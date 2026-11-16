@@ -9,8 +9,8 @@
     "path": "scripts/typecheck.integration.test.ts",
     "line": 129
   },
-  "says": "In today's tooling, the law file 'T1074 a local typecheck waits for the lock and any running compiler' starts a stand-in compiler in named() and polls pgrep -x for it every 20 ms up to a 5 s wall clock. On a loaded CI runner node's start can pass 5 s, or pgrep can look before the stand-in has written its name back on Linux, so the law fails with 'the stand-in compiler never started' on code that cannot reach it.",
-  "proof": "CI run 43831921638, leg tests (tooling-2), at eeb8ecdbb: 'AssertionError: the stand-in compiler never started: expected false to be true'. The same law was green on that branch's earlier run 43823291196 and on main's full run 43820371869, and the branch does not touch scripts/typecheck*.",
+  "says": "In today's tooling, the law file 'T1074 a local typecheck waits for the lock and any running compiler' bounds every poll in until() by a Date.now() + 5 s deadline. On CI the runner's wall clock stepped forward, so that deadline ended at once: named()'s pgrep poll for the stand-in compiler failed with 'the stand-in compiler never started' in a test vitest timed at 37 ms. Node did not start slowly. Every other until() in the file has the same cause.",
+  "proof": "CI run 43831921638, attempt 1, job 133179395579, leg tests (tooling-2), at eeb8ecdbb: 'AssertionError: the stand-in compiler never started: expected false to be true', in a test vitest timed at 37 ms with performance.now(). The same law was green on that branch's earlier run 43823291196 and on main's full run 43820371869, and the branch does not touch scripts/typecheck*.",
   "cost": "Any pull request whose CI runs the tooling legs can go red for no fault of its own, and a person must rerun it and compare against main to tell.",
   "head": "eeb8ecdbbaaa11365d893962e7ccd6fa32d9f0ee",
   "ticket": null,

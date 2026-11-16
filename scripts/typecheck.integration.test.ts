@@ -110,10 +110,12 @@ const typecheck = (r: Rig, id: string, env: Record<string, string | undefined> =
   return { child, stderr: () => err };
 };
 
+// The deadline reads the monotonic clock. A runner's wall clock can step forward, and a Date.now()
+// deadline then ends at once: CI run 43831921638 failed a 5 s wait in a test that took 37 ms.
 const until = async (test: () => boolean, what: string) => {
-  const end = Date.now() + 5_000;
+  const end = performance.now() + 5_000;
 
-  while (!test() && Date.now() < end) {
+  while (!test() && performance.now() < end) {
     await new Promise((r) => setTimeout(r, 20));
   }
 
@@ -123,8 +125,8 @@ const until = async (test: () => boolean, what: string) => {
 /**
  * A compiler the lock does not cover, or with `--lsp` a language server: node, linked under the rig's
  * compiler name. The stand-in prints `ready` once it runs under that name, and only then does pgrep -x
- * look for it, once, so the typecheck after it finds it. A wall-clock poll for its start flaked on a
- * loaded CI runner, where node took longer than the poll to start.
+ * look for it, once, so the typecheck after it finds it. The wait is on the child's own event, so no
+ * clock bounds it: a stand-in that errors or exits first fails the law at once.
  */
 const named = async (r: Rig, args: readonly string[] = []) => {
   const path = join(r.bin, r.compiler),
