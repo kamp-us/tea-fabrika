@@ -8,7 +8,9 @@ reports.
 
 1. Create `fabrikalfa/effect-mechanical` from `origin/main` (or continue it if it exists).
 2. Merge each slice branch in with `git merge --no-ff` (never rebase, never force). Resolve
-   conflicts in tsconfigs and `.oxlintrc.json` by keeping every line.
+   conflicts in tsconfigs and `.oxlintrc.json` by keeping every line. The laptop's fold of E0 to
+   E3 (PR https://github.com/kamp-us/tea-fabrika/pull/1462) touches the same overrides: if it has
+   landed, merge main and keep every entry; if not, say so in the body.
 3. **One lock entry per package**: in each package's own `tsconfig.json`, fold the slices'
    `overrides` entries into one entry whose `diagnosticSeverity` names every finished check at
    `error`, for the globs where all of them are at zero. Where checks reach zero over different

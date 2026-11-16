@@ -61,6 +61,13 @@ script or codemod you write. What stays:
 Then `pnpm format`. If the right fix is not clear, or it would change behavior a law should hold,
 do not fix that hit: list it in RESULT and in the PR.
 
+**Two lessons from folding E0 to E3 (PR 1462):**
+- `effect-tsgo diagnostics --project` undercounts: it misses files a tsconfig reaches only by
+  import (314 real sites where it said 262). Prove zero with `pnpm typecheck` (or the package's own
+  typecheck) before you call a check done or write a lock, not with diagnostics alone.
+- `pnpm format`'s import sort can hoist an import above a module's doc block, which then fails the
+  `jsdocs` lint rule. After formatting, run `pnpm lint` and put any doc block back on top.
+
 **Never:** a disable or `@effect-diagnostics` comment on wrong code, a list entry that lets broken
 code pass, a loosened law, a `warning` level, `oxlint-tsgolint` (refused; do not work around it),
 a check switched off. No personal names, machine paths or secrets in anything you write.
