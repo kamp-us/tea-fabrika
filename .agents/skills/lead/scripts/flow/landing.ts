@@ -15,11 +15,13 @@
 //
 // What each exit code means is a pure function below, so a test reads it without running a script.
 
-import { Effect, Layer, Path, Schema, Stream } from "effect";
+import { Effect, Path, Schema, Stream } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
+import { Checks } from "../ci/Checks.ts";
 import * as ChecksGh from "../ci/ChecksGh.ts";
+import { PullRequests } from "../pr/PullRequests.ts";
 import * as PullRequestsGh from "../pr/PullRequestsGh.ts";
-import { LeakGrepRefused } from "../pr/Pushes.ts";
+import { LeakGrepRefused, Pushes } from "../pr/Pushes.ts";
 import * as PushesProcess from "../pr/PushesProcess.ts";
 import * as Queue from "../pr/Queue.ts";
 import * as Outcome from "./Outcome.ts";
@@ -201,15 +203,14 @@ export const runners: Readonly<Record<string, Runner<Spawns>>> = {
       return yield* new StepFailed({ reason: `${dir}'s origin is not a GitHub repo` });
     }
 
-    const services = Layer.mergeAll(
-      PullRequestsGh.layer(repo, dir),
-      PushesProcess.layer(yield* script()),
-      ChecksGh.layer(repo),
-    );
+    const scripts = yield* script();
     // The `ci` step before this one waited for the checks, so the required one is read once here.
+    // Each service is built for this one call, so ChecksGh's ETag cache lives only as long as it.
     return Outcome.answer(
       yield* Queue.add({ dir, pr }).pipe(
-        Effect.provide(services),
+        Effect.provideServiceEffect(PullRequests, PullRequestsGh.make(repo, dir)),
+        Effect.provideServiceEffect(Pushes, PushesProcess.make(scripts)),
+        Effect.provideServiceEffect(Checks, ChecksGh.make(repo)),
         Effect.match({ onFailure: queueRefused, onSuccess: (added) => Outcome.done(Queue.line(added)) }),
       ),
     );
