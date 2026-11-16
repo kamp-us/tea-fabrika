@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-as-no-unknown-parameters-1-tests2",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T22:50:41-08:00",
+  "ended": "2026-11-15T22:55:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Small tests-step fix round for anti-slop judgment slice AS-no-unknown-parameters-1, in next/, from head 617e11640. The build step needs next/programs/pipeline/src/handlers.test.ts (law L12, handlers map faults) to type its cmd as { [key: string]: Schema.Json } instead of Record<string, unknown>, so that it can later retype Handler's Cmd in next/packages/libfabrika/src/runtime/Entry.ts as Schema.Json. That one annotation changed, by a hand edit (Schema was already imported from effect); pnpm format then split the object literal across lines. No assertion was changed, deleted or narrowed, and no law was loosened. The bad_head and no_attempt branches (cmd.change = 0, cmd.head = 'short', delete cmd.attempt) still type-check under the new type. Entry.ts and every other product file are untouched; the file is not in pull request 1366's diff (70 files, read with the GitHub tool).",
+  "plants": [
+    {
+      "law": "L12 handlers map faults: cmd is typed as JSON, so the build's Schema.Json Handler takes it",
+      "plant": "added `planted: new Date()` to the cmd literal in handlers.test.ts: tsc --noEmit in next/programs/pipeline fails with TS2322 Type 'Date' is not assignable to type 'Json'; restored by copy, tsc passes",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "Ran at the step's working tree on 617e11640 plus this edit: vitest on next/programs/pipeline/src/handlers.test.ts (1 file, 2 tests, passed) and tsc --noEmit in next/programs/pipeline (0 errors). pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) fails only on the one line the earlier tests round left on purpose: .oxlintrc.json: anti-slop/no-unknown-parameters has no hit left in next/packages/libfabrika/src/tezgah/**: add the folder to its block (0563); the owner ruling holds lock lines for one later pull request. pnpm format exits 1 on that same audit line after formatting. The list ratchet exits 0.",
+  "step": "tests"
+}
