@@ -23,6 +23,7 @@
 // that do not assign to each other, so each has a small adapter that reads the facts out. This file
 // holds oxlint's (`visitor`); test-kind.ts holds oxc-parser's.
 import type { ESTree, Visitor } from "@oxlint/plugins";
+import type { Data } from "effect";
 import { dotted } from "./match.ts";
 
 /** The real things 0584 names, by what a call opens. */
@@ -32,14 +33,18 @@ export type Tag = "process" | "port" | "browser" | "instance" | "signal" | "netw
 type Layer = "process" | "disk";
 
 /** One call in a module's own code that opens a real thing, at its node in the adapter's tree. */
-export type Open<N> = {
-  readonly _tag: Tag;
-  /** The call as written, for a message: `spawnSync(…)`. */
-  readonly call: string;
-  readonly node: N;
-  /** The Node layer this call needs to be real, or `null` when it is real alone. */
-  readonly needs: Layer | null;
-};
+export type Open<N> = Data.TaggedEnum<
+  Record<
+    Tag,
+    {
+      /** The call as written, for a message: `spawnSync(…)`. */
+      readonly call: string;
+      readonly node: N;
+      /** The Node layer this call needs to be real, or `null` when it is real alone. */
+      readonly needs: Layer | null;
+    }
+  >
+>;
 
 /** What each tag drives, in a message's words. */
 export const DRIVES: Readonly<Record<Tag, string>> = {
@@ -53,11 +58,12 @@ export const DRIVES: Readonly<Record<Tag, string>> = {
 };
 
 /** What a name from a module is: a call that opens, SQLite's constructor, a Node layer, or a service whose methods need one. */
-type Role =
-  | { readonly _tag: "call"; readonly tag: Tag; readonly needs: Layer | null }
-  | { readonly _tag: "sqlite" }
-  | { readonly _tag: "layer"; readonly gives: ReadonlyArray<Layer> }
-  | { readonly _tag: "service"; readonly needs: Layer };
+type Role = Data.TaggedEnum<{
+  call: { readonly tag: Tag; readonly needs: Layer | null };
+  sqlite: Record<never, never>;
+  layer: { readonly gives: ReadonlyArray<Layer> };
+  service: { readonly needs: Layer };
+}>;
 
 const call = (tag: Tag, needs: Layer | null = null): Role => ({ _tag: "call", tag, needs });
 const each = (names: ReadonlyArray<string>, role: Role) => Object.fromEntries(names.map((name) => [name, role]));
@@ -118,9 +124,10 @@ const METHODS: Readonly<Record<Layer, ReadonlySet<string>>> = {
 };
 
 /** What a method is called on: a name as written, or a service written in place, `(yield* S).spawn`. */
-export type Receiver =
-  | { readonly _tag: "name"; readonly written: string }
-  | { readonly _tag: "yield"; readonly written: string };
+export type Receiver = Data.TaggedEnum<{
+  name: { readonly written: string };
+  yield: { readonly written: string };
+}>;
 
 /** A host a test may reach without the network. */
 const LOCAL = /^(?:localhost|127(?:\.\d+){3}|\[::1\]|0\.0\.0\.0)$/;

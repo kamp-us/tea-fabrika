@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-no-manual-tagged-type-1-tests-round-2",
+  "ticket": 1057,
+  "pr": null,
+  "started": "2026-11-15T23:13:19-08:00",
+  "ended": "2026-11-15T23:25:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step, second round, of anti-slop judgment slice AS-no-manual-tagged-type-1 (ticket 1057, decisions 0562 and 0563), on branch fabrikalfa/antislop-no-manual-tagged-type-1 at f95727c64, which holds origin/main with PR 1366 merged. Recounted with anti-slop-effect/no-manual-tagged-type forced to error in a scratch config outside the repo, over next/, .agents/, .github/ci/ and oxlint-plugins/: 27 hits. 9 are the files once waiting on 1366 (next/packages/libfabrika/src/ledger/Log.ts 1, next/packages/libfabrika/src/processes/internal/programMail.test.ts 3, next/packages/libfabrika/src/runtime/Runner.integration.test.ts 5); 16 are new since round one because main moved (oxlint-plugins/starters.ts 8, oxlint-plugins/test-kind.ts 4 and oxlint-plugins/test-kind.test.ts 4 from PR 1420, next/packages/libfabrika/src/processes/internal/quota.test.ts 1 from PR 1366); 2 are the agent-may hits round one left. Fixed 24, all by hand edits through a small scratchpad script (never committed); the checker's quick fix was not used. How: Extract and Exclude over a tag became Types.ExtractTag and Types.ExcludeTag (programMail.test.ts 2, quota.test.ts 1); the bare full case in programMail.test.ts became Pick<Types.ExtractTag<Failure, \"full\">, \"_tag\">, the same type, so its not.toExtend check is unchanged; hand-written tagged unions became Data.TaggedEnum (starters.ts Role and Receiver, starters.ts Open over Record<Tag, ...> with its field docs kept, test-kind.ts Finding and the tree answer, test-kind.test.ts End, Runner.integration.test.ts Sent, which keeps rev, pos, reason and the optional now and most); Runner.integration.test.ts's Failure, whose catch-all { _tag: string; reason: string } stood for the runner's other errors, is now read from the real service, Effect.Error<ReturnType<ProgramRunner[\"Service\"][\"msg\"]>>, a type-only import, so three imports it alone used went; the two fake CheckedWriter methods' event: { _tag: string } took the service's own Event type from Entry.ts. Left 3: next/packages/libfabrika/src/ledger/Log.ts:102 (lineFor's type parameter A extends { readonly _tag: string } & Schema.JsonObject, a product file, for the build step); next/apps/fabrika/src/exam/agent-may.test.ts:452 and :466 (the loose Answer type of the agent-policy exam, which feeds malformed answers on purpose; its right fix is a judgment for the plan or the owner, as round one said). Waiting on 1366: 0. No disable line, no lock line, no .oxlintrc.json change, no assertion deleted or narrowed, no law loosened.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/processes/internal/programMail.test.ts: type: only a full failure carries an unread count, and it always does",
+      "plant": "next/packages/libfabrika/src/processes/ProgramMail.ts:50 makes full's unread an optionalKey",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/processes/internal/quota.test.ts: Q8 recovery bytes leave the rolling window, stay in totals, and clock movement cannot clear a fault (its reserve_fault operation check)",
+      "plant": "next/packages/libfabrika/src/processes/internal/quota.ts:39 makes reserve_fault's operation NullOr(String)",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 12,
+  "note": "Each plant ran once on a saved copy through the package's own typecheck (tsc --noEmit -p next/packages/libfabrika), went red at the changed assertion (programMail.test.ts:120 and :121; quota.test.ts:163), and was restored by copy; git status showed no product file after. Checks at the final tree: tsc --noEmit -p . in next/packages/libfabrika and oxlint-plugins exit 0, and both list every touched file. Tests at f95727c64 plus this change, under nice -n 15 vitest --maxWorkers=3: oxlint-plugins/test-kind.test.ts (2), integration-test-name.test.ts (4), plants.test.ts (236), programMail.test.ts (6), quota.test.ts (4), and Runner.integration.test.ts (117), which the 0178 guard now allows in this box after PR 1508; all green. The scratch count now finds only the 3 listed hits. The list ratchet exits 0. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) passes 16 of its 18 parts: oxlint-plugins/lint.ts asks that 18 folders now at zero for this rule be added to the rule's block in .oxlintrc.json, which the owner ruled waits for the later lock pull request; and field-check fails on the review step's committed row, field/runs/2026-11-15-antislop-no-manual-tagged-type-1-review.json, whose plants' result fields are sentences, not red or green. That row is not this step's to change. pnpm format's lint step stops on the same lock-line ask, so oxlint-plugins/format.ts ran on its own after it.",
+  "step": "tests"
+}

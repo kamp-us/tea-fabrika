@@ -7,7 +7,7 @@
 //   internal/programMail.ts: `mailId(command)` and `granted(grants, source, to)`.
 //   ProgramMail.ts: `Grants`, `MailRefusal` (the closed refusal reasons) and `ProgramMailError`.
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Schema, type Types } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { PIDS } from "../Process.test-support.ts";
@@ -117,10 +117,10 @@ describe("P41 slice 1: program mail rules", () => {
     expectTypeOf<ProgramMailError["reason"]>().toEqualTypeOf<Failure>();
     expectTypeOf<ProgramMailError>().not.toHaveProperty("unread");
     // A full failure's count is a number, never left out.
-    expectTypeOf<Extract<Failure, { _tag: "full" }>["unread"]>().toEqualTypeOf<number>();
-    expectTypeOf<{ readonly _tag: "full" }>().not.toExtend<Failure>();
+    expectTypeOf<Types.ExtractTag<Failure, "full">["unread"]>().toEqualTypeOf<number>();
+    expectTypeOf<Pick<Types.ExtractTag<Failure, "full">, "_tag">>().not.toExtend<Failure>();
     // No other case has a count, and the other cases are the refusals and storage.
-    expectTypeOf<Exclude<Failure, { _tag: "full" }>>().not.toHaveProperty("unread");
+    expectTypeOf<Types.ExcludeTag<Failure, "full">>().not.toHaveProperty("unread");
     expectTypeOf<Exclude<Failure["_tag"], "full" | "storage">>().toEqualTypeOf<typeof MailRefusal.Type>();
   });
 

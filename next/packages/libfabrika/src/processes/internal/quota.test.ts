@@ -4,6 +4,7 @@
 import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
+import type { Types } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import * as Quota from "./quota.ts";
@@ -159,7 +160,7 @@ describe("P34c quota machine", () => {
         }
 
         expect(model._tag).toBe("reserve_fault");
-        expectTypeOf<Extract<Quota.Model, { readonly _tag: "reserve_fault" }>["operation"]>().not.toBeNullable();
+        expectTypeOf<Types.ExtractTag<Quota.Model, "reserve_fault">["operation"]>().not.toBeNullable();
         expectTypeOf<Quota.Model["_tag"]>().toEqualTypeOf<"ready" | "reserve_fault">();
       }),
       options,

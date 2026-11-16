@@ -10,17 +10,19 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import type { Data } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import type { Tag } from "./starters.ts";
 import { judge, type Module } from "./test-kind.ts";
 
 /** What the last module of a chain holds: a starter of a tag, one that is real only on Node's layer, or nothing. */
-type End =
-  | { readonly _tag: "opens"; readonly tag: Tag }
-  | { readonly _tag: "needs_layer" }
-  | { readonly _tag: "type_only" }
-  | { readonly _tag: "nothing" };
+type End = Data.TaggedEnum<{
+  opens: { readonly tag: Tag };
+  needs_layer: Record<never, never>;
+  type_only: Record<never, never>;
+  nothing: Record<never, never>;
+}>;
 
 /** A module's text for each end, in the starters' own spellings. */
 const SOURCE: Readonly<Record<Tag, string>> = {

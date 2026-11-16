@@ -17,6 +17,7 @@ import {
   Cause,
   Arbitrary,
   Context,
+  type Data,
   Deferred,
   Effect,
   Exit,
@@ -30,7 +31,7 @@ import {
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { SessionManagerError, Storage } from "../access/SessionManager.ts";
-import { type Envelope, type NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
+import { type Envelope, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
 import { processId, processIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -39,19 +40,18 @@ import { Appended, type Entry, InputId, lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { letterLine, Mailbox, type From } from "../processes/Mailbox.ts";
 import { Activity, Down, Owner, Recipient, recoverActivity, signalId, Start } from "../processes/Process.ts";
-import type { QuotasError } from "../processes/Quotas.ts";
 import { mailChunk } from "../settings/Declarations.ts";
 import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { type SpanRow } from "../telemetry/Trace.ts";
-import { type Update as WatcherUpdate } from "./Entry.ts";
+import { type Event as CheckedEvent, type Update as WatcherUpdate } from "./Entry.ts";
 import type { Execution } from "./Execution.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input, Program, ProgramDown } from "./Program.ts";
 import type { RecoveryStoreError } from "./RecoveryStore.ts";
-import type { WatchersError } from "./Watchers.ts";
+import type { ProgramRunner } from "./Runner.ts";
 
 const SEED = 119120;
 const PROCESS = Effect.runSync(processId);
@@ -245,22 +245,13 @@ type Incoming = {
   readonly span: { readonly traceId: string; readonly spanId: string };
 };
 
-type Failure =
-  | { readonly _tag: string; readonly reason: string }
-  | NotGranted
-  | WatchersError
-  | RecoveryStoreError
-  | QuotasError
-  | SessionManagerError;
+// What the real runner fails with, read from its service.
+type Failure = Effect.Error<ReturnType<ProgramRunner["Service"]["msg"]>>;
 
-type Sent =
-  | { readonly _tag: "accepted"; readonly rev: number; readonly pos: number }
-  | {
-      readonly _tag: "refused";
-      readonly reason: string;
-      readonly now?: number;
-      readonly most?: number;
-    };
+type Sent = Data.TaggedEnum<{
+  accepted: { readonly rev: number; readonly pos: number };
+  refused: { readonly reason: string; readonly now?: number; readonly most?: number };
+}>;
 
 type Opened = { readonly rev: number; readonly view: Model };
 
@@ -784,7 +775,7 @@ const worldOn = async (
 
                 return answer;
               }),
-            commit: (id: string, session: { readonly parent: string }, stream: string, event: { _tag: string }) =>
+            commit: (id: string, session: { readonly parent: string }, stream: string, event: CheckedEvent) =>
               Effect.gen(function* () {
                 calls.push({ kind: event._tag, id, parent: session.parent });
                 const checked = yield* s.receipt(id, session.parent, process, event._tag);
@@ -814,7 +805,7 @@ const worldOn = async (
 
                 return answer;
               }),
-            own: (id: string, stream: string, event: { _tag: string }) =>
+            own: (id: string, stream: string, event: CheckedEvent) =>
               Effect.gen(function* () {
                 calls.push({ kind: event._tag, id, parent: null });
                 return yield* ledger.append(

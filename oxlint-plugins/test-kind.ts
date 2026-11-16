@@ -20,7 +20,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Option, Schema } from "effect";
+import { type Data, Option, Schema } from "effect";
 import { type Argument, type Expression, parseSync, Visitor } from "oxc-parser";
 import { DRIVES, reader, type Open, type Receiver } from "./starters.ts";
 
@@ -34,14 +34,14 @@ type Edge = { readonly target: string | null; readonly typeOnly: boolean };
 export type Module = { readonly source: string; readonly imports: ReadonlyArray<Edge> };
 
 /** What the check says of one test file: a failure, or advice. */
-type Finding =
-  | { readonly _tag: "integration_opens_nothing"; readonly file: string }
-  | {
-      readonly _tag: "plain_opens";
-      readonly file: string;
-      readonly via: ReadonlyArray<string>;
-      readonly opens: Pick<Open<null>, "_tag" | "call">;
-    };
+type Finding = Data.TaggedEnum<{
+  integration_opens_nothing: { readonly file: string };
+  plain_opens: {
+    readonly file: string;
+    readonly via: ReadonlyArray<string>;
+    readonly opens: Pick<Open<null>, "_tag" | "call">;
+  };
+}>;
 
 const INTEGRATION = /\.integration\.test\.tsx?$/;
 const TEST = /\.test\.tsx?$/;
@@ -224,9 +224,10 @@ const readGraph = Schema.decodeUnknownOption(Schema.fromJsonString(Graph));
 const tree = (
   root: string,
   scope: string,
-):
-  | { readonly _tag: "read"; readonly modules: ReadonlyArray<readonly [string, Module]> }
-  | { readonly _tag: "unread"; readonly why: string } => {
+): Data.TaggedEnum<{
+  read: { readonly modules: ReadonlyArray<readonly [string, Module]> };
+  unread: { readonly why: string };
+}> => {
   // The edge pass resolves imports; without it code-graph answers no targets.
   const graph = spawnSync(CODE_GRAPH, [scope, "--graph", "--edges"], {
     cwd: root,
