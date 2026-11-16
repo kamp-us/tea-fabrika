@@ -10,7 +10,7 @@
       {
         "name": "@effect/language-service",
         "namespaceImportPackages": ["effect"],
-        "diagnosticSeverity": { "preferNamespaceImport": "error" }
+        "diagnosticSeverity": { "preferNamespaceImport": "error", "preferSchemaTaggedError": "error" }
       }
     ]
   },
