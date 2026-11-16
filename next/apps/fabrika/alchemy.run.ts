@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import type { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import * as Alchemy from "alchemy";
-import { Config, Context, Effect, Layer, Schema } from "effect";
+import { Config, Context, Effect, Function, Layer, Predicate, Schema } from "effect";
 import type { Built } from "./src/build.ts";
 
 /** Cloudflare's limit on one environment variable, in encoded bytes (Workers platform limits). */
@@ -16,7 +16,7 @@ const setting = (value: string) =>
   Schema.decodeUnknownEffect(Setting)(value).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
 
 // The stack runs the completed brain file as it is (`bundle: false`); no code rides in its env.
-export const stack = (
+const stackBody = (
   built: Pick<Built, "brain">,
   checked: Effect.Success<ReturnType<typeof readSettings>>,
   local: Context.Context<never> = Context.empty(),
@@ -58,3 +58,20 @@ export const stack = (
       return { url: brain.url };
     }),
   );
+
+export const stack: {
+  (
+    checked: Effect.Success<ReturnType<typeof readSettings>>,
+    local?: Context.Context<never>,
+  ): (built: Pick<Built, "brain">) => ReturnType<typeof stackBody>;
+  (
+    built: Pick<Built, "brain">,
+    checked: Effect.Success<ReturnType<typeof readSettings>>,
+    local?: Context.Context<never>,
+  ): ReturnType<typeof stackBody>;
+} = Function.dual(
+  // A direct call starts with the built files, which name the brain; a piped one with the checked
+  // settings, which do not.
+  (args) => Predicate.hasProperty(args[0], "brain"),
+  stackBody,
+);

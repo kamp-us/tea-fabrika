@@ -684,8 +684,12 @@ export const decide: {
  * older than the run's start, read to the whole second for file systems that keep only seconds. A
  * run that wrote none, such as one box.sh refused before the agent started, gives no report.
  */
-export const freshReport = (path: string, started: number, mtime: number | null): string | null =>
-  mtime !== null && mtime >= Math.floor(started / 1000) * 1000 ? path : null;
+export const freshReport: {
+  (started: number, mtime: number | null): (path: string) => string | null;
+  (path: string, started: number, mtime: number | null): string | null;
+} = Function.dual(3, (path: string, started: number, mtime: number | null): string | null =>
+  mtime !== null && mtime >= Math.floor(started / 1000) * 1000 ? path : null,
+);
 
 // ---------------------------------------------------------------- the machine
 
@@ -1232,7 +1236,10 @@ export const heldBy: {
  * What box.sh new's exit and stderr say: exit 3 with a `refused <check>: <why>` line is a start
  * check's no; any other failure, or a line naming no known check, is the box failing.
  */
-export const parseStarted = (code: number, err: string): typeof Started.Type => {
+export const parseStarted: {
+  (err: string): (code: number) => typeof Started.Type;
+  (code: number, err: string): typeof Started.Type;
+} = Function.dual(2, (code: number, err: string): typeof Started.Type => {
   if (code === 0) {
     return Started.cases.made.make({});
   }
@@ -1249,7 +1256,7 @@ export const parseStarted = (code: number, err: string): typeof Started.Type => 
   }
 
   return Started.cases.failed.make({ detail: `box.sh new: ${tail(err)}` });
-};
+});
 
 /** The Cmds' handlers for one step. `started` holds the step's start phases so far; box_new adds
  * box.sh's own, and record writes them all on the step's entry. */

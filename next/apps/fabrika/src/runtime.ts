@@ -9,7 +9,7 @@ import {
   settings as readSettings,
   type Env as Bindings,
 } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Layer, Predicate, Schema } from "effect";
+import { Effect, Function, Layer, Predicate, Schema } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { programs } from "virtual:fabrika-built";
 import { Gateway } from "./door.ts";
@@ -34,7 +34,7 @@ export const connectionObject = ConnectionObject.layer({ input: checkedSettings 
 /** The Process object, reading the instance's setting through the app's checked read. */
 export const processObject = ProcessObject.layer({ programs, input: checkedSettings });
 
-export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
+const projectRuntimeBody = (ctx: DurableObjectState, env: Env) =>
   project(ctx, env, {
     input: checkedSettings(env),
     programs,
@@ -90,3 +90,8 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
         );
       }),
   });
+
+export const projectRuntime: {
+  (env: Env): (ctx: DurableObjectState) => ReturnType<typeof projectRuntimeBody>;
+  (ctx: DurableObjectState, env: Env): ReturnType<typeof projectRuntimeBody>;
+} = Function.dual(2, projectRuntimeBody);

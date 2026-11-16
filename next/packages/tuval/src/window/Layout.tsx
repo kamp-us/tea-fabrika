@@ -21,6 +21,7 @@
 import { lengths, STRIP, shut } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP, order } from "@kampus/libfabrika/tezgah/Layout";
 import type { Dir, Layout as Tree, Tile, TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
+import { Function } from "effect";
 import type { ReactElement } from "react";
 
 /**
@@ -76,13 +77,16 @@ const FOCUSABLE =
  * names, when it is there, else the top of the tile, its first control, or the region itself while
  * it has none.
  */
-export const landing = (region: HTMLElement, cursor: string | null): HTMLElement => {
+export const landing: {
+  (cursor: string | null): (region: HTMLElement) => HTMLElement;
+  (region: HTMLElement, cursor: string | null): HTMLElement;
+} = Function.dual(2, (region: HTMLElement, cursor: string | null): HTMLElement => {
   const row =
     cursor === null
       ? undefined
       : [...region.querySelectorAll("[data-cursor]")].find((e) => e.getAttribute("data-cursor") === cursor);
   return (row ?? region.querySelector(".tile-body"))?.querySelector<HTMLElement>(FOCUSABLE) ?? region;
-};
+});
 
 const LIVE: State = { word: "", live: true };
 

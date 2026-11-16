@@ -7,6 +7,7 @@
 import type { AnyTile, WindowRegistration } from "@kampus/libfabrika";
 import type { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
 import type { Tile } from "@kampus/libfabrika/tezgah/Workspace";
+import { Function } from "effect";
 import type { ReactNode } from "react";
 import { tileWords } from "./Layout.tsx";
 
@@ -19,14 +20,17 @@ type StatusMessage = WindowModel["said"]["messages"][number];
 type Named = Pick<Tile, "program" | "n">;
 
 /** A refused letter in words, the tile's own or the frame's; unknown free text is never said. */
-export const refusalFor = (registration: TileWindow | null, refusal: Refusal | null) => {
+export const refusalFor: {
+  (refusal: Refusal | null): (registration: TileWindow | null) => string | null;
+  (registration: TileWindow | null, refusal: Refusal | null): string | null;
+} = Function.dual(2, (registration: TileWindow | null, refusal: Refusal | null): string | null => {
   if (refusal === null) {
     return null;
   }
 
   const reason = /^[a-z_]{1,40}$/.test(refusal.reason) ? refusal.reason : "";
   return registration?.refused?.(refusal.m, reason) ?? (reason === "" ? "Not done." : `Not done (${reason}).`);
-};
+});
 
 /** One status message in words, or null when its tile is gone. `lookup` finds the desk tile by its
  *  id, and `windowFor` the window registered for the program that tile shows. */
@@ -46,8 +50,21 @@ const wordsFor = <T extends Named>(
 };
 
 /** The polite region's words: the current burst's status messages, in order, as one line. */
-export const spoken = <T extends Named>(
-  m: Pick<WindowModel, "said">,
-  lookup: (id: string) => T | null,
-  windowFor: (tile: T) => TileWindow | null,
-): string => m.said.messages.flatMap((message) => wordsFor(message, lookup, windowFor) ?? []).join(", ");
+export const spoken: {
+  <T extends Named>(
+    lookup: (id: string) => T | null,
+    windowFor: (tile: T) => TileWindow | null,
+  ): (m: Pick<WindowModel, "said">) => string;
+  <T extends Named>(
+    m: Pick<WindowModel, "said">,
+    lookup: (id: string) => T | null,
+    windowFor: (tile: T) => TileWindow | null,
+  ): string;
+} = Function.dual(
+  3,
+  <T extends Named>(
+    m: Pick<WindowModel, "said">,
+    lookup: (id: string) => T | null,
+    windowFor: (tile: T) => TileWindow | null,
+  ): string => m.said.messages.flatMap((message) => wordsFor(message, lookup, windowFor) ?? []).join(", "),
+);

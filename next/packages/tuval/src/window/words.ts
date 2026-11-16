@@ -4,13 +4,17 @@
 // the ended process's last view (docs/direction/tile-guidelines.md, "Empty and loading", and its
 // "Tuval" line on a tile kept after a crash).
 import type { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
+import { Function } from "effect";
 
 type Link = WindowModel["link"];
 type Reach = WindowModel["tiles"][number]["reach"];
 
 /** A tile's state in words, never color alone (0502): an ended tile names its exit's reason, and a
  *  tile with no reach yet, one the window has no row for, is opening. */
-export const stateWord = (link: Link, reach: Reach | undefined) => {
+export const stateWord: {
+  (reach: Reach | undefined): (link: Link) => string;
+  (link: Link, reach: Reach | undefined): string;
+} = Function.dual(2, (link: Link, reach: Reach | undefined): string => {
   if (link._tag !== "online") {
     return link._tag === "retrying" ? "Retrying" : "Connecting";
   }
@@ -25,7 +29,7 @@ export const stateWord = (link: Link, reach: Reach | undefined) => {
     default:
       return "Opening";
   }
-};
+});
 
 /**
  * The one word a tile's body shows where its view will start, or null when it draws the view.
@@ -33,7 +37,10 @@ export const stateWord = (link: Link, reach: Reach | undefined) => {
  * the ended process's last one, and the title bar's state slot says why it ended. A tile with no
  * reach yet is opening.
  */
-export const bodyWord = (reach: Reach | undefined, drawn: boolean): string | null => {
+export const bodyWord: {
+  (drawn: boolean): (reach: Reach | undefined) => string | null;
+  (reach: Reach | undefined, drawn: boolean): string | null;
+} = Function.dual(2, (reach: Reach | undefined, drawn: boolean): string | null => {
   switch (reach?._tag) {
     case "ended":
       return "Ended";
@@ -42,4 +49,4 @@ export const bodyWord = (reach: Reach | undefined, drawn: boolean): string | nul
     default:
       return drawn ? null : "Opening";
   }
-};
+});

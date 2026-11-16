@@ -88,7 +88,10 @@ export const level: {
 );
 
 /** The sev0 after one more line at `index`; a line that does not follow is refused with why. */
-export const step = (sev0: Sev0, entry: Entry, index: number): Result.Result<Sev0, string> => {
+export const step: {
+  (entry: Entry, index: number): (sev0: Sev0) => Result.Result<Sev0, string>;
+  (sev0: Sev0, entry: Entry, index: number): Result.Result<Sev0, string>;
+} = Function.dual(3, (sev0: Sev0, entry: Entry, index: number): Result.Result<Sev0, string> => {
   switch (entry._tag) {
     case "opened":
       return sev0._tag === "open"
@@ -115,14 +118,14 @@ export const step = (sev0: Sev0, entry: Entry, index: number): Result.Result<Sev
     case "ended":
       return Result.succeed(sev0);
   }
-};
+});
 
 /** The sev0 the whole log folds to; the first line that does not follow fails it. */
 export const fold = (entries: ReadonlyArray<Entry>): Result.Result<Sev0, string> => {
   let sev0: Sev0 = Sev0.cases.closed.make({});
 
   for (const [index, entry] of entries.entries()) {
-    const next = step(sev0, entry, index);
+    const next: Result.Result<Sev0, string> = step(sev0, entry, index);
 
     if (Result.isFailure(next)) {
       return Result.fail(`line ${index + 1} of the log (${entry._tag}): ${next.failure}`);

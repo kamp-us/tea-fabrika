@@ -239,7 +239,10 @@ const FaultS = Schema.Literals(FAULTS);
 const isFault = Schema.is(FaultS);
 
 /** The last JSON line of drive's output, read loosely; `null` when there is none. */
-export const parseLine = (out: string, exit: number): Line | null => {
+export const parseLine: {
+  (exit: number): (out: string) => Line | null;
+  (out: string, exit: number): Line | null;
+} = Function.dual(2, (out: string, exit: number): Line | null => {
   for (const raw of out.trim().split("\n").toReversed()) {
     const parsed = Result.try((): unknown => JSON.parse(raw));
 
@@ -269,7 +272,7 @@ export const parseLine = (out: string, exit: number): Line | null => {
   }
 
   return null;
-};
+});
 
 // ---------------------------------------------------------------- the moves
 
@@ -302,7 +305,10 @@ const after: Record<StepName, QuestStep | null> = {
  * this step, against the `MaxStucks` limit. A slot refusal never reaches here: the step's Cmd
  * retries it on `slotSchedule`, and running out is a `RetriesExhausted` on the err channel.
  */
-export const nextMove = (step: StepName, line: Line, stucks: number, maxStucks: number): Move => {
+export const nextMove: {
+  (line: Line, stucks: number, maxStucks: number): (step: StepName) => Move;
+  (step: StepName, line: Line, stucks: number, maxStucks: number): Move;
+} = Function.dual(4, (step: StepName, line: Line, stucks: number, maxStucks: number): Move => {
   const [verb, to = "", reason = ""] = line.outcome.split(":");
 
   switch (verb) {
@@ -332,7 +338,7 @@ export const nextMove = (step: StepName, line: Line, stucks: number, maxStucks: 
     default:
       return stucks >= maxStucks ? toPark(`${step} stuck ${maxStucks} times in a row: ${line.reason}`) : toJudge;
   }
-};
+});
 
 // An older answer may still name mutation; it reads as a send that names no quest step, so it parks.
 const JUDGED = /^[`*\s]*answer:\s*(send\s+(tests|build|mutation|review)|park)\b[`*\s]*(.*)$/i;
@@ -477,7 +483,10 @@ export const committedLine = (commits: ReadonlyArray<StepCommit> | null): string
   return `Step commits since the quest left main, oldest first: ${by.join("; ")}.`;
 };
 
-export const renderBrief = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: Facts): string => {
+export const renderBrief: {
+  (step: StepName, f: Facts): (lane: ReturnType<typeof sectionsOf>) => string;
+  (lane: ReturnType<typeof sectionsOf>, step: StepName, f: Facts): string;
+} = Function.dual(3, (lane: ReturnType<typeof sectionsOf>, step: StepName, f: Facts): string => {
   const short = (s: string) => s.slice(0, 8);
   const heads = STEPS.filter((s) => f.heads[s]).map((s) => `${s} ${short(f.heads[s] ?? "")}`);
   const lines = [
@@ -515,7 +524,7 @@ export const renderBrief = (lane: ReturnType<typeof sectionsOf>, step: StepName,
   }
 
   return `${lines.join("\n")}\n`;
-};
+});
 
 // ---------------------------------------------------------------- the budget
 

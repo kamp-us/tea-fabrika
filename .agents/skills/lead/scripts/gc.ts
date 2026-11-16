@@ -81,11 +81,14 @@ export const PinVerdict = Schema.TaggedUnion({
 export type PinVerdict = typeof PinVerdict.Type;
 
 /** The branch a box's commits are backed up to, best first. */
-export const backups = (name: string, branch: string | null): string[] => {
+export const backups: {
+  (branch: string | null): (name: string) => string[];
+  (name: string, branch: string | null): string[];
+} = Function.dual(2, (name: string, branch: string | null): string[] => {
   const own = `fabrikalfa/${name}-wip`;
   const wip = branch === null ? null : wipOf(branch);
   return wip?.startsWith("fabrikalfa/") && wip !== own ? [wip, own] : [own];
-};
+});
 
 /** The `state/*.box` files whose box folder is gone: facts of a dead box, which stepcommit would
  * otherwise still read. A box saves its facts only after its folder exists, so none is half made. */

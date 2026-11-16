@@ -7,6 +7,7 @@
  *
  * @stability unstable
  */
+import * as Function from "effect/Function";
 import * as Schema from "effect/Schema";
 
 const Depth = Schema.Literals(["fast", "full"]);
@@ -56,13 +57,16 @@ export interface Runs {
  * @stability unstable
  * @category counts
  */
-export const runsAt = (at: Depth, { fast, full }: Runs): number => {
+export const runsAt: {
+  (runs: Runs): (at: Depth) => number;
+  (at: Depth, runs: Runs): number;
+} = Function.dual(2, (at: Depth, { fast, full }: Runs): number => {
   if (!Number.isInteger(fast) || !Number.isInteger(full) || full < 1 || fast > full || fast < Math.min(LEAST, full)) {
     throw new Error(`runsFor: fast ${fast} must be a whole number from ${Math.min(LEAST, full)} to full ${full}`);
   }
 
   return at === "full" ? full : fast;
-};
+});
 
 /**
  * The count a law runs in this run: `runsFor({ fast: 10, full: 100 })` is 10 on a pull request and

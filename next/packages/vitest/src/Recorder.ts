@@ -20,6 +20,7 @@
  */
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
@@ -212,16 +213,35 @@ const watch = <S extends object>(
  * @stability unstable
  * @category constructors
  */
-export const layer = <I, S extends object, K extends keyof S = keyof S>(
-  service: Context.Key<I, S>,
-  impl: Layer.PartialEffectful<S> & object & Single<S> & Gives<K>,
-  options?: { readonly fails?: Fails<S, Method<S> & K> },
-): Layer.Layer<I | Recorded<I>> =>
-  Layer.unwrap(
-    Effect.map(Ref.make<ReadonlyArray<Entry>>([]), (kept) =>
-      Layer.merge(Layer.mock(service, watch<S>(impl, kept, options?.fails ?? {})), Layer.succeed(store(service), kept)),
+export const layer: {
+  // The piped form names its key and service types, as `Recorder.layer<Shelf, Service>(impl)`:
+  // `impl` is only a part of the service, so it cannot tell the whole type.
+  <I, S extends object, K extends keyof S = keyof S>(
+    impl: Layer.PartialEffectful<S> & object & Single<S> & Gives<K>,
+    options?: { readonly fails?: Fails<S, Method<S> & K> },
+  ): (service: Context.Key<I, S>) => Layer.Layer<I | Recorded<I>>;
+  <I, S extends object, K extends keyof S = keyof S>(
+    service: Context.Key<I, S>,
+    impl: Layer.PartialEffectful<S> & object & Single<S> & Gives<K>,
+    options?: { readonly fails?: Fails<S, Method<S> & K> },
+  ): Layer.Layer<I | Recorded<I>>;
+} = Function.dual(
+  // A direct call starts with the service's key; a piped one with `impl`, which is never a key.
+  (args) => Context.isKey(args[0]),
+  <I, S extends object, K extends keyof S = keyof S>(
+    service: Context.Key<I, S>,
+    impl: Layer.PartialEffectful<S> & object & Single<S> & Gives<K>,
+    options?: { readonly fails?: Fails<S, Method<S> & K> },
+  ): Layer.Layer<I | Recorded<I>> =>
+    Layer.unwrap(
+      Effect.map(Ref.make<ReadonlyArray<Entry>>([]), (kept) =>
+        Layer.merge(
+          Layer.mock(service, watch<S>(impl, kept, options?.fails ?? {})),
+          Layer.succeed(store(service), kept),
+        ),
+      ),
     ),
-  );
+);
 
 /**
  * The calls recorded so far, in the order they ran: all of them, or the argument lists of one
@@ -231,18 +251,27 @@ export const layer = <I, S extends object, K extends keyof S = keyof S>(
  * @stability unstable
  * @category getters
  */
-export function calls<I, S>(service: Context.Key<I, S>): Effect.Effect<ReadonlyArray<Call<S>>, never, Recorded<I>>;
-export function calls<I, S, M extends Method<S>>(
-  service: Context.Key<I, S>,
-  method: M,
-): Effect.Effect<ReadonlyArray<Args<S, M>>, never, Recorded<I>>;
-// The store keeps each call as plain data, and the two forms above give it back in the service's
-// own types. That holds because `watch` writes a member's own name and the args it was called with.
-export function calls<I, S>(
-  service: Context.Key<I, S>,
-  method?: string,
-): Effect.Effect<ReadonlyArray<Entry> | ReadonlyArray<ReadonlyArray<unknown>>, never, Recorded<I>> {
-  return Effect.map(Effect.flatMap(store(service), Ref.get), (list) =>
-    method === undefined ? list : list.flatMap((entry) => (entry.method === method ? [entry.args] : [])),
-  );
-}
+export const calls: {
+  // The piped form names its types, as `Recorder.calls<Shelf, Service, "put">("put")`: a method's
+  // name alone cannot tell the service it belongs to.
+  <I, S, M extends Method<S>>(
+    method: M,
+  ): (service: Context.Key<I, S>) => Effect.Effect<ReadonlyArray<Args<S, M>>, never, Recorded<I>>;
+  <I, S>(service: Context.Key<I, S>): Effect.Effect<ReadonlyArray<Call<S>>, never, Recorded<I>>;
+  <I, S, M extends Method<S>>(
+    service: Context.Key<I, S>,
+    method: M,
+  ): Effect.Effect<ReadonlyArray<Args<S, M>>, never, Recorded<I>>;
+} = Function.dual(
+  // A direct call starts with the service's key; a piped one with the method's name, a string.
+  (args) => Context.isKey(args[0]),
+  // The store keeps each call as plain data, and the forms above give it back in the service's own
+  // types. That holds because `watch` writes a member's own name and the args it was called with.
+  <I, S>(
+    service: Context.Key<I, S>,
+    method?: string,
+  ): Effect.Effect<ReadonlyArray<Entry> | ReadonlyArray<ReadonlyArray<unknown>>, never, Recorded<I>> =>
+    Effect.map(Effect.flatMap(store(service), Ref.get), (list) =>
+      method === undefined ? list : list.flatMap((entry) => (entry.method === method ? [entry.args] : [])),
+    ),
+);
