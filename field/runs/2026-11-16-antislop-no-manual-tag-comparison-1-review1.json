@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-manual-tag-comparison-1-review1",
+  "ticket": "kamp-us/tea-fabrika#1057",
+  "pr": null,
+  "started": "2026-11-16T00:37:51-08:00",
+  "ended": "2026-11-16T00:52:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send",
+  "why": "pipeline, tracker ticket 1057, review of slice AS-no-manual-tag-comparison-1 at 10e6f4175 (tests 47972cf18, build 10e6f4175, base b490a3203), next/packages/libfabrika/src/client. Sent back to the build, two blocking classes. (1) pnpm lint has a second blocking failure besides the expected zero lock: fabrika/no-hand-tag at next/packages/libfabrika/src/client/internal/dial.ts:50, where the build wrote the pattern `Match.when({ _tag: \"SocketOpenError\", kind: \"Timeout\" }, ...)`; `node oxlint-plugins/lint.ts` prints `oxlint: 1 blocking` with that line, so the build row's claim that the zero lock is the one failure is wrong (0562, 0214). (2) Three chained ternaries over one value that prefer-effect-match flagged on main were rewritten as chains of single-case guards, which no rule sees any more, where 0567's form is the union's own matchOrElse: WindowMachine.laws.test.ts:404 and :420 (Written.isAnyOf chains of 4 and 2) and :4367 (SchemaAST.isUnion then isObjects). The rule counts hold: the anti-slop rule forced to error in a scratch config outside the repo finds 384 hits at the base, per file exactly as the two rows say, and 0 at the head; prefer-effect-match goes from 21 to 14. Everything else holds: no comment line lost, no disable line, no new cast, expect and test counts unchanged in every law file, loosening.sh hits are all reformatted expects, the persist error's malformed_result keeps the same `persist failed` row, and every other rewrite answers what the old branch answered.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 14,
+  "note": "Ran at 10e6f4175, one file at a time with --maxWorkers=1: client Keys.laws, Prefix.laws, Tezgah.laws, HandsMachine.laws, HandsStart.laws, WindowStart.laws, WindowMachine.laws, Hands.types, Start.types and WindowMachine.types, all green; the reached integration laws next/apps/fabrika/src/checklist-instance.laws, tezgah-runner.laws, exam/layers and exam/deps, all green in the box. pnpm typecheck exits 0. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) exits 1; oxlint-plugins/lint.ts alone gives the two failures above. Plants were by reading only, since the branch may not be written.",
+  "step": "review"
+}
