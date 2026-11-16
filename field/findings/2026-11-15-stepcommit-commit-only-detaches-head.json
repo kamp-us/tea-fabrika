@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-stepcommit-commit-only-detaches-head",
+  "date": "2026-11-15",
+  "by": "tests",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/step-commit/scripts/stepcommit.sh",
+    "line": null
+  },
+  "says": "stepcommit.sh --commit-only, run on a checked-out branch, left HEAD detached with the new commit on it and the branch ref still at its base, so git push -u origin <branch> pushed the base.",
+  "proof": "Slice E98 tests step: git status -sb printed 'HEAD (no branch)' after the commit; git ls-remote showed the branch at its base while HEAD was one commit ahead; fixed by checking the branch out and fast-forwarding it to the commit.",
+  "cost": "A step reports a pushed head that origin does not hold, until someone compares git ls-remote with HEAD.",
+  "head": "773588d33e1eed728169817ff1249750252d339e",
+  "ticket": null,
+  "pr": null
+}
