@@ -48,7 +48,7 @@ const expectFires = (code: string, lines: ReadonlyArray<number>, since: Since = 
 const doc = (...lines: ReadonlyArray<string>): string =>
   ["/**", ...lines.map((line) => (line === "" ? " *" : ` * ${line}`)), " */"].join("\n");
 
-// 0574: no block asks for `@stability`, and a block that still holds one passes until E60 refuses it.
+// 0574: no block asks for `@stability`, and a block that holds one still passes, since `jsdocs` does not refuse it.
 const MODULE = doc("A planted module.");
 
 /** The module block of a file the sweep has not reached: it still holds the tag. */
