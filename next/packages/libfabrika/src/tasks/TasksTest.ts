@@ -16,7 +16,7 @@
 // the public `Ledger.read` and keeps its own list of what each key was asked for. Plant (after
 // build): append the `target:` line on a repeated request too.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Result as R, type Scope, Schema, Arbitrary, Stream } from "effect";
+import { DateTime, Effect, Layer, Result as R, type Scope, Schema, Arbitrary, Stream } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -101,7 +101,9 @@ export const fcExecutor = (keys: ReadonlyArray<string>): fc.Arbitrary<Executor> 
 export const fcRecorded = fc.record({
   by: fc.constantFrom("brain", "gateway:hands", "gateway:window"),
   for: fcTypeId("person"),
-  sentAt: fc.integer({ min: 1_700_000_000_000, max: 1_900_000_000_000 }).map((at) => new Date(at).toISOString()),
+  sentAt: fc
+    .integer({ min: 1_700_000_000_000, max: 1_900_000_000_000 })
+    .map((at) => DateTime.formatIso(DateTime.makeUnsafe(at))),
   parent: fc.option(fcTypeId("input"), { nil: null }),
   traceId: fcTraceId,
   build: fcHash,

@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
-import { Effect, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Answer, listUsd, NO_SPENT, runTurn, type Spent, stepRow } from "./agents.ts";
@@ -1269,8 +1269,8 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
         effort: "medium",
         outcome: "pass",
         reason: "done.",
-        started: new Date("2026-11-09T10:00:00Z"),
-        ended: new Date("2026-11-09T10:30:00Z"),
+        started: DateTime.toDateUtc(DateTime.makeUnsafe("2026-11-09T10:00:00Z")),
+        ended: DateTime.toDateUtc(DateTime.makeUnsafe("2026-11-09T10:30:00Z")),
         spent,
         redacted: 0,
       }),
@@ -1318,8 +1318,8 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
             effort: "medium",
             outcome: "pass",
             reason,
-            started: new Date("2026-11-09T10:00:00Z"),
-            ended: new Date("2026-11-09T10:30:00Z"),
+            started: DateTime.toDateUtc(DateTime.makeUnsafe("2026-11-09T10:00:00Z")),
+            ended: DateTime.toDateUtc(DateTime.makeUnsafe("2026-11-09T10:30:00Z")),
             spent,
             redacted: null,
             plants: answer.plants,

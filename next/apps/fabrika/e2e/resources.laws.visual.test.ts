@@ -14,7 +14,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { connect } from "node:net";
 import { join, resolve } from "node:path";
-import { Effect, Schema } from "effect";
+import { Clock, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, type TestContext } from "vitest";
 import { suite as scopedSuite } from "./p14.test-support.ts";
@@ -58,8 +58,8 @@ const FIRST_WINDOW: Target = { file: "first-window.visual.test.ts", test: "L11",
 
 const suite = (trace: string, fault: Fault | undefined, target: Target) =>
   Effect.acquireRelease(
-    Effect.sync(() => {
-      const started = Date.now();
+    Effect.gen(function* () {
+      const started = yield* Clock.currentTimeMillis;
       const child = spawn(
         process.execPath,
         [
@@ -86,7 +86,9 @@ const suite = (trace: string, fault: Fault | undefined, target: Target) =>
         },
       );
       const ended = Effect.callback<Ended>((resume) => {
-        child.once("exit", (code, signal) => resume(Effect.succeed({ code, signal, ms: Date.now() - started })));
+        child.once("exit", (code, signal) =>
+          resume(Effect.map(Clock.currentTimeMillis, (now) => ({ code, signal, ms: now - started }))),
+        );
       });
       return { child, ended };
     }),
@@ -161,10 +163,10 @@ const leftBehind = (trace: ReadonlyArray<Row>) =>
     });
     const gone = (left: Effect.Success<typeof look>) =>
       left.pids.length === 0 && left.ports.length === 0 && left.homes.length === 0;
-    const deadline = Date.now() + 10_000;
+    const deadline = (yield* Clock.currentTimeMillis) + 10_000;
     let left = yield* look;
 
-    while (!gone(left) && Date.now() < deadline) {
+    while (!gone(left) && (yield* Clock.currentTimeMillis) < deadline) {
       yield* Effect.sleep("250 millis");
       left = yield* look;
     }

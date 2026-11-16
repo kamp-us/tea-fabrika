@@ -12,7 +12,7 @@ import {
   TezgahView as View,
   tezgahName,
 } from "@kampus/libfabrika/tezgah/Workspace";
-import { Effect, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import type { Page } from "playwright";
 import { expect } from "vitest";
 import { PERSON, type reader } from "./p14.test-support.ts";
@@ -113,8 +113,12 @@ export const tezgahView = (r: Reader, pid: string): Effect.Effect<TezgahView> =>
 /** Sends tezgah one letter as a client does, through the door: for a layout no key reaches yet (focus
  *  moves are the next slice), never for what a law presses. */
 export const tell = (r: Reader, pid: string, m: unknown, letter: string) =>
-  Effect.flatMap(r.call("process.send", { pid, letter, m, sentAt: new Date().toISOString(), seen: 0 }), (frame) =>
-    frame.error === undefined ? Effect.void : Effect.die(new Error(`the door refused ${JSON.stringify(frame.error)}`)),
+  Effect.flatMap(
+    r.call("process.send", { pid, letter, m, sentAt: DateTime.formatIso(DateTime.nowUnsafe()), seen: 0 }),
+    (frame) =>
+      frame.error === undefined
+        ? Effect.void
+        : Effect.die(new Error(`the door refused ${JSON.stringify(frame.error)}`)),
   );
 
 /** What the tab draws: how many mains, each region in document order with its name and box, the

@@ -16,7 +16,7 @@
 // Plant, run once and undone (recorded in the tests step's field row): leave out the `PRIMARY KEY`,
 // so an overwrite adds a second row.
 import { describe, expect, it } from "@effect/vitest";
-import { Context, Effect, Exit, Layer } from "effect";
+import { Context, DateTime, Effect, Exit, Layer } from "effect";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import * as fc from "fast-check";
 import { Journal, type Entry, Entry as EntrySchema } from "../../client/Journal.ts";
@@ -148,7 +148,7 @@ const garbageStep = (n: number, value: string): Step => ({
 });
 
 const Text = fc.string({ minLength: 1, maxLength: 24 });
-const At = fc.integer({ min: 0, max: 4_102_444_800_000 }).map((ms) => new Date(ms).toISOString());
+const At = fc.integer({ min: 0, max: 4_102_444_800_000 }).map((ms) => DateTime.formatIso(DateTime.makeUnsafe(ms)));
 
 // fast-check: unsupported Effect -- fc.commands draws every step from fast-check arbitraries, and Effect's Arbitrary is another engine
 const AResult = fc.oneof(

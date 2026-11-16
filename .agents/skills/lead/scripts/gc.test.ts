@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DateTime } from "effect";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 import {
@@ -293,7 +294,7 @@ describe("dirtyIn reads a real box, today's tooling", () => {
     const box = join(root, "quiet");
     const data = join(root, "quiet-gitdata");
     spawnSync("git", ["init", "-q", `--separate-git-dir=${data}`, box]);
-    const old = new Date(Date.now() - 3 * 3_600_000);
+    const old = DateTime.toDateUtc(DateTime.subtract(DateTime.nowUnsafe(), { hours: 3 }));
     // The HEAD log stamps each entry with the committer's time.
     const env = { ...process.env, GIT_COMMITTER_DATE: old.toISOString() };
     const git = (...args: string[]) => spawnSync("git", ["-C", box, ...args], { encoding: "utf8", env });
@@ -309,16 +310,20 @@ describe("dirtyIn reads a real box, today's tooling", () => {
       utimesSync(p, old, old);
     }
 
-    utimesSync(join(box, "a.ts"), new Date(), new Date());
+    utimesSync(join(box, "a.ts"), DateTime.toDateUtc(DateTime.nowUnsafe()), DateTime.toDateUtc(DateTime.nowUnsafe()));
     utimesSync(box, old, old);
     const before = lastTouched(box, data);
     expect(dirtyIn(data, box)).toBe(0);
     expect(dirtyIn(data, box)).toBe(0);
     expect(lastTouched(box, data)).toBe(before);
-    expect(Date.now() - before).toBeGreaterThanOrEqual(IDLE);
+    expect(DateTime.toEpochMillis(DateTime.nowUnsafe()) - before).toBeGreaterThanOrEqual(IDLE);
     expect(statSync(join(data, "index")).mtimeMs).toBe(old.getTime());
     // git gc's reflog expiry rewrites the HEAD log: its file time is not work in the box.
-    utimesSync(join(data, "logs", "HEAD"), new Date(), new Date());
+    utimesSync(
+      join(data, "logs", "HEAD"),
+      DateTime.toDateUtc(DateTime.nowUnsafe()),
+      DateTime.toDateUtc(DateTime.nowUnsafe()),
+    );
     expect(lastTouched(box, data)).toBe(before);
   });
 });

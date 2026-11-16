@@ -21,7 +21,7 @@ import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey";
 import { type ClientRow, ClientRows } from "@kampus/libfabrika/transport/ClientRows";
-import { Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect";
+import { DateTime, Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "../src/build.ts";
 import { localInstance } from "../src/local-instance.ts";
@@ -296,7 +296,7 @@ export const served = (h: Home) =>
     const from = () => ({
       by: `SHA256:${createHash("sha256").update(blob).digest("base64").replace(/=+$/, "")}`,
       for: PERSON,
-      sentAt: new Date().toISOString(),
+      sentAt: DateTime.formatIso(DateTime.nowUnsafe()),
       seen: 0,
       parent: null,
       traceId: TRACE,

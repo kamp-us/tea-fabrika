@@ -4,7 +4,7 @@
 // file, `rename` replaces, and `stat` reports the type bits with the permission bits, as Node does.
 // Nothing here touches the disk. A call it does not model fails, as `layerNoop` makes it.
 import type { Layer, Scope } from "effect";
-import { Effect, FileSystem, Option, PlatformError } from "effect";
+import { DateTime, Effect, FileSystem, Option, PlatformError } from "effect";
 import { ByteSize } from "effect";
 
 type FileNode = { readonly type: "File"; bytes: Uint8Array; mode: number; mtime: Date };
@@ -19,7 +19,7 @@ export type Disk = {
 };
 
 /** A time as a `Date`, outside any Effect code. */
-const dateAt = (ms: number): Date => new Date(ms);
+const dateAt = (ms: number): Date => DateTime.toDateUtc(DateTime.makeUnsafe(ms));
 
 const S_IFREG = 0o100000;
 const S_IFDIR = 0o040000;
@@ -53,7 +53,7 @@ const parent = (path: string): string => {
 
 /** A new empty disk with the root and the folders given, each mode 0755. */
 export const disk = (folders: ReadonlyArray<string> = []): Disk => {
-  const entries = new Map<string, Entry>([["/", { type: "Directory", mode: 0o755, mtime: new Date(0) }]]);
+  const entries = new Map<string, Entry>([["/", { type: "Directory", mode: 0o755, mtime: dateAt(0) }]]);
 
   for (const folder of folders) {
     let at = "";
@@ -64,7 +64,7 @@ export const disk = (folders: ReadonlyArray<string> = []): Disk => {
       at = `${at}/${part}`;
 
       if (!entries.has(at)) {
-        entries.set(at, { type: "Directory", mode: 0o755, mtime: new Date(0) });
+        entries.set(at, { type: "Directory", mode: 0o755, mtime: dateAt(0) });
       }
     }
   }
@@ -74,7 +74,7 @@ export const disk = (folders: ReadonlyArray<string> = []): Disk => {
 
 /** Puts a file on the disk as a person or another program would, with its mode. */
 export const put = (d: Disk, path: string, bytes: Uint8Array, mode: number): void => {
-  d.entries.set(normal(path), { type: "File", bytes: new Uint8Array(bytes), mode: mode & 0o7777, mtime: new Date(0) });
+  d.entries.set(normal(path), { type: "File", bytes: new Uint8Array(bytes), mode: mode & 0o7777, mtime: dateAt(0) });
 };
 
 /** A file's bytes and permission bits, or null when the path holds no file. */
@@ -116,7 +116,7 @@ export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
   let temp = 0;
   let clock = 0;
   /** The disk's own clock: each change is one tick later, so no law reads the wall clock. */
-  const tick = () => new Date(++clock * 1000);
+  const tick = () => dateAt(++clock * 1000);
   const seen = (method: string, path: string) => d.calls.push({ method, path });
   const stat = (method: string) => (raw: string) =>
     Effect.suspend(() => {

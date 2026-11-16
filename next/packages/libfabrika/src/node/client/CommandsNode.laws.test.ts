@@ -20,7 +20,7 @@
 // toward the cap. C2, spawn with `extendEnv: true`. C3, report `git` when the file exists without
 // an execute bit.
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Layer, Path } from "effect";
+import { ConfigProvider, DateTime, Effect, Exit, Layer, Path } from "effect";
 import * as fc from "fast-check";
 import { Commands } from "../../client/Commands.ts";
 import { Command, type Result } from "../../tasks/Task.ts";
@@ -325,7 +325,11 @@ describe("P39 slice 4b: the real command layer", () => {
                 if (f.kind === "file") {
                   MemoryFiles.put(d, git, new Uint8Array([0x23, 0x21]), f.mode);
                 } else if (f.kind === "folder") {
-                  d.entries.set(git, { type: "Directory", mode: 0o755, mtime: new Date(0) });
+                  d.entries.set(git, {
+                    type: "Directory",
+                    mode: 0o755,
+                    mtime: DateTime.toDateUtc(DateTime.makeUnsafe(0)),
+                  });
                 }
               });
               const runnable = folders.some((f) => f.kind === "file" && (f.mode & 0o111) !== 0);

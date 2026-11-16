@@ -25,7 +25,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { DateTime, Effect, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId } from "../../Id.test-support.ts";
@@ -67,7 +67,7 @@ const KEEP = 336 * H;
 /** 2026-10-23 00:00 UTC, the plan's traced day. */
 const D = Date.UTC(2026, 9, 23);
 const hourStart = (at: number) => Math.floor(at / H) * H;
-const utcDay = (at: number) => new Date(at).toISOString().slice(0, 10);
+const utcDay = (at: number) => DateTime.formatIso(DateTime.makeUnsafe(at)).slice(0, 10);
 const fileKey = (day: string) => `measurements/${OBJECT}/${day}.jsonl`;
 
 const hex = (body: Uint8Array) => createHash("sha256").update(body).digest("hex");

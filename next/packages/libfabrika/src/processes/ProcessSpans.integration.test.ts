@@ -1,7 +1,7 @@
 // P33 extends p97/p99 through P37's real SQLite sink and JobRecords.
 // Raw process failure text may be content. It must never become tags or measurements data.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Layer, Redacted, Schema, Stream, Tracer } from "effect";
+import { Arbitrary, DateTime, Effect, Layer, Redacted, Schema, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as Id from "../Id.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -49,7 +49,12 @@ const nat = (max: number) =>
   );
 
 const date = Arbitrary.schema(
-  Schema.Date.check(Schema.isBetweenDate({ minimum: new Date("1900-01-01"), maximum: new Date("2100-01-01") })),
+  Schema.Date.check(
+    Schema.isBetweenDate({
+      minimum: DateTime.toDateUtc(DateTime.makeUnsafe("1900-01-01")),
+      maximum: DateTime.toDateUtc(DateTime.makeUnsafe("2100-01-01")),
+    }),
+  ),
 ).pipe(Arbitrary.map((date) => date.toISOString()));
 
 const capture = () => {

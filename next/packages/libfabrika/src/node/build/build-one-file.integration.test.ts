@@ -24,7 +24,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Path, Schema, Tracer } from "effect";
+import { DateTime, Effect, FileSystem, Path, Schema, Tracer } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
@@ -368,10 +368,10 @@ describe("P16 p33 one-file build", () => {
     await fc.assert(
       fc.asyncProperty(graph, async ({ text, count, chaos }) => {
         vi.useFakeTimers({ toFake: ["Date"] });
-        vi.setSystemTime(new Date("2030-01-01"));
+        vi.setSystemTime(DateTime.toDateUtc(DateTime.makeUnsafe("2030-01-01")));
         const a = fixture(text, count),
           first = await build({ ...a.options, chaos });
-        vi.setSystemTime(new Date("2031-01-01"));
+        vi.setSystemTime(DateTime.toDateUtc(DateTime.makeUnsafe("2031-01-01")));
         const b = fixture(text, count),
           second = await build({ ...b.options, chaos });
         // Plants: publish `// ${new Date().getUTCFullYear() % 7}`, or flip one byte of the second brain.
@@ -388,8 +388,8 @@ describe("P16 p33 one-file build", () => {
         for (const marker of [
           a.home,
           b.home,
-          String(new Date("2030-01-01").getTime()),
-          String(new Date("2031-01-01").getTime()),
+          String(DateTime.toEpochMillis(DateTime.makeUnsafe("2030-01-01"))),
+          String(DateTime.toEpochMillis(DateTime.makeUnsafe("2031-01-01"))),
           "2030-01-01T",
           "2031-01-01T",
         ]) {

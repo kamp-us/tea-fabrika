@@ -42,7 +42,7 @@
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { type Stepper, stepper } from "@kampus/libfabrika";
-import { Result, Schema } from "effect";
+import { DateTime, Result, Schema } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;
@@ -842,7 +842,7 @@ const FocusPick = fc.record({
 });
 type FocusPick = typeof FocusPick extends fc.Arbitrary<infer A> ? A : never;
 
-const iso = (ms: number) => new Date(Date.UTC(2026, 10, 14) + ms).toISOString();
+const iso = (ms: number) => DateTime.formatIso(DateTime.makeUnsafe(Date.UTC(2026, 10, 14) + ms));
 
 /** A focus move from a live tile to another tile on its workspace, picked in the state `w` reached,
  *  or for `focus_far` a `to` that is on no workspace or on another one. */

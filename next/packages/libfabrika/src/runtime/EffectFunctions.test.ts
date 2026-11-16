@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Clock, Effect, Exit, Layer, Option, Schema, Stream, Tracer } from "effect";
+import { Cause, Clock, DateTime, Effect, Exit, Layer, Option, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { ClientManager } from "../access/ClientManager.ts";
@@ -590,7 +590,7 @@ describe("T285, caller context keep-laws", () => {
                 expect(yield* fromHere(input)).toEqual({
                   ...input,
                   traceId: ctx.traceId,
-                  sentAt: new Date(at).toISOString(),
+                  sentAt: DateTime.formatIso(DateTime.makeUnsafe(at)),
                 });
               }),
             ).pipe(

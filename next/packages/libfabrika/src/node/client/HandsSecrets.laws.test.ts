@@ -27,6 +27,7 @@ import {
   Cause,
   ConfigProvider,
   Context,
+  DateTime,
   Effect,
   Exit,
   Layer,
@@ -278,7 +279,7 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
           done.add("file:wide");
         } else if (c === "unreadable" && entry?.type === "File") {
           // A folder where the key file should be: it stats, and reading it fails.
-          disk.entries.set(FILE, { type: "Directory", mode: 0o700, mtime: new Date(0) });
+          disk.entries.set(FILE, { type: "Directory", mode: 0o700, mtime: DateTime.toDateUtc(DateTime.makeUnsafe(0)) });
           done.add("file:unreadable");
         } else if (c !== "none" && entry !== undefined) {
           // A person deletes the key file, or one that cannot be used any more.

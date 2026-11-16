@@ -2,7 +2,7 @@
 // `verdict` on fixed clocks; the read laws write a made-up BOXES folder in a temp folder and set
 // Effect's test clock: no real quest, box or process is read or touched.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Layer, Path, type Scope } from "effect";
+import { DateTime, Effect, FileSystem, Layer, Path, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -12,8 +12,8 @@ import * as Quests from "./quests.ts";
 const options = { seed: 119120, numRuns: 300 };
 const T0 = Date.parse("2026-11-12T14:00:00.000Z");
 const MIN = 60_000;
-const iso = (offset: number) => new Date(T0 + offset).toISOString();
-const at = (offset: number) => new Date(T0 + offset);
+const iso = (offset: number) => DateTime.formatIso(DateTime.makeUnsafe(T0 + offset));
+const at = (offset: number) => DateTime.toDateUtc(DateTime.makeUnsafe(T0 + offset));
 
 const beat = (phase: Beat.Phase, sinceMs: number, atMs: number, agentMs: number | null = null): Beat.Beat => ({
   at: iso(atMs),
