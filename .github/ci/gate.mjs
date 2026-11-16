@@ -18,8 +18,8 @@
 // runner's own Node with no setup. A pure core (`decide`), a thin reader with the job's own token
 // (`read`), and `main`, which writes `start=true` or `start=false` for the next jobs and one line
 // for the run's summary. When GitHub cannot be read after three tries, the read runs out of its
-// deadline, or the last full run gives no start time that parses, the step fails and writes no `start`, so the tests do not run and the report judges the
-// run red.
+// deadline, or the last full run gives no start time that parses, the step fails and writes no
+// `start`, so the tests do not run and the report judges the run red.
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { isFull, jobsOf } from "./scheduled.mjs";
