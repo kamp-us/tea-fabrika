@@ -606,10 +606,18 @@ const secret = fc
 const printed = (value: unknown) =>
   JSON.stringify(value, (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v));
 
-const HIDDEN = ["b-env", "b-repo", "b-person", "a-table", "a-array"] as const;
+/**
+ * Each place a secret may sit. `a-table`, `a-array`, `a-scalar` (a plain value where a table of
+ * settings belongs) and `a-unknown` (a key no declaration has) are values the app's own schema
+ * refuses. The unknown section holds a digit, which no generated section does, so it never meets a
+ * declared one.
+ */
+const HIDDEN = ["b-env", "b-repo", "b-person", "a-table", "a-array", "a-scalar", "a-unknown"] as const;
 
 describe("K5 [secrets], another app's values never reach an output", () => {
   // Plant, run once: the `read` error prints the whole environment record. It turns this law red.
+  // Plants, run once: `Files`' "is a table of settings" message prints the refused value (a-scalar
+  // red), and its "there is no setting" message prints the unknown key's value (a-unknown red).
   // Every place, with the person's file readable and unreadable, is its own run of the property,
   // so each case is reached on every run.
   it.each(HIDDEN.flatMap((place) => [true, false].map((unreadable) => ({ place, unreadable }))))(
@@ -631,7 +639,11 @@ describe("K5 [secrets], another app's values never reach an output", () => {
                 ? `[${first}]\nnested = ${s}\n`
                 : place === "a-array"
                   ? `[${table}]\n${rest.join(".")} = [${s}]\n`
-                  : "",
+                  : place === "a-scalar"
+                    ? `${table} = ${s}\n`
+                    : place === "a-unknown"
+                      ? `[zz9zz]\nk = ${s}\n`
+                      : "",
             [own.person.path]: "",
             [other.repo.path]: place === "b-repo" ? `[${table}]\n${rest.join(".")} = ${s}\n` : "",
             [other.person.path]: place === "b-person" ? `[${table}]\n${rest.join(".")} = ${s}\n` : "",
