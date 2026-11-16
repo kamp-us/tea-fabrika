@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-snapshot-decodes-origins-with-a-sync-throw",
+  "date": "2026-11-15",
+  "by": "lead",
+  "model": "claude-fable-5-2",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/settings/Snapshot.ts",
+    "line": 110
+  },
+  "says": "In next/, the settings snapshot decodes its origins with Schema.decodeUnknownSync inside an Effect generator with nothing around it to catch the throw, so origins of the wrong shape crash as a defect and skip the typed error.",
+  "proof": "Snapshot.ts:110 reads `origins: Schema.decodeUnknownSync(Schema.Record(Schema.String, Origin))(resolved.origins)` while building the snapshot inside a generator that then yields `hashValues(values)`; no `Effect.try` wraps it. Effect's own checker flags it as schemaSyncInEffect when that check is turned on (a count run of 2026-11-15 with every check on).",
+  "cost": "A start with bad origins fails as an uncatchable defect, where the settings code answers a typed error for every other bad input.",
+  "head": "98bcdfa226f92fb702ae4a42ea19aa1a0592ad01",
+  "ticket": null,
+  "pr": null
+}
