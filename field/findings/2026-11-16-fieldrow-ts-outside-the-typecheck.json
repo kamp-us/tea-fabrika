@@ -1,0 +1,19 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-fieldrow-ts-outside-the-typecheck",
+  "date": "2026-11-16",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": ".agents/tsconfig.json",
+    "line": 18
+  },
+  "says": "In today's lead tooling, slice S3 of ticket 766 adds .agents/skills/lead/scripts/fieldrow.ts and fieldrow.test.ts but not to the include list of .agents/tsconfig.json, the project pnpm typecheck runs for the lead scripts. So pnpm typecheck never type-checks them or runs Effect's checks on them, and the build row's 'pnpm typecheck exited 0' says nothing about fieldrow.ts. Slice S2 added its new files there (governance.ts, governance.test.ts, git/*.ts on branch fabrikalfa/port-0113-s02); clauderow.ts, the twin of fieldrow.ts, is listed. Today both files are clean.",
+  "proof": "At 8491d53, rg fieldrow .agents/tsconfig.json finds nothing. A scratch tsconfig that extends .agents/tsconfig.json and includes only the two files passes tsc with exit 0; the same scratch project with a planted type error and a planted dropped Effect fails with TS2322 and effect(floatingEffect), so the checks were live.",
+  "cost": "A later edit to fieldrow.ts can break its types or drop an Effect and pass pnpm typecheck and CI.",
+  "next": "Add skills/lead/scripts/fieldrow.ts and skills/lead/scripts/fieldrow.test.ts to .agents/tsconfig.json's include, in this integrator, as S2 did for its files.",
+  "head": "8491d530717778fe21794079ae940287c762fdef",
+  "ticket": null,
+  "pr": null
+}
