@@ -106,15 +106,18 @@ const schemaFor = (spec: Spec) =>
 /** A narrowed counter never leaves its bounds, so its own steps keep its model readable. */
 const clamp = (spec: Spec, n: number) => (spec.shape === "narrowed" ? Math.min(spec.max, Math.max(spec.min, n)) : n);
 
-/** The variant's update, as plain functions the oracle folds too. */
-const updateFor = (spec: Spec, model: CounterModel, m: { readonly type: string }): CounterModel =>
-  m.type === "inc"
+/** The `_tag` of a letter the inbox kept. */
+const tagOf = (m: unknown): string => Schema.decodeUnknownSync(Schema.Struct({ _tag: Schema.String }))(m)._tag;
+
+/** The variant's update for a Msg's `_tag`, as plain functions the oracle folds too. */
+const updateFor = (spec: Spec, model: CounterModel, tag: string): CounterModel =>
+  tag === "inc"
     ? { ...model, count: clamp(spec, model.count + spec.k) }
-    : m.type === "dec"
+    : tag === "dec"
       ? { ...model, count: clamp(spec, model.count - spec.k) }
-      : m.type === "reset"
+      : tag === "reset"
         ? { ...model, count: clamp(spec, 0) }
-        : m.type === "ping_ok" || m.type === "write_ok" || m.type === "send_ok"
+        : tag === "ping_ok" || tag === "write_ok" || tag === "send_ok"
           ? { ...model, count: clamp(spec, model.count + 10 * spec.k) }
           : model;
 
@@ -138,11 +141,10 @@ const write = Cmd.make("write", {
   err: [],
 });
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("inc") }),
-  Schema.Struct({ type: Schema.Literal("dec") }),
-  Schema.Struct({ type: Schema.Literal("reset") }),
-]);
+const Msg = Schema.TaggedUnion({ inc: {}, dec: {}, reset: {} });
+
+/** The letter a `send` variant mails its recipient. */
+const Add = Schema.TaggedStruct("add", { n: Schema.Int });
 
 /** The variant as a program, made with `Program.make` as a program author writes one. */
 const programFor = (spec: Spec) => {
@@ -157,22 +159,22 @@ const programFor = (spec: Spec) => {
     ],
     update: {
       inc: (s: CounterModel, m: typeof Msg.Type) => [
-        updateFor(spec, s, m),
+        updateFor(spec, s, m._tag),
         spec.durable === "write"
           ? [write({ stream: "app/reload", write: Write.cases.own.make({ event: changed.make({ count: s.count }) }) })]
           : spec.durable === "send"
-            ? [send({ to: "recipient:1", m: { type: "add", n: s.count } })]
+            ? [send({ to: "recipient:1", m: Add.make({ n: s.count }) })]
             : spec.cmd
               ? [ping({ n: s.count })]
               : [],
       ],
-      dec: (s: CounterModel, m: typeof Msg.Type) => [updateFor(spec, s, m), []],
-      reset: (s: CounterModel, m: typeof Msg.Type) => [updateFor(spec, s, m), []],
-      ping_ok: (s: CounterModel) => [updateFor(spec, s, { type: "ping_ok" }), []],
+      dec: (s: CounterModel, m: typeof Msg.Type) => [updateFor(spec, s, m._tag), []],
+      reset: (s: CounterModel, m: typeof Msg.Type) => [updateFor(spec, s, m._tag), []],
+      ping_ok: (s: CounterModel) => [updateFor(spec, s, "ping_ok"), []],
       ping_err: (s: CounterModel) => [s, []],
-      write_ok: (s: CounterModel) => [updateFor(spec, s, { type: "write_ok" }), []],
+      write_ok: (s: CounterModel) => [updateFor(spec, s, "write_ok"), []],
       write_err: (s: CounterModel) => [s, []],
-      send_ok: (s: CounterModel) => [updateFor(spec, s, { type: "send_ok" }), []],
+      send_ok: (s: CounterModel) => [updateFor(spec, s, "send_ok"), []],
       send_err: (s: CounterModel) => [s, []],
     },
   });
@@ -620,7 +622,7 @@ const press = (w: World, type: "inc" | "dec" | "reset", letter?: number) => {
         id: `input_0000000000e00800000000${n.toString(16).padStart(4, "0")}`,
         by: PERSON,
         arrivedAt: n,
-        input: { type },
+        input: Msg.cases[type].make({}),
       },
       sentAt: "writer clock",
       seen: 0,
@@ -702,7 +704,7 @@ const replay = (
         continue;
       }
 
-      model = updateFor(code.variants.get(String(body.build)) ?? spec, model, letter.m as { type: string });
+      model = updateFor(code.variants.get(String(body.build)) ?? spec, model, tagOf(letter.m));
     } else if (fact.tag === "state.upgraded") {
       upgraded = { ran: (body.ran as ReadonlyArray<string>) ?? [] };
     } else if (fact.tag === "code.swapped") {
@@ -791,7 +793,7 @@ const pressOnce = Effect.fnUntraced(function* (w: World, a: Account, g: fc.Gener
   const { input } = press(w, type);
   const sent = yield* (yield* session(w, name)).runner.msg(input);
   expect(sent._tag, `press ${input.id}`).toBe("accepted");
-  a.model = updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, { type });
+  a.model = updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, type);
   a.accepted.push(input.id);
   return input;
 });
@@ -1036,9 +1038,7 @@ export const suite = (rig: Rig): void => {
                 yield* Deferred.await(held);
                 const spec = g(() =>
                   fcFitting(
-                    updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
-                      type: "inc",
-                    }),
+                    updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, "inc"),
                     a.v,
                   ),
                 );
@@ -1052,9 +1052,11 @@ export const suite = (rig: Rig): void => {
                 expect(swapping.pollUnsafe(), "the swap waits for the turn in flight").toBeUndefined();
                 yield* Deferred.succeed(gate, undefined);
                 expect((yield* Fiber.join(turn))._tag).toBe("accepted");
-                a.model = updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
-                  type: "inc",
-                });
+                a.model = updateFor(
+                  Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))),
+                  a.model,
+                  "inc",
+                );
                 a.accepted.push(input.id);
                 sent.push(input);
                 const answer = yield* Fiber.join(swapping);
@@ -1141,7 +1143,7 @@ export const suite = (rig: Rig): void => {
                     a.model = updateFor(
                       Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))),
                       a.model,
-                      { type },
+                      type,
                     );
                     a.accepted.push(input.id);
                     yield* agrees(w, a, base);
@@ -1332,7 +1334,7 @@ export const suite = (rig: Rig): void => {
                     const { input } = press(w, "inc");
                     const turn = yield* Effect.forkChild(s.runner.msg(input));
                     yield* Deferred.await(started);
-                    a.model = updateFor(start, a.model, { type: "inc" });
+                    a.model = updateFor(start, a.model, "inc");
                     a.accepted.push(input.id);
                     const late = g(fc.boolean);
 
@@ -1340,7 +1342,7 @@ export const suite = (rig: Rig): void => {
                       // The answer arrives before the swap: it folds on the old code.
                       yield* Deferred.succeed(gate, undefined);
                       yield* Fiber.join(turn);
-                      a.model = updateFor(start, a.model, { type: "ping_ok" });
+                      a.model = updateFor(start, a.model, "ping_ok");
                     }
 
                     yield* swapFitting(w, a, { ...g(() => fcFitting(a.model, a.v)), cmd: true });
@@ -1357,7 +1359,7 @@ export const suite = (rig: Rig): void => {
                       a.model = updateFor(
                         Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))),
                         a.model,
-                        { type: "ping_ok" },
+                        "ping_ok",
                       );
                     }
 
@@ -1408,9 +1410,11 @@ export const suite = (rig: Rig): void => {
                   expect(job.build).toBe(a.build);
                   expect(w.durable.attempts).toContain(job.id);
                   expect(w.durable.completed.has(job.id)).toBe(false);
-                  a.model = updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
-                    type: "inc",
-                  });
+                  a.model = updateFor(
+                    Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))),
+                    a.model,
+                    "inc",
+                  );
                   a.accepted.push(input.id);
                   const spec = { ...g(() => fcFitting(a.model, a.v)), durable };
                   const hash = yield* learn(w.code, spec);
@@ -1443,7 +1447,7 @@ export const suite = (rig: Rig): void => {
                   );
                   yield* s.runner.open(`pending-reader-${n}`);
                   a.model = climb(spec, a.model, a.v);
-                  a.model = updateFor(spec, a.model, { type: `${durable}_ok` });
+                  a.model = updateFor(spec, a.model, `${durable}_ok`);
                   a.v = spec.v;
                   a.build = hash;
                   a.ran.push(hash);
@@ -1510,9 +1514,11 @@ export const suite = (rig: Rig): void => {
                   const deadline = Option.getOrThrow(Option.fromNullishOr(s.alarms.at(-1)));
                   const now = yield* Clock.currentTimeMillis;
                   expect(deadline).toBeGreaterThan(now);
-                  a.model = updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
-                    type: "inc",
-                  });
+                  a.model = updateFor(
+                    Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))),
+                    a.model,
+                    "inc",
+                  );
                   a.accepted.push(input.id);
                   yield* TestClock.setTime(g(fc.integer, { min: now + 1, max: deadline - 1 }));
                   const spec = g(() =>
@@ -1533,7 +1539,7 @@ export const suite = (rig: Rig): void => {
                   yield* s.runner.due(deadline);
                   expect(w.durable.attempts.filter((id) => id === job.id)).toHaveLength(attempts + 1);
                   expect(w.durable.completed.has(job.id)).toBe(true);
-                  a.model = updateFor(spec, climb(spec, a.model, a.v), { type: "send_ok" });
+                  a.model = updateFor(spec, climb(spec, a.model, a.v), "send_ok");
                   a.v = spec.v;
                   a.build = hash;
                   const after = yield* history(w, NAME);
