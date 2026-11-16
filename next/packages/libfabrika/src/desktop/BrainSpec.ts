@@ -4,6 +4,7 @@
  * @stability unstable
  */
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 
 const Text = Schema.NonEmptyString.check(Schema.isPattern(/^[^\p{Cc}]+$/u));
 const Absolute = Text.check(Schema.isPattern(/^\//u));
@@ -12,9 +13,8 @@ const Home = Absolute.check(
   Schema.makeFilter(
     (value) =>
       value === "/" ||
-      (!value.endsWith("/") &&
-        !value
-          .split("/")
+      (!Str.endsWith("/")(value) &&
+        !Str.split("/")(value)
           .slice(1)
           .some((s) => s === "" || s === "." || s === "..")),
     { expected: "a canonical absolute home" },

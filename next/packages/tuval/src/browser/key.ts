@@ -11,7 +11,7 @@
 // It provides transport's `ClientKey` contract; the window consumes it.
 import { ClientKey, ClientKeyError as StoreError, type Identity } from "@kampus/libfabrika/transport/ClientKey";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Schema, String as Str } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { errorClass } from "./index.ts";
 
@@ -164,7 +164,7 @@ const makeKey = Effect.gen(function* () {
   return {
     pair,
     raw: Base64Url.encode(raw),
-    fingerprint: `SHA256:${Base64.encode(new Uint8Array(digest)).replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(digest)))}`,
   } satisfies Stored;
 });
 

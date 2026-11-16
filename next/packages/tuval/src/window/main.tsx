@@ -26,7 +26,7 @@ import { fold } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
 import { Button, useClipboard } from "@manti-ui/react";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema, String as Str } from "effect";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { landing, question, Layout, tileName } from "./Layout.tsx";
@@ -151,8 +151,8 @@ const PRINTED: Readonly<Record<string, string>> = { arrowleft: "←", arrowright
 const prefixHints = (table: Keys.Table): ReadonlyArray<string> =>
   table.rows.flatMap((row) => {
     const keys = row.keys
-      .filter((k) => k.startsWith("<prefix>"))
-      .map((k) => k.slice("<prefix>".length))
+      .filter(Str.startsWith("<prefix>"))
+      .map(Str.slice("<prefix>".length))
       .map((k) => PRINTED[k] ?? k);
     return keys.length === 0 ? [] : [`${keys.join(" ")} ${row.word}`];
   });

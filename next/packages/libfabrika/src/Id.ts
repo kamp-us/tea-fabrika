@@ -1,5 +1,16 @@
 // next/: TypeIDs with UUIDv7 suffixes. No platform or other libfabrika layer is needed.
-import { type Brand, Clock, Context, Effect, Layer, Order as Ordering, Result, Schema as S } from "effect";
+import {
+  type Brand,
+  Clock,
+  Context,
+  Effect,
+  Layer,
+  Option,
+  Order as Ordering,
+  Result,
+  Schema as S,
+  String as Str,
+} from "effect";
 
 const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 const low62 = (1n << 62n) - 1n;
@@ -20,10 +31,11 @@ const prefixes = new WeakMap<S.Top, string>();
 // Fabrika requires a nonempty prefix, with interior underscores and at most 63 characters.
 const validPrefix = (prefix: string): boolean => /^[a-z](?:[a-z_]{0,61}[a-z])?$/.test(prefix);
 
-const split = (id: string): readonly [string, string] => {
-  const separator = id.lastIndexOf("_");
-  return [id.slice(0, Math.max(0, separator)), id.slice(separator + 1)];
-};
+const split = (id: string): readonly [string, string] =>
+  Option.match(Str.lastIndexOf("_")(id), {
+    onNone: (): readonly [string, string] => ["", id],
+    onSome: (separator): readonly [string, string] => [Str.slice(0, separator)(id), Str.slice(separator + 1)(id)],
+  });
 
 const valid = (id: string): boolean => {
   const [prefix, suffix] = split(id);
@@ -37,12 +49,19 @@ const valid = (id: string): boolean => {
   }
 
   // The first character has only three bits: the UUID must fit in 128 bits.
-  if (alphabet.indexOf(suffix.charAt(0)) > 7) {
+  if (
+    Option.exists(
+      Option.flatMap(Str.charAt(0)(suffix), (first) => Str.indexOf(first)(alphabet)),
+      (index) => index > 7,
+    )
+  ) {
     return false;
   }
 
-  const uuid = [...suffix].reduce((bits, char) => (bits << 5n) | BigInt(alphabet.indexOf(char)), 0n);
-  return ((uuid >> 76n) & 15n) === 7n && ((uuid >> 62n) & 3n) === 2n;
+  return Option.exists(Option.all([...suffix].map((char) => Str.indexOf(char)(alphabet))), (digits) => {
+    const uuid = digits.reduce((bits, digit) => (bits << 5n) | BigInt(digit), 0n);
+    return ((uuid >> 76n) & 15n) === 7n && ((uuid >> 62n) & 3n) === 2n;
+  });
 };
 
 /** Any canonical TypeID containing a UUIDv7. Validation never trims or repairs input. */
@@ -136,7 +155,7 @@ const encode = (at: number, random: bigint): string => {
   let suffix = "";
 
   for (let i = 0; i < 26; i++) {
-    suffix = alphabet.charAt(Number(uuid & 31n)) + suffix;
+    suffix = Option.getOrElse(Str.charAt(Number(uuid & 31n))(alphabet), () => "") + suffix;
     uuid >>= 5n;
   }
 

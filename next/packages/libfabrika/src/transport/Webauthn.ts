@@ -10,7 +10,7 @@
  *
  * @stability unstable
  */
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema, String as Str } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { armor, type Bytes, field, holds, join, reader, same, subtle, u32, utf8 } from "./internal/binary.ts";
 
@@ -42,7 +42,7 @@ const keyParts = (blob: Uint8Array) =>
  * @category getters
  */
 export const passkeyBlob = (line: string): Option.Option<Bytes> => {
-  const [kind, base64] = line.split(/\s+/);
+  const [kind, base64] = Str.split(/\s+/)(line);
 
   if (kind !== KEY || base64 === undefined) {
     return Option.none();

@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { Context, Schema } from "effect";
+import { Context, Option, Schema, String as Str } from "effect";
 import type { Effect } from "effect";
 
 /**
@@ -20,8 +20,8 @@ export const Branch = Schema.String.check(
   Schema.makeFilter(
     (s) =>
       s !== "@" &&
-      [...s].every((c) => c.charCodeAt(0) > 32 && c.charCodeAt(0) !== 127) &&
-      s.split("/").every((p) => !p.startsWith(".") && !p.endsWith(".") && !p.endsWith(".lock")),
+      [...s].every((c) => Option.exists(Str.charCodeAt(0)(c), (unit) => unit > 32 && unit !== 127)) &&
+      Str.split("/")(s).every((p) => !Str.startsWith(".")(p) && !Str.endsWith(".")(p) && !Str.endsWith(".lock")(p)),
   ),
 );
 

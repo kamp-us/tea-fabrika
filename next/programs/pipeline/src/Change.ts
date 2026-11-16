@@ -1,5 +1,5 @@
 import { Ci, type CodeHost } from "@kampus/libfabrika";
-import { Array as Arr, Schema } from "effect";
+import { Array as Arr, Schema, String as Str } from "effect";
 import picomatch from "picomatch/posix.js";
 
 export const Kind = Schema.Literals(["rows", "docs", "code"]);
@@ -14,7 +14,7 @@ const compiles = (glob: string) => {
 };
 
 export const Glob = Schema.NonEmptyString.check(
-  Schema.makeFilter((g) => (!g.startsWith("!") && g.length <= 65_536 && compiles(g)) || "not a glob"),
+  Schema.makeFilter((g) => (!Str.startsWith("!")(g) && g.length <= 65_536 && compiles(g)) || "not a glob"),
 );
 
 export const Kinds = Schema.Struct({ rows: Schema.Array(Glob), docs: Schema.Array(Glob) });

@@ -2,6 +2,7 @@
 // union. A permission holds when some relation its unions reach holds for the subject on the object.
 // The visited set ends a loop of permissions, so no depth needs a number, and a loop alone holds
 // nothing.
+import { Option, String as Str } from "effect";
 import type { Tuples } from "../Relation.ts";
 import { holds, tupleKey } from "./relationsTable.ts";
 
@@ -20,7 +21,8 @@ export interface Declared {
  *
  * @internal
  */
-export const objectType = (ref: string): string => ref.slice(0, Math.max(0, ref.indexOf(":")));
+export const objectType = (ref: string): string =>
+  Option.match(Str.indexOf(":")(ref), { onNone: () => "", onSome: (colon) => Str.slice(0, colon)(ref) });
 
 /**
  * Whether `subject` holds `permission` on `object` in these tuples, by the declared types.

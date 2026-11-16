@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { Effect, Schema } from "effect";
+import { Effect, Schema, String as Str } from "effect";
 import { Base64 } from "effect/encoding";
 import { field, join, subtle } from "./internal/binary.ts";
 import { KeyLine } from "./Sshsig.ts";
@@ -18,7 +18,7 @@ import { KeyLine } from "./Sshsig.ts";
  */
 export const fingerprint = Effect.fnUntraced(function* (raw: Uint8Array) {
   const hash = yield* subtle("digest", "SHA-256", new Uint8Array(raw));
-  return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
+  return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(hash)))}`;
 });
 
 /**

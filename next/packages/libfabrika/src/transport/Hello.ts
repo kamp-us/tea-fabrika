@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { Effect, Result, Schema } from "effect";
+import { Effect, Result, Schema, String as Str } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { subtle } from "./internal/binary.ts";
 import { checkSshsig } from "./Sshsig.ts";
@@ -156,7 +156,7 @@ export const checkHello = Effect.fn("transport.checkHello")(function* <E, R>(a: 
   }
 
   const hash = yield* subtle("digest", "SHA-256", new Uint8Array(raw.success));
-  const fingerprint = `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
+  const fingerprint = `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(hash)))}`;
 
   if (fingerprint !== a.name) {
     return no("bad_signature");

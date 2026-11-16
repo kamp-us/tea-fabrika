@@ -9,7 +9,7 @@ import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import * as RepositoryTrustLedger from "@kampus/libfabrika/packs/RepositoryTrustLedger";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
-import { Config, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
+import { Config, Effect, FileSystem, Layer, Path, Schema, Stream, String as Str } from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
 import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
@@ -213,9 +213,9 @@ const command = Command.make("dev", flags, (options) => {
                 for (const { name, outcome } of answer.processes) {
                   const text =
                     outcome._tag === "swapped"
-                      ? `${name} runs ${answer.hash.slice(0, 8)} now`
+                      ? `${name} runs ${Str.slice(0, 8)(answer.hash)} now`
                       : outcome._tag === "refused"
-                        ? `${name} stays on ${outcome.was.slice(0, 8)}: ${outcome.reason === "shape" ? "the new code can't read its state" : outcome.reason === "newer" ? "its state has a newer version" : "the new code could not load"}`
+                        ? `${name} stays on ${Str.slice(0, 8)(outcome.was)}: ${outcome.reason === "shape" ? "the new code can't read its state" : outcome.reason === "newer" ? "its state has a newer version" : "the new code could not load"}`
                         : outcome._tag === "not_now"
                           ? `${name} will try the new code at the next brain start`
                           : `${name} already runs this code`;
