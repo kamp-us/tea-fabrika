@@ -87,4 +87,15 @@ this holds down the whole chain.**
 
 - The drop step: its name, its shape and who may take it.
 - Who owns a process the brain starts at boot.
-- Whether a restarted process keeps the member of the one it replaces.
+- ~~Whether a restarted process keeps the member of the one it replaces.~~ Settled on 2026-11-15,
+  see Amendments.
+
+## Amendments
+
+- 2026-11-15: **A restarted process keeps the member of the life it replaces.** A restart repeats
+  the original start, as Erlang's supervisor restarts a child from its child spec
+  ([supervisor](https://www.erlang.org/doc/apps/stdlib/supervisor.html)) and systemd's `Restart=`
+  starts a unit again as the same configured user
+  ([systemd.service](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html)).
+  An agent member stays a member across a restart until it leaves or is dismissed. This unblocks the
+  pipe slice's restart law.

@@ -1,0 +1,11 @@
+# ripgrep (and fd) read this file. A plain `rg` from the repo root skips hidden folders, so these
+# lines let it search our tracked dot folders. .gitignore still decides what is skipped inside them
+# (node_modules, dist, runs, .claude/worktrees).
+!.agents/
+!.claude/
+!.decisions/
+!.fabrika/
+!.github/
+!.glossary/
+!.patterns/
+!.runbooks/

@@ -1,7 +1,7 @@
 ---
 id: 0005
 title: Code shapes are written to .patterns/ with the write-pattern skill, and every pattern doc and every decision with a shape opens with a Mermaid diagram, then code, then words
-status: accepted
+status: amended-in-part by [0585](0585-kalfa-is-six-domain-packages.md)
 date: 2026-11-09
 tags: [patterns, decisions, diagrams, mermaid, docs, skills]
 ---

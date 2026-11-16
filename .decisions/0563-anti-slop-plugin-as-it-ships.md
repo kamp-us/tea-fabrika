@@ -125,12 +125,13 @@ authors already wrote (owner, 2026-11-15).**
   (the fork's one rule, in place of the parent's `no-conditional-empty-object-spread`),
   `anti-slop/no-shape-in-symbol-names`, and the rest of the list: `no-array-filter-map`,
   `no-reduce-accumulator-copy`, `no-chained-type-assertions`, `no-known-value-widening`,
-  `no-object-parameters`, `no-reflect-apply`, `no-unknown-type-aliases`,
-  `no-unsafe-dictionary-type`, `no-widen-then-assert`, and from the Effect entry point
+  `no-object-parameters`, `no-reflect-apply`, `no-widen-then-assert`, and from the Effect entry point
   `no-manual-effect-error-tag`, `no-service-constructor-imports` and
   `prefer-tagged-error-handling`.
 - **Since taken:** the two Match rules, by [0567](0567-a-tagged-value-is-matched.md), which also
   says the form we write. They no longer wait.
+- **Since taken:** `anti-slop/no-unknown-type-aliases` and `anti-slop/no-unsafe-dictionary-type`
+  (owner, 2026-11-15), see Amendments. They no longer wait.
 
 **`no-unknown-parameters`**
 
@@ -217,3 +218,5 @@ authors already wrote (owner, 2026-11-15).**
   plugin's `src/` comes in whole and unchanged at one commit of the fork, as its README says, with
   the commit and license recorded. The first route, a git dependency, would make every install and
   CI run depend on one fork staying online, and its `prepare` script could run on install.
+- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) rules which of our rules rule E replaces: where theirs catches the same or more, ours goes in the pull request that turns theirs on; where ours catches more, it stays. It also settles `fabrika/no-hand-tag` (theirs holds it) and `fabrika/padding-line-between-statements` (theirs holds it once `require-readable-spacing` is on and a check shows it flags every line ours does), two of the open items under Not decided here.
+- 2026-11-15: the owner took `anti-slop/no-unknown-type-aliases` and `anti-slop/no-unsafe-dictionary-type`. They go on with the rest, folder by folder, each at zero, alongside `no-unknown-parameters`, `no-unknown-returns` and `no-runtime-typeof`, in the sweep of ticket 1053. No `unknown` inside an array or an object-type field is covered by any rule of theirs; that gap went to the authors as https://github.com/dmmulroy/anti-slop/issues/77.

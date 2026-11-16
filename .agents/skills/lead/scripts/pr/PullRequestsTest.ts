@@ -9,11 +9,14 @@ export const Call = Schema.TaggedUnion({
   edit: { number: Schema.Number, title: Schema.String, body: Schema.String },
   ready: { number: Schema.Number },
   enqueue: { number: Schema.Number, oid: Schema.String },
+  arm: { number: Schema.Number, oid: Schema.String },
 });
 export type Call = typeof Call.Type;
 
 /** The calls that fail with a reason, by name. */
-export type Failing = Partial<Record<"openOn" | "all" | "draft" | "edit" | "ready" | "view" | "enqueue", string>>;
+export type Failing = Partial<
+  Record<"openOn" | "all" | "draft" | "edit" | "ready" | "view" | "enqueue" | "files" | "arm", string>
+>;
 
 /** What `view` adds to a listed pull request; each part has a plain default. */
 export type More = Partial<Omit<Detail, keyof PullRequest>>;
@@ -23,10 +26,17 @@ export type World = {
   readonly calls: Array<Call>;
   /** What `view` says beyond the list, by number: base `main`, no words and not merged when absent. */
   readonly more: Map<number, More>;
+  /** The files each pull request changes, by number: none when absent. */
+  readonly files: Map<number, ReadonlyArray<string>>;
 };
 
 /** A fresh world over these pull requests; the layer reads and changes it in place. */
-export const world = (prs: ReadonlyArray<PullRequest> = []): World => ({ prs: [...prs], calls: [], more: new Map() });
+export const world = (prs: ReadonlyArray<PullRequest> = []): World => ({
+  prs: [...prs],
+  calls: [],
+  more: new Map(),
+  files: new Map(),
+});
 
 export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests> => {
   const fails = (name: keyof Failing) => {
@@ -81,6 +91,11 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
       enqueue: (number, oid) =>
         Effect.map(fails("enqueue"), () => {
           w.calls.push(Call.cases.enqueue.make({ number, oid }));
+        }),
+      files: (number) => Effect.map(fails("files"), () => w.files.get(number) ?? []),
+      arm: (number, oid) =>
+        Effect.map(fails("arm"), () => {
+          w.calls.push(Call.cases.arm.make({ number, oid }));
         }),
     }),
   );

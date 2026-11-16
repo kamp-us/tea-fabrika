@@ -67,7 +67,18 @@ export const ProcessEvent = Schema.TaggedUnion({
   exited: { process: ProcessId, reason: ExitReason },
   restarted: { process: ProcessId, after: ProcessId, name: Text, reason: Text, build: Text },
   down: { process: ProcessId, reason: Text, crashes: Count, until: Schema.Int },
-  monitored: { ref: Text, process: ProcessId, to: Recipient },
+  /**
+   * `name` is the registered name a program's watch was asked by, and `member` the member that
+   * watch was checked against (0170, 0531). A window's watch, and every row from before, has
+   * neither.
+   */
+  monitored: {
+    ref: Text,
+    process: ProcessId,
+    to: Recipient,
+    name: Schema.optionalKey(Text),
+    member: Schema.optionalKey(Sender),
+  },
   demonitored: {
     ref: Text,
     to: Recipient,
@@ -97,7 +108,7 @@ export const watchKey = (to: To, ref: string): string => JSON.stringify([canonic
 export const signalId = (to: To, ref: string, round: number): string =>
   JSON.stringify(["DOWN", canonical(to), ref, round]);
 
-const watched = { ref: Text, process: ProcessId, to: Recipient, round: Count };
+const watched = { ref: Text, process: ProcessId, to: Recipient, round: Count, name: Schema.optionalKey(Text) };
 
 /** `round` counts this (recipient, ref)'s monitored events, so a monitor after a cancel is new. */
 const Watch = Schema.TaggedUnion({ live: watched, canceled: watched });
@@ -208,6 +219,7 @@ export const processTableFor = (by: string) =>
             process: event.process,
             to: event.to,
             round,
+            ...(event.name === undefined ? {} : { name: event.name }),
           });
           return [{ ...s, watches: put(s.watches, key, watch) }, []];
         }
@@ -220,8 +232,8 @@ export const processTableFor = (by: string) =>
             return [s, []];
           }
 
-          const { ref, process, to, round } = watch;
-          const canceled = Watch.cases.canceled.make({ ref, process, to, round });
+          const { _tag: _live, ...held } = watch;
+          const canceled = Watch.cases.canceled.make(held);
           return [{ ...s, watches: put(s.watches, key, canceled) }, []];
         }
 
