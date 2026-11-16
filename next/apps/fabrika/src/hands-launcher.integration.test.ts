@@ -31,10 +31,11 @@ import { build } from "@kampus/libfabrika/build";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import { Config, ConfigProvider, Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
+import { keptEnv } from "./env.test-support.ts";
 import type { Project as LauncherProject } from "./hands-launcher.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -149,11 +150,15 @@ const launcher = Effect.fnUntraced(function* (
   errors: Seen["stderr"],
 ) {
   const lines = yield* Queue.unbounded<Line>();
+  // This process's PATH through Config, read when the child starts; an empty one stays empty.
+  const path = yield* Config.String("PATH")
+    .pipe(Config.withDefault(""))
+    .parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
 
   const handle = yield* ChildProcess.make(process.execPath, [script], {
     cwd,
     extendEnv: false,
-    env: { FABRIKA_HOME: home, HOME: home, PATH: process.env.PATH ?? "" },
+    env: { FABRIKA_HOME: home, HOME: home, PATH: path },
   });
 
   yield* handle.stdout.pipe(
@@ -224,16 +229,8 @@ const flow = Effect.fnUntraced(
       files: [],
     });
 
-    const oldHome = process.env.ALCHEMY_HOME;
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        if (oldHome === undefined) {
-          delete process.env.ALCHEMY_HOME;
-        } else {
-          process.env.ALCHEMY_HOME = oldHome;
-        }
-      }),
-    );
+    // localInstance sets ALCHEMY_HOME; it goes back as it was when the scope closes.
+    yield* keptEnv(["ALCHEMY_HOME"]);
 
     const running = yield* localInstance(
       built,

@@ -6,6 +6,7 @@ import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Clock, Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -72,34 +73,9 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "sjob-" });
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const previous = {
-            home: process.env.FABRIKA_HOME,
-            alchemy: process.env.ALCHEMY_HOME,
-            tracking: process.env.DO_NOT_TRACK,
-          };
-
-          process.env.FABRIKA_HOME = home;
-          process.env.DO_NOT_TRACK = "1";
-
-          return previous;
-        }),
-        (previous) =>
-          Effect.sync(() => {
-            for (const [key, value] of [
-              ["FABRIKA_HOME", previous.home],
-              ["ALCHEMY_HOME", previous.alchemy],
-              ["DO_NOT_TRACK", previous.tracking],
-            ] as const) {
-              if (value === undefined) {
-                delete process.env[key];
-              } else {
-                process.env[key] = value;
-              }
-            }
-          }),
-      );
+      // localInstance sets ALCHEMY_HOME, so it goes back as it was too.
+      yield* scopedEnv({ FABRIKA_HOME: home }, ["ALCHEMY_HOME"]);
+      yield* Effect.sync(noTracking);
       const { localState } = yield* Effect.promise(() => import("alchemy/State/LocalState"));
       const { build } = yield* Effect.promise(() => import("./build.ts"));
       const { localInstance } = yield* Effect.promise(() => import("./local-instance.ts"));

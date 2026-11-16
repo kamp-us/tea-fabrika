@@ -14,7 +14,7 @@ import { Id } from "@kampus/libfabrika";
 import { workerLoader } from "@kampus/libfabrika/workers";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Config, ConfigProvider, Effect, Layer, Option, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
@@ -988,7 +988,15 @@ describe("P16 copied-file real instance, serial", () => {
   });
   // scenario: a fixed base/head benchmark, because it measures real laptop performance.
   it("scenario: T10 timing checks experiment 241's four base and five head readings on the laptop; without a bar file it skips the cap check", async () => {
-    const path = process.env.P16_LOCAL_BAR;
+    // The laptop's variables through Config, read when the scenario runs. An empty one stays empty,
+    // as a read of process.env gave it, so an empty P16_LOCAL_BAR still skips and an empty CI is off.
+    const text = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
+    const env = Effect.runSync(
+      Config.all({ bar: text("P16_LOCAL_BAR"), brain: text("P16_BRAIN"), ci: text("CI") }).parse(
+        ConfigProvider.fromEnv({ preserveEmptyStrings: true }),
+      ),
+    );
+    const path = env.bar;
 
     if (!path) {
       console.log(
@@ -999,12 +1007,12 @@ describe("P16 copied-file real instance, serial", () => {
     }
 
     const bar = Schema.decodeSync(Schema.fromJsonString(Bar))(readFileSync(path, "utf8"));
-    const brain = process.env.P16_BRAIN;
+    const brain = env.brain;
     assert(brain, "final brain path missing");
     const digest = createHash("sha256").update(readFileSync(brain)).digest("hex");
     const { programs } = await import("./table.ts");
     const windowed = exportsWindow(join(APP, "src"), programs);
-    localBar(bar, digest, !process.env.CI, windowed);
+    localBar(bar, digest, !env.ci, windowed);
     console.log(
       JSON.stringify({
         law: "T10",

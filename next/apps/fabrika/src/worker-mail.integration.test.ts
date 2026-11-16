@@ -11,6 +11,7 @@ import { Effect, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -262,7 +263,7 @@ const world = async (
   braked = false,
   diagnose = false,
 ) => {
-  process.env.DO_NOT_TRACK = "1";
+  noTracking();
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
@@ -275,22 +276,7 @@ const world = async (
       );
 
       const key = identity();
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const previous = process.env.FABRIKA_HOME;
-          process.env.FABRIKA_HOME = home;
-
-          return previous;
-        }),
-        (previous) =>
-          Effect.sync(() => {
-            if (previous === undefined) {
-              delete process.env.FABRIKA_HOME;
-            } else {
-              process.env.FABRIKA_HOME = previous;
-            }
-          }),
-      );
+      yield* scopedEnv({ FABRIKA_HOME: home });
       symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
       const selections: Record<string, string> = {};
 
@@ -731,22 +717,7 @@ const checklistWorld = async (
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "alarm866-" });
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const previous = process.env.FABRIKA_HOME;
-          process.env.FABRIKA_HOME = home;
-
-          return previous;
-        }),
-        (previous) =>
-          Effect.sync(() => {
-            if (previous === undefined) {
-              delete process.env.FABRIKA_HOME;
-            } else {
-              process.env.FABRIKA_HOME = previous;
-            }
-          }),
-      );
+      yield* scopedEnv({ FABRIKA_HOME: home });
       yield* fs.symlink(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
       const wrapper = join(home, "checklist.ts");
       yield* fs.writeFileString(
@@ -906,7 +877,7 @@ export const program = Program.make({name: "t1041/reader", machine, state: {v: 1
 `;
 
 it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread letter between two real programs answer full, and once the reader reads a resend lands", async () => {
-  process.env.DO_NOT_TRACK = "1";
+  noTracking();
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
@@ -921,22 +892,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
         (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
       );
 
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const previous = process.env.FABRIKA_HOME;
-          process.env.FABRIKA_HOME = home;
-
-          return previous;
-        }),
-        (previous) =>
-          Effect.sync(() => {
-            if (previous === undefined) {
-              delete process.env.FABRIKA_HOME;
-            } else {
-              process.env.FABRIKA_HOME = previous;
-            }
-          }),
-      );
+      yield* scopedEnv({ FABRIKA_HOME: home });
       symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
       const selections: Record<string, string> = {};
 

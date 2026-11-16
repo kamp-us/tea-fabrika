@@ -21,6 +21,7 @@ import { Effect, Layer, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { describe, expect, it } from "vitest";
+import { changeEnv, noTracking } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -124,7 +125,7 @@ const world = async (
   ) => Promise<void>,
   instrument = false,
 ) => {
-  process.env.DO_NOT_TRACK = "1";
+  noTracking();
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
@@ -132,8 +133,7 @@ const world = async (
   const home = mkdtempSync(join(tmpdir(), "p12-o-")),
     key = identity();
 
-  const previousHome = process.env.FABRIKA_HOME;
-  process.env.FABRIKA_HOME = home;
+  const restoreHome = Effect.runSync(changeEnv({ FABRIKA_HOME: home }));
   let hits = 0;
   let release: Effect.Effect<void> = Effect.void;
 
@@ -277,12 +277,7 @@ const world = async (
     rmSync(home, { recursive: true, force: true });
     // Last, so the pair stays held until the instance that used its port is gone.
     await Effect.runPromise(release);
-
-    if (previousHome === undefined) {
-      delete process.env.FABRIKA_HOME;
-    } else {
-      process.env.FABRIKA_HOME = previousHome;
-    }
+    restoreHome();
   }
 };
 

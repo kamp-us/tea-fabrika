@@ -55,6 +55,7 @@ const PongLive = Pong.make(
 export default Host.make(
   {
     main: import.meta.url,
+    // @effect-diagnostics-next-line processEnv:off -- read as this module loads, in Node and in workerd, where no Effect runs; sibling.laws hands its held port through it
     dev: { host: "127.0.0.1", port: Number(process.env.T502_PORT), strictPort: true },
     compatibility: { date: "2026-10-12" },
   },

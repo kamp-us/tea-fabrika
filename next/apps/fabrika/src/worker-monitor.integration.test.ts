@@ -18,6 +18,7 @@ import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { Effect, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -263,7 +264,7 @@ type Fixture = {
 
 /** One local instance on workerd in a temp home, with the reader and the writer built into it. */
 const world = async (test: (instance: Instance, fixture: Fixture) => Promise<void>) => {
-  process.env.DO_NOT_TRACK = "1";
+  noTracking();
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
@@ -276,22 +277,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
       );
 
       const key = identity();
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const previous = process.env.FABRIKA_HOME;
-          process.env.FABRIKA_HOME = home;
-
-          return previous;
-        }),
-        (previous) =>
-          Effect.sync(() => {
-            if (previous === undefined) {
-              delete process.env.FABRIKA_HOME;
-            } else {
-              process.env.FABRIKA_HOME = previous;
-            }
-          }),
-      );
+      yield* scopedEnv({ FABRIKA_HOME: home });
       symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
       const selections: Record<string, string> = {};
 

@@ -9,6 +9,7 @@ import { Context, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect } from "vitest";
 import { build } from "./build.ts";
+import { scopedEnv } from "./env.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -187,27 +188,8 @@ const world = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "usage-worker-" });
-  const oldAlchemy = process.env.ALCHEMY_HOME;
-  const oldHome = process.env.FABRIKA_HOME;
-  yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      process.env.FABRIKA_HOME = home;
-    }),
-    () =>
-      Effect.sync(() => {
-        if (oldHome === undefined) {
-          delete process.env.FABRIKA_HOME;
-        } else {
-          process.env.FABRIKA_HOME = oldHome;
-        }
-
-        if (oldAlchemy === undefined) {
-          delete process.env.ALCHEMY_HOME;
-        } else {
-          process.env.ALCHEMY_HOME = oldAlchemy;
-        }
-      }),
-  );
+  // localInstance sets ALCHEMY_HOME, so it goes back as it was too.
+  yield* scopedEnv({ FABRIKA_HOME: home }, ["ALCHEMY_HOME"]);
   yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
   const file = path.join(home, "spin.ts");
   yield* fs.writeFileString(file, spinSource);
