@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
-import { Effect, Schema } from "effect";
+import { Effect, Match, Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Answer, listUsd, NO_SPENT, runTurn, type Spent, stepRow } from "./agents.ts";
@@ -26,6 +26,7 @@ import {
   judgedMove,
   lacks,
   QUEST_STEPS,
+  Move,
   moveFrom,
   moveOf,
   providers,
@@ -113,9 +114,9 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
     fc.assert(
       fc.property(step, fc.constantFrom("done", "skip:step_said"), word, (s, o, reason) => {
         const m = moveOf(s, line(o, "h", reason), 0, 3);
-        expect(m._tag === "step" ? m.step : m._tag).toBe(walk[s]);
+        expect(Move.isAnyOf(["step"])(m) ? m.step : m._tag).toBe(walk[s]);
 
-        if (m._tag === "step") {
+        if (Move.isAnyOf(["step"])(m)) {
           expect(m.note).toBe("");
           expect(m.step).not.toBe("mutation");
         }
@@ -131,7 +132,7 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
         const m = moveOf(from, line(`send:${to}:step_said`, "h", reason), 0, 3);
         expect(m).toMatchObject({ _tag: "step", step: to });
 
-        if (m._tag === "step") {
+        if (Move.isAnyOf(["step"])(m)) {
           expect(m.note).toContain(reason);
         }
 
@@ -139,7 +140,7 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
         const toMutation = moveOf(from, line("send:mutation:step_said", "h", reason), 0, 3);
         expect(toMutation._tag).toBe("park");
 
-        if (toMutation._tag === "park") {
+        if (Move.isAnyOf(["park"])(toMutation)) {
           expect(toMutation.reason).toContain(reason);
         }
       }),
@@ -231,7 +232,7 @@ describe("T341 the judgment agent's answer, today's tooling", () => {
         const sent = judgedOf(`${chatter}\n\nanswer: send ${s} ${note}\n`);
         expect(sent).toMatchObject({ _tag: "step", step: s });
 
-        if (sent._tag === "step") {
+        if (Move.isAnyOf(["step"])(sent)) {
           expect(sent.note).toContain(note);
         }
 
@@ -498,14 +499,17 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
         const started: string[] = cmds.flatMap((c) => (c.type === "step_run" ? [c.step] : []));
 
         for (const a of answers) {
-          if (m.phase === "stepping" && a._tag === "line") {
-            [m, cmds] = ran(m, line(a.o, "c".repeat(40)));
-          } else if (m.phase === "judging" && a._tag === "judged") {
-            [m, cmds] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: a.text } } as never);
-          } else {
+          const next = Match.valueTags(a, {
+            line: ({ o }) => (m.phase === "stepping" ? ran(m, line(o, "c".repeat(40))) : null),
+            judged: ({ text }) =>
+              m.phase === "judging" ? machine.update.judge_ok(m, { type: "judge_ok", value: { text } } as never) : null,
+          });
+
+          if (next === null) {
             continue;
           }
 
+          [m, cmds] = next;
           started.push(...cmds.flatMap((c) => (c.type === "step_run" ? [c.step] : [])));
           expect(m.phase === "stepping" || m.phase === "judging" ? m.step : "none").not.toBe("mutation");
         }
@@ -1255,13 +1259,9 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
 
         expect(report).toBe(said);
         expect(turned._tag).toBe("ended");
-
-        if (turned._tag !== "ended") {
-          return;
-        }
-
-        expect(turned.answer).toEqual({ verb: "done", to: null, reason: "all green", laws: null, plants });
-        expect(turned.spent).toEqual({
+        const ended = Match.valueTags(turned, { ended: (t) => t, failed: () => undefined });
+        expect(ended?.answer).toEqual({ verb: "done", to: null, reason: "all green", laws: null, plants });
+        expect(ended?.spent).toEqual({
           input: 100,
           cached: 40,
           output: 10,
@@ -1289,9 +1289,7 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
         const { turned } = yield* turn({ raws: [{ _tag: "said", text: "half" }] });
         expect(turned._tag).toBe("failed");
 
-        if (turned._tag === "failed") {
-          expect(turned.reason).toBe("broke");
-        }
+        expect(Match.valueTags(turned, { ended: () => null, failed: ({ reason }) => reason })).toBe("broke");
       }),
     ));
 
@@ -1300,7 +1298,7 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
       Effect.gen(function* () {
         const { turned, report } = yield* turn(Agent.saying("no json here"));
         expect(report).toBe("no json here");
-        expect(turned._tag === "ended" && turned.answer).toBeNull();
+        expect(Match.valueTags(turned, { ended: ({ answer }) => answer, failed: () => false })).toBeNull();
         rmSync(dir, { recursive: true, force: true });
       }),
     ));

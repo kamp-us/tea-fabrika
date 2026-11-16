@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { codexHomeOf } from "@kampus/fabrika-old/agents/acp";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
-import { boxQuests, fateFor, hasLanded, judgeBox, ownerName } from "./boxfiles.ts";
+import { boxQuests, fateFor, hasLanded, judgeBox, ownerName, Verdict } from "./boxfiles.ts";
 import { boxTree, boxView, IDLE, oldBoxTree } from "./quest.ts";
 
 // Today's tooling. The rules are pure; one scenario runs the script on a folder of its own.
@@ -90,7 +90,7 @@ describe("box files, today's tooling", () => {
         (landed, tree, gone, idle) => {
           const v = judgeBox({ landed, tree, gone, idle });
           const may = landed.length > 0 && landed.every(Boolean) && (!tree || gone) && idle >= IDLE;
-          expect(v._tag === "sweep").toBe(may);
+          expect(Verdict.isAnyOf(["sweep"])(v)).toBe(may);
         },
       ),
       options,

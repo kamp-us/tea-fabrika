@@ -4,6 +4,8 @@ import { describe, expect, it } from "@effect/vitest";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Declarations from "../settings/Declarations.ts";
@@ -21,7 +23,12 @@ const signed = (cmds: ReadonlyArray<Test.Command>) =>
   );
 
 const waiting = (s: Test.Model) =>
-  Menu.view(s).filter((i): i is Extract<typeof Menu.Item.Type, { _tag: "waiting" }> => i._tag === "waiting");
+  Menu.view(s).filter((i): i is Extract<typeof Menu.Item.Type, { _tag: "waiting" }> =>
+    Menu.Item.isAnyOf(["waiting"])(i),
+  );
+
+// Menu.ts keeps its Model schema private, so a law matches a model with Effect's Match (0567, point 2).
+const idle = (m: Test.Model) => Match.valueTags(m, { idle: () => true, checking: () => false });
 
 const safe = (s: string) => s.replace(/[\p{Cc}\p{Cf}]/gu, "");
 
@@ -67,16 +74,16 @@ it("L1: signatures follow the matching check; no check failure or Enter writes",
         }
 
         if (msg.type === "not_checked") {
-          const stale = prev._tag !== "checking" || msg.cmd !== prev.cmd;
+          const stale = Match.valueTags(prev, { idle: () => true, checking: ({ cmd }) => msg.cmd !== cmd });
 
-          if (cmds.length > 0 || (stale ? !Test.same(prev, next) : next._tag !== "idle")) {
+          if (cmds.length > 0 || (stale ? !Test.same(prev, next) : !idle(next))) {
             return "a failed check acted";
           }
         }
 
         if (
           msg.type === "checked" &&
-          (prev._tag !== "checking" || msg.cmd !== prev.cmd) &&
+          Match.valueTags(prev, { idle: () => true, checking: ({ cmd }) => msg.cmd !== cmd }) &&
           (!Test.same(prev, next) || cmds.length > 0)
         ) {
           return "a stale check acted";
@@ -89,11 +96,10 @@ it("L1: signatures follow the matching check; no check failure or Enter writes",
           writes.length > 0 &&
           !(
             msg.type === "checked" &&
-            prev._tag === "checking" &&
-            msg.cmd === prev.cmd &&
+            Match.valueTags(prev, { idle: () => false, checking: ({ cmd }) => msg.cmd === cmd }) &&
             pending.has(msg.cmd) &&
             writes.length === 1 &&
-            next._tag === "idle"
+            idle(next)
           )
         ) {
           return "a signature had no matching check command";
@@ -123,7 +129,7 @@ it("L2: the signature keeps the clicked row, capabilities and act across later r
     Test.ctx,
     Test.walks,
     ({ prev, msg, next, cmds }) => {
-      if (prev._tag === "idle" && (msg.type === "approve" || msg.type === "remove")) {
+      if (idle(prev) && (msg.type === "approve" || msg.type === "remove")) {
         const shown =
           msg.type === "approve"
             ? prev.rows.find((r) => r.key === msg.key)
@@ -131,38 +137,44 @@ it("L2: the signature keeps the clicked row, capabilities and act across later r
 
         return (
           shown === undefined ||
-          (next._tag === "checking" &&
-            next.act._tag === msg.type &&
-            next.act.key === shown.key &&
-            cmds.length === 1 &&
-            cmds[0]?.type === "check" &&
-            cmds[0].cmd === msg.cmd &&
-            next.cmd === msg.cmd &&
-            Test.same(next.act.shown, shown)) ||
+          Match.valueTags(next, {
+            idle: () => false,
+            checking: ({ act, cmd }) =>
+              act._tag === msg.type &&
+              act.key === shown.key &&
+              cmds.length === 1 &&
+              cmds[0]?.type === "check" &&
+              cmds[0].cmd === msg.cmd &&
+              cmd === msg.cmd &&
+              Test.same(act.shown, shown),
+          }) ||
           "click did not capture its row"
         );
       }
 
-      if (prev._tag !== "checking") {
+      const held = Match.valueTags(prev, { idle: () => null, checking: (p) => p });
+
+      if (held === null) {
         return true;
       }
 
       if (msg.type === "rows" || msg.type === "clients") {
         return (
-          (next._tag === "checking" && Test.same(next.act, prev.act) && next.cmd === prev.cmd) ||
-          "news replaced the clicked row"
+          Match.valueTags(next, {
+            idle: () => false,
+            checking: ({ act, cmd }) => Test.same(act, held.act) && cmd === held.cmd,
+          }) || "news replaced the clicked row"
         );
       }
 
-      if (msg.type !== "checked" || msg.cmd !== prev.cmd) {
+      if (msg.type !== "checked" || msg.cmd !== held.cmd) {
         return true;
       }
 
       const [command] = signed(cmds);
-      const act = prev.act;
 
-      if (act._tag === "approve") {
-        return (
+      return Match.valueTags(held.act, {
+        approve: (act) =>
           (signed(cmds).length === 1 &&
             command?.type === "sign_grant" &&
             command.key === act.key &&
@@ -175,19 +187,16 @@ it("L2: the signature keeps the clicked row, capabilities and act across later r
               check: msg.check,
               has: act.shown.has,
             })) ||
-          "grant did not sign the clicked row"
-        );
-      }
-
-      return (
-        (signed(cmds).length === 1 &&
-          command?.type === "sign_revoke" &&
-          command.key === act.key &&
-          command.saw.label === act.shown.label &&
-          command.saw.location === act.shown.location &&
-          command.saw.check === msg.check) ||
-        "remove did not sign the clicked client"
-      );
+          "grant did not sign the clicked row",
+        remove: (act) =>
+          (signed(cmds).length === 1 &&
+            command?.type === "sign_revoke" &&
+            command.key === act.key &&
+            command.saw.label === act.shown.label &&
+            command.saw.location === act.shown.location &&
+            command.saw.check === msg.check) ||
+          "remove did not sign the clicked client",
+      });
     },
     options(300),
   );
@@ -233,7 +242,10 @@ it("L3: Deny writes once without a finger in both states, and tabs share one wai
             method: "compare",
             check: "none",
           }) &&
-          (prev._tag !== "checking" || (next._tag === "checking" && Test.same(next.act, prev.act)))) ||
+          Match.valueTags(prev, {
+            idle: () => true,
+            checking: (p) => Match.valueTags(next, { idle: () => false, checking: (n) => Test.same(n.act, p.act) }),
+          })) ||
         "Deny asked for a check or lost the pending act"
       );
     },
@@ -249,7 +261,7 @@ it("L4: the app's own client stays visible and cannot be removed", () => {
     Test.walks,
     ({ prev, msg, next, cmds }) => {
       for (const own of next.clients.filter((c) => c.own)) {
-        const item = Menu.view(next).find((i) => i._tag === "client" && i.key === own.key);
+        const item = Menu.view(next).find((i) => Menu.Item.isAnyOf(["client"])(i) && i.key === own.key);
 
         if (item?._tag !== "client" || item.removable) {
           return "the own client is missing or removable";
@@ -274,16 +286,18 @@ it("L5: one pending check blocks a second click and marks other rows busy in wor
     Test.ctx,
     Test.walks,
     ({ prev, msg, next, cmds }) => {
-      if (prev._tag === "checking" && (msg.type === "approve" || msg.type === "remove")) {
+      if (!idle(prev) && (msg.type === "approve" || msg.type === "remove")) {
         return (cmds.length === 0 && Test.same(prev, next)) || "a second click replaced the pending act";
       }
 
-      if (next._tag === "checking") {
+      const held = Match.valueTags(next, { idle: () => null, checking: (n) => n });
+
+      if (held !== null) {
         return (
           Menu.view(next).every(
             (i) =>
-              (i._tag !== "waiting" && i._tag !== "client") ||
-              i.key === next.act.key ||
+              !Menu.Item.isAnyOf(["waiting", "client"])(i) ||
+              i.key === held.act.key ||
               (i.busy && /busy|checking|waiting|in progress/i.test(i.words)),
           ) || "a second row does not explain that a check is pending"
         );
@@ -446,7 +460,13 @@ it("L8: equal models give ordered unique items, empty is explicit, and state is 
         const rank = { status: 0, empty: 1, waiting: 1, client: 2, action: 3 };
 
         const keys = items.map((i) =>
-          i._tag === "action" ? `action:${i.id}` : i._tag === "waiting" || i._tag === "client" ? i.key : i._tag,
+          Menu.Item.match(i, {
+            status: ({ _tag }) => _tag,
+            empty: ({ _tag }) => _tag,
+            waiting: ({ key }) => key,
+            client: ({ key }) => key,
+            action: ({ id }) => `action:${id}`,
+          }),
         );
 
         if (
@@ -457,7 +477,7 @@ it("L8: equal models give ordered unique items, empty is explicit, and state is 
         }
 
         if (
-          items.filter((i) => i._tag === "empty").length !==
+          items.filter(Menu.Item.isAnyOf(["empty"])).length !==
           (state.rows.length === 0 && state.clients.length === 0 ? 1 : 0)
         ) {
           return "empty was not explicit";
@@ -467,7 +487,7 @@ it("L8: equal models give ordered unique items, empty is explicit, and state is 
           return "an item has no words";
         }
 
-        const status = items.find((i) => i._tag === "status");
+        const status = items.find(Menu.Item.isAnyOf(["status"]));
 
         const statusWords = {
           connecting: /connect|starting/i,
@@ -480,15 +500,17 @@ it("L8: equal models give ordered unique items, empty is explicit, and state is 
         }
 
         for (const item of items) {
-          if (item._tag === "waiting" && !/waiting/i.test(item.words)) {
+          if (Menu.Item.isAnyOf(["waiting"])(item) && !/waiting/i.test(item.words)) {
             return "waiting is color only";
           }
 
-          if (item._tag === "client" && !/let in|own|this app/i.test(item.words)) {
+          if (Menu.Item.isAnyOf(["client"])(item) && !/let in|own|this app/i.test(item.words)) {
             return "admission is color only";
           }
 
-          const client = item._tag === "client" ? state.clients.find((c) => c.key === item.key) : undefined;
+          const client = Menu.Item.isAnyOf(["client"])(item)
+            ? state.clients.find((c) => c.key === item.key)
+            : undefined;
 
           if (client?.tabs._tag === "unknown" && !/unknown/i.test(item.words)) {
             return "unknown tabs were shown as a count";
@@ -539,18 +561,20 @@ it("L9: prompts and items keep the code and the safe label within the pinned 256
           return "control or bidi characters reached item words";
         }
 
-        const shown =
-          item._tag === "waiting"
-            ? next.rows.find((r) => r.key === item.key)
-            : item._tag === "client"
-              ? next.clients.find((c) => c.key === item.key)
-              : undefined;
+        const shown = Menu.Item.matchOrElse(
+          item,
+          {
+            waiting: ({ key }) => next.rows.find((r) => r.key === key),
+            client: ({ key }) => next.clients.find((c) => c.key === key),
+          },
+          () => undefined,
+        );
 
         if (shown !== undefined && !hasLabel(item.words, shown.label)) {
           return "an item lost the shown label, exceeded its limit or split a surrogate pair";
         }
 
-        if (item._tag === "waiting") {
+        if (Menu.Item.isAnyOf(["waiting"])(item)) {
           const row = next.rows.find((r) => r.key === item.key);
 
           if (row === undefined || item.code !== row.code || !hasCode(item.words, row.code)) {
@@ -565,12 +589,18 @@ it("L9: prompts and items keep the code and the safe label within the pinned 256
             return "raw control characters reached the check prompt";
           }
 
-          const act = next._tag === "checking" ? next.act : prev._tag === "checking" ? prev.act : undefined;
+          const act = Match.valueTags(next, {
+            checking: (n) => n.act,
+            idle: () => Match.valueTags(prev, { checking: (p) => p.act, idle: () => undefined }),
+          });
 
           if (
             act === undefined ||
             !hasLabel(command.reason, act.shown.label) ||
-            (act._tag === "approve" && !hasCode(command.reason, act.shown.code))
+            Match.valueTags(act, {
+              approve: ({ shown }) => !hasCode(command.reason, shown.code),
+              remove: () => false,
+            })
           ) {
             return "the check prompt lost the clicked label or code";
           }
@@ -600,7 +630,7 @@ it.effect.prop(
         const actual = yield* check.ask("generated test request").pipe(Effect.result);
         expect(actual._tag).toBe(answer === "unavailable" ? "Failure" : "Success");
 
-        if (actual._tag === "Success") {
+        if (Result.isSuccess(actual)) {
           expect(actual.success).toEqual(
             answer === "declined" ? { _tag: "declined" } : { _tag: "checked", check: answer },
           );
@@ -620,7 +650,7 @@ describe("browser link start switch", () => {
     ({ enabled }) => {
       const machine = Menu.machine({ linkTtl: Test.ttl, browserLink: enabled });
       const initial = machine.init(null, Test.ctx)[0];
-      expect(Menu.view(initial).some((i) => i._tag === "action" && i.id === "open_browser")).toBe(enabled);
+      expect(Menu.view(initial).some((i) => Menu.Item.isAnyOf(["action"])(i) && i.id === "open_browser")).toBe(enabled);
       const msgs: ReadonlyArray<Test.Msg> = [{ type: "open_browser", cmd: Test.cmdId(3) }];
       const trace = foldEvents(machine, Test.ctx, null, msgs);
       expect(trace.steps.flatMap((s) => s.cmds).filter((c) => c.type === "open")).toHaveLength(enabled ? 1 : 0);

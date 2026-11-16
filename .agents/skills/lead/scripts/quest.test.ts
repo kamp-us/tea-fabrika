@@ -1,3 +1,4 @@
+import { Match } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -124,15 +125,16 @@ describe("quest rules, today's tooling", () => {
         const out = [...answers.map((a) => JSON.stringify(a)), "commits: noise"].join("\n");
         const held = questStuck(out, quest).map((l) => JSON.parse(l));
 
-        const want = answers.filter(
-          (a) =>
-            a._tag === "stuck" &&
-            a.reason !== "unsigned_commit" &&
-            !(a.reason === "stale_link" && "step" in a && !quest.has(a.step)),
+        const want = answers.filter((a) =>
+          Match.valueTags(a, {
+            stuck: (s) =>
+              s.reason !== "unsigned_commit" && !(s.reason === "stale_link" && "step" in s && !quest.has(s.step)),
+            ask: () => false,
+          }),
         );
 
         expect(held).toEqual(want);
-        const stuck = answers.some((a) => a._tag === "stuck");
+        const stuck = answers.some((a) => Match.valueTags(a, { stuck: () => true, ask: () => false }));
         expect(checkHolds(0, out, quest)).toBe(false);
         expect(checkHolds(1, out, quest)).toBe(want.length > 0 || !stuck);
         expect(checkHolds(2, out, quest)).toBe(true);

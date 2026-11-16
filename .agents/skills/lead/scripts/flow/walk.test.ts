@@ -1,7 +1,7 @@
 // runFlow on the real tea engine and tea's own file store, in a temp folder, with fake runners
 // through `Runners.layer`: no git, network or agent.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Schema, type Scope } from "effect";
+import { Effect, FileSystem, Match, Schema, type Scope } from "effect";
 import { describe, expect, it } from "vitest";
 import * as Flow from "./Flow.ts";
 import { landDecision } from "./flows/land-decision.ts";
@@ -119,7 +119,12 @@ describe("runFlow", () => {
           Effect.flip,
         );
 
-        expect(other._tag === "Usage" ? other.reason : "").toContain("changed");
+        expect(
+          Match.value(other).pipe(
+            Match.tag("Usage", (e) => e.reason),
+            Match.orElse(() => ""),
+          ),
+        ).toContain("changed");
       }),
     ));
 
@@ -134,7 +139,12 @@ describe("runFlow", () => {
           Effect.flip,
         );
 
-        expect(refused._tag === "Usage" ? refused.reason : "").toBe("no runner for steps b, c");
+        expect(
+          Match.value(refused).pipe(
+            Match.tag("Usage", (e) => e.reason),
+            Match.orElse(() => ""),
+          ),
+        ).toBe("no runner for steps b, c");
         expect(calls).toEqual([]);
         expect(yield* FileSystem.FileSystem.pipe(Effect.flatMap((fs) => fs.exists(state)))).toBe(false);
       }),
@@ -174,7 +184,7 @@ describe("the land-decision flow", () => {
         const { calls, layer } = fakes(Object.fromEntries(decision.steps.map((s) => [s.name, ok])));
         const model = yield* runFlow(decision, { state, resume: false, lead: false }).pipe(Effect.provide(layer));
         expect(calls).toEqual(["format", "lint", "governance"]);
-        expect(model._tag === "parked" ? model.position : -1).toBe(3);
+        expect(FlowMachine.Model.isAnyOf(["parked"])(model) ? model.position : -1).toBe(3);
         const led = yield* runFlow(decision, { state, resume: true, lead: true }).pipe(Effect.provide(layer));
         expect(led._tag).toBe("done");
         expect(calls.slice(3)).toEqual(decision.steps.slice(3).map((s) => s.name));

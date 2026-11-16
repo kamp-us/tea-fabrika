@@ -44,7 +44,7 @@ const sweepAt = (startedAt: number, outcome: Outcome = Outcome.cases.ok.make({})
     minutes: 30,
     pid: 1,
     outcome,
-    code: outcome._tag === "skipped" ? null : 0,
+    code: Outcome.isAnyOf(["skipped"])(outcome) ? null : 0,
     removed: { boxes: [], worktrees: [], facts: [] },
     kept: [],
     seen: 0,
@@ -244,7 +244,7 @@ describe("a sweep", () => {
         yield* write(Holder.make({ pid: 1, startedAt: new Date(now).toISOString() }));
         const skipped = yield* sweep(ask(state, echo(TOTAL)));
         expect(skipped.outcome._tag).toBe("skipped");
-        expect(skipped.outcome._tag === "skipped" && skipped.outcome.reason).toContain("pid 1,");
+        expect(Outcome.isAnyOf(["skipped"])(skipped.outcome) && skipped.outcome.reason).toContain("pid 1,");
         expect(yield* fs.exists(`${state}/gc.lock`)).toBe(true);
 
         yield* write(Holder.make({ pid: 99_999_999, startedAt: new Date(now).toISOString() }));

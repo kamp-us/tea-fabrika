@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { beat, LATE, line } from "./heartbeat.ts";
+import { Beat, beat, LATE, line } from "./heartbeat.ts";
 
 // Today's lead tooling.
 const options = { seed: 119120, numRuns: 300 };
@@ -18,7 +18,7 @@ describe("the mutation heartbeat, today's tooling", () => {
         expect(b._tag).toBe(ages.some((a) => a > LATE) ? "late" : "ok");
         expect(b.merges).toBe(merges.length);
 
-        if (b._tag === "late") {
+        if (Beat.isAnyOf(["late"])(b)) {
           expect(b.oldest).toBe(Math.min(...merges));
         }
       }),

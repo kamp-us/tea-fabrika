@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { Pinned, pinLine, pinnedScript, pinState, pinText } from "./pin.ts";
+import { Pinned, pinLine, pinnedScript, PinState, pinState, pinText } from "./pin.ts";
 
 const commit = fc.stringMatching(/^[0-9a-f]{40}$/);
 
@@ -30,7 +30,7 @@ describe("pinState", () => {
       fc.property(fc.string(), (value) => {
         const state = pinState(value);
         // A string is a pin only when it is a pin's own text.
-        fc.pre(state._tag !== "pinned");
+        fc.pre(!PinState.isAnyOf(["pinned"])(state));
         expect(state).toEqual({ _tag: "malformed", value });
       }),
     ));

@@ -107,7 +107,7 @@ describe("the flow machine", () => {
 
         expect(ran).toEqual(Array.from({ length: first + 1 }, (_, i) => i));
         expect(model._tag).toBe(verbs[first] === "ask" ? "parked" : "stuck");
-        expect(model._tag !== "done" && model._tag !== "running" ? model.position : -1).toBe(first);
+        expect(FlowMachine.Model.isAnyOf(["parked", "stuck"])(model) ? model.position : -1).toBe(first);
       }),
     );
   });
@@ -117,14 +117,14 @@ describe("the flow machine", () => {
       fc.property(arbScripted, ({ flow, verbs }) => {
         const first = drive(asLead, flow, scripted(verbs));
 
-        if (first.model._tag === "done") {
+        if (FlowMachine.Model.isAnyOf(["done"])(first.model)) {
           // A done flow resumes to itself and runs nothing.
           expect(drive(asLead, flow, () => Outcome.done("again"), saved(first.model)).ran).toEqual([]);
 
           return;
         }
 
-        const stopped = first.model._tag === "running" ? -1 : first.model.position;
+        const stopped = FlowMachine.Model.isAnyOf(["running"])(first.model) ? -1 : first.model.position;
         const again = drive(asLead, flow, () => Outcome.done("now it passes"), saved(first.model));
         expect(again.ran[0]).toBe(stopped);
         expect(again.ran.every((p) => p >= stopped)).toBe(true);
@@ -159,7 +159,7 @@ describe("the flow machine", () => {
         }
 
         expect(model._tag).toBe("parked");
-        expect(model._tag === "parked" ? model.position : -1).toBe(first);
+        expect(FlowMachine.Model.isAnyOf(["parked"])(model) ? model.position : -1).toBe(first);
         expect(model.history.at(-1)?.outcome?._tag).toBe("ask");
       }),
     );
@@ -206,7 +206,7 @@ describe("the flow machine", () => {
     );
 
     expect(model._tag).toBe("stuck");
-    expect(model._tag === "stuck" ? model.reason : "").toContain("biuld");
+    expect(FlowMachine.Model.isAnyOf(["stuck"])(model) ? model.reason : "").toContain("biuld");
   });
 
   it("scenario: a send loop stops stuck at the flow's attempt cap, so no flow runs forever", () => {
@@ -238,7 +238,7 @@ describe("the flow machine", () => {
     );
 
     expect(next).toEqual([]);
-    expect(model._tag === "stuck" ? model.reason : "").toBe("push failed: no gh");
+    expect(FlowMachine.Model.isAnyOf(["stuck"])(model) ? model.reason : "").toBe("push failed: no gh");
     expect(model.history[0]?.outcome?._tag).toBe("stuck");
   });
 

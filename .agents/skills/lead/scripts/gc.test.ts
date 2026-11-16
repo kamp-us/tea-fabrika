@@ -16,6 +16,7 @@ import {
   type Seen,
   type SeenWorktree,
   STUCK,
+  Verdict,
   worktreePrs,
 } from "./gc.ts";
 import { PgrepAnswer } from "./pgrep.ts";
@@ -54,7 +55,7 @@ describe("box gc, today's tooling", () => {
         const v = decide(s);
         const young = s.busy.length > 0 || s.idle < IDLE || (s.stuck !== null && s.stuck < STUCK && !s.merged);
         const mustKeep = young || s.git === null || s.git.head === null;
-        expect(mustKeep && v._tag !== "keep", JSON.stringify(s)).toBe(false);
+        expect(mustKeep && !Verdict.isAnyOf(["keep"])(v), JSON.stringify(s)).toBe(false);
       }),
       options,
     );
@@ -66,8 +67,8 @@ describe("box gc, today's tooling", () => {
       fc.property(seen, (s) => {
         const v = decide(s);
         const held = s.merged || s.onRemote;
-        expect(v._tag === "remove" && !held).toBe(false);
-        expect(v._tag === "backup" && (held || v.to.length === 0)).toBe(false);
+        expect(Verdict.isAnyOf(["remove"])(v) && !held).toBe(false);
+        expect(Verdict.isAnyOf(["backup"])(v) && (held || v.to.length === 0)).toBe(false);
       }),
       options,
     );
@@ -79,7 +80,7 @@ describe("box gc, today's tooling", () => {
       fc.property(seen, sha, (s, head) => {
         const idle = { ...s, git: { head, branch: s.git?.branch ?? null }, busy: [], dirty: 0 };
         const v = decide({ ...idle, idle: IDLE + s.idle, stuck: s.stuck === null ? null : STUCK });
-        expect(v._tag === "remove" || v._tag === "backup").toBe(true);
+        expect(Verdict.isAnyOf(["remove", "backup"])(v)).toBe(true);
       }),
       options,
     );
@@ -94,7 +95,7 @@ describe("box gc, today's tooling", () => {
         const idle = { ...s, git: { head, branch: s.git?.branch ?? null }, busy: [] };
         const v = decide({ ...idle, idle: IDLE + s.idle, stuck: null, dirty });
         expect(v._tag).toBe(dirty !== null && s.merged ? "remove" : "keep");
-        expect(v._tag === "remove" && v.reason).toBe(dirty !== null && s.merged ? "merged" : false);
+        expect(Verdict.isAnyOf(["remove"])(v) && v.reason).toBe(dirty !== null && s.merged ? "merged" : false);
       }),
       options,
     );
@@ -198,7 +199,7 @@ describe("worktree gc, today's tooling", () => {
         const v = decideWorktree(w);
         const free = !w.locked && w.busy.length === 0 && w.idle >= IDLE && w.branch !== null && w.dirty === 0;
         const landed = !w.prs.includes("OPEN") && w.prs.length > 0;
-        expect(v._tag === "remove", JSON.stringify(w)).toBe(free && landed);
+        expect(Verdict.isAnyOf(["remove"])(v), JSON.stringify(w)).toBe(free && landed);
         expect(v._tag).not.toBe("backup");
       }),
       options,

@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1057-antislop-no-manual-tag-comparison-4-tests",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-16T00:47:28-08:00",
+  "ended": "2026-11-16T01:09:22-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice AS-no-manual-tag-comparison-4 (anti-slop-effect/no-manual-tag-comparison, decision 0567), in next/ and our tooling, on branch fabrikalfa/antislop-no-manual-tag-comparison-4 from eeb8ecdbb, which holds PR 1366. Recounted with the rule forced to error in a scratch config outside the repo: 314 hits (.agents 221, libfabrika desktop 91, permissions 2). Exam paths: every *.test.ts and every shared suite or test support file (BoxTest.ts, BrainFilesTest.ts, Menu.test-support.ts), 134 hits; all 134 fixed by hand edits, no quick fix and no codemod. Product files keep 180 hits for the build: .agents 138, desktop 41, permissions 1. No disable line, no lock line, no .oxlintrc.json change, no assertion removed or narrowed. Forms used: the union's own isAnyOf, match and matchOrElse where the union is exported (0567 point 1); Result.isSuccess, Result.isFailure, Result.match and ChildProcess.isStandardCommand for Effect's own types; Match.valueTags for plain unions (agents.ts Turned, fast-check records) and for Menu.ts's Model and Act, which Menu.ts does not export (point 2); Match.tag with Match.orElse for flipped error unions (Usage, NotQueued).",
+  "tokens": null,
+  "tools": null,
+  "minutes": 22,
+  "note": "Per folder, met / fixed / left: .agents 221 / 83 / 138; libfabrika/desktop 91 / 50 / 41 (BrainLife.ts 20, BrainServiceManaged.ts 14, Menu.ts 7); libfabrika/permissions 2 / 1 / 1 (internal/relationsTable.ts). Waiting on 1366: 0. Menu.laws.test.ts keeps its one Extract<..., { _tag: \"waiting\" }> type predicate on purpose: it is the last no-manual-tagged-type hit in desktop, and removing it makes the zero lock in oxlint-plugins/anti-slop.ts ask for a .oxlintrc.json change this slice may not make. Checks at the work tree before commit: pnpm format, pnpm lint (exit 0), pnpm typecheck (exit 0), ratchet.ts exit 0. Tests run, each file alone: the 24 touched test files plus box.rm.test.ts (reads BoxTest.ts) and BrainControlLaunchd.laws.integration.test.ts (reads BrainFilesTest.ts, stand-ins only), all green.",
+  "plants": [
+    {
+      "law": ".agents/skills/lead/scripts/gc.test.ts: removes a worktree only when it is clean, idle, unlocked and its quest landed",
+      "plant": "gc.ts decideWorktree drops the keep for uncommitted files; restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/desktop/Menu.laws.test.ts: L8",
+      "plant": "Menu.ts view drops the empty item; restored by copy",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

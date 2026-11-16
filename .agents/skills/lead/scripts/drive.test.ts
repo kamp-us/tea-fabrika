@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
 import { nameOf } from "@kampus/pipeline/stages/outcome";
-import { Effect, Exit, Schema, Stream } from "effect";
+import { Effect, Exit, Match, Schema, Stream } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type Answer, answerFor, NO_SPENT, sendsFrom } from "./agents.ts";
@@ -1755,22 +1755,24 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
                 expect(ran.calls.length).toBe(1);
                 expect(ran.turned._tag).toBe("ended");
 
-                if (ran.turned._tag !== "ended") {
+                const ended = Match.valueTags(ran.turned, { ended: (t) => t, failed: () => null });
+
+                if (ended === null) {
                   return;
                 }
 
-                expect(ran.turned.stop).toBe("end_turn");
-                expect(ran.turned.spent).toEqual(NO_SPENT);
-                expect(ran.turned.answer?.verb).toBe("stuck");
-                expect(ran.turned.answer?.reason).toContain("mutbox");
-                expect(ran.report).toContain(ran.turned.answer?.reason ?? "no reason");
+                expect(ended.stop).toBe("end_turn");
+                expect(ended.spent).toEqual(NO_SPENT);
+                expect(ended.answer?.verb).toBe("stuck");
+                expect(ended.answer?.reason).toContain("mutbox");
+                expect(ran.report).toContain(ended.answer?.reason ?? "no reason");
 
                 if (method === "line") {
-                  expect(ran.turned.answer?.reason).toContain(reason);
-                  expect(ran.turned.answer?.reason).toContain(detail);
+                  expect(ended.answer?.reason).toContain(reason);
+                  expect(ended.answer?.reason).toContain(detail);
                 }
 
-                expect(nameOf(decide({ ...ask, step: "mutation" }, readNothing, ran.turned.answer).outcome)).toBe(
+                expect(nameOf(decide({ ...ask, step: "mutation" }, readNothing, ended.answer).outcome)).toBe(
                   "stuck:step_said",
                 );
               }),
@@ -1798,7 +1800,9 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
             Effect.sync(() => {
               expect(ran.calls).toEqual([]);
               expect(ran.started).toEqual([]);
-              expect(ran.turned._tag === "ended" ? ran.turned.answer?.verb : null).toBe("stuck");
+              expect(Match.valueTags(ran.turned, { ended: ({ answer }) => answer?.verb, failed: () => null })).toBe(
+                "stuck",
+              );
               expect(ran.report).toContain("RELATED=<paths>");
             }),
           ),
@@ -1889,7 +1893,9 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
       Effect.tap((ran) =>
         Effect.sync(() => {
           expect(ran.started).toEqual([]);
-          expect(ran.turned._tag === "ended" ? ran.turned.answer?.verb : null).toBe("stuck");
+          expect(Match.valueTags(ran.turned, { ended: ({ answer }) => answer?.verb, failed: () => null })).toBe(
+            "stuck",
+          );
           expect(ran.report).toContain("no report");
         }),
       ),

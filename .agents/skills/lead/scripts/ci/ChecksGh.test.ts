@@ -1,7 +1,7 @@
 // Today's lead tooling. ChecksGh's polls are conditional requests; no test here reaches GitHub: a
 // spawner in memory stands in for `gh`.
-import { Effect, Layer, Option, type Result, Sink, Stream } from "effect";
-import { ChildProcessSpawner } from "effect/process";
+import { Effect, Layer, Option, Result, Sink, Stream } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Checks, type ChecksError, type Job } from "./Checks.ts";
@@ -44,7 +44,7 @@ const gh = (answers: ReadonlyArray<Ran>) => {
     ChildProcessSpawner.make((command) =>
       Effect.sync(() => {
         const answer = answers[calls.length] ?? { out: "", err: "no answer left", code: 1 };
-        calls.push(command._tag === "StandardCommand" ? command.args.map(String) : []);
+        calls.push(ChildProcess.isStandardCommand(command) ? command.args.map(String) : []);
 
         return ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(27000),
@@ -151,7 +151,7 @@ describe("a poll of a job is a conditional request, today's tooling", () => {
           "filter=latest",
         ]);
         const running = Option.some({ id: 9, status: "in_progress", conclusion: null });
-        expect(found.map((r) => (r._tag === "Success" ? r.success : r.failure))).toEqual([
+        expect(found.map((r) => Result.match(r, { onFailure: (f) => f, onSuccess: (s) => s }))).toEqual([
           Option.none(),
           Option.none(),
           running,
@@ -163,7 +163,7 @@ describe("a poll of a job is a conditional request, today's tooling", () => {
   it("scenario: a 304 answers with what that ETag came with, a finished job included", () =>
     polled([ok('W/"a"', [run(9, "completed", "success")]), unchanged], [head, head], ({ found }) => {
       const want = Option.some({ id: 9, status: "completed", conclusion: "success" });
-      expect(found.map((r) => (r._tag === "Success" ? r.success : null))).toEqual([want, want]);
+      expect(found.map((r) => (Result.isSuccess(r) ? r.success : null))).toEqual([want, want]);
     }));
 
   it("scenario: another head has its own ETag, so its first poll is unconditional", () =>

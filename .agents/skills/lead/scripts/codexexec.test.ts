@@ -21,7 +21,7 @@
 //      and one that finds the pin starts it.
 import { NodeServices } from "@effect/platform-node";
 import { Agent } from "@kampus/fabrika-old";
-import { Effect, FileSystem, type Scope } from "effect";
+import { Effect, FileSystem, Match, type Scope } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Answer, CapacityRetry, runTurn, type TurnAsk, type Turned } from "./agents.ts";
@@ -154,7 +154,7 @@ const world = (plays: ReadonlyArray<Play>, node: { pin: string; said: string } |
     return { dir, calls, turn, read, probed };
   });
 
-const answerIn = (t: Turned<Answer>) => (t._tag === "ended" ? t.answer : null);
+const answerIn = (t: Turned<Answer>) => Match.valueTags(t, { ended: ({ answer }) => answer, failed: () => null });
 
 /** A message that names no capacity word. */
 const plainMessage = fc.string({ minLength: 1, maxLength: 40 }).filter((m) => !CAPACITY.test(m) && m.trim() !== "");
@@ -396,7 +396,9 @@ describe("codex-exec: the box's Node", () => {
             const t = yield* w.turn();
             expect(yield* w.calls).toHaveLength(0);
             expect(t).toMatchObject({ _tag: "failed", reason: "start" });
-            expect(t._tag === "failed" ? t.message : "").toContain(`no Node ${pin}`);
+            expect(Match.valueTags(t, { ended: () => "", failed: ({ message }) => message })).toContain(
+              `no Node ${pin}`,
+            );
           }),
         ),
       ),

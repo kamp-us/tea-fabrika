@@ -206,7 +206,7 @@ const liveTuples = (history: ReadonlyArray<Written>): ReadonlySet<string> => {
 
     const key = tupleKey(row.subject, row.relation, row.object);
 
-    if (row._tag === "related") {
+    if (Relation.Row.isAnyOf(["related"])(row)) {
       tuples.add(key);
     } else {
       tuples.delete(key);

@@ -5,7 +5,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { ChecksError } from "./Checks.ts";
 import * as ChecksTest from "./ChecksTest.ts";
-import { errorsIn, type Found, LINES, logText, summary, type Verdict, verdict, wait, WIDTH } from "./typecheck.ts";
+import { errorsIn, type Found, LINES, logText, summary, Verdict, verdict, wait, WIDTH } from "./typecheck.ts";
 
 const options = { seed: 119120, numRuns: 300 };
 
@@ -150,7 +150,7 @@ describe("CI's typecheck job's result, today's tooling", () => {
         const v = verdict(failed(), found(ps), new Set());
         expect(v._tag).toBe("red");
 
-        if (v._tag === "red") {
+        if (Verdict.isAnyOf(["red"])(v)) {
           expect(v.lines.length).toBe(Math.min(ps.length, LINES));
           const kept = ps.length > LINES ? LINES - 1 : ps.length;
           expect(v.lines.slice(0, kept)).toEqual(found(ps.slice(0, kept)).map((e) => e.text));
@@ -179,7 +179,7 @@ describe("CI's typecheck job's result, today's tooling", () => {
         const v = verdict(failed(), [{ path: "a.ts", text: error("a.ts", m) }], new Set());
         const whole = error("a.ts", m);
         expect(v._tag).toBe("red");
-        const lines = v._tag === "red" ? v.lines : [];
+        const lines = Verdict.isAnyOf(["red"])(v) ? v.lines : [];
         expect(Math.max(...lines.map((l) => l.length))).toBeLessThanOrEqual(WIDTH);
         const first = lines[0] ?? "";
         expect(whole.startsWith(first.endsWith("...") ? first.slice(0, -3) : first)).toBe(true);

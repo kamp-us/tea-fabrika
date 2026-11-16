@@ -5,6 +5,7 @@ import { join } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  Advice,
   advise,
   ADVICE_LINES,
   diffLine,
@@ -201,7 +202,7 @@ describe("parseNumstat", () => {
           const entry = entries[at];
           expect(row._tag).toBe(entry?.shape === "binary" ? "binary" : "text");
 
-          if (row._tag === "text") {
+          if (Row.isAnyOf(["text"])(row)) {
             expect(row.lines).toBe((entry?.added ?? 0) + (entry?.deleted ?? 0));
           }
         });
@@ -227,12 +228,12 @@ describe("countLines and diffLine", () => {
           const tally = countLines(rows, new Set());
 
           const product = rows.reduce(
-            (sum, row) => sum + (row._tag === "text" && classify(row.path, false) === "product" ? row.lines : 0),
+            (sum, row) => sum + (Row.isAnyOf(["text"])(row) && classify(row.path, false) === "product" ? row.lines : 0),
             0,
           );
 
           expect(tally.product).toBe(product);
-          expect(tally.binary).toBe(rows.filter((row) => row._tag === "binary").length);
+          expect(tally.binary).toBe(rows.filter(Row.isAnyOf(["binary"])).length);
           const line = diffLine(tally, advice);
           expect(line.includes("should it have been sliced?")).toBe(product > advice);
           expect(line).not.toMatch(/\bcap\b/);
@@ -300,7 +301,7 @@ describe("readPlan and advise", () => {
   it("property: advice names exactly the slices with no estimate, whatever the others expect (0099)", () => {
     fc.assert(
       fc.property(fc.array(fc.option(fc.nat(100_000), { nil: null }), { minLength: 1, maxLength: 7 }), (slices) => {
-        const named = advise(readPlan(sizeSection(slices))).map((a) => (a._tag === "unsized" ? a.order : 0));
+        const named = advise(readPlan(sizeSection(slices))).map((a) => (Advice.isAnyOf(["unsized"])(a) ? a.order : 0));
         expect(named).toEqual(slices.flatMap((lines, at) => (lines === null ? [at + 1] : [])));
       }),
       options,

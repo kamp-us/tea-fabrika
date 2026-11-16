@@ -12,6 +12,7 @@ import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
 import * as Outside from "./BrainControl.test-support.ts";
+import { Status } from "./BrainControl.ts";
 import { BrainService } from "./BrainService.ts";
 import * as ServiceTest from "./BrainServiceTest.ts";
 
@@ -59,7 +60,7 @@ const progress = Effect.fnUntraced(function* (outside: Outside, n: number, actio
 
   expect(
     call.action !== "remove" ||
-      (before.job._tag === "absent" && before.children === "gone" && before.listener !== "ready"),
+      (Status.isAnyOf(["absent"])(before.job) && before.children === "gone" && before.listener !== "ready"),
   ).toBe(true);
   yield* call.release;
   yield* Effect.yieldNow;
@@ -165,7 +166,7 @@ it.effect.prop(
 
           if (held.action === "inspect" && outside.calls.slice(from).includes("stop")) {
             // First confirm that a successful bootout while still loaded cannot finish stop.
-            if (world.job._tag === "loaded") {
+            if (Status.isAnyOf(["loaded"])(world.job)) {
               yield* held.release;
               yield* Effect.yieldNow;
               expect(stopped.pollUnsafe()).toBeUndefined();

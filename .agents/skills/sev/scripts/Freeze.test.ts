@@ -108,13 +108,13 @@ describe("verdict", () => {
     { run: fixPr, allow: [], is: "cancel" },
   ])("vector: $run.event on $run.branch with $allow.length allowed is $is", ({ run, allow, is }) => {
     const v = Freeze.verdict(run, allow);
-    expect(v._tag === "keep" ? `keep ${v.reason}` : v._tag).toBe(is);
+    expect(Freeze.Verdict.isAnyOf(["keep"])(v) ? `keep ${v.reason}` : v._tag).toBe(is);
   });
 
   it.prop(
     "property: a merge queue run is kept whatever its branch and the allow list, so the script never takes an entry out of the queue",
     { run: Run, allow: Schema.Array(Schema.String) },
-    ({ run, allow }) => Freeze.verdict({ ...run, event: "merge_group" }, allow)._tag === "keep",
+    ({ run, allow }) => Freeze.Verdict.isAnyOf(["keep"])(Freeze.verdict({ ...run, event: "merge_group" }, allow)),
   );
 
   it.prop(
@@ -124,7 +124,7 @@ describe("verdict", () => {
       const other = { ...run, event: run.event === "merge_group" ? "push" : run.event };
       const list = listed ? [...allow, other.branch] : allow.filter((b) => b !== other.branch);
 
-      return (Freeze.verdict(other, list)._tag === "keep") === listed;
+      return Freeze.Verdict.isAnyOf(["keep"])(Freeze.verdict(other, list)) === listed;
     },
   );
 });
@@ -249,7 +249,7 @@ describe("the cancel loop", () => {
         yield* until(Effect.map(tags(dir), (t) => t.filter((tag) => tag === "failed").length === 2));
         yield* ending(dir);
         yield* finished(loop);
-        const failed = (yield* Level.log(dir)).filter((e) => e._tag === "failed");
+        const failed = (yield* Level.log(dir)).filter(Level.Entry.isAnyOf(["failed"]));
         expect(failed.map((e) => [e.call, e.id, e.reason])).toEqual([
           ["cancel", 4, "gh run cancel exited 1: completed"],
           ["cancel", 3, "gh run cancel exited 1: completed"],

@@ -3,7 +3,7 @@
 // a job moved here: the state gate, the one pinned squash, and the ticket close of 0015 (T410).
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
-import { Effect, Fiber, Layer, Option, Schema } from "effect";
+import { Effect, Fiber, Layer, Match, Option, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { ChecksError, type Job } from "../ci/Checks.ts";
 import * as ChecksTest from "../ci/ChecksTest.ts";
@@ -121,7 +121,7 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
         const { answer, leaks } = yield* added(m);
         const enters = state === "OPEN" && !draft && base === "main" && leak === "clean" && required === "success";
         expect(m.github.calls).toEqual(enters ? [{ _tag: "enqueue", number: 900, oid }] : []);
-        expect(answer._tag === "Success" && answer.success._tag === "queued").toBe(enters);
+        expect(Result.isSuccess(answer) && Queue.Added.isAnyOf(["queued"])(answer.success)).toBe(enters);
 
         if (enters) {
           // Every leak check ran, on the head and on the words a squash puts on main, before the ask.
@@ -167,11 +167,17 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
       Effect.gen(function* () {
         const red = yield* Effect.flip(add(memory({ required: "failure" })));
         expect(red).toMatchObject({ _tag: "NotQueued" });
-        expect(red._tag === "NotQueued" ? red.reason : "").toContain(`ci-required is failure at ${oid}`);
+
+        const reason = Match.type<typeof red>().pipe(
+          Match.tag("NotQueued", (e) => e.reason),
+          Match.orElse(() => ""),
+        );
+
+        expect(reason(red)).toContain(`ci-required is failure at ${oid}`);
         const none = yield* Effect.flip(add(memory({ required: "none" })));
-        expect(none._tag === "NotQueued" ? none.reason : "").toContain("ci-required is missing");
+        expect(reason(none)).toContain("ci-required is missing");
         const unread = yield* added(memory({ failing: { prs: { view: "gh: offline" } } }));
-        expect(unread.answer._tag === "Failure" ? unread.answer.failure._tag : null).toBe("PullRequestsError");
+        expect(Result.isFailure(unread.answer) ? unread.answer.failure._tag : null).toBe("PullRequestsError");
         expect(unread.leaks).toEqual([]);
         const refused = memory({ failing: { prs: { enqueue: "gh: head moved" } } });
         expect((yield* Effect.flip(add(refused)))._tag).toBe("PullRequestsError");
@@ -207,7 +213,7 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
         expect(red.answer._tag).toBe("Failure");
         expect(red.calls).toEqual([]);
         const never = yield* waited([job("in_progress")]);
-        expect(never.answer._tag === "Failure" ? String(never.answer.failure.reason) : "").toContain(
+        expect(Result.isFailure(never.answer) ? String(never.answer.failure.reason) : "").toContain(
           "ci-required is in_progress",
         );
         expect(never.calls).toEqual([]);
@@ -242,8 +248,8 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
 
         if (!named) {
           expect(answer).toMatchObject({ _tag: "Failure", failure: { _tag: "NotQueued" } });
-          expect(answer._tag === "Failure" && answer.failure.reason).toContain(`pr 900: its diff exports new names`);
-          expect(answer._tag === "Failure" && answer.failure.reason).toContain(name);
+          expect(Result.isFailure(answer) && answer.failure.reason).toContain(`pr 900: its diff exports new names`);
+          expect(Result.isFailure(answer) && answer.failure.reason).toContain(name);
         }
       }),
   );
@@ -256,7 +262,8 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
   const landed = (body: string, w: World = {}) =>
     memory({ state: "MERGED", ...w, more: { body, mergeCommit: merged, ...w.more } });
 
-  const closes = (m: ReturnType<typeof memory>) => m.tracker.posts.filter((p) => p._tag !== "list");
+  const closes = (m: ReturnType<typeof memory>) =>
+    m.tracker.posts.filter((p) => !TicketsTest.Post.isAnyOf(["list"])(p));
 
   const Noise = Schema.Array(
     Schema.Literals(["", "Done.", "close ticket 5", "fabrika close ticket", "ticket 5", "#5"]),
@@ -465,7 +472,7 @@ describe("closeOnly: closes the named tickets and starts no sweep (0015)", () =>
         const done = yield* run(m);
         const lands = state === "MERGED" && confirmed && base === "main";
         expect(done._tag).toBe(lands ? "merged" : "unmerged");
-        expect(m.tracker.posts.filter((p) => p._tag !== "list").map((p) => p._tag)).toEqual(
+        expect(m.tracker.posts.filter((p) => !TicketsTest.Post.isAnyOf(["list"])(p)).map((p) => p._tag)).toEqual(
           lands && open ? ["comment", "close"] : [],
         );
         expect(done.lines.includes("pr 900: closed ticket 5")).toBe(lands && open);

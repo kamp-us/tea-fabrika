@@ -8,6 +8,7 @@ import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { syncTest } from "../Testing.ts";
 import * as Outside from "./BrainControl.test-support.ts";
+import { Status } from "./BrainControl.ts";
 import * as BrainLife from "./BrainLife.ts";
 import { Readiness, Children } from "./BrainProbe.ts";
 import * as ServiceTest from "./BrainServiceTest.ts";
@@ -266,19 +267,22 @@ describe("P19 lifecycle", () => {
           const checksChildren = cmds.some((cmd) => cmd.type === "cleanup");
           removals += Number(removes);
           expect(
-            !removes || (prev._tag === "checking_children" && msg.type === "cleanup_ok" && msg.value._tag === "gone"),
+            !removes ||
+              (BrainLife.Model.isAnyOf(["checking_children"])(prev) &&
+                msg.type === "cleanup_ok" &&
+                Children.isAnyOf(["gone"])(msg.value)),
           ).toBe(true);
           expect(
             !checksChildren ||
-              prev._tag === "checking_children" ||
-              ((prev._tag === "inspecting" || prev._tag === "confirming_absence") &&
+              BrainLife.Model.isAnyOf(["checking_children"])(prev) ||
+              (BrainLife.Model.isAnyOf(["inspecting", "confirming_absence"])(prev) &&
                 msg.type === "inspect_ok" &&
-                msg.value._tag === "absent"),
+                Status.isAnyOf(["absent"])(msg.value)),
           ).toBe(true);
           expect(
-            next._tag !== "stopped" ||
-              prev._tag === "stopped" ||
-              (prev._tag === "removing" && msg.type === "remove_ok"),
+            !BrainLife.Model.isAnyOf(["stopped"])(next) ||
+              BrainLife.Model.isAnyOf(["stopped"])(prev) ||
+              (BrainLife.Model.isAnyOf(["removing"])(prev) && msg.type === "remove_ok"),
           ).toBe(true);
 
           return true;

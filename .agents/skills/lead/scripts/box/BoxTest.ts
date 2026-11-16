@@ -283,18 +283,20 @@ const law = Effect.fnUntraced(function* (world: World, plan: Plan) {
   );
 
   const verdict = expected(plan);
-  const removed = verdict._tag === "removed";
+  const removed = Remove.Verdict.isAnyOf(["removed"])(verdict);
   expect(removal.verdict, JSON.stringify(plan)).toEqual(verdict);
-  expect(Remove.exitCode(removal.verdict)).toBe(verdict._tag === "kept" ? verdict.code : 0);
+  expect(Remove.exitCode(removal.verdict)).toBe(Remove.Verdict.isAnyOf(["kept"])(verdict) ? verdict.code : 0);
   expect(removal.runs).toBe(removed && plan.runs === "moved" ? `kept runs of ${plan.name} at runs/${plan.name}` : "");
   expect([yield* present(fs, work), yield* present(fs, data)]).toEqual(removed ? [false, false] : before);
   expect(yield* fs.readFileString(`${dir}/outside/keep`)).toBe("outside");
 
   if (plan.asked === plan.name) {
     expect(Remove.line(removal)).toBe(
-      verdict._tag === "kept"
-        ? `kept box ${plan.name}: ${verdict.reason}`
-        : `${verdict._tag === "removed" ? "removed" : "absent"} box ${plan.name}`,
+      Remove.Verdict.match(verdict, {
+        removed: () => `removed box ${plan.name}`,
+        absent: () => `absent box ${plan.name}`,
+        kept: ({ reason }) => `kept box ${plan.name}: ${reason}`,
+      }),
     );
   } else {
     expect(Remove.line(removal)).toMatch(/^kept box '.*': invalid name$/s);

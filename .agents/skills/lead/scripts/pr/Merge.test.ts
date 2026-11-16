@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { afterEach, describe, expect, it, vi } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Effect, Layer, Option, Result, Schema } from "effect";
 import * as ChecksTest from "../ci/ChecksTest.ts";
 import * as Merge from "./Merge.ts";
 import * as PullRequestsGh from "./PullRequestsGh.ts";
@@ -138,7 +138,7 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
       Effect.gen(function* () {
         const m = memory({ leak: "leakText" });
         const { answer, leaks } = yield* merged(m, admin());
-        expect(answer._tag === "Failure" && answer.failure).toMatchObject({ _tag: "LeakGrepRefused" });
+        expect(Result.isFailure(answer) && answer.failure).toMatchObject({ _tag: "LeakGrepRefused" });
         expect(leaks).toEqual(gate);
         expect(m.github.calls).toEqual([]);
       }),
@@ -149,7 +149,7 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
       for (const route of [queue, admin()]) {
         const m = memory({ leak: "leakGrep" });
         const { answer, leaks } = yield* merged(m, route);
-        expect(answer._tag === "Failure" && answer.failure).toMatchObject({ _tag: "LeakGrepRefused" });
+        expect(Result.isFailure(answer) && answer.failure).toMatchObject({ _tag: "LeakGrepRefused" });
         expect(leaks).toEqual(gate.slice(0, 2));
         expect(m.github.calls).toEqual([]);
       }
@@ -229,9 +229,9 @@ describe("the leak gate's process: the real leakgrep.sh, whose exit code decides
         words();
         const grep = (text: string) => Effect.result(withPushes((p) => p.leakText(import.meta.dirname, text)));
         const hit = yield* grep(`${title}\n\nIt names ${planted} once.\n`).pipe(pushes(scripts));
-        expect(hit._tag === "Failure" && hit.failure.reason).toMatch(/^leakgrep\.sh --text exited [1-9]/);
+        expect(Result.isFailure(hit) && hit.failure.reason).toMatch(/^leakgrep\.sh --text exited [1-9]/);
         // The reason names only the kind, never the word.
-        expect(hit._tag === "Failure" && hit.failure.reason.includes(planted)).toBe(false);
+        expect(Result.isFailure(hit) && hit.failure.reason.includes(planted)).toBe(false);
         const clean = yield* grep(`${title}\n\n${body}\n`).pipe(pushes(scripts));
         expect(clean._tag).toBe("Success");
       }),
@@ -252,7 +252,7 @@ describe("the leak gate's process: the real leakgrep.sh, whose exit code decides
       );
 
       for (const ran of [text, commits]) {
-        expect(ran._tag === "Failure" && ran.failure._tag).toBe("LeakGrepRefused");
+        expect(Result.isFailure(ran) && ran.failure._tag).toBe("LeakGrepRefused");
       }
     }),
   );

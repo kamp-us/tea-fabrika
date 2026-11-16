@@ -2,6 +2,7 @@ import { applyCell } from "@demlik/tea";
 // next/, P21 slice 1. The factory takes checked settings at start; no provider is read by update.
 import { arbGuidedSequence, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import * as Equal from "effect/Equal";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Access from "../access/Access.ts";
@@ -142,12 +143,14 @@ export const walks = proposals.map((messages): ReadonlyArray<Msg> => {
       msg = target === undefined ? proposal : { ...proposal, key: target.key };
     }
 
+    const pending = Match.valueTags(model, { idle: () => null, checking: ({ cmd }) => cmd });
+
     if (
       (proposal.type === "checked" || proposal.type === "not_checked") &&
       proposal.cmd !== stale &&
-      model._tag === "checking"
+      pending !== null
     ) {
-      msg = { ...proposal, cmd: model.cmd };
+      msg = { ...proposal, cmd: pending };
     }
 
     output.push(msg);

@@ -6,7 +6,7 @@ import { NodeServices } from "@effect/platform-node";
 // step canceled the other nine, so the run's own conclusion reads `cancelled`.
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Result, Schema } from "effect";
 import { FileSystem } from "effect";
 import * as ChecksTest from "../ci/ChecksTest.ts";
 import type { Job, Run } from "../ci/Runs.ts";
@@ -418,7 +418,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         const m = memory({ stands: "green", draft: true, leak: leaking(leak) }, red);
         const { answer, leaks } = yield* armed(m);
         expect(m.github.calls).toEqual(leak === "clean" ? [{ _tag: "ready", number: 1092 }, ...armedAt] : []);
-        expect(answer._tag === "Failure" && answer.failure._tag).toBe(leak === "clean" ? false : "LeakGrepRefused");
+        expect(Result.isFailure(answer) && answer.failure._tag).toBe(leak === "clean" ? false : "LeakGrepRefused");
 
         const ran = [
           { method: "leakChange", args: [".", oid] },

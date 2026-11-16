@@ -48,10 +48,9 @@ describe("fold", () => {
         const next = Level.step(sev0, entry, written.length);
 
         // An open while one is open is always refused, and so is a move of a sev0 when none is.
-        const fits =
-          entry._tag === "opened"
-            ? sev0._tag === "closed"
-            : entry._tag === "looping" || entry._tag === "ended" || sev0._tag === "open";
+        const fits = Level.Entry.isAnyOf(["opened"])(entry)
+          ? Level.Sev0.isAnyOf(["closed"])(sev0)
+          : Level.Entry.isAnyOf(["looping", "ended"])(entry) || Level.Sev0.isAnyOf(["open"])(sev0);
 
         expect(Result.isSuccess(next)).toBe(fits);
 
@@ -63,7 +62,7 @@ describe("fold", () => {
 
       const folded = Level.fold(written);
       expect(folded).toEqual(Result.succeed(sev0));
-      const opens = written.flatMap((e) => (e._tag === "opened" || e._tag === "closed" ? [e._tag] : []));
+      const opens = written.filter(Level.Entry.isAnyOf(["opened", "closed"])).map((e) => e._tag);
       expect(opens.every((tag, i) => (i % 2 === 0 ? tag === "opened" : tag === "closed"))).toBe(true);
     },
   );
@@ -82,7 +81,11 @@ describe("fold", () => {
 
       const folded = Level.fold(entries);
 
-      return Result.isSuccess(folded) && folded.success._tag === "open" && folded.success.allow.join() === model.join();
+      return (
+        Result.isSuccess(folded) &&
+        Level.Sev0.isAnyOf(["open"])(folded.success) &&
+        folded.success.allow.join() === model.join()
+      );
     },
   );
 
@@ -114,12 +117,12 @@ describe("level", () => {
       const level = Level.level(sev0 ? open : Level.Sev0.cases.closed.make({}), issues);
 
       if (sev0) {
-        return level._tag === "sev0" && level.allow.join() === "fabrikalfa/ci-cache";
+        return Level.Level.isAnyOf(["sev0"])(level) && level.allow.join() === "fabrikalfa/ci-cache";
       }
 
       return issues.length === 0
-        ? level._tag === "none"
-        : level._tag === "sev1" && level.issues.map((i) => i.number).join() === numbers.join();
+        ? Level.Level.isAnyOf(["none"])(level)
+        : Level.Level.isAnyOf(["sev1"])(level) && level.issues.map((i) => i.number).join() === numbers.join();
     },
   );
 });

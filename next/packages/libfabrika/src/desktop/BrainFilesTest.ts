@@ -148,7 +148,7 @@ export const suite = (open: Open) =>
             const typed = { defect: false, error: "BrainControlError" };
             const held = Effect.map(disk.entries, (names) => names.filter((name) => name.startsWith(".brain-")));
 
-            if (competing._tag === "copy") {
+            if (Competing.isAnyOf(["copy"])(competing)) {
               // A 0600 file with our exact bytes is our plist: an existing matching file is reusable.
               // The racing removal may take it or refuse. Either way the file is gone whole or still
               // there as it was put, and no captured copy outlives the removal.
@@ -171,17 +171,17 @@ export const suite = (open: Open) =>
             }
 
             // The swap really put the generated kind at the path.
-            if (competing._tag === "symlink") {
+            if (Competing.isAnyOf(["symlink"])(competing)) {
               expect(
                 swapped?._tag === "symlink" && swapped.target.startsWith("/") === (competing.path === "absolute"),
               ).toBe(true);
             } else {
               expect(swapped).toEqual(
-                competing._tag === "directory"
+                Competing.isAnyOf(["directory"])(competing)
                   ? Dirent.cases.directory.make({ files: { kept: utf8(competing.bytes) } })
                   : Dirent.cases.file.make({
                       bytes: utf8(competing.bytes),
-                      mode: competing._tag === "file" ? competing.mode : 0o600,
+                      mode: Competing.isAnyOf(["file"])(competing) ? competing.mode : 0o600,
                     }),
               );
             }
