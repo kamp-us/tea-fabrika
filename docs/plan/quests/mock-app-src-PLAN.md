@@ -615,6 +615,7 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
 | patches/@alchemy.run__cloudflare-runtime@2.0.0-beta.85.patch | tests | 40 | slice 2: Node `Workerd` spawns through `ChildProcessSpawner`, made with `pnpm patch`; an exam path, so the tests step writes it |
 | patches/ | tests | none | the folder of the patch above; no other file in it changes |
 | pnpm-lock.yaml | tests | 1 | slice 2: the patch's new hash, written by `pnpm patch-commit` |
+| next/packages/libfabrika/src/node/dev/dev.ts | build | 2 | slice 2 (amendment 2026-11-16, for law B3): the stack's local context (about line 327) also carries the caller's spawner, `Context.add(ChildProcessSpawner.ChildProcessSpawner, yield* ChildProcessSpawner.ChildProcessSpawner)`, plus its import, so Alchemy's own platform layer no longer hides the law's spawner from workerd's starts |
 | next/packages/libfabrika/src/gateway/GatewayNonce.ts | build | 30 | slice 3: `Mac` and `SecureRandom` |
 | next/packages/libfabrika/src/gateway/Gateway.ts | build | 24 | slice 3, after PR 1366: `SecureRandom`, the digests through the `WebCrypto` reference, and (amended 2026-11-15) the input's name through `InputNames` |
 | next/packages/libfabrika/src/gateway/InputNames.ts | build | 10 | slice 3, new (amended 2026-11-15): the contract only |
