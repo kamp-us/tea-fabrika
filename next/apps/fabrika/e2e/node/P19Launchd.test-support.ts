@@ -492,7 +492,13 @@ export const check = Effect.fn("P19Host.check")(function* () {
     yield* fs.remove(`${home}/controller.ready`, { force: true });
     const child = yield* ChildProcess.make(
       process.execPath,
-      [controllerFile, "p19:controller", `${home}/spec.json`, `${home}/snapshot.json`, ...(mode ? [mode] : [])],
+      [
+        controllerFile,
+        "p19:controller",
+        `${home}/spec.json`,
+        `${home}/snapshot.json`,
+        ...(mode !== undefined && mode !== "" ? [mode] : []),
+      ],
       { stdin: "ignore", stdout: "ignore", stderr: "ignore" },
     );
 

@@ -50,7 +50,7 @@ if (whole) {
     );
   }
 
-  if (raw.length || unreached.length) {
+  if (raw.length > 0 || unreached.length > 0) {
     process.exit(1);
   }
 }

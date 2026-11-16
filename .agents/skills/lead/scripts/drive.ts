@@ -874,7 +874,7 @@ export const loadEnv = (): Env => {
   ]);
   const [MAIN = "", BOXES = "", GH_REPO = "", CODEX_MODEL = "", CODEX_EFFORT = ""] = r.out.split("\n");
 
-  if (r.code !== 0 || !MAIN) {
+  if (r.code !== 0 || MAIN === "") {
     throw new Error(`env.sh failed: ${r.err}`);
   }
 
@@ -1208,7 +1208,7 @@ export const startedOf = (code: number, err: string): typeof Started.Type => {
     .find((m) => m !== null);
   const check = BOX_CHECKS.find((c) => c === line?.[1]);
 
-  if (code === 3 && line && check) {
+  if (code === 3 && line !== undefined && check !== undefined) {
     return Started.cases.refused.make({ check, detail: line[2] ?? "" });
   }
 
@@ -1491,7 +1491,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           `- ${ended} drive.ts ${ask.step} in box ${ask.box}: ${outcome}${faultNote(outcome, e.reason)}, head ${e.head.slice(0, 8)}. ${e.reason}\n`,
         );
 
-        if (!keep && ask.step !== "plan" && ask.box) {
+        if (!keep && ask.step !== "plan" && ask.box !== "") {
           rmSync(boxTree(env.BOXES, ask.box), { recursive: true, force: true });
           rmSync(join(env.BOXES, `${ask.box}-gitdata`), { recursive: true, force: true });
           // Its facts go with it, so no later stepcommit reads a dead box's plan hash.
@@ -1591,8 +1591,8 @@ export const mutationTail = (step: StepName, steps: Quest["steps"], read: (path:
   }
 
   const last = steps.findLast((s) => s.step === "mutation" && typeof s.report === "string");
-  const text = last?.report ? read(last.report) : null;
-  return text === null || !last?.report
+  const text = typeof last?.report === "string" && last.report !== "" ? read(last.report) : null;
+  return text === null || typeof last?.report !== "string" || last.report === ""
     ? "\n\n---\nThis quest has no mutation report drive can read. Since decision 0066 a quest runs no mutation step, so review without one, and do not look for one outside your box.\n"
     : `\n\n---\nThe quest's newest mutation report (${last.report}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
 };
@@ -2050,7 +2050,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   const saved = savedQuest(statePath);
   const ticket = p.ticket ?? saved?.ticket;
 
-  if (!ticket) {
+  if (ticket === undefined || ticket === "") {
     return usageError(`no ticket for quest ${quest} yet; pass --ticket`);
   }
 
@@ -2084,7 +2084,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   const from = step === "plan" ? "HEAD" : (p.from ?? lastHead ?? "origin/main");
   const base = sh("git", ["-C", env.MAIN, "rev-parse", "-q", "--verify", `${from}^{commit}`]).out.trim();
 
-  if (!base) {
+  if (base === "") {
     return usageError(`${from} is not a commit in the main checkout`);
   }
 
@@ -2096,7 +2096,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     isAncestor,
   );
 
-  if (!root) {
+  if (root === "") {
     return usageError(`${base.slice(0, 8)} shares no history with origin/main`);
   }
 

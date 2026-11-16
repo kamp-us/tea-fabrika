@@ -103,8 +103,8 @@ const cssImport = (
       return escape === "hex" ? `\\${char.codePointAt(0)!.toString(16)} ` : `\\${char}`;
     })
     .join("");
-  const target = `${quote}${quote && continuation ? `\\${continuation}` : ""}${ref}${quote}`;
-  return `@${keyword} ${form.endsWith("string") ? target : `${url}(${target})`}${media ? ` ${media}` : ""};`;
+  const target = `${quote}${quote !== "" && continuation !== "" ? `\\${continuation}` : ""}${ref}${quote}`;
+  return `@${keyword} ${form.endsWith("string") ? target : `${url}(${target})`}${media !== "" ? ` ${media}` : ""};`;
 };
 
 const homes: string[] = [];
@@ -377,7 +377,7 @@ describe("P16 assets and Compiler", () => {
             expect(styles).toContain(`--theme: ${id}`);
             expect(styles).toContain(`--tokens: ${id}`);
 
-            if (css.media) {
+            if (css.media !== "") {
               expect(styles).toContain(`@media ${css.media}`);
             }
           }),
@@ -896,7 +896,7 @@ describe("P16 cleanup and recording", () => {
                   const out = await handle.generate(o);
                   const css = out.output.find((f) => f.fileName.endsWith(".css"));
 
-                  if (!css) {
+                  if (css === undefined) {
                     return out;
                   }
 

@@ -10,7 +10,7 @@ const pixels = (nodes: valueParser.Node[]) => {
 
     const dimension = valueParser.unit(node.value);
 
-    if (dimension && dimension.unit.toLowerCase() === "px") {
+    if (dimension !== false && dimension.unit.toLowerCase() === "px") {
       found = true;
     }
   });
@@ -29,7 +29,7 @@ const hasUnit = (nodes: valueParser.Node[], units: RegExp) => {
   valueParser.walk(nodes, (node) => {
     const dimension = node.type === "word" ? valueParser.unit(node.value) : false;
 
-    if (dimension && units.test(dimension.unit)) {
+    if (dimension !== false && units.test(dimension.unit)) {
       found = true;
     }
   });

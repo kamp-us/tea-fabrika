@@ -205,7 +205,10 @@ export const runsFromDepth: CreateRule = {
                 : null;
             const variable = resolve(specifier.local);
 
-            if (variable && (IO.test(from) || (FS.test(from) && (imported === null || WRITES.test(imported))))) {
+            if (
+              variable !== undefined &&
+              (IO.test(from) || (FS.test(from) && (imported === null || WRITES.test(imported))))
+            ) {
               io.add(variable);
             }
           }
@@ -226,7 +229,7 @@ export const runsFromDepth: CreateRule = {
           if (id?.type === "Identifier" && !inTest(node)) {
             const variable = resolve(id);
 
-            if (variable) {
+            if (variable !== undefined) {
               declared.set(variable, node);
             }
           }

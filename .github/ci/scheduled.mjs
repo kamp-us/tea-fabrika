@@ -443,7 +443,15 @@ export const github = (env, send = globalThis.fetch) => {
   // `owner/repo/.github/workflows/scheduled.yaml@refs/heads/main`: the file this run started from.
   const workflow = /\/\.github\/workflows\/([^/@]+)@/.exec(env["GITHUB_WORKFLOW_REF"] ?? "")?.[1];
 
-  if (!token || !repository || !id || workflow === undefined) {
+  if (
+    token === undefined ||
+    token === "" ||
+    repository === undefined ||
+    repository === "" ||
+    id === undefined ||
+    id === "" ||
+    workflow === undefined
+  ) {
     return null;
   }
 

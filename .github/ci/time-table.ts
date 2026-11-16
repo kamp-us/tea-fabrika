@@ -216,7 +216,7 @@ const legOf = (env: Readonly<Record<string, string | undefined>>): Leg => ({
 // The jobs API is asked once, then again `pause` apart until the steps before this one all show an
 // end, at most TRIES times in all; the last answer stands.
 const stepsOf = (id: string | undefined, io: Io, pause: Duration.Input): Effect.Effect<Section<Step>> =>
-  id
+  id !== undefined && id !== ""
     ? io.job(id).pipe(
         Effect.map(readSteps),
         Effect.catch((error) =>
@@ -227,7 +227,7 @@ const stepsOf = (id: string | undefined, io: Io, pause: Duration.Input): Effect.
     : Effect.succeed(unavailable("JOB_ID is not set"));
 
 const filesOf = (path: string | undefined, root: string, io: Io): Effect.Effect<Section<TestFile>> =>
-  path
+  path !== undefined && path !== ""
     ? io.read(path).pipe(
         Effect.flatMap((text) => Effect.try({ try: () => JSON.parse(text), catch: (cause) => new Unread({ cause }) })),
         Effect.map((report) => readFiles(report, root)),
@@ -252,7 +252,11 @@ export const collect = (
     { concurrency: 2 },
   ).pipe(Effect.map(({ steps, files }) => ({ ...legOf(env), steps, files })));
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] !== undefined &&
+  process.argv[1] !== "" &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   const env = process.env;
   const api = env["GITHUB_API_URL"] ?? "https://api.github.com";
   const io: Io = {
@@ -284,7 +288,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         writeFileSync(join(env["RUNNER_TEMP"] ?? ".", fileName(timings)), `${JSON.stringify(timings)}\n`);
         console.log(text);
 
-        if (env["GITHUB_STEP_SUMMARY"]) {
+        if (env["GITHUB_STEP_SUMMARY"] !== undefined && env["GITHUB_STEP_SUMMARY"] !== "") {
           appendFileSync(env["GITHUB_STEP_SUMMARY"], text);
         }
       },

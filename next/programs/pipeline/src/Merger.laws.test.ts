@@ -58,7 +58,10 @@ const settingsFor = (w: World) =>
           queue: {
             kinds: { rows: ["rows/**"], docs: ["docs/**"] },
             checks: Object.fromEntries(
-              ["rows", "docs", "code"].map((kind, i) => [kind, w.empty[i] ? [] : [{ name: w.name, source: w.source }]]),
+              ["rows", "docs", "code"].map((kind, i) => [
+                kind,
+                w.empty[i] === true ? [] : [{ name: w.name, source: w.source }],
+              ]),
             ),
           },
           merger: { wait: w.wait, poll: w.poll, backoff: w.backoff, rounds: w.rounds },

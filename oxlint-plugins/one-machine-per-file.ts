@@ -170,7 +170,7 @@ export const oneMachinePerFile: CreateRule = {
 
             const variable = resolve(node);
 
-            if (!variable?.references.some((ref) => ref.identifier === node)) {
+            if (variable?.references.some((ref) => ref.identifier === node) !== true) {
               continue;
             }
 

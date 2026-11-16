@@ -514,7 +514,12 @@ const acceptNotice = (views: Model["views"], { pid, note }: Notice): Model["view
 
   if (noteType(note) === "whole") {
     view = body.view;
-  } else if (noteType(note) === "patch" && shown && body.base === shown.rev && body.rev === shown.rev + 1) {
+  } else if (
+    noteType(note) === "patch" &&
+    shown !== undefined &&
+    body.base === shown.rev &&
+    body.rev === shown.rev + 1
+  ) {
     const result = apply(shown.view, body.patch);
 
     if (Result.isFailure(result)) {
@@ -620,7 +625,9 @@ describe("L5: client views (p3)", () => {
           if (changed) {
             seen.installed++;
             seen.removed +=
-              Array.isArray(note.patch) && note.patch.some((op: { op?: unknown }) => op.op === "remove") ? 1 : 0;
+              Array.isArray(note.patch) && note.patch.some((op: { op?: unknown }) => op.op === "remove") === true
+                ? 1
+                : 0;
             expect(shown).toBeDefined();
             expect(note.base).toBe(shown!.rev);
             expect(note.rev).toBe(shown!.rev + 1);

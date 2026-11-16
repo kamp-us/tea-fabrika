@@ -456,7 +456,7 @@ const workerdPid = () => {
     .split("\n")
     .flatMap((row) => {
       const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row);
-      return m ? [{ pid: Number(m[1]), parent: Number(m[2]), command: m[3]! }] : [];
+      return m !== null ? [{ pid: Number(m[1]), parent: Number(m[2]), command: m[3]! }] : [];
     });
   const descendants = new Set([process.pid]);
 
@@ -535,7 +535,7 @@ describe("P12 real object adapters", () => {
           let waiting = wait();
           let before = await gateway("testState");
 
-          while (!before.sockets.some((row: any) => row.attachment.waits?.length === 1)) {
+          while (before.sockets.some((row: any) => row.attachment.waits?.length === 1) !== true) {
             await pause();
             before = await gateway("testState");
           }
@@ -595,7 +595,7 @@ describe("P12 real object adapters", () => {
               waiting = wait();
               let saved = await gateway("testState");
 
-              while (!saved.sockets.some((row: any) => row.attachment.waits?.length === 1)) {
+              while (saved.sockets.some((row: any) => row.attachment.waits?.length === 1) !== true) {
                 await pause();
                 saved = await gateway("testState");
               }
@@ -653,7 +653,7 @@ describe("P12 real object adapters", () => {
           () => ({ closed: true }),
         );
 
-        while (!(await process.testEntered())) {
+        while ((await process.testEntered()) !== true) {
           await pause();
         }
 

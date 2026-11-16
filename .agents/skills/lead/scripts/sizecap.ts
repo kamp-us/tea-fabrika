@@ -203,7 +203,12 @@ const unfenced = (text: string): ReadonlyArray<string> => {
     const mark = /^\s{0,3}(`{3,}|~{3,})(.*)$/.exec(line);
 
     if (fence !== null) {
-      if (mark?.[1] !== undefined && mark[1][0] === fence[0] && mark[1].length >= fence.length && !mark[2]?.trim()) {
+      if (
+        mark?.[1] !== undefined &&
+        mark[1][0] === fence[0] &&
+        mark[1].length >= fence.length &&
+        (mark[2]?.trim() ?? "") === ""
+      ) {
         fence = null;
       }
 

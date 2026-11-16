@@ -232,7 +232,7 @@ describe("P10 hello", () => {
         fc.array(fc.integer({ min: 1, max: 9 })),
         (client, server) => {
           const common = [...new Set(client)].filter((v) => server.includes(v));
-          expect(selectVersion(client, server)).toEqual(common.length ? Math.max(...common) : null);
+          expect(selectVersion(client, server)).toEqual(common.length > 0 ? Math.max(...common) : null);
         },
       ),
       { seed: 119120, numRuns: 100 },

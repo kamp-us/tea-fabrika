@@ -172,7 +172,7 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
     if (frame.method === "initialize") {
       owe(events, -1);
 
-      if (script.waiting) {
+      if (script.waiting === true) {
         message({ jsonrpc: "2.0", id: frame.id, error: { data: { reason: "not_granted" } } });
         return true;
       }

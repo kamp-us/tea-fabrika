@@ -706,7 +706,7 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
         const said = commitsSaid({ code: 1, out, err: "commits: stuck ..." }, quest);
         const named = answers
           .filter(held)
-          .map((a) => `${a.reason} ${a.sha.slice(0, 8)}${a.step ? ` step ${a.step}` : ""}`);
+          .map((a) => `${a.reason} ${a.sha.slice(0, 8)}${a.step !== undefined ? ` step ${a.step}` : ""}`);
 
         if (named.length === 0) {
           expect(said).toMatch(/^commits check exit 1: /);

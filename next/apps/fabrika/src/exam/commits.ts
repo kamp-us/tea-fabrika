@@ -473,7 +473,7 @@ const headerField = (lines: ReadonlyArray<string>, name: string) => {
 
     const value = [line.slice(name.length + 1)];
 
-    while (lines[i + 1]?.startsWith(" ")) {
+    while (lines[i + 1]?.startsWith(" ") === true) {
       i += 1;
       value.push((lines[i] ?? "").slice(1));
     }

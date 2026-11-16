@@ -5,7 +5,7 @@ import { Digest } from "effect/crypto";
 import { expect, it } from "vitest";
 import * as Host from "./node/P19Launchd.test-support.ts";
 
-const enabled = process.platform === "darwin" && process.env.FABRIKA_P19_HOST === "1" && !process.env.CI;
+const enabled = process.platform === "darwin" && process.env.FABRIKA_P19_HOST === "1" && (process.env.CI ?? "") === "";
 
 it("pinned: L13 bundles keep native dependencies resolvable outside root node_modules", async () => {
   // Review found that pnpm's transitive native dependencies were absent from the root link.

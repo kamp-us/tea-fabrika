@@ -43,7 +43,11 @@ export const staleRows = (table: Readonly<Record<string, number>>, real: readonl
 
 export const rowLine = (row: Row): string => `  ${JSON.stringify(row.path)}: ${row.seconds.toFixed(1)},`;
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] !== undefined &&
+  process.argv[1] !== "" &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   for (const path of process.argv.slice(2)) {
     try {
       const rows = reportRows(JSON.parse(readFileSync(path, "utf8")), process.cwd());

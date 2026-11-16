@@ -89,9 +89,12 @@ describe("P39 slice 3: one hands Cmd's delivery", () => {
 
         if (r._tag === "waiting") {
           return prev._tag === "waiting"
-            ? same(prev, next) || "D1: waiting stays waiting, at its first receipt, on another waiting reply"
-            : (next._tag === "waiting" && next.rev === r.rev && next.arrivedAt === r.arrivedAt) ||
-                "D1: pending moves to waiting with the request's receipt";
+            ? same(prev, next)
+              ? true
+              : "D1: waiting stays waiting, at its first receipt, on another waiting reply"
+            : next._tag === "waiting" && next.rev === r.rev && next.arrivedAt === r.arrivedAt
+              ? true
+              : "D1: pending moves to waiting with the request's receipt";
         }
 
         if (r._tag === "finished") {

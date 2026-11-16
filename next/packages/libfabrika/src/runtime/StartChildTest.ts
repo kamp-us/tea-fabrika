@@ -340,7 +340,7 @@ const faulting = (
         );
       }
 
-      if (fault.checkpoint && fault.landed && /INSERT INTO process_state/.test(query)) {
+      if (fault.checkpoint === true && fault.landed === true && /INSERT INTO process_state/.test(query)) {
         fault.checkpoint = false;
         throw new Error(fault.message);
       }
@@ -536,20 +536,21 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
       recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 },
       chunk: ANY_CHUNK,
     };
-    const layer = world.worker
-      ? Layer.unwrap(
-          Effect.map(ProgramLoader, (loader) =>
-            ProgramRunner.withLoader(
-              descriptor,
-              {
-                load: (name, build) =>
-                  Effect.map(loader.load(name, build), ({ stepper: _stepper, ...loaded }) => loaded),
-              },
-              options,
+    const layer =
+      world.worker === true
+        ? Layer.unwrap(
+            Effect.map(ProgramLoader, (loader) =>
+              ProgramRunner.withLoader(
+                descriptor,
+                {
+                  load: (name, build) =>
+                    Effect.map(loader.load(name, build), ({ stepper: _stepper, ...loaded }) => loaded),
+                },
+                options,
+              ),
             ),
-          ),
-        )
-      : ProgramRunner.layer(descriptor, options);
+          )
+        : ProgramRunner.layer(descriptor, options);
     const built = yield* Layer.buildWithScope(layer.pipe(Layer.provide(own)), scope);
     const real = Context.get(built, ProgramRunner);
     const made: ProgramRunner["Service"] = {

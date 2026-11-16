@@ -144,7 +144,7 @@ describe("box gc, today's tooling", () => {
         expect(new Set(to).size).toBe(to.length);
         const base = git?.branch?.replace(/(-wip)+$/, "");
 
-        if (base?.startsWith("fabrikalfa/")) {
+        if (base?.startsWith("fabrikalfa/") === true) {
           expect(to[0]).toBe(`${base}-wip`);
         }
       }),

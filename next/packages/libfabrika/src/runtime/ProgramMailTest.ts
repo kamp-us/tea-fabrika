@@ -509,7 +509,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
   });
   const names: ReadonlyArray<readonly [string, string]> = PAIRS.flatMap((k) => [
     [requesterName(k), REQUESTERS[k].name] as const,
-    [responderName(k), world.timers ? timerProgram.name : mailResponder.name] as const,
+    [responderName(k), world.timers === true ? timerProgram.name : mailResponder.name] as const,
   ]);
 
   for (const [name, program] of names) {
@@ -565,7 +565,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
     const runner = ProgramRunner.layer(
       { id: pid, name, program, build: BUILD, owner },
       {
-        ...(world.timers ? { policy: alarmPolicy } : {}),
+        ...(world.timers === true ? { policy: alarmPolicy } : {}),
         recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 },
         chunk: ANY_CHUNK,
       },

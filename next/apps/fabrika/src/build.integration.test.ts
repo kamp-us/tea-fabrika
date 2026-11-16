@@ -34,7 +34,7 @@ const discovery = (files: Array<string>, seen?: { calls: number }) =>
       ...fs,
       glob: () =>
         Effect.sync(() => {
-          if (seen) {
+          if (seen !== undefined) {
             seen.calls++;
           }
 

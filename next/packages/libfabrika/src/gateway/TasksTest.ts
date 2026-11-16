@@ -390,7 +390,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
   const revoke = Effect.fnUntraced(function* (c: Client, id: string, ancestor = false) {
     const value = revokeText({
       id,
-      key: ancestor ? root.line : c.key.raw,
+      key: ancestor === true ? root.line : c.key.raw,
       for: PERSON,
       to: "tasks-law",
       sentAt: SENT,
@@ -398,9 +398,9 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
     });
     // A second gateway over the same store takes the membership write before a held call.
     const b = yield* Gateway.pipe(Effect.provide(gatewayFor()));
-    expect((yield* b.grant({ text: value, armored: yield* (ancestor ? backup : root).sign(value) }))._tag).toBe(
-      "applied",
-    );
+    expect(
+      (yield* b.grant({ text: value, armored: yield* (ancestor === true ? backup : root).sign(value) }))._tag,
+    ).toBe("applied");
 
     for (const old of clients.filter((x) => ancestor || x.key.raw === c.key.raw)) {
       old.live = false;

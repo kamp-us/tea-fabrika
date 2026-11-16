@@ -1182,7 +1182,7 @@ describe("Desk S3: a split's letter carries the cursor it leaves", () => {
               const call = c["call"] as Call | undefined;
               const did = call?.["m"] as (Did & { readonly cursor?: string | null }) | undefined;
 
-              if (c.type !== "write" || call?._tag !== "send" || !did?.does.startsWith("tezgah.split_")) {
+              if (c.type !== "write" || call?._tag !== "send" || did?.does.startsWith("tezgah.split_") !== true) {
                 continue;
               }
 

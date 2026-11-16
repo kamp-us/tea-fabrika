@@ -488,7 +488,7 @@ it.effect.prop(
         yield* bundle(path.join(folder, "m0.ts"), []);
         const graph = observations.builds[start];
 
-        if (!graph) {
+        if (graph === undefined) {
           return yield* Effect.die("observer did not see graph");
         }
 
@@ -525,7 +525,7 @@ it.effect.prop(
           ]);
           const bad = observations.builds[n];
 
-          if (!bad) {
+          if (bad === undefined) {
             return yield* Effect.die("no planted graph");
           }
 

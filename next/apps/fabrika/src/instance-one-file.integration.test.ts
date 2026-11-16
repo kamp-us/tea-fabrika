@@ -87,7 +87,11 @@ const plantPolicy = (source: string, mode: "binding" | "outbound", name: string,
     if (node.type === "ObjectExpression") {
       const prop = (key: string) => node.properties.find((p: any) => p.key?.name === key || p.key?.value === key);
 
-      if (prop("mainModule")?.value?.value === "program.js" && prop("env") && prop("globalOutbound")) {
+      if (
+        prop("mainModule")?.value?.value === "program.js" &&
+        prop("env") !== undefined &&
+        prop("globalOutbound") !== undefined
+      ) {
         const target = mode === "binding" ? prop("env").value : prop("globalOutbound");
         ranges.push({ start: target.start, end: target.end });
       }
@@ -397,7 +401,7 @@ describe("P16 stack and sealed loader", () => {
         // multibyte setting that passes a character count.
         const real = calls[0];
 
-        if (real) {
+        if (real !== undefined) {
           for (const plant of [
             { ...real, env: { ...real.env, WINDOW_JS: "export const x = 1;" } },
             { ...real, env: { ...real.env, CODE: "program-marker" } },
@@ -929,7 +933,7 @@ describe("P16 copied-file real instance, serial", () => {
   it("scenario: T10 timing checks experiment 241's four base and five head readings on the laptop; without a bar file it skips the cap check", async () => {
     const path = process.env.P16_LOCAL_BAR;
 
-    if (!path) {
+    if (path === undefined || path === "") {
       console.log(
         "T10 cap check skipped: P16_LOCAL_BAR is unset, so there is no bar file; the bar blocks on the laptop only",
       );
@@ -942,7 +946,7 @@ describe("P16 copied-file real instance, serial", () => {
     const digest = createHash("sha256").update(readFileSync(brain)).digest("hex");
     const { programs } = await import("./table.ts");
     const windowed = exportsWindow(join(APP, "src"), programs);
-    localBar(bar, digest, !process.env.CI, windowed);
+    localBar(bar, digest, (process.env.CI ?? "") === "", windowed);
     console.log(
       JSON.stringify({
         law: "T10",

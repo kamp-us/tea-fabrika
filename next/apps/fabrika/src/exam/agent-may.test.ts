@@ -270,7 +270,7 @@ it.effect.prop(
       yield* w.door.route(client, "process.send", request(c.body));
       const input = w.delivered.at(-1);
 
-      if (!input) {
+      if (input === undefined) {
         return yield* Effect.die("no checked delivery");
       }
 
@@ -404,7 +404,7 @@ it.effect.prop(
       yield* w.door.route(client, "process.send", request(c.body));
       const input = w.delivered.at(-1);
 
-      if (!input) {
+      if (input === undefined) {
         return yield* Effect.die("no delivery");
       }
 
@@ -686,7 +686,7 @@ it.effect.prop(
       const handler = new Map<string, () => Effect.Effect<Schema.Json>>();
       const dispatch = Effect.fnUntraced(function* (method: string) {
         const h = handler.get(method);
-        return h ? { _tag: "ok", result: yield* h() } : { _tag: "refused", reason: "unknown_method" };
+        return h !== undefined ? { _tag: "ok", result: yield* h() } : { _tag: "refused", reason: "unknown_method" };
       });
       const clean: PolicyDoor = {
         install: (m, h) =>

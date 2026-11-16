@@ -358,7 +358,7 @@ const rows = (w: World, stream: string, saved = w.first) =>
 const last = (w: World) => {
   const incoming = w.deliveries.at(-1);
 
-  if (!incoming) {
+  if (incoming === undefined) {
     throw new Error("door did not deliver an input");
   }
 

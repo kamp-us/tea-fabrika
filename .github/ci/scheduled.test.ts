@@ -1120,11 +1120,12 @@ it("L1 property: the last green run is main's newest green run whose test legs r
             }
           : (() => {
               const run = runs.find((r) => path === `actions/runs/${r.id}/jobs`);
-              const names = !run?.full
-                ? ["gate", "tests", "report"]
-                : run.old
-                  ? ["tooling (1)", "next (e2e-1)", "next (1)", "report"]
-                  : ["gate", "tests (e2e-1)", "tests (1)", "report"];
+              const names =
+                run?.full !== true
+                  ? ["gate", "tests", "report"]
+                  : run.old
+                    ? ["tooling (1)", "next (e2e-1)", "next (1)", "report"]
+                    : ["gate", "tests (e2e-1)", "tests (1)", "report"];
               return {
                 total_count: names.length,
                 jobs: names.map((name) => ({ name, status: "completed", conclusion: "success" })),
@@ -1139,8 +1140,8 @@ it("L1 property: the last green run is main's newest green run whose test legs r
       expect(await scheduled.github(env, send)!.lastGreen()).toBe(expected);
       reached.stepped += green[0] !== undefined && !green[0].full && expected !== null ? 1 : 0;
       reached.none += expected === null && green.length > 0 ? 1 : 0;
-      reached.first += green[0]?.full ? 1 : 0;
-      reached.old += green.find((r) => r.full)?.old ? 1 : 0;
+      reached.first += green[0]?.full === true ? 1 : 0;
+      reached.old += green.find((r) => r.full)?.old === true ? 1 : 0;
     }),
     options,
   );

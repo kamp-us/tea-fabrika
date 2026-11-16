@@ -96,10 +96,10 @@ const rule = (w: Workspace, size: { readonly width: number; readonly height: num
     const fixed = node.parts.map((p) => tilesIn(p.inner).every((t) => strips.has(t)));
     const has = left - fixed.filter((f) => f).length * ACROSS[node.dir];
     overflow ||= has < 0;
-    const open = node.parts.flatMap((p, i) => (fixed[i] ? [] : [p.percent]));
+    const open = node.parts.flatMap((p, i) => (fixed[i] === true ? [] : [p.percent]));
     const total = open.reduce((a, b) => a + b, 0);
     const lead = node.parts.findIndex((p) => tilesIn(p.inner).includes(w.focus));
-    let shares = node.parts.map((p, i) => (fixed[i] ? ACROSS[node.dir] : (has * p.percent) / total));
+    let shares = node.parts.map((p, i) => (fixed[i] === true ? ACROSS[node.dir] : (has * p.percent) / total));
 
     if (lead >= 0) {
       const least = Math.min(row ? SMALLEST.width : SMALLEST.height, has);
@@ -108,7 +108,7 @@ const rule = (w: Workspace, size: { readonly width: number; readonly height: num
       if (shares[lead]! < least) {
         const rest = total - node.parts[lead]!.percent;
         shares = node.parts.map((p, i) =>
-          i === lead ? least : fixed[i] ? ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
+          i === lead ? least : fixed[i] === true ? ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
         );
       }
     }
@@ -120,7 +120,7 @@ const rule = (w: Workspace, size: { readonly width: number; readonly height: num
         ? { x: at, y: box.y, width: shares[i]!, height: box.height }
         : { x: box.x, y: at, width: box.width, height: shares[i]! };
 
-      if (fixed[i] && typeof p.inner !== "string") {
+      if (fixed[i] === true && typeof p.inner !== "string") {
         bands.push({ box: b, tiles: tilesIn(p.inner) });
       } else {
         walk(p.inner, b);

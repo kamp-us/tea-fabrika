@@ -4240,20 +4240,26 @@ const foldDrawn = (w: Workspace, size: Extent, strips: ReadonlySet<string>): Rea
     const left = (row ? box.width : box.height) - (node.parts.length - 1) * Layout.GAP;
     const fixed = node.parts.map((p) => foldTiles(p.inner).every((t) => strips.has(t)));
     const has = left - fixed.filter((f) => f).length * FOLD_ACROSS[node.dir];
-    const total = node.parts.reduce((sum, p, i) => (fixed[i] ? sum : sum + p.percent), 0);
+    const total = node.parts.reduce((sum, p, i) => (fixed[i] === true ? sum : sum + p.percent), 0);
     const lead = node.parts.findIndex((p) => foldTiles(p.inner).includes(w.focus));
-    let shares = node.parts.map((p, i) => (fixed[i] ? FOLD_ACROSS[node.dir] : (has * p.percent) / total));
+    let shares = node.parts.map((p, i) => (fixed[i] === true ? FOLD_ACROSS[node.dir] : (has * p.percent) / total));
     const least = Math.min(row ? FOLD_SMALLEST.width : FOLD_SMALLEST.height, has);
 
     if (lead >= 0 && shares[lead]! < least) {
       const rest = total - node.parts[lead]!.percent;
       shares = node.parts.map((p, i) =>
-        i === lead ? least : fixed[i] ? FOLD_ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
+        i === lead
+          ? least
+          : fixed[i] === true
+            ? FOLD_ACROSS[node.dir]
+            : rest > 0
+              ? ((has - least) * p.percent) / rest
+              : 0,
       );
     }
 
     for (const [i, p] of node.parts.entries()) {
-      if (!fixed[i] || typeof p.inner === "string") {
+      if (fixed[i] !== true || typeof p.inner === "string") {
         walk(p.inner, row ? { width: shares[i]!, height: box.height } : { width: box.width, height: shares[i]! });
       }
     }

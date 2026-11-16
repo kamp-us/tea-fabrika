@@ -216,7 +216,7 @@ export const storage = () => {
     size: () => backend.size(),
   };
   const rows = (): ReadonlyArray<Entry> => {
-    if (!db.prepare("SELECT name FROM sqlite_master WHERE name='entries'").get()) {
+    if (db.prepare("SELECT name FROM sqlite_master WHERE name='entries'").get() === undefined) {
       return [];
     }
 

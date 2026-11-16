@@ -112,7 +112,7 @@ export const suite = (database: Database) =>
             }
 
             for (const step of walk) {
-              const client = held.length && step.pick % 3 ? nth(held, step.pick) : step.client;
+              const client = held.length > 0 && step.pick % 3 !== 0 ? nth(held, step.pick) : step.client;
 
               if (step.pick % 3 === 2) {
                 gone.add(client);
@@ -213,7 +213,7 @@ export const suite = (database: Database) =>
               );
               expect(column).toBeDefined();
               const original = String((row ?? {})[column ?? "value"]);
-              const damaged = step.pick % 2 ? "{bad-json" : JSON.stringify({ ...json(original), v: 999 });
+              const damaged = step.pick % 2 !== 0 ? "{bad-json" : JSON.stringify({ ...json(original), v: 999 });
               sql.exec(`UPDATE process_watchers SET "${column}"=? WHERE name=?`, damaged, "counter:fault");
               const before = rows(sql);
               frames.length = 0;
@@ -265,7 +265,7 @@ export const suite = (database: Database) =>
               yield* watches.open(client, whole);
               held.add(client);
               const target = nth([...held], step.pick);
-              const route = i % 2 ? "gone" : "unknown";
+              const route = i % 2 !== 0 ? "gone" : "unknown";
               routes.set(target, route);
               frames.length = 0;
               yield* watches.publish(patch);

@@ -48,17 +48,13 @@ export const preferSchemaArbitrary: CreateRule = {
         return undefined;
       }
 
-      let scope = source.getScope(id);
+      let scope: ReturnType<typeof source.getScope> | null = source.getScope(id);
 
-      while (scope) {
+      while (scope !== null) {
         const variable = scope.set.get(id.name);
 
-        if (variable) {
+        if (variable !== undefined) {
           return variable;
-        }
-
-        if (!scope.upper) {
-          break;
         }
 
         scope = scope.upper;
@@ -74,7 +70,7 @@ export const preferSchemaArbitrary: CreateRule = {
     const imported = (id: Node, seen = new Set<Binding>()): { from: string; name: string } | undefined => {
       const variable = binding(id);
 
-      if (!variable || seen.has(variable)) {
+      if (variable === undefined || seen.has(variable)) {
         return undefined;
       }
 
@@ -109,7 +105,9 @@ export const preferSchemaArbitrary: CreateRule = {
         const object = node.type === "TSQualifiedName" ? node.left : node.object;
         const name = node.type === "TSQualifiedName" ? node.right.name : node.property.name;
         const owner = moduleName(object);
-        return owner ? { from: owner.from, name: owner.name === "*" ? name : `${owner.name}.${name}` } : undefined;
+        return owner !== undefined
+          ? { from: owner.from, name: owner.name === "*" ? name : `${owner.name}.${name}` }
+          : undefined;
       }
 
       return undefined;
@@ -141,13 +139,13 @@ export const preferSchemaArbitrary: CreateRule = {
 
       const name = dotted(node);
 
-      if (!name) {
+      if (name === null || name === "") {
         return undefined;
       }
 
       if (node.type === "MemberExpression" || node.type === "TSQualifiedName") {
         const origin = moduleName(node);
-        return origin &&
+        return origin !== undefined &&
           origin.from !== "fast-check" &&
           (origin.from !== "effect" || origin.name.startsWith("Schema.")) &&
           (!origin.from.startsWith("effect/") || origin.from === "effect/Schema")
@@ -157,14 +155,14 @@ export const preferSchemaArbitrary: CreateRule = {
 
       const variable = binding(node);
 
-      if (!variable || seen.has(variable)) {
+      if (variable === undefined || seen.has(variable)) {
         return undefined;
       }
 
       seen.add(variable);
       const origin = imported(node);
 
-      if (origin) {
+      if (origin !== undefined) {
         return origin.from === "fast-check" ||
           (origin.from === "effect" && !origin.name.startsWith("Schema.")) ||
           (origin.from.startsWith("effect/") && origin.from !== "effect/Schema")
@@ -175,12 +173,12 @@ export const preferSchemaArbitrary: CreateRule = {
       const init = initial(node);
 
       if (init?.type === "Identifier") {
-        return schema(init, seen) ? name : undefined;
+        return (schema(init, seen) ?? "") !== "" ? name : undefined;
       }
 
       const declaration = variable.defs[0]?.node;
 
-      if (declaration?.type === "ClassDeclaration" && declaration.superClass) {
+      if (declaration?.type === "ClassDeclaration" && declaration.superClass !== null) {
         let base: Node = declaration.superClass;
 
         while (base.type === "CallExpression") {
@@ -225,11 +223,11 @@ export const preferSchemaArbitrary: CreateRule = {
         const roots = (node: Node, seen = new Set<Binding>()): Node[] => {
           const variable = binding(node);
 
-          if (variable && !seen.has(variable)) {
+          if (variable !== undefined && !seen.has(variable)) {
             seen.add(variable);
             const value = flows.get(variable) ?? initial(node);
 
-            if (value) {
+            if (value !== undefined) {
               return roots(value, seen);
             }
           }
@@ -252,7 +250,7 @@ export const preferSchemaArbitrary: CreateRule = {
             } else if (part.type === "Identifier") {
               const variable = binding(part);
 
-              if (variable && !seen.has(variable)) {
+              if (variable !== undefined && !seen.has(variable)) {
                 found.push(...roots(part, new Set(seen)));
               }
             }
@@ -276,7 +274,7 @@ export const preferSchemaArbitrary: CreateRule = {
             const variable = binding(param);
             const input = node.arguments[i];
 
-            if (variable && input && input.type !== "SpreadElement") {
+            if (variable !== undefined && input !== undefined && input.type !== "SpreadElement") {
               flows.set(variable, input);
             }
           });
@@ -284,7 +282,7 @@ export const preferSchemaArbitrary: CreateRule = {
 
         const matches = new Map<Node, string>();
         const mark = (value: Node, name: string | undefined) => {
-          if (name) {
+          if (name !== undefined && name !== "") {
             for (const root of roots(value)) {
               matches.set(root, name);
             }
@@ -295,14 +293,14 @@ export const preferSchemaArbitrary: CreateRule = {
         const checkedRoots = (value: Node, seen = new Set<Binding>()): Node[] => {
           const variable = binding(value);
 
-          if (!variable || seen.has(variable)) {
+          if (variable === undefined || seen.has(variable)) {
             return [];
           }
 
           seen.add(variable);
           const input = flows.get(variable);
 
-          if (input) {
+          if (input !== undefined) {
             return roots(input);
           }
 
@@ -317,13 +315,13 @@ export const preferSchemaArbitrary: CreateRule = {
           if (value.type === "Identifier") {
             const variable = binding(value);
 
-            if (!variable || seen.has(variable) || flows.has(variable)) {
+            if (variable === undefined || seen.has(variable) || flows.has(variable)) {
               return [];
             }
 
             seen.add(variable);
             const init = initial(value);
-            return init ? arbitraryRoots(init, seen) : [];
+            return init !== undefined ? arbitraryRoots(init, seen) : [];
           }
 
           if (
@@ -359,7 +357,7 @@ export const preferSchemaArbitrary: CreateRule = {
         };
 
         for (const node of nodes) {
-          if (node.type === "VariableDeclarator" && node.id.type === "Identifier" && node.init) {
+          if (node.type === "VariableDeclarator" && node.id.type === "Identifier" && node.init !== null) {
             for (const part of below(node.id)) {
               if (
                 part.type !== "TSTypeReference" ||
@@ -388,9 +386,9 @@ export const preferSchemaArbitrary: CreateRule = {
           // A schema check applied to a generated value: Schema.is(S)(value).
           if (effectCheck(node.callee) && node.callee.type === "CallExpression") {
             const target = node.callee.arguments[0];
-            const name = target && target.type !== "SpreadElement" ? schema(target) : undefined;
+            const name = target !== undefined && target.type !== "SpreadElement" ? schema(target) : undefined;
 
-            if (name) {
+            if (name !== undefined && name !== "") {
               for (const arg of node.arguments) {
                 if (arg.type !== "SpreadElement") {
                   for (const root of checkedRoots(arg)) {
@@ -411,19 +409,19 @@ export const preferSchemaArbitrary: CreateRule = {
             // A generated array's map is ordinary JavaScript, not Arbitrary.map.
             const inputs = arbitraryRoots(callee.object);
 
-            if (!inputs.length) {
+            if (inputs.length === 0) {
               continue;
             }
 
             const callback = node.arguments[0];
 
-            if (!callback || callback.type === "SpreadElement") {
+            if (callback === undefined || callback.type === "SpreadElement") {
               continue;
             }
 
             const direct = maker(callback);
 
-            if (direct) {
+            if (direct !== undefined && direct !== "") {
               for (const input of inputs) {
                 mark(input, direct);
               }
@@ -439,7 +437,7 @@ export const preferSchemaArbitrary: CreateRule = {
             const parameter = input && binding(input);
             const body = callback.body;
 
-            if (!parameter || !body) {
+            if (parameter === undefined || body === null) {
               continue;
             }
 
@@ -447,14 +445,14 @@ export const preferSchemaArbitrary: CreateRule = {
               body.type === "BlockStatement"
                 ? [...below(body)]
                     .filter((part) => {
-                      if (part.type !== "ReturnStatement" || !part.argument) {
+                      if (part.type !== "ReturnStatement" || part.argument === null) {
                         return false;
                       }
 
                       let owner: Node | null = part.parent;
 
                       while (
-                        owner &&
+                        owner !== null &&
                         owner !== callback &&
                         !["ArrowFunctionExpression", "FunctionExpression", "FunctionDeclaration"].includes(owner.type)
                       ) {
@@ -463,7 +461,9 @@ export const preferSchemaArbitrary: CreateRule = {
 
                       return owner === callback;
                     })
-                    .flatMap((part) => (part.type === "ReturnStatement" && part.argument ? [part.argument] : []))
+                    .flatMap((part) =>
+                      part.type === "ReturnStatement" && part.argument !== null ? [part.argument] : [],
+                    )
                 : [body];
 
             for (const returned of returns) {
@@ -473,7 +473,7 @@ export const preferSchemaArbitrary: CreateRule = {
 
               const name = maker(returned.callee);
 
-              if (!name) {
+              if (name === undefined || name === "") {
                 continue;
               }
 
@@ -499,7 +499,10 @@ export const preferSchemaArbitrary: CreateRule = {
 
           let statement = node;
 
-          while (statement.parent && !["VariableDeclaration", "ExpressionStatement"].includes(statement.type)) {
+          while (
+            statement.parent !== null &&
+            !["VariableDeclaration", "ExpressionStatement"].includes(statement.type)
+          ) {
             statement = statement.parent;
           }
 

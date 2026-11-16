@@ -192,14 +192,14 @@ const service = Effect.fnUntraced(function* (
   const ledger = yield* reader(sql);
   const failure = options.failure;
   const lower = failure === undefined ? undefined : new LedgerError({ reason: failure.reason, cause: failure.cause });
-  const affected = failure?.part.startsWith("inbox") ? inbox(name) : `processes/${name}`;
+  const affected = failure?.part.startsWith("inbox") === true ? inbox(name) : `processes/${name}`;
   const controlled: Ledger["Service"] = {
     ...ledger,
     wait: (stream, after) =>
       Effect.gen(function* () {
         expect(after, "capture uses the nonblocking wait from zero").toBe(0);
 
-        if (lower !== undefined && stream === affected && failure?.part.endsWith("wait")) {
+        if (lower !== undefined && stream === affected && failure?.part.endsWith("wait") === true) {
           return yield* Effect.fail(lower);
         }
 
@@ -222,7 +222,7 @@ const service = Effect.fnUntraced(function* (
         return captured;
       }),
     read: (stream, after) =>
-      lower !== undefined && stream === affected && failure?.part.endsWith("read")
+      lower !== undefined && stream === affected && failure?.part.endsWith("read") === true
         ? ledger.read(stream, after).pipe(Stream.take(1), Stream.concat(Stream.fail(lower)))
         : ledger.read(stream, after),
   };
