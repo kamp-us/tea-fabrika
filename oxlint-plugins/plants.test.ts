@@ -764,16 +764,22 @@ describe("the Data.TaggedError entry, which stands beside fabrika/no-data-tagged
  * The files a vi plant is written to, for every glob a vi ban block lists: one plain file of the
  * folder (the lib-top slice's form) and one law file, `-vi-<n>.test.ts` (the gateway slice's form),
  * since the lock is there to hold laws. A glob whose plain file is not a `.ts` file, such as
- * `src/*.tsx`, gets the one file.
+ * `src/*.tsx`, keeps its plain name for both.
  */
-const viFiles = (globs: ReadonlyArray<{ readonly glob: string }>, n: number): ReadonlyArray<string> => {
+const viFiles = (globs: ReadonlyArray<{ readonly glob: string }>, n: number) => {
   const plain = globs.map(({ glob }) => plantPath(glob));
   const laws = plain.map((file) => file.replace(/\.ts$/, `-vi-${n}.test.ts`));
-  expect(new Set(plain).size, "each glob gets a file of its own").toBe(plain.length);
-  expect(new Set(laws).size, "each glob gets a law file of its own").toBe(laws.length);
 
-  return [...new Set([...plain, ...laws])];
+  return { plain, laws, files: [...new Set([...plain, ...laws])] };
 };
+
+/** The vi ban globs every vi law must find: libfabrika's top files, both extensions, and the gateway and telemetry folders. */
+const VI_FOLDERS = [
+  "next/packages/libfabrika/src/*.ts",
+  "next/packages/libfabrika/src/*.tsx",
+  "next/packages/libfabrika/src/gateway/**",
+  "next/packages/libfabrika/src/telemetry/**",
+];
 
 describe("M1 of the mock sweep: every folder a vi ban block lists refuses vi's mocks", () => {
   // scenario: T1067 L1 (lib-top), M1 (node) and M1 (gateway and telemetry), the repo's own config,
@@ -789,14 +795,7 @@ describe("M1 of the mock sweep: every folder a vi ban block lists refuses vi's m
       const globs = viGlobs(printed);
       // Coverage: libfabrika's top files, both extensions, and the gateway and telemetry slice's two
       // folders, at least.
-      expect(globs.map(({ glob }) => glob)).toEqual(
-        expect.arrayContaining([
-          "next/packages/libfabrika/src/*.ts",
-          "next/packages/libfabrika/src/*.tsx",
-          "next/packages/libfabrika/src/gateway/**",
-          "next/packages/libfabrika/src/telemetry/**",
-        ]),
-      );
+      expect(globs.map(({ glob }) => glob)).toEqual(expect.arrayContaining(VI_FOLDERS));
       expect(globs.every(({ level }) => level === "deny")).toBe(true);
       // Coverage: each chained line the vitest rule takes alone is refused by the other half.
       const chained = (line: string) => /\)\.mock\w*\(/.test(line);
@@ -813,8 +812,15 @@ describe("M1 of the mock sweep: every folder a vi ban block lists refuses vi's m
     "scenario: VI_METHODS' plant under %s is refused exactly, in every folder of every vi ban block",
     (_from, n, p) => {
       inConfigCopy(({ printed, lint }) => {
+        const globs = viGlobs(printed);
+        // Coverage: libfabrika's top files, both extensions, and the ban blocks in every folder it names.
+        expect(globs.map(({ glob }) => glob)).toEqual(expect.arrayContaining(VI_FOLDERS));
+        expect(globs.every(({ level }) => level === "deny")).toBe(true);
+
         const { text, want } = textOf(p);
-        const files = viFiles(viGlobs(printed), n);
+        const { plain, laws, files } = viFiles(globs, n);
+        expect(new Set(plain).size, "each glob gets a file of its own").toBe(plain.length);
+        expect(new Set(laws).size, "each glob gets a law file of its own").toBe(laws.length);
         const diagnostics = lint(text, files);
 
         for (const file of files) {
@@ -836,17 +842,12 @@ describe("M1 of the mock sweep: every folder a vi ban block lists refuses vi's m
     inConfigCopy(({ printed, lint }) => {
       const globs = viGlobs(printed);
       // Coverage: libfabrika's top files, both extensions, and the gateway and telemetry folders.
-      expect(globs.map(({ glob }) => glob)).toEqual(
-        expect.arrayContaining([
-          "next/packages/libfabrika/src/*.ts",
-          "next/packages/libfabrika/src/*.tsx",
-          "next/packages/libfabrika/src/gateway/**",
-          "next/packages/libfabrika/src/telemetry/**",
-        ]),
-      );
+      expect(globs.map(({ glob }) => glob)).toEqual(expect.arrayContaining(VI_FOLDERS));
 
       const { text, want } = textOf(VI_PROPERTIES);
-      const files = viFiles(globs, VI_METHODS.length);
+      const { plain, laws, files } = viFiles(globs, VI_METHODS.length);
+      expect(new Set(plain).size, "each glob gets a file of its own").toBe(plain.length);
+      expect(new Set(laws).size, "each glob gets a law file of its own").toBe(laws.length);
       const diagnostics = lint(text, files);
 
       for (const file of files) {
