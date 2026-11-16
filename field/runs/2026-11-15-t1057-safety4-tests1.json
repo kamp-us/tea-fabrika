@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1057-safety4-tests1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T21:48:05-08:00",
+  "ended": "2026-11-15T22:05:40-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Anti-slop judgment slice AS-require-safety-comment-4, branch fabrikalfa/antislop-require-safety-comment-4, no pull request (owner ruling: one per sweep, folded into fabrikalfa/antislop-judgment). Rule anti-slop/require-safety-comment-for-type-assertion with its SAFETY marker (0561), forced to error in a scratch config outside the repo, over libfabrika settings, transport, desktop, tezgah, telemetry, ledger, access, schedules and next/packages/tuval, next/programs/pipeline, next/programs/counter. Met 73 hits on origin/main bcad0080d: 67 in exam paths, 5 in product files, 1 in a file of PR 1366. All 67 exam hits fixed by hand edits (Edit-style replacements from a scratchpad script, no quick fix, no codemod in the repo): 53 casts removed, 14 kept with a SAFETY comment naming the fact on that line. Removed by a decode with the library's own schema (TileId, Tile, Schema.Record for JSON objects, Schema.TaggedUnion for a generator's cases), a type annotation or explicit type argument where the cast was only an upcast (Codec is covariant; applyCell is generic; Layout.rects already keys by TileId; EffectJsonSchema.JsonSchema is an index type), satisfies, Predicate.hasProperty or isTagged to read an error's cause, reason and tag, ByteSize.isByteSize with an added assertion, and fc.constantFrom over STREAMS for a modulo index. Kept with SAFETY: tea's template-string reply Msgs and id-swapped spreads in desktop/BrainLife.laws.test.ts (4), toWellFormed missing from the ES2023 lib (1), an empty CryptoKey that only a rejecting spy sees (1), Schema.Top read back from JSON Schema with no services (1), a deliberate top-level stray key in a tables-only tree (2), a tileName law whose generated name ProcessName may refuse (1), the RecordCalls Proxy stub (1), two JSON.parse reads in a telemetry integration file that cannot run here (2), a two-part split of the seven pipeline setting paths (1). Counted again with the rule under an unused marker over the 23 touched files: 67 casts before, 14 after. Left for the build, product files: next/packages/libfabrika/src/ledger/LedgerStreamsSql.ts:23, next/packages/libfabrika/src/schedules/ScheduledJob.ts:96, next/packages/libfabrika/src/desktop/BrainServiceManaged.ts:100 and :104, next/packages/tuval/src/browser/key.ts:133. Waiting on 1366: next/packages/libfabrika/src/settings/StartsTest.ts:100. No assertion deleted or narrowed, no disable line, no lock line, no .oxlintrc.json change. This step adds no new law; it reshaped how four laws read an error, and ran each one's plant once.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/transport/ErrorCause.test.ts: C5: a generated rejection on any WebCrypto call is WebCryptoError with that very value as its cause",
+      "plant": "next/packages/libfabrika/src/transport/internal/binary.ts: new WebCryptoError({ cause: String(cause) })",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/ErrorCause.test.ts: C3: client data that does not decode is BadAssertion carrying the decoder's or text decoder's failure",
+      "plant": "next/packages/libfabrika/src/transport/Webauthn.ts:265: catch: () => new BadAssertion({})",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/ledger/LedgerCauseTest.ts (run by next/packages/libfabrika/src/node/ErrorCause.test.ts): C2: a referee's typed failure across the stub keeps its tag, its reason and its own cause",
+      "plant": "next/packages/libfabrika/src/ledger/internal/ledgerStore.ts:198: cause: String(error)",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/ledger/LedgerCauseTest.ts (run by next/packages/libfabrika/src/node/ErrorCause.test.ts): C2, the inner reason",
+      "plant": "next/packages/libfabrika/src/ledger/internal/ledgerStore.ts:194: const reason = \"bad_row\"",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Tests run at base bcad0080d plus this diff, one file at a time under nice -n 15 --maxWorkers=3, all green: tuval window/Layout.laws, tezgah Fold.laws and Layout.laws, transport Handshake.laws, ErrorCause and Connection, desktop BrainLife.laws, settings JsonSchema, Files, Mail, Reference, Snapshot, Print, Setting, access Passkey, ledger LedgerTurnReads, node ErrorCause, counter window.types, pipeline handlers, Merger.laws and Settings. Not run here: telemetry/Records.integration.test.ts, telemetry/internal/measurements.integration.test.ts and ledger/LedgerTurnReads.integration.test.ts, which the test config refuses locally without the owner's yes (0178); CI's full run carries them. One pnpm typecheck: exit 0. pnpm format and pnpm lint fail only on six lines that ask to add access, telemetry, tezgah, transport, programs/counter and programs/pipeline to the rule's .oxlintrc.json block, which the owner ruling holds for the later lock PR; every other lint part passes. The list ratchet exits 0.",
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billing": "subscription",
+  "step": "tests"
+}

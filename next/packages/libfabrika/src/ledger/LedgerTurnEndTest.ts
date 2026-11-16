@@ -66,7 +66,7 @@ const EMPTY = "never";
 /** One append: its stream, an id from a small set so resends and refusals happen, and a body size
  *  from a few bytes to a 1 MiB chunk. */
 const Append = fc.record({
-  stream: fc.nat(),
+  stream: fc.constantFrom(...STREAMS),
   id: fc.nat({ max: 5 }),
   pad: fc.oneof(fc.integer({ min: 0, max: 64 }), fc.integer({ min: 4_096, max: 1_024 * 1_024 })),
 });
@@ -123,7 +123,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
               judge(yield* tx.transact((turn) => look(turn, "an empty log")));
 
               for (const append of log) {
-                const stream = STREAMS[append.stream % STREAMS.length] as string;
+                const stream = append.stream;
                 const id = `id-${append.id}`;
                 // A reused id keeps its first body, so a resend is the same line and a change is refused.
                 const pad = pads.get(`${stream}/${id}`) ?? append.pad;

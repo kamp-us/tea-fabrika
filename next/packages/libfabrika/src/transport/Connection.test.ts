@@ -926,7 +926,7 @@ it.effect.prop(
   { has: Schema.Array(Schema.String), build: Schema.NonEmptyString },
   ({ has, build }) =>
     Effect.gen(function* () {
-      let saved = Attached.cases.online.make({
+      let saved: Saved = Attached.cases.online.make({
         client: READER,
         identity: { key: "hands-key", person: "person-test", as: "hands" },
         version: 1,
@@ -943,7 +943,7 @@ it.effect.prop(
         ping: () => PING,
         read: () => restored(saved),
         save: (next) => {
-          saved = restored(next) as typeof saved;
+          saved = restored(next);
           copies.push(saved);
         },
         send: () => {},

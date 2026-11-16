@@ -5,7 +5,7 @@
 // Audit sites: `Ledger.ts:86` (a rejected stub call), `Ledger.ts:91` (an answer that does not
 // decode), both now in `LedgerRemote.ts` (0095), `internal/ledgerStore.ts:192` (a throw in the atomic step, and its pass-through branch).
 import { describe, expect } from "@effect/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
+import { Effect, Layer, Predicate, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
@@ -182,10 +182,10 @@ export const suite = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: stri
             const outer = yield* Effect.flip(Effect.provide(callOn(method), remote));
             expect(outer.reason).toBe("unreachable");
             expect(outer.cause).toBeInstanceOf(LedgerError);
-            const inner = outer.cause as LedgerError;
-            expect(inner._tag).toBe("LedgerError");
-            expect(inner.reason).toBe("storage");
-            expect(inner.cause).toBe(failure);
+            const inner = outer.cause;
+            expect(Predicate.isTagged(inner, "LedgerError")).toBe(true);
+            expect(Predicate.hasProperty(inner, "reason") ? inner.reason : undefined).toBe("storage");
+            expect(Predicate.hasProperty(inner, "cause") ? inner.cause : undefined).toBe(failure);
           }
         }),
     );

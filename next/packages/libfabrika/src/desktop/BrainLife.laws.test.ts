@@ -22,6 +22,9 @@ const walks = (machine: ReturnType<typeof BrainLife.machine>) => {
     cmd: Extract<BrainLife.Command, { type: T }>,
     answer: { value: A; failed: number },
   ): BrainLife.Msg =>
+    // SAFETY: tea settles a Cmd of type T with `${T}_ok`, carrying the Cmd and its value, or
+    // `${T}_err`, carrying the Cmd and its error, and BrainLife's Msg union has both for every
+    // Command type; the compiler cannot join the template string to those cases.
     (answer.failed === 0
       ? { type: `${cmd.type}_err`, cmd, error: Failure.cases.Operation.make({}), at: 0 }
       : { type: `${cmd.type}_ok`, cmd, value: answer.value, at: 0 }) as BrainLife.Msg;
@@ -142,6 +145,9 @@ describe("P19 lifecycle", () => {
             const stale = id === undefined ? [] : earlier.filter((old) => old.cmd.id !== id);
 
             if (id !== undefined && "cmd" in msg) {
+              // SAFETY: this is `msg`, a reply that carries a Cmd, with only that Cmd's id swapped for
+              // `oldId`, which decodes as an Id.Cmd above; it stays the same Msg case, which the
+              // spread no longer names.
               stale.push({ ...msg, cmd: { ...msg.cmd, id: oldId } } as (typeof stale)[number]);
             }
 
@@ -192,6 +198,9 @@ describe("P19 lifecycle", () => {
             reached.add(prev.pending.type);
             const replies: ReadonlyArray<BrainLife.Msg> = [
               msg,
+              // SAFETY: tea settles a failed Cmd of type T with `${T}_err`, carrying the Cmd and its
+              // error, and the Msg union has that case for the pending Command's type; the compiler
+              // cannot join the template string to it.
               {
                 type: `${prev.pending.type}_err`,
                 cmd: prev.pending,
@@ -222,6 +231,8 @@ describe("P19 lifecycle", () => {
                   acceptedExpired.add(`${prev._tag}:${reply.type}:${at === prev.deadline ? "at" : "after"}`);
                 }
 
+                // SAFETY: this is `reply`, one of the Msg cases above, with only its Cmd's id swapped for
+                // `oldId`, a decoded Id.Cmd; it stays that case, which the spread no longer names.
                 const [stale, staleCmds] = applyCell(machine, prev, {
                   ...reply,
                   cmd: { ...msg.cmd, id: oldId },
@@ -285,7 +296,8 @@ it.effect.prop(
   ([word, seed]) =>
     Effect.gen(function* () {
       const secret = `sentinel-${word}/+&`;
-      // The compiler's ES2023 library has no type for toWellFormed; the pinned Node runs it.
+      // SAFETY: every string has toWellFormed on the pinned Node, and the compiler's ES2023 library
+      // has no type for it.
       const encoded = encodeURIComponent((secret as string & { toWellFormed(): string }).toWellFormed());
       const machine = BrainLife.machine({ spec: Outside.spec, settings: yield* ServiceTest.timing() });
       propertyInvariant(

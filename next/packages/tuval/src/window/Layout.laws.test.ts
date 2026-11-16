@@ -15,7 +15,7 @@
 // React's own server render, read back into a tree of elements by role and accessible name.
 import { describe, expect, it } from "@effect/vitest";
 import * as Layout from "@kampus/libfabrika/tezgah/Layout";
-import { type Tile, type TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
+import { Tile, TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
 import { Schema } from "effect";
 import * as fc from "fast-check";
 import { createElement } from "react";
@@ -36,6 +36,9 @@ const typeId = (prefix: string, n: number): string => {
 
   return `${prefix}_${suffix}`;
 };
+
+/** Tile `n`'s id, decoded by the library's own schema, so a walk never holds an id tezgah would refuse. */
+const tileId = (n: number): TileId => Schema.decodeUnknownSync(TileId)(typeId("tile", n));
 
 // --- Reading the markup back -----------------------------------------------------------------------
 
@@ -196,17 +199,19 @@ class Split implements fc.Command<Desk, Desk> {
   run(_: Desk, d: Desk) {
     const tiles = Layout.order(d.w.layout);
     const at = tiles[this.at % tiles.length]!;
-    const id = typeId("tile", d.next) as TileId;
+    const id = tileId(d.next);
     d.w = Layout.split(d.w, at, this.dir, id);
-    d.tiles.push({
-      id,
-      n: d.next,
-      shows: `${this.program.slice(this.program.indexOf("/") + 1)}:t${d.next}`,
-      program: this.program,
-      child: true,
-      keep: "failed",
-      cursor: null,
-    } as Tile);
+    d.tiles.push(
+      Schema.decodeUnknownSync(Tile)({
+        id,
+        n: d.next,
+        shows: `${this.program.slice(this.program.indexOf("/") + 1)}:t${d.next}`,
+        program: this.program,
+        child: true,
+        keep: "failed",
+        cursor: null,
+      }),
+    );
     d.next++;
     check(d, this.seen);
   }
@@ -241,6 +246,9 @@ describe("L20: one main, one region per open tile named by tileName, aria-curren
         fc.stringMatching(/^[a-z][a-z0-9-]{0,15}$/),
         fc.integer({ min: 1, max: 10_000 }),
         (pack, name, n) => {
+          // SAFETY: tileName reads only `program` and `n`. `shows` is built from the generated name and
+          // is never read here, so it is not decoded: a name such as `client` would make it a name
+          // ProcessName refuses, and fail a law that is not about it.
           const tile = {
             id: typeId("tile", n),
             n,
@@ -271,7 +279,7 @@ describe("L20: one main, one region per open tile named by tileName, aria-curren
           { size: "+1", maxCommands: 12 },
         ),
         (cmds) => {
-          const first = typeId("tile", 1) as TileId;
+          const first = tileId(1);
           const real: Desk = {
             w: Schema.decodeUnknownSync(Workspace)({
               id: typeId("workspace", 1),
@@ -281,7 +289,7 @@ describe("L20: one main, one region per open tile named by tileName, aria-curren
               recent: [first],
             }),
             tiles: [
-              {
+              Schema.decodeUnknownSync(Tile)({
                 id: first,
                 n: 1,
                 shows: "checklist:1",
@@ -289,7 +297,7 @@ describe("L20: one main, one region per open tile named by tileName, aria-curren
                 child: false,
                 keep: "failed",
                 cursor: null,
-              } as Tile,
+              }),
             ],
             next: 2,
           };
@@ -374,7 +382,7 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
     const seen = { strips: 0, open: 0, nested: 0 };
     fc.assert(
       fc.property(Folded, ({ width, height, cuts, focus }) => {
-        const first = typeId("tile", 1) as TileId;
+        const first = tileId(1);
         let w: Workspace = Schema.decodeUnknownSync(Workspace)({
           id: typeId("workspace", 1),
           n: 1,
@@ -383,7 +391,7 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
           recent: [first],
         });
         const tiles: Array<Tile> = [
-          {
+          Schema.decodeUnknownSync(Tile)({
             id: first,
             n: 1,
             shows: "checklist:1",
@@ -391,7 +399,7 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
             child: false,
             keep: "failed",
             cursor: null,
-          } as Tile,
+          }),
         ];
 
         for (const [k, cut] of cuts.entries()) {
@@ -403,18 +411,20 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
             continue;
           }
 
-          const id = typeId("tile", k + 2) as TileId;
+          const id = tileId(k + 2);
           const program = PROGRAMS[cut.program % PROGRAMS.length]!;
           w = Layout.split(w, at, cut.down ? "column" : "row", id);
-          tiles.push({
-            id,
-            n: k + 2,
-            shows: `${program.slice(program.indexOf("/") + 1)}:t${k + 2}`,
-            program,
-            child: true,
-            keep: "failed",
-            cursor: null,
-          } as Tile);
+          tiles.push(
+            Schema.decodeUnknownSync(Tile)({
+              id,
+              n: k + 2,
+              shows: `${program.slice(program.indexOf("/") + 1)}:t${k + 2}`,
+              program,
+              child: true,
+              keep: "failed",
+              cursor: null,
+            }),
+          );
         }
 
         const live = Layout.order(w.layout);
@@ -429,7 +439,7 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
               tiles: shown,
               strips,
               children: (t: Tile) => createElement("p", null, `body of ${t.shows}`),
-            } as Parameters<typeof Desk>[0]),
+            } satisfies Parameters<typeof Desk>[0]),
           ),
         );
         const mains = all(root).filter(isMain);

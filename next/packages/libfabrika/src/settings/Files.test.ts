@@ -378,17 +378,21 @@ type Declared = typeof declared extends fc.Arbitrary<infer D> ? D : never;
 const grouped = (ds: Declared) =>
   Setting.group(
     Object.fromEntries(
-      ds.map((d, n) => [
-        `s${n}`,
-        Setting.make(`${d.table}.${d.key}`, {
-          schema: KINDS[d.kind].schema as Schema.Codec<unknown, unknown>,
-          default: KINDS[d.kind].default,
-          doc: `Setting ${n}.`,
-          scope: d.scope,
-          reload: "restart",
-          since: "0.0.0",
-        }),
-      ]),
+      ds.map((d, n) => {
+        // The declarations mix the kinds, so each schema is read as one of any type, its default with it.
+        const schema: Schema.Codec<unknown, unknown> = KINDS[d.kind].schema;
+        return [
+          `s${n}`,
+          Setting.make(`${d.table}.${d.key}`, {
+            schema,
+            default: KINDS[d.kind].default,
+            doc: `Setting ${n}.`,
+            scope: d.scope,
+            reload: "restart",
+            since: "0.0.0",
+          }),
+        ];
+      }),
     ),
   );
 
@@ -447,6 +451,8 @@ describe("T730 L2, a file's schema keeps omitted tables and empty files valid, a
 
           if (stray !== undefined && !taken) {
             if (stray.table === undefined) {
+              // SAFETY: `tree` is typed as tables only, and this stray key is on purpose a top-level
+              // value that no declaration names as a table, which the file's schema must refuse.
               (tree as Record<string, unknown>)[stray.key] = 1;
             } else {
               tree[stray.table] = { ...tree[stray.table], [stray.key]: 1 };

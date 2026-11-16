@@ -40,6 +40,14 @@ const doc = fc
 const SOURCES = ["flag", "env", "repo", "person"] as const;
 type Slot = (typeof SOURCES)[number];
 
+/** The same draw for each source, in SOURCES order. */
+const slots = <A>(draw: fc.Arbitrary<A>): Record<Slot, fc.Arbitrary<A>> => ({
+  flag: draw,
+  env: draw,
+  repo: draw,
+  person: draw,
+});
+
 /** Port declarations, each with values in some sources: often its own default, or one shared value. */
 const declared = port.chain((shared) =>
   fc.uniqueArray(
@@ -49,12 +57,9 @@ const declared = port.chain((shared) =>
       doc,
       default: fc.oneof(fc.constant(shared), port),
       scope: fc.constantFrom<Setting.Scope>(["person"], ["repo", "person"]),
-      supplied: fc.record(
-        Object.fromEntries(
-          SOURCES.map((s) => [s, fc.oneof(fc.constant("default" as const), fc.constant(shared), port)]),
-        ) as Record<Slot, fc.Arbitrary<number | "default">>,
-        { requiredKeys: [] },
-      ),
+      supplied: fc.record(slots(fc.oneof(fc.constant("default" as const), fc.constant(shared), port)), {
+        requiredKeys: [],
+      }),
     }),
     { minLength: 1, maxLength: 4, selector: (d) => `${d.table}.${d.key}` },
   ),

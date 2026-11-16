@@ -116,29 +116,36 @@ const groupWith = (input: Declared, defaults: ReadonlyArray<unknown>) => {
   const { made } = build(input);
   return Setting.group(
     Object.fromEntries(
-      ds.map((d, n) => [
-        `s${n}`,
-        Setting.make(`${d.table}.${d.key}`, {
-          schema: made[d.schema] as Schema.Codec<unknown, unknown>,
-          default: defaults[n],
-          doc: d.doc,
-          scope: d.scope,
-          reload: n % 2 === 0 ? "restart" : "live",
-          since: "0.0.0",
-        }),
-      ]),
+      ds.map((d, n) => {
+        // The declarations mix the kinds, so each schema is read as one of any type, its default with it.
+        const schema: Schema.Codec<unknown, unknown> = made[d.schema]!;
+        return [
+          `s${n}`,
+          Setting.make(`${d.table}.${d.key}`, {
+            schema,
+            default: defaults[n],
+            doc: d.doc,
+            scope: d.scope,
+            reload: n % 2 === 0 ? "restart" : "live",
+            since: "0.0.0",
+          }),
+        ];
+      }),
     ),
   );
 };
 
+/** Declaration `n`'s valid values, read as values of any type: the declarations mix the kinds. */
+const validValues = (input: Declared, n: number): fc.Arbitrary<unknown> => build(input).values(n).valid;
+
 const withDefaults = declared.chain((input) =>
-  fc.tuple(
-    fc.constant(input),
-    fc.tuple(...input[1].map((_, n) => build(input).values(n).valid as fc.Arbitrary<unknown>)),
-  ),
+  fc.tuple(fc.constant(input), fc.tuple(...input[1].map((_, n) => validValues(input, n)))),
 );
 
 type Json = Record<string, unknown>;
+
+/** A JSON object, decoded: a test fails here when a document holds something else where an object belongs. */
+const object = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown));
 
 /** The definition a local reference names, by Effect's escaping: URI-encoded JSON Pointer. */
 const target = (document: Json, ref: string) => {
@@ -147,7 +154,7 @@ const target = (document: Json, ref: string) => {
   const name = decodeURIComponent(ref.slice(prefix.length)).replaceAll("~1", "/").replaceAll("~0", "~");
   const defs = document.$defs;
   expect(Predicate.isObject(defs) && Object.hasOwn(defs, name), `${ref} names no definition`).toBe(true);
-  return (defs as Json)[name] as Json;
+  return object(object(defs)[name]);
 };
 
 /** A node with its references followed: the referenced fields, with the node's own over them. */
@@ -163,7 +170,7 @@ const leaf = (document: Json, segments: ReadonlyArray<string>) =>
   segments.reduce<Json | undefined>((node, key) => {
     const properties = node === undefined ? undefined : resolve(document, node).properties;
     return Predicate.isObject(properties) && Object.hasOwn(properties, key)
-      ? resolve(document, (properties as Json)[key] as Json)
+      ? resolve(document, object(object(properties)[key]))
       : undefined;
   }, document);
 
@@ -175,12 +182,13 @@ const refs = (value: unknown): Array<string> =>
       ? Object.entries(value).flatMap(([key, v]) => (key === "$ref" && typeof v === "string" ? [v] : refs(v)))
       : [];
 
+// SAFETY: the reader builds the schema from JSON Schema keywords alone, into Effect's own schemas
+// and checks, none of which needs a service to decode; its Top type cannot say so.
 /** The generated document read back by Effect's own JSON Schema reader. */
 const imported = (document: Json) =>
-  SchemaRepresentation.fromJsonSchemaDocument(
-    EffectJsonSchema.fromSchemaDraft2020_12(document as EffectJsonSchema.JsonSchema),
-    { patterns: "apply" },
-  ) as Schema.Codec<unknown, unknown>;
+  SchemaRepresentation.fromJsonSchemaDocument(EffectJsonSchema.fromSchemaDraft2020_12(document), {
+    patterns: "apply",
+  }) as Schema.Codec<unknown, unknown>;
 
 /** One file's document: per declaration nothing, a valid value or an invalid one, and maybe one stray key. */
 const contents = (input: Declared) =>
@@ -190,7 +198,7 @@ const contents = (input: Declared) =>
       ...input[1].map((_, n) =>
         fc.oneof(
           fc.constant({ _tag: "absent" as const }),
-          (build(input).values(n).valid as fc.Arbitrary<unknown>).map((value) => ({ _tag: "valid" as const, value })),
+          validValues(input, n).map((value) => ({ _tag: "valid" as const, value })),
           build(input)
             .values(n)
             .invalid.map((value) => ({ _tag: "invalid" as const, value })),
@@ -229,6 +237,8 @@ const tree = ([, ds]: Declared, c: Contents) => {
 
   if (stray !== undefined) {
     if (stray.table === undefined && ds.every((d) => d.table !== stray.key)) {
+      // SAFETY: `out` is typed as tables only, and this stray key is on purpose a top-level value that
+      // no declaration names as a table, which the editor schema must refuse.
       (out as Json)[stray.key] = 1;
     }
 
@@ -248,7 +258,7 @@ describe("L2, the editor schema accepts and refuses exactly what the file's own 
         ([input, defaults, c]) => {
           const group = groupWith(input, defaults);
           const own = Files.schema(group, c.file);
-          const editor = imported(JsonSchema.make(own) as Json);
+          const editor = imported(JsonSchema.make(own));
           const document = tree(input, c);
           const expected = Schema.decodeUnknownExit(own)(document, { onExcessProperty: "error" });
           const got = Schema.decodeUnknownExit(editor)(document, { onExcessProperty: "error" });
@@ -288,7 +298,7 @@ it("T753 L7 shared byte schemas keep distinct file defaults, descriptions and re
           first: declare("limits.first", v.count, v.first),
           second: declare("limits.second", v.count + v.delta, v.second),
         });
-        const document = JsonSchema.make(Files.schema(group, v.file)) as Json;
+        const document = JsonSchema.make(Files.schema(group, v.file));
         const editor = imported(document);
 
         for (const d of group.declarations) {
@@ -319,7 +329,7 @@ describe("L3, every allowed declaration keeps its own words and encoded default 
         const [schemas, ds] = input;
 
         for (const file of ["person", "repo"] as const) {
-          const document = JsonSchema.make(Files.schema(group, file)) as Json;
+          const document = JsonSchema.make(Files.schema(group, file));
           group.declarations.forEach((d, n) => {
             const node = leaf(document, d.segments);
             // Scope: a key is offered in exactly the files that may set it.
@@ -344,7 +354,7 @@ describe("L3, every allowed declaration keeps its own words and encoded default 
   it("vector: the shipped declarations, each file offering its own keys with their docs and defaults", () => {
     // vector: the two files fabrika ships schemas for, read back key by key; the law above generates the rest.
     for (const file of ["person", "repo"] as const) {
-      const document = JsonSchema.make(Files.schema(Declarations.all, file)) as Json;
+      const document = JsonSchema.make(Files.schema(Declarations.all, file));
 
       for (const d of Declarations.all.declarations) {
         const node = leaf(document, d.segments);
@@ -386,7 +396,7 @@ describe("L4, generated local references resolve, with every definition present"
         withDefaults.chain(([input, defaults]) => fc.tuple(fc.constant(input), fc.constant(defaults), contents(input))),
         ([input, defaults, c]) => {
           const group = groupWith(input, defaults);
-          const document = JsonSchema.make(Files.schema(group, c.file)) as Json;
+          const document = JsonSchema.make(Files.schema(group, c.file));
           expect(document.$schema).toBe(DIALECT);
           // Effect names a definition only for a named schema, so a named one in scope gives a $ref.
           const named = input[1].some((d) => d.scope.includes(c.file) && input[0][d.schema]!.identifier !== undefined);
@@ -399,7 +409,7 @@ describe("L4, generated local references resolve, with every definition present"
           // Generated valid values of the file's own keys decode, and one invalid value among them does not.
           const editor = imported(document);
           const valid: Record<string, Record<string, unknown>> = {};
-          let broken: Record<string, Record<string, unknown>> | undefined;
+          let broken: { readonly table: string; readonly key: string; readonly value: unknown } | undefined;
           input[1].forEach((d, n) => {
             const v = c.values[n]!;
 
@@ -414,15 +424,14 @@ describe("L4, generated local references resolve, with every definition present"
             }
 
             if (v._tag === "invalid" && broken === undefined) {
-              broken = { [d.table]: { [d.key]: v.value } };
+              broken = { table: d.table, key: d.key, value: v.value };
             }
           });
           const decoded = Schema.decodeUnknownExit(editor)(valid, { onExcessProperty: "error" });
           expect(Exit.isSuccess(decoded), JSON.stringify(valid)).toBe(true);
 
           if (broken !== undefined) {
-            const [[table, keys]] = Object.entries(broken) as [[string, Record<string, unknown>]];
-            const document = { ...valid, [table]: { ...valid[table], ...keys } };
+            const document = { ...valid, [broken.table]: { ...valid[broken.table], [broken.key]: broken.value } };
             expect(Exit.isFailure(Schema.decodeUnknownExit(editor)(document, { onExcessProperty: "error" }))).toBe(
               true,
             );

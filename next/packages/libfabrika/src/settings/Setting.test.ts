@@ -84,9 +84,15 @@ const nest = (path: ReadonlyArray<string>, value: unknown): unknown =>
   path.reduceRight<unknown>((inner, key) => ({ [key]: inner }), value);
 
 /** What a provider holds at the setting's path: nothing, a valid port, or a value that must fail. */
-const supplied = fc.oneof(
-  fc.constant({ _tag: "absent" as const }),
-  ports.map((port) => ({ _tag: "valid" as const, value: port as unknown, expected: port })),
+const Supplied = Schema.TaggedUnion({
+  absent: {},
+  valid: { value: Schema.Unknown, expected: Schema.Number },
+  invalid: { value: Schema.Unknown },
+});
+
+const supplied: fc.Arbitrary<typeof Supplied.Type> = fc.oneof(
+  fc.constant(Supplied.cases.absent.make({})),
+  ports.map((port) => Supplied.cases.valid.make({ value: port, expected: port })),
   fc
     .oneof(
       fc.integer({ min: 65536, max: 2 ** 31 }),
@@ -97,7 +103,7 @@ const supplied = fc.oneof(
       fc.constant(true),
       fc.stringMatching(/^[a-z]{1,8}$/),
     )
-    .map((value) => ({ _tag: "invalid" as const, value: value as unknown })),
+    .map((value) => Supplied.cases.invalid.make({ value })),
 );
 
 const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseExit(effect);
@@ -235,7 +241,8 @@ describe("L4, a dotted declaration path reaches the nested value exactly once", 
         expect(setting.path).toBe(dotted);
         // Both spellings at once: the nested tables and one key whose own name holds the dots. A
         // one-segment path has no dots, so both spellings are the one key.
-        const both = path.length > 1 ? { ...(nest(path, nested) as object), [dotted]: literal } : nest(path, nested);
+        const both =
+          path.length > 1 ? { [path[0]!]: nest(path.slice(1), nested), [dotted]: literal } : nest(path, nested);
         expect(await run(setting.parse(ConfigProvider.fromUnknown(both)))).toEqual(Exit.succeed(nested));
 
         // The literal key alone is an unknown key to this setting, so it takes its default.

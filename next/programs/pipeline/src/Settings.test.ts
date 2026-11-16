@@ -92,7 +92,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           expect(declaration.doc.length).toBeGreaterThan(0);
         }
 
-        const broken = structuredClone(table) as { queue: Record<string, unknown>; merger: Record<string, unknown> };
+        const broken: { queue: Record<string, unknown>; merger: Record<string, unknown> } = structuredClone(table);
         const paths = [
           "merger.wait",
           "merger.poll",
@@ -158,6 +158,8 @@ it("L11: every declared numeric setting refuses zero, negatives and fractions at
       const declarations = Settings.all.declarations.filter((d) => typeof d.default === "number");
       expect(declarations.length).toBeGreaterThan(0);
       const declaration = declarations[pick % declarations.length]!;
+      // SAFETY: every pipeline setting's path is `<table>.<key>` with one dot (Settings.ts declares all
+      // seven so), so the split has exactly these two parts.
       const [group, key] = declaration.path.split(".") as [string, string];
       const parse = (value: unknown) =>
         Effect.runSyncExit(Settings.all.parse(ConfigProvider.fromUnknown({ [group]: { [key]: value } })));

@@ -34,7 +34,7 @@ import { Schema } from "effect";
 import * as fc from "fast-check";
 import { drawn, fold, STRIP } from "./Fold.ts";
 import * as Layout from "./Layout.ts";
-import { type TileId, Workspace } from "./Workspace.ts";
+import { TileId, Workspace } from "./Workspace.ts";
 
 const SEED = 119120;
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
@@ -60,6 +60,9 @@ const typeId = (prefix: string, n: number): string => {
 
   return `${prefix}_${suffix}`;
 };
+
+/** Tile `n`'s id, decoded by the library's own schema, so a walk never holds an id it would refuse. */
+const tileId = (n: number): TileId => Schema.decodeUnknownSync(TileId)(typeId("tile", n));
 
 type Box = { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
 type Node = Workspace["layout"];
@@ -180,7 +183,7 @@ type Cut = typeof Cut extends fc.Arbitrary<infer C> ? C : never;
 
 /** A workspace walked from one tile by `cuts`, focus on the live tile `focus` picks. */
 const walked = (cuts: ReadonlyArray<Cut>, focus: number) => {
-  const first = typeId("tile", 1) as TileId;
+  const first = tileId(1);
   let w: Workspace = Schema.decodeUnknownSync(Workspace)({
     id: typeId("workspace", 1),
     n: 1,
@@ -195,7 +198,7 @@ const walked = (cuts: ReadonlyArray<Cut>, focus: number) => {
     w =
       cut.close && live.length > 1
         ? Layout.remove(w, at)
-        : Layout.split(w, at, cut.down ? "column" : "row", typeId("tile", k + 2) as TileId);
+        : Layout.split(w, at, cut.down ? "column" : "row", tileId(k + 2));
   }
 
   const live = Layout.order(w.layout);
@@ -316,7 +319,7 @@ describe("Desk S4 L31: one drawn geometry; a window folds a tile under 220x120 i
   });
 
   it("scenario: a 2x2 at 400x300 with t1 focused folds the bottom row whole: one band 20px tall across the area, its two strips lying along it apart, and t1 holds the rest beside c's 22px strip (amendment 13, point 3)", () => {
-    const [t1, c, a, b] = [1, 2, 3, 4].map((n) => typeId("tile", n) as TileId);
+    const [t1, c, a, b] = [1, 2, 3, 4].map(tileId);
     let w: Workspace = Schema.decodeUnknownSync(Workspace)({
       id: typeId("workspace", 1),
       n: 1,

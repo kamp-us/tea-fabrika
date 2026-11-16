@@ -98,7 +98,7 @@ const savedFlow = fc.record({
   port: fc.integer({ min: 1, max: 65535 }),
   word: fc.string(),
   source: fc.constantFrom("default", "env", "file"),
-  order: fc.shuffledSubarray(["record", "port", "word"], { minLength: 3, maxLength: 3 }),
+  order: fc.shuffledSubarray<"record" | "port" | "word">(["record", "port", "word"], { minLength: 3, maxLength: 3 }),
 });
 
 type SavedFlow = typeof savedFlow extends fc.Arbitrary<infer A> ? A : never;
@@ -236,9 +236,7 @@ describe("T753 complete checked snapshots", () => {
       fc.asyncProperty(fc.record({ scalar: savedFlow, object: objectFlow }), async ({ scalar: v, object }) => {
         const flow = save(v);
         const made = await digest(Snapshot.make(flow.group, flow));
-        const reversed = Setting.group(
-          Object.fromEntries(v.order.map((name) => [name, flow.settings[name as keyof typeof flow.settings]])),
-        );
+        const reversed = Setting.group(Object.fromEntries(v.order.map((name) => [name, flow.settings[name]])));
         const origins = Object.fromEntries(
           flow.group.declarations.map((d) => [d.path, Sources.Origin.cases.flag.make({ name: `--${d.path}` })]),
         );

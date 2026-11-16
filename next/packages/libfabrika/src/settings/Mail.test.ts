@@ -110,8 +110,13 @@ describe("T1041: the inbox cap and the chunk size are repo settings", () => {
 
             if (Exit.isSuccess(answer)) {
               const got = answer.value.values[key];
+
+              if (key === "mailChunk") {
+                expect(ByteSize.isByteSize(got), `${setting.path} reads as a byte size`).toBe(true);
+              }
+
               expect(
-                key === "mailChunk" ? Number(ByteSize.toBigInt(got as ByteSize.ByteSize)) : got,
+                key === "mailChunk" && ByteSize.isByteSize(got) ? Number(ByteSize.toBigInt(got)) : got,
                 `${setting.path} = ${text} from ${source}`,
               ).toBe(read);
               expect(answer.value.origins[setting.path]?._tag, `${setting.path}'s origin`).toBe(

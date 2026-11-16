@@ -52,7 +52,7 @@ type Space = {
 };
 
 /** The workspace as the wire shows it: what every client reads. */
-const encode = (w: unknown): Space => Schema.encodeUnknownSync(Workspace)(w) as Space;
+const encode = (w: unknown): Space => Schema.encodeUnknownSync(Workspace)(w);
 const decode = (w: Space) => Schema.decodeUnknownSync(Workspace)(w);
 const tileId = (id: string) => Schema.decodeUnknownSync(TileId)(id);
 
@@ -365,7 +365,7 @@ describe("Desk S2b: rects measure drawn tiles, with the frame's gap between part
           fc.modelRun(() => ({ model: { live: [t1], next: 2 }, real }), cmds);
           const layout = encode(real.w).layout;
           fc.pre(shortest(layout, width, height, gap) > 1);
-          const at = Layout.rects(real.w.layout, { width, height }, { gap }) as ReadonlyMap<string, Box>;
+          const at: ReadonlyMap<string, Box> = Layout.rects(real.w.layout, { width, height }, { gap });
           nested += typeof layout !== "string" && layout.parts.some((p) => typeof p.inner !== "string") ? 1 : 0;
           expect([...at.keys()].sort(), "every tile has its rectangle").toEqual([...order(layout)].sort());
           expect(gapBreaks(layout, at, { x: 0, y: 0, width, height }, gap), `gap ${gap} in ${width}x${height}`).toEqual(

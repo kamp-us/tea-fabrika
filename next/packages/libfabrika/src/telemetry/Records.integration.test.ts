@@ -87,7 +87,7 @@ const home = folder.pipe(
       return made;
     };
     const rows = (name: string, table: string): Array<Record<string, unknown>> =>
-      dbs.has(name) ? (db(name).prepare(`SELECT * FROM ${table}`).all() as Array<Record<string, unknown>>) : [];
+      dbs.has(name) ? db(name).prepare(`SELECT * FROM ${table}`).all() : [];
     return { open, asked, rows, names: () => [...dbs.keys()] };
   }),
 );
@@ -496,6 +496,8 @@ describe("RecordManager.remote, the record object's stub", () => {
   const stub = (answer: () => Effect.Effect<unknown, unknown>) => {
     const calls: Array<{ name: string; method: string }> = [];
     const make = (name: string): RecordCalls =>
+      // SAFETY: the Proxy answers every name but `then` with a function that records the call and
+      // returns `answer()`, an Effect, so each of RecordCalls' four methods is there with its type.
       new Proxy(
         {},
         {

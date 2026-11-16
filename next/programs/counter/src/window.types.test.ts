@@ -77,11 +77,10 @@ describe("P14 S1.4: the counter's window accepts its own data and emits only its
 
   it("the default key rows name exactly the counter's inputs, one non-empty row each", () => {
     expect(counterWindow.keys).toBe(counterKeys);
+    const rows: Readonly<Record<string, ReadonlyArray<string>>> = counterKeys;
     fc.assert(
       fc.property(fc.constantFrom(...Object.keys(counter.inputs)), (input) => {
-        const row: ReadonlyArray<string> | undefined = (counterKeys as Readonly<Record<string, ReadonlyArray<string>>>)[
-          `counter.${input}`
-        ];
+        const row: ReadonlyArray<string> | undefined = rows[`counter.${input}`];
         expect(row?.length, `counter.${input} has a default row`).toBeGreaterThan(0);
         expect(row!.every((key) => typeof key === "string" && key.length > 0)).toBe(true);
       }),

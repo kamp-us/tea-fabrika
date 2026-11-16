@@ -3,7 +3,7 @@
 // and verify share) and `Webauthn.ts:176` (client data that does not decode). Each run makes its
 // own passkey and signs with it, so only the client data is damaged.
 import { describe, expect, it, vi } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Predicate, Schema } from "effect";
 import * as fc from "fast-check";
 import { subtle } from "./internal/binary.ts";
 import { PasskeyLine, writeWebauthnSshsig } from "./Webauthn.ts";
@@ -38,6 +38,8 @@ const call = (method: Method, bytes: Uint8Array<ArrayBuffer>) => {
     return subtle("importKey", "raw", bytes, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
   }
 
+  // SAFETY: `call` runs only inside `rejecting`, whose spy rejects `verify` before WebCrypto reads
+  // the key, so this empty key is never used as one.
   return subtle("verify", { name: "ECDSA", hash: "SHA-256" }, {} as CryptoKey, bytes, bytes);
 };
 
@@ -70,7 +72,7 @@ describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
             rejecting<unknown, Effect.Error<ReturnType<typeof call>>>(method, failure, call(method, bytes)),
           );
           expect(error._tag).toBe("WebCryptoError");
-          expect((error as { readonly cause?: unknown }).cause).toBe(failure);
+          expect(Predicate.hasProperty(error, "cause") ? error.cause : undefined).toBe(failure);
         }
       }),
   );
@@ -161,7 +163,7 @@ describe("T695, the passkey writer keeps why client data was refused", () => {
           writeWebauthnSshsig({ text, line: Schema.decodeUnknownSync(PasskeyLine)(line), assertion }),
         );
         expect(error._tag).toBe("BadAssertion");
-        const cause = (error as { readonly cause?: unknown }).cause;
+        const cause = Predicate.hasProperty(error, "cause") ? error.cause : undefined;
 
         if (client.utf8) {
           expect(Schema.isSchemaError(cause), "the cause is the decoder's own failure").toBe(true);

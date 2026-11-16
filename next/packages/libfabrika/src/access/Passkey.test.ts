@@ -69,9 +69,7 @@ describe("P10 passkey records", () => {
         proof: text,
       })
       .chain((full) =>
-        fc
-          .subarray(Object.keys(full), { maxLength: 6 })
-          .map((keys) => Object.fromEntries(keys.map((key) => [key, full[key as keyof typeof full]]))),
+        fc.subarray(Object.entries(full), { maxLength: 6 }).map((entries) => Object.fromEntries(entries)),
       );
     fc.assert(
       fc.property(incomplete, text, text, (passkey, key, window) => {

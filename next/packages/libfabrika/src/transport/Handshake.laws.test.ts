@@ -33,7 +33,7 @@ type Cmd = { readonly type: string; readonly [key: string]: unknown };
 type State = { readonly _tag: string; readonly dial: number; readonly [key: string]: unknown };
 
 const step = (s: State, m: Msg): readonly [State, ReadonlyArray<Cmd>] =>
-  applyCell(handshakeMachine as never, s as never, m as never) as never;
+  applyCell<State, Msg, Cmd>(handshakeMachine, s, m);
 
 const ADMITTED = { version: 1, ping: 5_000, identity: { key: "SHA256:k", person: "person_x", as: "window" } };
 /** The door's admission of a generated person: Desk S2a keeps the person on `admitted`, so a window
@@ -142,7 +142,7 @@ const moves = (w: World, c: Pick): ReadonlyArray<() => Msg> => {
 
 /** Folds a walk from the real init, opened on dial 1, and hands each step to `each`. */
 const fold = (list: ReadonlyArray<Pick>, each: (e: Event) => void): void => {
-  const [s0, cmds0]: readonly [State, ReadonlyArray<Cmd>] = handshakeMachine.init(null, {} as never);
+  const [s0, cmds0]: readonly [State, ReadonlyArray<Cmd>] = handshakeMachine.init(null, {});
   const [s1, cmds1] = step(s0, { type: "opened", dial: 1, at: 0 });
   const w: World = { s: s1, waiting: [...cmds0, ...cmds1], ids: [], at: 0 };
 

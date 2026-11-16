@@ -93,6 +93,8 @@ const bucket = (lie = false) => {
       return Promise.resolve(body === undefined ? null : { sha256: lie ? "0".repeat(64) : hex(body) });
     },
   };
+  // SAFETY: measurements.ts writes each archive line as JSON.stringify of one measurement object, so
+  // every non-empty line parses to an object with string keys.
   const lines = (key: string): Array<Record<string, unknown>> =>
     new TextDecoder()
       .decode(stored.get(key))
@@ -663,6 +665,8 @@ describe("p101, a measurements row joins its span", () => {
         yield* Effect.void.pipe(Effect.withSpan("gateway.envelope"));
         const unsent = db.prepare(`SELECT "spanId", row FROM unsent`).all();
         const byName = new Map(
+          // SAFETY: the sink stores `row` as encodeRow of a SpanRow (Sink.ts, `land`), whose `name` is
+          // a string.
           unsent.map((u) => [String((JSON.parse(String(u["row"])) as { name: string }).name), String(u["spanId"])]),
         );
         const measurements = db.prepare(`SELECT piece, "spanId" FROM measurements ORDER BY piece`).all();

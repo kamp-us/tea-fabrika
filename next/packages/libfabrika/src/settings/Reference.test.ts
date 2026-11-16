@@ -244,7 +244,7 @@ describe("L6, a warning names exactly the explicit keys newer than the repo's mi
                 key: "b",
                 doc: "d",
                 default: 1,
-                scope: ["person"] as Setting.Scope,
+                scope: ["person"] satisfies Setting.Scope,
                 reload: "restart" as const,
                 since: "0.10.0",
                 source: "flag",

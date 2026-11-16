@@ -73,6 +73,16 @@ const tree = (w: World, char: string) => Schema.decodeUnknownSync(Tree)(char.rep
 const land = (w: World) => Mail.Land.make({ type: "land", ref: w.ref, change: 1, head: id(w, "a"), reply: "queue" });
 const equal = (a: unknown, b: unknown) => expect(a).toEqual(b);
 
+const CONCLUSIONS: ReadonlyArray<(typeof Status.cases.done.Type)["conclusion"]> = [
+  "success",
+  "failure",
+  "timed_out",
+  "skipped",
+  "neutral",
+  "cancelled",
+  "startup_failure",
+];
+
 const runAt = (w: World, choice: number) => ({
   name: w.name,
   source: w.source,
@@ -86,9 +96,7 @@ const runAt = (w: World, choice: number) => ({
         ? Status.cases.queued.make({})
         : Status.cases.running.make({})
       : Status.cases.done.make({
-          conclusion: ["success", "failure", "timed_out", "skipped", "neutral", "cancelled", "startup_failure"][
-            choice % 7
-          ]! as (typeof Status.cases.done.Type)["conclusion"],
+          conclusion: CONCLUSIONS[choice % CONCLUSIONS.length]!,
         }),
 });
 
@@ -840,7 +848,8 @@ it("L15: updated heads spend the round budget; behind names the newest head and 
   fc.assert(
     fc.property(
       world.chain((drawn) => {
-        const w = { ...drawn, empty: [false, false, false] as [boolean, boolean, boolean] };
+        const empty: [boolean, boolean, boolean] = [false, false, false];
+        const w = { ...drawn, empty };
         const p = merger(settingsFor(w));
         return roundWalk(p, w).map((msgs) => ({ p, w, msgs }));
       }),
