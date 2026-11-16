@@ -307,8 +307,8 @@ const mint = Cmd.make("mint", {
   err: ["entropy"],
 });
 
-const platformFailure = (error: unknown) => {
-  const decoded = Schema.decodeUnknownResult(Schema.Union([ClientKeyError, ClientRowsError]))(error);
+const platformFailure = (cause: unknown) => {
+  const decoded = Schema.decodeUnknownResult(Schema.Union([ClientKeyError, ClientRowsError]))(cause);
   return Result.isSuccess(decoded) ? decoded.success.error : ("other" as const);
 };
 
@@ -363,13 +363,13 @@ type Out = ReadonlyArray<
 
 const RpcAnswer = Schema.Struct({
   id: Schema.Union([Schema.String, Schema.Number]),
-  result: Schema.optionalKey(Schema.Unknown),
+  result: Schema.optionalKey(Schema.Json),
   error: Schema.optionalKey(
     Schema.Struct({ data: Schema.optionalKey(Schema.Struct({ reason: Schema.optionalKey(Schema.String) })) }),
   ),
 });
 
-const Notice = Schema.Struct({ method: Schema.String, params: Schema.optionalKey(Schema.Unknown) });
+const Notice = Schema.Struct({ method: Schema.String, params: Schema.optionalKey(Schema.Json) });
 const decodeFrame = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Union([RpcAnswer, Notice])));
 
 const Nonce = Schema.Struct({ nonce: Schema.String });
@@ -1343,7 +1343,7 @@ type Frame = Extract<typeof Own.Type, { readonly type: "frame" }>;
 const answerTo = (
   call: Call["_tag"],
   on: { readonly id: number; readonly dial: number },
-  result: unknown,
+  result: Schema.Json | undefined,
   ms: number,
   fingerprint: string,
   handshake: Handshake,

@@ -233,7 +233,7 @@ export type Line = {
   readonly listUsd: number | null;
 };
 
-const str = (v: unknown, or = ""): string => (typeof v === "string" ? v : or);
+const str = (v: Schema.Json | undefined, or = ""): string => (typeof v === "string" ? v : or);
 const FaultS = Schema.Literals(FAULTS);
 const isFault = Schema.is(FaultS);
 
@@ -252,7 +252,7 @@ export const lineOf = (out: string, exit: number): Line | null => {
       continue;
     }
 
-    const o = d as Record<string, unknown>;
+    const o = d as Record<string, Schema.Json>;
     const outcome = str(o.outcome);
     const reason = str(o.reason);
     return {
@@ -1899,8 +1899,8 @@ const main = () => {
       overridden(TypecheckEvery, "CHAIN_TYPECHECK_EVERY"),
       overridden(QueueMinutes, "CHAIN_QUEUE_MINUTES"),
     ),
-  ).catch((e: unknown) => {
-    console.log(JSON.stringify({ outcome: "stuck", reason: String(e), exit: 30 }));
+  ).catch((cause: unknown) => {
+    console.log(JSON.stringify({ outcome: "stuck", reason: String(cause), exit: 30 }));
     process.exitCode = 30;
   });
 };

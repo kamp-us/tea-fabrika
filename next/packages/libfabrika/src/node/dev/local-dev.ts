@@ -316,7 +316,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
   return {
     last: last().pipe(turn.withPermit),
     pending: read.pipe(turn.withPermit),
-    add: Effect.fn("brain.pending")(function* (raw: unknown) {
+    add: Effect.fn("brain.pending")(function* (raw: Schema.Json) {
       yield* Effect.gen(function* () {
         const event = yield* Schema.decodeUnknownEffect(PendingEvent)(raw).pipe(
           Effect.mapError((cause) => new BrainError({ reason: "bad_row", cause })),

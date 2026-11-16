@@ -4,13 +4,13 @@
 // the parents the program returned. Both throw a diagnostic on a difference. Remove `syncTest`
 // when tea ships the matching helper.
 import { applyCell, type Cmd, type Machine, type Sub } from "@demlik/tea";
-import { Result } from "effect";
+import { Result, type Schema } from "effect";
 
 type Options<S, M> = {
   readonly msgs: ReadonlyArray<M>;
   readonly encode: (model: S) => unknown;
-  readonly decode: (raw: unknown) => S;
-  readonly equals: (a: unknown, b: unknown) => boolean;
+  readonly decode: (raw: Schema.Json) => S;
+  readonly equals: <A>(a: A, b: A) => boolean;
   readonly seed: number;
 };
 

@@ -54,7 +54,7 @@ const load = Effect.fn("flow.load")(function* (file: string) {
   const url = yield* path
     .toFileUrl(path.resolve(file))
     .pipe(Effect.mapError(() => new Usage({ reason: `${file} is no path` })));
-  const unloadable = (e: unknown) => new Usage({ reason: `${file} does not load: ${String(e)}` });
+  const unloadable = (cause: unknown) => new Usage({ reason: `${file} does not load: ${String(cause)}` });
   // oxlint-disable-next-line fabrika/no-promises -- edge: Node loads a module by its path only through import()
   const module = yield* Effect.tryPromise({ try: () => import(url.href), catch: unloadable });
   return yield* Schema.decodeUnknownEffect(Flow.Flow)(module.default).pipe(

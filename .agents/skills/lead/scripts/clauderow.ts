@@ -121,7 +121,7 @@ const Usage = Schema.Struct({
 });
 type Usage = typeof Usage.Type;
 
-const Field = Schema.optionalKey(Schema.Unknown);
+const Field = Schema.optionalKey(Schema.Json);
 
 /** The four fields read from a transcript line, and the four read from its message. */
 const Line = Schema.Struct({ type: Field, timestamp: Field, uuid: Field, message: Field });
@@ -169,7 +169,7 @@ const split = (usage: Usage): Tokens => {
 };
 
 /** One call's list dollars, or a refusal when its price is not here. */
-const priced = (model: unknown, usage: Usage, tokens: Tokens): Result.Result<number, Refused> => {
+const priced = (model: Schema.Json | undefined, usage: Usage, tokens: Tokens): Result.Result<number, Refused> => {
   for (const [key, wanted] of ROUTING) {
     const got = usage[key] ?? wanted;
 
@@ -200,13 +200,14 @@ const priced = (model: unknown, usage: Usage, tokens: Tokens): Result.Result<num
   );
 };
 
-const named = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
+const named = (value: Schema.Json | undefined): string | null =>
+  typeof value === "string" && value !== "" ? value : null;
 
 /** A transcript's calls and its first and last timestamp, or the first refusal. */
 export const read = (text: string): Result.Result<Transcript, Refused> => {
   interface Draft {
     readonly at: string | null;
-    readonly model: unknown;
+    readonly model: Schema.Json | undefined;
     readonly usage: Usage;
     readonly line: number;
     tools: number;

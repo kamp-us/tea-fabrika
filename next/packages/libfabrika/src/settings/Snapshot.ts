@@ -49,7 +49,7 @@ export class SnapshotError extends Schema.TaggedError<SnapshotError>()("Snapshot
 
 const hashValues = Effect.fnUntraced(function* (values: Snapshot["values"]) {
   const sorted = Object.entries(values).sort(([a], [b]) => (a < b ? -1 : 1));
-  const text = JSON.stringify(sorted, (_key, value: unknown) =>
+  const text = JSON.stringify(sorted, (_key, value: Schema.Json) =>
     Predicate.isObject(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1))) : value,
   );
   const digest = yield* Digest.Digest;

@@ -3,13 +3,17 @@
 
 import { dirname, matchesGlob } from "node:path";
 
+/** A value as JSON text holds it. Effect's `Schema.Json` is the same type, but importing Effect
+ *  would make this file an Effect file, whose plain try/catch lint refuses. */
+type Json = null | boolean | number | string | ReadonlyArray<Json> | { readonly [key: string]: Json };
+
 /**
  * A quest's state file (`state/<quest>.json`, drive.ts's) names its quest under `quest`. One written
  * before decision 0546 says `lane`, since saved data keeps the word it was written with: it reads
  * as `quest`, and the old key goes, so the next write of the file says `quest`. Anything that is not
  * a JSON object is given back as it is, for the reader's own schema to refuse.
  */
-export const questKeyed = (saved: unknown): unknown => {
+export const questKeyed = (saved: Json): Json => {
   if (typeof saved !== "object" || saved === null || !("lane" in saved)) {
     return saved;
   }
@@ -202,25 +206,25 @@ const LOCKED = [
 ] as const;
 
 /** Keys sorted all the way down, so a reorder is not a change. */
-const canon = (v: unknown): string =>
+const canon = (v: Json | undefined): string =>
   Array.isArray(v)
     ? `[${v.map(canon).join(",")}]`
     : v !== null && typeof v === "object"
       ? `{${Object.keys(v)
           .toSorted()
-          .map((k) => `${JSON.stringify(k)}:${canon((v as Record<string, unknown>)[k])}`)
+          .map((k) => `${JSON.stringify(k)}:${canon((v as Record<string, Json>)[k])}`)
           .join(",")}}`
       : JSON.stringify(v);
 
 const lockedPart = (text: string): string | null => {
   try {
-    const json: unknown = JSON.parse(text);
+    const json: Json = JSON.parse(text);
 
     if (json === null || typeof json !== "object") {
       return null;
     }
 
-    return canon(LOCKED.map((k) => (json as Record<string, unknown>)[k] ?? null));
+    return canon(LOCKED.map((k) => (json as Record<string, Json>)[k] ?? null));
   } catch {
     return null;
   }

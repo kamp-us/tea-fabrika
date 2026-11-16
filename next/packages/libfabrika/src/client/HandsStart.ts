@@ -47,9 +47,12 @@ const F = Failure.cases;
 const forHands = (m: DialMsg): m is Exclude<DialMsg, { readonly type: "socket_failure" }> =>
   m.type !== "socket_failure";
 
+/** A JSON value that is a table: an object, never an array. */
+const isTable = (json: Schema.Json): json is Schema.JsonObject => Predicate.isObject(json);
+
 /** A call that says what the client has `seen` also says when it was sent, on the client's own clock. */
-const stamped = (params: unknown, sentAt: string): unknown =>
-  Predicate.isObject(params) && "seen" in params ? { ...params, sentAt } : params;
+const stamped = (params: Schema.Json, sentAt: string): Schema.Json =>
+  isTable(params) && "seen" in params ? { ...params, sentAt } : params;
 
 /**
  * Boots a hands client and runs every Cmd to hand-off; the door's answers arrive as Msgs.
