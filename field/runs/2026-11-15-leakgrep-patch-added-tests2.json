@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-leakgrep-patch-added-tests2",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T22:59:31-08:00",
+  "ended": "2026-11-15T23:04:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Second tests round for the fast-tracked lead-tooling change on branch fabrikalfa/leakgrep-patch-added-lines, today's tooling. The build wrote the owner-approved edit to .agents/skills/lead/scripts/leakgrep.sh, but stepcommit.sh refused its commit because leakgrep.sh is an exam path, so this step judged and committed it. The edit changes one behavior line: Quotes.quoted now counts a line that starts with a plus inside a hunk, beside the minus and space lines it already counted. A patch's diff, --- and +++ headers stay outside a hunk, since a diff line resets the hunk state, so they keep every shape. The build's comments were right; the header line was reworded to say plainly that the removed, context and added lines inside a patch's hunks skip only the style shapes. No law changed in this round. All five leakgrep test files are green: commits 11, lines 12, patches 21, respaced 21, the main file 14.",
+  "plants": [
+    {
+      "law": "leakgrep.patches.test.ts: an em dash on any added line inside a hunk of a patches/ file passes",
+      "plant": "leakgrep.sh put back to the branch's committed version before the edit (Quotes.quoted counts only minus and space lines), restored by copy and checked with cmp",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "Ran each leakgrep test file with nice -n 15 pnpm exec vitest run --maxWorkers=3, then pnpm format and pnpm lint with a 6 GB heap.",
+  "step": "tests"
+}
