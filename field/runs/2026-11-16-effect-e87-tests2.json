@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e87-tests2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:12:26-08:00",
+  "ended": "2026-11-16T01:17:59-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests fix round for judgment slice E87 of the Effect-check sweep (missingPipeableSignature), in next/, after the build sent the slice back at 944d034. The build gave LedgerSql.layer and LedgerRemote.layer a Function.dual signature, piped form first and data-first form last. The ledger type law in next/packages/libfabrika/src/ledger/Ledger.types.test.ts read them with expectTypeOf(...).parameters and .returns, which expect-type reads across every overload, so libfabrika's typecheck failed on its four lines. The law now names the data-first form with Parameters<typeof X.layer> and ReturnType<typeof X.layer>, which read an overloaded function's last signature, and still asserts the same four types exactly: [Sql, { readonly reader: string }] to Layer<Ledger, never, Doorbell>, and [LedgerCalls, { readonly reader: string }] to Layer<Ledger>. pnpm format then made the LedgerSql import type-only, since the file now uses it only in types. No other type or exam law broke: next/packages/libfabrika and next/apps/fabrika each typecheck clean (tsc --noEmit -p .) with the change, and the other expectTypeOf .parameter or .returns reads under next/ are on functions the build did not make dual. No product file changed. The build's three left hits stay as they are, since each first argument is unknown and no predicate can tell the two forms apart: decodeExitReason, letterBody and nodeExecution.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "Ran at 944d034 plus this change on Node 26.13.0, with TYPESAFE_API_KEY unset: Ledger.types.test.ts alone (1 test) green; next/packages/libfabrika and next/apps/fabrika typecheck clean; pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) and the list ratchet pass. The full pnpm typecheck was not run here. No lock line, no tsconfig change, no disable comment. The plant was run once with a copy saved and restored by copy, and git status showed only the test file before the commit.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/ledger/Ledger.types.test.ts",
+      "plant": "LedgerSql.ts layer's data-first overload given caller { readonly reader: number }, checked with libfabrika's typecheck",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

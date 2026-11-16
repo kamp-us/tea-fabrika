@@ -7,7 +7,7 @@ import type { Sql } from "../Sql.ts";
 import type * as LedgerFront from "./Ledger.ts";
 import { type Doorbell, Ledger, type LedgerCalls, type LedgerError } from "./Ledger.ts";
 import * as LedgerRemote from "./LedgerRemote.ts";
-import * as LedgerSql from "./LedgerSql.ts";
+import type * as LedgerSql from "./LedgerSql.ts";
 import type { Appended, Entry, Line, Waited } from "./Log.ts";
 
 const checkTypes = () => {
@@ -17,11 +17,14 @@ const checkTypes = () => {
     readonly read: (stream: string, after: Rev) => Stream.Stream<Entry, LedgerError>;
     readonly wait: (stream: string, after: Rev) => Effect.Effect<Waited, LedgerError>;
   }>();
-  // Each layer: what it takes, what it serves, and what it still needs.
-  expectTypeOf(LedgerSql.layer).parameters.toEqualTypeOf<[Sql, { readonly reader: string }]>();
-  expectTypeOf(LedgerSql.layer).returns.toEqualTypeOf<Layer.Layer<Ledger, never, Doorbell>>();
-  expectTypeOf(LedgerRemote.layer).parameters.toEqualTypeOf<[LedgerCalls, { readonly reader: string }]>();
-  expectTypeOf(LedgerRemote.layer).returns.toEqualTypeOf<Layer.Layer<Ledger>>();
+  // Each layer: what it takes, what it serves, and what it still needs. Each layer is a
+  // `Function.dual`, so these name its data-first form: `Parameters` and `ReturnType` read an
+  // overloaded function's last signature, which `dual` lists last.
+  // Plant: change LedgerSql.layer's data-first `caller` to `{ readonly reader: number }`, and tsc fails here.
+  expectTypeOf<Parameters<typeof LedgerSql.layer>>().toEqualTypeOf<[Sql, { readonly reader: string }]>();
+  expectTypeOf<ReturnType<typeof LedgerSql.layer>>().toEqualTypeOf<Layer.Layer<Ledger, never, Doorbell>>();
+  expectTypeOf<Parameters<typeof LedgerRemote.layer>>().toEqualTypeOf<[LedgerCalls, { readonly reader: string }]>();
+  expectTypeOf<ReturnType<typeof LedgerRemote.layer>>().toEqualTypeOf<Layer.Layer<Ledger>>();
   // No static layer is left on the class, and the contract module exports no layer.
   expectTypeOf<"sql" extends keyof typeof Ledger ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<"remote" extends keyof typeof Ledger ? true : false>().toEqualTypeOf<false>();
