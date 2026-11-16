@@ -121,8 +121,10 @@ export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpaw
       });
 
       const log = Effect.fn("ChecksGh.log")(function* (id: number) {
-        // A test log is colored. gh 2.104.0 exits 1 and prints nothing on an answer with terminal
-        // escape sequences unless told to pass them on (job 133007568239, 2026-11-15).
+        // A test log is colored. Since gh 2.97.0, whose release notes name the escape-sequence fix
+        // for `gh api`, gh exits 1 and prints nothing on an answer with terminal escape sequences
+        // unless told to pass them on; seen on 2.104.0 (job 133007568239, 2026-11-15). So this
+        // needs gh 2.97.0 or later.
         const args = ["--allow-escape-sequences", `repos/${repo}/actions/jobs/${id}/logs`];
         const ran = yield* call(args);
         return ran.code === 0 ? ran.out : yield* exited(args, ran);

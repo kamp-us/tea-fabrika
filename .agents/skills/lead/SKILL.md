@@ -542,8 +542,9 @@ visible, and never weaken the rules to hide this message.
    2026-11-08). A change that loosens or removes a law still stays `ask owner exam_read`.
    Then the lead session turns on GitHub's "merge when ready" at once, without waiting for CI
    ([0530](../../../.decisions/0530-lead-turns-on-merge-when-ready.md)), only with
-   `land.ts arm <pr>`, never by hand: it refuses unless the full run at the head is green on every
-   job, and prints each red job's failed steps and tests. GitHub puts it in the merge queue
+   `land.ts arm <pr>`, never by hand: it refuses a full run there that is red or not ended, and
+   prints each red job's failed steps and tests; with none at the head it arms, as
+   [0544](../../../.decisions/0544-every-reviewed-pull-request-is-armed.md) allows. GitHub puts it in the merge queue
    when `ci-required` goes green, never when red. If anything is pushed after the final read, run
    `disablePullRequestAutoMerge` and read again. Main takes changes only
    through that queue ([0162](../../../.decisions/0162-no-friction-before-a-merge.md)). For a quest that ended at `land.ts ready`, run `land.ts run <quest> <ticket>`

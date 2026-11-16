@@ -11,10 +11,10 @@
 // So the command judges each job, never the run's top line, and on a refusal prints each job that is
 // not green, its failed steps and the failing test lines of its log.
 //
-// No full run at the head, or only one at an older head, refuses unless the caller says so: `--docs`
-// for a pull request of only docs paths, which nothing starts a full run for, or `--without-full-run`,
-// as 0544 lets a reviewed pull request be armed with no full run first. A full run at the head that
-// failed or has not finished refuses whatever the caller says. Read through its module: `Arm.arm(...)`.
+// No full run at the head arms, as 0544 lets a reviewed pull request be armed with no full run
+// first, and says so in one line with how to start one. A full run at the head that is red or has not
+// ended refuses. With none at the head, the branch's newest run at an older head counts: green arms
+// with the note, red or not ended refuses. Read through its module: `Arm.arm(...)`.
 import { Effect, Option, Schema } from "effect";
 import { Checks } from "../ci/Checks.ts";
 import { Job, type Run, Runs } from "../ci/Runs.ts";
@@ -45,18 +45,25 @@ export const passes = (job: Job): boolean =>
 export const failedSteps = (job: Job): ReadonlyArray<string> =>
   job.steps.filter((s) => s.conclusion === "failure" || s.conclusion === "timed_out").map((s) => s.name);
 
-/** The full run at a pull request's head, as the command found it. */
-export const FullRun = Schema.TaggedUnion({
+/** How one full run stands, judged job by job. */
+export const Verdict = Schema.TaggedUnion({
   /** Every job green. */
   green: { run: Schema.Number },
-  /** No full run on the branch at all. */
-  none: {},
-  /** The branch's newest full run is at an older head. */
-  older: { run: Schema.Number, head: Schema.String },
-  /** The newest run at the head has not ended. */
+  /** Not ended yet. */
   unfinished: { run: Schema.Number, status: Schema.String },
   /** Ended, and these jobs are not green. */
   red: { run: Schema.Number, jobs: Schema.Array(Job) },
+});
+export type Verdict = typeof Verdict.Type;
+
+/** The full run a pull request's head is judged by, as the command found it. */
+export const FullRun = Schema.TaggedUnion({
+  /** No full run on the branch at all. */
+  none: {},
+  /** The newest run at the head. */
+  at: { verdict: Verdict },
+  /** None at the head; the branch's newest run, at an older head. */
+  older: { head: Schema.String, verdict: Verdict },
 });
 export type FullRun = typeof FullRun.Type;
 
@@ -69,28 +76,34 @@ export const pick = (
   return { at: newest(runs.filter((r) => r.head === head)), newest: newest(runs) };
 };
 
-/** The full run on `branch` at `head`: its runs read, then the jobs of the one at the head. */
+/** One run judged: not ended, or its jobs read and each judged. */
+const judge = Effect.fn("Arm.judge")(function* (run: Run) {
+  if (run.status !== "completed") {
+    return Verdict.cases.unfinished.make({ run: run.id, status: run.status });
+  }
+
+  const jobs = yield* (yield* Runs).jobs(run.id);
+  const bad = jobs.filter((job) => !passes(job));
+  // A run with no jobs at all (a workflow file GitHub could not read) is not green either.
+  return jobs.length > 0 && bad.length === 0
+    ? Verdict.cases.green.make({ run: run.id })
+    : Verdict.cases.red.make({ run: run.id, jobs: bad });
+});
+
+/** The full run on `branch` that `head` is judged by: the newest at the head, else the newest older one. */
 export const fullRunAt = Effect.fn("Arm.fullRunAt")(function* (branch: string, head: string) {
   const runs = yield* Runs;
   const { at, newest } = pick(head, yield* runs.on(WORKFLOW, branch));
 
-  if (Option.isNone(at)) {
-    return Option.match(newest, {
-      onNone: () => FullRun.cases.none.make({}),
-      onSome: (run) => FullRun.cases.older.make({ run: run.id, head: run.head }),
-    });
+  if (Option.isSome(at)) {
+    return FullRun.cases.at.make({ verdict: yield* judge(at.value) });
   }
 
-  if (at.value.status !== "completed") {
-    return FullRun.cases.unfinished.make({ run: at.value.id, status: at.value.status });
+  if (Option.isNone(newest)) {
+    return FullRun.cases.none.make({});
   }
 
-  const jobs = yield* runs.jobs(at.value.id);
-  const bad = jobs.filter((job) => !passes(job));
-  // A run with no jobs at all (a workflow file GitHub could not read) is not green either.
-  return jobs.length > 0 && bad.length === 0
-    ? FullRun.cases.green.make({ run: at.value.id })
-    : FullRun.cases.red.make({ run: at.value.id, jobs: bad });
+  return FullRun.cases.older.make({ head: newest.value.head, verdict: yield* judge(newest.value) });
 });
 
 /** The longest line a refusal prints from a log, and the most lines it prints per job. */
@@ -124,11 +137,7 @@ export const failingLines = (log: string): ReadonlyArray<string> => {
 /** The pull request was not armed, and nothing was asked of GitHub's merge. */
 export class NotArmed extends Schema.TaggedError<NotArmed>()("NotArmed", { reason: Schema.String }) {}
 
-/** What to do when the head has no full run of its own: refuse, or arm a docs pull request, or any. */
-export const NoRun = Schema.Literals(["refuse", "docs", "any"]);
-export type NoRun = typeof NoRun.Type;
-
-export type Ask = { readonly repo: string; readonly pr: number; readonly noRun: NoRun };
+export type Ask = { readonly repo: string; readonly pr: number };
 
 /** Why a pull request may not be armed whatever its runs say, or `null` when it may. A draft may. */
 export const refusal = (found: Detail): string | null => {
@@ -186,11 +195,13 @@ const redReport = Effect.fn("Arm.redReport")(function* (repo: string, run: numbe
   return lines.join("\n");
 });
 
-/** Why a head with no full run of its own is refused, after what was found, and the two ways on. */
-const noRunReason = (seen: string, branch: string, docsOnly: boolean): string =>
-  docsOnly
-    ? `${seen}. A docs pull request (only ${DOCS.join(", ")} files) starts no full run: pass --docs to arm it`
-    : `${seen}. Start one (gh workflow run ${WORKFLOW} --ref ${branch}) and arm once it is green, or pass --without-full-run to arm it with none, as 0544 allows`;
+/** The line a head with no full run of its own is armed with (0544), and how to start one. */
+const unrunNote = (seen: string, oid: string, branch: string, docsOnly: boolean): string =>
+  `no full run at ${oid.slice(0, 12)}${seen}; arming as 0544 allows (${
+    docsOnly
+      ? `a docs pull request, only ${DOCS.join(", ")} files, starts no full run`
+      : `to start one: gh workflow run ${WORKFLOW} --ref ${branch}`
+  })`;
 
 export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
   const prs = yield* PullRequests;
@@ -209,32 +220,27 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
 
   const files = yield* prs.files(found.number);
   const docsOnly = files.length > 0 && files.every(isDocs);
-
-  if (a.noRun === "docs" && !docsOnly) {
-    const others = files.filter((path) => !isDocs(path));
-    const named = others.length > 5 ? [...others.slice(0, 5), `and ${others.length - 5} more`] : others;
-    return yield* refuse(
-      `--docs is for a pull request of only ${DOCS.join(", ")} files; it also changes ${named.join(", ")}`,
-    );
-  }
-
+  const note = (seen: string) => unrunNote(seen, found.oid, found.head, docsOnly);
+  // A green run arms with its line; any other refuses, at the head or, with none there, at the older head.
+  const judged = (verdict: Verdict, place: string, green: (run: number) => string) =>
+    Verdict.match(verdict, {
+      green: ({ run }) => Effect.succeed(green(run)),
+      unfinished: ({ run, status }) =>
+        Effect.fail(
+          refuse(`${place}: the full run ${runUrl(a.repo, run)} is ${status}, not ended; arm it once it is green`),
+        ),
+      red: ({ run, jobs }) =>
+        Effect.flatMap(redReport(a.repo, run, jobs), (report) => Effect.fail(refuse(`${place}: ${report}`))),
+    });
   const full = yield* fullRunAt(found.head, found.oid);
-  const unrun = (seen: string) =>
-    a.noRun === "refuse"
-      ? Effect.fail(refuse(noRunReason(seen, found.head, docsOnly)))
-      : Effect.succeed(`${seen}; armed with --${a.noRun === "docs" ? "docs" : "without-full-run"}`);
   const said = yield* FullRun.match(full, {
-    green: ({ run }) => Effect.succeed(`full run ${run} green on every job at ${found.oid.slice(0, 12)}`),
-    none: () => unrun(`no ${WORKFLOW} run on ${found.head}`),
-    older: ({ head }) =>
-      unrun(
-        `the newest ${WORKFLOW} run on ${found.head} is at ${head.slice(0, 12)}, not the head ${found.oid.slice(0, 12)}`,
+    none: () => Effect.succeed(note("")),
+    at: ({ verdict }) =>
+      judged(verdict, "at this head", (run) => `full run ${run} green on every job at ${found.oid.slice(0, 12)}`),
+    older: ({ head, verdict }) =>
+      judged(verdict, `no full run at this head, and at the older head ${head.slice(0, 12)}`, (run) =>
+        note(`, and the newest one, ${run} at the older head ${head.slice(0, 12)}, was green`),
       ),
-    unfinished: ({ run, status }) =>
-      Effect.fail(
-        refuse(`the full run ${runUrl(a.repo, run)} at this head is ${status}, not ended; arm it once it is green`),
-      ),
-    red: ({ run, jobs }) => Effect.flatMap(redReport(a.repo, run, jobs), (report) => Effect.fail(refuse(report))),
   });
 
   if (found.draft) {

@@ -33,8 +33,17 @@ const fixture = Effect.gen(function* () {
 const allGreen = (jobs: ReadonlyArray<Job>): ReadonlyArray<Job> =>
   jobs.map((job) => ({ ...job, conclusion: job.name === "report" ? "skipped" : "success" }));
 
-/** How the branch's full runs stand, as a law sets them. */
-const Stands = Schema.Literals(["green", "red", "none", "older", "in_progress", "queued"]);
+/** How the branch's full runs stand, as a law sets them: at the head, or only at an older head. */
+const Stands = Schema.Literals([
+  "green",
+  "red",
+  "in_progress",
+  "queued",
+  "none",
+  "older",
+  "older_red",
+  "older_running",
+]);
 type Stands = typeof Stands.Type;
 
 type World = {
@@ -44,7 +53,7 @@ type World = {
   readonly base?: string;
   readonly title?: string;
   readonly files?: ReadonlyArray<string>;
-  /** The jobs of the run at the head, for a law that builds its own. */
+  /** The jobs of the run that is read, for a law that builds its own. */
   readonly jobs?: ReadonlyArray<Job>;
 };
 
@@ -64,21 +73,25 @@ const memory = (w: World, red: { readonly jobs: ReadonlyArray<Job>; readonly log
   const runs: Record<Stands, ReadonlyArray<Run>> = {
     green: [run(oid, "completed", "success")],
     red: [run(oid, "completed", "cancelled")],
-    none: [],
-    older: [run(older, "completed", "success")],
     in_progress: [run(oid, "in_progress", null)],
     queued: [run(oid, "queued", null)],
+    none: [],
+    older: [run(older, "completed", "success")],
+    older_red: [run(older, "completed", "cancelled")],
+    older_running: [run(older, "in_progress", null)],
   };
   actions.runs.set(branch, runs[stands]);
-  actions.jobs.set(RED, w.jobs ?? (stands === "red" ? red.jobs : allGreen(red.jobs)));
+  const isRed = stands === "red" || stands === "older_red";
+  actions.jobs.set(RED, w.jobs ?? (isRed ? red.jobs : allGreen(red.jobs)));
   const layer = Layer.mergeAll(PullRequestsTest.layer(github), RunsTest.layer(actions), ChecksTest.layer([], red.log));
   return { github, actions, layer };
 };
 
-const arm = (m: ReturnType<typeof memory>, noRun: Arm.NoRun = "refuse") =>
-  Arm.arm({ repo, pr: 1092, noRun }).pipe(Effect.provide(m.layer));
+const arm = (m: ReturnType<typeof memory>) => Arm.arm({ repo, pr: 1092 }).pipe(Effect.provide(m.layer));
 
-describe("arm: merge when ready goes on only over a full run green on every job at the head", () => {
+const armedAt = [{ _tag: "arm", number: 1092, oid }];
+
+describe("arm: merge when ready goes on over a green full run, or none at the head as 0544 allows", () => {
   // scenario: the run that was read as "the queue canceled it" twice on 2026-11-15.
   it.effect(
     "scenario: run 43776563690, one leg's vitest step failed and the other nine canceled, refuses; it names the red leg's failed step and failing tests, and arms nothing",
@@ -89,7 +102,9 @@ describe("arm: merge when ready goes on only over a full run green on every job 
         const refused = yield* Effect.flip(arm(m));
         expect(refused._tag).toBe("NotArmed");
         expect(m.github.calls).toEqual([]);
-        expect(refused.reason).toContain(`https://github.com/${repo}/actions/runs/${RED} is not green on every job`);
+        expect(refused.reason.split("\n")[0]).toBe(
+          `pr 1092: at this head: the full run https://github.com/${repo}/actions/runs/${RED} is not green on every job:`,
+        );
         // The red leg comes first, right under the run's line.
         expect(refused.reason.split("\n")[1]).toBe("  next (2): cancelled, failed step: vitest");
         expect(refused.reason).toContain(
@@ -104,25 +119,54 @@ describe("arm: merge when ready goes on only over a full run green on every job 
       }),
   );
 
-  // scenario: each way a head can lack a finished run of its own.
+  // scenario: each run that is there and not green, at the head or at an older head.
   it.effect(
-    "scenario: no run on the branch, a run only at an older head, and a run at the head that is in progress or queued each refuse with a line saying which, and arm nothing",
+    "scenario: a run at the head that is queued or in progress, and with none at the head an older head's run that is red or in progress, each refuse with a line saying which, and arm nothing",
     () =>
       Effect.gen(function* () {
         const red = yield* fixture;
+        const url = `https://github.com/${repo}/actions/runs/${RED}`;
         const said = {
-          none: `no scheduled.yaml run on ${branch}`,
-          older: `the newest scheduled.yaml run on ${branch} is at ${older.slice(0, 12)}, not the head ${oid.slice(0, 12)}`,
-          in_progress: `at this head is in_progress, not ended`,
-          queued: `at this head is queued, not ended`,
+          in_progress: `pr 1092: at this head: the full run ${url} is in_progress, not ended; arm it once it is green`,
+          queued: `pr 1092: at this head: the full run ${url} is queued, not ended; arm it once it is green`,
+          older_red: `pr 1092: no full run at this head, and at the older head ${older.slice(0, 12)}: the full run ${url} is not green on every job:`,
+          older_running: `pr 1092: no full run at this head, and at the older head ${older.slice(0, 12)}: the full run ${url} is in_progress, not ended; arm it once it is green`,
         } as const;
 
         for (const [stands, line] of Object.entries(said)) {
           const m = memory({ stands: stands as keyof typeof said }, red);
           const refused = yield* Effect.flip(arm(m));
-          expect(refused.reason).toContain(line);
+          expect(refused.reason.split("\n")[0]).toBe(line);
           expect(m.github.calls).toEqual([]);
         }
+      }),
+  );
+
+  // vector: 0544's path, word for word: no run at the head arms, with one line and the way to start one.
+  it.effect(
+    "vector: no full run arms with the 0544 line and the command that starts one; a green run at an older head arms with the same line; a docs pull request's line says it starts no full run",
+    () =>
+      Effect.gen(function* () {
+        const red = yield* fixture;
+        const head = oid.slice(0, 12);
+        const tail = `merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`;
+        const none = memory({ stands: "none" }, red);
+        expect(Arm.line(yield* arm(none))).toBe(
+          `pr 1092: no full run at ${head}; arming as 0544 allows (to start one: gh workflow run scheduled.yaml --ref ${branch}); ${tail}`,
+        );
+        const stale = memory({ stands: "older" }, red);
+        expect(Arm.line(yield* arm(stale))).toBe(
+          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (to start one: gh workflow run scheduled.yaml --ref ${branch}); ${tail}`,
+        );
+        const docs = memory({ stands: "none", files: ["docs/plan/README.md", ".glossary/TERMS.md"] }, red);
+        expect(Arm.line(yield* arm(docs))).toBe(
+          `pr 1092: no full run at ${head}; arming as 0544 allows (a docs pull request, only .decisions/, docs/, field/, .glossary/, .runbooks/ files, starts no full run); ${tail}`,
+        );
+        expect([...none.github.calls, ...stale.github.calls, ...docs.github.calls]).toEqual([
+          ...armedAt,
+          ...armedAt,
+          ...armedAt,
+        ]);
       }),
   );
 
@@ -134,10 +178,7 @@ describe("arm: merge when ready goes on only over a full run green on every job 
         const red = yield* fixture;
         const m = memory({ stands: "green", draft: true }, red);
         const armed = yield* arm(m);
-        expect(m.github.calls).toEqual([
-          { _tag: "ready", number: 1092 },
-          { _tag: "arm", number: 1092, oid },
-        ]);
+        expect(m.github.calls).toEqual([{ _tag: "ready", number: 1092 }, ...armedAt]);
         expect(Arm.line(armed)).toBe(
           `pr 1092: full run ${RED} green on every job at ${oid.slice(0, 12)}; marked ready; merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
         );
@@ -145,25 +186,26 @@ describe("arm: merge when ready goes on only over a full run green on every job 
       }),
   );
 
-  // Plants: arm on the run's top line; let a skip pass on any job; arm with no run, or on an older
-  // head, without being told; let a flag arm a red or unfinished run; arm a plan or a closed one.
+  // Plants: arm on the run's top line; let a skip pass on any job; refuse a head with no run (0544);
+  // arm over a red or unfinished run at the head, or over an older head's run that is not green; arm
+  // a plan or a closed one.
   it.effect.prop(
-    "property: it arms exactly when the pull request is open, into main and no `Plan:`, and the run at its head is green on every job, or there is none at the head and the caller said to arm anyway (--docs only for docs paths); it then arms once, at the head",
+    "property: it arms exactly when the pull request is open, into main and no `Plan:`, and the run it is judged by is green on every job, or there is no full run on the branch at all; it then arms once, at the head",
     {
       stands: Stands,
       state: Schema.Literals(["OPEN", "CLOSED"]),
       base: Schema.Literals(["main", "fabrikalfa/parent"]),
       plan: Schema.Boolean,
       docsOnly: Schema.Boolean,
-      noRun: Arm.NoRun,
       skipped: Schema.Literals(["none", "report", "tooling (1)"]),
     },
-    ({ stands, state, base, plan, docsOnly, noRun, skipped }) =>
+    ({ stands, state, base, plan, docsOnly, skipped }) =>
       Effect.gen(function* () {
         const red = yield* fixture;
         // The report skipped as on every branch, or a success, or another job skipped in its place.
         const skips = (job: Job) => job.name === skipped || (job.name === "report" && skipped === "report");
         const withSkip = red.jobs.map((job) => ({ ...job, conclusion: skips(job) ? "skipped" : "success" }));
+        const isRed = stands === "red" || stands === "older_red";
         const m = memory(
           {
             stands,
@@ -171,40 +213,16 @@ describe("arm: merge when ready goes on only over a full run green on every job 
             base,
             title: plan ? "Plan: per-program quotas" : "Per-program quotas",
             files: docsOnly ? [".decisions/0573-x.md", "field/notes/x.json"] : ["docs/x.md", "next/x.ts"],
-            jobs: stands === "red" ? red.jobs : withSkip,
+            jobs: isRed ? red.jobs : withSkip,
           },
           red,
         );
-        const answer = yield* Effect.result(arm(m, noRun));
+        const answer = yield* Effect.result(arm(m));
         const open = state === "OPEN" && base === "main" && !plan;
-        const flagFits = noRun === "any" || (noRun === "docs" && docsOnly);
-        const green = stands === "green" && skipped !== "tooling (1)";
-        const unrun = stands === "none" || stands === "older";
-        const arms = open && (noRun !== "docs" || docsOnly) && (green || (unrun && flagFits));
-        expect(m.github.calls).toEqual(arms ? [{ _tag: "arm", number: 1092, oid }] : []);
+        const green = (stands === "green" || stands === "older") && skipped !== "tooling (1)";
+        const arms = open && (green || stands === "none");
+        expect(m.github.calls).toEqual(arms ? armedAt : []);
         expect(answer._tag).toBe(arms ? "Success" : "Failure");
-      }),
-  );
-
-  // vector: the hint a docs pull request with no run gets, and the refusal of --docs on code.
-  it.effect(
-    "vector: a docs pull request with no full run is told to pass --docs; --docs on one with code refuses",
-    () =>
-      Effect.gen(function* () {
-        const red = yield* fixture;
-        const docs = memory({ stands: "none", files: ["docs/plan/README.md", ".glossary/TERMS.md"] }, red);
-        const hint = yield* Effect.flip(arm(docs));
-        expect(hint.reason).toBe(
-          `pr 1092: no scheduled.yaml run on ${branch}. A docs pull request (only .decisions/, docs/, field/, .glossary/, .runbooks/ files) starts no full run: pass --docs to arm it`,
-        );
-        const armed = yield* arm(docs, "docs");
-        expect(Arm.line(armed)).toContain(`no scheduled.yaml run on ${branch}; armed with --docs`);
-        const code = memory({ stands: "none", files: ["docs/x.md", "next/a.ts"] }, red);
-        const refused = yield* Effect.flip(arm(code, "docs"));
-        expect(refused.reason).toBe(
-          "pr 1092: --docs is for a pull request of only .decisions/, docs/, field/, .glossary/, .runbooks/ files; it also changes next/a.ts",
-        );
-        expect(code.github.calls).toEqual([]);
       }),
   );
 
