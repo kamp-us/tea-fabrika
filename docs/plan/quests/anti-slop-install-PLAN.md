@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0563, 0558, 0561, 0562, 0524; body a97309b9ac3f
+Approved by the lead agent, builds 0563, 0558, 0561, 0562, 0524; body 7e90a9158af2
 Plancheck-Version: 3
 
 # Plan: the anti-slop lint plugin comes in as it ships, pinned, and each rule the owner took goes on as an error folder by folder
@@ -444,6 +444,29 @@ The lint rules are the exam, so each taken rule is seen to fail through the real
   tooling project.
 - No secret is near this work.
 
+
+## Amendment, 2026-11-15: what the tests step found
+
+- **Spacing has no block in pull request 1.** No folder is at 0/0 for
+  `anti-slop/require-readable-spacing`, so pull request 1 has seven blocks, not eight. Spacing's L2
+  case starts with its first sweep. No list is kept by hand: the zero lock adds the block when a
+  folder reaches zero.
+- **One vendored file runs a process.** Their test
+  `vendor/anti-slop/src/rules/require-readable-spacing-cli.test.ts` runs `pnpm exec oxlint` as a
+  child process and writes temp files. It stays, unchanged: the pinned tree id needs it, and the
+  owner ruled their `src/` comes in whole. Nothing here runs it: vitest's globs, every tsconfig and
+  oxlint's plugin entries (`src/index.ts`, `src/effect/index.ts`) leave it out. **Law L6, test:**
+  no vitest project and no tsconfig of the repo includes a path under `vendor/`. Plant: add
+  `vendor/**` to one project's `include`. Where: `oxlint-plugins/vendored.test.ts`.
+- **More files change** (one line each, tests step): every temp repo that copies the real config
+  needs a `vendor/` link: `oxlint-plugins/advice.test.ts`, `oxlint-plugins/plants.test.ts`,
+  `oxlint-plugins/prefer-schema-arbitrary.test.ts`, `oxlint-plugins/program-package-layout.test.ts`,
+  `next/apps/fabrika/src/exam/plant.ts` and
+  `next/apps/fabrika/src/exam/one-store-hook.integration.test.ts`. And
+  `next/apps/fabrika/src/exam/commits.test.ts` pins the bytes of `exam-paths.json`, which gains
+  the `vendor/**` row. New files: `oxlint-plugins/anti-slop.ts` and `oxlint-plugins/vendored.ts`
+  with their tests.
+
 ## Files
 
 Pull request 1 only. The lint rules, their config and everything under `oxlint-plugins/` are exam
@@ -467,7 +490,10 @@ That leaves the build one docs row, and the job of showing the tree green under 
 | oxlint-plugins/vendored.test.ts | tests | tests | new: L1 |
 | oxlint-plugins/anti-slop.test.ts | tests | tests | new: L2 to L5 |
 | oxlint-plugins/README.md | tests | tests | a section: the vendored plugin, the pin, how a rule goes on in a folder, how an update arrives |
-| oxlint-plugins/advice.ts oxlint-plugins/index.ts oxlint-plugins/plants.test.ts pnpm-workspace.yaml | tests | tests | read for this plan, not changed |
+| oxlint-plugins/advice.test.ts oxlint-plugins/plants.test.ts oxlint-plugins/prefer-schema-arbitrary.test.ts oxlint-plugins/program-package-layout.test.ts | tests | tests | each temp repo that copies the real config gains a `vendor/` link (amendment) |
+| next/apps/fabrika/src/exam/plant.ts next/apps/fabrika/src/exam/one-store-hook.integration.test.ts | tests | tests | the same `vendor/` link in their temp repos (amendment) |
+| next/apps/fabrika/src/exam/commits.test.ts | tests | tests | the pinned bytes of `exam-paths.json` gain the `vendor/**` row (amendment) |
+| oxlint-plugins/advice.ts oxlint-plugins/index.ts pnpm-workspace.yaml | tests | tests | read for this plan, not changed |
 | oxlint-plugins/ oxlint-plugins/** .github/ | tests | tests | named in this plan as folders of the scope; pull request 1 changes no file in them beyond the rows above |
 | next/AGENTS.md | build | docs | "What lint holds" gains one row that points at the README section |
 
