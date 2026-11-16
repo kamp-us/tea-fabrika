@@ -1,4 +1,4 @@
-// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC11).
+// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC12).
 import { parse } from "yaml";
 import {
   allSteps,
@@ -257,6 +257,10 @@ export const lintScheduled = (text: string, check: string): string[] => {
         (s) => map(s["env"])["FABRIKA_TEST_DEPTH"] === DEPTH,
       ), `SC11: every step that runs ${command.split(" --shard")[0]} sets FABRIKA_TEST_DEPTH: ${DEPTH}`);
   }
+
+  // SC12. SC2's one group holds main's schedule and every hand-started run, so a waiting run is
+  // never replaced: GitHub's default queue keeps one waiting and cancels it when a newer run queues.
+  require(map(workflow["concurrency"])["queue"] === "max", "SC12: a newer run never cancels a waiting one: queue: max");
 
   return errors;
 };
