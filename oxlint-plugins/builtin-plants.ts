@@ -66,7 +66,12 @@ export const REFLECT: Plant = {
 export const VI_METHODS: Plant = {
   code: "vitest(no-restricted-vi-methods)",
   file: "planted.test.ts",
-  prelude: [TEST, 'import {vi as v} from "vitest";', "declare const other: {fn: () => unknown};"],
+  prelude: [
+    TEST,
+    'import {vi as v} from "vitest";',
+    'import * as V from "vitest";',
+    "declare const other: {fn: () => unknown};",
+  ],
   lines: [
     ["export const a = vi.fn();", true],
     ['vi.mock("./a.ts");', true],
@@ -93,6 +98,10 @@ export const VI_METHODS: Plant = {
     ['export const l = vi.spyOn(console, "warn").mockImplementation(() => undefined);', false],
     ["export const m = vi.fn().mockReturnValue(1);", false],
     ['export const n = (vi.spyOn(console, "warn")).mockImplementation(() => undefined);', true],
+    // The rule's reach past a plain name, on record (the pipeline plan's L1): `vi` reached through a
+    // namespace import, and a member taken out by a destructure. Neither is refused by this rule.
+    ['export const o = V.vi.spyOn(console, "warn");', false],
+    ["export const { spyOn } = vi;", false],
   ],
 };
 
@@ -109,7 +118,12 @@ export const VI_METHODS: Plant = {
 export const VI_PROPERTIES: Plant = {
   code: "eslint(no-restricted-properties)",
   file: "planted.test.ts",
-  prelude: [TEST, 'import {vi as v} from "vitest";', "declare const other: {fn: () => unknown};"],
+  prelude: [
+    TEST,
+    'import {vi as v} from "vitest";',
+    'import * as V from "vitest";',
+    "declare const other: {fn: () => unknown};",
+  ],
   lines: [
     // The chained calls the vitest rule misses.
     ['export const a = vi.spyOn(console, "warn").mockImplementation(() => undefined);', true],
@@ -134,6 +148,11 @@ export const VI_PROPERTIES: Plant = {
     ["export const l = [describe, expect, it];", false],
     // This rule's own miss: a renamed import is not followed. VI_METHODS refuses it.
     ['export const m = v.spyOn(console, "warn");', false],
+    // The lock's reach past a plain name, on record (the pipeline plan's L1): this rule refuses a
+    // member taken out by a destructure, which VI_METHODS misses, so the pair holds it. A `vi`
+    // reached through a namespace import is a miss of both rules (oxlint 1.90.0).
+    ['export const n = V.vi.spyOn(console, "warn");', false],
+    ["export const { spyOn } = vi;", true],
   ],
 };
 

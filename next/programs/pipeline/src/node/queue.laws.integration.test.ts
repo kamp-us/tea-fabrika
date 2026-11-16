@@ -35,6 +35,7 @@ import { ProgramRunner } from "@kampus/libfabrika/runtime/Runner";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { Recorder } from "@kampus/vitest";
 import type { Redacted } from "effect";
 import {
   Clock,
@@ -464,7 +465,7 @@ const open = Effect.fnUntraced(function* (
     yield* notify(NAME);
   });
   return {
-    host,
+    host: { ...host, calls: (method) => Effect.provideContext(Recorder.calls(CodeHost, method), services) },
     ci,
     snapshot,
     step,

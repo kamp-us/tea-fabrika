@@ -1,11 +1,14 @@
 import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
+import type { CodeHost } from "@kampus/libfabrika";
+import { type Recorder, runsFor } from "@kampus/vitest";
 import {
   Arbitrary,
   Cause,
+  Console,
   Effect,
   Exit,
   Fiber,
+  Layer,
   Logger,
   Predicate,
   Redacted,
@@ -13,12 +16,15 @@ import {
   type Scope,
   type Tracer,
 } from "effect";
+import { TestConsole } from "effect/testing";
 import * as fc from "fast-check";
-import { vi } from "vitest";
 import * as Mail from "./Mail.ts";
 import type { queue } from "./Queue.ts";
 
 type QueueModel = ReturnType<typeof queue>["machine"]["model"]["Type"];
+
+/** The code host's own interface, whose calls a caller answers from its Recorder (0579). */
+type Host = CodeHost.CodeHost["Service"];
 
 type Fault<R> =
   | { readonly kind: "fault"; readonly reason: R }
@@ -58,7 +64,10 @@ export type World = {
       method: "update" | "merge",
       fault: Fault<"unavailable" | "rate_limited" | "refused">,
     ) => Effect.Effect<void>;
-    readonly calls: () => ReadonlyArray<{ readonly method: string; readonly change: number }>;
+    /** The args of each recorded run of one code host method, in run order. */
+    readonly calls: <M extends Recorder.Method<Host>>(
+      method: M,
+    ) => Effect.Effect<ReadonlyArray<Recorder.Args<Host, M>>>;
     readonly read: (change: number) => Effect.Effect<{ readonly head: string } | undefined>;
   };
   readonly ci: {
@@ -161,6 +170,42 @@ const tapes = Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, m
     return tape;
   }),
 );
+
+/** One printed argument as the old console spy wrote it, so the leak check reads the same text. */
+const line = (arg: unknown) => `${String(arg)} ${JSON.stringify(arg)}`;
+
+/**
+ * S2's console check: every argument printed through Effect's Console, for each of the five methods
+ * the old spy watched. `warnLines`, `infoLines` and `debugLines` come from patches/effect@4.1.3.patch
+ * (https://github.com/Effect-TS/effect/issues/10665).
+ */
+const printed = Effect.gen(function* () {
+  const lines = [
+    ...(yield* TestConsole.logLines),
+    ...(yield* TestConsole.errorLines),
+    ...(yield* TestConsole.warnLines),
+    ...(yield* TestConsole.infoLines),
+    ...(yield* TestConsole.debugLines),
+  ];
+  return lines.map(line);
+});
+
+/**
+ * What S2 provides around a world, at the one place: its logger and Effect's own test console. The
+ * console is fresh: `TestConsole.layer` is one value, which Effect memoizes across the provides of
+ * one test, so without it a world would read the lines of the world before it.
+ */
+const watching = (logs: Array<string>) =>
+  Layer.merge(
+    Logger.layer([
+      Logger.map(Logger.formatSimple, (text) => {
+        logs.push(text);
+      }),
+    ]),
+    Layer.fresh(TestConsole.layer),
+  );
+
+const print = { log: Console.log, error: Console.error, warn: Console.warn, info: Console.info, debug: Console.debug };
 
 export const suite = (driver: Driver) =>
   describe("the queue on real runners, next/", () => {
@@ -301,12 +346,8 @@ export const suite = (driver: Driver) =>
         const s = yield* h.snapshot;
         expect(s.model?._tag).toBe("idle");
         expect(started(s).map((p) => p.name)).toEqual(["merger:1.1", "merger:2.2", "merger:3.3"]);
-        expect(
-          h.host
-            .calls()
-            .filter((c) => c.method === "merge")
-            .map((c) => c.change),
-        ).toEqual([1, 2, 3]);
+        // Plant L5: hand Recorder.layer a host whose merge is put back to the raw fake: QR1 red.
+        expect((yield* h.host.calls("merge")).map(([change]) => change)).toEqual([1, 2, 3]);
 
         for (let change = 1; change <= 3; change++) {
           expect(replies(s, change)).toHaveLength(1);
@@ -365,13 +406,13 @@ export const suite = (driver: Driver) =>
         expect(before).toBeDefined();
         expect(h.ci.starts()).toContain(before?.head);
         expect(replies(yield* h.snapshot, 1)).toHaveLength(1);
-        expect(h.host.calls().filter((c) => c.method === "merge" && c.change === 2)).toEqual([]);
+        expect((yield* h.host.calls("merge")).filter(([change]) => change === 2)).toEqual([]);
         yield* h.green(2);
         yield* h.moveMain;
         yield* h.step;
         const after = yield* h.host.read(2);
         expect(after?.head).not.toBe(before?.head);
-        expect(h.host.calls().filter((c) => c.method === "merge" && c.change === 2)).toEqual([]);
+        expect((yield* h.host.calls("merge")).filter(([change]) => change === 2)).toEqual([]);
         expect(h.ci.starts()).toContain(after?.head);
         yield* finish(h);
         const s = yield* h.snapshot;
@@ -384,7 +425,7 @@ export const suite = (driver: Driver) =>
         }
 
         expect(s.model?._tag).toBe("idle");
-        expect(h.host.calls().filter((c) => c.method === "update" && c.change === 2).length).toBeGreaterThanOrEqual(3);
+        expect((yield* h.host.calls("update")).filter(([change]) => change === 2).length).toBeGreaterThanOrEqual(3);
       }),
     );
     it.effect("scenario: QR4 an outside write after the last look stops the line until resume", () =>
@@ -424,22 +465,6 @@ export const suite = (driver: Driver) =>
           Effect.gen(function* () {
             const capture = driver.capture();
             const logs: Array<string> = [];
-            yield* Effect.forEach(
-              ["log", "info", "warn", "error", "debug"] as const,
-              (method) =>
-                Effect.acquireRelease(
-                  Effect.sync(() =>
-                    vi.spyOn(console, method).mockImplementation((...args: ReadonlyArray<unknown>) => {
-                      logs.push(args.map((arg) => `${String(arg)} ${JSON.stringify(arg)}`).join(" "));
-                    }),
-                  ),
-                  (spy) => Effect.sync(() => spy.mockRestore()),
-                ),
-              { discard: true, concurrency: 1 },
-            );
-            const logger = Logger.map(Logger.formatSimple, (line) => {
-              logs.push(line);
-            });
             yield* Effect.gen(function* () {
               const h = yield* driver.open(Redacted.make(value.text));
               const inspect = Effect.gen(function* () {
@@ -452,6 +477,7 @@ export const suite = (driver: Driver) =>
                     JSON.stringify(s.view),
                     ...capture.text(),
                     ...logs,
+                    ...(yield* printed),
                   ],
                   [value.text, value.token],
                 );
@@ -528,12 +554,50 @@ export const suite = (driver: Driver) =>
               expect(spans).toContain("start_child");
               expect(spans).toContain("merger:1.1");
               yield* inspect;
-            }).pipe(Effect.withTracer(capture.tracer), Effect.provide(Logger.layer([logger])));
+            }).pipe(Effect.withTracer(capture.tracer), Effect.provide(watching(logs)));
           }),
         ),
       // Each world finishes a faulted landing, then walks up to 24 moves, including store reopens.
       // Measured 14.6 s for 40 worlds locally, 35.3 s before the leak check asserted once for each
       // look; 3 s per world covers that counted work.
       { timeout: s2Runs * 3_000, arbitrary: { seed: 119120, runs: s2Runs, size: 24 } },
+    );
+    // L4 (ticket 1067): S2's console check sees what the console got, for each of the five methods
+    // the old spy watched. Each method gets a world of its own under S2's provide, which lands a
+    // change clean, then prints the secret through that method inside the same provide.
+    // Plants: drop the fresh `TestConsole.layer` from `watching`: L4 red, since `it.effect`'s own
+    // test console is then shared by the five worlds, and a world's clean look reads the line the
+    // world before it printed. Drop `warnLines`, `infoLines` or `debugLines` from `printed`: that
+    // method's case is red.
+    it.effect.prop(
+      "L4: [secrets] S2's console check reads a secret printed through any of the five console methods",
+      [secret],
+      ([value]) =>
+        Effect.forEach(
+          ["log", "error", "warn", "info", "debug"] as const,
+          (method) => {
+            const logs: Array<string> = [];
+            return Effect.gen(function* () {
+              const h = yield* driver.open(Redacted.make(value.text));
+              yield* h.enqueue(1, "initial");
+              yield* finish(h);
+              const look = Effect.gen(function* () {
+                const s = yield* h.snapshot;
+                return [JSON.stringify(s.letters), JSON.stringify(s.model), ...logs, ...(yield* printed)];
+              });
+              driver.unleaked(yield* look, [value.text, value.token]);
+              yield* print[method]("a scripted fault's cause:", value.text);
+              // The records the leak check reads now hold the secret, so S2 would fail on this line.
+              // A failed `expect` counts even when caught, so the law reads the records, not the check.
+              const seen = yield* look;
+              expect(
+                seen.some((record) => record.includes(value.token)),
+                method,
+              ).toBe(true);
+            }).pipe(Effect.provide(watching(logs)), Effect.scoped);
+          },
+          { discard: true, concurrency: 1 },
+        ),
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 10 }) } },
     );
   });

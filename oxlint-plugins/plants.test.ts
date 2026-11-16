@@ -687,9 +687,13 @@ describe("M1 of the mock sweep: every folder a vi-methods block lists refuses th
     inConfigCopy(({ printed, lint }) => {
       const globs = viGlobs(printed);
       // Coverage: the app's e2e folder, the first to reach zero in this slice, in both of its
-      // blocks, and every block blocks.
+      // blocks, and the pipeline program's folder (the pipeline plan's L1), and every block blocks.
       expect(globs.map(({ glob }) => glob)).toEqual(
-        expect.arrayContaining(["next/apps/fabrika/e2e/*", "next/apps/fabrika/e2e/node/**"]),
+        expect.arrayContaining([
+          "next/apps/fabrika/e2e/*",
+          "next/apps/fabrika/e2e/node/**",
+          "next/programs/pipeline/**",
+        ]),
       );
 
       for (const { glob, level } of globs) {
@@ -721,6 +725,8 @@ describe("M1 of the mock sweep: every folder a vi-methods block lists refuses th
   it("scenario: VI_PROPERTIES' lines are refused exactly, and every vi fire blocks, in every folder of every vi-methods block", () => {
     inConfigCopy(({ printed, lint }) => {
       const globs = viGlobs(printed);
+      // Coverage: the pipeline program's folder (the pipeline plan's L1) is one of them.
+      expect(globs.map(({ glob }) => glob)).toContain("next/programs/pipeline/**");
       // Coverage: the chained lines VI_METHODS takes are lines this plant refuses.
       const call = (line: string) => line.replace(/^export const \w+ = /, "");
       const chained = VI_METHODS.lines.filter(([line, refused]) => !refused && /^vi\.\w+\(.*\)\./.test(call(line)));

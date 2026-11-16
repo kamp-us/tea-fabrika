@@ -1,11 +1,13 @@
-// Shared Effect patch: today's version and next/. Ticket 1067, law L3: `TestConsole.warnLines`, the
-// reader patches/effect@4.1.3.patch adds for the `Console.warn` calls TestConsole already keeps.
+// Shared Effect patch: today's version and next/. Ticket 1067, law L3: `TestConsole.warnLines`,
+// `infoLines` and `debugLines`, the readers patches/effect@4.1.3.patch adds for the `Console.warn`,
+// `Console.info` and `Console.debug` calls TestConsole already keeps
+// (https://github.com/Effect-TS/effect/issues/10665). `errorLines` is Effect's own.
 import { Console, Effect } from "effect";
 import { TestConsole } from "effect/testing";
 import fc from "fast-check";
 import { expect, it } from "vitest";
 
-const METHODS = ["warn", "log", "error", "info"] as const;
+const METHODS = ["warn", "log", "error", "info", "debug"] as const;
 
 /** A program's console calls, in order: each a method and its parameters. */
 const Calls = fc.array(
@@ -13,10 +15,17 @@ const Calls = fc.array(
   { maxLength: 24 },
 );
 
-const print = { warn: Console.warn, log: Console.log, error: Console.error, info: Console.info };
+const print = {
+  warn: Console.warn,
+  log: Console.log,
+  error: Console.error,
+  info: Console.info,
+  debug: Console.debug,
+};
 
-// Plant L3: filter `warnLines` on "error" in the patch's TestConsole: L3 red.
-it("L3 warnLines gives every Console.warn parameter in order, and logLines and errorLines answer as before", () => {
+// Plant L3: filter `warnLines` on "error" in the patch's TestConsole: L3 red. The pipeline slice's
+// plants: filter `infoLines` on "log", or `debugLines` on "info": L3 red.
+it("L3 warnLines, infoLines and debugLines give every parameter of their own method in order, and logLines and errorLines answer as before", () => {
   const seen = new Set<string>();
   fc.assert(
     fc.property(Calls, (calls) => {
@@ -30,12 +39,20 @@ it("L3 warnLines gives every Console.warn parameter in order, and logLines and e
             warn: yield* TestConsole.warnLines,
             log: yield* TestConsole.logLines,
             error: yield* TestConsole.errorLines,
+            info: yield* TestConsole.infoLines,
+            debug: yield* TestConsole.debugLines,
           };
         }).pipe(Effect.provide(TestConsole.layer)),
       );
       const of = (method: (typeof METHODS)[number]) =>
         calls.flatMap((call) => (call.method === method ? call.parameters : []));
-      expect(read).toEqual({ warn: of("warn"), log: of("log"), error: of("error") });
+      expect(read).toEqual({
+        warn: of("warn"),
+        log: of("log"),
+        error: of("error"),
+        info: of("info"),
+        debug: of("debug"),
+      });
 
       for (const { method, parameters } of calls) {
         seen.add(`${method}:${parameters.length > 0 ? "some" : "none"}`);

@@ -2533,9 +2533,10 @@
       }
     },
     {
-      // The same lock for the e2e folder's node/ files, which take the Reflect ban's error block
-      // above: its Data.TaggedError, JSON.parse and four Reflect entries are written out again.
-      "files": ["next/apps/fabrika/e2e/node/**"],
+      // The same lock for every folder that takes the Reflect ban's error block above: its
+      // Data.TaggedError, JSON.parse and four Reflect entries are written out again. A later folder
+      // at zero that takes that block too appends its glob here.
+      "files": ["next/apps/fabrika/e2e/node/**", "next/programs/pipeline/**"],
       "rules": {
         "vitest/no-restricted-vi-methods": [
           "error",

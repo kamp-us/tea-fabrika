@@ -1,10 +1,14 @@
-import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
+import { describe, expect, expectTypeOf, it } from "@effect/vitest";
+import type { CodeHost } from "@kampus/libfabrika";
+import { type Recorder, runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
 import * as Mail from "./Mail.ts";
 import type { merger } from "./Merger.ts";
 
 type Model = ReturnType<typeof merger>["machine"]["model"]["Type"];
+
+/** The code host's own interface, whose calls a caller answers from its Recorder (0579). */
+type Host = CodeHost.CodeHost["Service"];
 type Saved = { readonly name: string; readonly at: number };
 
 type Fault<R> =
@@ -20,7 +24,10 @@ export type World = {
       fault: Fault<"unavailable" | "rate_limited" | "refused">,
     ) => Effect.Effect<void>;
     readonly crashMerge: Effect.Effect<void>;
-    readonly calls: () => ReadonlyArray<{ readonly method: string }>;
+    /** The args of each recorded run of one code host method, in run order. */
+    readonly calls: <M extends Recorder.Method<Host>>(
+      method: M,
+    ) => Effect.Effect<ReadonlyArray<Recorder.Args<Host, M>>>;
     readonly read: (change: number) => Effect.Effect<{ readonly state: string } | undefined>;
   };
   readonly ci: {
@@ -130,8 +137,17 @@ export const suite = (driver: Driver) =>
         expect(yield* h.alarms.saved).toEqual(before);
         yield* h.green;
         yield* h.fire;
-        expect(h.host.calls().filter((c) => c.method === "merge")).toHaveLength(1);
+        // Plant L5: hand Recorder.layer a host whose merge is put back to the raw fake: R2 red.
+        expect(yield* h.host.calls("merge")).toHaveLength(1);
         expect(yield* replies(h)).toHaveLength(1);
+        // L7 type, read only by the typecheck: `calls` takes only a method of the code host and
+        // answers that method's own args. Plant: widen its parameter to `string`, and the
+        // `@ts-expect-error` below goes unused, which fails the typecheck.
+        expectTypeOf<Effect.Success<ReturnType<typeof h.host.calls<"merge">>>>().toEqualTypeOf<
+          ReadonlyArray<readonly [change: typeof CodeHost.ChangeId.Type, head: typeof CodeHost.Commit.Type]>
+        >();
+        // @ts-expect-error L7: "mrege" is no method of the code host
+        type _Typo = typeof h.host.calls<"mrege">;
       }),
     );
     it.effect("scenario: R3 retries an interrupted merge only at its saved asking deadline", () =>
@@ -148,9 +164,9 @@ export const suite = (driver: Driver) =>
         expect((yield* h.host.read(1))?.state).toBe("merged");
         expect(yield* replies(h)).toEqual([]);
         yield* h.reopen;
-        expect(h.host.calls().filter((c) => c.method === "merge")).toHaveLength(1);
+        expect(yield* h.host.calls("merge")).toHaveLength(1);
         yield* h.fire;
-        expect(h.host.calls().filter((c) => c.method === "merge")).toHaveLength(2);
+        expect(yield* h.host.calls("merge")).toHaveLength(2);
         expect((yield* replies(h))[0]?._tag).toBe("merged");
         expect((yield* replies(h))[0]?.ref).toBe("r3");
         expect(yield* replies(h)).toHaveLength(1);

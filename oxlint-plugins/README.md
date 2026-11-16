@@ -1145,7 +1145,8 @@ entry per banned member. Its blocks near the end of `.oxlintrc.json` ban five me
 saying what to use instead (a service and a test layer, the Recorder, `TestConsole` for `Console`,
 or a `ConfigProvider` layer). A folder joins whole the day its own slice of the sweep brings it to
 zero, and none is ever taken off. The last slice folds the lists into the `next/**/*` block. The
-first folder is `next/apps/fabrika/e2e` (ticket 1067).
+first folder is `next/apps/fabrika/e2e` (ticket 1067), then `next/programs/pipeline`, which shares
+the `e2e/node/**` block since it takes the same Reflect ban block.
 
 ```jsonc
 // The shape of one block of the lock, cut short.
@@ -1184,11 +1185,14 @@ What oxlint 1.90.0 sees, from a probe and from `VI_METHODS` in `builtin-plants.t
   1.93.0, the newest release on 2026-11-16, misses it too
   ([oxc#29656](https://github.com/oxc-project/oxc/issues/29656)). This is the most common shape of
   a spy, so the lock's other half holds it.
+- It misses a member taken out by a destructure (`const { spyOn } = vi`) and a `vi` reached
+  through a namespace import (`import * as V from "vitest"`, then `V.vi.spyOn`).
 
 What the `vi` entries of `no-restricted-properties` see, from `VI_PROPERTIES`: each of the five,
-the two chained calls, a computed key and an optional call; not a renamed import, `vi.hoisted`,
-`vi.waitFor`, a comment, a string or another object's `fn`. A line is held when either plant
-refuses it.
+the two chained calls, a computed key, an optional call and a destructure; not a renamed import, a
+namespace import, `vi.hoisted`, `vi.waitFor`, a comment, a string or another object's `fn`. A line
+is held when either plant refuses it, so the one form the pair misses is `V.vi.spyOn` through a
+namespace import. No file under a lock uses it.
 
 `plants.test.ts` reads every block that sets the vitest rule from oxlint's own `--print-config` and
 plants `VI_METHODS` and `VI_PROPERTIES` in a test file of every folder they list, as it does

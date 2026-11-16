@@ -1,0 +1,90 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-pipeline-tests1",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-16T01:34:40-08:00",
+  "ended": "2026-11-16T01:58:10-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 1 of the mock sweep's pipeline plan, ticket 1067, in next/ (next/programs/pipeline and libfabrika's CodeHostTest.ts), our lint tooling and the Effect patch, branch fabrikalfa/mock-pipeline-s1, built on origin/main with fabrikalfa/mock-app-e2e-s1 merged in at 2387b44ad. Laws L1 to L7 done; L8 and the tea 0.27.0 patch wait on tea-s2's demlik#966 patch. CodeHostTest.layer is built on Recorder.layer(CodeHost, host) inside Layer.unwrap; its Call type and Control.calls are gone, Method is Recorder.Method<CodeHost['Service']>, and the fault queue stays the fake's own state. RunnerTest.ts and QueueRunnerTest.ts read h.host.calls(method), typed to CodeHost's own args, which the two integration files answer with Recorder.calls(CodeHost, method) provided the built services; the suites import CodeHost as a type from the library root, since fabrika/package-imports lets a program suite import only the exact name @kampus/libfabrika (the plan's sketch named the codehost subpath). S2 drops vi and its five console spies for Effect's TestConsole, read through all five readers; a new L4 prints the secret through each of the five console methods in its own world and checks S2's records hold it. patches/effect@4.1.3.patch gains TestConsole.infoLines and debugLines beside app-e2e's warnLines, by pnpm patch and pnpm patch-commit, one file, never errorLines (Effect-TS/effect#10665); scripts/effect-testconsole.test.ts L3 covers all five methods. The lock: next/programs/pipeline/** joins the e2e/node/** block of .oxlintrc.json, since both take the Reflect ban's error block, so the pair (vitest/no-restricted-vi-methods plus eslint/no-restricted-properties with the five vi entries and the Data.TaggedError, JSON.parse and four Reflect entries written out again) is at error there. VI_METHODS and VI_PROPERTIES gain V.vi.spyOn after a namespace import and const { spyOn } = vi; plants.test.ts coverage names the pipeline glob. layer-rules.json: next-codehost now lists next-vitest, as next-ci on the same layer does, since the layer gate refused the new import (a plan gap). pnpm format; NODE_OPTIONS=--max-old-space-size=6144 pnpm lint ran 18 parts, 17 passed and lint:layers failed on that import; after the layer-rules line, lint:layers passed alone. A second full lint on the final tree passed 16 of 18 parts; lint:dead and lint:promise-types died with EPIPE while the other agent's tsgo ran (the sighting of field/findings/2026-11-16-promise-types-epipe-in-full-lint.json), and each passed when rerun alone with no tsgo running (promise-types 0 findings, unreachable ledger PASS). The list ratchet exits 0. Laws run at the final tree: CodeHost.test.ts, handlers.test.ts, plants.test.ts, effect-testconsole.test.ts, runner.laws.integration.test.ts and queue.laws.integration.test.ts, 273 passed; bundle-warnings.test.ts and Merger.laws.test.ts, 13 passed. tsc --noEmit on next/programs/pipeline is clean; effect-tsgo diagnostics: pipeline 49 messages, libfabrika 816 with 0 errors, none on a changed line.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 24,
+  "note": "Two plan premises the code corrected. (1) @effect/vitest provides TestConsole.layer to every it.effect (node_modules/@effect/vitest/src/internal/internal.ts:68), and Effect memoizes the one TestConsole.layer value across the provides of a test, so S2's own console is Layer.fresh(TestConsole.layer): dropping it does not send lines to the global console, as the plan's L4 plant says; it makes the five worlds share it.effect's console. (2) The pair refuses const { spyOn } = vi through no-restricted-properties; only V.vi.spyOn through a namespace import is missed by both rules (oxlint 1.90.0). A failed expect inside expect(...).toThrow() still fails a vitest 5 test, so L4 reads the records rather than calling the leak check to fail.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "L1 (VI_METHODS and VI_PROPERTIES)",
+      "plant": "delete next/programs/pipeline/** from the lock block's files: both scenarios red on their coverage, the glob list lacks next/programs/pipeline/**",
+      "result": "red"
+    },
+    {
+      "law": "L1 (VI_PROPERTIES)",
+      "plant": "drop the five vi entries from that block's no-restricted-properties: planted.test.ts expected [] to deeply equal [5..14, 23]",
+      "result": "red"
+    },
+    {
+      "law": "L2",
+      "plant": "import { vi } from vitest and vi.spyOn(console, \"log\").mockImplementation(() => undefined) back in QueueRunnerTest.ts: lint.ts fires eslint(no-restricted-properties) 'vi.spyOn' at 24:30, and the vitest rule alone takes the chained call",
+      "result": "red"
+    },
+    {
+      "law": "L3 (S2)",
+      "plant": "the pipeline's outcome handler writes error.reason.cause with Console.error: S2 input text leaked, the line 'Error: github_pat_000... {}' from TestConsole",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "TestConsole.layer dropped from watching: red, since it.effect's own test console is shared by the five worlds and a clean look reads the line of the world before",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "warnLines dropped from printed: 'warn: expected false to be true'",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "infoLines dropped from printed: 'info: expected false to be true'",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "debugLines dropped from printed: 'debug: expected false to be true'",
+      "result": "red"
+    },
+    {
+      "law": "L5",
+      "plant": "CodeHostTest.layer adds Layer.succeed(CodeHost, host) after the Recorder, so merges go unrecorded: R2 and R3 'expected [] to have a length of 1', QR1 'expected [] to deeply equal [1, 2, 3]', QR3 'expected 0 to be greater than or equal to 3'",
+      "result": "red"
+    },
+    {
+      "law": "L6",
+      "plant": "the fake's failure skips its fault queue: handlers.test.ts S2 'expected { _tag: Err } to deeply equal { _tag: Err }'",
+      "result": "red"
+    },
+    {
+      "law": "L7",
+      "plant": "World.host.calls widened to <M extends string>: tsc 'RunnerTest.ts(147,9): error TS2578: Unused @ts-expect-error directive'",
+      "result": "red"
+    },
+    {
+      "law": "L3 (effect-testconsole)",
+      "plant": "the installed patched TestConsole.js reads infoLines from 'log': L3 deep-equal fails",
+      "result": "red"
+    },
+    {
+      "law": "L3 (effect-testconsole)",
+      "plant": "the installed patched TestConsole.js reads debugLines from 'info': L3 deep-equal fails",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

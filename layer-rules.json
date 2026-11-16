@@ -354,7 +354,7 @@
       "name": "next-codehost",
       "layer": 2,
       "paths": ["next/packages/libfabrika/src/codehost"],
-      "imports": ["next-telemetry", "next-shared"]
+      "imports": ["next-telemetry", "next-shared", "next-vitest"]
     },
     {
       "name": "next-ci",
