@@ -33,6 +33,12 @@ expect(sent.map((text) => JSON.parse(text))).toContainEqual(/* ... */);
   `process.stderr` spies without getting weaker.** The lean is in the question. Until the owner
   answers, slice 1 holds back the entry-flows spies on `process.stdout`, `process.stderr` and
   `console`, and lands the rest.
+
+  **Amendment (2026-11-16, merge session ruling):** the `console` half is answered: oxlint's
+  built-in `eslint/no-console` rule holds it, not a rule of ours. So slice 1 turns `no-console` on
+  for libfabrika's non-test files at zero, and the `console` spy goes in slice 1. The
+  `process.stdout` and `process.stderr` half was not ruled on and stays open question 1; until it is
+  answered, slice 1 still holds back those two spies.
 - **The t863 span law reads its spans from the span sink's records (70%).** Today it wraps
   `ProjectClient.make` to catch the current span at each `route`. The lean reads the ended
   `runtime.rpc` spans that the connection's own recording writes, as `t864Delivered` in the same
@@ -297,7 +303,11 @@ it is, and only how it watches changes. The reviewer runs the loosening check.
 | M9. Law 3 on the Process shell and the request slot keep their checks with the two References handed in | test | fc.record: the bad settings and requests, default runs | make `recordingLayer` name `SpanSink.layer` again, past `SinkLayer`: the fake SQL refuses the sink's tables, red | next/packages/libfabrika/src/cloudflare/ObjectService.test.ts |
 | M10. C1: a bucket put whose digest rejects fails `crypto` with the rejected value as its cause | test | fc.record: failure, body and key, default runs | make `checkedPut` call `globalThis.crypto.subtle.digest` again: the real digest answers, C1 red | next/packages/libfabrika/src/cloudflare/error-cause.test.ts |
 | M11. No file in the folder calls `vi.fn`, `vi.spyOn`, `vi.doMock` or `vi.stubEnv`, or uses a `toHaveBeenCalled*` matcher; each `VI_BAN` line is refused or taken exactly, in each folder of the block | lint | lint | delete `fn` from the block in `.oxlintrc.json`: `plants.test.ts`'s VI_BAN scenario red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
+| M12. No product file in `next/packages/libfabrika/src` calls `console`, held by oxlint's built-in `eslint/no-console` at error, not a rule of ours (amendment 2026-11-16, merge session ruling); its plant lines are refused in a libfabrika product path and taken in a test path | lint | lint | drop the libfabrika glob from the `no-console` block: the planted `console.log(secret)` in a product path is taken, the plant scenario red | .oxlintrc.json, oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
 
+- M12 is new (amendment 2026-11-16). It is what lets the `console` spy go in slice 1 without M6
+  losing a raw `console` write: a raw call cannot land at all. `no-console` is oxlint's own rule
+  (installed oxlint 1.90.0), not a plugin rule of ours, by the merge session's ruling.
 - M1, M2, M5 and M6 lose a spy and keep what it checked. M1 and M2 still check the typed failure,
   now on the function's own exit. M5 still checks each ended span. M6 still reads every output the
   flow can write, given open question 1.
@@ -319,16 +329,16 @@ it is, and only how it watches changes. The reviewer runs the loosening check.
 | next/packages/libfabrika/src/cloudflare/readers.laws.test.ts | tests | tests | slice 1: the world on `Stub.make`, 6 `vi.fn` go (M3, M4); slice 2: the 3 `Effect.result` spies and `vi.mock("effect")` go (M1, M2) |
 | next/packages/libfabrika/src/cloudflare/ProjectAuditTest.ts | tests | tests | slice 1: 2 `vi.fn` go, the guard is `Stub.make`'s `rest` (M7) |
 | next/packages/libfabrika/src/cloudflare/connection.test.ts | tests | tests | slice 1: the `ProjectClient.make` spy goes, spans read from the records (M5) |
-| next/packages/libfabrika/src/cloudflare/entry-flows.laws.test.ts | tests | tests | slice 1: the span attribute spy goes; the `console`, `stdout` and `stderr` spies go once open question 1 is answered (M6) |
+| next/packages/libfabrika/src/cloudflare/entry-flows.laws.test.ts | tests | tests | slice 1: the span attribute spy and (amendment 2026-11-16) the `console` spy go; the `stdout` and `stderr` spies go once open question 1 is answered (M6) |
 | next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts | tests | tests | slice 2, after 1366: 4 spies go (M8) |
 | next/packages/libfabrika/src/cloudflare/ObjectService.test.ts | tests | tests | slice 2, after 1366: 2 spies go (M9) |
 | next/packages/libfabrika/src/cloudflare/error-cause.test.ts | tests | tests | slice 2: the `crypto.subtle` spy goes (M10) |
 | next/packages/libfabrika/src/cloudflare/control.ts | build | 1 | slice 2: `dispatch` exported |
 | next/packages/libfabrika/src/cloudflare/connection.ts | build | 8 | slice 2, after 1366: `ready` named and exported; `wait` calls it |
 | next/packages/libfabrika/src/cloudflare/runtime.ts | build | 24 | slice 2, after 1366: `SinkLayer` and `RunnerLayer` with doc blocks, read where `SpanSink.layer` and `ProgramRunner.withLoader` are named; the two digests read `WebCrypto.WebCrypto` |
-| .oxlintrc.json | tests | 30 | slice 2: the lock block above |
-| oxlint-plugins/builtin-plants.ts | tests | tests | slice 2: `VI_BAN` (M11) |
-| oxlint-plugins/plants.test.ts | tests | tests | slice 2: the VI_BAN scenario, beside REFLECT's (M11) |
+| .oxlintrc.json | tests | 38 | slice 2: the lock block above, 30 lines; slice 1 (amendment 2026-11-16): an `eslint/no-console` block at error for `next/packages/libfabrika/src/**`, test files left out (M12), about 8 lines |
+| oxlint-plugins/builtin-plants.ts | tests | tests | slice 2: `VI_BAN` (M11); slice 1 (amendment 2026-11-16): the `no-console` plant lines (M12) |
+| oxlint-plugins/plants.test.ts | tests | tests | slice 2: the VI_BAN scenario, beside REFLECT's (M11); slice 1 (amendment 2026-11-16): the `no-console` scenario (M12) |
 | next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts | tests | tests | unchanged; run once in slice 1, since it reads `ProjectAuditTest.ts` (M7) |
 | next/AGENTS.md | build | docs | slice 2: a "What lint holds" row for the vi ban, naming the folders it is on for |
 | oxlint-plugins/README.md | tests | docs | slice 2: the two vitest rules and their messages |
@@ -377,6 +387,10 @@ over a one-line export and the removed spies. The lead picks the order on the da
   of allowed leftovers. This is a narrower rule, on at zero for what it names.
 - **What fact is lost if not recorded now?** None. These are test and wiring changes, and no data
   is stored.
+- **Raw `console` in libfabrika's product code is held by oxlint's built-in `no-console`** (amendment
+  2026-11-16, merge session ruling, no longer a call): no rule of ours is written for it.
+- **Is the `no-console` block a setting?** No. It is lint config for code, nothing a person running
+  fabrika picks (0069).
 
 ## Validation
 
@@ -384,7 +398,7 @@ over a one-line export and the removed spies. The lead picks the order on the da
   `NODE_OPTIONS=--max-old-space-size=6144`, then
   `nice -n 15 pnpm exec vitest run --maxWorkers=3` on each test file in that slice's files table,
   plus `next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts` in slice 1 and
-  `oxlint-plugins/plants.test.ts` in slice 2. Each plant above is run once and named in the report.
+  `oxlint-plugins/plants.test.ts` in slice 2 and (amendment 2026-11-16, for M12) in slice 1. Each plant above is run once and named in the report.
 - The build, slice 2: the same narrow paths.
 - The lead runs the changed-files run and the one type check.
 
@@ -393,7 +407,8 @@ over a one-line export and the removed spies. The lead picks the order on the da
 Confidence in the line counts: 70%. The doubt is the world rewrite in `readers.laws.test.ts`, the
 longest test file here.
 
-1. Slice 1, the test-only fakes and the spans: no product code, about 120 test lines changed. 0 lines.
+1. Slice 1, the test-only fakes and the spans: no product code, about 120 test lines changed, and
+   (amendment 2026-11-16) about 8 lines of `no-console` config, with its plants. 8 lines.
 2. Slice 2, after 1366 and reflect slice 10: the exports, the two References, the `WebCrypto` reads
    and the lock, about 63 product and config lines, about 150 test lines. 63 lines.
 
@@ -405,7 +420,9 @@ Estimate: 6 steps, $28
 
 ## Records
 
-- No decision file. This plan builds 0554, 0555, 0557 and 0579, and asks the owner one question.
+- No decision file. This plan builds 0554, 0555, 0557 and 0579. The merge session's ruling of
+  2026-11-16 answered the `console` half of its one question; the `process.stdout` and
+  `process.stderr` half is still asked.
 - No glossary row: no new word. `Stub` is reflect slice 8's.
 - `field/`: one run row per step, the same day.
 - The tracker ticket is 1067, the Recorder's, whose plan lists this folder as a later slice.
@@ -433,6 +450,12 @@ Estimate: 6 steps, $28
    style, in slice 1. It is the owner's because it adds a rule over the whole package, beyond this
    folder. If the answer is no, the three spies still go (0555), and the review records that M6 no
    longer sees a raw write.
+
+   **Amendment (2026-11-16, merge session ruling):** the `console` half is answered: oxlint's
+   built-in `no-console` rule, not a rule of ours (M12, slice 1). What stays open is only the
+   `process.stdout` and `process.stderr` half: does a `no-restricted-properties` entry for them go
+   on for libfabrika's non-test files, or do their two spies go with M6 no longer seeing a raw
+   write? The lean for that half is unchanged: the entry, 80%.
 
 ## Findings
 

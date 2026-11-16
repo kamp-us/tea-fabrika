@@ -40,6 +40,13 @@ expect((yield* h.host.calls("merge")).map(([change]) => change)).toEqual([1, 2, 
   `fromTransport`'s close), which reach the global object, never the Console reference. What
   settles it: the tests step greps that the merger's and queue's code reach neither tea part, and
   the open question below.
+
+  **Amendment (2026-11-16, merge session ruling):** coverage is never lost. tea's direct
+  `console.warn` lines are patched with `pnpm patch` so S2 still sees them, and the upstream issue
+  is filed the same day ([patch upstream locally](../../direction/patch-upstream-locally.md),
+  [0054](../../../.decisions/0054-read-upstream-before-patching-it.md)). See "Tea's warnings reach
+  the S2 check" under "The shape". The doubt left is only the `Console.warn` one, which
+  `TestConsole` keeps but does not read back.
 - **Whether `CodeHostTest.layer` can hand its stateful fake to `Recorder.layer` as it is (85%).**
   `Recorder.layer` takes the implementation as a value, while today's fake makes its state inside
   `Layer.effectContext(Effect.sync(...))`. The lean wraps the whole build in `Layer.unwrap`, the same
@@ -59,6 +66,11 @@ integration files answer with `Recorder.calls(CodeHost, method)`. Then the folde
 `.oxlintrc.json` gets the first block of the mock ban: `vitest/no-restricted-vi-methods` at error for
 `next/programs/pipeline/**`, with a plant law that every folder the block lists refuses each banned
 call.
+
+**Amendment (2026-11-16, merge session ruling):** the same pull request extends tea's local patch,
+`patches/@demlik__tea@0.25.0.patch`, so tea's direct `console.warn` lines go through a warning hook
+a host sets, and S2 sets it to collect them beside `TestConsole`'s lines. The upstream issue on
+`kamp-us/demlik` is filed the same day the patch is made.
 
 ## Counted on main
 
@@ -214,6 +226,60 @@ yield* Effect.gen(function* () {
 checks the same text it checks now. `TestConsole.layer` is provided at the very place the logger is,
 so it reaches every fiber the logger reaches; the law already relies on that place.
 
+### Tea's warnings reach the S2 check
+
+**Amendment (2026-11-16, merge session ruling).** The spy also saw what `@demlik/tea` writes to the
+global `console` past Effect's `Console` reference. That coverage stays, through a local patch.
+
+What was read first (0054), in the installed `@demlik/tea` 0.25.0 `dist/`, with today's patch
+(demlik#897) applied:
+
+- tea's own answer for errors no caller can take is the runtime's `OnError` sink: its doc in
+  `runtime-types` says an isolated throw "routes to the `OnError` sink rather than a bare
+  `console.error`". The sink is the known way, and the patch follows it.
+- Seven direct `console.warn` sites skip that sink: `defaultOnError` for a `RuntimeDiscardNotice`
+  (the loop), `contained` (a run listener that threw), two `onToolError` guards, and
+  `fromTransport`'s two close failures and its dropped send.
+- Not read, since this session cannot reach `kamp-us/demlik`: its `.decisions/` (ADR 0021 is cited
+  by the sink's doc) and `.patterns/`. The tests step reads them before it writes the patch, and the
+  pull request names what it read and why the sink alone does not cover these sites, as 0054 binds.
+
+The patch, a sketch, not compiled: each site calls one `warn` that a host can set, with
+`console.warn` as its default, so a program that sets nothing sees no change.
+
+```ts
+// patches/@demlik__tea@0.25.0.patch, a sketch in tea's own words, added to the demlik#897 change.
+// A host may set where tea's warnings go; unset, they go to console.warn as today.
+export type Warn = (message: string, cause: unknown) => void;
+let warn: Warn = (message, cause) => console.warn(message, cause);
+export const setWarn = (next: Warn): (() => void) => {
+  const before = warn;
+  warn = next;
+  return () => { warn = before; };
+};
+// at each of the seven sites:
+warn(`@demlik/tea: a run's ${what} listener threw`, err); // was console.warn(...)
+```
+
+```ts
+// next/programs/pipeline/src/QueueRunnerTest.ts, S2, beside TestConsole (a sketch)
+const teaWarnings: Array<string> = [];
+yield* Effect.acquireRelease(
+  Effect.sync(() => setWarn((message, cause) => { teaWarnings.push(line(message), line(cause)); })),
+  (restore) => Effect.sync(restore),
+);
+// inspect: [...printed.map(line), ...teaWarnings] join the leak check's records
+```
+
+- If tea's decisions say a warning belongs on the `OnError` sink, the tests step routes the seven
+  sites there instead and S2 reads the sink; the law (L8) is the same either way. Call: 70% that the
+  hook above is the shape that lands, which is why the read comes first.
+- One patch file per package version: pnpm keeps one `patchedDependencies` row for
+  `@demlik/tea@0.25.0`, so this change extends that file, and its comment in `pnpm-workspace.yaml`
+  names both upstream issues. The bump that takes tea's release with the hook deletes the patch.
+- The upstream issue carries the diff in a folded `<details>` block (0060), and reports one gap:
+  tea writes warnings no host can route.
+
 ### The lock
 
 ```jsonc
@@ -272,10 +338,13 @@ so it reaches every fiber the logger reaches; the law already relies on that pla
 | L5. The runner suites keep their merge counts: R2 one merge, R3 one merge before the retry and two after, Q1 merges 1, 2, 3 in order, QR2 no merge of change 2, QR3 at least three updates of change 2 | test | scenario: the suites' own scripted walks, unchanged | hand `Recorder.layer` a host whose `merge` is put back to the raw fake after the wrap, so merges go unrecorded: R2, R3 and Q1 red | next/programs/pipeline/src/RunnerTest.ts, next/programs/pipeline/src/QueueRunnerTest.ts |
 | L6. The code host contract C1 and the handler fault law still hold on the watched fake | test | fc.commands: C1's own commands, seed 119120, 100 runs | make the fake's `failure` skip its fault queue: the handler fault law red. Default runs | next/packages/libfabrika/src/codehost/CodeHost.test.ts, next/programs/pipeline/src/handlers.test.ts |
 | L7. `h.host.calls` takes only a method of `CodeHost` and answers its own args | type | type | widen `calls`' parameter to `string`: a `@ts-expect-error` on `calls("mrege")` goes unused, red in a typecheck | next/programs/pipeline/src/RunnerTest.ts |
+| L8. S2 sees tea's own warnings: a secret in a tea warning (a run listener that throws with the secret in its message, inside the run) reaches the leak check, and with no hook set tea still writes to `console.warn` (amendment 2026-11-16) | test | Effect Arbitrary: tapes | drop the `setWarn` acquire from S2, so the planted warning goes to the global console unseen: L8 red; and a patch whose default is a no-op: the default-output half red | next/programs/pipeline/src/QueueRunnerTest.ts |
 
 - L3 and L5 rewrite existing laws. Every value the old law compared is still compared: the same
   merge counts and the same secret outputs. The reviewer runs the loosening check.
 - L4 is new: it proves the swap watches what the spy watched, for the channel Effect writes.
+- L8 is new (amendment 2026-11-16): it proves the swap watches what the spy watched, for the
+  channel tea writes, so no coverage is lost.
 - L5 and L3 run inside `*.integration.test.ts` files (0536), as they do today: they need real SQLite
   stores and real runners, which no stand-in gives. The tests step runs both integration files in
   its box, which step rules allow.
@@ -300,9 +369,17 @@ so it reaches every fiber the logger reaches; the law already relies on that pla
 | next/packages/libfabrika/src/ci/CiTest.ts | tests | tests | unchanged: `starts` is the fake's state and stays |
 | next/programs/pipeline/tsconfig.json | tests | tests | unchanged; the project the narrow type count reads |
 | field/runs/2026-11-15-mock-pipeline-tests1.json | tests | docs | the tests step's run row |
+| patches/@demlik__tea@0.25.0.patch | tests | 30 | amendment 2026-11-16: tea's seven `console.warn` sites go through a `warn` a host sets, in `dist/` and the `.d.ts`, made with `pnpm patch`; an exam path, so the tests step writes it |
+| patches/ | tests | none | amendment 2026-11-16: the folder of the tea patch above; no other file in it changes |
+| pnpm-workspace.yaml | tests | 1 | amendment 2026-11-16: the new upstream issue's link beside the tea patch row |
+| pnpm-lock.yaml | tests | lockfile | amendment 2026-11-16: the patch hash, written by `pnpm patch-commit` |
 
 - No product file changes, so the build step has nothing to make green unless the review sends
-  work back; the tests step reports `build_needed: no` when lint is green.
+  work back; the tests step reports `build_needed: no` when lint is green. The tea patch is an exam
+  path, so the tests step writes it, as the app-e2e plan does for its Effect patch
+  (amendment 2026-11-16).
+- The tea patch's `pnpm-workspace.yaml` and `pnpm-lock.yaml` lines meet the app-e2e plan's Effect
+  patch lines in the same two files: a one-line rebase for whichever lands second.
 - `CodeHostTest.ts` is a libfabrika test layer beside its service (0538), and libfabrika's other
   `*Test.ts` layers already import `@kampus/vitest` (`processes/ProgramMailTest.ts`), which
   `fabrika/package-imports` allows.
@@ -319,6 +396,9 @@ so it reaches every fiber the logger reaches; the law already relies on that pla
 
 - **`TestConsole` for the console spy,** 75% (see the doubts). The Recorder plan names it; the
   Recorder itself cannot watch `Console`, whose members answer `void`, not an Effect.
+- **tea's warnings are patched, not let go** (amendment 2026-11-16, merge session ruling): a local
+  `pnpm patch` and an upstream issue the same day. The hook's shape is a 70% call, settled by the
+  read of tea's decisions the tests step does first.
 - **The fake keeps its fault queue,** 90%. See "The shape".
 - **`CiTest.Control.starts` stays,** 80%. It is state, not a call log.
 - **`fn` joins the banned list,** 85%. 0579 and 0557.
@@ -348,12 +428,14 @@ Confidence in the line counts: 80%; the doubt is how many lines the `World` type
 two integration files.
 
 1. The pipeline folder's mock sweep and its lock: 0 product lines, about 60 test lines changed in
-   five test files, about 40 lines of lint config and plants. 0 lines.
+   five test files, about 40 lines of lint config and plants, and (amendment 2026-11-16) about 30
+   lines of tea patch. 30 lines.
 
 Priced from `field/runs/` rows of 2026-11-15 at list price, as the Recorder plan priced them: a tests
-step about $6, a review about $3, a fix round about $4. No build step is expected.
+step about $6, a review about $3, a fix round about $4. No build step is expected. Amendment
+(2026-11-16): the tea patch, its read and its upstream issue add about $3 to the tests step.
 
-Estimate: 3 steps, $13
+Estimate: 3 steps, $16
 
 ## Records
 
@@ -368,14 +450,24 @@ Estimate: 3 steps, $13
 - **Whether any block compiles.** None was compiled; the tests step's type count tells.
 - **Whether tea's direct `console.warn` is reached by S2.** Read, not run: its sites are a run
   listener's guard and a transport's close, which the merger and queue machines do not appear to
-  use. The open question below is about it.
+  use. Since the 2026-11-16 amendment this no longer matters for coverage: L8 watches them either
+  way.
+- **What tea's own decisions say about warnings.** Not read here; the tests step reads them first.
 - **The lock's reach beyond what L1 plants.** A `vi` reached through a namespace import or a
   destructure is not refused by the rule today (scratch run, 2026-11-15). No file in the folder does
   either; a later slice that meets one names it.
 
 ## Open questions
 
-- **Tea's own `console.warn`.** `@demlik/tea` 0.25.0 writes to the global `console` in two guards
+None.
+
+## Answered questions
+
+**Amendment (2026-11-16, merge session ruling):** the plan's one open question was answered: patch
+tea with `pnpm patch` so its `console.warn` lines stay covered, and file the upstream issue the same
+day. The question is kept as it was asked, with its lean marked wrong.
+
+- **Tea's own `console.warn` (answered 2026-11-16: patch, not accept; the lean was wrong).** `@demlik/tea` 0.25.0 writes to the global `console` in two guards
   (a run listener that threw, a transport that failed to close), past Effect's `Console` reference.
   With the spy gone, S2 no longer sees those lines. Lean: accept it for this slice, since the
   pipeline's machines reach neither guard, and leave tea as it is (tea stays small). The other way:

@@ -43,6 +43,10 @@ it.effect.prop("...", { at: Time }, ({ at }) => law.pipe(Effect.provide(generato
   says the edge provides the crypto layer. About 50 files provide `Id.Generator.layer` today, and 3
   of them are in pull request 1366's diff (the two cloudflare files `connection.ts` and `runtime.ts`, and the app's
   `local-instance` integration test), which this slice may not touch.
+
+  **Amendment (2026-11-16, merge session ruling):** settled. `Id.Generator.layer` keeps providing
+  `SecureRandom` (`SecureRandom.layerWebCrypto`) inside itself unless a law says otherwise. No edge
+  moves, in this slice or a later one, until a law needs it.
 - **Nothing here was compiled or run.** The installed versions were read: `effect` 4.1.3
   (`next/packages/libfabrika/node_modules/effect/package.json`).
 
@@ -155,7 +159,7 @@ export const makeGenerator: Effect.Effect<Generator["Service"], never, SecureRan
 );
 
 export class Generator extends Context.Service<Generator, { /* unchanged */ }>()("@kampus/libfabrika/Id.Generator") {
-  // Callers keep one layer that needs nothing (open question 1).
+  // Callers keep one layer that needs nothing (open question 1, settled 2026-11-16: it stays).
   static readonly layer: Layer.Layer<Generator> = Layer.effect(Generator, makeGenerator).pipe(
     Layer.provide(SecureRandom.layerWebCrypto),
   );
@@ -352,6 +356,9 @@ No file of pull request 1366's diff is in this table (its 57 files were read wit
   typed `IdError` with its cause, and Effect's doc names translating a defect at a boundary as
   `catchDefect`'s use. Deleting the `entropy` reason would delete laws, which this sweep may not do.
 - **The test helpers sit in `Id.test-support.ts`** (90%), beside the service, as 0538 says.
+- **`Id.Generator.layer` keeps providing `SecureRandom` inside itself** (amendment 2026-11-16,
+  merge session ruling, no longer a call): it stays the one layer that needs nothing unless a law
+  says otherwise, and `makeGenerator` is there for a caller that picks its own source. T5 holds it.
 - **Is this a setting?** No. The random source is a layer an edge picks, not a value a person sets.
 - **What fact is lost if it is not recorded now?** None: this changes where bytes come from, not what
   is written.
@@ -389,7 +396,8 @@ Estimate: 4 steps, $17
 
 - `.patterns/effect-crypto-through-services.md`: edited in this pull request.
 - No glossary row: this coins no word (`makeGenerator` and `generatorWith` are code names).
-- No decision file: this plan builds 0555 and 0579, and its one open question waits for the owner.
+- No decision file: this plan builds 0555 and 0579. Its one open question was answered by the merge
+  session's ruling of 2026-11-16 (see "Answered questions"); the ruling is recorded here as an amendment.
 - `field/`: one run row per step, the same day.
 - The tracker ticket is 1067, the Recorder's, whose "Size" section lists this slice.
 
@@ -406,8 +414,16 @@ Estimate: 4 steps, $17
 
 ## Open questions
 
-1. **`Id.Generator.layer` keeps providing `SecureRandom.layerWebCrypto` inside itself, or every
-   edge provides it.** The crypto pattern doc says the edge provides; its "Not yet" list names
+None.
+
+## Answered questions
+
+**Amendment (2026-11-16, merge session ruling):** the plan's one open question was answered:
+`Id.Generator.layer` keeps providing `SecureRandom` unless a law says otherwise. The lean held. The
+question is kept as it was asked.
+
+1. **(Answered 2026-11-16: it keeps providing it.) `Id.Generator.layer` keeps providing
+   `SecureRandom.layerWebCrypto` inside itself, or every edge provides it.** The crypto pattern doc says the edge provides; its "Not yet" list names
    `Built.ts` for providing inside. Moving now touches about 50 files, 3 of them in pull request
    1366's diff, so it cannot be done in this slice whole. Lean: keep the bundled layer now, with
    `makeGenerator` for anyone who picks their own source, and no later slice unless the owner wants
