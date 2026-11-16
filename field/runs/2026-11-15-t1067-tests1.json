@@ -1,0 +1,105 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1067-tests1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1401",
+  "started": "2026-11-15T18:02:40-08:00",
+  "ended": "2026-11-15T18:24:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for ticket 1067 in next/ and our tooling: @kampus/vitest gets a Recorder (0579), plan docs/plan/quests/recorder-PLAN.md. Wrote R1 to R4 (type laws, next/packages/vitest/src/Recorder.types.test.ts), R5 to R10 (next/packages/vitest/src/Recorder.test.ts, on a made-up Shelf service in Shelf.test-support.ts), and moved R12 (Publish.test.ts, Queue.test.ts, with PushesTest.ts on Recorder.layer) and R13 (next/packages/libfabrika/src/node/settings/Command.test.ts, FileSystem.makeNoop under Recorder.layer) onto Recorder.calls. R11 is the existing lint rule fabrika/no-type-assertions. Red now: Recorder.test.ts cannot find ./Recorder.ts; Publish, Queue and Command fail with Recorder undefined (reading 'layer'); R1 to R4 are red only in a typecheck. To run the plants, a stand-in Recorder.ts (and one export line in index.ts) was written in the worktree, every law was seen green on it, each plant was run once, and both were removed before the commit. With the stand-in in place, one pnpm typecheck passed (exit 0), and a throwaway config type-checked the pr tooling folder: no error on a changed line, only the folder's older errors in Queue.test.ts's settle laws (ticket 486).",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Plan and code differ in three places, code wins: FileSystem.FileSystem is the service's own interface, so WRITES is typed Recorder.Method<FileSystem.FileSystem>, not FileSystem.FileSystem[\"Service\"]; Command.test.ts draws from a fast-check record, not a Schema named Inputs, so R13 keeps its fc.assert generator unchanged; the plan's R13 impl drops sink from the record, so the rewrite keeps a one-line list for sink, which the Recorder does not watch, to stay as strict as the old law. Effect's errorPayloadShadowsName check refused a field called name on the made-up Full error, so it is item.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "R1",
+      "plant": "stand-in: Method<S> widened to string; three @ts-expect-error lines go unused and the exact-keys check fails in tsc",
+      "result": "red"
+    },
+    {
+      "law": "R2",
+      "plant": "stand-in: Args made ReadonlyArray<unknown>; the four tuple checks fail in tsc",
+      "result": "red"
+    },
+    {
+      "law": "R3",
+      "plant": "stand-in: Fails values made unknown; both @ts-expect-error lines go unused in tsc",
+      "result": "red"
+    },
+    {
+      "law": "R4",
+      "plant": "stand-in: calls given an environment of never; the Recorded<Shelf> check fails in tsc",
+      "result": "red"
+    },
+    {
+      "law": "R5",
+      "plant": "stand-in: record only a method's first call; falsified after 1 run, 4 records for 6 runs",
+      "result": "red"
+    },
+    {
+      "law": "R5",
+      "plant": "stand-in: drop a call's last arg; falsified after 1 run",
+      "result": "red"
+    },
+    {
+      "law": "R6",
+      "plant": "stand-in: run the implementation before failing; the implementation's runs include the failing puts",
+      "result": "red"
+    },
+    {
+      "law": "R6",
+      "plant": "stand-in: add one to the implementation's number answer; expected { value: 1 } to equal { value: 0 }",
+      "result": "red"
+    },
+    {
+      "law": "R7",
+      "plant": "stand-in: calls(Service, m) answers its list reversed; falsified after 1 run",
+      "result": "red"
+    },
+    {
+      "law": "R8",
+      "plant": "stand-in: record when the function is called; the built and dropped put is recorded",
+      "result": "red"
+    },
+    {
+      "law": "R9",
+      "plant": "stand-in: Stream members passed through unwatched; the run stream leaves no record",
+      "result": "red"
+    },
+    {
+      "law": "R10",
+      "plant": "stand-in: one store at module level; the second run of the same layer reads two calls",
+      "result": "red"
+    },
+    {
+      "law": "R11",
+      "plant": "stand-in: impl as unknown as Record<PropertyKey, unknown> in Recorder.ts; fabrika(no-type-assertions) fires at line 51",
+      "result": "red"
+    },
+    {
+      "law": "R12",
+      "plant": "Publish.ts pushes before the leak grep; three Publish laws red",
+      "result": "red"
+    },
+    {
+      "law": "R12",
+      "plant": "Queue.ts runs leakGrep before leakChange; the add property is red",
+      "result": "red"
+    },
+    {
+      "law": "R13",
+      "plant": "Command.ts calls writeFile once; T753 L8 and L7 red, expected [ 'writeFile' ] to equal []",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
