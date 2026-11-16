@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Config, ConfigProvider, Effect, Option, Result } from "effect";
 import { readPaths, validSha } from "./changes.mjs";
 import { checkRow, Finding, inFolder, type Log, logOf, rowName } from "./field-schema.ts";
 
@@ -29,13 +30,16 @@ export const selectAdded = (base: string, head: string): { line: number; text: s
   });
 };
 
-const parse = (text: string): unknown => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-};
+const parse = (text: string): unknown => Result.getOrUndefined(Result.try((): unknown => JSON.parse(text)));
+
+// A variable read through Effect's Config, when the read runs. An empty variable stays empty, as a
+// read of process.env gave it, and an unset one is undefined.
+const variable = (name: string): string | undefined =>
+  Effect.runSync(
+    Config.String(name)
+      .pipe(Config.option, Config.map(Option.getOrUndefined))
+      .parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true })),
+  );
 
 // GitHub annotation escaping applies to property values as well as message text.
 const escape = (text: string) =>
@@ -229,9 +233,9 @@ export const readLocalFieldFiles = (main: string, run: Runner = git) => {
 };
 
 const main = (local: boolean) => {
-  const base = process.env["BASE"] ?? "";
-  const head = process.env["HEAD"] ?? "";
-  const event = process.env["EVENT"] ?? "";
+  const base = variable("BASE") ?? "";
+  const head = variable("HEAD") ?? "";
+  const event = variable("EVENT") ?? "";
   let total = 0;
 
   for (const input of local ? readLocalFieldFiles("origin/main") : readFieldFiles(base, head, event)) {
@@ -255,18 +259,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // base and head, and check's shallow checkout holds no origin/main.
   const local = process.argv.includes("--local");
 
-  if (local && process.env["GITHUB_ACTIONS"] === "true") {
+  if (local && variable("GITHUB_ACTIONS") === "true") {
     console.log("field: this CI run's field job checks the added rows");
-  } else {
-    try {
-      main(local);
-    } catch {
-      console.error(
-        local
-          ? "field: origin/main or this checkout could not be read; fetch origin main and run it again"
-          : "field: history or input could not be read; validation did not finish",
-      );
-      process.exitCode = 2;
-    }
+  } else if (Result.isFailure(Result.try(() => main(local)))) {
+    console.error(
+      local
+        ? "field: origin/main or this checkout could not be read; fetch origin main and run it again"
+        : "field: history or input could not be read; validation did not finish",
+    );
+    process.exitCode = 2;
   }
 }

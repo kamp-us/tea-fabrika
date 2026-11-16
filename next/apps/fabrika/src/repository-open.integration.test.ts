@@ -6,18 +6,27 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Row } from "@kampus/libfabrika/ledger/Log";
 import type { Entry } from "@kampus/libfabrika/ledger/Log";
-import { Effect, FileSystem, Path, Queue, Ref, Result, Schema, Stream } from "effect";
+import { Config, ConfigProvider, Effect, FileSystem, Option, Path, Queue, Ref, Result, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 
+// This process's PATH through Config, read when each child starts; an empty one stays empty and an
+// unset one stays unset, as a read of process.env gave it.
+const inheritedPath = Effect.suspend(() =>
+  Config.String("PATH")
+    .pipe(Config.option, Config.map(Option.getOrUndefined))
+    .parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true })),
+);
+
 const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
+  const PATH = yield* inheritedPath;
   return (yield* (yield* ChildProcessSpawner.ChildProcessSpawner).string(
     ChildProcess.make("git", [...args], {
       cwd,
       extendEnv: false,
       env: {
-        PATH: process.env.PATH,
+        PATH,
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_CONFIG_GLOBAL: "/dev/null",
         GIT_TERMINAL_PROMPT: "0",
@@ -128,6 +137,7 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
           raw.toString("base64url"),
         ];
         const input = yield* Queue.unbounded<Uint8Array>();
+        const PATH = yield* inheritedPath;
         const scriptArgs =
           process.platform === "darwin"
             ? ["-q", "/dev/null", process.execPath, ...argv]
@@ -142,7 +152,7 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
             stdin: interactive ? Stream.fromQueue(input) : "ignore",
             extendEnv: false,
             env: {
-              PATH: process.env.PATH,
+              PATH,
               HOME: root,
               FABRIKA_HOME: home,
               DO_NOT_TRACK: "1",

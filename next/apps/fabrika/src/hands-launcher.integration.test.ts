@@ -31,7 +31,7 @@ import { grantText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import { Config, ConfigProvider, Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
@@ -137,10 +137,14 @@ const launcher = Effect.fnUntraced(function* (
   errors: Seen["stderr"],
 ) {
   const lines = yield* Queue.unbounded<Line>();
+  // This process's PATH through Config, read when the child starts; an empty one stays empty.
+  const path = yield* Config.String("PATH")
+    .pipe(Config.withDefault(""))
+    .parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
   const handle = yield* ChildProcess.make(process.execPath, [script], {
     cwd,
     extendEnv: false,
-    env: { FABRIKA_HOME: home, HOME: home, PATH: process.env.PATH ?? "" },
+    env: { FABRIKA_HOME: home, HOME: home, PATH: path },
   });
   yield* handle.stdout.pipe(
     Stream.decodeText(),
