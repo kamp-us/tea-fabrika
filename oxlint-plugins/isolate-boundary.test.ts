@@ -1,3 +1,4 @@
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -24,17 +25,20 @@ const tester = new RuleTester({ cwd: process.cwd() });
 it("U11 keeps platform names at the Cloudflare edge, including tests and optional reads", () => {
   fc.assert(
     fc.property(stem, (name) => {
-      const code = uses.join("\n");
+      const code = Arr.join(uses, "\n");
       tester.run("isolate-boundary", isolateBoundary, {
         valid: [
           { code, filename: `next/packages/libfabrika/src/cloudflare/${name}.ts` },
           { code, filename: `packages/fabrika/src/${name}.ts` },
         ],
-        invalid: [
-          `next/packages/libfabrika/src/runtime/${name}.ts`,
-          `next/packages/libfabrika/src/runtime/${name}.test.ts`,
-          `next/apps/fabrika/src/${name}.ts`,
-        ].map((filename) => ({ code, filename, errors: uses.map((_, n) => ({ line: n + 1, message: /U11/ })) })),
+        invalid: Arr.map(
+          [
+            `next/packages/libfabrika/src/runtime/${name}.ts`,
+            `next/packages/libfabrika/src/runtime/${name}.test.ts`,
+            `next/apps/fabrika/src/${name}.ts`,
+          ],
+          (filename) => ({ code, filename, errors: Arr.map(uses, (_, n) => ({ line: n + 1, message: /U11/ })) }),
+        ),
       });
     }),
     { seed: 119120 },
@@ -73,7 +77,9 @@ it("scenario: U11 is enabled by the real config and leaves only cloudflare/ and 
   const runtime = "next/packages/libfabrika/src/runtime/usage.ts";
   const cloudflare = "next/packages/libfabrika/src/cloudflare/usage.ts";
   const old = "packages/fabrika/src/usage.ts";
-  const result = await plant(Object.fromEntries([runtime, cloudflare, old].map((file) => [file, uses.join("\n")])));
+  const result = await plant(
+    Object.fromEntries(Arr.map([runtime, cloudflare, old], (file) => [file, Arr.join(uses, "\n")])),
+  );
   expect(result(CODE, runtime)).toEqual([1, 2, 3, 4, 5, 6]);
   expect(result(CODE, cloudflare)).toEqual([]);
   expect(result(CODE, old)).toEqual([]);

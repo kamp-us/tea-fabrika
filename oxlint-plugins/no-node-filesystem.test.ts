@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
+import { Array as Arr, pipe } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -22,7 +23,7 @@ const check = (filename: string, code: string, lines: readonly number[]) => {
     invalid:
       lines.length === 0
         ? []
-        : [{ code, filename, errors: lines.map((line) => ({ line, message: /Use Effect FileSystem and Path/ })) }],
+        : [{ code, filename, errors: Arr.map(lines, (line) => ({ line, message: /Use Effect FileSystem and Path/ })) }],
   });
 };
 
@@ -30,7 +31,7 @@ const check = (filename: string, code: string, lines: readonly number[]) => {
 const cli = (cases: ReadonlyMap<string, readonly number[]>) => {
   const out = spawnSync(
     join(root, "node_modules/.bin/oxlint"),
-    ["--format=json", ...[...cases.keys()].map((file) => relative(root, file))],
+    ["--format=json", ...Arr.map([...cases.keys()], (file) => relative(root, file))],
     { cwd: root, encoding: "utf8" },
   );
   const report = JSON.parse(out.stdout) as {
@@ -40,12 +41,13 @@ const cli = (cases: ReadonlyMap<string, readonly number[]>) => {
       labels: Array<{ span: { line: number } }>;
     }>;
   };
-  const found = [...cases.keys()].map((file) => [
+  const found = Arr.map([...cases.keys()], (file) => [
     file,
-    report.diagnostics
-      .filter((d) => d.code === "fabrika(no-node-filesystem)" && join(root, d.filename) === file)
-      .map((d) => d.labels[0]!.span.line)
-      .sort((a, b) => a - b),
+    pipe(
+      report.diagnostics,
+      Arr.filter((d) => d.code === "fabrika(no-node-filesystem)" && join(root, d.filename) === file),
+      Arr.map((d) => d.labels[0]!.span.line),
+    ).sort((a, b) => a - b),
   ]);
   expect(Object.fromEntries(found)).toEqual(Object.fromEntries(cases));
 };
@@ -93,10 +95,10 @@ it("every native filesystem import form is refused only in next/ product files",
           const run = join(folder, `${n++}`);
 
           for (const [name, banned] of files) {
-            const lines = banned ? forms.map((_, i) => i + 1) : [];
-            check(relative(root, join(folder, name)), forms.join("\n"), lines);
+            const lines = banned ? Arr.map(forms, (_, i) => i + 1) : [];
+            check(relative(root, join(folder, name)), Arr.join(forms, "\n"), lines);
             mkdirSync(dirname(join(run, name)), { recursive: true });
-            writeFileSync(join(run, name), forms.join("\n"));
+            writeFileSync(join(run, name), Arr.join(forms, "\n"));
             cases.set(join(run, name), lines);
           }
         },

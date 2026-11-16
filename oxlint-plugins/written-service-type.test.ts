@@ -4,6 +4,7 @@
 // file that fires then proves the repo's own .oxlintrc.json turns the rule on for next/ product
 // code and leaves tests out.
 import { join } from "node:path";
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -310,7 +311,7 @@ const file = (
   const body: string[] = own ? ["type ReturnType<T> = { readonly made: T };"] : [];
   const fires: number[] = [];
 
-  drawn.forEach((pick, n) => {
+  Arr.forEach(drawn, (pick, n) => {
     const success = successes[pick.success % successes.length]!(n);
     const d: Drawn = { n, name: `${pick.name}${n}`, success: success.text, effects: success.effects, own };
     const form = forms[pick.form % forms.length]!(d);
@@ -327,7 +328,7 @@ const file = (
 
   // Each import is written once: two services may ask for the same line.
   const head = [...new Set(imports)];
-  return { text: `${[...head, ...body].join("\n")}\n`, fires: fires.map((at) => head.length + at + 1) };
+  return { text: `${Arr.join([...head, ...body], "\n")}\n`, fires: Arr.map(fires, (at) => head.length + at + 1) };
 };
 
 const Name = fc.stringMatching(/^[a-z]{2,6}$/).map((w) => `${w[0]!.toUpperCase()}${w.slice(1)}Svc`);
@@ -355,7 +356,13 @@ it("fires exactly on a read service whose type holds ReturnType, Effect.Success 
         invalid:
           made.fires.length === 0
             ? []
-            : [{ code: made.text, filename: product, errors: made.fires.map((line) => ({ line, message: OURS })) }],
+            : [
+                {
+                  code: made.text,
+                  filename: product,
+                  errors: Arr.map(made.fires, (line) => ({ line, message: OURS })),
+                },
+              ],
       });
     }),
     { seed: 119120, numRuns: 100 },
@@ -372,7 +379,7 @@ it("fires exactly on a read service whose type holds ReturnType, Effect.Success 
     "packages/fabrika/src/unit/Unit.ts",
   ];
   const tsx = "next/apps/fabrika/src/unit/Unit.tsx";
-  const linted = await plant(Object.fromEntries([product, tsx, ...off].map((path) => [path, planted.text])));
+  const linted = await plant(Object.fromEntries(Arr.map([product, tsx, ...off], (path) => [path, planted.text])));
   expect(linted(CODE, product)).toEqual(planted.fires);
   // The same text as a `.tsx` product file fires, so the `.test.tsx` path below is quiet by the config.
   expect(linted(CODE, tsx)).toEqual(planted.fires);

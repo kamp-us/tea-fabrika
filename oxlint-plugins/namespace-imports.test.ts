@@ -6,6 +6,7 @@
 // `tsconfig.base.json` has comments, so it is read as a JS expression.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { Array as Arr, Option } from "effect";
 import { type Expression, parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
 
@@ -25,12 +26,12 @@ const value = (node: Expression): unknown => {
     case "Literal":
       return node.value;
     case "ArrayExpression":
-      return node.elements.map((element) =>
+      return Arr.map(node.elements, (element) =>
         element === null || element.type === "SpreadElement" ? null : value(element),
       );
     case "ObjectExpression":
       return Object.fromEntries(
-        node.properties.flatMap((property) =>
+        Arr.flatMap(node.properties, (property) =>
           property.type === "Property" && property.key.type === "Literal"
             ? [[String(property.key.value), value(property.value)]]
             : [],
@@ -42,9 +43,9 @@ const value = (node: Expression): unknown => {
 };
 
 const record = (x: unknown): Record<string, unknown> =>
-  typeof x === "object" && x !== null && !Array.isArray(x) ? Object.fromEntries(Object.entries(x)) : {};
+  typeof x === "object" && x !== null && !Arr.isArray(x) ? Object.fromEntries(Object.entries(x)) : {};
 
-const list = (x: unknown): ReadonlyArray<unknown> => (Array.isArray(x) ? x : []);
+const list = (x: unknown): ReadonlyArray<unknown> => (Arr.isArray(x) ? x : []);
 
 /** Where a glob stops being fixed: the text before its first `*`. */
 const stem = (glob: string): string => glob.split("*")[0] ?? glob;
@@ -58,7 +59,7 @@ const covers = (outer: string, glob: string): boolean => {
 /** The two globs can read one file: one's fixed start lies inside the other's. */
 const touches = (a: string, b: string): boolean => stem(a).startsWith(stem(b)) || stem(b).startsWith(stem(a));
 
-const strings = (x: unknown): ReadonlyArray<string> => list(x).filter((item) => typeof item === "string");
+const strings = (x: unknown): ReadonlyArray<string> => Arr.filter(list(x), (item) => typeof item === "string");
 
 /**
  * Each glob whose files do not end with `preferNamespaceImport` at error for `effect`, after every
@@ -76,10 +77,14 @@ const uncovered = (text: string, globs: ReadonlyArray<string>): ReadonlyArray<st
   }
 
   const plugins = list(record(record(value(statement.expression)).compilerOptions).plugins);
-  const effect = record(plugins.map(record).find((plugin) => plugin.name === "@effect/language-service"));
-  const overrides = list(effect.overrides).map(record);
+  const effect = record(
+    Option.getOrUndefined(
+      Arr.findFirst(Arr.map(plugins, record), (plugin) => plugin.name === "@effect/language-service"),
+    ),
+  );
+  const overrides = Arr.map(list(effect.overrides), record);
 
-  return globs.filter((glob) => {
+  return Arr.filter(globs, (glob) => {
     let packages: unknown = effect.namespaceImportPackages;
     let severity: unknown = record(effect.diagnosticSeverity).preferNamespaceImport;
 
@@ -94,9 +99,9 @@ const uncovered = (text: string, globs: ReadonlyArray<string>): ReadonlyArray<st
         (!sets.packages || list(options.namespaceImportPackages).includes("effect")) &&
         (!sets.severity || record(options.diagnosticSeverity).preferNamespaceImport === "error");
       const reads = raises
-        ? include.some((outer) => covers(outer, glob)) &&
-          !strings(override.exclude).some((excluded) => touches(excluded, glob))
-        : include.some((outer) => touches(outer, glob));
+        ? Arr.some(include, (outer) => covers(outer, glob)) &&
+          !Arr.some(strings(override.exclude), (excluded) => touches(excluded, glob))
+        : Arr.some(include, (outer) => touches(outer, glob));
 
       if (reads && sets.packages) {
         packages = options.namespaceImportPackages;
@@ -114,7 +119,7 @@ const uncovered = (text: string, globs: ReadonlyArray<string>): ReadonlyArray<st
 it("pinned: law 6, every folder once listed for preferNamespaceImport still ends at error for effect, and so does the whole tree once listed", () => {
   // pinned: the folders listed on the day each slice landed, since a folder dropped in a merge is silent.
   const text = readFileSync(CONFIG, "utf8");
-  const whole = WHOLE.filter((glob) => text.includes(`"${glob}"`));
+  const whole = Arr.filter(WHOLE, (glob) => text.includes(`"${glob}"`));
 
   expect(uncovered(text, [...LISTED, ...whole])).toEqual([]);
 });

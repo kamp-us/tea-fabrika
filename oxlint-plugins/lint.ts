@@ -9,6 +9,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { Array as Arr, pipe } from "effect";
 import { advises, stale, warnLines } from "./advice.ts";
 import { checkTracked } from "./gitignore.mjs";
 import { type Finding, fingerprint, LEDGERS, outside, settle } from "./ledger.ts";
@@ -27,7 +28,7 @@ const ROOT = join(import.meta.dirname, "..");
 
 // A run with no path is over the whole repo, as `pnpm lint` and `pnpm format` make it. Only it sees
 // every finding, so only it prunes a ledger, and only it runs the check below.
-const whole = process.argv.slice(2).every((arg) => arg.startsWith("-"));
+const whole = Arr.every(process.argv.slice(2), (arg) => arg.startsWith("-"));
 
 // What a lead-script test reads is derived for Vitest (script-reads.mjs). This fails on what the
 // derivation cannot see, and on a test that declares by hand what is derived. It reads the whole
@@ -62,7 +63,11 @@ const hidden = checkTracked();
 
 if (!hidden.ok) {
   console.error(
-    `Git failed or a .gitignore hides tracked files from the lint and format checks: ${hidden.files.map((file: string) => JSON.stringify(file)).join(", ")}`,
+    `Git failed or a .gitignore hides tracked files from the lint and format checks: ${pipe(
+      hidden.files,
+      Arr.map((file: string) => JSON.stringify(file)),
+      Arr.join(", "),
+    )}`,
   );
   process.exit(2);
 }
@@ -84,6 +89,7 @@ const ran = spawnSync(
 
 /** What oxlint said, or `null` when it did not finish and report: that must never read as clean. */
 const read = (): readonly Diagnostic[] | null => {
+  // oxlint-disable-next-line fabrika/no-raw-try-catch -- a plain JSON.parse of oxlint's output, no Effect here; effect is imported only for its Array helpers
   try {
     const report: {
       readonly diagnostics?: readonly Diagnostic[];
@@ -108,7 +114,7 @@ const where = ({ filename, labels }: Diagnostic) => {
 };
 
 // What a folder broke the day a rule joined it, which only shrinks (ledger.ts).
-const ledgers = LEDGERS.map((ledger) => {
+const ledgers = Arr.map(LEDGERS, (ledger) => {
   const path = join(ROOT, ledger.file);
   const read: { readonly entries: readonly Finding[] } = existsSync(path)
     ? JSON.parse(readFileSync(path, "utf8"))
@@ -140,27 +146,27 @@ const finding = (d: Diagnostic): Finding => {
   };
 };
 
-const found = diagnostics.filter((d) => !advises(d));
-const findings = found.map(finding);
+const found = Arr.filter(diagnostics, (d) => !advises(d));
+const findings = Arr.map(found, finding);
 
 // Each ledger settles what the one before left blocking. A file sits in at most one ledger's folder,
 // so the order changes nothing.
 let open: readonly Finding[] = findings;
 
-const settled = ledgers.map((ledger) => {
+const settled = Arr.map(ledgers, (ledger) => {
   const result = settle(ledger.entries, open, ledger.root);
   open = result.blocks;
   return { ...ledger, ...result };
 });
 
-const waived = new Set(settled.flatMap((ledger) => ledger.waived));
+const waived = new Set(Arr.flatMap(settled, (ledger) => ledger.waived));
 
-const blocks = found.filter((_, i) => {
+const blocks = Arr.filter(found, (_, i) => {
   const at = findings[i];
   return at === undefined || !waived.has(at);
 });
 
-const advised = diagnostics.filter((d) => advises(d));
+const advised = Arr.filter(diagnostics, (d) => advises(d));
 // The hint oxlint keeps apart from the message, such as the JSON.parse rule's Schema hint.
 const text = (d: Diagnostic) => (d.help === undefined ? d.message : `${d.message} ${d.help}`);
 
@@ -196,7 +202,7 @@ const stuck =
     ? []
     : stale(
         warnLines(JSON.parse(printed.stdout)),
-        advised.map((d) => ({ ...d, filename: relative(ROOT, resolve(process.cwd(), d.filename ?? "")) })),
+        Arr.map(advised, (d) => ({ ...d, filename: relative(ROOT, resolve(process.cwd(), d.filename ?? "")) })),
       );
 
 for (const { _tag, line } of stuck) {
@@ -218,9 +224,13 @@ for (const { file, path, entries, kept } of settled) {
 }
 
 console.log(
-  `oxlint: ${blocks.length} blocking, ${advised.length} advice, ${settled
-    .map(({ file, waived }) => `${waived.length} in ${file}`)
-    .join(", ")}`,
+  `oxlint: ${blocks.length} blocking, ${advised.length} advice, ${pipe(
+    settled,
+    Arr.map(({ file, waived }) => `${waived.length} in ${file}`),
+    Arr.join(", "),
+  )}`,
 );
 
-process.exit(blocks.length === 0 && stuck.length === 0 && ledgers.every(({ refused }) => refused.length === 0) ? 0 : 1);
+process.exit(
+  blocks.length === 0 && stuck.length === 0 && Arr.every(ledgers, ({ refused }) => refused.length === 0) ? 0 : 1,
+);

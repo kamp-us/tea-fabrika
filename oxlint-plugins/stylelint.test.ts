@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
+import { Array as Arr, Predicate } from "effect";
 import stylelint from "stylelint";
 import { afterAll, assert, describe, expect, it } from "vitest";
 
@@ -75,7 +76,7 @@ const lint = async (file: string, codeFilename?: string) => {
   expect(result.parseErrors, "The plant must be valid CSS").toEqual([]);
   expect(result.invalidOptionWarnings, "The real config must have valid options").toEqual([]);
   expect(
-    result.warnings.filter((warning) => warning.text.startsWith("Unknown rule")),
+    Arr.filter(result.warnings, (warning) => warning.text.startsWith("Unknown rule")),
     "PR 3's CSS rules must be implemented and registered",
   ).toEqual([]);
   return result.warnings;
@@ -93,9 +94,9 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
     }
 
     const warnings = await lint(bad);
-    const fires = warnings.filter((warning) => warning.rule === `fabrika/${name}`);
-    expect([...new Set(fires.map((warning) => warning.line))].sort((a, b) => a - b)).toEqual(lines);
-    expect(fires.every((warning) => warning.severity === "error")).toBe(true);
+    const fires = Arr.filter(warnings, (warning) => warning.rule === `fabrika/${name}`);
+    expect([...new Set(Arr.map(fires, (warning) => warning.line))].sort((a, b) => a - b)).toEqual(lines);
+    expect(Arr.every(fires, (warning) => warning.severity === "error")).toBe(true);
     const good = fixture("good", name);
     expect(await lint(good, name === "part-token-owner" ? WINDOW : undefined)).toEqual([]);
   });
@@ -126,8 +127,8 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 `,
     );
     const warnings = await lint(file);
-    expect(warnings.map(({ rule, line }) => ({ rule, line }))).toEqual(
-      [1, 2, 3].map((line) => ({ rule: "fabrika/no-raw-color", line })),
+    expect(Arr.map(warnings, ({ rule, line }) => ({ rule, line }))).toEqual(
+      Arr.map([1, 2, 3], (line) => ({ rule: "fabrika/no-raw-color", line })),
     );
   });
 
@@ -167,7 +168,7 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
     );
     expect(await lint(file, TOKENS)).toEqual([]);
     const warnings = await lint(file, "programs/css-plant/window.css");
-    expect(warnings.map(({ rule }) => rule)).toEqual(
+    expect(Arr.map(warnings, ({ rule }) => rule)).toEqual(
       expect.arrayContaining(["fabrika/no-raw-color", "fabrika/no-primitive-var", "fabrika/part-token-owner"]),
     );
   });
@@ -175,7 +176,7 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
   it("law 26 refuses a pixel font size outside the hand-written scale, even in tokens.css", async () => {
     const file = write(temp(), "size.css", ".a { font-size: 12px; }\n");
     const warnings = await lint(file, TOKENS);
-    expect(warnings.map(({ rule }) => rule)).toContain("fabrika/font-size-from-scale");
+    expect(Arr.map(warnings, ({ rule }) => rule)).toContain("fabrika/font-size-from-scale");
   });
 
   it.each(['"sky"', "'sky'"])("law 22 limits pipe %s to its exact selector and five tokens", async (name) => {
@@ -186,7 +187,7 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
     );
     expect(await lint(file, WINDOW)).toEqual([]);
     const warnings = await lint(file, "programs/css-plant/window.css");
-    expect(warnings.map(({ rule }) => rule)).toContain("fabrika/no-raw-color");
+    expect(Arr.map(warnings, ({ rule }) => rule)).toContain("fabrika/no-raw-color");
     const nested = write(temp(), "nested-pipe.css", `.outer [data-pipe=${name}] { --tile-wash: #fff; }\n`);
     expect(await lint(nested, WINDOW)).toEqual([expect.objectContaining({ rule: "fabrika/no-raw-color" })]);
   });
@@ -199,11 +200,18 @@ const settingsProblems = (config: stylelint.Config | undefined, base: stylelint.
     const rule = `fabrika/${name}`;
     const setting = config?.rules?.[rule];
 
-    if (!Array.isArray(setting) || setting[0] !== true || setting[1]?.severity !== "error") {
+    const options: unknown = Arr.isArray(setting) ? setting[1] : undefined;
+
+    if (
+      !Arr.isArray(setting) ||
+      setting[0] !== true ||
+      !Predicate.hasProperty(options, "severity") ||
+      options.severity !== "error"
+    ) {
       problems.push(`${rule}: must be on at error`);
     }
 
-    if (!Array.isArray(setting) || !Array.isArray(setting[1]?.known)) {
+    if (!Arr.isArray(setting) || !Predicate.hasProperty(options, "known") || !Arr.isArray(options.known)) {
       problems.push(`${rule}: known list is missing`);
     }
 
@@ -220,7 +228,7 @@ const warningPaths = (value: unknown, path = "config"): string[] => {
     return [];
   }
 
-  return Object.entries(value).flatMap(([key, item]) => [
+  return Arr.flatMap(Object.entries(value), ([key, item]) => [
     ...((key === "severity" || key === "defaultSeverity") && item === "warning" ? [`${path}.${key}`] : []),
     ...warningPaths(item, `${path}.${key}`),
   ]);
@@ -239,17 +247,15 @@ const configPlant = (body: string) => {
 describe("T245 PR 3, laws 27 and 28: the effective config cannot weaken a rule", () => {
   it("law 27 keeps each rule's complete root options in every tracked CSS file", async () => {
     const base = await rootConfig();
-    expect(
-      Object.keys(base.rules ?? {})
-        .filter((rule) => rule.startsWith("fabrika/"))
-        .sort(),
-    ).toEqual(RULES.map(({ name }) => `fabrika/${name}`).sort());
+    expect(Arr.filter(Object.keys(base.rules ?? {}), (rule) => rule.startsWith("fabrika/")).sort()).toEqual(
+      Arr.map(RULES, ({ name }) => `fabrika/${name}`).sort(),
+    );
     const tracked = spawnSync("git", ["ls-files", "-z", "--", "*.css"], {
       cwd: ROOT,
       encoding: "utf8",
     });
     expect(tracked.status).toBe(0);
-    const files = tracked.stdout.split("\0").filter((path) => path.endsWith(".css"));
+    const files = Arr.filter(tracked.stdout.split("\0"), (path) => path.endsWith(".css"));
     expect(files.length).toBeGreaterThan(0);
 
     for (const file of files) {
@@ -292,7 +298,7 @@ describe("T245 PR 3, laws 27 and 28: the effective config cannot weaken a rule",
 const trackedFiles = (folder: string) => {
   const listed = spawnSync("git", ["ls-files", "-z", "--", folder], { cwd: ROOT, encoding: "utf8" });
   expect(listed.status, listed.stderr).toBe(0);
-  return listed.stdout.split("\0").filter((file) => file !== "");
+  return Arr.filter(listed.stdout.split("\0"), (file) => file !== "");
 };
 
 // The runner gets a real git index and its own root config. It imports the actual config and
@@ -381,7 +387,7 @@ describe("T245 PR 3, law 29: known only shrinks", () => {
       codeFilename: join(ROOT, WINDOW),
     });
     expect(report.errored).toBe(true);
-    expect(report.results.flatMap(({ invalidOptionWarnings }) => invalidOptionWarnings)).toEqual([
+    expect(Arr.flatMap(report.results, ({ invalidOptionWarnings }) => invalidOptionWarnings)).toEqual([
       expect.objectContaining({ text: expect.stringContaining("known") }),
     ]);
   });
@@ -473,13 +479,13 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
 
   it("law 30 reads every tracked scope despite nested configs and ignore files", () => {
     const repo = runnerRepo();
-    const paths = ["apps", "packages", "programs", "next"].map((scope) => `${scope}/plant/window.css`);
-    track(repo, Object.fromEntries(paths.map((path) => [path, ".a { color: #fff; }\n"])));
+    const paths = Arr.map(["apps", "packages", "programs", "next"], (scope) => `${scope}/plant/window.css`);
+    track(repo, Object.fromEntries(Arr.map(paths, (path) => [path, ".a { color: #fff; }\n"])));
     write(repo, ".stylelintignore", "**/*.css\n");
     write(
       repo,
       "apps/.stylelintrc.json",
-      JSON.stringify({ rules: Object.fromEntries(RULES.map(({ name }) => [`fabrika/${name}`, null])) }),
+      JSON.stringify({ rules: Object.fromEntries(Arr.map(RULES, ({ name }) => [`fabrika/${name}`, null])) }),
     );
     write(repo, "apps/untracked.css", ".broken {\n");
     track(repo, { "experiments/plant/ignored.css": ".broken {\n" });
@@ -548,8 +554,8 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
   ])("law 30 reports $report", async ({ comment, css, report }) => {
     const file = write(temp(), "disable.css", `${comment}\n${css}\n`);
     const warnings = await lint(file);
-    expect(warnings.map(({ rule }) => rule)).toContain(report);
-    expect(warnings.every(({ severity }) => severity === "error")).toBe(true);
+    expect(Arr.map(warnings, ({ rule }) => rule)).toContain(report);
+    expect(Arr.every(warnings, ({ severity }) => severity === "error")).toBe(true);
   });
 
   it("law 30 allows a needed disable that names its rule and reason", async () => {

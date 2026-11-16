@@ -2,6 +2,7 @@
 // Match only the returned chain. A span yielded inside a generator covers part of
 // its work, and Stream.withSpan measures consumption, so both stay valid.
 import type { CreateRule, ESTree } from "@oxlint/plugins";
+import { Array as Arr } from "effect";
 import { dotted, type Node } from "./match.ts";
 
 type FunctionNode = ESTree.ArrowFunctionExpression | ESTree.Function;
@@ -45,7 +46,7 @@ export const effectFunctions: CreateRule = {
     const effects = new Set<string>();
     const isSpan = (node: Node): boolean => {
       const name = dotted(node);
-      return [...effects].some((effect) => name === `${effect}.withSpan`);
+      return Arr.some([...effects], (effect) => name === `${effect}.withSpan`);
     };
     const wrapper = (node: Node): Node | null => {
       if (node.type !== "CallExpression") {

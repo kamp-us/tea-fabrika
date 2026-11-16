@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { Array as Arr, pipe } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
@@ -36,14 +37,17 @@ const expectFires = (code: string, lines: ReadonlyArray<number>, since: Since = 
               code,
               filename: "case.ts",
               options,
-              errors: [...lines].sort((a, b) => a - b).map((line) => ({ line, message: /\(E6, 0023\)/ })),
+              errors: Arr.map(
+                [...lines].sort((a, b) => a - b),
+                (line) => ({ line, message: /\(E6, 0023\)/ }),
+              ),
             },
           ],
   });
 };
 
 const doc = (...lines: ReadonlyArray<string>): string =>
-  ["/**", ...lines.map((line) => (line === "" ? " *" : ` * ${line}`)), " */"].join("\n");
+  Arr.join(["/**", ...Arr.map(lines, (line) => (line === "" ? " *" : ` * ${line}`)), " */"], "\n");
 
 const MODULE = doc("A planted module.", "", "@stability unstable");
 
@@ -162,9 +166,9 @@ describe("law 3: the rule reports exactly the exports whose block is missing or 
         (pieces) => {
           const parts = [MODULE, IMPORT];
           const fires: number[] = [];
-          let line = lineCount(parts.join("\n")) + 1;
+          let line = lineCount(Arr.join(parts, "\n")) + 1;
 
-          pieces.forEach(({ kind, state: s, gap }, n) => {
+          Arr.forEach(pieces, ({ kind, state: s, gap }, n) => {
             const piece: Piece = PIECES[kind];
             const block = blockFor(s);
             const shown = block === null ? null : `${block}\n${gap}`.replace(/\n$/, "");
@@ -184,7 +188,7 @@ describe("law 3: the rule reports exactly the exports whose block is missing or 
             line += lineCount(text);
           });
 
-          expectFires(`${parts.join("\n")}\n`, fires);
+          expectFires(`${Arr.join(parts, "\n")}\n`, fires);
         },
       ),
       RUNS,
@@ -246,14 +250,14 @@ describe("law 4: tags pass only in the order of case 29, with @stability one of 
         fc.option(fc.constantFrom("param", "returns", "example", "default", "author", "since"), { nil: undefined }),
         fc.nat(),
         (tags, stability, outside, at) => {
-          const lines = tags.map((tag) => `@${tag} ${tag === "stability" ? stability : VALUE[tag]}`);
+          const lines = Arr.map(tags, (tag) => `@${tag} ${tag === "stability" ? stability : VALUE[tag]}`);
 
           if (outside !== undefined) {
             lines.splice(at % (lines.length + 1), 0, `@${outside} x`);
           }
 
-          const order = tags.map((tag) => TAGS.indexOf(tag));
-          const ordered = order.every((rank, i) => i === 0 || (order[i - 1] ?? rank) < rank);
+          const order = Arr.map(tags, (tag) => TAGS.indexOf(tag));
+          const ordered = Arr.every(order, (rank, i) => i === 0 || (order[i - 1] ?? rank) < rank);
           const passes =
             ordered &&
             tags.includes("stability") &&
@@ -330,7 +334,7 @@ describe("law 5: a file with a checked export fires for its module block unless 
             fires.push(blockLine);
           }
 
-          expectFires(`${parts.join("\n")}\n`, fires);
+          expectFires(`${Arr.join(parts, "\n")}\n`, fires);
         },
       ),
       RUNS,
@@ -370,7 +374,7 @@ describe("law 7: with since absent a @since tag fires, with since required its a
         fc.constantFrom<Since>("absent", "required"),
         fc.boolean(),
         // A namespace's inner exports take `@since` too under `required`, so it is not in this list.
-        fc.constantFrom(...FORMS.filter((form) => form !== "namespace")),
+        fc.constantFrom(...Arr.filter(FORMS, (form) => form !== "namespace")),
         (since, tagged, form) => {
           const tag = tagged ? ["@since 1.0.0"] : [];
           const module = doc("A planted module.", "", "@stability unstable", ...tag);
@@ -389,7 +393,7 @@ describe("law 7: with since absent a @since tag fires, with since required its a
 
 /** Every `.ts` file under a folder, `internal/` left out, as Effect's own jsdocs config reads them. */
 const publicFiles = (dir: string): ReadonlyArray<string> =>
-  readdirSync(dir).flatMap((name) => {
+  Arr.flatMap(readdirSync(dir), (name) => {
     const full = join(dir, name);
 
     if (statSync(full).isDirectory()) {
@@ -413,7 +417,7 @@ describe("law 8: on Effect 4.1.3's own source, with since required", () => {
   // of its files lack (case 19).
   it("fires on the exports of StandardSchema.ts, on the four files with no module block, and nowhere else", () => {
     const src = realpathSync(join(ROOT, "node_modules", "effect", "src"));
-    const files = publicFiles(src).map((file) => relative(src, file));
+    const files = Arr.map(publicFiles(src), (file) => relative(src, file));
     const config = join(scratch, ".oxlintrc.json");
     writeFileSync(
       config,
@@ -463,19 +467,21 @@ describe("law 9: the real config turns the rule on for every next/packages folde
   const config = JSON.parse(printed.stdout) as {
     readonly overrides: ReadonlyArray<{ readonly files: string[]; readonly rules: Record<string, unknown> }>;
   };
-  const warn = config.overrides
-    .filter(({ rules }) => {
+  const warn = pipe(
+    config.overrides,
+    Arr.filter(({ rules }) => {
       const setting = rules["fabrika/jsdocs"];
-      return (Array.isArray(setting) ? setting[0] : setting) === "warn";
-    })
-    .flatMap(({ files }) => files)
-    .map((glob) => ({ folder: glob.replace(/\/\*\*?$/, ""), deep: glob.endsWith("/**") }));
+      return (Arr.isArray(setting) ? setting[0] : setting) === "warn";
+    }),
+    Arr.flatMap(({ files }) => files),
+    Arr.map((glob) => ({ folder: glob.replace(/\/\*\*?$/, ""), deep: glob.endsWith("/**") })),
+  );
   const on = [
     `${SRC}/ci/Planted.ts`,
     `${SRC}/codehost/Planted.ts`,
     // A folder 1186's list left out, at zero now; each folder that still advises; and a new package.
     `${SRC}/tasks/Planted.ts`,
-    ...warn.map(({ folder }) => `${folder}/Planted.ts`),
+    ...Arr.map(warn, ({ folder }) => `${folder}/Planted.ts`),
     "next/packages/planted/src/Planted.ts",
   ];
   const off = [
@@ -489,7 +495,7 @@ describe("law 9: the real config turns the rule on for every next/packages folde
     `${SRC}/codehost/PlantedTest.ts`,
     `${SRC}/codehost/Planted.d.ts`,
     // The same kinds in each folder with a warn line: the off override comes after it.
-    ...warn.flatMap(({ folder, deep }) => [
+    ...Arr.flatMap(warn, ({ folder, deep }) => [
       ...(deep ? [`${folder}/internal/planted.ts`] : []),
       `${folder}/Planted.test.ts`,
       `${folder}/PlantedTest.ts`,
@@ -498,7 +504,7 @@ describe("law 9: the real config turns the rule on for every next/packages folde
     // An app (case 4).
     "next/apps/fabrika/src/Planted.ts",
   ];
-  const linted = await plant(Object.fromEntries([...on, ...off].map((path) => [path, body])));
+  const linted = await plant(Object.fromEntries(Arr.map([...on, ...off], (path) => [path, body])));
 
   // scenario: one real lint run over one planted file per kind, since only the real config holds the scope.
   it("fires in every next/packages folder, at the module block and the export", () => {

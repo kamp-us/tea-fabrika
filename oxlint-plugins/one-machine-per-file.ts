@@ -7,6 +7,7 @@
 // Review keeps control-state judgment, relative/workspace I/O, globals, dynamic imports, hand edits
 // of another file's Model, and whether a factory returns its machine or receives a service.
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
+import { Array as Arr } from "effect";
 import { ancestors, below, type Node } from "./match.ts";
 
 const TEA = new Set(["@demlik/tea", "@demlik/tea/effect"]);
@@ -134,7 +135,8 @@ export const oneMachinePerFile: CreateRule = {
 
     return {
       "Program:exit"(program) {
-        const calls = [...below(program)].filter(
+        const calls = Arr.filter(
+          [...below(program)],
           (n): n is ESTree.CallExpression => n.type === "CallExpression" && maker(n),
         );
         const reached = new Set<Node>();
@@ -160,7 +162,7 @@ export const oneMachinePerFile: CreateRule = {
               reached.add(node);
             }
 
-            if (node.type !== "Identifier" || [...ancestors(node)].some((a) => a !== root && maker(a))) {
+            if (node.type !== "Identifier" || Arr.some([...ancestors(node)], (a) => a !== root && maker(a))) {
               continue;
             }
 
@@ -170,7 +172,7 @@ export const oneMachinePerFile: CreateRule = {
 
             const variable = resolve(node);
 
-            if (!variable?.references.some((ref) => ref.identifier === node)) {
+            if (variable === undefined || !Arr.some(variable.references, (ref) => ref.identifier === node)) {
               continue;
             }
 
@@ -192,7 +194,7 @@ export const oneMachinePerFile: CreateRule = {
           }
         }
 
-        const exported = calls.filter((call) => reached.has(call));
+        const exported = Arr.filter(calls, (call) => reached.has(call));
 
         for (const call of exported.slice(1)) {
           context.report({
@@ -244,11 +246,15 @@ export const oneMachinePerFile: CreateRule = {
           }
 
           const from = statement.source.value;
-          const values = statement.specifiers.filter((s) => s.type !== "ImportSpecifier" || s.importKind !== "type");
+          const values = Arr.filter(
+            statement.specifiers,
+            (s) => s.type !== "ImportSpecifier" || s.importKind !== "type",
+          );
           const io =
-            (IO_MODULES.some((pattern) => pattern.test(from)) &&
+            (Arr.some(IO_MODULES, (pattern) => pattern.test(from)) &&
               (statement.specifiers.length === 0 || values.length > 0)) ||
-            values.some(
+            Arr.some(
+              values,
               (s) =>
                 (from === "effect" && (importedName(s) === "*" || IO_NAMES.has(importedName(s)))) ||
                 (from === "@demlik/tea/effect" && TEA_RUNNERS.has(importedName(s))),

@@ -21,6 +21,8 @@
 // - Twenty reads by index that our `noUncheckedIndexedAccess` cannot prove in range read `?? ""`:
 //   `lines[index]` (14), `lines[headingIndex]` (3) and a regex group, `match[1]` (3). Each index is
 //   in range where Effect reads it, so the value is the same at runtime.
+// - Each native array call reads through `effect/Array` (`Arr.map`, `Arr.findFirst` and the rest), as
+//   the checker's `preferEffectArray` asks of our tooling. Each answers what Effect's line does.
 // `@since` stays as Effect asks it: `jsdocs.ts` drops that one ask while libfabrika has no release
 // (0118). On an Effect bump, diff these lines again.
 //
@@ -45,6 +47,8 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
+
+import { Array as Arr, Option, pipe } from "effect";
 
 export type DocScope = "module" | "declaration" | "namespace" | "namespace-declaration" | "member";
 
@@ -172,10 +176,10 @@ function isInlineLinkStart(source: string, index: number): boolean {
 export function parseLooseJSDocBlock(raw: string, range: [number, number]): JSDocBlock {
   const body = raw.replace(/^\/\*\*/, "").replace(/\*\/$/, "");
   const rawLines = body.split(/\r\n|\r|\n/);
-  const lines = rawLines.map((line) => line.replace(/^\s*\* ?/, "").trimEnd());
+  const lines = Arr.map(rawLines, (line) => line.replace(/^\s*\* ?/, "").trimEnd());
   const normalized = trimStructuralBlankLines(lines);
   const tags = parseTags(normalized);
-  const internal = tags.some((tag) => tag.name === "internal");
+  const internal = Arr.some(tags, (tag) => tag.name === "internal");
   return { range, raw, lines: normalized, tags, diagnostics: [], internal };
 }
 
@@ -305,7 +309,7 @@ function parseCoreJSDoc(lines: Array<string>, tags: Array<JSDocTag>): Result<Par
 
 function uniqueDiagnostics(diagnostics: ReadonlyArray<JSDocDiagnostic>): ReadonlyArray<JSDocDiagnostic> {
   const seen = new Set<string>();
-  return diagnostics.filter((item) => {
+  return Arr.filter(diagnostics, (item) => {
     const key = `${item.code}:${item.message}`;
 
     if (seen.has(key)) {
@@ -408,9 +412,11 @@ function parseDescriptionContent(lines: Array<string>): ParsedContentResult {
       continue;
     }
 
-    const heading = standardHeadings.find((candidate) => candidate === line);
+    const found = Arr.findFirst(standardHeadings, (candidate) => candidate === line);
 
-    if (heading !== undefined) {
+    if (Option.isSome(found)) {
+      const heading = found.value;
+
       if (examplesStarted) {
         diagnostics.push(diagnostic("section-after-example", `${heading} must appear before examples`));
       }
@@ -464,7 +470,11 @@ function parseDescriptionContent(lines: Array<string>): ParsedContentResult {
     diagnostics.push(
       diagnostic(
         "when-to-use-format",
-        `**When to use** must start with one of: ${whenToUsePrefixes.map((prefix) => `\`${prefix}\``).join(", ")}`,
+        `**When to use** must start with one of: ${pipe(
+          whenToUsePrefixes,
+          Arr.map((prefix) => `\`${prefix}\``),
+          Arr.join(", "),
+        )}`,
       ),
     );
   }
@@ -489,7 +499,7 @@ function parseDescriptionContent(lines: Array<string>): ParsedContentResult {
 
 function hasWhenToUsePrefix(text: string): boolean {
   const trimmed = text.trimStart();
-  return whenToUsePrefixes.some((prefix) => trimmed === prefix || trimmed.startsWith(`${prefix} `));
+  return Arr.some(whenToUsePrefixes, (prefix) => trimmed === prefix || trimmed.startsWith(`${prefix} `));
 }
 
 function parseSection(
@@ -724,7 +734,7 @@ function joinBody(lines: ReadonlyArray<string>): string {
     end--;
   }
 
-  return lines.slice(start, end).join("\n");
+  return Arr.join(lines.slice(start, end), "\n");
 }
 
 function isHeadingLine(line: string | undefined): boolean {
@@ -920,7 +930,7 @@ export function buildTags(
 
     return {
       _tag: "Success",
-      value: { category, since, stability: resolvedStability, deprecated, see: see.map(parseSeeTag) },
+      value: { category, since, stability: resolvedStability, deprecated, see: Arr.map(see, parseSeeTag) },
     };
   }
 
@@ -937,7 +947,7 @@ export function buildTags(
 
     return {
       _tag: "Success",
-      value: { since, stability: resolvedStability, default: defaultValue, deprecated, see: see.map(parseSeeTag) },
+      value: { since, stability: resolvedStability, default: defaultValue, deprecated, see: Arr.map(see, parseSeeTag) },
     };
   }
 
@@ -946,7 +956,10 @@ export function buildTags(
       return { _tag: "Failure", error: { diagnostics } };
     }
 
-    return { _tag: "Success", value: { since, stability: resolvedStability, deprecated, see: see.map(parseSeeTag) } };
+    return {
+      _tag: "Success",
+      value: { since, stability: resolvedStability, deprecated, see: Arr.map(see, parseSeeTag) },
+    };
   }
 
   const category = values.get("category")?.[0] ?? null;
@@ -961,6 +974,6 @@ export function buildTags(
 
   return {
     _tag: "Success",
-    value: { category, since, stability: resolvedStability, deprecated, see: see.map(parseSeeTag) },
+    value: { category, since, stability: resolvedStability, deprecated, see: Arr.map(see, parseSeeTag) },
   };
 }

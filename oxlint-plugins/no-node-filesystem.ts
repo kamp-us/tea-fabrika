@@ -1,5 +1,6 @@
 // next/ product code uses Effect's replaceable FileSystem and Path services.
 import type { CreateRule } from "@oxlint/plugins";
+import { Array as Arr } from "effect";
 import { heldToNext, pathIn, type Node } from "./match.ts";
 
 const native = /^(?:node:)?(?:fs(?:\/promises)?|path(?:\/(?:posix|win32))?)$/;
@@ -21,14 +22,13 @@ export const noNodeFilesystem: CreateRule = {
             : null;
       const edge =
         source != null &&
-        context.sourceCode
-          .getAllComments()
-          .some(
-            (comment) =>
-              comment.type === "Line" &&
-              comment.loc.start.line === source.loc.start.line &&
-              /^\s*edge:\s*\S/.test(comment.value),
-          );
+        Arr.some(
+          context.sourceCode.getAllComments(),
+          (comment) =>
+            comment.type === "Line" &&
+            comment.loc.start.line === source.loc.start.line &&
+            /^\s*edge:\s*\S/.test(comment.value),
+        );
 
       if (typeof value === "string" && native.test(value) && !edge) {
         context.report({

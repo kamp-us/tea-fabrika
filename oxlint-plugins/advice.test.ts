@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, matchesGlob } from "node:path";
+import { Array as Arr, pipe } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { advises, type Fire, stale, type WarnLine, warnLines } from "./advice.ts";
@@ -89,7 +90,7 @@ describe("T930 L1 a fire advises only when it is one of the six and graded a war
           { requiredKeys: [] },
         ),
         (fire) => {
-          const six = SIX.some((code) => code === fire.code);
+          const six = Arr.some(SIX, (code) => code === fire.code);
           const member = /^'([^']*)' is restricted from being used\.$/.exec(fire.message ?? "")?.[1];
           const guard = fire.code !== "eslint(no-restricted-properties)" || member === "JSON.parse";
           const want = six && guard && fire.severity === "warning";
@@ -122,7 +123,7 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
         folders.chain((names) =>
           fc.record({
             lines: fc.tuple(
-              ...names.map((folder) =>
+              ...Arr.map(names, (folder) =>
                 fc.record({
                   folder: fc.constant(folder),
                   kind: fc.constantFrom<Kind>("tree", "files", "file"),
@@ -142,8 +143,8 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
           }),
         ),
         ({ lines, fires }) => {
-          const warn: WarnLine[] = lines.map(({ folder, kind, rule }) => ({ rule, glob: globOf(folder, kind) }));
-          const advice: Fire[] = fires.map(({ folder, place, rule }) => ({
+          const warn: WarnLine[] = Arr.map(lines, ({ folder, kind, rule }) => ({ rule, glob: globOf(folder, kind) }));
+          const advice: Fire[] = Arr.map(fires, ({ folder, place, rule }) => ({
             code: rule,
             severity: "warning",
             filename:
@@ -153,14 +154,15 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
                   ? `next/${folder}/sub/b.ts`
                   : `next/${folder}x/b.ts`,
           }));
-          const want = lines.flatMap(({ folder, kind, rule }, i) => {
+          const want = Arr.flatMap(lines, ({ folder, kind, rule }, i) => {
             const line = warn[i]!;
 
             if (kind === "file") {
               return [{ _tag: "file", line }];
             }
 
-            const held = fires.some(
+            const held = Arr.some(
+              fires,
               (f) =>
                 f.rule === rule &&
                 f.folder === folder &&
@@ -245,7 +247,7 @@ const small = (dirty: readonly string[] = ["next/dirty"]) => ({
     },
     { files: ["next/**/*"], rules: { "eslint/no-restricted-properties": parse("error") } },
     ...FROZEN,
-    ...dirty.flatMap((folder) => [
+    ...Arr.flatMap(dirty, (folder) => [
       {
         files: [`${folder}/**`],
         rules: {
@@ -281,7 +283,7 @@ const PLANTS: Readonly<Record<(typeof FIVE)[number], { readonly file: string; re
 };
 
 const planted = (folder: string) =>
-  Object.fromEntries(Object.values(PLANTS).map(({ file, text }) => [`${folder}/${file}`, text]));
+  Object.fromEntries(Arr.map(Object.values(PLANTS), ({ file, text }) => [`${folder}/${file}`, text]));
 
 describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean folder and advises in a dirty one", () => {
   it.each(FIVE)(
@@ -326,10 +328,10 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
     const { lint, done } = repo(small(), { ...planted("next/clean"), ...planted("next/dirty") });
 
     try {
-      const clean = lint(...Object.values(PLANTS).map(({ file }) => `next/clean/${file}`));
+      const clean = lint(...Arr.map(Object.values(PLANTS), ({ file }) => `next/clean/${file}`));
       expect(clean.out).toContain(`oxlint: ${FIVE.length} blocking, 0 advice`);
       expect(clean.status, clean.out).toBe(1);
-      const dirty = lint(...Object.values(PLANTS).map(({ file }) => `next/dirty/${file}`));
+      const dirty = lint(...Arr.map(Object.values(PLANTS), ({ file }) => `next/dirty/${file}`));
       expect(dirty.out).toContain(`oxlint: 0 blocking, ${FIVE.length} advice`);
       expect(dirty.status, dirty.out).toBe(0);
     } finally {
@@ -379,7 +381,7 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
     const { lint, done } = repo(
       config,
       Object.fromEntries(
-        [clean, ...folders].flatMap((folder) => [
+        Arr.flatMap([clean, ...folders], (folder) => [
           [`${folder}/Planted.ts`, text],
           [`${folder}/Planted.test.ts`, text],
         ]),
@@ -395,8 +397,8 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
       // Judged by its own lines: libfabrika's module rule also refuses a planted top file in `src/`,
       // and lint.ts fails on a fire only when it blocks, so a jsdocs line that advises cannot fail it.
       if (folders.length > 0) {
-        const warn = lint(...folders.map((folder) => `${folder}/Planted.ts`));
-        const lines = warn.out.split("\n").filter((line) => line.includes(" fabrika(jsdocs) "));
+        const warn = lint(...Arr.map(folders, (folder) => `${folder}/Planted.ts`));
+        const lines = Arr.filter(warn.out.split("\n"), (line) => line.includes(" fabrika(jsdocs) "));
         expect(lines, warn.out).toHaveLength(2 * folders.length);
 
         for (const line of lines) {
@@ -405,13 +407,13 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
 
         for (const folder of folders) {
           expect(
-            lines.filter((line) => line.startsWith(`${folder}/Planted.ts:`)),
+            Arr.filter(lines, (line) => line.startsWith(`${folder}/Planted.ts:`)),
             folder,
           ).toHaveLength(2);
         }
       }
 
-      const tests = lint(...[clean, ...folders].map((folder) => `${folder}/Planted.test.ts`));
+      const tests = lint(...Arr.map([clean, ...folders], (folder) => `${folder}/Planted.test.ts`));
       expect(tests.out).not.toContain("fabrika(jsdocs)");
     } finally {
       done();
@@ -434,16 +436,18 @@ const jsdocsWarnFolders = ({ at, done }: { readonly at: string; readonly done: (
     expect(printed.status, printed.stderr).toBe(0);
     const { overrides }: { readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }> } =
       JSON.parse(printed.stdout);
-    return overrides
-      .filter(({ rules }) => {
+    return pipe(
+      overrides,
+      Arr.filter(({ rules }) => {
         const setting = rules["fabrika/jsdocs"];
-        return (Array.isArray(setting) ? setting[0] : setting) === "warn";
-      })
-      .flatMap(({ files }) => files)
-      .map((glob) => {
+        return (Arr.isArray(setting) ? setting[0] : setting) === "warn";
+      }),
+      Arr.flatMap(({ files }) => files),
+      Arr.map((glob) => {
         expect(glob, "a jsdocs warn line names one folder").toMatch(/^next\/packages\/[^/*]+\/src(\/[^/*]+)?\/\*\*?$/);
         return glob.replace(/\/\*\*?$/, "");
-      });
+      }),
+    );
   } finally {
     done();
   }
@@ -551,8 +555,8 @@ describe("T930 L10 the five stop saying they only advise", () => {
           readonly severity: string;
         }>;
       } = JSON.parse(ran.stdout);
-      const fires = report.diagnostics.filter((d) => FIVE.some((code) => code === d.code));
-      expect([...new Set(fires.map((d) => d.code))].sort()).toEqual([...FIVE].sort());
+      const fires = Arr.filter(report.diagnostics, (d) => Arr.some(FIVE, (code) => code === d.code));
+      expect([...new Set(Arr.map(fires, (d) => d.code))].sort()).toEqual([...FIVE].sort());
 
       for (const d of fires) {
         expect(`${d.message} ${d.help ?? ""}`, d.code).not.toMatch(/advice|does not block/i);
@@ -584,7 +588,7 @@ const banned = (dirty: readonly string[] = ["next/dirty"]) => {
     overrides: [
       ...base.overrides,
       { files: ["next/clean/**"], rules: { "eslint/no-restricted-properties": ban("error") } },
-      { files: dirty.map((folder) => `${folder}/**`), rules: { "eslint/no-restricted-properties": ban("warn") } },
+      { files: Arr.map(dirty, (folder) => `${folder}/**`), rules: { "eslint/no-restricted-properties": ban("warn") } },
     ],
   };
 };
@@ -638,7 +642,7 @@ describe("Reflect ban L3 a Reflect fire does not keep a JSON.parse warn line ali
   // Plant: count every warning of the rule as holding the line, and the stale line is not named.
   it("scenario: a whole run names the rule's warn line stale once only Reflect fires are left, and not while JSON.parse is", () => {
     const others = Object.fromEntries(
-      Object.entries(planted("next/dirty")).filter(([path]) => !path.endsWith("/parse.ts")),
+      Arr.filter(Object.entries(planted("next/dirty")), ([path]) => !path.endsWith("/parse.ts")),
     );
     const stuck = repo(banned(), { ...others, "next/dirty/reflect.ts": REFLECTS });
     const held = repo(banned(), { ...planted("next/dirty"), "next/dirty/reflect.ts": REFLECTS });
@@ -691,28 +695,31 @@ describe("Reflect ban L4 each ban block under next/ keeps what the rule held the
       expect(printed.status, printed.stderr).toBe(0);
       const { overrides }: { readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }> } =
         JSON.parse(printed.stdout);
-      const settings = overrides.flatMap(({ files, rules }) => {
+      const settings = Arr.flatMap(overrides, ({ files, rules }) => {
         const setting = rules["no-restricted-properties"];
-        return Array.isArray(setting) && Array.isArray(setting[1])
-          ? [{ files, level: setting[0], names: setting[1].map(nameOf) }]
+        return Arr.isArray(setting) && Arr.isArray(setting[1])
+          ? [{ files, level: setting[0], names: Arr.map(setting[1], nameOf) }]
           : [];
       });
       // The folders where JSON.parse advised before the ban: the warn override with no Reflect entry.
-      const advised = settings
-        .filter(({ level, names }) => level === "warn" && !names.includes("Reflect.get"))
-        .flatMap(({ files }) => files);
-      const blocks = settings.filter(
-        ({ files, names }) => names.includes("Reflect.get") && files.some((glob) => glob.startsWith("next/")),
+      const advised = pipe(
+        settings,
+        Arr.filter(({ level, names }) => level === "warn" && !names.includes("Reflect.get")),
+        Arr.flatMap(({ files }) => files),
+      );
+      const blocks = Arr.filter(
+        settings,
+        ({ files, names }) => names.includes("Reflect.get") && Arr.some(files, (glob) => glob.startsWith("next/")),
       );
       // Coverage: a block where JSON.parse blocks and one where it still advises.
-      expect(new Set(blocks.map(({ level }) => level))).toEqual(new Set(["deny", "warn"]));
+      expect(new Set(Arr.map(blocks, ({ level }) => level))).toEqual(new Set(["deny", "warn"]));
 
       for (const { files, level, names } of blocks) {
-        expect(names, files.join(" ")).toContain("JSON.parse");
+        expect(names, Arr.join(files, " ")).toContain("JSON.parse");
 
         for (const glob of files) {
           expect(glob, "a ban block under next/ names next/ folders only").toMatch(/^next\//);
-          const was = advised.some((warn) => matchesGlob(inside(glob), warn)) ? "warn" : "deny";
+          const was = Arr.some(advised, (warn) => matchesGlob(inside(glob), warn)) ? "warn" : "deny";
           expect(level, glob).toBe(was);
 
           if (glob.startsWith("next/packages/libfabrika/src/client/")) {

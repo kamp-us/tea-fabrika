@@ -14,6 +14,7 @@
 // call of 2026-11-14 and still make one through Effect's FileSystem. Whether a temp folder alone is
 // a real resource under 0536 is the owner's to rule; until then this rule holds the other kinds.
 import type { CreateRule } from "@oxlint/plugins";
+import { Array as Arr, Option } from "effect";
 import { dotted, pathIn, type Node } from "./match.ts";
 
 /** What a call drives, by the module its name came from, and the names in that module that open it. */
@@ -72,7 +73,7 @@ export const integrationTestName: CreateRule = {
     return {
       ImportDeclaration(node) {
         const source = node.source.value;
-        const opener = OPENERS.find((each) => each.module.test(source));
+        const opener = Arr.findFirst(OPENERS, (each) => each.module.test(source));
 
         for (const spec of node.specifiers) {
           const local = spec.local.name;
@@ -83,11 +84,11 @@ export const integrationTestName: CreateRule = {
                 : spec.imported.value
               : null;
 
-          if (opener !== undefined) {
+          if (Option.isSome(opener)) {
             if (imported === null) {
-              spaces.set(local, opener);
-            } else if (opener.names.has(imported)) {
-              named.set(local, opener.drives);
+              spaces.set(local, opener.value);
+            } else if (opener.value.names.has(imported)) {
+              named.set(local, opener.value.drives);
             }
           }
 

@@ -21,6 +21,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import { Array as Arr, pipe } from "effect";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -45,7 +46,7 @@ type Fire = { readonly code: string; readonly line: number };
 
 /** What `pnpm lint`'s oxlint refuses in each of these files, from one run through the repo's config. */
 const firesIn = (paths: readonly string[]): ReadonlyMap<string, readonly Fire[]> => {
-  const out = spawnSync(OXLINT, ["--format=json", ...paths.map((path) => relative(ROOT, path))], {
+  const out = spawnSync(OXLINT, ["--format=json", ...Arr.map(paths, (path) => relative(ROOT, path))], {
     cwd: ROOT,
     encoding: "utf8",
   });
@@ -56,7 +57,7 @@ const firesIn = (paths: readonly string[]): ReadonlyMap<string, readonly Fire[]>
       readonly labels: readonly { readonly span: { readonly line: number } }[];
     }[];
   };
-  const fires = new Map<string, Fire[]>(paths.map((path) => [path, []]));
+  const fires = new Map<string, Fire[]>(Arr.map(paths, (path) => [path, []]));
 
   for (const d of report.diagnostics) {
     if (d.labels[0] !== undefined) {
@@ -69,10 +70,11 @@ const firesIn = (paths: readonly string[]): ReadonlyMap<string, readonly Fire[]>
 
 /** The lines one rule's code refuses, in order. */
 const linesOf = (fires: readonly Fire[], code: string): readonly number[] =>
-  fires
-    .filter((f) => f.code === code)
-    .map((f) => f.line)
-    .sort((a, b) => a - b);
+  pipe(
+    fires,
+    Arr.filter((f) => f.code === code),
+    Arr.map((f) => f.line),
+  ).sort((a, b) => a - b);
 
 /** The lines `pnpm lint`'s oxlint refuses in this file under one rule's code. */
 const fires = (path: string, code: string): readonly number[] => linesOf(firesIn([path]).get(path)!, code);
@@ -294,9 +296,9 @@ const put = (name: string, text: string): string => {
 
 /** The planted file, its text and the lines its rule must refuse. */
 const write = (p: Plant, name: string) => {
-  const text = `${[...p.prelude, ...p.lines.map(([line]) => line)].join("\n")}\n`;
+  const text = `${Arr.join([...p.prelude, ...Arr.map(p.lines, ([line]) => line)], "\n")}\n`;
   const file = put(`${name}-${p.file ?? "planted.ts"}`, text);
-  const want = p.lines.flatMap(([, refused], at) => (refused ? [p.prelude.length + at + 1] : []));
+  const want = Arr.flatMap(p.lines, ([, refused], at) => (refused ? [p.prelude.length + at + 1] : []));
   return { file, text, want };
 };
 
@@ -312,21 +314,25 @@ const inProcess = (p: Plant, { file, text, want }: ReturnType<typeof write>) => 
   const filename = relative(ROOT, file);
   tester.run(p.code, rule, {
     valid: want.length === 0 ? [{ code: text, filename }] : [],
-    invalid: want.length === 0 ? [] : [{ code: text, filename, errors: want.map((line) => ({ line, message: /\S/ })) }],
+    invalid:
+      want.length === 0 ? [] : [{ code: text, filename, errors: Arr.map(want, (line) => ({ line, message: /\S/ })) }],
   });
 };
 
 describe("each rule refuses what it is there to refuse", () => {
-  const ours = PLANTS.map((p, i) => [p.code, p, write(p, String(i))] as const);
-  const builtIn = BUILTIN_PLANTS.map((p, i) => [p.code, p, write(p, `builtin-${i}`)] as const);
+  const ours = Arr.map(PLANTS, (p, i) => [p.code, p, write(p, String(i))] as const);
+  const builtIn = Arr.map(BUILTIN_PLANTS, (p, i) => [p.code, p, write(p, `builtin-${i}`)] as const);
   const self = put("self.ts", 'import {a} from "./self.ts";\nimport {b} from "./b.laws.ts";\nexport {a, b};\n');
   const poll = put(
     "poll.test.ts",
-    `${[
-      'import {expect, it} from "vitest";',
-      'it("a", () => { expect.poll(() => 1).toBe(1); });',
-      'it("b", async () => { await expect.poll(() => 1).toBe(1); });',
-    ].join("\n")}\n`,
+    `${Arr.join(
+      [
+        'import {expect, it} from "vitest";',
+        'it("a", () => { expect.poll(() => 1).toBe(1); });',
+        'it("b", async () => { await expect.poll(() => 1).toBe(1); });',
+      ],
+      "\n",
+    )}\n`,
   );
   const notATest = put(
     "not-a-test.ts",
@@ -355,7 +361,7 @@ describe("each rule refuses what it is there to refuse", () => {
   });
 
   it("each built-in rule is planted once", () => {
-    const codes = BUILTIN_PLANTS.map((p) => p.code);
+    const codes = Arr.map(BUILTIN_PLANTS, (p) => p.code);
     expect(new Set(codes).size).toBe(codes.length);
   });
 
@@ -365,7 +371,7 @@ describe("each rule refuses what it is there to refuse", () => {
 
   it("the plugin has one planted line or more for every rule it lists", async () => {
     const { default: plugin } = await import("./index.ts");
-    const planted = new Set(PLANTS.map((p) => p.code));
+    const planted = new Set(Arr.map(PLANTS, (p) => p.code));
     // `no-bare-disable` reports at the top of the file, so it has its own test below.
     const elsewhere = [
       "prefer-schema-arbitrary", // generated syntax laws in prefer-schema-arbitrary.test.ts
@@ -427,7 +433,8 @@ describe("each rule refuses what it is there to refuse", () => {
       // 0535's rule reads only next/'s test files: its scoped plant and its in-memory twin are below.
       "runs-from-depth",
     ];
-    const missing = Object.keys(plugin.rules).filter(
+    const missing = Arr.filter(
+      Object.keys(plugin.rules),
       (rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),
     );
     expect(missing).toEqual([]);
@@ -436,12 +443,15 @@ describe("each rule refuses what it is there to refuse", () => {
 
 it("scenario: T877 L10 only the TOML adapter imports the parser and serializer", async () => {
   // scenario: literal import names at every overriding config path are the rule's inputs.
-  const imports = [
-    'import "toml-eslint-parser";',
-    'import "toml-eslint-parser/lib/parser";',
-    'import "@decimalturn/toml-patch";',
-    'import "@decimalturn/toml-patch/dist/index.js";',
-  ].join("\n");
+  const imports = Arr.join(
+    [
+      'import "toml-eslint-parser";',
+      'import "toml-eslint-parser/lib/parser";',
+      'import "@decimalturn/toml-patch";',
+      'import "@decimalturn/toml-patch/dist/index.js";',
+    ],
+    "\n",
+  );
   const banned = [
     "next/programs/sample/src/machine.ts",
     "next/packages/libfabrika/src/settings/TomlEdit.test.ts",
@@ -456,7 +466,7 @@ it("scenario: T877 L10 only the TOML adapter imports the parser and serializer",
     ".agents/skills/lead/scripts/example.ts",
   ];
   const adapter = "next/packages/libfabrika/src/settings/TomlParser.ts";
-  const result = await lintCopies(Object.fromEntries([...banned, adapter].map((file) => [file, imports])));
+  const result = await lintCopies(Object.fromEntries(Arr.map([...banned, adapter], (file) => [file, imports])));
 
   for (const file of banned) {
     expect(result("eslint(no-restricted-imports)", file), file).toEqual([1, 2, 3, 4]);
@@ -480,15 +490,18 @@ it("scenario: T1031 runs-from-depth refuses a bare count in a law over real IO, 
   const law = (body: string, count: string) =>
     `it("law", () => { ${body}fc.assert(fc.property(fc.nat(), () => true), { seed: 119120, numRuns: ${count} }); });`;
   const result = await lintCopies({
-    [io]: [
-      'import { DatabaseSync } from "node:sqlite";',
-      'import { runsFor } from "@kampus/vitest";',
-      ...imports,
-      law('new DatabaseSync(":memory:"); ', "100"),
-      law('new DatabaseSync(":memory:"); ', "runsFor({ fast: 10, full: 100 })"),
-      "",
-    ].join("\n"),
-    [memory]: [...imports, law("", "3000"), ""].join("\n"),
+    [io]: Arr.join(
+      [
+        'import { DatabaseSync } from "node:sqlite";',
+        'import { runsFor } from "@kampus/vitest";',
+        ...imports,
+        law('new DatabaseSync(":memory:"); ', "100"),
+        law('new DatabaseSync(":memory:"); ', "runsFor({ fast: 10, full: 100 })"),
+        "",
+      ],
+      "\n",
+    ),
+    [memory]: Arr.join([...imports, law("", "3000"), ""], "\n"),
   });
   expect(result("fabrika(runs-from-depth)", io)).toEqual([5]);
   expect(result("fabrika(runs-from-depth)", memory)).toEqual([]);
@@ -517,11 +530,11 @@ const plantPath = (glob: string): string => {
 
 /** The globs of every override that holds the Reflect ban (0554), each with the rule's level there. */
 const banGlobs = (printed: Printed): ReadonlyArray<{ readonly glob: string; readonly level: unknown }> =>
-  printed.overrides.flatMap(({ files, rules }) => {
+  Arr.flatMap(printed.overrides, ({ files, rules }) => {
     const setting = rules["no-restricted-properties"];
-    const options: unknown = Array.isArray(setting) ? setting[1] : undefined;
-    return Array.isArray(options) && options.some(isReflectGet)
-      ? files.map((glob) => ({ glob, level: Array.isArray(setting) ? setting[0] : setting }))
+    const options: unknown = Arr.isArray(setting) ? setting[1] : undefined;
+    return Arr.isArray(options) && Arr.some(options, isReflectGet)
+      ? Arr.map(files, (glob) => ({ glob, level: Arr.isArray(setting) ? setting[0] : setting }))
       : [];
   });
 
@@ -554,15 +567,15 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
       const parsed: Printed = JSON.parse(printed.stdout);
       const globs = banGlobs(parsed);
       // Coverage: the tooling, a next/ folder where JSON.parse blocks and one where it still advises.
-      expect(globs.map(({ glob }) => glob)).toEqual(
+      expect(Arr.map(globs, ({ glob }) => glob)).toEqual(
         expect.arrayContaining([".agents/**", ".github/**", "oxlint-plugins/**"]),
       );
-      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "deny")).toBe(true);
-      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "warn")).toBe(true);
+      expect(Arr.some(globs, ({ glob, level }) => glob.startsWith("next/") && level === "deny")).toBe(true);
+      expect(Arr.some(globs, ({ glob, level }) => glob.startsWith("next/") && level === "warn")).toBe(true);
 
-      const text = `${[...REFLECT.prelude, ...REFLECT.lines.map(([line]) => line)].join("\n")}\n`;
-      const want = REFLECT.lines.flatMap(([, refused], i) => (refused ? [REFLECT.prelude.length + i + 1] : []));
-      const files = globs.map(({ glob }) => plantPath(glob));
+      const text = `${Arr.join([...REFLECT.prelude, ...Arr.map(REFLECT.lines, ([line]) => line)], "\n")}\n`;
+      const want = Arr.flatMap(REFLECT.lines, ([, refused], i) => (refused ? [REFLECT.prelude.length + i + 1] : []));
+      const files = Arr.map(globs, ({ glob }) => plantPath(glob));
       expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
 
       for (const file of files) {
@@ -584,10 +597,11 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
       } = JSON.parse(ran.stdout);
 
       for (const file of files) {
-        const refused = report.diagnostics
-          .filter((d) => d.filename === file && d.code === REFLECT.code)
-          .flatMap((d) => (d.labels[0] === undefined ? [] : [d.labels[0].span.line]))
-          .sort((a, b) => a - b);
+        const refused = pipe(
+          report.diagnostics,
+          Arr.filter((d) => d.filename === file && d.code === REFLECT.code),
+          Arr.flatMap((d) => (d.labels[0] === undefined ? [] : [d.labels[0].span.line])),
+        ).sort((a, b) => a - b);
         expect(refused, file).toEqual(want);
       }
     } finally {
@@ -610,14 +624,17 @@ describe("lint.ts, the first step of pnpm lint", () => {
   it("scenario: T930 L6 a no-raw-try-catch fire in a folder at zero blocks", () => {
     writeFileSync(
       tried,
-      [
-        'import {Effect} from "effect";',
-        "declare const f: () => void;",
-        "export const e = Effect.void;",
-        "",
-        "try { f(); } catch { f(); }",
-        "",
-      ].join("\n"),
+      Arr.join(
+        [
+          'import {Effect} from "effect";',
+          "declare const f: () => void;",
+          "export const e = Effect.void;",
+          "",
+          "try { f(); } catch { f(); }",
+          "",
+        ],
+        "\n",
+      ),
     );
     const out = lint(tried);
     expect(out.stdout).toContain("fabrika(no-raw-try-catch)");
@@ -775,17 +792,20 @@ describe("rules that apply by path", () => {
     expect(fires(file, "react-hooks(rules-of-hooks)")).toEqual([2]);
   });
 
-  const EFFECTS = [
-    'import {useEffect, useEffectEvent} from "react";',
-    "export const stale = (n: number) => {",
-    "\tuseEffect(() => console.log(n), []);",
-    "};",
-    "export const fresh = (n: number) => {",
-    "\tconst log = useEffectEvent(() => console.log(n));",
-    "\tuseEffect(() => log(), [n]);",
-    "};",
-    "",
-  ].join("\n");
+  const EFFECTS = Arr.join(
+    [
+      'import {useEffect, useEffectEvent} from "react";',
+      "export const stale = (n: number) => {",
+      "\tuseEffect(() => console.log(n), []);",
+      "};",
+      "export const fresh = (n: number) => {",
+      "\tconst log = useEffectEvent(() => console.log(n));",
+      "\tuseEffect(() => log(), [n]);",
+      "};",
+      "",
+    ],
+    "\n",
+  );
 
   it.each(["apps", "programs"])("an effect's stale value under %s/ is refused", (folder) => {
     const { at, file } = plantIn(folder, EFFECTS);
@@ -897,13 +917,16 @@ it("pinned: L6 a second machine is planted and lint.ts exits 1", async () => {
 it("format: P21 L12 a PersonCheck contract cannot carry a Layer implementation", async () => {
   const file = "next/packages/libfabrika/src/desktop/PersonCheck.ts";
   const result = await lintCopies({
-    [file]: [
-      'import { Context, Effect, Layer, Schema } from "effect";',
-      'export const Answer = Schema.TaggedUnion({ checked: { check: Schema.Literals(["touch", "click"]) }, declined: {} });',
-      'export class PersonCheck extends Context.Service<PersonCheck, { readonly ask: (reason: string) => Effect.Effect<typeof Answer.Type> }>()("@kampus/libfabrika/desktop/PersonCheck") {',
-      '  static readonly layer = Layer.succeed(PersonCheck, { ask: () => Effect.succeed({ _tag: "checked", check: "touch" }) });',
-      "}",
-    ].join("\n"),
+    [file]: Arr.join(
+      [
+        'import { Context, Effect, Layer, Schema } from "effect";',
+        'export const Answer = Schema.TaggedUnion({ checked: { check: Schema.Literals(["touch", "click"]) }, declined: {} });',
+        'export class PersonCheck extends Context.Service<PersonCheck, { readonly ask: (reason: string) => Effect.Effect<typeof Answer.Type> }>()("@kampus/libfabrika/desktop/PersonCheck") {',
+        '  static readonly layer = Layer.succeed(PersonCheck, { ask: () => Effect.succeed({ _tag: "checked", check: "touch" }) });',
+        "}",
+      ],
+      "\n",
+    ),
   });
   expect(result("eslint(no-restricted-imports)", file)).toContain(1);
 });
@@ -912,14 +935,17 @@ it("format: P21 L12 a PersonCheck contract cannot carry a Layer implementation",
 it("format: P21 L12 Menu exports only one tea machine", async () => {
   const file = "next/packages/libfabrika/src/desktop/Menu.ts";
   const result = await lintCopies({
-    [file]: [
-      'import { Machine } from "@demlik/tea/effect";',
-      'import { Schema } from "effect";',
-      "const Model = Schema.TaggedUnion({ idle: {} });",
-      'const Msg = Schema.Struct({ type: Schema.Literal("enter") });',
-      'export const machine = Machine.make({ model: Model, msg: Msg, cmds: [], init: () => [{ _tag: "idle" }, []], update: { enter: (s) => [s, []] } });',
-      'export const second = Machine.make({ model: Model, msg: Msg, cmds: [], init: () => [{ _tag: "idle" }, []], update: { enter: (s) => [s, []] } });',
-    ].join("\n"),
+    [file]: Arr.join(
+      [
+        'import { Machine } from "@demlik/tea/effect";',
+        'import { Schema } from "effect";',
+        "const Model = Schema.TaggedUnion({ idle: {} });",
+        'const Msg = Schema.Struct({ type: Schema.Literal("enter") });',
+        'export const machine = Machine.make({ model: Model, msg: Msg, cmds: [], init: () => [{ _tag: "idle" }, []], update: { enter: (s) => [s, []] } });',
+        'export const second = Machine.make({ model: Model, msg: Msg, cmds: [], init: () => [{ _tag: "idle" }, []], update: { enter: (s) => [s, []] } });',
+      ],
+      "\n",
+    ),
   });
   expect(result("fabrika(one-machine-per-file)", file)).toContain(6);
 });
@@ -930,12 +956,15 @@ it("format: P21 L11 desktop public types cannot name Electron, Node or the DOM",
   const globals = "next/packages/libfabrika/src/desktop/PersonCheck.ts";
   const result = await lintCopies({
     [imported]: 'import type { BrowserWindow } from "electron";\nexport type Handle = BrowserWindow;\n',
-    [globals]: [
-      "export type DomWindow = Window;",
-      "export type DomDocument = Document;",
-      "export type NodeTimer = NodeJS.Timeout;",
-      "export type ElectronWindow = Electron.BrowserWindow;",
-    ].join("\n"),
+    [globals]: Arr.join(
+      [
+        "export type DomWindow = Window;",
+        "export type DomDocument = Document;",
+        "export type NodeTimer = NodeJS.Timeout;",
+        "export type ElectronWindow = Electron.BrowserWindow;",
+      ],
+      "\n",
+    ),
   });
   expect.soft(result("eslint(no-restricted-imports)", imported)).toContain(1);
   expect.soft(result("typescript(no-restricted-types)", globals)).toEqual([1, 2, 3, 4]);
@@ -945,15 +974,18 @@ it("format: P21 L11 desktop public types cannot name Electron, Node or the DOM",
 it("format: P21 L12 desktop refuses gateway and platform imports while admitting access", async () => {
   const file = "next/packages/libfabrika/src/desktop/Menu.ts";
   const result = await lintCopies({
-    [file]: [
-      'import type { Grant } from "../access/Access.ts";',
-      'import type { Gateway } from "../gateway/Gateway.ts";',
-      'import type { Load } from "../node/settings/Load.ts";',
-      'import type { Extra } from "../electron/Extra.ts";',
-      'import type { Brain } from "../cloudflare/objects.ts";',
-      'import type { Stats } from "node:fs";',
-      'import type { Document } from "@types/web";',
-    ].join("\n"),
+    [file]: Arr.join(
+      [
+        'import type { Grant } from "../access/Access.ts";',
+        'import type { Gateway } from "../gateway/Gateway.ts";',
+        'import type { Load } from "../node/settings/Load.ts";',
+        'import type { Extra } from "../electron/Extra.ts";',
+        'import type { Brain } from "../cloudflare/objects.ts";',
+        'import type { Stats } from "node:fs";',
+        'import type { Document } from "@types/web";',
+      ],
+      "\n",
+    ),
   });
   expect(result("eslint(no-restricted-imports)", file)).toEqual([2, 3, 4, 5, 6, 7]);
 });

@@ -1,5 +1,6 @@
 // Today's CSS rules share parsing and reporting, so the runner can count known debt too.
 import { relative } from "node:path";
+import { Array as Arr, Option } from "effect";
 import valueParser from "postcss-value-parser";
 import stylelint from "stylelint";
 import names from "../packages/fabrika-design/src/token-names.json" with { type: "json" };
@@ -8,7 +9,7 @@ type Root = Parameters<ReturnType<stylelint.Rule>>[0];
 type Declaration = Extract<Root["nodes"][number], { type: "decl" }>;
 const TOKENS = "packages/fabrika-design/src/tokens.css";
 export const WINDOW = "apps/fabrika/src/window/window.css";
-export const tokens = new Map(names.tokens.map(({ name, owner }) => [name, owner]));
+export const tokens = new Map(Arr.map(names.tokens, ({ name, owner }) => [name, owner]));
 export const steps = new Set(names.steps);
 export const parts: Readonly<Record<string, readonly string[]>> = names.parts;
 export const file = (decl: Declaration) => relative(process.cwd(), decl.source?.input.file ?? "");
@@ -55,10 +56,10 @@ export const references = (decl: Declaration) => {
       return;
     }
 
-    const name = node.nodes.find((child) => child.type !== "space" && child.type !== "comment");
+    const name = Arr.findFirst(node.nodes, (child) => child.type !== "space" && child.type !== "comment");
 
-    if (name?.type === "word" && name.value.startsWith("--")) {
-      found.push(name.value);
+    if (Option.isSome(name) && name.value.type === "word" && name.value.value.startsWith("--")) {
+      found.push(name.value.value);
     }
   });
   return found;
@@ -72,7 +73,7 @@ export const media = (decl: Declaration, feature: string, value: string) => {
     if (
       parent.type === "atrule" &&
       parent.name.toLowerCase() === "media" &&
-      parent.params.split(",").every((query) => condition.test(query) && !/\b(not|or)\b/i.test(query))
+      Arr.every(parent.params.split(","), (query) => condition.test(query) && !/\b(not|or)\b/i.test(query))
     ) {
       return true;
     }

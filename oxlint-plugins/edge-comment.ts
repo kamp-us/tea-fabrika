@@ -19,6 +19,7 @@
 // Where it reports, and why there: at the very start of the file, with the real line in the message,
 // as `no-bare-disable` does. A report on the comment's own line could be silenced by a comment.
 import type { CreateRule } from "@oxlint/plugins";
+import { Array as Arr, pipe } from "effect";
 
 const EDGE_RULES: ReadonlySet<string> = new Set(["fabrika/no-promises", "fabrika/no-effect-run-outside-edge"]);
 
@@ -40,12 +41,13 @@ const problem = (comment: string): string | null => {
 
   const [, form = "", rest = ""] = found;
   const at = rest.search(REASON);
-  const rules = (at < 0 ? rest : rest.slice(0, at))
-    .split(",")
-    .map((rule) => rule.trim())
-    .filter((rule) => rule !== "");
+  const rules = pipe(
+    (at < 0 ? rest : rest.slice(0, at)).split(","),
+    Arr.map((rule) => rule.trim()),
+    Arr.filter((rule) => rule !== ""),
+  );
 
-  if (!rules.some((rule) => EDGE_RULES.has(rule))) {
+  if (!Arr.some(rules, (rule) => EDGE_RULES.has(rule))) {
     return null;
   }
 
@@ -53,7 +55,7 @@ const problem = (comment: string): string | null => {
     return "is not the `-next-line` form. An edge is one line";
   }
 
-  if (rules.some((rule) => !EDGE_RULES.has(rule))) {
+  if (Arr.some(rules, (rule) => !EDGE_RULES.has(rule))) {
     return "names a rule that is not an edge rule. Give that exception its own comment";
   }
 

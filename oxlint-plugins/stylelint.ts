@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { devNull } from "node:os";
 import { join, relative } from "node:path";
+import { Array as Arr, Predicate } from "effect";
 import stylelint from "stylelint";
 import type { CssResult } from "./css-support.ts";
 
@@ -20,13 +21,14 @@ if (tracked.status !== 0) {
   process.exit(2);
 }
 
-const files = tracked.stdout.split("\0").filter((path) => path.endsWith(".css"));
+const files = Arr.filter(tracked.stdout.split("\0"), (path) => path.endsWith(".css"));
 
 if (files.length === 0) {
   console.error("stylelint: no tracked CSS files");
   process.exit(2);
 }
 
+// oxlint-disable-next-line fabrika/no-raw-try-catch -- the script's top-level guard, no Effect here; effect is imported only for its Array helpers
 try {
   // `code` avoids glob expansion; the empty ignore file prevents .stylelintignore taking effect.
   const config = await stylelint.resolveConfig(join(ROOT, files[0] ?? ""), { configFile });
@@ -86,7 +88,8 @@ try {
 
     if (
       report.errored &&
-      report.results.every(
+      Arr.every(
+        report.results,
         (result) =>
           result.warnings.length === 0 && result.parseErrors.length === 0 && result.invalidOptionWarnings.length === 0,
       )
@@ -98,14 +101,15 @@ try {
 
   for (const [rule, hits] of counts) {
     const setting = config.rules?.[rule];
-    const known: unknown = Array.isArray(setting) ? setting[1]?.known : undefined;
+    const options: unknown = Arr.isArray(setting) ? setting[1] : undefined;
+    const known: unknown = Predicate.hasProperty(options, "known") ? options.known : undefined;
 
-    if (!Array.isArray(known)) {
+    if (!Arr.isArray(known)) {
       throw new Error(`${rule} needs its known list`);
     }
 
     for (const entry of known) {
-      if (!hits.known.has(entry)) {
+      if (typeof entry !== "string" || !hits.known.has(entry)) {
         console.error(`${rule}: stale known entry ${entry}`);
         blocks++;
       }

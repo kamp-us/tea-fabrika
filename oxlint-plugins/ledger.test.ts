@@ -1,3 +1,4 @@
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -12,9 +13,9 @@ const finding = fc.record({
 });
 
 const count = (xs: readonly Finding[], x: Finding) =>
-  xs.filter((y) => y.file === x.file && y.rule === x.rule && y.code === x.code).length;
+  Arr.filter(xs, (y) => y.file === x.file && y.rule === x.rule && y.code === x.code).length;
 
-const root = fc.constantFrom(...LEDGERS.map((ledger) => ledger.root));
+const root = fc.constantFrom(...Arr.map(LEDGERS, (ledger) => ledger.root));
 
 describe("agents-ledger.json and next-ledger.json, 0033", () => {
   it("each finding is waived or blocks, never both, and order is kept", () => {
@@ -22,8 +23,8 @@ describe("agents-ledger.json and next-ledger.json, 0033", () => {
       fc.property(fc.array(finding), fc.array(finding), root, (entries, findings, at) => {
         const { waived, blocks } = settle(entries, findings, at);
         expect(waived.length + blocks.length).toBe(findings.length);
-        expect(findings.filter((f) => waived.includes(f))).toEqual(waived);
-        expect(findings.filter((f) => blocks.includes(f))).toEqual(blocks);
+        expect(Arr.filter(findings, (f) => waived.includes(f))).toEqual(waived);
+        expect(Arr.filter(findings, (f) => blocks.includes(f))).toEqual(blocks);
       }),
       options,
     );
@@ -46,7 +47,7 @@ describe("agents-ledger.json and next-ledger.json, 0033", () => {
     fc.assert(
       fc.property(fc.array(finding), fc.array(finding), root, (entries, findings, at) => {
         const { kept, waived } = settle(entries, findings, at);
-        expect(entries.filter((e) => kept.includes(e))).toEqual(kept);
+        expect(Arr.filter(entries, (e) => kept.includes(e))).toEqual(kept);
         expect(kept.length).toBe(waived.length);
         // Settling again on what was kept changes nothing.
         expect(settle(kept, findings, at).kept).toEqual(kept);
@@ -64,11 +65,11 @@ describe("agents-ledger.json and next-ledger.json, 0033", () => {
           expect(f.file.startsWith(at)).toBe(true);
         }
 
-        for (const f of findings.filter((f) => !f.file.startsWith(at))) {
+        for (const f of Arr.filter(findings, (f) => !f.file.startsWith(at))) {
           expect(blocks).toContain(f);
         }
 
-        expect(outside(entries, at)).toEqual(entries.filter((e) => !e.file.startsWith(at)));
+        expect(outside(entries, at)).toEqual(Arr.filter(entries, (e) => !e.file.startsWith(at)));
       }),
       options,
     );
@@ -95,11 +96,14 @@ describe("agents-ledger.json and next-ledger.json, 0033", () => {
 describe("`.agents/` code is held to next/'s rules, 0033", () => {
   const script = ".agents/skills/x/scripts/a.ts";
   const test = ".agents/skills/x/scripts/a.test.ts";
-  const body = [
-    'import {readFileSync} from "node:fs";',
-    "export const a = async () => readFileSync(await Promise.resolve(''));",
-    "export const fooOf = 1;",
-  ].join("\n");
+  const body = Arr.join(
+    [
+      'import {readFileSync} from "node:fs";',
+      "export const a = async () => readFileSync(await Promise.resolve(''));",
+      "export const fooOf = 1;",
+    ],
+    "\n",
+  );
 
   // scenario: one script and its test, since the config is what is under test. Only next/'s tests
   // may turn an edge rule off (edge-comment.test.ts), so `no-promises` fires in an `.agents/` test.

@@ -8,6 +8,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -95,7 +96,7 @@ const fires = (paths: readonly string[]) => {
   };
   const found = new Map<string, number[]>();
 
-  for (const d of report.diagnostics.filter((each) => each.code === "fabrika(integration-test-name)")) {
+  for (const d of Arr.filter(report.diagnostics, (each) => each.code === "fabrika(integration-test-name)")) {
     found.set(d.filename, [...(found.get(d.filename) ?? []), d.labels[0]!.span.line]);
   }
 

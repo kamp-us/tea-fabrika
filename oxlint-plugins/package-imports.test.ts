@@ -5,6 +5,7 @@
 // table; one oxlint run over every case's file then proves the repo's own `.oxlintrc.json` holds the
 // same table at the same paths.
 import { join } from "node:path";
+import { Array as Arr, pipe } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -23,7 +24,8 @@ const tester = new RuleTester({ cwd: join(import.meta.dirname, "..") });
 
 const TRANSPORT = [
   `${LIBRARY}/transport`,
-  ...["Answer", "ClientKey", "ClientRows", "Hello", "Link", "Sshsig", "Webauthn", "Wire"].map(
+  ...Arr.map(
+    ["Answer", "ClientKey", "ClientRows", "Hello", "Link", "Sshsig", "Webauthn", "Wire"],
     (front) => `${LIBRARY}/transport/${front}`,
   ),
 ];
@@ -90,11 +92,11 @@ const TABLE: { scope: string; parts: Part[] } = {
 const within =
   (...packages: ReadonlyArray<string>) =>
   (name: string) =>
-    packages.some((pkg) => name === pkg || name.startsWith(`${pkg}/`));
+    Arr.some(packages, (pkg) => name === pkg || name.startsWith(`${pkg}/`));
 
 /** What a file at each place may import by a name under the scope; `null` where nothing is judged. */
 const ALLOWS: Readonly<Record<string, ((name: string) => boolean) | null>> = {
-  ...Object.fromEntries(TABLE.parts.map((part) => [part.name, (name: string) => part.may.includes(name)])),
+  ...Object.fromEntries(Arr.map(TABLE.parts, (part) => [part.name, (name: string) => part.may.includes(name)])),
   // A library test names the library itself and the test primitives, root or subpath, and nothing
   // else of ours. A test of the test primitives names only that package.
   "library test": within(LIBRARY, VITEST),
@@ -113,9 +115,13 @@ const base = fc.oneof(fc.constantFrom("Log", "Link", "Main", "View"), fc.stringM
  */
 const production = base.filter((name) => !/test$/i.test(name));
 
-const below = fc
-  .array(fc.constantFrom("internal", "build", "node", "a"), { maxLength: 2 })
-  .map((folders) => folders.map((folder) => `${folder}/`).join(""));
+const below = fc.array(fc.constantFrom("internal", "build", "node", "a"), { maxLength: 2 }).map((folders) =>
+  pipe(
+    folders,
+    Arr.map((folder) => `${folder}/`),
+    Arr.join(""),
+  ),
+);
 
 const program = fc.constantFrom("notes", "counter", "map");
 const ext = fc.constantFrom("ts", "tsx");
@@ -156,7 +162,8 @@ const PLACES: ReadonlyArray<readonly [string, fc.Arbitrary<string>]> = [
       .tuple(fc.constantFrom("src/", "src/coordination/", "src/node/build/", "scripts/"), below, base, ext)
       .map(([top, at, name, end]) => `next/packages/libfabrika/${top}${at}${name}.test.${end}`),
   ],
-  ...["desktop", "window", "dom", "browser", "electron", "headless"].map(
+  ...Arr.map(
+    ["desktop", "window", "dom", "browser", "electron", "headless"],
     (folder) =>
       [
         folder,
@@ -202,7 +209,7 @@ const PLACES: ReadonlyArray<readonly [string, fc.Arbitrary<string>]> = [
 
 /** Names from every part's list, and names no list holds: other front files, other packages, not ours. */
 const target = fc.oneof(
-  { arbitrary: fc.constantFrom(...new Set(TABLE.parts.flatMap((part) => part.may))), weight: 2 },
+  { arbitrary: fc.constantFrom(...new Set(Arr.flatMap(TABLE.parts, (part) => part.may))), weight: 2 },
   // Next to a listed name, so a list that grew by one is seen.
   {
     arbitrary: fc.constantFrom(
@@ -274,8 +281,12 @@ type Case = { readonly text: string; readonly lines: ReadonlyArray<number> };
 const caseFor = (place: string, names: ReadonlyArray<readonly [string, number]>): Case => {
   const allows = ALLOWS[place] ?? null;
   return {
-    text: `${names.map(([from, form], n) => FORMS[form]?.(from, n) ?? "").join("\n")}\n`,
-    lines: names.flatMap(([from], n) =>
+    text: `${pipe(
+      names,
+      Arr.map(([from, form], n) => FORMS[form]?.(from, n) ?? ""),
+      Arr.join("\n"),
+    )}\n`,
+    lines: Arr.flatMap(names, ([from], n) =>
       allows !== null && from.startsWith(TABLE.scope) && !allows(from) ? [n + 1] : [],
     ),
   };
@@ -289,7 +300,7 @@ const check = (filename: string, { text: code, lines }: Case) => {
     invalid:
       lines.length === 0
         ? []
-        : [{ code, filename, options, errors: lines.map((line) => ({ line, message: /may not import/ })) }],
+        : [{ code, filename, options, errors: Arr.map(lines, (line) => ({ line, message: /may not import/ })) }],
   });
 };
 
@@ -308,7 +319,7 @@ it("each part fires on exactly the names of ours its table refuses, wherever its
   const places = new Set<string>();
   fc.assert(
     fc.property(
-      fc.oneof(...PLACES.map(([place, path]) => fc.tuple(fc.constant(place), path, imports))),
+      fc.oneof(...Arr.map(PLACES, ([place, path]) => fc.tuple(fc.constant(place), path, imports))),
       ([place, path, names]) => {
         const one = caseFor(place, names);
         check(path, one);
@@ -330,13 +341,13 @@ it("each part fires on exactly the names of ours its table refuses, wherever its
     },
   );
   // Every place was drawn, and both fires and passes.
-  expect([...places].sort()).toEqual(PLACES.map(([place]) => place).sort());
-  expect([...cases.values()].some((one) => one.lines.length > 0)).toBe(true);
-  expect([...cases.values()].some((one) => one.lines.length === 0)).toBe(true);
+  expect([...places].sort()).toEqual(Arr.map(PLACES, ([place]) => place).sort());
+  expect(Arr.some([...cases.values()], (one) => one.lines.length > 0)).toBe(true);
+  expect(Arr.some([...cases.values()], (one) => one.lines.length === 0)).toBe(true);
 
-  const result = await plant(Object.fromEntries([...cases].map(([path, { text }]) => [path, text])));
-  expect(Object.fromEntries([...cases.keys()].map((path) => [path, result(CODE, path)]))).toEqual(
-    Object.fromEntries([...cases].map(([path, { lines }]) => [path, lines])),
+  const result = await plant(Object.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text])));
+  expect(Object.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
+    Object.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
   );
 });
 
@@ -354,7 +365,7 @@ it("the library's and a program's code may not import the test primitives, and t
   fc.assert(
     fc.property(
       fc.oneof(
-        ...[...CODE_PLACES, ...SUITE_PLACES].map((place) =>
+        ...Arr.map([...CODE_PLACES, ...SUITE_PLACES], (place) =>
           fc.tuple(fc.constant(place), pathAt.get(place)!, fc.nat({ max: FORMS.length - 1 })),
         ),
       ),
@@ -380,8 +391,8 @@ it("the library's and a program's code may not import the test primitives, and t
   );
   expect([...seen].sort()).toEqual([...CODE_PLACES, ...SUITE_PLACES].sort());
 
-  const result = await plant(Object.fromEntries([...cases].map(([path, { text }]) => [path, text])));
-  expect(Object.fromEntries([...cases.keys()].map((path) => [path, result(CODE, path)]))).toEqual(
-    Object.fromEntries([...cases].map(([path, { lines }]) => [path, lines])),
+  const result = await plant(Object.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text])));
+  expect(Object.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
+    Object.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
   );
 });

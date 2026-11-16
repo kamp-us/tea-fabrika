@@ -5,6 +5,7 @@
 // the day the rule landed, which may only grow.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { Array as Arr, pipe } from "effect";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { RuleTester } from "oxlint/plugins-dev";
@@ -128,12 +129,12 @@ it("fires exactly on the static members of a class that extends Context.Service,
       ];
 
       // An index after each name keeps two members of one name apart.
-      const body = members.map(({ form, name }, i) => {
+      const body = Arr.map(members, ({ form, name }, i) => {
         const [text, fires] = FORMS[form] ?? FORMS[0]!;
         return { text: `  ${text(`${name}${i === 0 ? "" : i}`)}`, fires: fires && base === "service" };
       });
-      const code = [...head, ...body.map((b) => b.text), expression ? "};" : "}", ""].join("\n");
-      const lines = body.flatMap((b, i) => (b.fires ? [head.length + i + 1] : []));
+      const code = Arr.join([...head, ...Arr.map(body, (b) => b.text), expression ? "};" : "}", ""], "\n");
+      const lines = Arr.flatMap(body, (b, i) => (b.fires ? [head.length + i + 1] : []));
       const filename = "next/packages/libfabrika/src/tasks/Retries.ts";
 
       if (lines.length === 0) {
@@ -143,7 +144,7 @@ it("fires exactly on the static members of a class that extends Context.Service,
 
       tester.run("no-static-layer", noStaticLayer, {
         valid: [],
-        invalid: [{ code, filename, errors: lines.map((line) => ({ line, message: /holds only its contract/ })) }],
+        invalid: [{ code, filename, errors: Arr.map(lines, (line) => ({ line, message: /holds only its contract/ })) }],
       });
     }),
     { seed: 119120, numRuns: 100 },
@@ -196,7 +197,11 @@ const configured = (): readonly string[] => {
   const config = toValue(tree.body[0].declaration) as {
     readonly overrides: ReadonlyArray<{ readonly files: readonly string[]; readonly rules: Record<string, unknown> }>;
   };
-  return config.overrides.filter((o) => o.rules[RULE] === "error").flatMap((o) => o.files);
+  return pipe(
+    config.overrides,
+    Arr.filter((o) => o.rules[RULE] === "error"),
+    Arr.flatMap((o) => o.files),
+  );
 };
 
 it("pinned: every folder listed the day the rule landed is still listed, or the list is next/**", () => {
@@ -206,23 +211,26 @@ it("pinned: every folder listed the day the rule landed is still listed, or the 
     return;
   }
 
-  expect(LISTED.filter((folder) => !files.includes(folder))).toEqual([]);
+  expect(Arr.filter(LISTED, (folder) => !files.includes(folder))).toEqual([]);
 });
 
-const SERVICE = [
-  'import { Context, Layer } from "effect";',
-  "",
-  'export class Planted extends Context.Service<Planted, { readonly n: number }>()("t/Planted") {',
-  "  static readonly layer = Layer.succeed(Planted, { n: 1 });",
-  "}",
-  "",
-].join("\n");
+const SERVICE = Arr.join(
+  [
+    'import { Context, Layer } from "effect";',
+    "",
+    'export class Planted extends Context.Service<Planted, { readonly n: number }>()("t/Planted") {',
+    "  static readonly layer = Layer.succeed(Planted, { n: 1 });",
+    "}",
+    "",
+  ],
+  "\n",
+);
 
 it("scenario: the real config holds a static layer in each listed folder, and leaves tests and today's version out", async () => {
   // Only the real config holds the list, so one real lint run reads one planted file per listed
   // folder, saved or added since, and per left-out kind.
-  const folders = [...new Set([...LISTED, ...configured()])].filter((f) => f !== "next/**");
-  const on = folders.map((folder) => folder.replace(/\*\*$/, "planted/Planted.ts"));
+  const folders = Arr.filter([...new Set([...LISTED, ...configured()])], (f) => f !== "next/**");
+  const on = Arr.map(folders, (folder) => folder.replace(/\*\*$/, "planted/Planted.ts"));
   const off = [
     "next/packages/libfabrika/src/tasks/Planted.test.ts",
     "next/packages/libfabrika/src/tasks/Planted.test.tsx",
@@ -231,8 +239,8 @@ it("scenario: the real config holds a static layer in each listed folder, and le
     "next/apps/fabrika/src/Planted.test.ts",
     "packages/fabrika/src/Planted.ts",
   ];
-  const linted = await plant(Object.fromEntries([...on, ...off].map((path) => [path, SERVICE])));
+  const linted = await plant(Object.fromEntries(Arr.map([...on, ...off], (path) => [path, SERVICE])));
 
-  expect(on.map((path) => [path, linted(CODE, path)])).toEqual(on.map((path) => [path, [4]]));
-  expect(off.map((path) => [path, linted(CODE, path)])).toEqual(off.map((path) => [path, []]));
+  expect(Arr.map(on, (path) => [path, linted(CODE, path)])).toEqual(Arr.map(on, (path) => [path, [4]]));
+  expect(Arr.map(off, (path) => [path, linted(CODE, path)])).toEqual(Arr.map(off, (path) => [path, []]));
 });

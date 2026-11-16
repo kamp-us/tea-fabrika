@@ -38,6 +38,7 @@
 // This repo's own rule, not a copy. It blocks. Its fires when it was
 // added are in oxlint-plugins/README.md.
 import type { CreateRule } from "@oxlint/plugins";
+import { Array as Arr } from "effect";
 import { below, dotted, grouped, isWritten, type Node, quoted } from "./match.ts";
 
 const SECRET =
@@ -103,7 +104,8 @@ export const noSecretEnv: CreateRule = {
           return;
         }
 
-        const secret = [...below(node.id)].some(
+        const secret = Arr.some(
+          [...below(node.id)],
           (part) =>
             part.type === "Property" &&
             part.shorthand &&
@@ -115,7 +117,7 @@ export const noSecretEnv: CreateRule = {
           return;
         }
 
-        const reads = [...below(node.init)].some((part) => dotted(part) === "process.env");
+        const reads = Arr.some([...below(node.init)], (part) => dotted(part) === "process.env");
 
         if (!reads) {
           return;

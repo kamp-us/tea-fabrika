@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, expect, it } from "vitest";
@@ -57,12 +58,12 @@ type Report = {
 
 /** The lines the rule fires at in each file, from one oxlint run through the repo's own config. */
 const firesIn = (files: readonly string[]): ReadonlyMap<string, readonly number[]> => {
-  const out = spawnSync(OXLINT, ["--format=json", ...files.map((f) => relative(ROOT, f))], {
+  const out = spawnSync(OXLINT, ["--format=json", ...Arr.map(files, (f) => relative(ROOT, f))], {
     cwd: ROOT,
     encoding: "utf8",
   });
   const report = JSON.parse(out.stdout) as Report;
-  const lines = new Map<string, number[]>(files.map((f) => [f, []]));
+  const lines = new Map<string, number[]>(Arr.map(files, (f) => [f, []]));
 
   for (const d of report.diagnostics) {
     const at = lines.get(join(ROOT, d.filename));
@@ -72,7 +73,7 @@ const firesIn = (files: readonly string[]): ReadonlyMap<string, readonly number[
     }
   }
 
-  return new Map([...lines].map(([f, at]) => [f, at.sort((a, b) => a - b)]));
+  return new Map(Arr.map([...lines], ([f, at]) => [f, at.sort((a, b) => a - b)]));
 };
 
 const fires = (file: string): readonly number[] => firesIn([file]).get(file)!;
@@ -91,7 +92,7 @@ const check = ({ text, expected, fixed }: Case) => {
             {
               code: text,
               filename: "case.ts",
-              errors: expected.map((line) => ({ line, message: /Leave a blank line before this statement/ })),
+              errors: Arr.map(expected, (line) => ({ line, message: /Leave a blank line before this statement/ })),
               output: fixed,
             },
           ],
@@ -102,10 +103,10 @@ const check = ({ text, expected, fixed }: Case) => {
 const cli = (cases: ReadonlyMap<string, Case>) => {
   const files = [...cases.keys()];
   const found = firesIn(files);
-  expect(Object.fromEntries(found)).toEqual(Object.fromEntries([...cases].map(([f, c]) => [f, c.expected])));
-  spawnSync(OXLINT, ["--fix", ...files.map((f) => relative(ROOT, f))], { cwd: ROOT, encoding: "utf8" });
-  expect(Object.fromEntries(files.map((f) => [f, readFileSync(f, "utf8")]))).toEqual(
-    Object.fromEntries([...cases].map(([f, c]) => [f, c.fixed])),
+  expect(Object.fromEntries(found)).toEqual(Object.fromEntries(Arr.map([...cases], ([f, c]) => [f, c.expected])));
+  spawnSync(OXLINT, ["--fix", ...Arr.map(files, (f) => relative(ROOT, f))], { cwd: ROOT, encoding: "utf8" });
+  expect(Object.fromEntries(Arr.map(files, (f) => [f, readFileSync(f, "utf8")]))).toEqual(
+    Object.fromEntries(Arr.map([...cases], ([f, c]) => [f, c.fixed])),
   );
   expect([...firesIn(files).values()].flat()).toEqual([]);
 };
@@ -128,7 +129,7 @@ it("fires before each piece with no blank line above it, unless both sides are o
       let fixed = "";
       let line = 1;
       const expected: number[] = [];
-      pieces.forEach(({ kind, blank, comment }, i) => {
+      Arr.forEach(pieces, ({ kind, blank, comment }, i) => {
         const { text: body, first } = piece(kind, i);
         const lead = comment ? `// piece ${i}\n` : "";
 
@@ -206,7 +207,7 @@ it("inside a block, fires before and after each control statement with no blank 
       let fixed = head;
       let line = 6;
       const expected: number[] = [];
-      statements.forEach(({ kind, blank }, i) => {
+      Arr.forEach(statements, ({ kind, blank }, i) => {
         const prev = i === 0 ? "plain" : statements[i - 1]!.kind;
 
         if (blank) {

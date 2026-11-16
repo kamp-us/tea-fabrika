@@ -16,7 +16,7 @@
 // (`.oxfmtrc.json`).
 import { constants } from "node:os";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Duration, Effect, Fiber, Result, Schema, Stdio, Stream } from "effect";
+import { Array as Arr, Console, Duration, Effect, Fiber, Option, Result, Schema, Stdio, Stream, pipe } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** A piece of a part's output, and the stream it went to. */
@@ -47,8 +47,8 @@ const passed = (end: End) => end._tag === "exited" && end.code === 0;
 
 /** A shell's exit code over 128 is 128 + the number of the signal that killed what it ran. */
 const ended = (code: number): End => {
-  const signal = Object.entries(constants.signals).find(([, n]) => code > 128 && n === code - 128)?.[0];
-  return signal === undefined ? { _tag: "exited", code } : { _tag: "killed", signal, code };
+  const signal = Arr.findFirst(Object.entries(constants.signals), ([, n]) => code > 128 && n === code - 128);
+  return Option.isNone(signal) ? { _tag: "exited", code } : { _tag: "killed", signal: signal.value[0], code };
 };
 
 /** How a part ended, in the words its header and the summary print. */
@@ -118,11 +118,19 @@ const print = Effect.fnUntraced(function* (ran: Ran) {
 /** A part's last line that is not empty, from stderr when it wrote any there, else from stdout. */
 const lastLine = (output: ReadonlyArray<Piece>): string | undefined => {
   const last = (to: Piece["to"]) =>
-    Buffer.concat(output.filter((piece) => piece.to === to).map((piece) => piece.bytes))
-      .toString("utf8")
-      .split("\n")
-      .findLast((line) => line.trim() !== "");
-  return last("stderr") ?? last("stdout");
+    Arr.findLast(
+      Buffer.concat(
+        pipe(
+          output,
+          Arr.filter((piece) => piece.to === to),
+          Arr.map((piece) => piece.bytes),
+        ),
+      )
+        .toString("utf8")
+        .split("\n"),
+      (line) => line.trim() !== "",
+    );
+  return Option.getOrUndefined(Option.orElse(last("stderr"), () => last("stdout")));
 };
 
 /** A failed part as the summary names it, with its last line, the one a failure reason shows. */
@@ -143,16 +151,16 @@ const all = Effect.fnUntraced(function* (commands: ReadonlyArray<string>) {
 /** Runs the parts at once and fails with the ones that did not exit 0. */
 const parallel = Effect.fnUntraced(function* (commands: ReadonlyArray<string>) {
   const [took, ran] = yield* Effect.timed(all(commands));
-  const failed = ran.filter((part) => !passed(part.end));
+  const failed = Arr.filter(ran, (part) => !passed(part.end));
 
   if (failed.length === 0) {
     return yield* Console.log(`\nparallel: ${ran.length} parts passed in ${seconds(took)}`);
   }
 
   yield* Console.error(
-    `\nparallel: ${failed.length} of ${ran.length} parts failed in ${seconds(took)}:\n${failed.map(named).join("\n")}`,
+    `\nparallel: ${failed.length} of ${ran.length} parts failed in ${seconds(took)}:\n${pipe(failed, Arr.map(named), Arr.join("\n"))}`,
   );
-  return yield* new Failed({ parts: failed.map((part) => part.command) });
+  return yield* new Failed({ parts: Arr.map(failed, (part) => part.command) });
 });
 
 if (import.meta.main) {

@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e31-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:32:16-08:00",
+  "ended": "2026-11-15T20:54:38-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E31 (preferEffectArray in oxlint-plugins/ and stylelint.config.ts, all exam paths, no build step). The checker has no quick fix for this check (the client fixed 0 of 10 hits in advice.ts), so a scratchpad codemod on oxc-parser rewrote each flagged call from the checker's own hit list: xs.m(a) to Arr.m(xs, a) for map, filter, flatMap, some, every, join and forEach, and Array.isArray to Arr.isArray. A second pass turned each nest the first made from a chain into pipe(xs, Arr.y(a), Arr.x(b)), in the chain's order, which also fixed the inference errors the nests raised. The 24 find, findLast, findIndex and toSorted hits answer an Option, so each was rewritten by hand and followed to its uses. No lock line was added.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Count (the plan's --lspconfig, only preferEffectArray at error): 739 before, 0 after; with all 135 checks at error no other check rose (strictBooleanExpressions 1543 to 1542). 15 more hits in script-reads.mjs, which tsc reaches through an import but the per-project count does not list, were fixed the same way. Left: gitignore.mjs's 3 hits, since CI's changes job runs it with node before any install, so it may import no package. The effect import made 7 try/catch blocks in 5 files fire fabrika/no-raw-try-catch; each got a reasoned disable line (plain Node reads at the edge, effect imported only for its Array helpers). pnpm format, pnpm lint and pnpm typecheck pass; the 38 oxlint-plugins test files ran, 547 tests passed. --changed origin/main is refused locally, since the diff touches a force-rerun trigger. None of PR 1366's files is in the slice.",
+  "plants": [],
+  "step": "tests"
+}
