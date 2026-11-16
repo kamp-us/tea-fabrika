@@ -24,6 +24,7 @@ import {
   Stream,
   Tracer,
 } from "effect";
+import * as Str from "effect/String";
 import { type SessionManagerError } from "../access/SessionManager.ts";
 import {
   Activity,
@@ -1425,7 +1426,7 @@ export class ProgramRunner extends Context.Service<
               continue;
             }
 
-            const own = inRunnerSpace(letter.id) && letter.id.startsWith(`${process.id}/`);
+            const own = inRunnerSpace(letter.id) && Str.startsWith(`${process.id}/`)(letter.id);
             const ending = cmds.findIndex((job) => exits(state, job));
 
             // Only answers to Cmds before exit may still fold. Ordinary mail waits for the next life.
@@ -1487,8 +1488,8 @@ export class ProgramRunner extends Context.Service<
             // what its step made is still this life's to run, as if `settle` had folded it.
             const settled = own && cmds.some((cmd) => letter.id === `${cmd.id}/answer` && cmdType(cmd) === MONITOR);
 
-            if (own && letter.id.endsWith("/answer")) {
-              cmds = cmds.filter((cmd) => cmd.id !== letter.id.slice(0, -"/answer".length));
+            if (own && Str.endsWith("/answer")(letter.id)) {
+              cmds = cmds.filter((cmd) => cmd.id !== Str.slice(0, -"/answer".length)(letter.id));
             }
 
             const owed = !accepted || settled || letter.id === options.mine;
@@ -1679,8 +1680,8 @@ export class ProgramRunner extends Context.Service<
           if (
             brainOnly({ stream, id: job.id, tag: kind }) ||
             stream === "gateway" ||
-            stream.startsWith("gateway/") ||
-            (stream.endsWith("/inbox") && stream !== `${process.name}/inbox`)
+            Str.startsWith("gateway/")(stream) ||
+            (Str.endsWith("/inbox")(stream) && stream !== `${process.name}/inbox`)
           ) {
             return yield* err(job, "forbidden");
           }
@@ -2127,7 +2128,7 @@ export class ProgramRunner extends Context.Service<
         const dispatch = Effect.fnUntraced(function* (
           job: Dispatched,
         ): Effect.fn.Return<ReadonlyArray<Dispatched>, RunnerFailure> {
-          if (!job.id.startsWith(`${process.id}/`) || (yield* ended) || recovering(supervision)) {
+          if (!Str.startsWith(`${process.id}/`)(job.id) || (yield* ended) || recovering(supervision)) {
             return [];
           }
 

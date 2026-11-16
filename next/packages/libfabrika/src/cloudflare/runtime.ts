@@ -24,6 +24,7 @@ import {
 } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import * as Redacted from "effect/Redacted";
+import * as Str from "effect/String";
 import { admitted } from "../access/Access.ts";
 import { ClientManager } from "../access/ClientManager.ts";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
@@ -671,7 +672,8 @@ export const processDescriptor = Effect.fn("process.descriptor")(function* (ctx:
   return { ...descriptor, id: pid ?? descriptor.id, build: checkpoint.saved.build };
 });
 
-const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), (n) => n.toString(16).padStart(2, "0")).join("");
+const hex = (bytes: ArrayBuffer) =>
+  Array.from(new Uint8Array(bytes), (n) => Str.padStart(2, "0")(n.toString(16))).join("");
 
 // R2 refuses a body whose SHA-256 differs from the one sent. The local bucket does not check,
 // so the adapter checks first and both places fail the same way.
@@ -694,7 +696,7 @@ export const checkedPut = Effect.fnUntraced(function* (
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", copy), catch: fail });
   const digest = yield* work;
 
-  if (hex(digest) !== sha256.toLowerCase()) {
+  if (hex(digest) !== Str.toLowerCase(sha256)) {
     return yield* new LedgerError({ reason: "bad_row" });
   }
 
@@ -805,8 +807,8 @@ export const recordingLayer = (sql: Sql, env: Env, project: string, object: stri
   );
 
 const fingerprint = Effect.fnUntraced(function* (value: string) {
-  const ssh = value.startsWith("ssh-");
-  const blob = ssh ? Base64.decode(value.trim().split(/\s+/)[1] ?? "") : Base64Url.decode(value);
+  const ssh = Str.startsWith("ssh-")(value);
+  const blob = ssh ? Base64.decode(Str.split(Str.trim(value), /\s+/)[1] ?? "") : Base64Url.decode(value);
 
   if (Result.isFailure(blob)) {
     return yield* new LedgerError({ reason: "bad_row", cause: blob.failure });
@@ -818,7 +820,7 @@ const fingerprint = Effect.fnUntraced(function* (value: string) {
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail });
   const hash = yield* work;
-  return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
+  return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(hash)))}`;
 });
 
 const projectLedger = (
@@ -1571,9 +1573,9 @@ const projectLogic = Effect.fn("project.init")(function* (
     const { path, line, ...body } = fact;
     const safe =
       path !== undefined &&
-      !path.startsWith("/") &&
-      !path.includes("..") &&
-      !path.includes("\\") &&
+      !Str.startsWith("/")(path) &&
+      !Str.includes("..")(path) &&
+      !Str.includes("\\")(path) &&
       !/^[A-Za-z]:/.test(path);
     yield* ledger.append(
       "gateway/code",
@@ -1809,7 +1811,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       return yield* new LedgerError({ reason: "refused" });
     }
 
-    if (stream.startsWith("gateway/") || stream.startsWith("processes")) {
+    if (Str.startsWith("gateway/")(stream) || Str.startsWith("processes")(stream)) {
       return yield* new LedgerError({ reason: "refused" });
     }
 

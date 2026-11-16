@@ -9,6 +9,7 @@
  * @stability unstable
  */
 import { DateTime, Effect, Schema } from "effect";
+import * as Str from "effect/String";
 import { ParentText, Rev } from "../Rev.ts";
 
 export {
@@ -31,7 +32,7 @@ export {
  */
 export const TraceId = Schema.String.check(
   Schema.isPattern(/^[0-9a-f]{32}$/),
-  Schema.makeFilter((traceId) => traceId !== "0".repeat(32), { expected: "a nonzero W3C trace id" }),
+  Schema.makeFilter((traceId) => traceId !== Str.repeat(32)("0"), { expected: "a nonzero W3C trace id" }),
 );
 
 const Text = Schema.NonEmptyString;

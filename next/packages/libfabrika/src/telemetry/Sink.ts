@@ -24,6 +24,7 @@ import {
   Schema,
   Tracer,
 } from "effect";
+import * as Str from "effect/String";
 import type { Sql } from "../Sql.ts";
 import type { Archive } from "./Archive.ts";
 import {
@@ -130,7 +131,7 @@ const findProcess = (span: Tracer.AnySpan): Option.Option<string> => {
 /** The largest numeric tag whose key ends in `.lag`, such as P6's `fab.ledger.lag`. */
 const largestLag = (tags: Readonly<Record<string, Tag>>): number | null => {
   const lags = Object.entries(tags).flatMap(([key, value]) =>
-    key.endsWith(".lag") && typeof value === "number" ? [value] : [],
+    Str.endsWith(".lag")(key) && typeof value === "number" ? [value] : [],
   );
   return lags.length === 0 ? null : Math.max(...lags);
 };
@@ -154,18 +155,26 @@ const summary = (error: unknown): unknown =>
       }
     : error;
 
+/** Where the text after the last `separator` in `text` starts, or 0 if it holds none. */
+const after = (text: string, separator: string): number =>
+  Option.match(Str.lastIndexOf(separator)(text), { onNone: () => 0, onSome: (index) => index + 1 });
+
+/** The first " (" in `body` at or after `from`. */
+const group = (body: string, from: number): Option.Option<number> =>
+  Option.map(Str.indexOf(" (")(Str.slice(from)(body)), (index) => from + index);
+
 /** A location without its folder: the file name with its line and column. A `node:` location is a
  *  module name and stays whole. A URL's query and fragment come after its file name and can hold a
  *  folder, so they go with the folder. */
 const place = (location: string): string => {
-  if (location.startsWith("node:")) {
+  if (Str.startsWith("node:")(location)) {
     return location;
   }
 
   const position = /(?::\d+){1,2}$/.exec(location)?.[0] ?? "";
-  const path = location.slice(0, location.length - position.length);
-  const file = /^[a-z][a-z\d+.-]*:\/\//i.test(path) ? (path.split(/[?#]/)[0] ?? path) : path;
-  return `${file.slice(Math.max(file.lastIndexOf("/"), file.lastIndexOf("\\")) + 1)}${position}`;
+  const path = Str.slice(0, location.length - position.length)(location);
+  const file = /^[a-z][a-z\d+.-]*:\/\//i.test(path) ? Str.split(path, /[?#]/)[0] : path;
+  return `${Str.slice(Math.max(after(file, "/"), after(file, "\\")))(file)}${position}`;
 };
 
 /** Where a location may start: an eval origin, a scheme (`file:`, `http:`, `node:`, a drive such
@@ -181,12 +190,12 @@ const START = /^(?:eval at |[a-z][a-z\d+.-]*:|[^\s()]*[/\\])/is;
 const opens = (body: string): number => {
   let last = -1;
 
-  for (let at = body.indexOf(" ("); at !== -1; at = body.indexOf(" (", at + 1)) {
-    if (START.test(body.slice(at + 2))) {
-      return at + 1;
+  for (let at = group(body, 0); Option.isSome(at); at = group(body, at.value + 1)) {
+    if (START.test(Str.slice(at.value + 2)(body))) {
+      return at.value + 1;
     }
 
-    last = at + 1;
+    last = at.value + 1;
   }
 
   return last;
@@ -196,12 +205,17 @@ const opens = (body: string): number => {
  *  is split at its last "), ": it keeps its name and loses the folder of each location inside it,
  *  however deep the origins nest. */
 const located = (location: string): string => {
-  const origin = location.startsWith("eval at ") ? location.lastIndexOf("), ") : -1;
-  const head = origin === -1 ? "" : location.slice(0, origin);
-  const open = origin === -1 ? -1 : opens(head);
+  const origin = Str.startsWith("eval at ")(location) ? Str.lastIndexOf("), ")(location) : Option.none<number>();
+
+  if (Option.isNone(origin)) {
+    return place(location);
+  }
+
+  const head = Str.slice(0, origin.value)(location);
+  const open = opens(head);
   return open === -1
     ? place(location)
-    : `${head.slice(0, open)}(${located(head.slice(open + 1))}), ${place(location.slice(origin + 3))}`;
+    : `${Str.slice(0, open)(head)}(${located(Str.slice(open + 1)(head))}), ${place(Str.slice(origin.value + 3)(location))}`;
 };
 
 /** One line without its frame's folders: a frame's name stays whole, as do messages and Effect's
@@ -217,10 +231,10 @@ const portable = (line: string): string => {
   }
 
   const [, at = "", body = "", ending = ""] = frame;
-  const open = body.endsWith(")") ? opens(body) : -1;
+  const open = Str.endsWith(")")(body) ? opens(body) : -1;
 
   if (open > 0) {
-    return `${at}${body.slice(0, open)}(${located(body.slice(open + 1, -1))})${ending}`;
+    return `${at}${Str.slice(0, open)(body)}(${located(Str.slice(open + 1, -1)(body))})${ending}`;
   }
 
   const bare = /^(async )?((?:[a-z][a-z\d+.-]*:|[/\\]).*|.*(?::\d+){1,2})$/is.exec(body);
@@ -230,13 +244,12 @@ const portable = (line: string): string => {
 /** `Cause.pretty`'s text with every frame's folders cut. Each line break, `\r\n`, `\r` or `\n`, is
  *  a separator kept as it was, so a CRLF stack stays CRLF and its `\r {` stays where it was. */
 const cutFolders = (text: string): string =>
-  text
-    .split(/(\r\n|\r|\n)/)
+  Str.split(text, /(\r\n|\r|\n)/)
     .map((piece, index) => (index % 2 === 1 ? piece : portable(piece)))
     .join("");
 
 const cutContent = (text: string): string =>
-  text.length <= MOST_CONTENT ? text : `${text.slice(0, MOST_CONTENT)}\n[cut: ${text.length} characters]`;
+  text.length <= MOST_CONTENT ? text : `${Str.slice(0, MOST_CONTENT)(text)}\n[cut: ${text.length} characters]`;
 
 /** Turns an ended span into its rows. Pure: no write, no clock but the span's own times. `object`
  *  is the one that ended it, the row's resource. */

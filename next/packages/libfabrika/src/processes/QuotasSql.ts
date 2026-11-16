@@ -12,6 +12,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { Entry, encodedBytes, lineFor, type Line } from "../ledger/Log.ts";
 import { Selection } from "../ledger/Referee.ts";
 import { accountingEntries, nextPlace } from "../ledger/RefereeSql.ts";
@@ -77,14 +78,14 @@ const fromWriter = (writer: Writer | undefined): Authority =>
 // program's charge.
 const infrastructure = (stream: string) =>
   stream === ProcessTable.stream ||
-  stream.startsWith("processes/") ||
+  Str.startsWith("processes/")(stream) ||
   stream === "gateway" ||
-  stream.startsWith("gateway/") ||
-  stream.startsWith("job:") ||
-  stream.startsWith("target:") ||
-  stream.startsWith("settings/") ||
-  stream.startsWith("permissions/") ||
-  stream.startsWith("repository/");
+  Str.startsWith("gateway/")(stream) ||
+  Str.startsWith("job:")(stream) ||
+  Str.startsWith("target:")(stream) ||
+  Str.startsWith("settings/")(stream) ||
+  Str.startsWith("permissions/")(stream) ||
+  Str.startsWith("repository/")(stream);
 
 const programAccount = (program: string) => Quota.Account.cases.program.make({ program });
 const recoveryAccount = (name: string) => Quota.Account.cases.recovery.make({ name, location: "project" });
@@ -197,13 +198,15 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       options.brain,
     );
   const owner = (entry: Entry, registry: ProcessTable) => {
-    const live = registry.info.find((p) => entry.stream === `${p.name}/inbox` || entry.stream.startsWith(`${p.name}/`));
+    const live = registry.info.find(
+      (p) => entry.stream === `${p.name}/inbox` || Str.startsWith(`${p.name}/`)(entry.stream),
+    );
 
     if (live !== undefined) {
       return live;
     }
 
-    const life = registry.life(entry.stream.split("/")[0] ?? "");
+    const life = registry.life(Str.split(entry.stream, "/")[0]);
     return Option.isNone(life)
       ? undefined
       : {

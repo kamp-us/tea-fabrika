@@ -1,4 +1,5 @@
 import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
+import * as Str from "effect/String";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
@@ -78,7 +79,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
         // A hands key's own `target:` stream is asked again as its `tasks.wait`: it may not call
         // `ledger.wait`, and the gateway names that stream from its key alone. Either way the ring
         // goes to `reader`, this object, where the socket is.
-        const asked = stream.startsWith(targetStream(""))
+        const asked = Str.startsWith(targetStream(""))(stream)
           ? p.route(client, "tasks.wait", { after }, reader)
           : p.route(client, "ledger.wait", { stream, after }, reader);
         const answer = yield* rpc(routed(asked));
@@ -262,9 +263,14 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
   return {
     fetch: Effect.fnUntraced(function* (request: Request) {
-      const path = new URL(request.url).pathname.split("/");
+      const path = Str.split(new URL(request.url).pathname, "/");
 
-      if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+      if (
+        !Option.exists(
+          Option.fromNullishOr(request.headers.get("upgrade")),
+          (upgrade) => Str.toLowerCase(upgrade) === "websocket",
+        )
+      ) {
         return new Response("WebSocket required", { status: 426 });
       }
 
