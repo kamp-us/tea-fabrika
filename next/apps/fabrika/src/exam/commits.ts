@@ -18,7 +18,7 @@
 // imports no product code, so a builder cannot weaken it by changing one (p84). Exit 1 on any `stuck`,
 // 0 on `done` and `ask`, 2 when the run fails: a keys file p87 refuses, or something it could not read.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Config, Console, Effect, Exit, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { Config, Console, Effect, Exit, FileSystem, Option, Path, type PlatformError, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 export const ROLES = ["tests", "build", "lead"] as const;
@@ -381,7 +381,7 @@ export const chain = (
 
 class Failed extends Schema.TaggedError<Failed>()("Failed", { message: Schema.String }) {}
 
-const text = Effect.fnUntraced(function* (s: Stream.Stream<Uint8Array, unknown>) {
+const text = Effect.fnUntraced(function* (s: Stream.Stream<Uint8Array, PlatformError.PlatformError>) {
   return yield* s.pipe(Stream.decodeText(), Stream.mkString);
 });
 

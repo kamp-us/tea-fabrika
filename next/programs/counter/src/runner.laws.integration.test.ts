@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
-import { Id } from "@kampus/libfabrika";
+import { Id, type ProgramRunner } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
 import { Doorbell } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
@@ -38,9 +38,12 @@ type Update =
       patch: ReadonlyArray<{ op: string; path: string; value?: unknown }>;
     };
 
+// What the real runner fails with, read from its own type.
+type RunnerFailure = Effect.Error<ReturnType<ProgramRunner["Service"]["open"]>>;
+
 type Runner = {
-  readonly open: (client: string) => Effect.Effect<{ rev: number; view: unknown }, unknown>;
-  readonly msg: (input: unknown) => Effect.Effect<{ _tag: string; reason?: string }, unknown>;
+  readonly open: (client: string) => Effect.Effect<{ rev: number; view: unknown }, RunnerFailure>;
+  readonly msg: (input: unknown) => Effect.Effect<{ _tag: string; reason?: string }, RunnerFailure>;
 };
 
 const reconstruct = (before: unknown, change: Update): unknown => {

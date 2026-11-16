@@ -17,8 +17,9 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
+import type { BuildError } from "@kampus/libfabrika/runtime/Built";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Result, Schema, Scope } from "effect";
+import { Effect, Exit, type PlatformError, Result, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { chromium } from "playwright";
@@ -46,7 +47,10 @@ type Build = {
     readonly chaos: boolean;
     readonly files: readonly string[];
     readonly ledger: readonly unknown[];
-  }) => Effect.Effect<Built & { readonly assets: Readonly<Record<string, Asset>> }, unknown>;
+  }) => Effect.Effect<
+    Built & { readonly assets: Readonly<Record<string, Asset>> },
+    BuildError | PlatformError.PlatformError
+  >;
 };
 
 const field = (v: string | Buffer) => {

@@ -14,7 +14,7 @@
 // list grew or no longer reads as a list, 0 when none did or there is no base, 2 when the base is
 // not a sha, git fails, or the base's own file does not read (main is broken, so it fails closed).
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Exit, Option, Schema, Stream } from "effect";
+import { Console, Effect, Exit, Option, type PlatformError, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 const ZEROS = "0".repeat(40);
@@ -122,7 +122,8 @@ export const judge = Effect.fnUntraced(function* (
 
 class Failed extends Schema.TaggedError<Failed>()("Failed", { message: Schema.String }) {}
 
-const text = (s: Stream.Stream<Uint8Array, unknown>) => s.pipe(Stream.decodeText(), Stream.mkString);
+const text = (s: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
+  s.pipe(Stream.decodeText(), Stream.mkString);
 
 /** One git command's output and exit code. */
 const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {

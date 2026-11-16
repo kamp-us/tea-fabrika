@@ -24,13 +24,14 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Path, Schema, Tracer } from "effect";
+import { Effect, FileSystem, Path, type PlatformError, Schema, Tracer } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import { parseSync } from "oxc-parser";
 import { rolldown, type RolldownOptions, type OutputOptions, type RolldownOutput } from "rolldown";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { BuildError } from "../../runtime/Built.ts";
 import * as StartsTest from "../../settings/StartsTest.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../../../../..");
@@ -145,8 +146,11 @@ type Build = {
     readonly ledger: readonly unknown[];
     readonly chaos: boolean;
     readonly tab?: { readonly entry: string; readonly styles: readonly string[] };
-  }) => Effect.Effect<Built, unknown>;
+  }) => Effect.Effect<Built, BuildFailure>;
 };
+
+// The build fails with what `build.ts` names: a refusal or a disk failure.
+type BuildFailure = BuildError | PlatformError.PlatformError;
 
 const fixture = (value: string, count = 1) => {
   const home = mkdtempSync("/tmp/fh.");
@@ -1345,7 +1349,7 @@ const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
 
   const steps: ReadonlyArray<{
     readonly possible: () => boolean;
-    readonly run: (n: number) => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path>;
+    readonly run: (n: number) => Effect.Effect<void, BuildFailure, FileSystem.FileSystem | Path.Path>;
   }> = [
     {
       possible: () => true,
