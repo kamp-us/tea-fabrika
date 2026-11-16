@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-related-fixture-json-selects-every-test",
+  "date": "2026-11-15",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".github/ci/related.test.ts",
+    "line": 83
+  },
+  "says": "The JSON fixture .agents/skills/lead/scripts/ci/fixtures/run-43776563690-jobs.json added by PR 1392 counts as a real script, and vitest's related run on it selects 943 tests where only its declaring test .agents/skills/lead/scripts/pr/Arm.test.ts is expected, so related.test.ts is red on main.",
+  "proof": "Scheduled run 43790791018, job 133052900697: 'real script subsets select exactly their declaring tests' fails with counterexample [\".agents/skills/lead/scripts/ci/fixtures/run-43776563690-jobs.json\"], expected [ Array(1) ] received [ …(943) ]; the per-script law fails the same way.",
+  "cost": "Every scheduled full run on main or a branch is red at tooling-2, and fail-fast cancels the other legs, so no branch can get the green full run land.ts arm requires.",
+  "head": "66be1fd451907224a42c708db78e864c30100f6c",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1402"
+}

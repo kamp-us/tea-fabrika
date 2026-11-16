@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-ci-red-failure-fix1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1383",
+  "started": "2026-11-15T16:38:00-08:00",
+  "ended": "2026-11-15T17:05:00-08:00",
+  "parent": "2026-11-15-ci-red-failure-review1",
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round, one agent, today's CI tooling: the review found that two matrices let a red tooling leg leave next's 7 legs running (up to about 59 runner minutes) where the old stop step stopped every leg, and the lead took the reviewer's path (b). All 9 test legs are now one matrix in one job, tests, with fail-fast: true and max-parallel: 9, so with the report 10 machines as before. Tooling legs are tooling-1 and tooling-2 and strip their prefix for --shard. The job's backstop is a matrix expression, 33 for a tooling leg and 20 for a next leg (the docs' contexts table lets this key read matrix). scheduled.mjs reads a leg's suite from its shard (suiteOf), no longer from the job id. SC5 to SC10 now judge the one job; SC6 holds the one-matrix shape. The test-step limit law is renumbered SC13 after pull request 1380 took SC12 for queue: max, kept from the merge of origin/main.",
+  "plants": [
+    {
+      "law": ".github/ci/workflow-lint/scheduled.test.ts SC6 scenario: the tooling legs or the next legs in a job of their own is named by SC6",
+      "plant": "scheduled.ts: SC6's one-matrix check dropped",
+      "result": "red"
+    },
+    {
+      "law": ".github/ci/scheduled.test.ts property: a leg's suite is tooling when its shard starts tooling-, and next for any other leg",
+      "plant": "scheduled.mjs: suiteOf reads the job id; then suiteOf matches tooling anywhere in the name",
+      "result": "red"
+    },
+    {
+      "law": ".github/ci/workflow-lint/scheduled.test.ts SC13 scenario and its four backstop plants",
+      "plant": "scheduled.ts: SC13's job-limit check dropped",
+      "result": "red"
+    },
+    {
+      "law": ".github/ci/workflow-lint/scheduled.test.ts SC8 plants: no tooling legs, tooling tests on every leg, a third each",
+      "plant": "scheduled.ts: SC8's tooling-leg order and naming check dropped",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 27,
+  "note": "Ran with Node 26.13.0: every workflow-lint test file, scheduled.test.ts, time-table.test.ts, changes.test.ts, vitest.shards.test.ts, shard-rows.test.ts and ci-speed.test.ts, 746 tests green; pnpm format; pnpm lint. No workflow run was started. Not run: pnpm typecheck (CI runs it), a real scheduled run of the one-job shape.",
+  "step": "build"
+}
