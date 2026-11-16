@@ -349,15 +349,6 @@ describe("T703 connection driver laws", () => {
                 yield* Deferred.succeed(call!.reply, answer);
                 yield* settle;
                 const after = h.log.slice(from);
-<<<<<<< HEAD
-                const sent = after.findIndex((e) => e._tag === "send");
-                    const idle = after.findIndex(
-                      (e) => e._tag === "save" && e.saved._tag === "online" && !e.saved.busy,
-                    );
-||||||| e613fa45b
-                const sent = after.findIndex((e) => e._tag === "send");
-                const idle = after.findIndex((e) => e._tag === "save" && e.saved._tag === "online" && !e.saved.busy);
-=======
                 const sent = Option.getOrElse(
                   Arr.findFirstIndex(after, (e) => e._tag === "send"),
                   () => -1,
@@ -366,7 +357,6 @@ describe("T703 connection driver laws", () => {
                   Arr.findFirstIndex(after, (e) => e._tag === "save" && e.saved._tag === "online" && !e.saved.busy),
                   () => -1,
                 );
->>>>>>> 7a10b6213
                 // The response goes out first; only then is busy cleared.
                 expect(sent).toBeGreaterThanOrEqual(0);
                 expect(idle).toBeGreaterThan(sent);
@@ -883,17 +873,9 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
                 e._tag === "call" ? [{ method: e.method, params: e.params }] : [],
               );
               // The calls the old decode accepted, in order, and no other.
-<<<<<<< HEAD
-                  expect(calls).toEqual(
-                    queued.splice(0, calls.length).map(({ method, params }) => ({ method, params })),
-                  );
-||||||| e613fa45b
-              expect(calls).toEqual(queued.splice(0, calls.length).map(({ method, params }) => ({ method, params })));
-=======
               expect(calls).toEqual(
                 Arr.map(queued.splice(0, calls.length), ({ method, params }) => ({ method, params })),
               );
->>>>>>> 7a10b6213
             };
 
             for (const { move, pick, frame, failure: f, rev } of moves) {
