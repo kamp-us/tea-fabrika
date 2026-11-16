@@ -294,6 +294,8 @@ export const closingWords = (closing: readonly string[]): string => {
 /** One turn through the agents service, on `prompt` and `seconds`, with its report (`closingWords`). */
 const turnOnce = <A>(agents: Agents, ask: TurnAsk<A>, prompt: string, seconds: number) =>
   Effect.gen(function* () {
+    // SAFETY: `[]` and `null` are values of these wider types; the casts only widen the literal types
+    // so the turn below can push the closing lines and keep the ended answer.
     const state = { closing: [] as string[], spent: NO_SPENT, ended: null as Agent.Ended<A> | null };
     const append = (line: object) => appendTo(ask.events, line);
     const turn: Agent.Turn<A> = {

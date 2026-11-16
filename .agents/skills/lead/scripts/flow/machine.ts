@@ -100,6 +100,7 @@ export const make = ({ lead }: { readonly lead: boolean }) => {
     model: Model,
     msg: Schema.Never,
     cmds: [stepRun],
+    // SAFETY: tea's `types` slot only carries the Ctx type; tea never reads this empty value (0561).
     types: { ctx: {} as Ctx },
     init: (loaded, ctx): Next => {
       if (loaded === null) {

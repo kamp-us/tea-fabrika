@@ -708,9 +708,11 @@ const recordIt = (
 const draft: DepKeyedSub<Model, DraftSub> = {
   type: "draft",
   deps: (s: Model) => (s.phase === "drafting" ? s.ask : null),
-} as DepKeyedSub<Model, DraftSub>;
+};
 
 export const machine = defineMachine({
+  // SAFETY: tea's `types` slot only carries the Model, Msg and Sub types; tea never reads these
+  // empty values (0561).
   types: { model: {} as Model, msg: {} as Msg, sub: {} as DraftSub, ctx: undefined },
   cmds: [boxNew, stepRead, backupPush, record],
   init: (): Step => [{ phase: "idle" }, []],
@@ -1056,12 +1058,14 @@ export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
   const status = boxGit(env, box, "status", "--porcelain=v1", "-z", "--untracked-files=all");
 
   if (status.code !== 0) {
+    // SAFETY: an empty array holds no Change, so it is a Change[]; a failed status lists none.
     return { ...status, changes: [] as Change[] };
   }
 
   const listed = boxGit(env, box, "ls-files", "--cached", "-z");
 
   if (listed.code !== 0) {
+    // SAFETY: an empty array holds no Change, so it is a Change[]; a failed ls-files lists none.
     return { ...listed, changes: [] as Change[] };
   }
 
@@ -1260,6 +1264,8 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           unsigned: [],
           exam: [],
           leaks: [],
+          // SAFETY: an empty array is a string[]; the cast only widens `left` so a Read built from
+          // `empty` can carry the held work's lines.
           left: [] as string[],
           manifests: [],
           plancheck: null,
@@ -1781,6 +1787,8 @@ type Quest = {
  * `quest`.
  */
 const savedQuest = (path: string): Quest | null =>
+  // SAFETY: drive's record Cmd writes this file from a Quest, and questKeyed only renames an older
+  // file's `lane` key to `quest`.
   existsSync(path) ? (questKeyed(JSON.parse(readFileSync(path, "utf8"))) as Quest) : null;
 
 // ---------------------------------------------------------------- the command
@@ -1865,6 +1873,8 @@ const isAlive = (pid: number) =>
     {
       onSuccess: () => true,
       // EPERM: the process exists and is someone else's.
+      // SAFETY: process.kill throws Node's system errors, which carry an errno `code`; an error
+      // without one reads `code` as undefined and answers false.
       onFailure: (error) => (error as NodeJS.ErrnoException).code === "EPERM",
     },
   );
@@ -2344,6 +2354,8 @@ const main = () => {
   const [quest = "", step = "", brief = ""] = args;
   const agent = flag(args, "--agent") ?? "codex";
 
+  // SAFETY: widening STEPS and AGENTS to readonly strings only lets `includes` take the raw
+  // arguments; both arrays are only read.
   if (
     !(STEPS as readonly string[]).includes(step) ||
     !(AGENTS as readonly string[]).includes(agent) ||
@@ -2355,6 +2367,8 @@ const main = () => {
   const env = loadEnv();
   // prepare takes the quest for this process; it is given back however the process ends.
   process.on("exit", () => freeQuest(env.BOXES, quest));
+  // SAFETY: usage() above exits the process unless `step` is one of STEPS and `agent` one of
+  // AGENTS, so both casts below hold.
   const prepared = prepare(env, {
     quest,
     step: step as StepName,

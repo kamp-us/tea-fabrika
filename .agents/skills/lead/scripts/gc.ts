@@ -371,6 +371,8 @@ const keptByDrive = (boxes: string): Map<string, number> => {
   for (const file of readdirSync(dir).filter((f) => f.endsWith(".json"))) {
     // A state file that does not read is skipped, from the step where it stopped reading.
     Result.try(() => {
+      // SAFETY: drive's record Cmd writes this file as its Quest, whose steps carry `box`, `kept` and
+      // `ended`; each is optional here, and a file whose shape throws below is skipped.
       const quest = JSON.parse(readFileSync(join(dir, file), "utf8")) as {
         steps?: { box?: string; kept?: boolean; ended?: string }[];
       };

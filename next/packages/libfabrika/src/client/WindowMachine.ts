@@ -1250,6 +1250,8 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
   return [flushed, [...out, ...firsts, ...reads, ...waits, ...sends, ...(askPersist ? [persist({})] : [])]];
 };
 
+// SAFETY: the list names each of LinkMsg's eleven `type` literals once (transport/Link.ts), and
+// `linked` takes any LinkMsg, so each entry also takes the one case its key names.
 const linkUpdate = Object.fromEntries(
   [
     "admitted",
@@ -1521,6 +1523,8 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
     model: WindowModel,
     msg: Schema.Union([LinkMsg, Own]),
     cmds: [key, now, write, persist, record, ping, hello, enroll, mint],
+    // SAFETY: tea's `types` slot only carries the ctx and Sub types; tea never reads these empty
+    // values (0561).
     types: { ctx: {} as WindowCtx, sub: {} as SocketSub },
     init: (loaded, ctx) => [
       loaded === null
@@ -1990,6 +1994,8 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
     ],
   });
   // Every step, whatever its Msg, records a change of the window's strips (the plan's `fold` row).
+  // SAFETY: the entries are machine.update's own, key for key, and each new cell takes the same
+  // `s` and `m` and returns `folded`'s Step, so the object keeps machine.update's type.
   const update = Object.fromEntries(
     Object.entries(machine.update).map(([type, cell]: [string, (s: WindowModel, m: never) => Step]) => [
       type,

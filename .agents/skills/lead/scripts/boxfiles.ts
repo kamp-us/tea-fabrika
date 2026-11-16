@@ -193,6 +193,8 @@ export const sweep = Effect.fn("boxfiles.sweep")(function* (o: {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const would = o.dry ? "would " : "";
+  // SAFETY: an empty array holds no name, so it is a string[]; it stands in for a folder that does
+  // not read.
   const list = (dir: string) => fs.readDirectory(dir).pipe(Effect.catch(() => Effect.succeed([] as string[])));
   const there = (p: string) => fs.exists(p).pipe(Effect.catch(() => Effect.succeed(false)));
   /** Move `from` to `to`, or to the first of `to-1`, `to-2`, ... that is free: nothing is overwritten. */

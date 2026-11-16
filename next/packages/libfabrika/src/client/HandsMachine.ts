@@ -649,6 +649,8 @@ export const handsMachine = Machine.make({
   model: HandsModel,
   msg: Schema.Union([LinkMsg, Own]),
   cmds: [write, hello, knock, ping, journalRead, journalWrite, execute],
+  // SAFETY: tea's `types` slot only carries the socket Sub type; tea never reads this empty value
+  // (0561).
   types: { sub: {} as SocketSub },
   init: (loaded) => [
     loaded ??

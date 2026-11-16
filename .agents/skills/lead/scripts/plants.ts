@@ -89,7 +89,8 @@ export const failuresIn = (report: string, law: string): string[] => {
  */
 export const records = (steps: ReadonlyArray<unknown>, read: (path: string) => string | null): LawRecord[] => {
   const lastBuild = steps.findLastIndex(Schema.is(BuildEntry));
-  const buildHead = lastBuild === -1 ? null : (steps[lastBuild] as typeof BuildEntry.Type).head;
+  const lastEntry = steps.findLast(Schema.is(BuildEntry));
+  const buildHead = lastEntry === undefined ? null : lastEntry.head;
   const byLaw = new Map<string, LawRecord>();
 
   steps.forEach((step, at) => {

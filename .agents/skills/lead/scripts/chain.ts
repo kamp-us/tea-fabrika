@@ -153,12 +153,16 @@ const HERE = import.meta.dirname;
 /** Every step the chain can start at: the quest's steps, and mutation for a quest parked inside it. */
 export const STEPS = ["tests", "build", "mutation", "review"] as const;
 export type StepName = (typeof STEPS)[number];
+// SAFETY: widening STEPS' literal tuple to readonly strings only lets `includes` take any
+// string; the array is only read.
 const isStep = (s: string): s is StepName => (STEPS as readonly string[]).includes(s);
 /** A quest's name, as its state files and its pin folder carry it. */
 const QUEST_NAME = /^[a-z0-9][a-z0-9-]*$/;
 /** A quest's steps, in order (0066). A move names only these, so no move reaches mutation. */
 export const QUEST_STEPS = ["tests", "build", "review"] as const;
 export type QuestStep = (typeof QUEST_STEPS)[number];
+// SAFETY: widening QUEST_STEPS to readonly strings only lets `includes` take any string, and
+// the guard's own check is what narrows `s`.
 const isQuestStep = (s: string): s is QuestStep => (QUEST_STEPS as readonly string[]).includes(s);
 
 // ---------------------------------------------------------------- the limits
@@ -252,6 +256,8 @@ export const lineOf = (out: string, exit: number): Line | null => {
       continue;
     }
 
+    // SAFETY: `d` is a non-null object, checked above, and each field is read as unknown and
+    // checked by `str`, `isFault` or typeof before use.
     const o = d as Record<string, unknown>;
     const outcome = str(o.outcome);
     const reason = str(o.reason);
@@ -349,6 +355,8 @@ export const judgedMove = (j: Judgment): Judged =>
 export const moveFrom = (text: string): Judged => {
   // A text that is not such JSON, or reads as neither move, falls back to its `answer:` line.
   const move = Result.try((): Judged | undefined => {
+    // SAFETY: JSON.parse gives `any`; only `_tag` and `step` decide below, `step` through isQuestStep,
+    // and a text that parses to null throws inside Result.try, which falls back to the answer line.
     const d = JSON.parse(text) as Judged;
 
     if (d._tag === "step" && isQuestStep(d.step)) {
@@ -870,6 +878,8 @@ const take = (quest: Quest, step: StepName, line: Line, move: Move, limits: Limi
 
 export const makeMachine = (limits: Limits) =>
   defineMachine({
+    // SAFETY: tea's `types` slot only carries the Model and Msg types; tea never reads these empty
+    // values (0561).
     types: { model: {} as Model, msg: {} as Msg, ctx: undefined },
     cmds: [stepRun, judge, prOpen, typecheckRead, loosen, land, hostRun],
     init: (): Step => [
@@ -1629,6 +1639,8 @@ export const stepsTable = (
   if (existsSync(rowsFile)) {
     for (const raw of readFileSync(rowsFile, "utf8").split("\n")) {
       // A line that is not JSON, or is JSON null, holds no row.
+      // SAFETY: `run` is read only when truthy, as a map key, and `listUsd` only after typeof says it
+      // is a number; a JSON null or a non-object has neither.
       const r = Result.getOrUndefined(Result.try(() => JSON.parse(raw) as { run?: string; listUsd?: number } | null));
 
       if (r?.run && typeof r.listUsd === "number") {
