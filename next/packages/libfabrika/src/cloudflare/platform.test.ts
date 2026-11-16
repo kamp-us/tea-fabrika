@@ -34,7 +34,12 @@ const rejecting = <A>(fault: unknown, own: object = {}) =>
           },
   }) as A;
 
-const clients = (fault: Error) => ({
+/** One client member: a call, or an Effect that needs no service, where the call takes nothing (the
+ *  checker's lazyEffect, T1075). The type holds every client to that, so a member that needs a
+ *  service fails the typecheck. */
+type Member = Effect.Effect<unknown, unknown, never> | ((...args: ReadonlyArray<never>) => unknown);
+
+const clients = (fault: Error): Record<string, Record<string, Member>> => ({
   Project: ProjectClient.make(rejecting(fault)),
   Process: ProcessClient.make(rejecting(fault)),
   Gateway: GatewayClient.make(rejecting(fault)),
@@ -46,9 +51,8 @@ const methods = Object.entries(clients(new Error("probe"))).flatMap(([client, se
   Object.keys(service).map((method) => `${client}.${method}`),
 );
 
-/** Runs one client member: a call is given `request`, and a member that is an Effect, where the
- *  call takes nothing (the checker's lazyEffect, T1075), runs as it is. */
-const run = (member: unknown, request: Request): Effect.Effect<unknown, unknown> =>
+/** Runs one client member: a call is given `request`, and a member that is an Effect runs as it is. */
+const run = (member: Member | undefined, request: Request): Effect.Effect<unknown, unknown> =>
   Effect.isEffect(member)
     ? member
     : typeof member === "function"
@@ -66,12 +70,10 @@ it.effect.prop(
     Effect.gen(function* () {
       const [client = "", method = ""] = call.split(".");
       const kind = faults.find((fault) => fault.name === name)!;
-      const service: unknown = Reflect.get(clients(kind.make(text)), client);
+      const member = clients(kind.make(text))[client]?.[method];
       // A real Request, so a client that hands `fetch` to a typed stub has one to read; the
       // rejecting stub ignores what every other method is given.
-      const error = yield* Effect.flip(
-        run(Reflect.get(Object(service), method), new Request("http://127.0.0.1:8787/client/a/b")),
-      );
+      const error = yield* Effect.flip(run(member, new Request("http://127.0.0.1:8787/client/a/b")));
       expect(error).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
       expect(Reflect.get(Object(error), "message")).toContain(kind.name);
       expect(Reflect.get(Object(error), "message")).toContain(text);

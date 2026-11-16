@@ -55,9 +55,13 @@ const rejecting = <A>(failure: unknown): A =>
 /** A platform value built from plain parts: the adapter reads only the parts each law gives. */
 const fake = <A>(value: object): A => value as A;
 
-/** Every client the shared callback serves, built on a rejecting platform object. A member is a
- *  call, or an Effect where the call takes nothing (the checker's lazyEffect, T1075). */
-const clients = (failure: unknown): Record<string, Record<string, unknown>> => ({
+/** One client member: a call, or an Effect that needs no service, where the call takes nothing (the
+ *  checker's lazyEffect, T1075). The type holds every client to that, so a member that needs a
+ *  service fails the typecheck. */
+type Member = Effect.Effect<unknown, unknown, never> | ((...args: ReadonlyArray<never>) => unknown);
+
+/** Every client the shared callback serves, built on a rejecting platform object. */
+const clients = (failure: unknown): Record<string, Record<string, Member>> => ({
   project: ProjectClient.make(rejecting(failure)),
   process: ProcessClient.make(rejecting(failure)),
   gateway: GatewayClient.make(rejecting(failure)),
@@ -77,7 +81,7 @@ const throughStub = (client: string, method: string) =>
   client === "process" || (client === "gateway" && method !== "fetch");
 
 /** Runs one client member: a call is given `request`, and an Effect member runs as it is. */
-const run = (member: unknown, request: Request): Effect.Effect<unknown, unknown> =>
+const run = (member: Member | undefined, request: Request): Effect.Effect<unknown, unknown> =>
   Effect.isEffect(member)
     ? member
     : typeof member === "function"
