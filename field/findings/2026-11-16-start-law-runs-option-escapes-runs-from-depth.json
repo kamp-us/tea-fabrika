@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-start-law-runs-option-escapes-runs-from-depth",
+  "date": "2026-11-16",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "oxlint-plugins/runs-from-depth.ts",
+    "line": 359
+  },
+  "says": "In next/, the new runs option of StartsTest.law ({ examples, runs }) is a case count that fabrika/runs-from-depth does not read, so a law over real IO that writes StartsTest.law(..., { runs: 100 }) passes lint and breaks decision 0535; only a doc comment says 'never a number'.",
+  "proof": "runs-from-depth.ts line 359 treats a key as a count only when it is numRuns, or runs inside an arbitrary object (inArbitrary, lines 151-155). StartsTest.ts lines 15-19 at 297895bf9 type runs as a plain number with the doc line 'never a number (decision 0535)', and line 28 hands it to numRuns inside the shared module, which the rule cannot see.",
+  "cost": "The next real-IO start law can pin its count by hand with no check refusing it, the same gap T753 L16 had until this pull request.",
+  "head": "297895bf9b781b238271094181992209f86bc1f4",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1519"
+}
