@@ -18,6 +18,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import * as Predicate from "effect/Predicate";
 import * as fc from "fast-check";
 import { Repositories } from "../../repositories/Repositories.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";
@@ -191,8 +192,9 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                     ) {
                       hits++;
 
-                      const bytes =
-                        typeof fault.output === "string" ? new TextEncoder().encode(fault.output) : fault.output;
+                      const bytes = Predicate.isString(fault.output)
+                        ? new TextEncoder().encode(fault.output)
+                        : fault.output;
 
                       return Effect.succeed(
                         ChildProcessSpawner.makeHandle({

@@ -5,6 +5,7 @@
 import { describe, expect, it, vi } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Predicate from "effect/Predicate";
 import * as fc from "fast-check";
 import { subtle } from "./internal/binary.ts";
 import { PasskeyLine, writeWebauthnSshsig } from "./Webauthn.ts";
@@ -80,7 +81,7 @@ describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
 });
 
 const field = (value: string | Uint8Array) => {
-  const bytes = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+  const bytes = Predicate.isString(value) ? Buffer.from(value, "utf8") : Buffer.from(value);
   const size = Buffer.alloc(4);
   size.writeUInt32BE(bytes.length);
 

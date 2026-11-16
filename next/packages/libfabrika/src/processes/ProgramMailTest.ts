@@ -392,7 +392,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
       expect(receipt.to.state._tag, "the target's lifecycle state at acceptance").toBe(
         target?.live === true ? "live" : "ended",
       );
-      expect(typeof receipt.arrivedAt, "the referee's clock is kept").toBe("number");
+      expect(receipt.arrivedAt, "the referee's clock is kept").toBeTypeOf("number");
       world.sent.set(delivery.command, { delivery, receipt });
       world.targetState.set(delivery.command, target?.live === true ? "live" : "ended");
       const inbox = world.inbox.get(delivery.to) ?? [];

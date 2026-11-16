@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
+import * as Predicate from "effect/Predicate";
 import * as fc from "fast-check";
 import { connection } from "./Connection.ts";
 import { Answer, Attached, Wait } from "./Wire.ts";
@@ -560,7 +561,7 @@ describe("T703 connection driver laws", () => {
   });
 });
 
-const isRev = (result: unknown) => typeof result === "object" && result !== null && "rev" in result;
+const isRev = (result: unknown) => Predicate.isObjectOrArray(result) && "rev" in result;
 
 const no = (id: string | number, reason: string) => ({
   _tag: "send",
@@ -780,7 +781,7 @@ const failure = (f: Failure, trace: Array<string>): unknown => {
     }
   })();
 
-  if (!f.proxy || (typeof target !== "object" && typeof target !== "function") || target === null) {
+  if (!f.proxy || !Predicate.isObjectKeyword(target)) {
     return target;
   }
 

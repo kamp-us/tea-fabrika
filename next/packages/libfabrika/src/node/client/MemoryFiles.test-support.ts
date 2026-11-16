@@ -10,6 +10,10 @@ import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Predicate from "effect/Predicate";
+import * as ByteSize from "effect/ByteSize";
 
 type FileNode = { readonly type: "File"; bytes: Uint8Array; mode: number; mtime: Date };
 
@@ -471,7 +475,7 @@ export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
           return fail("NotFound", "utimes", normal(raw));
         }
 
-        entry.mtime = typeof mtime === "number" ? dateAt(mtime) : mtime;
+        entry.mtime = Predicate.isNumber(mtime) ? dateAt(mtime) : mtime;
 
         return Effect.void;
       }),

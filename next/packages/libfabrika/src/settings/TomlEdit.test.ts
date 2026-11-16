@@ -3,7 +3,7 @@
 // L9 is the Reflect ban's (ticket 1056, slice 5): hostile keys and a scalar in the middle of a path.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, Effect, Exit, Schema } from "effect";
+import { ByteSize, Effect, Exit, Predicate, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
@@ -74,7 +74,7 @@ const pick = <A>(xs: ReadonlyArray<A>, hint: number): A => xs[hint % xs.length]!
 
 const same = (a: Path, b: Path) => a.length === b.length && a.every((s, i) => s === b[i]);
 
-const record = (v: unknown): v is Tree => typeof v === "object" && v !== null && !Array.isArray(v);
+const record = (v: unknown): v is Tree => Predicate.isObject(v);
 
 const frozen = (value: unknown): unknown =>
   Array.isArray(value)
@@ -258,9 +258,9 @@ const writable = (value: unknown): boolean =>
       ? value.every(writable)
       : record(value)
         ? Object.entries(value).every(([key, child]) => !lone(key) && writable(child))
-        : typeof value === "string"
+        : Predicate.isString(value)
           ? !lone(value)
-          : typeof value !== "number" || !Number.isInteger(value) || Number.isSafeInteger(value);
+          : !Predicate.isNumber(value) || !Number.isInteger(value) || Number.isSafeInteger(value);
 
 const dotted = (path: Path): string => path.map((key) => JSON.stringify(key)).join(".");
 

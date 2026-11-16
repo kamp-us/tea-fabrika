@@ -18,6 +18,7 @@ import {
   Exit,
   Layer,
   Option,
+  Predicate,
   Result,
   Schema,
   Semaphore,
@@ -305,11 +306,11 @@ const behind = (cmds: ReadonlyArray<Dispatched>, job: Dispatched): boolean => {
  * names are checked before the strict decode, since an empty struct takes any field.
  */
 const operands = (cmd: unknown, fields: object): Option.Option<Record<string, unknown>> => {
-  if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd)) {
+  if (!Predicate.isObject(cmd)) {
     return Option.none();
   }
 
-  const { type: _type, ...rest } = cmd as Record<string, unknown>;
+  const { type: _type, ...rest } = cmd;
 
   return Object.keys(rest).every((key) => Object.hasOwn(fields, key)) ? Option.some(rest) : Option.none();
 };
@@ -347,11 +348,11 @@ const encoder = new TextEncoder();
 /** A start_child's operands without its input: what every `ok` answer echoes, so no row holds the
  *  first letter twice. */
 const withoutInput = (cmd: unknown): unknown => {
-  if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd) || !Object.hasOwn(cmd, "input")) {
+  if (!Predicate.isObject(cmd) || !Object.hasOwn(cmd, "input")) {
     return cmd;
   }
 
-  const { input: _input, ...rest } = cmd as Record<string, unknown>;
+  const { input: _input, ...rest } = cmd;
 
   return rest;
 };
@@ -428,6 +429,8 @@ const decodeDelivery = Schema.decodeUnknownEffect(Delivery);
 const Typed = Schema.Struct({ type: Schema.String });
 
 const decodeTyped = Schema.decodeUnknownOption(Typed);
+
+const decodeJsonObject = Schema.decodeUnknownOption(Schema.JsonObject);
 
 const decodeDown = Schema.decodeUnknownOption(Down);
 
@@ -1363,7 +1366,7 @@ export class ProgramRunner extends Context.Service<
           const loaded = yield* loader.load(process.program, recorded);
           // The Worker's loader names the hash it loaded: for a build a home never kept, the code
           // that took its place at an open, so every record from here names that code (0293).
-          const build = "hash" in loaded && typeof loaded.hash === "string" ? loaded.hash : recorded;
+          const build = "hash" in loaded && Predicate.isString(loaded.hash) ? loaded.hash : recorded;
           process = { ...process, build };
 
           if (supervision?.journal._tag === "idle" && supervision.build !== build) {
@@ -1788,7 +1791,7 @@ export class ProgramRunner extends Context.Service<
 
           const { stream, write: asked } = input.success;
           const event = asked.event;
-          const kind = typeof event._tag === "string" ? event._tag : null;
+          const kind = Predicate.isString(event._tag) ? event._tag : null;
           const writes = state.loaded.declaration.writes;
           const policy = kind !== null && Object.hasOwn(writes, kind) ? writes[kind] : undefined;
 
@@ -2085,7 +2088,7 @@ export class ProgramRunner extends Context.Service<
 
           // The Worker's loader names its build's hash; the Node loader runs this runner's build.
           const hash =
-            "hash" in code.success && typeof code.success.hash === "string" ? code.success.hash : process.build;
+            "hash" in code.success && Predicate.isString(code.success.hash) ? code.success.hash : process.build;
 
           const started = yield* children.value
             .start(
@@ -2251,9 +2254,9 @@ export class ProgramRunner extends Context.Service<
             Effect.map((m) => {
               const tag = outcome._tag === "Err" ? errTag(outcome.error) : undefined;
 
-              return tag !== undefined && typeof m === "object" && m !== null && !Array.isArray(m)
-                ? { ...m, reason: tag }
-                : m;
+              return tag === undefined
+                ? m
+                : Option.match(decodeJsonObject(m), { onNone: () => m, onSome: (o) => ({ ...o, reason: tag }) });
             }),
             Effect.catchIf(
               (error) => error.reason === "step" && error.source === undefined,
@@ -2369,7 +2372,7 @@ export class ProgramRunner extends Context.Service<
                     yield* originStore.save({
                       ...old,
                       cmds: old.cmds.filter(
-                        (cmd) => typeof cmd !== "object" || cmd === null || !("id" in cmd) || cmd.id !== job.id,
+                        (cmd) => !Predicate.isObjectOrArray(cmd) || !("id" in cmd) || cmd.id !== job.id,
                       ),
                     });
                   }
@@ -3104,9 +3107,9 @@ type WriteFailure = LedgerError | SessionManagerError | SigningRefused | NotGran
 const cmdType = (job: Dispatched): string =>
   Option.match(decodeTyped(job.cmd), { onNone: () => "", onSome: (c) => c.type });
 
-const hasParent = (m: unknown): boolean => typeof m === "object" && m !== null && "parent" in m;
+const hasParent = (m: unknown): boolean => Predicate.isObjectOrArray(m) && "parent" in m;
 
-const stamp = (m: unknown, parent: string): unknown => (typeof m === "object" && m !== null ? { ...m, parent } : m);
+const stamp = (m: unknown, parent: string): unknown => (Predicate.isObjectOrArray(m) ? { ...m, parent } : m);
 
 const inputPort = (state: Live, m: unknown) =>
   Option.match(decodeTyped(m), {
@@ -3118,10 +3121,8 @@ const inputPort = (state: Live, m: unknown) =>
     },
   });
 
-const isEvent = (u: Readonly<Record<string, Schema.Json>>): u is Event => typeof u._tag === "string";
+const isEvent = (u: Readonly<Record<string, Schema.Json>>): u is Event => Predicate.isString(u._tag);
 
 /** An Err outcome's tag, when its error is tagged. */
 const errTag = (error: unknown): string | undefined =>
-  typeof error === "object" && error !== null && "_tag" in error && typeof error._tag === "string"
-    ? error._tag
-    : undefined;
+  Predicate.isObjectOrArray(error) && "_tag" in error && Predicate.isString(error._tag) ? error._tag : undefined;

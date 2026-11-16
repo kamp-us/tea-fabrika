@@ -1,7 +1,7 @@
 // next/, W3/W4. Driver-free laws run by the Node module over real scoped SQLite files.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
+import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Predicate } from "effect";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { type Update, WatcherManager } from "./Entry.ts";
 import { nth } from "./RepliesTest.ts";
@@ -224,7 +224,7 @@ export const suite = (database: Database) =>
               expect(row).toBeDefined();
 
               const column = Object.keys(row ?? {}).find(
-                (k) => typeof (row ?? {})[k] === "string" && String((row ?? {})[k]).startsWith("{"),
+                (k) => Predicate.isString((row ?? {})[k]) && String((row ?? {})[k]).startsWith("{"),
               );
 
               expect(column).toBeDefined();

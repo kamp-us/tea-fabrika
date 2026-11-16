@@ -971,7 +971,7 @@ describe("P34 a program sets its own maxDeliveries, next/", () => {
         const raw = limit === undefined ? fields : withLimit(fields, limit);
 
         const own = (u: unknown) =>
-          typeof u === "object" && u !== null && Object.hasOwn(u, "maxDeliveries")
+          Predicate.isObjectOrArray(u) && Object.hasOwn(u, "maxDeliveries")
             ? Reflect.get(u, "maxDeliveries")
             : undefined;
 
@@ -1206,8 +1206,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
         };
 
         const schemasOk =
-          typeof m === "object" &&
-          m !== null &&
+          Predicate.isObjectOrArray(m) &&
           "model" in m &&
           Schema.isSchema(m.model) &&
           "msg" in m &&
@@ -1319,12 +1318,12 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
             throw new Error("has");
           }
 
-          return typeof key === "string" && key in fields ? fields[key]!.present : Reflect.has(t, key);
+          return Predicate.isString(key) && key in fields ? fields[key]!.present : Reflect.has(t, key);
         },
         get: (t, key, receiver) => {
           trace.push(`get:${String(key)}`);
 
-          return typeof key === "string" && key in fields ? next(key) : Reflect.get(t, key, receiver);
+          return Predicate.isString(key) && key in fields ? next(key) : Reflect.get(t, key, receiver);
         },
       });
     };
@@ -1622,7 +1621,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           }
 
           seen.add(`${expected}:${a.container}`);
-          seen.add(`${expected}:at:${typeof a.at === "number" && !Number.isFinite(a.at) ? "nonfinite" : String(a.at)}`);
+          seen.add(`${expected}:at:${Predicate.isNumber(a.at) && !Number.isFinite(a.at) ? "nonfinite" : String(a.at)}`);
           seen.add(`${expected}:error:${a.type === "save_err" ? a.error : "-"}`);
         }
       }),

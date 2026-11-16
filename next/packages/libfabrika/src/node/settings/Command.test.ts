@@ -31,6 +31,7 @@ import * as References from "effect/References";
 import * as Sink from "effect/Sink";
 import * as TestConsole from "effect/testing/TestConsole";
 import * as Tracer from "effect/Tracer";
+import * as Predicate from "effect/Predicate";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
 import * as Print from "../../settings/Print.ts";
@@ -157,7 +158,7 @@ const spans = () => {
       .map((span) =>
         JSON.stringify(
           { name: span.name, attributes: [...span.attributes], events: span.events, status: span.status },
-          (_key, value: unknown) => (typeof value === "bigint" ? String(value) : value),
+          (_key, value: unknown) => (Predicate.isBigInt(value) ? String(value) : value),
         ),
       )
       .join("\n");

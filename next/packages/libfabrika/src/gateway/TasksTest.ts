@@ -38,6 +38,7 @@ import {
   type Scope,
   Semaphore,
   Tracer,
+  Predicate,
 } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { grantText, revokeText } from "../access/Text.ts";
@@ -93,7 +94,7 @@ const u32 = (n: number) => {
 };
 
 const field = (a: string | Uint8Array) => {
-  const bytes = typeof a === "string" ? text(a) : a;
+  const bytes = Predicate.isString(a) ? text(a) : a;
 
   return join(u32(bytes.length), bytes);
 };
@@ -1214,7 +1215,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
 
       for (const [name, value] of Object.entries(outputs)) {
         const encoded = JSON.stringify(value, (_key, item: unknown) =>
-          typeof item === "bigint"
+          Predicate.isBigInt(item)
             ? String(item)
             : item instanceof Map
               ? [...item]

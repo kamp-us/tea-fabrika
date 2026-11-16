@@ -24,7 +24,7 @@ const put = (table: object, path: Edit.Path, value: unknown): void => {
     } else {
       if (!Object.hasOwn(parent, segment)) {
         Object.defineProperty(parent, segment, {
-          value: typeof path[i + 1] === "number" ? [] : {},
+          value: Predicate.isNumber(path[i + 1]) ? [] : {},
           enumerable: true,
           writable: true,
           configurable: true,
@@ -201,7 +201,7 @@ const encoded = (value: unknown, ancestors: ReadonlySet<object> = new Set()): un
 
   const result = scalar(value);
 
-  if (typeof result === "number" && Number.isInteger(result) && !Number.isSafeInteger(result)) {
+  if (Predicate.isNumber(result) && Number.isInteger(result) && !Number.isSafeInteger(result)) {
     throw new TypeError("A TOML integer must be a safe JavaScript integer.");
   }
 

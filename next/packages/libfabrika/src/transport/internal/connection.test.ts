@@ -6,6 +6,7 @@
 import { applyCellChecked } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
+import * as Predicate from "effect/Predicate";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { Attached, Wait } from "../Wire.ts";
@@ -407,7 +408,7 @@ describe("T703 connection machine laws", () => {
           }
 
           if (duplicate) {
-            sides.add(`duplicate:${typeof msg.wait.id}`);
+            sides.add(`duplicate:${Predicate.isString(msg.wait.id) ? "string" : "number"}`);
           }
         });
       }),
@@ -457,7 +458,7 @@ describe("T703 connection machine laws", () => {
           const reused = from.waits.some((w) => w.id === msg.wait.id) && !matching;
           const late = fold.completed.some((w) => same(w, msg.wait)) && !matching;
           seen.add(matching ? "matching" : reused ? "reused" : late ? "late" : "absent");
-          seen.add(`id:${typeof msg.wait.id}:${answered}`);
+          seen.add(`id:${Predicate.isString(msg.wait.id) ? "string" : "number"}:${answered}`);
         });
       }),
       options,

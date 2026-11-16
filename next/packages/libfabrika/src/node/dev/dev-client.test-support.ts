@@ -1,6 +1,7 @@
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 // P12, next/. The HTTP client `startDev`'s laws provide, over each run's own `fetch` stub.
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 
 /**
  * The entry's own client, `FetchHttpClient.layer`, whose `fetch` is the global one at the moment
@@ -13,4 +14,4 @@ export const fetchClient = FetchHttpClient.layer.pipe(
 
 /** A stubbed `fetch` call's body as text, sent as a string or as the client's bytes. */
 export const bodyText = (options: RequestInit | undefined): string =>
-  typeof options?.body === "string" ? options.body : new TextDecoder().decode(options?.body as Uint8Array);
+  Predicate.isString(options?.body) ? options.body : new TextDecoder().decode(options?.body as Uint8Array);

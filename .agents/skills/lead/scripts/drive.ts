@@ -105,7 +105,7 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Cause, Effect, FileSystem, Layer, Option, Result, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Layer, Option, Predicate, Result, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
@@ -1655,7 +1655,7 @@ export const mutationTail = (step: StepName, steps: Quest["steps"], read: (path:
     return "";
   }
 
-  const last = steps.findLast((s) => s.step === "mutation" && typeof s.report === "string");
+  const last = steps.findLast((s) => s.step === "mutation" && Predicate.isString(s.report));
   const text = last?.report ? read(last.report) : null;
 
   return text === null || !last?.report

@@ -1,6 +1,6 @@
 // S3, next/. Saved.upgrade(saved, state, build) returns {saved, ran}; no I/O.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Predicate } from "effect";
 
 const Model = Schema.Struct({ count: Schema.Int, step: Schema.Int });
 
@@ -115,7 +115,7 @@ describe("S3 saved state and named upgrades", () => {
         run: (value: unknown) => {
           Object.assign(Schema.decodeUnknownSync(Schema.Struct({ n: Schema.Int }))(value), { n: 99 });
 
-          if (typeof value === "object" && value !== null) {
+          if (Predicate.isObjectOrArray(value)) {
             Object.assign(value, { n: 99 });
           }
 

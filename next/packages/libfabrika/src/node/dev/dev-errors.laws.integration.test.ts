@@ -19,6 +19,7 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
+import * as Predicate from "effect/Predicate";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
@@ -42,7 +43,7 @@ const failure = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
 const deploy = (port: number) => (local: Context.Context<never>) =>
   Effect.gen(function* () {
     const plugin = [...local.mapUnsafe.values()].find(
-      (value) => typeof value === "object" && value !== null && "sockets" in value,
+      (value) => Predicate.isObjectOrArray(value) && "sockets" in value,
     ) as { start: (ports: Record<string, number>) => Effect.Effect<unknown> };
 
     Context.get(local, RuntimeLifecycle)({ type: "start", worker: "errors", pid: 27001 });

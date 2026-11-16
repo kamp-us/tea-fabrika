@@ -4,6 +4,8 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import effectPackage from "effect/package.json" with { type: "json" };
 import * as Path from "effect/Path";
 import {
@@ -62,7 +64,7 @@ const emitted = (output: RolldownOutput) =>
       total +
       (item.type === "chunk"
         ? bytes(item.code)
-        : typeof item.source === "string"
+        : Predicate.isString(item.source)
           ? bytes(item.source)
           : item.source.byteLength),
     0,

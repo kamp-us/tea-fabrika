@@ -3,7 +3,7 @@ import { applyCell } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Cause, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream, Predicate } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Writer, SinkError } from "../coordination/index.ts";
@@ -94,7 +94,7 @@ const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json)
 
 // SQL columns and span fields can hold another JSON document.
 const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
-  if (typeof value === "string") {
+  if (Predicate.isString(value)) {
     const prior = cache.get(value);
 
     if (prior !== undefined) {
@@ -121,9 +121,9 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
 
   return Array.isArray(value)
     ? value.flatMap((part) => texts(part, cache))
-    : value !== null && typeof value === "object"
-      ? Object.values(value).flatMap((part) => texts(part, cache))
-      : [];
+    : value === null || Predicate.isNumber(value) || Predicate.isBoolean(value)
+      ? []
+      : Object.values(value).flatMap((part) => texts(part, cache));
 };
 
 const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: ReadonlyArray<Cell>, reached: Set<string>) {
@@ -340,27 +340,27 @@ const walk = Effect.fnUntraced(function* (
 
         const admission =
           /process_recovery/.test(query) &&
-          params.some((p) => typeof p === "string" && p.includes('"_tag":"stepping"'));
+          params.some((p) => Predicate.isString(p) && p.includes('"_tag":"stepping"'));
 
         const reply = /process_replies/.test(query);
 
         const cleanup =
-          /process_activity/.test(query) && params.some((p) => typeof p === "string" && p.includes('"_tag":"idle"'));
+          /process_activity/.test(query) && params.some((p) => Predicate.isString(p) && p.includes('"_tag":"idle"'));
 
         const activity =
           /process_activity/.test(query) &&
-          params.some((p) => typeof p === "string" && p.includes('"_tag":"stepping"'));
+          params.some((p) => Predicate.isString(p) && p.includes('"_tag":"stepping"'));
 
         const refusal =
           /process_recovery/.test(query) &&
-          params.some((p) => typeof p === "string" && p.includes('"_tag":"writing_reply"'));
+          params.some((p) => Predicate.isString(p) && p.includes('"_tag":"writing_reply"'));
 
         const abandonment =
           /process_recovery/.test(query) &&
-          params.some((p) => typeof p === "string" && p.includes('"_tag":"clearing_attempt"'));
+          params.some((p) => Predicate.isString(p) && p.includes('"_tag":"clearing_attempt"'));
 
         const replyComplete =
-          /process_recovery/.test(query) && params.some((p) => typeof p === "string" && p.includes('"_tag":"idle"'));
+          /process_recovery/.test(query) && params.some((p) => Predicate.isString(p) && p.includes('"_tag":"idle"'));
 
         if (
           control.cut === "all" ||

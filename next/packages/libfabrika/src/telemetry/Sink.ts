@@ -106,9 +106,9 @@ const keep = (attributes: Iterable<readonly [string, unknown]>) => {
   for (const [key, value] of attributes) {
     if (Redacted.isRedacted(value)) {
       tags[key] = "<redacted>";
-    } else if (typeof value === "string") {
+    } else if (Predicate.isString(value)) {
       Object.assign(tags, short({ [key]: value }));
-    } else if (typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))) {
+    } else if (Predicate.isBoolean(value) || (Predicate.isNumber(value) && Number.isFinite(value))) {
       tags[key] = value;
     } else {
       dropped += 1;
@@ -126,7 +126,7 @@ const findProcess = (span: Tracer.AnySpan): Option.Option<string> => {
 
   const own = span.attributes.get(PROCESS);
 
-  if (typeof own === "string" && own !== "") {
+  if (Predicate.isString(own) && own !== "") {
     return Option.some(own);
   }
 
@@ -136,7 +136,7 @@ const findProcess = (span: Tracer.AnySpan): Option.Option<string> => {
 /** The largest numeric tag whose key ends in `.lag`, such as P6's `fab.ledger.lag`. */
 const largestLag = (tags: Readonly<Record<string, Tag>>): number | null => {
   const lags = Object.entries(tags).flatMap(([key, value]) =>
-    key.endsWith(".lag") && typeof value === "number" ? [value] : [],
+    key.endsWith(".lag") && Predicate.isNumber(value) ? [value] : [],
   );
 
   return lags.length === 0 ? null : Math.max(...lags);
@@ -271,7 +271,7 @@ const ended = (span: Tracer.NativeSpan, endTime: bigint, exit: Exit.Exit<unknown
   const error = Option.map(failure, (cause) => {
     const named = own.tags[ERROR];
 
-    return typeof named === "string" ? named : causeClass(cause);
+    return Predicate.isString(named) ? named : causeClass(cause);
   });
 
   const tags: Record<string, Tag> = {

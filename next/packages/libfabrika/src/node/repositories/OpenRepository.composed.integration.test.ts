@@ -22,6 +22,7 @@ import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
+import * as Predicate from "effect/Predicate";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as Id from "../../Id.ts";
@@ -573,7 +574,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
 
           const output =
             JSON.stringify(values, (_key: string, value: unknown) =>
-              typeof value === "bigint" ? value.toString() : value,
+              Predicate.isBigInt(value) ? value.toString() : value,
             ) + inspect(values, { depth: null });
 
           for (const spelling of [secret, folder, url].flatMap(forms)) {

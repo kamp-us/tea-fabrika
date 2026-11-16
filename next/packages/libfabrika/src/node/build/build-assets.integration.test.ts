@@ -17,6 +17,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Tracer from "effect/Tracer";
+import * as Predicate from "effect/Predicate";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import type { RolldownOutput, RolldownOptions, OutputOptions } from "rolldown";
@@ -34,7 +35,7 @@ const serving = async () => {
     pathToFileURL(join(import.meta.dirname, "../../cloudflare/index.ts")).href,
   );
 
-  assert.equal(typeof worker.serveAsset, "function", "P16 library asset serving is absent");
+  assert.ok(Predicate.isFunction(worker.serveAsset), "P16 library asset serving is absent");
 
   return worker.serveAsset!;
 };
@@ -318,7 +319,7 @@ describe("P16 assets and Compiler", () => {
                 return {
                   ...output,
                   output: output.output.map((item) => {
-                    if (item.type !== "asset" || typeof item.source !== "string") {
+                    if (item.type !== "asset" || !Predicate.isString(item.source)) {
                       return item;
                     }
 
@@ -1138,7 +1139,7 @@ describe("P16 cleanup and recording", () => {
               expect(
                 data
                   .flatMap((row) => Object.entries(row.attributes))
-                  .some(([key, value]) => /bytes|size/.test(key) && typeof value === "number" && value > 0),
+                  .some(([key, value]) => /bytes|size/.test(key) && Predicate.isNumber(value) && value > 0),
               ).toBe(true);
             }
           }

@@ -15,6 +15,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import * as Predicate from "effect/Predicate";
 import { BrainControl } from "../../desktop/BrainControl.ts";
 import * as BrainFilesTest from "../../desktop/BrainFilesTest.ts";
 import * as ServiceTest from "../../desktop/BrainServiceTest.ts";
@@ -98,7 +99,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
 
         const args = command.args.map((arg) => String(arg));
         seen.push({ executable: command.command, args, options: command.options });
-        const supplied = typeof answer === "function" ? yield* answer(args, spec) : answer;
+        const supplied = Predicate.isFunction(answer) ? yield* answer(args, spec) : answer;
 
         let response: Response = {
           ...supplied,

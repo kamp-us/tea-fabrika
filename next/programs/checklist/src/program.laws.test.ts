@@ -9,7 +9,7 @@ import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Program, Input, stepper } from "@kampus/libfabrika";
 import { syncTest } from "@kampus/libfabrika/testing";
-import { Result, Schema } from "effect";
+import { Result, Schema, Predicate } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 
@@ -437,7 +437,7 @@ describe("ticket 806 the checklist's laws", () => {
 
         return (
           (Number.isInteger(answer) &&
-            typeof answer === "number" &&
+            Predicate.isNumber(answer) &&
             answer >= 0 &&
             view.left === left(next) &&
             answer === left(next)) ||

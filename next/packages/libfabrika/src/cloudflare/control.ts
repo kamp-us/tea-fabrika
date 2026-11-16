@@ -2,7 +2,7 @@
  * The local runtime's control entrypoint: a private, token-guarded way to call a fixed set of
  * methods on the Project, a Process, the Record, the Worker Loader or the bucket.
  */
-import { Effect, Equal, Redacted, Result, Schema } from "effect";
+import { Effect, Equal, Predicate, Redacted, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { httpContext } from "./fetch.ts";
 import { workerLoader, type ProgramSource } from "./index.ts";
@@ -101,13 +101,7 @@ const dispatch = Effect.fnUntraced(function* (
     return yield* Effect.fail({ reason: "unknown_method" });
   }
 
-  if (
-    target === "project" &&
-    method === "commit" &&
-    typeof args[1] === "object" &&
-    args[1] !== null &&
-    "process" in args[1]
-  ) {
+  if (target === "project" && method === "commit" && Predicate.isObjectOrArray(args[1]) && "process" in args[1]) {
     return yield* Effect.fail({ reason: "reserved" });
   }
 
@@ -168,11 +162,9 @@ export const control = Effect.fn("runtime.control")(function* (
         {
           error: {
             reason:
-              typeof answer.failure === "object" && answer.failure !== null && "reason" in answer.failure
+              Predicate.isObjectOrArray(answer.failure) && "reason" in answer.failure
                 ? answer.failure.reason
-                : typeof answer.failure === "object" && answer.failure !== null && "reason" in answer.failure
-                  ? answer.failure.reason
-                  : "unreachable",
+                : "unreachable",
           },
         },
         { status: 500 },

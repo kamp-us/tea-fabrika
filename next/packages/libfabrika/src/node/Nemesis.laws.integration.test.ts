@@ -12,6 +12,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
+import * as Predicate from "effect/Predicate";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -282,7 +283,7 @@ NemesisTest.suite({
 
         const health = sql
           .exec("SELECT * FROM measurements")
-          .filter((row) => typeof row["piece"] === "string" && /nemesis/i.test(row["piece"]));
+          .filter((row) => Predicate.isString(row["piece"]) && /nemesis/i.test(row["piece"]));
 
         return { rows, health };
       }).pipe(Effect.orDie),

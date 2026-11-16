@@ -9,7 +9,7 @@
 //   by an index and with no entry's body.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import { Effect, Exit, Layer, Option, Schema, type Scope, Predicate } from "effect";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { property } from "../Testing.test-support.ts";
@@ -48,7 +48,7 @@ const counted = (sql: Sql) => {
       if (state.on) {
         for (const row of rows) {
           for (const value of Object.values(row)) {
-            state.bytes += typeof value === "string" ? encoder.encode(value).length : 8;
+            state.bytes += Predicate.isString(value) ? encoder.encode(value).length : 8;
           }
         }
       }

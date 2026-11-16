@@ -387,12 +387,12 @@ const construct = (raw: unknown) =>
       inputs: Object.fromEntries(
         Object.entries(spec.inputs).map(([key, port]) => [
           key,
-          typeof port !== "string" && "_tag" in port
+          !Predicate.isString(port) && "_tag" in port
             ? port
             : Input.cases.write.make({
                 schema: spec.machine.msg,
-                description: typeof port === "string" ? port : port.description,
-                personOnly: typeof port !== "string",
+                description: Predicate.isString(port) ? port : port.description,
+                personOnly: !Predicate.isString(port),
               }),
         ]),
       ),

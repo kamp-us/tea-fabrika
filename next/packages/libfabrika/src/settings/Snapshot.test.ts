@@ -8,7 +8,7 @@
 //   from different sources have one hash. It may need `Digest` from `effect/crypto`.
 // - `Snapshot.Snapshot` is its Schema: what a process start saves, and what a replay reads back.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Cause, Effect, Exit, Formatter, Layer, Logger, References, Schema, Tracer } from "effect";
+import { ByteSize, Cause, Effect, Exit, Formatter, Layer, Logger, References, Schema, Tracer, Predicate } from "effect";
 import { Digest } from "effect/crypto";
 import { TestConsole } from "effect/testing";
 import * as fc from "fast-check";
@@ -426,7 +426,7 @@ const secret = fc
  * as its digits and every other value as JSON does: the search still reads every value.
  */
 const printed = (value: unknown) =>
-  JSON.stringify(value, (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v));
+  JSON.stringify(value, (_key, v: unknown) => (Predicate.isBigInt(v) ? String(v) : v));
 
 const spans = () => {
   const ended: Array<Tracer.NativeSpan> = [];

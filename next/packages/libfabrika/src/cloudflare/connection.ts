@@ -1,4 +1,4 @@
-import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { Cause, Clock, Context, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
@@ -317,13 +317,13 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       if ((yield* attached(ws)).client === client) {
         yield* Effect.try({
           try: () => {
-            if (typeof news === "object" && news !== null && "close" in news && typeof news.close === "number") {
+            if (Predicate.isObjectOrArray(news) && "close" in news && Predicate.isNumber(news.close)) {
               ws.close(news.close, "permission changed");
             } else {
               ws.send(
                 JSON.stringify({
                   jsonrpc: "2.0",
-                  ...(typeof news === "object" && news !== null ? news : {}),
+                  ...(Predicate.isObjectOrArray(news) ? news : {}),
                 }),
               );
             }
@@ -375,7 +375,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
     message: Effect.fnUntraced(function* (ws: WebSocket, text: string | ArrayBuffer) {
       const state = yield* attached(ws);
 
-      if (typeof text !== "string") {
+      if (!Predicate.isString(text)) {
         return;
       }
 

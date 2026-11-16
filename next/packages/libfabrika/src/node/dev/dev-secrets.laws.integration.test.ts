@@ -19,6 +19,7 @@ import * as Logger from "effect/Logger";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import * as Predicate from "effect/Predicate";
 import * as fc from "fast-check";
 import { expect, expectTypeOf, it, vi } from "vitest";
 import { ConnectionService, connectionRuntime } from "../../cloudflare/connection.ts";
@@ -72,7 +73,7 @@ const forms = (text: string) => [
 ];
 
 const strings = (value: unknown): Array<string> => {
-  if (typeof value === "string") {
+  if (Predicate.isString(value)) {
     return [value];
   }
 
@@ -80,7 +81,7 @@ const strings = (value: unknown): Array<string> => {
     return value.flatMap(strings);
   }
 
-  return value !== null && typeof value === "object"
+  return Predicate.isObjectOrArray(value)
     ? Object.entries(value).flatMap(([key, child]) => [key, ...strings(child)])
     : [];
 };
@@ -349,7 +350,7 @@ const flow = async (sample: Flow) => {
               observe = Context.get(local, RuntimeLifecycle);
 
               const plugin = [...local.mapUnsafe.values()].find(
-                (value) => typeof value === "object" && value !== null && "sockets" in value,
+                (value) => Predicate.isObjectOrArray(value) && "sockets" in value,
               ) as {
                 sockets: ReadonlyArray<{ service: { props: { json: string } } }>;
                 start: (ports: Record<string, number>) => Effect.Effect<unknown>;

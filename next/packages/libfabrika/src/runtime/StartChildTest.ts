@@ -317,10 +317,10 @@ const raw = (tag: string, fields: object = {}): unknown =>
   // oxlint-disable-next-line fabrika/no-hand-tag -- invalid on purpose: no schema maker writes a shape its schema refuses
   ({ ...fields, _tag: tag });
 
-const body = (entry: Entry | undefined): Record<string, unknown> =>
-  typeof entry?.body === "object" && entry.body !== null && !Array.isArray(entry.body)
-    ? (entry.body as Record<string, unknown>)
-    : {};
+const body = (entry: Entry | undefined): Record<string, unknown> => {
+  const value = entry?.body;
+  return Predicate.isObject(value) ? value : {};
+};
 
 const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
   const item = items[pick % items.length];
@@ -350,7 +350,7 @@ const faulting = (
       if (
         fault.exited &&
         /^\s*INSERT\b/i.test(query) &&
-        params.some((p) => p === "exited" || (typeof p === "string" && p.includes('"exited"')))
+        params.some((p) => p === "exited" || (Predicate.isString(p) && p.includes('"exited"')))
       ) {
         fault.exited = false;
         throw Object.assign(
@@ -368,7 +368,7 @@ const faulting = (
         fault.inputCheckpoint !== undefined &&
         /INSERT INTO process_(state|checkpoint_parts)/.test(query) &&
         params.some(
-          (value) => typeof value === "string" && value.includes(JSON.stringify(fault.inputCheckpoint).slice(1, -1)),
+          (value) => Predicate.isString(value) && value.includes(JSON.stringify(fault.inputCheckpoint).slice(1, -1)),
         )
       ) {
         fault.inputCheckpoint = undefined;
@@ -384,7 +384,7 @@ const faulting = (
 
       if (
         /^\s*INSERT\b/i.test(query) &&
-        params.some((p) => p === "exited" || (typeof p === "string" && p.includes('"exited"')))
+        params.some((p) => p === "exited" || (Predicate.isString(p) && p.includes('"exited"')))
       ) {
         fault.landed = true;
       }

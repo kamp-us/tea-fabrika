@@ -24,7 +24,7 @@
 // move that state allows; stale and malformed input is built from what the walk delivered.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Result, Schema, Predicate } from "effect";
 import * as fc from "fast-check";
 import { ProcessId } from "../ProcessId.ts";
 import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";
@@ -526,11 +526,9 @@ const pidKind = (pid: string): Kind => pid.slice(pid.lastIndexOf("_") + 1) as Ki
 
 const decodes = (pid: string, view: unknown): boolean => Schema.is(SHAPES[pidKind(pid)])(view);
 
-const noteType = (note: unknown): unknown =>
-  typeof note === "object" && note !== null ? Reflect.get(note, "type") : null;
+const noteType = (note: unknown): unknown => (Predicate.isObjectOrArray(note) ? Reflect.get(note, "type") : null);
 
-const noteRev = (note: unknown): unknown =>
-  typeof note === "object" && note !== null ? Reflect.get(note, "rev") : null;
+const noteRev = (note: unknown): unknown => (Predicate.isObjectOrArray(note) ? Reflect.get(note, "rev") : null);
 
 // L6 checks apply independently. Here the oracle owns revision and decoder checks, starting from
 // notices it accepted, since a valid foreign whole can replace the brain's historical value.
@@ -656,7 +654,7 @@ describe("L5: client views (p3)", () => {
             return;
           }
 
-          if (shown !== undefined && typeof note.rev === "number" && note.rev > shown.rev + 1) {
+          if (shown !== undefined && Predicate.isNumber(note.rev) && note.rev > shown.rev + 1) {
             seen.gap++;
             expect(asks, "a gap asks once for a whole view").toHaveLength(1);
           }

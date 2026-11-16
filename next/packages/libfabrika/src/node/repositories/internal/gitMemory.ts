@@ -66,7 +66,7 @@ const encoder = new TextEncoder();
 
 const answer = (code: number, stdout: string | Uint8Array = "", stderr = ""): Answer => ({
   code,
-  stdout: typeof stdout === "string" ? encoder.encode(stdout) : stdout,
+  stdout: Predicate.isString(stdout) ? encoder.encode(stdout) : stdout,
   stderr,
 });
 

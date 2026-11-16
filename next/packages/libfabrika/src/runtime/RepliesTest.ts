@@ -118,8 +118,8 @@ export const capture = () => {
   const write = (span: Tracer.NativeSpan) =>
     [
       span.name,
-      JSON.stringify([...span.attributes], (_, value) => (typeof value === "bigint" ? value.toString() : value)),
-      JSON.stringify(span.events, (_, value) => (typeof value === "bigint" ? value.toString() : value)),
+      JSON.stringify([...span.attributes], (_, value) => (Predicate.isBigInt(value) ? value.toString() : value)),
+      JSON.stringify(span.events, (_, value) => (Predicate.isBigInt(value) ? value.toString() : value)),
       span.status._tag === "Ended" && Exit.isFailure(span.status.exit) ? Cause.pretty(span.status.exit.cause) : "",
     ].join("\n");
 
@@ -369,7 +369,7 @@ const walk = (
 
         const located = dump(raw).flatMap(({ table, row }) =>
           Object.entries(row).flatMap(([column, value]) => {
-            if (typeof value !== "string" || parsed(value)?.["digest"] !== stored.digest) {
+            if (!Predicate.isString(value) || parsed(value)?.["digest"] !== stored.digest) {
               return [];
             }
 
@@ -423,7 +423,7 @@ const walk = (
 
       const cells = dump(raw)
         .flatMap(({ row }) => Object.values(row))
-        .filter((cell): cell is string => typeof cell === "string" && !damaged.has(cell));
+        .filter((cell): cell is string => Predicate.isString(cell) && !damaged.has(cell));
 
       unleaked([...cells, ...errors, ...spans.text()], secrets);
     }

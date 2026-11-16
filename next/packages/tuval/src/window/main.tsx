@@ -29,6 +29,7 @@ import { Button, useClipboard } from "@manti-ui/react";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Predicate from "effect/Predicate";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { landing, question, Layout, tileName } from "./Layout.tsx";
@@ -355,7 +356,7 @@ const Desk = (props: PageProps) => {
     tileName(focused)
   );
 
-  const said = typeof line === "string" ? <span className="says">{line}</span> : line;
+  const said = Predicate.isString(line) ? <span className="says">{line}</span> : line;
 
   return (
     <>

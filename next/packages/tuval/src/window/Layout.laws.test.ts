@@ -17,6 +17,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Layout from "@kampus/libfabrika/tezgah/Layout";
 import { type Tile, type TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
 import * as Schema from "effect/Schema";
+import * as Predicate from "effect/Predicate";
 import * as fc from "fast-check";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -105,10 +106,10 @@ const parse = (html: string): Node => {
 
 const all = (node: Node): ReadonlyArray<Node> => [
   node,
-  ...node.children.flatMap((c) => (typeof c === "string" ? [] : all(c))),
+  ...node.children.flatMap((c) => (Predicate.isString(c) ? [] : all(c))),
 ];
 
-const text = (node: Node): string => node.children.map((c) => (typeof c === "string" ? c : text(c))).join("");
+const text = (node: Node): string => node.children.map((c) => (Predicate.isString(c) ? c : text(c))).join("");
 
 /** An element's accessible name by HTML-AAM's first two steps: `aria-labelledby`, then `aria-label`. */
 const nameIn = (root: Node, node: Node): string | null => {
@@ -183,7 +184,7 @@ const check = (d: Desk, seen: { regions: number; nested: number }) => {
   }
 
   seen.regions = Math.max(seen.regions, regions.length);
-  seen.nested += typeof d.w.layout !== "string" && d.w.layout.parts.some((p) => typeof p.inner !== "string") ? 1 : 0;
+  seen.nested += !Predicate.isString(d.w.layout) && d.w.layout.parts.some((p) => !Predicate.isString(p.inner)) ? 1 : 0;
 };
 
 class Split implements fc.Command<Desk, Desk> {
@@ -355,7 +356,7 @@ const pathTo = (root: Node, node: Node): ReadonlyArray<Node> => {
   }
 
   for (const c of root.children) {
-    const below = typeof c === "string" ? [] : pathTo(c, node);
+    const below = Predicate.isString(c) ? [] : pathTo(c, node);
 
     if (below.length > 0) {
       return [root, ...below];
@@ -511,7 +512,7 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
         seen.strips += folded.length > 0 ? 1 : 0;
         seen.open += folded.length > 0 && open.length > 1 ? 1 : 0;
         seen.nested +=
-          folded.length > 0 && typeof w.layout !== "string" && w.layout.parts.some((p) => typeof p.inner !== "string")
+          folded.length > 0 && !Predicate.isString(w.layout) && w.layout.parts.some((p) => !Predicate.isString(p.inner))
             ? 1
             : 0;
       }),

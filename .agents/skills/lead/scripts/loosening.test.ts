@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { Predicate } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
@@ -78,7 +79,7 @@ const compare = (before: Record<string, File>, after: Record<string, File>, mapp
         mkdirSync(dirname(join(dir, path)), { recursive: true });
         rmSync(join(dir, path), { force: true });
 
-        if (typeof content === "string") {
+        if (Predicate.isString(content)) {
           writeFileSync(join(dir, path), content);
         } else if ("link" in content) {
           symlinkSync(content.link, join(dir, path));

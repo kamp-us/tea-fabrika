@@ -18,6 +18,7 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
+import * as Predicate from "effect/Predicate";
 import { vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
@@ -258,7 +259,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 
       const value: unknown = Reflect.get(target, key);
 
-      return typeof value === "function" ? value.bind(target) : value;
+      return Predicate.isFunction(value) ? value.bind(target) : value;
     },
   });
 
@@ -300,7 +301,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 
       const value: unknown = Reflect.get(target, key);
 
-      return typeof value === "function" ? value.bind(target) : value;
+      return Predicate.isFunction(value) ? value.bind(target) : value;
     },
   });
 
@@ -361,7 +362,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
           observe = Context.get(local, RuntimeLifecycle);
 
           const plugin = [...local.mapUnsafe.values()].find(
-            (value) => typeof value === "object" && value !== null && "sockets" in value,
+            (value) => Predicate.isObjectOrArray(value) && "sockets" in value,
           ) as { start: (ports: Record<string, unknown>) => Effect.Effect<unknown> };
 
           listen = (port) => plugin.start({ "fabrika-control": port });

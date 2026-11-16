@@ -14,6 +14,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Predicate from "effect/Predicate";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { ProgramName } from "../../packs/ProgramName.ts";
 import { Asset, type AssetType, Built as Tables, BuildError, type BuiltProgram, hash } from "../../runtime/Built.ts";
@@ -119,7 +120,7 @@ const findWindow = Effect.fn("build.manifest")(function* (from: string, selected
 
       const exports = manifest.exports;
 
-      return typeof exports === "object" && Object.hasOwn(exports, "./window")
+      return Predicate.isObjectOrArray(exports) && Object.hasOwn(exports, "./window")
         ? Option.some(`${selected}/window`)
         : Option.none<string>();
     }
@@ -152,7 +153,7 @@ const collect = Effect.fn("build.collect")(function* (output: ReadonlyArray<Outp
     const body =
       item.type === "chunk"
         ? item.code
-        : typeof item.source === "string"
+        : Predicate.isString(item.source)
           ? item.source
           : new TextDecoder().decode(item.source);
 
@@ -340,7 +341,7 @@ const tabAssets = Effect.fn("build.tab")(function* (
 
   const html = output.output.find((o): o is OutputAsset => o.type === "asset" && o.fileName === PAGE);
 
-  if (html === undefined || typeof html.source !== "string") {
+  if (html === undefined || !Predicate.isString(html.source)) {
     return yield* BuildError.make({ reason: "bundle", message: "the tab's call emitted no page" });
   }
 

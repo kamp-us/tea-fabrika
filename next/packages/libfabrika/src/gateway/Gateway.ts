@@ -5,7 +5,20 @@
  * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import { Context, Duration, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
+import {
+  Context,
+  Duration,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+  Semaphore,
+  Stream,
+  Tracer,
+} from "effect";
 import * as Cause from "effect/Cause";
 import { Base64, Base64Url } from "effect/encoding";
 import { RateLimiter } from "effect/persistence/RateLimiter";
@@ -77,8 +90,7 @@ const silent = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E,
   return yield* effect.pipe(Effect.withTracer(quiet));
 });
 
-const rawObject = (a: unknown): Record<string, unknown> | null =>
-  typeof a === "object" && a !== null && !Array.isArray(a) ? (a as Record<string, unknown>) : null;
+const rawObject = (a: unknown): Record<string, unknown> | null => (Predicate.isObject(a) ? a : null);
 
 const reserved = (a: unknown) => {
   const value = rawObject(a);
@@ -1419,7 +1431,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         Result.isFailure(request) ||
         decoded === null ||
         Result.isFailure(decoded) ||
-        typeof name !== "string")
+        !Predicate.isString(name))
     ) {
       refusal ??= "bad_input";
     }
@@ -1526,8 +1538,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           client: raw,
           by,
           process: processId,
-          name: typeof name === "string" ? name : method,
-          personOnly: typeof name === "string" && policy.inputs.includes(name),
+          name: Predicate.isString(name) ? name : method,
+          personOnly: Predicate.isString(name) && policy.inputs.includes(name),
           digest,
           arrivedAt: at,
           span: { traceId: span.traceId, spanId: span.spanId },
@@ -1591,10 +1603,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
       let safe: typeof Schema.Json.Type | undefined;
 
-      if (refusal === null && message !== null && typeof name === "string" && !options.inputs.raw.includes(name)) {
+      if (refusal === null && message !== null && Predicate.isString(name) && !options.inputs.raw.includes(name)) {
         const audit = options.audit;
         // Audit decodes the same trusted parent that the runner stamps before checking the message.
-        const stamped = typeof message === "object" ? { ...message, parent: binding.id } : message;
+        const stamped = Predicate.isObjectOrArray(message) ? { ...message, parent: binding.id } : message;
 
         const selected =
           audit === undefined

@@ -16,6 +16,7 @@ import * as Scope from "effect/Scope";
 import * as ScopedRef from "effect/ScopedRef";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
+import * as Predicate from "effect/Predicate";
 import * as SessionSenders from "../access/SessionSenders.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -80,7 +81,7 @@ export const databases = Effect.gen(function* () {
         // Cloudflare limits each stored row. Node SQLite needs the same failure at this edge.
         if (/^\s*(INSERT|UPDATE)\b/i.test(query)) {
           const size = params.reduce<number>(
-            (total, value) => total + (typeof value === "string" ? bytes.encode(value).byteLength : 8),
+            (total, value) => total + (Predicate.isString(value) ? bytes.encode(value).byteLength : 8),
             0,
           );
 

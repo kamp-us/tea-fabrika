@@ -1,6 +1,6 @@
 // P34c slice 4, next/. Calibration is copied from A-Numbers, never read from product defaults.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Option, Schema } from "effect";
+import { ByteSize, Effect, Option, Predicate, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Setting.ts";
@@ -28,7 +28,7 @@ const numeric = (value: unknown): unknown => {
     return ByteSize.toNumberUnsafe(value);
   }
 
-  if (typeof value === "object" && value !== null) {
+  if (Predicate.isObjectOrArray(value)) {
     return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, numeric(v)]));
   }
 
@@ -197,7 +197,7 @@ describe("P34c Q11 settings", () => {
 
           const recovery = declaration("limits.recovery");
           const encoded = Schema.encodeUnknownSync(recovery.schema)(recovery.default);
-          expect(typeof encoded).toBe("object");
+          expect(encoded).toBeTypeOf("object");
 
           // Mutate a schema-valid recovery value, rather than inventing another error schema.
           for (const location of ["project", "process"]) {

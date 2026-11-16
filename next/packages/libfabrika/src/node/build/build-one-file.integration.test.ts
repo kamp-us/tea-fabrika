@@ -31,6 +31,7 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
+import * as Predicate from "effect/Predicate";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import { parseSync } from "oxc-parser";
@@ -243,11 +244,11 @@ const strings = (source: string) => {
   const found: string[] = [];
 
   const visit = (x: unknown): void => {
-    if (x === null || typeof x !== "object") {
+    if (!Predicate.isObjectOrArray(x)) {
       return;
     }
 
-    if ("type" in x && x.type === "Literal" && "value" in x && typeof x.value === "string") {
+    if ("type" in x && x.type === "Literal" && "value" in x && Predicate.isString(x.value)) {
       found.push(x.value);
     }
 
@@ -318,7 +319,7 @@ const observe = async () => {
             emitted.push(
               item.type === "chunk"
                 ? item.code
-                : typeof item.source === "string"
+                : Predicate.isString(item.source)
                   ? item.source
                   : new TextDecoder().decode(item.source),
             );
@@ -641,7 +642,7 @@ const observeCalls = async () => {
               text:
                 item.type === "chunk"
                   ? item.code
-                  : typeof item.source === "string"
+                  : Predicate.isString(item.source)
                     ? item.source
                     : new TextDecoder().decode(item.source),
             })),
@@ -1189,7 +1190,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
 
             const seen = JSON.stringify(
               spans.map((s) => ({ name: s.name, attributes: [...s.attributes], events: s.events, status: s.status })),
-              (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v),
+              (_key, v: unknown) => (Predicate.isBigInt(v) ? String(v) : v),
             );
 
             if (result._tag === "Failure") {
