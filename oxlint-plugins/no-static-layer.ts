@@ -7,7 +7,7 @@
 // What fires, on a class declaration or a class expression whose `extends` is a call of
 // `Context.Service` (`Context.Service<S, A>()("id")`): a static field, with or without `readonly` or
 // a value, a static method, getter, setter or accessor, and a `static {}` block. `Context` is resolved
-// through the file's own scope as `service-id.ts` resolves it, so a renamed import is seen and a local
+// through the file's own scope, so a renamed import is seen and a local
 // of the same name is not: `Context` imported from `effect` under any name, `effect/Context` imported
 // as a namespace, the `effect` barrel imported as a namespace (`Effect.Context.Service`), and
 // `Service` imported by name from `effect/Context`.

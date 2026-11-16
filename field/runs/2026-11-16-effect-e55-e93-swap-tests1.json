@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e55-e93-swap-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:04:27-08:00",
+  "ended": "2026-11-16T01:24:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for the Effect sweep unit E55 + E93 + the service-id swap (decisions 0573 and 0575, the merge session's ruling Q7), in next/ and our tooling, on branch fabrikalfa/effect-e55-e93-swap from fa24f807e. Merged origin/fabrikalfa/effect-e55 (its two tests commits: the app's three test IDs and its run row); origin/main was not merged. Count with only deterministicKeys at error through --lspconfig (effect-tsgo diagnostics, one project at a time): next/packages/libfabrika 7 (Id.ts:152, access/SessionManager.ts:164, ci/CiTest.ts:38, codehost/CodeHostTest.ts:53, ledger/Ledger.ts:55, ledger/WritePolicy.ts:52, processes/Mailbox.ts:30), next/apps/fabrika 0, .agents 5 (skills/lead/scripts/box/BoxGit.ts:36, skills/lead/scripts/box/Runs.ts:16, skills/lead/scripts/flow/Runners.ts:23, skills/sev/scripts/Alerts.ts:21, skills/sev/scripts/WorkflowRuns.ts:45), all 5 .agents hits in product files. 0575's check before a rename: every old ID string of the 12 hits and runtime.ts:833 was searched across the repo; each is spelled only at its own declaration, in the deleted service-id test's vectors, and in prose (decisions, plans, patterns, field rows), so none is a stored value, a wire value, a log key another program reads or a fixture. No stop. Fixed by hand with the Edit tool, to the checker's default form: ci/CiTest.ts:38 to @kampus/libfabrika/ci/CiTest/Control, codehost/CodeHostTest.ts:53 to @kampus/libfabrika/codehost/CodeHostTest/Control. The swap: oxlint-plugins/service-id.ts and service-id.test.ts deleted; its import and entry dropped from oxlint-plugins/index.ts; its .oxlintrc.json line and comment dropped; its row dropped from plants.test.ts's elsewhere list; advice.test.ts's OTHERS generator takes fabrika(service-contract) in its place, so the generator keeps its size; decode-guards.test.ts no longer counts a wrong ID as blocking and instead asserts that lint's verdict does not change with the ID; comments in no-static-layer.ts and written-service-type.ts no longer cite service-id.ts; oxlint-plugins/README.md drops the rule's paragraph and its two replay rows and says deterministicKeys holds the form; the now unused disable line at next/packages/libfabrika/src/permissions/Rebac.ts:182 is removed, since oxlint blocks on an unused disable and the swap cannot land without it (a comment line, no code). The lock: deterministicKeys at error under the @effect/language-service plugin's overrides in next/packages/libfabrika/tsconfig.json (src/**/*.ts, the folder service-id read) and next/apps/fabrika/tsconfig.json (the whole app, at zero). .agents/tsconfig.json is not locked: its 5 hits are product files for the build. Recount with each project's own config: libfabrika 5 at error, all product (Id.ts:152, access/SessionManager.ts:164, ledger/Ledger.ts:55, ledger/WritePolicy.ts:52, processes/Mailbox.ts:30), and base checks still held, so the checker merges the package block into the base's (no unstableApiUsage warning came back); the app 0 and exit 0. Left for the build: the 5 libfabrika product hits, the 5 .agents hits, the dot-form Reference the checker does not see at next/packages/libfabrika/src/cloudflare/runtime.ts:833 (WriteNotifications), and the prose naming old IDs or the dot form: docs/direction/effect-code-guidelines.md:321 and :437, docs/plan/effect-rules-small.md:334, docs/plan/effect-rules-big.md:149, docs/plan/tier-1-detail.md:1756, .patterns/effect-services-and-layers.md:89-92.",
+  "plants": [
+    {
+      "law": "the lock: deterministicKeys at error in next/packages/libfabrika/tsconfig.json, read by the project's own config",
+      "plant": "none needed: the known product site next/packages/libfabrika/src/ledger/Ledger.ts:55 still holds the dot form, and effect-tsgo diagnostics on the project reports it at error, with Id.ts:152, SessionManager.ts:164, WritePolicy.ts:52 and Mailbox.ts:30",
+      "result": "red"
+    },
+    {
+      "law": "the lock: deterministicKeys at error in next/apps/fabrika/tsconfig.json, read by the project's own config",
+      "plant": "next/apps/fabrika/src/record.laws.integration.test.ts:32 put back to the dot form @kampus/fabrika/record.laws.integration.test.Wire: one deterministicKeys error at that line, exit 1; restored by copy, then 0 and exit 0",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/decode-guards.test.ts: a clean report passes, a JSON.parse or another blocking one fails, and the ID changes nothing",
+      "plant": "the old service-id rule put back (service-id.ts, its index.ts entry and its .oxlintrc.json line): expected the report to contain 'oxlint: 0 blocking, 0 advice'; restored by copy, then green",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 20,
+  "note": "Tests run at fa24f807e plus the E55 merge and this step's edits, under nice -n 15 with maxWorkers 3 and TYPESAFE_API_KEY unset: oxlint-plugins/plants.test.ts, advice.test.ts, decode-guards.test.ts, no-static-layer.test.ts, written-service-type.test.ts (260 passed); next/apps/fabrika/src/exam/effect-checks.test.ts, exam/tsconfig-scope.integration.test.ts, next/programs/pipeline/src/handlers.test.ts, node/queue.laws.integration.test.ts, node/runner.laws.integration.test.ts, next/packages/libfabrika/src/permissions/Rebac.test.ts, next/apps/fabrika/src/record.laws.integration.test.ts, worker-usage.integration.test.ts (29 passed, 1 expected fail). pnpm format and pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) passed, with no service-id line; the list ratchet exited 0. No pnpm typecheck: it stays red on the 5 libfabrika product hits until the build. loosening.sh will name the deleted service-id.test.ts and the narrowed decode-guards law: both are 0575's decided swap, with deterministicKeys at error taking the wrong-ID case. For the fold: main's libfabrika tsconfig gained its own plugin block after this branch's base (pull requests 1462 and 1516), so the two blocks are merged by hand at the fold, and main's L3 law asks for preferSchemaTaggedError in each block.",
+  "step": "tests"
+}

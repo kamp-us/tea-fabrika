@@ -179,7 +179,6 @@ export const Permission =
     config: { readonly model: Model<T>; readonly on: On; readonly permission: P },
   ): PermissionClass<Self, Id, On> => {
     const { model, permission } = config;
-    // oxlint-disable-next-line fabrika/service-id -- a right's id is its declarer's, as with Effect's own `Context.Service` caller; `Model.ts` names its rights by their path
     const key = Context.Service<Self, Proof<Self>>()(id);
     const within = (tuples: Tuples, sender: Sender, object: Ref<On>): Result.Result<Proof<Self>, Denied> => {
       const subject = `person:${sender.for}`;

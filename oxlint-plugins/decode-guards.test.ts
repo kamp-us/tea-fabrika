@@ -1,7 +1,8 @@
 // Ticket 737, G1 and G3. next/ decodes input with Effect Schema (decision 0023), so oxlint's own
 // `no-restricted-properties` reports a bare `JSON.parse` there. It blocks in every folder at zero
-// (0523), and since ticket 909 a wrong service ID blocks too (decision 0168). The fixtures are the
-// rule's inputs (0093); the replay reads the tree.
+// (0523). A wrong service ID is the Effect checker's `deterministicKeys` now, at error in each
+// package's tsconfig (0575), so the type check holds it, not lint. The fixtures are the rule's inputs
+// (0093); the replay reads the tree.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -10,7 +11,6 @@ import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 
 const CODE = "eslint(no-restricted-properties)";
-const ID = "fabrika(service-id)";
 const root = resolve(import.meta.dirname, "..");
 const word = fc.stringMatching(/^[a-z]{2,6}$/);
 
@@ -106,43 +106,35 @@ const lint = (files: Readonly<Record<string, string>>, args: ReadonlyArray<strin
   }
 };
 
-/** One libfabrika file as the lint runner sees it: a service with a wrong or right ID, and a parse or none. */
-const probe = ({
-  parse,
-  id,
-  blocking,
-}: {
-  readonly parse: boolean;
-  readonly id: string | null;
-  readonly blocking: boolean;
-}) =>
+/** One libfabrika file as the lint runner sees it: a service with any ID, and a parse or none. */
+const probe = ({ parse, id, blocking }: { readonly parse: boolean; readonly id: string; readonly blocking: boolean }) =>
   `${[
     'import { Context } from "effect";',
     "",
-    `export class Probe extends Context.Service<Probe, { readonly n: number }>()("${id ?? "@kampus/libfabrika/runtime/Probe"}") {}`,
+    `export class Probe extends Context.Service<Probe, { readonly n: number }>()("${id}") {}`,
     "",
     `export const read = (text: string): unknown => ${parse ? "JSON.parse(text)" : "text"};`,
     ...(blocking ? ["", "debugger;"] : []),
   ].join("\n")}\n`;
 
 const PROBE = "next/packages/libfabrika/src/runtime/Probe.ts";
+const RIGHT = "@kampus/libfabrika/runtime/Probe";
 
 // T930 L9: the planted folder has no warn line, so it is at zero and a bare JSON.parse blocks there
-// (0523), beside a wrong service ID, which blocks since ticket 909.
-describe("T737 G3, T909 and T930 L9: a bare JSON.parse in a clean folder and a wrong service ID both block", () => {
-  it("a clean report passes, and a JSON.parse, a wrong ID or another blocking one fails", () => {
+// (0523). A service's ID is not lint's any more (0575): whatever it says, lint says nothing about it.
+describe("T737 G3 and T930 L9: a bare JSON.parse in a clean folder blocks, and lint judges no service ID", () => {
+  it("a clean report passes, a JSON.parse or another blocking one fails, and the ID changes nothing", () => {
     const seen = new Set<string>();
     fc.assert(
       fc.property(
         fc.record({ parse: fc.boolean(), id: fc.boolean(), blocking: fc.boolean(), name: word }),
         ({ parse, id, blocking, name }) => {
-          const ran = lint({ [PROBE]: probe({ parse, id: id ? `fabrika/${name}` : null, blocking }) }, [
+          const ran = lint({ [PROBE]: probe({ parse, id: id ? `fabrika/${name}` : RIGHT, blocking }) }, [
             "--warn=no-debugger",
           ]);
-          const blocks = Number(parse) + Number(blocking) + Number(id);
+          const blocks = Number(parse) + Number(blocking);
           expect(ran.stdout).toContain(`oxlint: ${blocks} blocking, 0 advice`);
           expect(ran.stdout.includes(CODE)).toBe(parse);
-          expect(ran.stdout.includes(ID)).toBe(id);
           expect(ran.status, ran.stdout + ran.stderr).toBe(blocks > 0 ? 1 : 0);
           seen.add(`${parse}:${id}:${blocking}`);
         },
@@ -153,16 +145,10 @@ describe("T737 G3, T909 and T930 L9: a bare JSON.parse in a clean folder and a w
   });
 
   // Law 10 of docs/plan/effect-rules-small.md, and T930 L9. Only the real lint runner reads the
-  // severity and the real config holds the rule's level, so two real runs stand where no generator can.
-  it("scenario: the lint runner exits 1 on a wrong service ID, and 1 on a bare JSON.parse alone in a clean folder", () => {
-    const wrong = lint({ [PROBE]: probe({ parse: false, id: "@kampus/libfabrika/Probe", blocking: false }) }, []);
-    expect(wrong.stdout).toContain(ID);
-    expect(wrong.stdout).toContain("oxlint: 1 blocking, 0 advice");
-    expect(wrong.status, wrong.stdout + wrong.stderr).toBe(1);
-
-    const parsed = lint({ [PROBE]: probe({ parse: true, id: null, blocking: false }) }, []);
+  // severity and the real config holds the rule's level, so a real run stands where no generator can.
+  it("scenario: the lint runner exits 1 on a bare JSON.parse alone in a clean folder", () => {
+    const parsed = lint({ [PROBE]: probe({ parse: true, id: RIGHT, blocking: false }) }, []);
     expect(parsed.stdout).toContain(CODE);
-    expect(parsed.stdout).not.toContain(ID);
     expect(parsed.stdout).toContain("oxlint: 1 blocking, 0 advice");
     expect(parsed.status, parsed.stdout + parsed.stderr).toBe(1);
   });

@@ -6,7 +6,20 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     // The package commands use plain Node, which strips types without transforming them.
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A service's key is the checker's own form, `<package>/<path>/<Class>` (0575). The app is at
+        // zero, so the lock holds every file it checks. The globs read from this folder.
+        "overrides": [
+          {
+            "include": ["**/*.ts", "**/*.tsx"],
+            "options": { "diagnosticSeverity": { "deterministicKeys": "error" } }
+          }
+        ]
+      }
+    ]
   },
   // The P19 host check bundles this fixture as the small brain that exits normally, so it is checked
   // here with the code that runs it. The root tsconfig is for editors only and no typecheck reads it.

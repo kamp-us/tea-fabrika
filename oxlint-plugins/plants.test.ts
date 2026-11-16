@@ -377,8 +377,6 @@ describe("each rule refuses what it is there to refuse", () => {
       // P17a's path-scoped rules have plants in their own oxlint-plugins/*.test.ts files.
       "door-is-library",
       "outside-input-constructor",
-      // T737's rule reads only libfabrika's src, so service-id.test.ts plants it there.
-      "service-id",
       "service-contract", // P19 plants the three desktop contracts and a native import below.
       // T518's retired module is planted in one-id-module.test.ts.
       "one-id-module",

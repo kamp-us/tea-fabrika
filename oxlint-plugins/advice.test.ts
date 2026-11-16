@@ -37,7 +37,7 @@ const FIVE = [
 const SIX = [...FIVE, "fabrika(jsdocs)"] as const;
 
 const OTHERS = [
-  "fabrika(service-id)",
+  "fabrika(service-contract)",
   "eslint(no-debugger)",
   "fabrika(no-type-assertions)",
   "eslint(no-restricted-imports)",

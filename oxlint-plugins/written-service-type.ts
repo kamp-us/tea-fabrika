@@ -4,7 +4,7 @@
 //
 // What is read: the last type argument of Effect's `Context.Service`, which is the service's type in
 // both forms, `Context.Service<Self, Type>()("id")` and `Context.Service<Type>("id")`. `Context` is
-// resolved through the file's own scope, as `service-id.ts` does it: `Context` imported from
+// resolved through the file's own scope: `Context` imported from
 // `effect` under any name, `effect/Context` or the `effect` barrel imported as a namespace, and
 // `Service` imported by name from `effect/Context`, with the member written plainly, optionally or
 // as a string literal. A `Context.Reference`, a shadowed `Context` and another module's `Service`
