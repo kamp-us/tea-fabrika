@@ -78,25 +78,24 @@ type Model = typeof Model.Type;
 
 const clickFields = { key: Schema.String, cmd: Id.Cmd };
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("link"), link: Link }),
-  Schema.Struct({ type: Schema.Literal("rows"), rows: Schema.Array(Row), at: Schema.Number }),
-  Schema.Struct({ type: Schema.Literal("clients"), clients: Schema.Array(Client) }),
-  Schema.Struct({ type: Schema.Literal("approve"), ...clickFields }),
-  Schema.Struct({ type: Schema.Literal("deny"), ...clickFields }),
-  Schema.Struct({ type: Schema.Literal("remove"), ...clickFields }),
-  Schema.Struct({ type: Schema.Literal("enter") }),
-  Schema.Struct({ type: Schema.Literal("checked"), cmd: Id.Cmd, check: Schema.Literals(["touch", "click"]) }),
-  Schema.Struct({
-    type: Schema.Literal("not_checked"),
+const Msg = Schema.TaggedUnion({
+  link: { link: Link },
+  rows: { rows: Schema.Array(Row), at: Schema.Number },
+  clients: { clients: Schema.Array(Client) },
+  approve: { ...clickFields },
+  deny: { ...clickFields },
+  remove: { ...clickFields },
+  enter: {},
+  checked: { cmd: Id.Cmd, check: Schema.Literals(["touch", "click"]) },
+  not_checked: {
     cmd: Id.Cmd,
     reason: Schema.Literals(["declined", "unavailable"]),
-  }),
-  Schema.Struct({ type: Schema.Literal("open_browser"), cmd: Id.Cmd }),
-  Schema.Struct({ type: Schema.Literal("opened"), cmd: Id.Cmd, digest: Schema.String, at: Schema.Number }),
-  Schema.Struct({ type: Schema.Literal("open_window") }),
-  Schema.Struct({ type: Schema.Literal("quit") }),
-]);
+  },
+  open_browser: { cmd: Id.Cmd },
+  opened: { cmd: Id.Cmd, digest: Schema.String, at: Schema.Number },
+  open_window: {},
+  quit: {},
+});
 
 const check = Cmd.make("check", {
   input: Schema.toType(Schema.Struct({ cmd: Id.Cmd, reason: Schema.String })),

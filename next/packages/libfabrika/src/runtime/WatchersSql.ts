@@ -8,7 +8,7 @@ import { applyCell } from "@demlik/tea";
 import { Clock, Effect, Layer, Result, Schema } from "effect";
 import type { Sql } from "../Sql.ts";
 import type { Update } from "./Entry.ts";
-import { Model, watchers } from "./internal/watchers.ts";
+import { Model, Msg, watchers } from "./internal/watchers.ts";
 import { WatcherManager } from "./WatcherManager.ts";
 import { BadRow, Storage, Watchers, WatchersError } from "./Watchers.ts";
 
@@ -65,14 +65,7 @@ export const layer = (
     Watchers,
     Effect.gen(function* () {
       const manager = yield* WatcherManager;
-      const step = (
-        msg:
-          | {
-              readonly type: "open";
-              readonly watch: { readonly client: string; readonly at: number; readonly position: number };
-            }
-          | { readonly type: "end"; readonly client: string },
-      ) => {
+      const step = (msg: typeof Msg.Type) => {
         const before = load(sql, descriptor.name);
         const [next] = applyCell(watchers, before, msg);
         sql.exec(
@@ -91,7 +84,7 @@ export const layer = (
       });
       const end = Effect.fn("watchers.end")(function* (client: string, position: number) {
         const at = yield* Clock.currentTimeMillis;
-        yield* stored(() => sql.transaction(() => step({ type: "end", client })));
+        yield* stored(() => sql.transaction(() => step(Msg.cases.end.make({ client }))));
         yield* Effect.annotateCurrentSpan({ ...attributes(), client, position, at, reason: "gone" });
       });
       const deliver = Effect.fnUntraced(function* (client: string, update: Update) {
@@ -108,7 +101,7 @@ export const layer = (
         open: Effect.fn("watchers.open")(function* (client: string, whole: Extract<Update, { type: "whole" }>) {
           const at = yield* Clock.currentTimeMillis;
           const evicted = yield* stored(() =>
-            sql.transaction(() => step({ type: "open", watch: { client, at, position: whole.rev } })),
+            sql.transaction(() => step(Msg.cases.open.make({ watch: { client, at, position: whole.rev } }))),
           );
           const outcome = yield* deliver(client, whole);
           yield* Effect.annotateCurrentSpan({

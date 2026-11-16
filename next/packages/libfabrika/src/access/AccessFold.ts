@@ -11,7 +11,7 @@
 import { applyCell } from "@demlik/tea";
 import { Result } from "effect";
 import type { Access, Folded, MemberEvent, Reason } from "./Access.ts";
-import { access, members } from "./Access.ts";
+import { access, Fold, members } from "./Access.ts";
 
 /**
  * The Model before any event: the machine's own init, which is `unfounded`.
@@ -22,7 +22,7 @@ import { access, members } from "./Access.ts";
 export const EMPTY: Folded = access.init(null, {})[0];
 
 const step = (model: Folded, event: MemberEvent): Folded => {
-  const [next] = applyCell(access, model, { type: "fold", event });
+  const [next] = applyCell(access, model, Fold.make({ event }));
   return next;
 };
 

@@ -86,7 +86,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
   const read = Effect.suspend(() => {
     const state = options.read();
     return Effect.isEffect(state) ? state : Effect.succeed(state);
-  }).pipe(Effect.map((attached) => step(unloaded, { type: "observed", attached })));
+  }).pipe(Effect.map((attached) => step(unloaded, State.Msg.cases.observed.make({ attached }))));
   const save = (model: State.Model) => {
     const attached = State.attachment(model);
 
@@ -120,7 +120,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
   };
   const forget = Effect.fnUntraced(function* (wait: typeof Wait.Type) {
     const now = yield* read;
-    const next = step(now, { type: "answered", wait });
+    const next = step(now, State.Msg.cases.answered.make({ wait }));
 
     if (next === now) {
       return false;
@@ -184,7 +184,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
   /** Keeps one wait and registers it. It is saved first, so a ring during registration finds it. */
   const hold = Effect.fnUntraced(function* (wait: typeof Wait.Type) {
     const now = yield* read;
-    const next = step(now, { type: "waited", wait });
+    const next = step(now, State.Msg.cases.waited.make({ wait }));
 
     if (next === now) {
       return respond(wait.id, Answer.cases.refused.make({ reason: "too_many_waits" }));
@@ -221,7 +221,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
       return respond(request.id, Answer.cases.refused.make({ reason: "no_hello" }));
     }
 
-    const busy = step(now, { type: "started" });
+    const busy = step(now, State.Msg.cases.started.make({}));
 
     if (State.online(busy)) {
       save(busy);
@@ -243,7 +243,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     }
 
     // The call or reply may replace the attachment. A failed call must clear busy too.
-    const idle = step(yield* read, { type: "finished" });
+    const idle = step(yield* read, State.Msg.cases.finished.make({}));
 
     if (State.online(idle)) {
       save(idle);

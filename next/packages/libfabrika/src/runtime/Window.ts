@@ -3,6 +3,7 @@
  *
  * @stability unstable
  */
+import type { Cmd } from "@demlik/tea";
 import type { Machine } from "@demlik/tea/effect";
 import type { Schema } from "effect";
 import type { Program } from "./Program.ts";
@@ -69,12 +70,7 @@ export type TileProps<T extends AnyTile = never> = [T] extends [never]
 type TileCommand<T> = T extends Machine<any, any, infer C, any, any> ? C : never;
 
 type CheckedTile<P extends AnyProgram, T extends AnyTile> =
-  TileCommand<T> extends {
-    readonly type: "press";
-    readonly m: WindowMsg<P>;
-  }
-    ? T
-    : never;
+  TileCommand<T> extends Cmd<"press"> & { readonly m: WindowMsg<P> } ? T : never;
 
 /**
  * A command name for one of the program's inputs, such as `counter.inc`.
@@ -112,6 +108,13 @@ export const defineWindow = <P extends AnyProgram, View, T extends AnyTile = nev
   registration: WindowRegistration<NoInfer<P>, View, NoInfer<T>> & { readonly tile?: T },
 ): WindowRegistration<P, View, T> => registration;
 
+/** A Msg named only by its key, with no fields: what a key command sends. */
+// oxlint-disable-next-line fabrika/no-hand-tag -- a writer that knows no cases: a key command names any program's input, so its key is an open string (as for ledger/Log.ts)
+type Named = { readonly _tag: string };
+
+// oxlint-disable-next-line fabrika/no-hand-tag -- a writer that knows no cases: a key command names any program's input, so its key is an open string (as for ledger/Log.ts)
+const named = (name: string): Named => ({ _tag: name });
+
 /**
  * Returns the Msg a key command sends: the input named after the program's dot, with no fields.
  * Returns `null` when the command has no dot, starts with one, or ends with one.
@@ -119,7 +122,7 @@ export const defineWindow = <P extends AnyProgram, View, T extends AnyTile = nev
  * @stability unstable
  * @category combinators
  */
-export const commandMsg = (command: string): { readonly type: string } | null => {
+export const commandMsg = (command: string): Named | null => {
   const dot = command.indexOf(".");
-  return dot <= 0 || dot === command.length - 1 ? null : { type: command.slice(dot + 1) };
+  return dot <= 0 || dot === command.length - 1 ? null : named(command.slice(dot + 1));
 };

@@ -92,34 +92,37 @@ export const DevState = Schema.TaggedUnion({
 });
 type DevState = typeof DevState.Type;
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("listened"), port: Schema.Int }),
-  Schema.Struct({
-    type: Schema.Literal("started"),
+/**
+ * Schema for what the dev loop tells its life machine, each made with `DevMsg.cases.<name>.make`.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const DevMsg = Schema.TaggedUnion({
+  listened: { port: Schema.Int },
+  started: {
     start: Schema.String,
     pid: Pid,
     build: Schema.String,
     at: Schema.Number,
-  }),
-  Schema.Struct({ type: Schema.Literal("exited"), replacement: Schema.String }),
-  Schema.Struct({
-    type: Schema.Literal("waiting"),
+  },
+  exited: { replacement: Schema.String },
+  waiting: {
     until: Schema.Number,
     reason: Schema.String,
-  }),
-  Schema.Struct({ type: Schema.Literal("braked"), reason: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("stop") }),
-  Schema.Struct({ type: Schema.Literal("stopped") }),
-  Schema.Struct({
-    type: Schema.Literal("replacing"),
+  },
+  braked: { reason: Schema.String },
+  stop: {},
+  stopped: {},
+  replacing: {
     // The pid the memory sampler read, so a sample of an older process replaces nothing.
     pid: Pid,
     replacement: Schema.String,
     bytes: Schema.Int,
     at: Schema.Number,
-  }),
-  Schema.Struct({ type: Schema.Literal("killed"), pid: Pid }),
-]);
+  },
+  killed: { pid: Pid },
+});
 
 type Ctx = { readonly last: string | null };
 
@@ -255,7 +258,7 @@ const active = (s: DevState) => {
  */
 export const devLife = Machine.make({
   model: DevState,
-  msg: Msg,
+  msg: DevMsg,
   cmds: [],
   types: { ctx: {} as Ctx },
   init: (_saved, ctx) => [DevState.cases.starting.make({ last: ctx.last }), []],

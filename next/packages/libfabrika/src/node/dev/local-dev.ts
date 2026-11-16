@@ -19,7 +19,7 @@ import {
   SubscriptionRef,
 } from "effect";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
-import { devLife, type DevState } from "./DevLife.ts";
+import { DevMsg, devLife, type DevState } from "./DevLife.ts";
 
 type Life = typeof devLife.model.Type;
 type LifeMsg = typeof devLife.msg.Type;
@@ -197,7 +197,7 @@ export const terminate = Effect.fn("brain.terminate")(function* <E, R>(options: 
   const send = (prev: Life, next: Replacing) =>
     record(prev, next).pipe(Effect.andThen(options.signal(pid, next.signal)));
   const terming = yield* life.step(
-    { type: "replacing", ...sample },
+    DevMsg.cases.replacing.make({ ...sample }),
     (prev, next): next is Replacing => prev._tag !== "replacing" && next._tag === "replacing",
     send,
   );
@@ -217,7 +217,7 @@ export const terminate = Effect.fn("brain.terminate")(function* <E, R>(options: 
   }
 
   const killing = yield* life.step(
-    { type: "killed", pid },
+    DevMsg.cases.killed.make({ pid }),
     (prev, next): next is Replacing =>
       prev._tag === "replacing" && prev.signal === "SIGTERM" && next._tag === "replacing" && next.signal === "SIGKILL",
     send,

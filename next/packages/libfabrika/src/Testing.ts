@@ -14,8 +14,11 @@ type Options<S, M> = {
   readonly seed: number;
 };
 
+// oxlint-disable-next-line fabrika/no-hand-tag -- a reader that knows no cases: any program's Msg or Cmd, so its key is an open string (as for ledger/Log.ts)
+type Typed = { readonly _tag: string };
+
 /** Checks every cut, the first and the last included. Never runs a Cmd. */
-export const syncTest = <S, M extends { readonly type: string }, C extends Cmd, U extends Sub, Ctx>(
+export const syncTest = <S, M extends Typed, C extends Cmd, U extends Sub, Ctx>(
   machine: Machine<S, M, C, U, Ctx>,
   ctx: Ctx,
   { msgs, encode, decode, equals, seed }: Options<S, M>,

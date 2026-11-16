@@ -7,7 +7,7 @@
 import { applyCell } from "@demlik/tea";
 import { Effect, Layer, Result, Schema, SchemaIssue } from "effect";
 import type { Sql } from "../Sql.ts";
-import { Model, Reply, reply as machine } from "./internal/reply.ts";
+import { Model, Remember, Reply, reply as machine } from "./internal/reply.ts";
 import { Replies, RepliesError } from "./Replies.ts";
 
 const TABLE =
@@ -48,7 +48,7 @@ const load = (sql: Sql, name: string, id: string): typeof Model.Type => {
  *  transaction, so a failed or full write keeps nothing. */
 const remember = (sql: Sql, capacity: number, reply: typeof Reply.Type): typeof Reply.Type => {
   const model = load(sql, reply.name, reply.id);
-  const [next] = applyCell(machine, model, { type: "remember", reply });
+  const [next] = applyCell(machine, model, Remember.make({ reply }));
 
   // The machine never forgets: a remember always leaves a remembered Model.
   if (next._tag !== "remembered") {

@@ -5,6 +5,7 @@
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
 import * as Schema from "effect/Schema";
+import type * as Types from "effect/Types";
 import * as Chaos from "./Chaos.ts";
 import * as ChaosSchedule from "./ChaosSchedule.ts";
 
@@ -82,9 +83,6 @@ const Phase = Schema.TaggedUnion({
 export const Model = Schema.Struct({ number: Count, phase: Phase });
 type Model = typeof Model.Type;
 
-const startMsg = Schema.Struct({ type: Schema.Literal("start"), ...Chaos.Start.fields });
-const stopMsg = Schema.Struct({ type: Schema.Literal("stop") });
-const timerMsg = Schema.Struct({ type: Schema.Literal("timer"), at: Count });
 const errorFields = { error: Error, at: Count, reason: Schema.optionalKey(Schema.String) };
 
 /**
@@ -93,44 +91,17 @@ const errorFields = { error: Error, at: Count, reason: Schema.optionalKey(Schema
  * @stability unstable
  * @category schemas
  */
-export const Msg = Schema.Union([
-  startMsg,
-  stopMsg,
-  timerMsg,
-  Schema.Struct({
-    type: Schema.Literal("now_ok"),
-    cmd: Schema.Struct({ type: Schema.Literal("now"), ...Request.fields }),
-    value: Count,
-    at: Count,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("now_err"),
-    cmd: Schema.Struct({ type: Schema.Literal("now"), ...Request.fields }),
-    ...errorFields,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("fire_ok"),
-    cmd: Schema.Struct({ type: Schema.Literal("fire"), ...Chaos.Fire.fields }),
-    value: Chaos.Fired,
-    at: Count,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("fire_err"),
-    cmd: Schema.Struct({ type: Schema.Literal("fire"), ...Chaos.Fire.fields }),
-    ...errorFields,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("inspect_ok"),
-    cmd: Schema.Struct({ type: Schema.Literal("inspect"), ...Inspect.fields }),
-    value: Chaos.Report,
-    at: Count,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("inspect_err"),
-    cmd: Schema.Struct({ type: Schema.Literal("inspect"), ...Inspect.fields }),
-    ...errorFields,
-  }),
-]);
+export const Msg = Schema.TaggedUnion({
+  start: Chaos.Start.fields,
+  stop: {},
+  timer: { at: Count },
+  now_ok: { cmd: Schema.TaggedStruct("now", Request.fields), value: Count, at: Count },
+  now_err: { cmd: Schema.TaggedStruct("now", Request.fields), ...errorFields },
+  fire_ok: { cmd: Schema.TaggedStruct("fire", Chaos.Fire.fields), value: Chaos.Fired, at: Count },
+  fire_err: { cmd: Schema.TaggedStruct("fire", Chaos.Fire.fields), ...errorFields },
+  inspect_ok: { cmd: Schema.TaggedStruct("inspect", Inspect.fields), value: Chaos.Report, at: Count },
+  inspect_err: { cmd: Schema.TaggedStruct("inspect", Inspect.fields), ...errorFields },
+});
 type Msg = typeof Msg.Type;
 
 const unfinished = (phase: typeof Phase.Type) =>
@@ -151,7 +122,7 @@ const incomplete = (m: Model, experiment: Experiment, reason: typeof Phase.cases
   phase: Phase.cases.incomplete.make({ experiment, reason }),
 });
 
-const receive = (m: Model, msg: Extract<Msg, { type: "fire_ok" | "fire_err" }>): Model => {
+const receive = (m: Model, msg: Types.ExtractTag<Msg, "fire_ok" | "fire_err">): Model => {
   const p = m.phase;
 
   if (p._tag === "idle" || p._tag === "starting") {
@@ -169,7 +140,7 @@ const receive = (m: Model, msg: Extract<Msg, { type: "fire_ok" | "fire_err" }>):
   }
 
   const result =
-    msg.type === "fire_ok"
+    msg._tag === "fire_ok"
       ? Did.fields.result.cases.answered.make({ value: msg.value })
       : Did.fields.result.cases.failed.make({ reason: msg.error._tag });
   const answers = [...history.answers, Did.make({ ordinal: msg.cmd.ordinal, at: msg.at, result })];
@@ -198,7 +169,7 @@ export const chaosMachine = Machine.make({
         return [m, []];
       }
 
-      const { type: _type, ...start } = msg;
+      const { _tag: _type, ...start } = msg;
       return [{ number: m.number + 1, phase: Phase.cases.starting.make({ start }) }, [now({ id: start.id })]];
     },
     now_ok: (m, msg) => {
@@ -310,6 +281,6 @@ export const wake = (model: Model): number | null =>
  * @category validation
  */
 export const refuse = (model: Model, msg: Msg): { readonly reason: string } | null =>
-  msg.type === "start" && (unfinished(model.phase) || model.number === Number.MAX_SAFE_INTEGER)
+  msg._tag === "start" && (unfinished(model.phase) || model.number === Number.MAX_SAFE_INTEGER)
     ? { reason: "active" }
     : null;

@@ -74,26 +74,24 @@ export type Handshake = typeof Handshake.Type;
  * @stability unstable
  * @category models
  */
-export const HandshakeMsg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("opened"), dial: Dial, at: Schema.optionalKey(Ms) }),
-  Schema.Struct({ type: Schema.Literal("challenge"), dial: Dial, nonce: Schema.String, at: Ms }),
-  Schema.Struct({ type: Schema.Literal("granted"), dial: Dial, nonce: Schema.String, at: Ms }),
-  Schema.Struct({
-    type: Schema.Literal("waiting"),
+export const HandshakeMsg = Schema.TaggedUnion({
+  opened: { dial: Dial, at: Schema.optionalKey(Ms) },
+  challenge: { dial: Dial, nonce: Schema.String, at: Ms },
+  granted: { dial: Dial, nonce: Schema.String, at: Ms },
+  waiting: {
     dial: Dial,
     code: Schema.String,
     until: Schema.Number,
     at: Ms,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("answer"),
+  },
+  answer: {
     dial: Dial,
     id: Schema.String,
     result: Schema.Unknown,
     reason: Schema.optionalKey(Schema.String),
     at: Ms,
-  }),
-]);
+  },
+});
 
 /**
  * The type of a Msg the hello exchange takes.

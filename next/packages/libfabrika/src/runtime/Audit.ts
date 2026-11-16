@@ -89,7 +89,8 @@ const reasons = { Input, Selection, Output, Transport, Reply };
 export const restore = (answer: typeof Answer.cases.AuditError.Type): AuditError =>
   new AuditError({ reason: new reasons[answer.reason._tag]({}) });
 
-const Minimal = Schema.Struct({ type: Schema.String });
+// oxlint-disable-next-line fabrika/no-hand-tag -- a reader that knows no cases: any program's Msg or Cmd, so its key is an open string (as for ledger/Log.ts)
+const Minimal = Schema.Struct({ _tag: Schema.String });
 
 type Declaration = {
   readonly msg: Schema.Codec<unknown, unknown>;

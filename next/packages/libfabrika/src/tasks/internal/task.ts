@@ -31,13 +31,13 @@ const Model = Schema.Struct({ state: State, answer: Answer });
 type Model = typeof Model.Type;
 
 /** @internal */
-export const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("request"), request: Request }),
-  Schema.Struct({ type: Schema.Literal("take"), executor: Executor, execution: Execution }),
-  Schema.Struct({ type: Schema.Literal("start"), execution: Execution }),
-  Schema.Struct({ type: Schema.Literal("finish"), execution: Execution, result: Result }),
-  Schema.Struct({ type: Schema.Literal("collect"), collection: Collection }),
-]);
+export const Msg = Schema.TaggedUnion({
+  request: { request: Request },
+  take: { executor: Executor, execution: Execution },
+  start: { execution: Execution },
+  finish: { execution: Execution, result: Result },
+  collect: { collection: Collection },
+});
 /** @internal */
 export type Msg = typeof Msg.Type;
 

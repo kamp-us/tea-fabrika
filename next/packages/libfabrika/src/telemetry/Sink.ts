@@ -37,7 +37,7 @@ import {
   writeHealth,
   writeSize,
 } from "./internal/measurements.ts";
-import { type Ended, held, machine } from "./internal/sink.ts";
+import { type Ended, held, machine, Msg } from "./internal/sink.ts";
 import { RecordManager } from "./Records.ts";
 import {
   Chain,
@@ -442,7 +442,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     state = applyCell(
       machine,
       state,
-      Result.isFailure(done) ? { type: "commit_failed", more } : { type: "committed", hour, sized },
+      Result.isFailure(done) ? Msg.cases.commit_failed.make({ more }) : Msg.cases.committed.make({ hour, sized }),
     )[0];
     return done;
   };
@@ -555,7 +555,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
 
   const flush = Effect.gen(function* () {
     const before = state;
-    state = applyCell(machine, state, { type: "flush_checked" })[0];
+    state = applyCell(machine, state, Msg.cases.flush_checked.make({}))[0];
 
     if (before._tag !== "clean") {
       return yield* Effect.fail(new SinkError({ reason: "storage", held: held(before).length }));
@@ -596,7 +596,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
 
   const check = Effect.suspend(() => {
     const before = state;
-    state = applyCell(machine, state, { type: "flush_checked" })[0];
+    state = applyCell(machine, state, Msg.cases.flush_checked.make({}))[0];
     return before._tag === "clean" && counts.size === 0
       ? Effect.void
       : Effect.fail(new SinkError({ reason: "storage", held: held(before).length + counts.size }));

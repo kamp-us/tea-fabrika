@@ -7,7 +7,7 @@
  * @stability unstable
  */
 import { run } from "@demlik/tea/effect";
-import { DateTime, Effect, Predicate, Schema, Stream } from "effect";
+import { DateTime, Effect, Predicate, Schema, Stream, type Types } from "effect";
 import { Socket } from "effect/socket";
 import * as Id from "../Id.ts";
 import { ClientKey } from "../transport/ClientKey.ts";
@@ -44,8 +44,8 @@ const Failure = Schema.TaggedUnion({
 const F = Failure.cases;
 
 /** The socket's Msgs the hands machine reads: a failure to open shows as its close. */
-const forHands = (m: DialMsg): m is Exclude<DialMsg, { readonly type: "socket_failure" }> =>
-  m.type !== "socket_failure";
+const forHands = (m: DialMsg): m is Exclude<DialMsg, Types.ExtractTag<DialMsg, "socket_failure">> =>
+  m._tag !== "socket_failure";
 
 /** A call that says what the client has `seen` also says when it was sent, on the client's own clock. */
 const stamped = (params: unknown, sentAt: string): unknown =>

@@ -222,7 +222,8 @@ const Declaration = Schema.Struct({
 /** A declaration the runner can load: one that also declares every port its built-in Cmds answer on. */
 const Loadable = Declaration.check(downDeclared);
 
-type Typed = { readonly type: string };
+// oxlint-disable-next-line fabrika/no-hand-tag -- a reader that knows no cases: any program's Msg or Cmd, so its key is an open string (as for ledger/Log.ts)
+type Typed = { readonly _tag: string };
 
 type ProgramMachine = Steps & {
   readonly model: Schema.Schema<unknown>;
@@ -244,7 +245,7 @@ type Port<M extends Typed, K, P> = P extends Pick<typeof InputSchema.cases.read.
   ? P extends ReadPort<Q, (view: never, input: Q["Type"]) => unknown>
     ? P
     : never
-  : K extends M["type"]
+  : K extends M["_tag"]
     ? Description
     : never;
 
@@ -603,7 +604,7 @@ const decodeRefusal = Schema.decodeUnknownResult(Schema.NullOr(Refusal));
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
 
 const isTyped = (u: unknown): u is Typed =>
-  Predicate.isObjectOrArray(u) && Predicate.hasProperty(u, "type") && Predicate.isString(u.type);
+  Predicate.isObjectOrArray(u) && Predicate.hasProperty(u, "_tag") && Predicate.isString(u._tag);
 
 const decodeTyped = (u: unknown): Option.Option<Typed> => (isTyped(u) ? Option.some(u) : Option.none());
 
@@ -644,7 +645,7 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
     return Option.none();
   }
 
-  const type = typed.value.type;
+  const type = typed.value._tag;
   const def = defs.find((d) => d.okType === type || d.errType === type);
 
   if (def === undefined || !Predicate.isObjectOrArray(msg)) {
@@ -652,7 +653,7 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
   }
 
   const cmd = Predicate.hasProperty(msg, "cmd") ? msg.cmd : undefined;
-  const sameCmd = Option.exists(decodeTyped(cmd), (c) => c.type === def.cmdType);
+  const sameCmd = Option.exists(decodeTyped(cmd), (c) => c._tag === def.cmdType);
 
   if (!sameCmd || !Predicate.hasProperty(msg, "at") || !Predicate.isNumber(msg.at)) {
     return Option.some(false);
@@ -719,7 +720,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
 
     if (
       !saved &&
-      Option.exists(typed, (m) => m.type === "timer" || defs.some((d) => d.okType === m.type || d.errType === m.type))
+      Option.exists(typed, (m) => m._tag === "timer" || defs.some((d) => d.okType === m._tag || d.errType === m._tag))
     ) {
       return Option.none();
     }
@@ -744,7 +745,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       return false;
     }
 
-    const def = defs.find((d) => d.cmdType === typed.value.type);
+    const def = defs.find((d) => d.cmdType === typed.value._tag);
 
     if (def === undefined) {
       return true;
@@ -790,7 +791,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       const now = model(raw, "saved_state");
       const m = message(msg, false);
 
-      if (Option.isNone(m) || !cells.has(m.value.type)) {
+      if (Option.isNone(m) || !cells.has(m.value._tag)) {
         return Admission.cases.invalid.make({});
       }
 
@@ -809,7 +810,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       const now = model(raw, "saved_state");
       const m = message(msg, false);
 
-      if (Option.isNone(m) || !cells.has(m.value.type)) {
+      if (Option.isNone(m) || !cells.has(m.value._tag)) {
         throw new ProgramDown({ reason: "step" });
       }
 
@@ -854,7 +855,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       const typed = decodeTyped(msg);
 
       // tea drops a Msg whose cell is gone by its turn; a saved one is dropped the same way.
-      if (Option.isSome(typed) && !cells.has(typed.value.type)) {
+      if (Option.isSome(typed) && !cells.has(typed.value._tag)) {
         return prepare(now, [], "saved_letter");
       }
 

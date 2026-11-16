@@ -35,14 +35,20 @@ export const Prefix = Schema.TaggedUnion({
  */
 export type Prefix = typeof Prefix.Type;
 
-const Msg = Schema.Union([
+/**
+ * Schema for what a window's prefix machine takes, each Msg made with its case's maker.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const PrefixMsg = Schema.TaggedUnion({
   /** The prefix key, pressed at `at`. */
-  Schema.Struct({ type: Schema.Literal("arm"), at: Ms }),
+  arm: { at: Ms },
   /** A close of `tile` that waits for y or n, asked at `at`. */
-  Schema.Struct({ type: Schema.Literal("question"), tile: TileId, at: Ms }),
+  question: { tile: TileId, at: Ms },
   /** The key that ends it: a command, the prefix again, Escape, an unbound key or the answer. */
-  Schema.Struct({ type: Schema.Literal("done") }),
-]);
+  done: {},
+});
 
 type Step = readonly [Prefix, readonly []];
 
@@ -54,7 +60,7 @@ type Step = readonly [Prefix, readonly []];
  */
 export const prefixMachine = Machine.make({
   model: Prefix,
-  msg: Msg,
+  msg: PrefixMsg,
   cmds: [],
   init: (loaded) => [loaded ?? Prefix.cases.idle.make({}), []],
   update: {

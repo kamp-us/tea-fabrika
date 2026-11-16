@@ -112,7 +112,14 @@ const look = (
 /** The monitor Cmd's `ok` answer letter, in the shape the runner gives every host Cmd's answer. */
 const answered = (watch: Watch, watched: typeof Watched.Type, at: number) => ({
   id: `${watch.id}/answer`,
-  m: { type: "monitor_ok", cmd: { type: "monitor", name: watch.name }, value: encodeWatched(watched), at },
+  m: {
+    // oxlint-disable-next-line fabrika/no-hand-tag -- a host Cmd's answer in the shape the runner gives every one, keyed `_tag` as tea's own; the processes layer cannot reach the monitor Cmd's def
+    _tag: "monitor_ok",
+    // oxlint-disable-next-line fabrika/no-hand-tag -- a host Cmd's answer in the shape the runner gives every one, keyed `_tag` as tea's own; the processes layer cannot reach the monitor Cmd's def
+    cmd: { _tag: "monitor", name: watch.name },
+    value: encodeWatched(watched),
+    at,
+  },
 });
 
 /**

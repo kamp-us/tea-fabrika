@@ -4,10 +4,11 @@ import { Schema } from "effect";
 const Inputs = { failedInputs: Schema.optionalKey(Schema.NullOr(Schema.String)) };
 const Model = Schema.TaggedUnion({ booting: Inputs, watching: Inputs });
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("attempted") }),
-  Schema.Struct({ type: Schema.Literal("rebuilt"), failedInputs: Schema.NullOr(Schema.String) }),
-]);
+/** @internal A rebuild was attempted, or it finished. */
+export const Msg = Schema.TaggedUnion({
+  attempted: {},
+  rebuilt: { failedInputs: Schema.NullOr(Schema.String) },
+});
 
 /** Tracks the first install attempt and the inputs of the last failed build. @internal */
 export const watcher = Machine.make({

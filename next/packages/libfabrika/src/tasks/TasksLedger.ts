@@ -48,36 +48,36 @@ const stream = (id: string) => `${PREFIX}${id}`;
 
 const toMsg = (stored: Stored): Msg => {
   if (stored._tag === "requested") {
-    return { type: "request", request: stored.request };
+    return Msg.cases.request.make({ request: stored.request });
   }
 
   if (stored._tag === "taken") {
-    return { type: "take", executor: stored.executor, execution: stored.execution };
+    return Msg.cases.take.make({ executor: stored.executor, execution: stored.execution });
   }
 
   if (stored._tag === "collected") {
-    return { type: "collect", collection: stored.collection };
+    return Msg.cases.collect.make({ collection: stored.collection });
   }
 
   return stored._tag === "started"
-    ? { type: "start", execution: stored.execution }
-    : { type: "finish", execution: stored.execution, result: stored.result };
+    ? Msg.cases.start.make({ execution: stored.execution })
+    : Msg.cases.finish.make({ execution: stored.execution, result: stored.result });
 };
 
 const toStored = (msg: Msg): Stored => {
-  if (msg.type === "request") {
+  if (msg._tag === "request") {
     return Stored.cases.requested.make({ request: msg.request });
   }
 
-  if (msg.type === "take") {
+  if (msg._tag === "take") {
     return Stored.cases.taken.make({ executor: msg.executor, execution: msg.execution });
   }
 
-  if (msg.type === "collect") {
+  if (msg._tag === "collect") {
     return Stored.cases.collected.make({ collection: msg.collection });
   }
 
-  return msg.type === "start"
+  return msg._tag === "start"
     ? Stored.cases.started.make({ execution: msg.execution })
     : Stored.cases.finished.make({ execution: msg.execution, result: msg.result });
 };
@@ -157,7 +157,7 @@ export const layer = Layer.effect(
 
             // An accepted request is also indexed under its target, in the same turn: a repeat or a
             // refusal never reaches here, so it writes no second line.
-            if (msg.type === "request") {
+            if (msg._tag === "request") {
               const pointer = encodePointer(Pointer.make({ id, process: msg.request.process }));
               turn.append(targetStream(msg.request.target), id, lineFor(writer, pointer));
             }
@@ -181,29 +181,29 @@ export const layer = Layer.effect(
 
     return {
       request: Effect.fn("tasks.request")(function* (request: Request, recorded: Recorded) {
-        return (yield* call(request.id, { type: "request", request }, recorded)).receipt;
+        return (yield* call(request.id, Msg.cases.request.make({ request }), recorded)).receipt;
       }),
       take: Effect.fn("tasks.take")(function* (id: string, executor: Executor, recorded: Recorded) {
         const proposed = yield* ids
           .next(Execution)
           .pipe(Effect.mapError((cause) => new TasksError({ reason: "storage", cause })));
-        const { receipt, state } = yield* call(id, { type: "take", executor, execution: proposed }, recorded);
+        const { receipt, state } = yield* call(id, Msg.cases.take.make({ executor, execution: proposed }), recorded);
         // An accepted or repeated take leaves the task owned, so the saved assignment is there.
         const execution = state._tag === "absent" || state._tag === "requested" ? proposed : state.assignment.execution;
         return { ...receipt, execution };
       }),
       started: Effect.fn("tasks.started")(function* (id: string, execution: string, recorded: Recorded) {
-        return (yield* call(id, { type: "start", execution }, recorded)).receipt;
+        return (yield* call(id, Msg.cases.start.make({ execution }), recorded)).receipt;
       }),
       finish: Effect.fn("tasks.finish")(function* (id: string, execution: string, result: Result, recorded: Recorded) {
-        return (yield* call(id, { type: "finish", execution, result }, recorded)).receipt;
+        return (yield* call(id, Msg.cases.finish.make({ execution, result }), recorded)).receipt;
       }),
       collected: Effect.fn("tasks.collected")(function* (
         id: string,
         collection: typeof Collection.Type,
         recorded: Recorded,
       ) {
-        return (yield* call(id, { type: "collect", collection }, recorded)).receipt;
+        return (yield* call(id, Msg.cases.collect.make({ collection }), recorded)).receipt;
       }),
       read,
       forTarget: Effect.fn("tasks.forTarget")(function* (key: string) {

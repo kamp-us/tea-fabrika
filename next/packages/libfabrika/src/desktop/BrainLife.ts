@@ -5,6 +5,7 @@
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
 import * as Schema from "effect/Schema";
+import type * as Types from "effect/Types";
 import * as Id from "../Id.ts";
 import type * as Snapshot from "../settings/Snapshot.ts";
 import { Status } from "./BrainControl.ts";
@@ -24,9 +25,14 @@ const remove = Cmd.make("remove", { input: Input, ok: Schema.Null, err: Errors }
 const commands = { inspect, install, start, stop, ready, cleanup, remove };
 const Action = Schema.Literals(["up", "stop"]);
 
-const Command = Schema.Struct({
-  type: Schema.Literals(["inspect", "install", "start", "stop", "ready", "cleanup", "remove"]),
-  id: Id.Cmd,
+const Command = Schema.TaggedUnion({
+  inspect: { id: Id.Cmd },
+  install: { id: Id.Cmd },
+  start: { id: Id.Cmd },
+  stop: { id: Id.Cmd },
+  ready: { id: Id.Cmd },
+  cleanup: { id: Id.Cmd },
+  remove: { id: Id.Cmd },
 });
 /**
  * Commands emitted by the lifecycle.
@@ -50,7 +56,7 @@ const Flow = {
 const Failure = {
   ...Sequence,
   reason: Schema.Literals(["Operation", "Conflict", "Timeout"]),
-  command: Command.fields.type,
+  command: Schema.Literals(["inspect", "install", "start", "stop", "ready", "cleanup", "remove"]),
 };
 
 const Up = { ...Flow, action: Schema.Literal("up") };
@@ -84,26 +90,27 @@ type Cell = readonly [Model, ReadonlyArray<Command>];
 const Error = Schema.TaggedUnion({ Operation: {}, Conflict: {}, malformed_result: {} });
 const Observation = { at: Schema.Finite, next: Schema.optionalKey(Id.Cmd) };
 
-const responses = <const T extends Command["type"], S extends Schema.Top>(type: T, value: S) =>
+const responses = <const T extends Command["_tag"], S extends Schema.Top>(type: T, value: S) =>
   [
-    Schema.Struct({
-      type: Schema.Literal(`${type}_ok`),
-      cmd: Schema.Struct({ type: Schema.Literal(type), id: Id.Cmd }),
-      value,
-      ...Observation,
-    }),
-    Schema.Struct({
-      type: Schema.Literal(`${type}_err`),
-      cmd: Schema.Struct({ type: Schema.Literal(type), id: Id.Cmd }),
+    Schema.TaggedStruct(`${type}_ok`, { cmd: Schema.TaggedStruct(type, { id: Id.Cmd }), value, ...Observation }),
+    Schema.TaggedStruct(`${type}_err`, {
+      cmd: Schema.TaggedStruct(type, { id: Id.Cmd }),
       error: Error,
       ...Observation,
     }),
   ] as const;
 
+/**
+ * Schema for a request or a clock observation the lifecycle takes, each made with
+ * `Observed.cases.<name>.make`.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const Observed = Schema.TaggedUnion({ up: Observation, stop: Observation, tick: Observation });
+
 const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("up"), ...Observation }),
-  Schema.Struct({ type: Schema.Literal("stop"), ...Observation }),
-  Schema.Struct({ type: Schema.Literal("tick"), ...Observation }),
+  Observed,
   ...responses("inspect", Status),
   ...responses("install", Schema.Null),
   ...responses("start", Schema.Null),
@@ -135,34 +142,34 @@ const up = (m: Active) => ({ ...flow(m), action: "up" as const });
 const down = (m: Active) => ({ ...flow(m), action: "stop" as const });
 
 const matches = (m: Model, cmd: Command): m is Active =>
-  active(m) && m.pending?.id === cmd.id && m.pending.type === cmd.type;
+  active(m) && m.pending?.id === cmd.id && m.pending._tag === cmd._tag;
 
-const fail = (m: Active, reason: typeof Failure.reason.Type, command?: Command["type"]): Cell => [
+const fail = (m: Active, reason: typeof Failure.reason.Type, command?: Command["_tag"]): Cell => [
   Model.cases[m.action === "up" ? "failed_up" : "failed_stop"].make({
     sequence: m.sequence,
     reason,
     command:
       command ??
-      m.pending?.type ??
+      m.pending?._tag ??
       (m._tag === "waiting_ready" ? "ready" : m._tag === "checking_children" ? "cleanup" : "inspect"),
   }),
   [],
 ];
 
 // Pure walks omit the host's allocation and reproduce command identities across saved cuts.
-const issue = (m: Active, type: Command["type"], allocated?: typeof Id.Cmd.Type): Cell => {
+const issue = (m: Active, type: Command["_tag"], allocated?: typeof Id.Cmd.Type): Cell => {
   const sequence = m.sequence + 1;
   const id = allocated ?? Id.Cmd.make(`cmd_0000000000e008${sequence.toString(16).padStart(12, "0")}`);
   const pending = commands[type]({ id });
-  return [{ ...m, sequence, pending: { type: pending.type, id: pending.id } }, [pending]];
+  return [{ ...m, sequence, pending: Command.cases[pending._tag].make({ id: pending.id }) }, [pending]];
 };
 
 type Reply = Extract<Msg, { cmd: unknown }>;
 
 const reply =
-  <T extends Reply["type"]>(type: T, handle: (m: Active, msg: Extract<Reply, { type: T }>) => Cell) =>
-  (m: Model, msg: Extract<Reply, { type: T }>): Cell => {
-    if (msg.type !== type || !matches(m, msg.cmd)) {
+  <T extends Reply["_tag"]>(type: T, handle: (m: Active, msg: Types.ExtractTag<Reply, T>) => Cell) =>
+  (m: Model, msg: Types.ExtractTag<Reply, T>): Cell => {
+    if (msg._tag !== type || !matches(m, msg.cmd)) {
       return [m, []];
     }
 

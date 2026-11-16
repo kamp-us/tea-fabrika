@@ -694,7 +694,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     }
 
     const [state] = Waiting.machine.init(loaded?.success ?? initialWaiting, options.waiting);
-    return stepWaiting(state, { type: "expire", at });
+    return stepWaiting(state, Waiting.Msg.cases.expire.make({ at }));
   };
   const knock = Effect.fnUntraced(function* (
     client: ConnectionId,
@@ -708,20 +708,22 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     const at = yield* clock;
     const state = yield* store.atomic(() => {
-      const next = stepWaiting(waiting(at), {
-        type: "knock",
-        key: attached.key,
-        client,
-        label: params.label,
-        location: options.location,
-        has: attached.hello.has,
-        as: params.as ?? "window",
-        code: String(crypto.getRandomValues(new Uint32Array(1))[0] ?? 0)
-          .slice(-6)
-          .padStart(6, "0"),
-        pass: params.pass ?? null,
-        at,
-      });
+      const next = stepWaiting(
+        waiting(at),
+        Waiting.Msg.cases.knock.make({
+          key: attached.key,
+          client,
+          label: params.label,
+          location: options.location,
+          has: attached.hello.has,
+          as: params.as ?? "window",
+          code: String(crypto.getRandomValues(new Uint32Array(1))[0] ?? 0)
+            .slice(-6)
+            .padStart(6, "0"),
+          pass: params.pass ?? null,
+          at,
+        }),
+      );
       saveWaiting(next);
       return next;
     });
@@ -763,7 +765,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       const attached = store.get(`client/${client}`, Attached);
 
       if (attached?._tag === "waiting") {
-        saveWaiting(stepWaiting(waiting(at), { type: "leave", key: attached.key, client }));
+        saveWaiting(stepWaiting(waiting(at), Waiting.Msg.cases.leave.make({ key: attached.key, client })));
       }
 
       forget(client);
@@ -1047,7 +1049,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
               const live = waiting(at);
               const accepted = live.rows.filter((r) => !("reason" in admitted(latest, r.key)));
               const keys = accepted.map((r) => r.key);
-              saveWaiting(stepWaiting(live, { type: "accepted", keys }));
+              saveWaiting(stepWaiting(live, Waiting.Msg.cases.accepted.make({ keys })));
               return accepted;
             });
 
@@ -1418,7 +1420,9 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         const stamped = typeof message === "object" ? { ...message, parent: binding.id } : message;
         const selected =
           audit === undefined
-            ? Effect.succeed<Schema.Json>({ type: name })
+            ? // The default audit keeps the input's name alone.
+              // oxlint-disable-next-line fabrika/no-hand-tag -- a writer that knows no cases: the default audit names any program's input, so its key is an open string (as for ledger/Log.ts)
+              Effect.succeed<Schema.Json>({ _tag: name })
             : Effect.suspend(() => audit(binding.process, stamped)).pipe(
                 Effect.provideContext(context),
                 Effect.catchCause((cause) => {

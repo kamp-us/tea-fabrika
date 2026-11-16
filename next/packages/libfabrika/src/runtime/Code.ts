@@ -94,6 +94,17 @@ const swap = Cmd.make("swap", {
 });
 
 /**
+ * Schema for what the code machine takes: a build checked for a program, or one loaded.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const CodeMsg = Schema.TaggedUnion({
+  checked: { id: Schema.String, program: ProgramName, hash: Hash, from: From },
+  loaded: { id: Schema.String, program: ProgramName, hash: Hash },
+});
+
+/**
  * Machine that holds the selection. A `checked` Msg for a hash other than the selected one emits an
  * `append` of a `code.loaded` fact; a `loaded` Msg selects the hash and emits a `swap` for it.
  *
@@ -107,10 +118,7 @@ const swap = Cmd.make("swap", {
  */
 export const code = Machine.make({
   model: Selected,
-  msg: Schema.Union([
-    Schema.Struct({ type: Schema.Literal("checked"), id: Schema.String, program: ProgramName, hash: Hash, from: From }),
-    Schema.Struct({ type: Schema.Literal("loaded"), id: Schema.String, program: ProgramName, hash: Hash }),
-  ]),
+  msg: CodeMsg,
   cmds: [append, swap],
   types: { ctx: {} as Record<string, never> },
   init: (saved) => [saved ?? {}, []],

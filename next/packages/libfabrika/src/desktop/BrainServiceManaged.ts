@@ -70,14 +70,14 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         "fab.build": spec.build,
         "fab.settings": settings.hash,
         "fab.cmd": cmd.id,
-        "fab.command": cmd.type,
+        "fab.command": cmd._tag,
         "fab.sentAt": String(began),
       });
       const work: Effect.Effect<
         void | typeof Status.Type | typeof Readiness.Type | typeof Children.Type,
         BrainControlError | BrainProbeError,
         Scope.Scope
-      > = cmd.type === "ready" ? probe.ready : cmd.type === "cleanup" ? probe.cleanup : control[cmd.type];
+      > = cmd._tag === "ready" ? probe.ready : cmd._tag === "cleanup" ? probe.cleanup : control[cmd._tag];
       const answer = yield* work.pipe(Effect.result);
       const at = yield* Clock.currentTimeMillis;
       yield* Effect.annotateCurrentSpan({
@@ -97,13 +97,25 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         const error = translate(answer.failure);
         return {
           cause: Redacted.make(answer.failure),
-          cmds: yield* send({ type: `${cmd.type}_err`, cmd, error: Failed.cases[error].make({}), at } as BrainLife.Msg),
+          cmds: yield* send({
+            // oxlint-disable-next-line fabrika/no-hand-tag -- a Cmd's answer, keyed `_tag` as tea's own; slice 5 (demlik 952) deletes `responses` and this cast
+            _tag: `${cmd._tag}_err`,
+            cmd,
+            error: Failed.cases[error].make({}),
+            at,
+          } as BrainLife.Msg),
         };
       }
 
-      const cmds = yield* send({ type: `${cmd.type}_ok`, cmd, value: answer.success ?? null, at } as BrainLife.Msg);
+      const cmds = yield* send({
+        // oxlint-disable-next-line fabrika/no-hand-tag -- a Cmd's answer, keyed `_tag` as tea's own; slice 5 (demlik 952) deletes `responses` and this cast
+        _tag: `${cmd._tag}_ok`,
+        cmd,
+        value: answer.success ?? null,
+        at,
+      } as BrainLife.Msg);
 
-      if (cmd.type === "remove" && model._tag === "failed_stop") {
+      if (cmd._tag === "remove" && model._tag === "failed_stop") {
         return yield* new BrainServiceError({
           reason: new Timeout({ action: "stop", cause: Redacted.make("deadline") }),
         });
@@ -126,7 +138,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
     semaphore.withPermits(1)(
       Effect.gen(function* () {
         const began = yield* Clock.currentTimeMillis;
-        let cmds = yield* send({ type: action, at: began });
+        let cmds = yield* send(BrainLife.Observed.cases[action].make({ at: began }));
         const first = cmds[0];
         const deadline =
           began + timings[action === "up" ? "desktop.brain-start-timeout" : "desktop.brain-stop-timeout"];
@@ -138,7 +150,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 
             if (next === undefined) {
               yield* Effect.sleep(timings["desktop.brain-poll"]);
-              cmds = yield* send({ type: "tick", at: yield* Clock.currentTimeMillis });
+              cmds = yield* send(BrainLife.Observed.cases.tick.make({ at: yield* Clock.currentTimeMillis }));
             } else {
               const answer = yield* command(next, action);
               cause = answer.cause ?? cause;
@@ -168,7 +180,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
               return Effect.void;
             }
 
-            settle({ type: "tick", at: deadline });
+            settle(BrainLife.Observed.cases.tick.make({ at: deadline }));
             return Effect.fail(
               new BrainServiceError({ reason: new Timeout({ action, cause: Redacted.make("deadline") }) }),
             );
@@ -198,7 +210,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         const exit = yield* sink.batch(observed).pipe(
           Effect.ensuring(
             Effect.sync(() => {
-              settle({ type: "tick", at: deadline });
+              settle(BrainLife.Observed.cases.tick.make({ at: deadline }));
             }),
           ),
           Effect.exit,

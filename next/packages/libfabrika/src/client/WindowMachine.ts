@@ -7,9 +7,9 @@
  *
  * @stability unstable
  */
-import { applyCell, type Sub } from "@demlik/tea";
+import { applyCell, type Cmd as TeaCmd, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Option, Predicate, Result, Schema } from "effect";
+import { Option, Predicate, Result, Schema, type Types } from "effect";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace } from "../processes/Process.ts";
 import * as C from "../runtime/Client.ts";
@@ -21,12 +21,12 @@ import { focus as focusOn, neighbor, order, type Side, split } from "../tezgah/L
 import { CursorKey, type Dir, tezgahName, TileId, type Workspace } from "../tezgah/Workspace.ts";
 import { ClientKeyError } from "../transport/ClientKey.ts";
 import { ClientRecord, ClientRowsError, ErrorClass, Pixels } from "../transport/ClientRows.ts";
-import { Handshake, handshakeMachine, hello, knock } from "../transport/Handshake.ts";
+import { Handshake, handshakeMachine, HandshakeMsg, hello, knock } from "../transport/Handshake.ts";
 import { Link, linkMachine, LinkMsg, ping, socketDial, timerDeps } from "../transport/Link.ts";
 import { PAGE } from "../transport/Wire.ts";
 import * as Keys from "./Keys.ts";
-import { Prefix, prefixMachine } from "./Prefix.ts";
-import { optimisticState, TezgahClient, type TezgahCmd, type TezgahMsg, tezgahMachine } from "./Tezgah.ts";
+import { Prefix, prefixMachine, PrefixMsg } from "./Prefix.ts";
+import { optimisticState, TezgahClient, type TezgahCmd, TezgahMsg, tezgahMachine } from "./Tezgah.ts";
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
@@ -227,53 +227,60 @@ export const lastCursor = (
   return Object.hasOwn(notes, tile.id) ? (notes[tile.id] ?? null) : tile.cursor;
 };
 
-const Own = Schema.Union([
+const Own = Schema.TaggedUnion({
   // What one dial's socket saw, raw: it opened, the door sent a text frame, or it closed with a code.
   // `ms` on a frame is how long ago the call it answers was written, when it answers one.
-  Schema.Struct({ type: Schema.Literal("socket_opened"), dial: Schema.Int, at: Ms }),
-  Schema.Struct({
-    type: Schema.Literal("frame"),
+  socket_opened: { dial: Schema.Int, at: Ms },
+  frame: {
     dial: Schema.Int,
     text: Schema.String,
     at: Ms,
     ms: Schema.optionalKey(Ms),
-  }),
-  Schema.Struct({ type: Schema.Literal("socket_closed"), dial: Schema.Int, code: Schema.Int, at: Ms }),
-  Schema.Struct({
-    type: Schema.Literal("socket_failure"),
+  },
+  socket_closed: { dial: Schema.Int, code: Schema.Int, at: Ms },
+  socket_failure: {
     dial: Schema.Int,
     op: Schema.Literals(["key", "connect"]),
     error: ErrorClass,
-  }),
-  Schema.Struct({ type: Schema.Literal("press"), tile: Schema.String, m: Schema.Json, via: Schema.optionalKey(Via) }),
-  Schema.Struct({ type: Schema.Literal("tile"), id: Schema.String, msg: Schema.Unknown }),
+  },
+  press: { tile: Schema.String, m: Schema.Json, via: Schema.optionalKey(Via) },
+  tile: { id: Schema.String, msg: Schema.Unknown },
   // One press, spelled as `Keys` spells it, and the size of the area the tiles are laid out in, inside the frame's padding.
-  Schema.Struct({ type: Schema.Literal("key"), key: Schema.String, at: Ms }),
-  Schema.Struct({ type: Schema.Literal("size"), width: Pixels, height: Pixels }),
+  key: { key: Schema.String, at: Ms },
+  size: { width: Pixels, height: Pixels },
   // DOM focus is now in tile `tile`, by a click or Tab, on an element whose `data-cursor` key is
   // `cursor` (null for none).
-  Schema.Struct({ type: Schema.Literal("focus"), tile: Schema.String, cursor: Schema.NullOr(CursorKey) }),
-  Schema.Struct({ type: Schema.Literal("view"), pid: Schema.String, note: Schema.Unknown }),
-  Schema.Struct({ type: Schema.Literal("seen"), rev: Schema.Int }),
-  Schema.Struct({ type: Schema.Literal("resend"), dial: Schema.Int }),
-  Schema.Struct({ type: Schema.Literal("read_ok"), ...OnWrite, value: Schema.Array(Schema.Unknown), ms: Ms }),
-  Schema.Struct({ type: Schema.Literal("read_err"), ...OnWrite, error: CallError }),
-  Schema.Struct({ type: Schema.Literal("wait_ok"), ...OnWrite, value: Schema.Struct({ rev: Schema.Int }), ms: Ms }),
-  Schema.Struct({ type: Schema.Literal("wait_err"), ...OnWrite, error: CallError }),
-  Schema.Struct({ type: Schema.Literal("monitor_ok"), ...OnWrite, value: Schema.Null, ms: Ms }),
-  Schema.Struct({ type: Schema.Literal("monitor_err"), ...OnWrite, error: CallError }),
-  Schema.Struct({
-    type: Schema.Literal("open_ok"),
+  focus: { tile: Schema.String, cursor: Schema.NullOr(CursorKey) },
+  view: { pid: Schema.String, note: Schema.Unknown },
+  seen: { rev: Schema.Int },
+  resend: { dial: Schema.Int },
+  read_ok: { ...OnWrite, value: Schema.Array(Schema.Unknown), ms: Ms },
+  read_err: { ...OnWrite, error: CallError },
+  wait_ok: { ...OnWrite, value: Schema.Struct({ rev: Schema.Int }), ms: Ms },
+  wait_err: { ...OnWrite, error: CallError },
+  monitor_ok: { ...OnWrite, value: Schema.Null, ms: Ms },
+  monitor_err: { ...OnWrite, error: CallError },
+  open_ok: {
     ...OnWrite,
     value: Schema.Struct({ rev: Schema.Int, view: Schema.Json }),
     ms: Ms,
-  }),
-  Schema.Struct({ type: Schema.Literal("open_err"), ...OnWrite, error: CallError }),
-  Schema.Struct({ type: Schema.Literal("send_ok"), ...OnWrite, value: Sent, ms: Ms }),
-  Schema.Struct({ type: Schema.Literal("send_err"), ...OnWrite, error: CallError }),
-  Schema.Struct({ type: Schema.Literal("knock_ok"), ...OnWrite, value: Schema.Null, ms: Ms }),
-  Schema.Struct({ type: Schema.Literal("knock_err"), ...OnWrite, error: CallError }),
-]);
+  },
+  open_err: { ...OnWrite, error: CallError },
+  send_ok: { ...OnWrite, value: Sent, ms: Ms },
+  send_err: { ...OnWrite, error: CallError },
+  knock_ok: { ...OnWrite, value: Schema.Null, ms: Ms },
+  knock_err: { ...OnWrite, error: CallError },
+});
+
+/**
+ * Schema for the window's own Msgs: what its socket saw, what a page hands it (a press, a tile's
+ * Msg, a key, a size, a focus), and its calls' answers. A page makes one with
+ * `WindowOwn.cases.<name>.make`.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const WindowOwn = Own;
 
 const key = Cmd.make("key", {
   input: Schema.Struct({ rejected: Schema.NullOr(Schema.String) }),
@@ -300,6 +307,19 @@ const Split = Schema.Struct({
 /** How a person gave a command to tezgah, in tezgah's own Via: by keys, or by a click or Tab. */
 const ByKeys = Schema.TaggedStruct("key", { keys: Schema.String });
 const ByClick = Schema.TaggedStruct("click", {});
+
+/** What this window sends tezgah, in tezgah's own inputs (next/programs/tezgah): a first look at a
+ *  workspace, and a split, a focus move or a close given in a tile. */
+const TezgahAttach = Schema.TaggedStruct("attach", { workspace: Schema.Int, tile: Schema.String });
+
+const TezgahDid = Schema.TaggedStruct("did", {
+  does: Schema.String,
+  from: Schema.String,
+  to: Schema.optionalKey(Schema.String),
+  tile: Schema.optionalKey(Schema.String),
+  via: Schema.Union([ByKeys, ByClick]),
+  cursor: Schema.optionalKey(Schema.NullOr(Schema.String)),
+});
 
 const mint = Cmd.make("mint", {
   input: Schema.Struct({ split: Schema.optionalKey(Split) }),
@@ -387,13 +407,7 @@ type ClientStep = (client: C.Client, msg: C.ClientMsg) => readonly [C.Client, Re
 
 type AnyProgram = Program<any, any, any, any, any>;
 
-type ProgramTile<P extends AnyProgram> = Machine<
-  any,
-  any,
-  { readonly type: "press"; readonly m: ProgramMsg<P> },
-  any,
-  any
-> &
+type ProgramTile<P extends AnyProgram> = Machine<any, any, TeaCmd<"press"> & { readonly m: ProgramMsg<P> }, any, any> &
   Pick<AnyTile, "model" | "msg">;
 
 type WindowChecks<P extends AnyProgram> = {
@@ -682,7 +696,7 @@ const noticed = (
   pid: string,
   note: unknown,
 ): readonly [WindowModel, Out, ReadonlyArray<string>] => {
-  const [client, requested] = step(s.client, { type: "notice", pid, note });
+  const [client, requested] = step(s.client, C.ClientMsg.cases.notice.make({ pid, note }));
   const asks = requested.filter((p) => !s.tiles.some((t) => held(t.reach)?.pid === p && t.recovery === "asked"));
   const shown = client.views[pid];
   const changed = shown !== undefined && shown !== s.client.views[pid];
@@ -745,7 +759,7 @@ const pressed = (s: WindowModel, step: ClientStep, tile: string, m: Schema.Json,
   }
 
   const n = s.client.written;
-  const [client] = step(s.client, { type: "press", pid: found.reach.pid, m });
+  const [client] = step(s.client, C.ClientMsg.cases.press.make({ pid: found.reach.pid, m }));
   return [
     {
       ...s,
@@ -804,7 +818,7 @@ const tezgahTook = (s: WindowModel, pid: string, msg: TezgahMsg, fresh: (t: Show
 
   const link = s.tezgah;
   const [client, cmds] = applyCell<TezgahClient, TezgahMsg, TezgahCmd>(tezgahMachine, link.client, msg);
-  const asks = cmds.filter((c) => c.type === "ask");
+  const asks = cmds.filter((c) => c._tag === "ask");
   const view = client.serverState;
   const due = link.attach === "waiting" && view !== null && !view.workspaces.some((w) => w.n === client.workspace);
   const [after, reads] = followed(
@@ -834,7 +848,7 @@ const tezgahTook = (s: WindowModel, pid: string, msg: TezgahMsg, fresh: (t: Show
 /** The `focus` row of each move the window's tezgah child dropped. */
 const focusRows = (cmds: ReadonlyArray<TezgahCmd>) =>
   cmds.flatMap((c) =>
-    c.type === "settled"
+    c._tag === "settled"
       ? [record({ record: ClientRecord.cases.focus.make({ letter: c.letter, result: c.result, ms: c.ms }) })]
       : [],
   );
@@ -906,7 +920,7 @@ const toTezgah = (s: WindowModel, step: ClientStep, m: Schema.Json, does: string
   }
 
   const n = s.client.written;
-  const [client] = step(s.client, { type: "press", pid: link.reach.pid, m });
+  const [client] = step(s.client, C.ClientMsg.cases.press.make({ pid: link.reach.pid, m }));
   return [{ ...s, client, from: { ...s.from, [n]: { tile: from, via: "key", does } } }, [now({ n })]];
 };
 
@@ -915,7 +929,7 @@ const closing = (s: WindowModel, step: ClientStep, tile: TileId, keys: string): 
   toTezgah(
     s,
     step,
-    { type: "did", does: "tezgah.close", from: tile, via: ByKeys.make({ keys }) },
+    TezgahDid.make({ does: "tezgah.close", from: tile, via: ByKeys.make({ keys }) }),
     "tezgah.close",
     tile,
   );
@@ -975,8 +989,11 @@ const moved = (
 
   const cursor = link.cursors[from] ?? null;
   const n = s.client.written;
-  const [client] = step(s.client, { type: "press", pid, m: { type: "did", does, from, to, via, cursor } });
-  const [moving] = applyCell(tezgahMachine, link.client, { type: "move", n, from, to, cursor });
+  const [client] = step(
+    s.client,
+    C.ClientMsg.cases.press.make({ pid, m: TezgahDid.make({ does, from, to, via, cursor }) }),
+  );
+  const [moving] = applyCell(tezgahMachine, link.client, TezgahMsg.cases.move.make({ n, from, to, cursor }));
   return [
     {
       ...s,
@@ -1023,17 +1040,17 @@ const pressedKey = (s: WindowModel, step: ClientStep, table: Keys.Table, key: st
   }
 
   if (routed._tag === "prefix") {
-    return [{ ...s, prefix: prefix({ type: "arm", at }), polite: null }, []];
+    return [{ ...s, prefix: prefix(PrefixMsg.cases.arm.make({ at })), polite: null }, []];
   }
 
   if (routed._tag === "answer") {
     const asked = s.prefix;
-    const done = { ...s, prefix: prefix({ type: "done" }) };
+    const done = { ...s, prefix: prefix(PrefixMsg.cases.done.make({})) };
     return routed.yes && asked._tag === "asking" ? closing(done, step, asked.tile, `${table.prefix} x y`) : [done, []];
   }
 
   if (routed._tag === "tile" || routed._tag === "dropped") {
-    return [s.prefix._tag === "idle" ? s : { ...s, prefix: prefix({ type: "done" }) }, []];
+    return [s.prefix._tag === "idle" ? s : { ...s, prefix: prefix(PrefixMsg.cases.done.make({})) }, []];
   }
 
   const does = routed.does;
@@ -1044,7 +1061,7 @@ const pressedKey = (s: WindowModel, step: ClientStep, table: Keys.Table, key: st
       ms: s.prefix._tag === "armed" ? Math.max(0, at - s.prefix.since) : 0,
     }),
   });
-  const done: WindowModel = { ...s, prefix: prefix({ type: "done" }) };
+  const done: WindowModel = { ...s, prefix: prefix(PrefixMsg.cases.done.make({})) };
   const drawn = drawnSpace(s.tezgah);
 
   if (drawn === null) {
@@ -1069,7 +1086,7 @@ const pressedKey = (s: WindowModel, step: ClientStep, table: Keys.Table, key: st
     const tile = drawn.view.tiles.find((t) => t.id === from);
 
     if (tile?.child === true && order(drawn.space.layout).length > 1) {
-      return [{ ...s, prefix: prefix({ type: "question", tile: from, at }), polite: null }, [row]];
+      return [{ ...s, prefix: prefix(PrefixMsg.cases.question.make({ tile: from, at })), polite: null }, [row]];
     }
 
     const [sent, cmds] = closing({ ...done, polite: null }, step, from, keys);
@@ -1105,17 +1122,17 @@ const dated = (
   stamp: { readonly letter: string; readonly sentAt: string; readonly traceId?: string },
 ): Step => {
   const before = s.client.pending.find((p) => p.n === n);
-  const [client] = step(s.client, { type: "dated", n, ...stamp });
+  const [client] = step(s.client, C.ClientMsg.cases.dated.make({ n, ...stamp }));
   const slot = client.pending.find((p) => p.n === n);
   const owner = s.from[n];
   const tile = s.tiles.find((t) => t.id === owner?.tile);
   const type =
     slot &&
     Predicate.isObject(slot.m) &&
-    Predicate.hasProperty(slot.m, "type") &&
-    Predicate.isString(slot.m.type) &&
-    /^[a-z_]{1,40}$/.test(slot.m.type)
-      ? slot.m.type
+    Predicate.hasProperty(slot.m, "_tag") &&
+    Predicate.isString(slot.m._tag) &&
+    /^[a-z_]{1,40}$/.test(slot.m._tag)
+      ? slot.m._tag
       : "other";
   const command = owner?.does ?? `${tile?.name.split(":")[0] ?? "program"}.${type}`;
   const rows =
@@ -1137,28 +1154,27 @@ const dated = (
   // A focus move's pending entry takes its letter, so tezgah's answer finds it.
   const [noted] = tezgahStep(
     { ...s, client, redate: s.redate.filter((r) => r !== n) },
-    {
-      type: "dated",
+    TezgahMsg.cases.dated.make({
       n,
       letter: stamp.letter,
-    },
+    }),
   );
   const [next, cmds] = flush(noted);
   return [next, [...rows, ...cmds]];
 };
 
 const linked = (s: WindowModel, m: LinkMsg): Step => {
-  const input = m.type === "ask_again" ? { ...m, dial: Math.max(s.dials + 1, m.dial) } : m;
+  const input = m._tag === "ask_again" ? { ...m, dial: Math.max(s.dials + 1, m.dial) } : m;
   const [link, cmds] = applyCell(linkMachine, s.link, input);
   const open = socketDial(link);
-  const granted = m.type === "granted" && s.link._tag === "waiting_grant" && s.link.dial === m.dial;
+  const granted = m._tag === "granted" && s.link._tag === "waiting_grant" && s.link.dial === m.dial;
   let next: WindowModel = {
     ...s,
     link,
     // A new dial starts its own hello exchange.
     handshake:
       open !== null && open > s.handshake.dial
-        ? applyCell(handshakeMachine, s.handshake, { type: "opened", dial: open })[0]
+        ? applyCell(handshakeMachine, s.handshake, HandshakeMsg.cases.opened.make({ dial: open }))[0]
         : s.handshake,
     dials: Math.max(s.dials, open ?? 0),
     tries: link._tag === "dialing" && open !== socketDial(s.link) ? (link.tries ?? 0) : s.tries,
@@ -1166,8 +1182,8 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
     rejected: link._tag === "removed" ? link.fingerprint : s.rejected,
     flight: s.flight.filter((f) => f.dial === open),
   };
-  const out: Array<Out[number]> = cmds.filter((c): c is ReturnType<typeof ping> => c.type === "ping");
-  const knocks = cmds.filter((c) => c.type === "knock").map(() => Call.cases.knock.make({}));
+  const out: Array<Out[number]> = cmds.filter((c): c is ReturnType<typeof ping> => c._tag === "ping");
+  const knocks = cmds.filter((c) => c._tag === "knock").map(() => Call.cases.knock.make({}));
   const [knocked, writes] = wrote(next, open ?? 0, knocks);
   next = knocked;
   out.push(...writes);
@@ -1179,7 +1195,7 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
         : s.link._tag !== "removed" && link._tag === "removed"
           ? "removed"
           : s.link._tag !== "retrying" && link._tag === "retrying"
-            ? m.type === "closed"
+            ? m._tag === "closed"
               ? "closed"
               : "stalled"
             : null;
@@ -1191,13 +1207,13 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
           dial: m.dial,
           result,
           ms: m.ms,
-          ...(m.type === "closed" ? { code: m.code } : {}),
+          ...(m._tag === "closed" ? { code: m.code } : {}),
         }),
       }),
     );
   }
 
-  if (s.link._tag === "removed" && m.type === "ask_again" && link._tag === "dialing") {
+  if (s.link._tag === "removed" && m._tag === "ask_again" && link._tag === "dialing") {
     out.push(key({ rejected: s.link.fingerprint }));
   }
 
@@ -1264,7 +1280,7 @@ const linkUpdate = Object.fromEntries(
     "blocked",
     "ask_again",
   ].map((type) => [type, linked]),
-) as { readonly [K in LinkMsg["type"]]: (s: WindowModel, m: Extract<LinkMsg, { readonly type: K }>) => Step };
+) as { readonly [K in LinkMsg["_tag"]]: (s: WindowModel, m: Types.ExtractTag<LinkMsg, K>) => Step };
 
 type HandshakeIn =
   typeof handshakeMachine extends Machine<Handshake, infer M, infer _C, infer _U, infer _X> ? M : never;
@@ -1272,14 +1288,20 @@ type HandshakeIn =
 /** The Link Msg a change of the hello exchange means, if any. */
 const outcome = (was: Handshake, now: Handshake, fingerprint: string): LinkMsg | null => {
   if (now._tag === "admitted" && was._tag !== "admitted") {
-    return { type: "admitted", dial: now.dial, ping: now.ping, ms: now.ms };
+    return LinkMsg.cases.admitted.make({ dial: now.dial, ping: now.ping, ms: now.ms });
   }
 
   if (now._tag === "waiting" && (was._tag !== "waiting" || was.code !== now.code || was.until !== now.until)) {
-    return { type: "not_granted", dial: now.dial, fingerprint, code: now.code, until: now.until, ms: now.ms };
+    return LinkMsg.cases.not_granted.make({
+      dial: now.dial,
+      fingerprint,
+      code: now.code,
+      until: now.until,
+      ms: now.ms,
+    });
   }
 
-  return was._tag === "waiting" && now._tag === "initializing" ? { type: "granted", dial: now.dial } : null;
+  return was._tag === "waiting" && now._tag === "initializing" ? LinkMsg.cases.granted.make({ dial: now.dial }) : null;
 };
 
 /** Steps the hello exchange by hand, sends its Cmds on and tells the Link what changed. */
@@ -1295,10 +1317,10 @@ const shook = (s: WindowModel, m: HandshakeIn): Step => {
   }
 
   const next: WindowModel = { ...s, handshake };
-  const sent: Out = cmds.map((c) => (c.type === "knock" ? enroll({ dial: c.dial, id: c.id }) : c));
+  const sent: Out = cmds.map((c) => (c._tag === "knock" ? enroll({ dial: c.dial, id: c.id }) : c));
 
   if (handshake._tag === "failed" && s.handshake._tag !== "failed") {
-    const [blocked, out] = linked(next, { type: "blocked", reason: handshake.error });
+    const [blocked, out] = linked(next, LinkMsg.cases.blocked.make({ reason: handshake.error }));
     return [
       blocked,
       [...sent, ...out, record({ record: ClientRecord.cases.failure.make({ op: "key", error: handshake.error }) })],
@@ -1333,11 +1355,11 @@ const closedIn = (s: WindowModel, m: { readonly dial: number; readonly code: num
 
   const h = s.handshake;
   const ms = h.dial === m.dial && "since" in h && h.since !== undefined ? Math.max(0, m.at - h.since) : 0;
-  return linked(s, { type: "closed", dial: m.dial, code: m.code, fingerprint: s.fingerprint ?? "", ms });
+  return linked(s, LinkMsg.cases.closed.make({ dial: m.dial, code: m.code, fingerprint: s.fingerprint ?? "", ms }));
 };
 
 type OwnerMsg = LinkMsg | typeof Own.Type;
-type Frame = Extract<typeof Own.Type, { readonly type: "frame" }>;
+type Frame = typeof Own.cases.frame.Type;
 
 /** The Msg the call's own handler takes for an answer to it, or nothing for a malformed result. */
 const answerTo = (
@@ -1352,24 +1374,24 @@ const answerTo = (
     case "read":
       return Option.match(Schema.decodeUnknownOption(Entries)(result), {
         onNone: () => [],
-        onSome: (read) => [{ type: "read_ok", ...on, value: read.entries, ms }],
+        onSome: (read) => [Own.cases.read_ok.make({ ...on, value: read.entries, ms })],
       });
     case "wait":
       return Option.match(Schema.decodeUnknownOption(Woke)(result), {
         onNone: () => [],
-        onSome: (value) => [{ type: "wait_ok", ...on, value, ms }],
+        onSome: (value) => [Own.cases.wait_ok.make({ ...on, value, ms })],
       });
     case "monitor":
-      return Schema.is(Schema.Null)(result) ? [{ type: "monitor_ok", ...on, value: null, ms }] : [];
+      return Schema.is(Schema.Null)(result) ? [Own.cases.monitor_ok.make({ ...on, value: null, ms })] : [];
     case "open":
       return Option.match(Schema.decodeUnknownOption(Opened)(result), {
         onNone: () => [],
-        onSome: (value) => [{ type: "open_ok", ...on, value, ms }],
+        onSome: (value) => [Own.cases.open_ok.make({ ...on, value, ms })],
       });
     case "send":
       return Option.match(Schema.decodeUnknownOption(Sent)(result), {
         onNone: () => [],
-        onSome: (value) => [{ type: "send_ok", ...on, value, ms }],
+        onSome: (value) => [Own.cases.send_ok.make({ ...on, value, ms })],
       });
     case "knock":
       // A renewed knock keeps or renews the code the Link shows, but only while the handshake still
@@ -1379,9 +1401,9 @@ const answerTo = (
         onNone: () => [],
         onSome: (w) => [
           ...(handshake._tag === "waiting" && handshake.dial === on.dial
-            ? [{ type: "not_granted" as const, dial: on.dial, fingerprint, ...w, ms }]
+            ? [LinkMsg.cases.not_granted.make({ dial: on.dial, fingerprint, ...w, ms })]
             : []),
-          { type: "knock_ok", ...on, value: null, ms },
+          Own.cases.knock_ok.make({ ...on, value: null, ms }),
         ],
       });
   }
@@ -1398,7 +1420,7 @@ const frameIn = (s: WindowModel, m: Frame, own: (s: WindowModel, msg: OwnerMsg) 
   }
 
   if (m.text === "pong") {
-    return own(s, { type: "pong", dial: m.dial });
+    return own(s, LinkMsg.cases.pong.make({ dial: m.dial }));
   }
 
   const decoded = decodeFrame(m.text);
@@ -1413,14 +1435,16 @@ const frameIn = (s: WindowModel, m: Frame, own: (s: WindowModel, msg: OwnerMsg) 
     const reason = frame.error?.data?.reason;
 
     if (Predicate.isString(frame.id)) {
-      return shook(s, {
-        type: "answer",
-        dial: m.dial,
-        id: frame.id,
-        result: frame.result ?? null,
-        ...(reason === undefined ? {} : { reason }),
-        at: m.at,
-      });
+      return shook(
+        s,
+        HandshakeMsg.cases.answer.make({
+          dial: m.dial,
+          id: frame.id,
+          result: frame.result ?? null,
+          ...(reason === undefined ? {} : { reason }),
+          at: m.at,
+        }),
+      );
     }
 
     const id = frame.id;
@@ -1436,14 +1460,13 @@ const frameIn = (s: WindowModel, m: Frame, own: (s: WindowModel, msg: OwnerMsg) 
       frame.error === undefined
         ? answerTo(tag, on, frame.result, m.ms ?? 0, s.fingerprint ?? "", s.handshake)
         : [
-            {
-              type: `${tag}_err`,
+            Own.cases[`${tag}_err`].make({
               ...on,
               error:
                 reason !== undefined && AGAIN.has(reason)
                   ? CallError.cases.unreachable.make({})
                   : CallError.cases.unknown.make({}),
-            },
+            }),
           ];
     return msgs.reduce<Step>(
       ([acc, cmds], msg) => {
@@ -1460,21 +1483,28 @@ const frameIn = (s: WindowModel, m: Frame, own: (s: WindowModel, msg: OwnerMsg) 
     return Option.match(Schema.decodeUnknownOption(Nonce)(params), {
       onNone: (): Step => [s, []],
       onSome: ({ nonce }) =>
-        shook(s, { type: frame.method === "challenge" ? "challenge" : "granted", dial: m.dial, nonce, at: m.at }),
+        shook(
+          s,
+          HandshakeMsg.cases[frame.method === "challenge" ? "challenge" : "granted"].make({
+            dial: m.dial,
+            nonce,
+            at: m.at,
+          }),
+        ),
     });
   }
 
   if (frame.method === "gateway.waiting") {
     return Option.match(Schema.decodeUnknownOption(WaitingCode)(params), {
       onNone: (): Step => [s, []],
-      onSome: (w) => shook(s, { type: "waiting", dial: m.dial, ...w, at: m.at }),
+      onSome: (w) => shook(s, HandshakeMsg.cases.waiting.make({ dial: m.dial, ...w, at: m.at })),
     });
   }
 
   if (frame.method === "view.whole" || frame.method === "view.patch") {
     return Option.match(Schema.decodeUnknownOption(ViewNotice)(params), {
       onNone: (): Step => [s, []],
-      onSome: (notice) => own(s, { type: "view", pid: notice.pid, note: params }),
+      onSome: (notice) => own(s, Own.cases.view.make({ pid: notice.pid, note: params })),
     });
   }
 
@@ -1532,7 +1562,11 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
             said: { id: 0, messages: [] },
             link: linkMachine.init(null, {})[0],
             // Dial 1's exchange waits for its challenge; its socket opening times it.
-            handshake: applyCell(handshakeMachine, handshakeMachine.init(null, {})[0], { type: "opened", dial: 1 })[0],
+            handshake: applyCell(
+              handshakeMachine,
+              handshakeMachine.init(null, {})[0],
+              HandshakeMsg.cases.opened.make({ dial: 1 }),
+            )[0],
             fingerprint: null,
             dials: 1,
             tries: 0,
@@ -1584,7 +1618,9 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
 
         const msg = Schema.decodeUnknownResult(Schema.toType(child.msg))(m.msg);
 
-        if (Result.isFailure(msg) || !Schema.is(Schema.Struct({ type: Schema.String }))(msg.success)) {
+        // A tile's own Msg names its case by its key, as every tea Msg does.
+        // oxlint-disable-next-line fabrika/no-hand-tag -- a reader that knows no cases: a tile's own Msg, any machine's, so its key is an open string (as for ledger/Log.ts)
+        if (Result.isFailure(msg) || !Schema.is(Schema.Struct({ _tag: Schema.String }))(msg.success)) {
           return [s, []];
         }
 
@@ -1595,7 +1631,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         }
 
         // A queued submit can arrive after the link drops. Keep its draft until a press can land.
-        if (cmds.some((cmd) => cmd.type === "press") && t.reach._tag !== "open") {
+        if (cmds.some((cmd) => cmd._tag === "press") && t.reach._tag !== "open") {
           return [s, []];
         }
 
@@ -1603,7 +1639,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         const out: Array<Out[number]> = [];
 
         for (const cmd of cmds) {
-          if (cmd.type === "press" && Schema.is(Schema.Struct({ m: Schema.Json }))(cmd)) {
+          if (cmd._tag === "press" && Schema.is(Schema.Struct({ m: Schema.Json }))(cmd)) {
             const [after, sent] = pressed(next, step, t.id, cmd.m, "button");
             next = after;
             out.push(...sent);
@@ -1618,7 +1654,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       ],
       key_err: (s, m): Step => {
         const error = platformFailure(m.error);
-        const [next, cmds] = linked(s, { type: "blocked", reason: error });
+        const [next, cmds] = linked(s, LinkMsg.cases.blocked.make({ reason: error }));
         return [next, [...cmds, record({ record: ClientRecord.cases.failure.make({ op: "key", error }) })]];
       },
       socket_failure: (s, m): Step => [
@@ -1628,13 +1664,15 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           : [],
       ],
       socket_opened: (s, m): Step =>
-        socketDial(s.link) === m.dial ? shook(s, { type: "opened", dial: m.dial, at: m.at }) : [s, []],
+        socketDial(s.link) === m.dial ? shook(s, HandshakeMsg.cases.opened.make({ dial: m.dial, at: m.at })) : [s, []],
       frame: (s, m): Step => frameIn(s, m, (at, msg) => applyCell(machine, at, msg)),
       socket_closed: (s, m): Step => closedIn(s, m),
       hello_ok: (s, m): Step => shook(s, m),
       hello_err: (s, m): Step => shook(s, m),
-      enroll_ok: (s, m): Step => shook(s, { type: "knock_ok", cmd: knock(m.cmd), value: null, at: m.at }),
-      enroll_err: (s, m): Step => shook(s, { type: "knock_err", cmd: knock(m.cmd), error: m.error, at: m.at }),
+      enroll_ok: (s, m): Step => shook(s, knock.ok(knock(m.cmd), null, m.at)),
+      enroll_err: (s, m): Step =>
+        // oxlint-disable-next-line fabrika/no-hand-tag -- the enroll answer re-keyed as the knock answer it stands for: tea's `knock.err` takes only knock's own errors, and this one can carry tea's `malformed_result`
+        shook(s, { _tag: "knock_err", cmd: knock(m.cmd), error: m.error, at: m.at }),
       now_ok: (s, m): Step => dated(s, step, m.cmd.n, m.value),
       now_err: (s, m): Step => [{ ...s, redate: [...new Set([...s.redate, m.cmd.n])] }, []],
       write_ok: (s): Step => [s, []],
@@ -1699,15 +1737,17 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         }
 
         const life = C.foldName(tile.reach.life, m.value, tile.name, isBrain);
-        const [seen] = step(s.client, {
-          type: "read",
-          rev: Math.max(
-            s.client.seen,
-            ...m.value.flatMap((e) =>
-              Predicate.isObject(e) && Predicate.hasProperty(e, "rev") && Predicate.isNumber(e.rev) ? [e.rev] : [],
+        const [seen] = step(
+          s.client,
+          C.ClientMsg.cases.read.make({
+            rev: Math.max(
+              s.client.seen,
+              ...m.value.flatMap((e) =>
+                Predicate.isObject(e) && Predicate.hasProperty(e, "rev") && Predicate.isNumber(e.rev) ? [e.rev] : [],
+              ),
             ),
-          ),
-        });
+          }),
+        );
         return resolved({ ...s, client: seen, flight: found.rest }, m.dial, tile, life, m.value.length === PAGE);
       },
       read_err: (s, m): Step => {
@@ -1746,7 +1786,12 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         // tezgah's view is the window's tezgah link's own, decoded as `TezgahView` by its tezgah child, never by a
         // program's decoder.
         if (s.tezgah !== null && "pid" in s.tezgah.reach && s.tezgah.reach.pid === pid) {
-          return tezgahTook({ ...s, flight: found.rest, trouble: null }, pid, { type: "server", ...m.value }, fresh);
+          return tezgahTook(
+            { ...s, flight: found.rest, trouble: null },
+            pid,
+            TezgahMsg.cases.server.make({ ...m.value }),
+            fresh,
+          );
         }
 
         const [next, rows, asks] = noticed({ ...s, flight: found.rest }, step, pid, { type: "whole", ...m.value });
@@ -1778,7 +1823,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
 
         const letter = found.call.letter;
         const slot = s.client.pending.find((p) => p._tag === "ready" && p.letter === letter);
-        const [client] = step(s.client, { type: "reply", letter, answer: m.value });
+        const [client] = step(s.client, C.ClientMsg.cases.reply.make({ letter, answer: m.value }));
         const owner = slot && s.from[slot.n]?.tile;
         // A letter to tezgah names its command, and its refusal is no tile's.
         const refusal =
@@ -1792,8 +1837,8 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         const [moves, rows] = tezgahStep(
           s,
           m.value._tag === "accepted"
-            ? { type: "accepted", letter, pos: m.value.pos, ms: m.ms }
-            : { type: "refused", letter, ms: m.ms },
+            ? TezgahMsg.cases.accepted.make({ letter, pos: m.value.pos, ms: m.ms })
+            : TezgahMsg.cases.refused.make({ letter, ms: m.ms }),
         );
         const settled = {
           ...moves,
@@ -1862,8 +1907,8 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
                 s,
                 m.pid,
                 note.value.type === "whole"
-                  ? { type: "server", rev: note.value.rev, view: note.value.view }
-                  : { type: "patch", base: note.value.base, rev: note.value.rev, patch: note.value.patch },
+                  ? TezgahMsg.cases.server.make({ rev: note.value.rev, view: note.value.view })
+                  : TezgahMsg.cases.patch.make({ base: note.value.base, rev: note.value.rev, patch: note.value.patch }),
                 fresh,
               );
         }
@@ -1882,7 +1927,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         const [written, writes] = wrote(after, s.link.dial, [Call.cases.open.make({ pid: m.pid })]);
         return [written, [...rows, ...writes]];
       },
-      seen: (s, m): Step => [{ ...s, client: step(s.client, { type: "read", rev: m.rev })[0] }, []],
+      seen: (s, m): Step => [{ ...s, client: step(s.client, C.ClientMsg.cases.read.make({ rev: m.rev }))[0] }, []],
       resend: (s, m): Step => {
         // Every tick ends the polite region's burst, on any dial or none.
         const quiet = hushed(s);
@@ -1939,14 +1984,13 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           }
 
           // A split moves focus off its tile, so it carries that tile's cursor (0165).
-          const did = {
-            type: "did",
+          const did = TezgahDid.make({
             does: split.does,
             from: split.from,
             tile: m.value.tile,
             via: ByKeys.make({ keys: split.keys }),
             cursor: link?.cursors[split.from] ?? null,
-          };
+          });
           return toTezgah(s, step, did, split.does, split.from);
         }
 
@@ -1959,8 +2003,8 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         }
 
         const n = s.client.written;
-        const attach = { type: "attach", workspace: link.client.workspace, tile: m.value.tile };
-        const [client] = step(s.client, { type: "press", pid: link.reach.pid, m: attach });
+        const attach = TezgahAttach.make({ workspace: link.client.workspace, tile: m.value.tile });
+        const [client] = step(s.client, C.ClientMsg.cases.press.make({ pid: link.reach.pid, m: attach }));
         return [{ ...s, client, tezgah: { ...link, attach: "sent" } }, [now({ n })]];
       },
       mint_err: (s, m): Step =>
@@ -1969,19 +2013,22 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           : [s, []],
     },
     subs: [
-      { type: "timer", deps: (s) => timerDeps(s.link) },
+      // oxlint-disable-next-line fabrika/no-hand-tag -- a tea Sub entry: tea gives a built-in Sub no maker, and its `deps` is a function no schema makes
+      { _tag: "timer", deps: (s) => timerDeps(s.link) },
       {
-        type: "timer",
+        // oxlint-disable-next-line fabrika/no-hand-tag -- a tea Sub entry: tea gives a built-in Sub no maker, and its `deps` is a function no schema makes
+        _tag: "timer",
         deps: (s) =>
           s.redate.length > 0 ||
           s.said.messages.length > 0 ||
           (s.link._tag === "online" &&
             (s.inbox._tag === "idle" || C.sendable(s.client).some((p) => !s.sent.includes(p.letter))))
-            ? { ms: 2000, msg: { type: "resend" as const, dial: socketDial(s.link) ?? 0 } }
+            ? { ms: 2000, msg: Own.cases.resend.make({ dial: socketDial(s.link) ?? 0 }) }
             : null,
       },
       {
-        type: "socket",
+        // oxlint-disable-next-line fabrika/no-hand-tag -- a tea Sub entry: a Sub is named by its runner, and its `deps` is a function no schema makes
+        _tag: "socket",
         deps: (s) => {
           const dial = socketDial(s.link);
           return dial === null ? null : { dial, rejected: s.rejected, tries: s.tries };
@@ -2015,7 +2062,7 @@ export type WindowMsg =
  * @stability unstable
  * @category models
  */
-export type KeyPress = Extract<WindowMsg, { readonly type: "key" }>;
+export type KeyPress = Types.ExtractTag<WindowMsg, "key">;
 
 /**
  * The presses a page handed its window that the window may not have read yet, in the order they

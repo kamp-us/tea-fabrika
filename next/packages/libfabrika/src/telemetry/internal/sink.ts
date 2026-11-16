@@ -26,11 +26,12 @@ const Model = Schema.TaggedUnion({
 });
 type Model = typeof Model.Type;
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("commit_failed"), more: Schema.Array(Ended) }),
-  Schema.Struct({ type: Schema.Literal("committed"), hour: Schema.Number, sized: Schema.Boolean }),
-  Schema.Struct({ type: Schema.Literal("flush_checked") }),
-]);
+/** @internal A flush's commit failed or landed, or the next flush was checked. */
+export const Msg = Schema.TaggedUnion({
+  commit_failed: { more: Schema.Array(Ended) },
+  committed: { hour: Schema.Number, sized: Schema.Boolean },
+  flush_checked: {},
+});
 
 /** @internal The spans a Model holds, oldest first. */
 export const held = (model: Model): ReadonlyArray<Ended> =>
