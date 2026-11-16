@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1067-mock-app-src-s1-tests1",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": null,
+  "started": "2026-11-15T23:14:19-08:00",
+  "ended": "2026-11-15T23:40:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 1 of docs/plan/quests/mock-app-src-PLAN.md (the mock sweep in next/apps/fabrika/src, ticket 1067, decision 0555), in next/. Count before, at origin/main b510ed2: 5 vi.fn, 14 toHaveBeenCalled*, 23 spies in the folder. A1 (file-services.laws.integration.test.ts, dev refuses every invalid parent with parent_gone before any makeDirectory): the vi.fn on makeDirectory is now Recorder.layer(FileSystem.FileSystem, FileSystem.makeNoop({ makeDirectory: () => Effect.never })), built once with Layer.build and handed to the hoisted cli.layer as Layer.succeedContext, read with Recorder.calls(FileSystem.FileSystem, \"makeDirectory\") equal to []. A2 (grant-readers.laws.test.ts, three laws: bad URL, usage, unknown flag): the fetch spies are a stand-in for FetchHttpClient.Fetch that keeps a typed list of its calls and rejects; the list equals []. A3 (grant-readers.laws.test.ts, the eleven mode laws): the fetch spy is the same stand-in answering per mode, and the console.log spy is Effect's TestConsole.layer, with TestConsole.logLines equal to exactly the Granted line on applied and [] otherwise (stricter than toHaveBeenCalledWith; logLines flattens each call's arguments, and grant.ts prints one string). A4 (door.integration.test.ts p27, three laws): the hand wrap with vi.fn is Layer.unwrap over Recorder.layer(ClientManager, real), read with Recorder.calls(ClientManager, \"write\") equal to []. A5 (instance-one-file.integration.test.ts p33 loader) is NOT rewritten: the plan's getEntrypoint: () => rpc does not compile (TS2322: rpc is not assignable to Fetcher<T>, since WorkerStub.getEntrypoint in @cloudflare/workers-types 5.20261109.1 is generic in T), and the one-overload form the type would allow fails with TS2589 (type instantiation is excessively deep). The plan's fallback, a one-line satisfies, does not exist for a generic method, and a cast is refused, so the file is left as on main and the gap goes back to plan. These are rewrites of existing laws, all green on main's product code; each was seen red only under its plant. After: 3 vi.fn, 9 toHaveBeenCalled*, 18 spies left in the folder. The lock (A6, A8, the no-restricted-vi-methods override), A7 and the README paragraph stay out of this sweep by the laptop lead's ruling in the plan. The pattern doc lines are the build's.",
+  "plants": [
+    {
+      "law": "A1: dev refuses every invalid parent with reason parent_gone before touching settings",
+      "plant": "next/apps/fabrika/dev.ts: the guard runs makeDirectory(\"planted\") under a 1 ms timeout before the parent check",
+      "result": "red"
+    },
+    {
+      "law": "A2: grant command rejects malformed outside URLs as GrantError before fetching or signing; grant usage guard names the error for each missing argument or flag",
+      "plant": "next/apps/fabrika/grant.ts: the handler gets http://127.0.0.1:1/planted before the usage check and the URL parse",
+      "result": "red"
+    },
+    {
+      "law": "A2: grant reports bad_args when the CLI refuses unknown flags",
+      "plant": "next/apps/fabrika/grant.ts: the ShowHelp handler gets http://127.0.0.1:1/planted before it fails with bad_args",
+      "result": "red"
+    },
+    {
+      "law": "A3: grant refused path preserves the signed fields and exact error reason",
+      "plant": "next/apps/fabrika/grant.ts: the Granted line is printed on a refused reply too",
+      "result": "red"
+    },
+    {
+      "law": "A3: grant applied path preserves the signed fields and exact error reason",
+      "plant": "next/apps/fabrika/grant.ts: a second line is printed after the Granted line",
+      "result": "red"
+    },
+    {
+      "law": "A4: p27: granted, revoked and added wrong-to never calls ClientManager.write or founds",
+      "plant": "next/packages/libfabrika/src/gateway/Gateway.ts: clients.write runs before the ledger check",
+      "result": "red"
+    },
+    {
+      "law": "A5: p33 loader (with getEntrypoint: () => rpc, the version that does not compile)",
+      "plant": "next/packages/libfabrika/src/cloudflare/index.ts: the loader answers the bare short name",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 26,
+  "note": "Each plant ran once on a saved copy in the scratchpad and was restored by copy; git status showed no product file before the commit. Tests run at the branch's base b510ed2 with the slice's edits: grant-readers.laws.test.ts 14 passed, file-services.laws.integration.test.ts 13 passed, door.integration.test.ts 153 passed, each whole, once, under nice -n 15 and --maxWorkers=3; the .integration. files ran in this box with no override (main holds PR 1508). A throwaway tsconfig over the four test files ran tsc once: the three rewritten files had no error; it found the A5 errors above and was deleted. No pnpm typecheck in this step. Whole pnpm lint, format and the list ratchet are recorded in the step's report. No build is needed for slice 1: it changes no product file.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "tests"
+}

@@ -4,6 +4,7 @@ import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Layer, Option, Schema, Sink, Stream } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { TestConsole } from "effect/testing";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 
@@ -29,11 +30,38 @@ vi.mock("@effect/platform-node", async (original) => {
   };
 });
 
+/** One `fetch` call as the law's stand-in saw it: the address and the options. */
+type Sent = readonly [url: string, options: RequestInit | undefined];
+
 /**
- * Runs the captured command with this run's `fetch` stub as the client's `fetch`. A fresh process
- * reads the global once; here one process runs many laws, and the client would keep the first stub.
+ * A stand-in for Effect's `FetchHttpClient.Fetch` reference that keeps each call it is handed, in
+ * order, and answers with `answer`. The law owns the list, since `fetch` is a function reference and
+ * not an Effect service the Recorder could watch.
  */
-const run = () => Effect.runPromiseExit(cli.work!.pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)));
+const fetches = (answer: (url: string, options: RequestInit | undefined) => Promise<Response>) => {
+  const sent: Array<Sent> = [];
+  const fetch: typeof globalThis.fetch = (url, options) => {
+    sent.push([String(url), options]);
+    return answer(String(url), options);
+  };
+  return { sent, fetch };
+};
+
+/** A stand-in that refuses every call, for a law that expects none. */
+const refused = () => fetches(() => Promise.reject(new Error("must not fetch")));
+
+/**
+ * Runs the captured command with the law's `fetch` as the client's `fetch`, and Effect's
+ * `TestConsole` as the `Console` it prints to, since grant.ts does not provide one of its own.
+ * Answers the exit and every line printed with `Console.log`.
+ */
+const run = (fetch: typeof globalThis.fetch) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(cli.work!);
+      return { exit, logged: yield* TestConsole.logLines };
+    }).pipe(Effect.provideService(FetchHttpClient.Fetch, fetch), Effect.provide(TestConsole.layer)),
+  );
 
 /** What one `fetch` call puts on the wire: its method, every header, and its body as text. */
 const wire = (options: RequestInit | undefined) => ({
@@ -60,7 +88,7 @@ it("grant command rejects malformed outside URLs as GrantError before fetching o
   await fc.assert(
     fc.asyncProperty(invalid, async (url) => {
       const argv = process.argv;
-      const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("must not fetch"));
+      const f = refused();
       process.argv = [
         process.execPath,
         "grant.ts",
@@ -76,11 +104,11 @@ it("grant command rejects malformed outside URLs as GrantError before fetching o
         vi.resetModules();
         await import("../grant.ts");
         expect(cli.work).toBeDefined();
-        typed(await run(), "bad_url");
-        expect(fetch).not.toHaveBeenCalled();
+        // Plant (run once): in grant.ts, fetch the target before parsing the URL; `sent` is not [].
+        typed((await run(f.fetch)).exit, "bad_url");
+        expect(f.sent).toEqual([]);
       } finally {
         process.argv = argv;
-        fetch.mockRestore();
       }
     }),
     { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }), examples: [["http://["]] },
@@ -104,17 +132,17 @@ it("grant usage guard names the error for each missing argument or flag", async 
 
       // Removing the URL also removes its following positional argument so the CLI cannot shift it.
       const argv = process.argv;
-      const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("must not fetch"));
+      const f = refused();
       process.argv = [process.execPath, "grant.ts", ...args];
 
       try {
         vi.resetModules();
         await import("../grant.ts");
-        typed(await run(), usage);
-        expect(fetch).not.toHaveBeenCalled();
+        // Plant (run once): in grant.ts, fetch before the usage check; `sent` is not [].
+        typed((await run(f.fetch)).exit, usage);
+        expect(f.sent).toEqual([]);
       } finally {
         process.argv = argv;
-        fetch.mockRestore();
       }
     }),
     { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }) },
@@ -198,10 +226,7 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
             }),
           ),
         );
-        const calls: Array<[string, RequestInit | undefined]> = [];
-        const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
-          calls.push([String(url), options]);
-
+        const { sent: calls, fetch } = fetches(async (_url, options) => {
           if (options?.method === "POST") {
             if (mode === "post") {
               throw new Error("post unavailable");
@@ -231,7 +256,6 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
           return Response.json(mode === "target" ? data.badTarget : mode === "waiting" ? null : data.target);
         });
         const argv = process.argv;
-        const log = vi.spyOn(console, "log").mockImplementation(() => {});
         process.argv = [
           process.execPath,
           "grant.ts",
@@ -247,7 +271,7 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
           vi.resetModules();
           await import("../grant.ts");
           const before = Date.now();
-          const exit = await run();
+          const { exit, logged } = await run(fetch);
           const reason = results[mode];
 
           if (reason === null) {
@@ -310,16 +334,13 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
             });
           }
 
-          if (mode === "applied") {
-            expect(log).toHaveBeenCalledWith(`Granted ${data.fingerprint} to ${data.target.for}`);
-          } else {
-            expect(log).not.toHaveBeenCalled();
-          }
+          // The whole log, so a second line printed beside the one it names is red too.
+          // Plant (run once): in grant.ts, print the line on `refused` too, or print a second line;
+          // `logged` differs.
+          expect(logged).toEqual(mode === "applied" ? [`Granted ${data.fingerprint} to ${data.target.for}`] : []);
         } finally {
           process.argv = argv;
           cli.layer = undefined;
-          fetch.mockRestore();
-          log.mockRestore();
         }
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 12 }) },
@@ -331,17 +352,17 @@ it("grant reports bad_args when the CLI refuses unknown flags", async () => {
   await fc.assert(
     fc.asyncProperty(fc.uuid(), async (flag) => {
       const argv = process.argv;
-      const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("must not fetch"));
+      const f = refused();
       process.argv = [process.execPath, "grant.ts", `--unknown-${flag}`];
 
       try {
         vi.resetModules();
         await import("../grant.ts");
-        typed(await run(), "bad_args");
-        expect(fetch).not.toHaveBeenCalled();
+        // Plant (run once): in grant.ts, fetch in the ShowHelp handler; `sent` is not [].
+        typed((await run(f.fetch)).exit, "bad_args");
+        expect(f.sent).toEqual([]);
       } finally {
         process.argv = argv;
-        fetch.mockRestore();
       }
     }),
     { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },

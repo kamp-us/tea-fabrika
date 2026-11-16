@@ -48,7 +48,7 @@ import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
-import { type Runs, runsFor } from "@kampus/vitest";
+import { Recorder, type Runs, runsFor } from "@kampus/vitest";
 import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
@@ -3080,18 +3080,9 @@ describe("P10 signed membership changes", () => {
           (value) =>
             Effect.gen(function* () {
               const w = yield* world();
-              const called = vi.fn();
-              const clients = Layer.effect(
-                ClientManager,
-                ClientManager.pipe(
-                  Effect.map((real: typeof ClientManager.Service) => ({
-                    ...real,
-                    write: (...args: Parameters<typeof real.write>) => {
-                      called();
-                      return real.write(...args);
-                    },
-                  })),
-                ),
+              // The real ClientManager, recorded: every method still runs the real code.
+              const clients = Layer.unwrap(
+                ClientManager.pipe(Effect.map((real) => Recorder.layer(ClientManager, real))),
               ).pipe(Layer.provide(w.env));
               yield* Effect.gen(function* () {
                 const d = yield* Gateway;
@@ -3131,7 +3122,9 @@ describe("P10 signed membership changes", () => {
                   _tag: "refused",
                   reason: "wrong_ledger",
                 });
-                expect(called).not.toHaveBeenCalled();
+                // Plant (run once, on a scratch copy): in Gateway.ts, write the client before the
+                // ledger check; the recorded `write` list is not [].
+                expect(yield* Recorder.calls(ClientManager, "write")).toEqual([]);
                 expect(yield* entries("gateway/access")).toEqual([]);
               }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, clients)))));
             }),
