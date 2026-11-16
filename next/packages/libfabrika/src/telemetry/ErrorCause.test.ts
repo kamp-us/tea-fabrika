@@ -43,6 +43,7 @@ const onRejecting = <A, E>(failure: unknown, work: Effect.Effect<A, E>) =>
     expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause), "a rejected digest is no defect").toBe(false);
     const error = Exit.findErrorOption(exit);
     expect(Option.isSome(error), "the digest's rejection reached the work as a typed failure").toBe(true);
+
     return { error: Option.getOrThrow(error), asked: stand.asked };
   });
 

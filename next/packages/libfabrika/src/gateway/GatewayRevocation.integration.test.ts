@@ -52,6 +52,7 @@ beforeEach(async () => {
 });
 
 const checks = { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }) };
+
 // The three paused-hash laws report their first failure unshrunk: a hash that misses the stand-in
 // fails each run at `reached`'s timeout, and shrinking would spend the law's whole time on it.
 const pausedChecks = { ...checks, endOnFailure: true };
@@ -680,11 +681,13 @@ describe("P17a, revoke stops writes at the final door", () => {
 
               const marker = `queued-input-${token}`;
               const pause = yield* paused(marker);
+
               const pending = yield* Effect.forkChild(
                 Effect.result(send(d.a, d.old, w, target, marker, token)).pipe(
                   Effect.provide(WebCrypto.layer(pause.crypto)),
                 ),
               );
+
               yield* reached(pause.entered);
 
               if (revokeFirst) {
@@ -738,11 +741,13 @@ describe("P17a, revoke stops writes at the final door", () => {
               const inputs = yield* rows(w, "gateway/inputs");
 
               const pause = yield* paused(marker);
+
               const pending = yield* Effect.forkChild(
                 Effect.result(send(d.a, d.old, w, target, marker, text)).pipe(
                   Effect.provide(WebCrypto.layer(pause.crypto)),
                 ),
               );
+
               // Request hashing follows online(); the settled reply is still pending.
               yield* reached(pause.entered);
 
@@ -1040,6 +1045,7 @@ describe("P17a, revoke stops writes at the final door", () => {
               const marker = `p17-queued-${text}`;
               // The event is hashed as JSON, so the pause looks for the marker as JSON writes it.
               const pause = yield* paused(JSON.stringify(marker));
+
               const pending = yield* Effect.forkChild(
                 Effect.result(
                   door.append({
