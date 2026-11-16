@@ -301,7 +301,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
       Arr.join(
         Arr.map(rows, (row) => JSON.stringify(row)),
         "\n",
-      ) + (rows.length ? "\n" : ""),
+      ) + (rows.length > 0 ? "\n" : ""),
     );
   const last = Effect.fnUntraced(function* () {
     const pending = Arr.last(Arr.filter(yield* read, (event) => event._tag === "started"));

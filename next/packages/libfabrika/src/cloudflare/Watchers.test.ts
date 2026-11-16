@@ -89,7 +89,7 @@ describe("watcher delivery evidence, next/", () => {
 
           for (const step of steps) {
             const held = [...routes.keys()];
-            const client = held.length && step.pick % 2 ? nth(held, step.pick) : step.client;
+            const client = held.length > 0 && step.pick % 2 !== 0 ? nth(held, step.pick) : step.client;
             routes.delete(client);
             expect(yield* publish(client, patch)).toEqual(Publication.cases.gone.make({}));
             expect(yield* reason(client)).toBe("Gone");

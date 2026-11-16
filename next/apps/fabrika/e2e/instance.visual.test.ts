@@ -166,7 +166,7 @@ const driver = async (page: Page, url: string, tab: string) => {
         get.onerror = () => fail(get.error);
       });
 
-      if (!pair) {
+      if (pair === undefined) {
         pair = await crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]);
         await new Promise<void>((done, fail) => {
           const tx = db.transaction("keys", "readwrite");

@@ -71,7 +71,8 @@ const settingsFor = (w: World) =>
             kinds: { rows: ["rows/**"], docs: ["docs/**"] },
             checks: Rec.fromEntries(
               Arr.map(["rows", "docs", "code"], (kind, i) => [
-                kind, w.empty[i] ? [] : [{ name: w.name, source: w.source }],
+                kind,
+                w.empty[i] === true ? [] : [{ name: w.name, source: w.source }],
               ]),
             ),
           },

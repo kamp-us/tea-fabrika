@@ -133,7 +133,7 @@ const environment: ProjectAuditTest.Harness["environment"] = (
           const message = input.envelope.input;
           const stamped = Predicate.isObject(message) ? { ...message, parent: input.envelope.id } : message;
 
-          if (!(await box.admit(stamped))) {
+          if ((await box.admit(stamped)) !== true) {
             return Sent.cases.refused.make({ reason: "bad_msg" });
           }
 

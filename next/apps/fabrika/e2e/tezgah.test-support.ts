@@ -443,9 +443,9 @@ const foldRule = (space: Space, area: Box, strips: ReadonlySet<string>) => {
     const left = (row ? box.width : box.height) - (node.parts.length - 1) * GAP;
     const fixed = Arr.map(node.parts, (p) => Arr.every(tilesIn(p.inner), (t) => strips.has(t)));
     const has = left - Arr.filter(fixed, (f) => f).length * STRIP_ACROSS[node.dir];
-    const total = Arr.reduce(node.parts, 0, (sum, p, i) => (fixed[i] ? sum : sum + p.percent));
+    const total = Arr.reduce(node.parts, 0, (sum, p, i) => (fixed[i] === true ? sum : sum + p.percent));
     const lead = Arr.findFirstIndex(node.parts, (p) => tilesIn(p.inner).includes(space.focus));
-    let shares = Arr.map(node.parts, (p, i) => (fixed[i] ? STRIP_ACROSS[node.dir] : (has * p.percent) / total));
+    let shares = Arr.map(node.parts, (p, i) => (fixed[i] === true ? STRIP_ACROSS[node.dir] : (has * p.percent) / total));
     const least = Math.min(row ? SMALLEST.width : SMALLEST.height, has);
 
     if (Option.isSome(lead) && (shares[lead.value] ?? 0) < least) {
@@ -453,7 +453,7 @@ const foldRule = (space: Space, area: Box, strips: ReadonlySet<string>) => {
       shares = Arr.map(node.parts, (p, i) =>
         i === lead.value
           ? least
-          : fixed[i]
+          : fixed[i] === true
             ? STRIP_ACROSS[node.dir]
             : rest > 0
               ? ((has - least) * p.percent) / rest
@@ -468,7 +468,7 @@ const foldRule = (space: Space, area: Box, strips: ReadonlySet<string>) => {
         ? { x: at, y: box.y, width: shares[i] ?? 0, height: box.height }
         : { x: box.x, y: at, width: box.width, height: shares[i] ?? 0 };
 
-      if (fixed[i] && typeof p.inner !== "string") {
+      if (fixed[i] === true && typeof p.inner !== "string") {
         bands.push({ box: b, tiles: tilesIn(p.inner) });
       } else {
         walk(p.inner, b);

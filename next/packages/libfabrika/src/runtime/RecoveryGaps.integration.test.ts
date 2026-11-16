@@ -569,7 +569,7 @@ describe("P34 interrupted recovery", () => {
   // installs P34's trusted failure hook, never a public fault endpoint. waitForRecovery waits
   // for the real object's alarm; evict reconstructs the actual object with its durable storage.
   // scenario: the optional P12 driver runs real object alarms and reconstruction on the local instance.
-  it.skipIf(!process.env.P34_INSTANCE_DRIVER)(
+  it.skipIf((process.env.P34_INSTANCE_DRIVER ?? "") === "")(
     "scenario: p80 real instance: durable poison, down resends and duplicate alarms survive object reconstruction",
     async () => {
       type Status = { process: string; state: string; until: number | null };

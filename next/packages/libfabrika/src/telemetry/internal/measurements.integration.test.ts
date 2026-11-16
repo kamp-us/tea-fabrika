@@ -233,7 +233,7 @@ describe("p101, measurements in two levels", () => {
                   hour: hourStart(start),
                   ms: s.ms,
                   ok: s.ok,
-                  lag: lags.length ? Math.max(...lags) : null,
+                  lag: lags.length > 0 ? Math.max(...lags) : null,
                 });
                 t = start + s.ms;
               }

@@ -29,7 +29,7 @@ const checkSecretTypes = (project: Project, root: string) => {
 
     const source = program.getSourceFile(path);
 
-    if (!source) {
+    if (source === undefined) {
       continue;
     }
 
@@ -46,7 +46,7 @@ const checkSecretTypes = (project: Project, root: string) => {
 
       const bindings = statement.importClause?.namedBindings;
 
-      if (bindings && ts.isNamedImports(bindings)) {
+      if (bindings !== undefined && ts.isNamedImports(bindings)) {
         for (const spec of bindings.elements) {
           if ((spec.propertyName ?? spec.name).text === "randomBytes") {
             entropy.add(spec.name.text);
@@ -87,7 +87,7 @@ const checkSecretTypes = (project: Project, root: string) => {
         reason = "control binding read";
       }
 
-      if (reason) {
+      if (reason !== undefined && reason !== "") {
         const ancestors: Array<ts.Node> = [];
 
         for (let parent: ts.Node = node; !ts.isStatement(parent); parent = parent.parent) {

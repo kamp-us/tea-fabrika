@@ -406,21 +406,21 @@ const drawnWith = (w: Workspace, size: Size, strips: ReadonlySet<string>): Reado
     const left = (row ? box.width : box.height) - (node.parts.length - 1) * GAP;
     const fixed = Arr.map(node.parts, (p) => Arr.every(tilesIn(p.inner), (t) => strips.has(t)));
     const has = left - Arr.filter(fixed, (f) => f).length * ACROSS[node.dir];
-    const total = Arr.reduce(node.parts, 0, (sum, p, i) => (fixed[i] ? sum : sum + p.percent));
+    const total = Arr.reduce(node.parts, 0, (sum, p, i) => (fixed[i] === true ? sum : sum + p.percent));
     const lead = Arr.findFirstIndex(node.parts, (p) => tilesIn(p.inner).includes(w.focus));
-    let shares = Arr.map(node.parts, (p, i) => (fixed[i] ? ACROSS[node.dir] : (has * p.percent) / total));
+    let shares = Arr.map(node.parts, (p, i) => (fixed[i] === true ? ACROSS[node.dir] : (has * p.percent) / total));
     const least = Math.min(row ? SMALLEST.width : SMALLEST.height, has);
 
     if (Option.isSome(lead) && shares[lead.value]! < least) {
       const at = lead.value;
       const rest = total - node.parts[at]!.percent;
       shares = Arr.map(node.parts, (p, i) =>
-        i === at ? least : fixed[i] ? ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
+        i === at ? least : fixed[i] === true ? ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
       );
     }
 
     for (const [i, p] of node.parts.entries()) {
-      if (!fixed[i] || typeof p.inner === "string") {
+      if (fixed[i] !== true || typeof p.inner === "string") {
         walk(p.inner, row ? { width: shares[i]!, height: box.height } : { width: box.width, height: shares[i]! });
       }
     }

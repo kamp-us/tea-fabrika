@@ -54,15 +54,15 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
 
         const table = {
           queue: {
-            ...(omitted[5] ? {} : { most: values.most }),
-            ...(omitted[0] ? {} : { kinds: { rows: [values.glob], docs: [values.glob] } }),
-            ...(omitted[1] ? {} : { checks: { rows: values.rows, docs: values.docs, code: values.code } }),
+            ...(omitted[5] === true ? {} : { most: values.most }),
+            ...(omitted[0] === true ? {} : { kinds: { rows: [values.glob], docs: [values.glob] } }),
+            ...(omitted[1] === true ? {} : { checks: { rows: values.rows, docs: values.docs, code: values.code } }),
           },
           merger: {
-            ...(omitted[2] ? {} : { wait: values.wait }),
-            ...(omitted[3] ? {} : { poll: values.poll }),
-            ...(omitted[4] ? {} : { backoff: values.backoff }),
-            ...(omitted[6] ? {} : { rounds: values.rounds }),
+            ...(omitted[2] === true ? {} : { wait: values.wait }),
+            ...(omitted[3] === true ? {} : { poll: values.poll }),
+            ...(omitted[4] === true ? {} : { backoff: values.backoff }),
+            ...(omitted[6] === true ? {} : { rounds: values.rounds }),
           },
         };
 

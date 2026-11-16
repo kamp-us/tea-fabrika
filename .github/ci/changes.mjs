@@ -377,7 +377,7 @@ export const github = (env, get = globalThis.fetch) => {
   // `owner/repo/.github/workflows/check.yaml@refs/heads/main`: the file this run started from.
   const workflow = /\/\.github\/workflows\/([^/@]+)@/.exec(env["GITHUB_WORKFLOW_REF"] ?? "")?.[1];
 
-  if (!token || !repository || workflow === undefined) {
+  if (token === undefined || token === "" || repository === undefined || repository === "" || workflow === undefined) {
     return null;
   }
 
@@ -842,7 +842,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const note = (line) => {
     process.stdout.write(`${line}\n`);
 
-    if (summary) {
+    if (summary !== undefined && summary !== "") {
       appendFileSync(summary, `- ${line}\n`);
     }
   };
@@ -857,7 +857,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   process.stdout.write(output);
   const file = process.env["GITHUB_OUTPUT"];
 
-  if (file) {
+  if (file !== undefined && file !== "") {
     appendFileSync(file, output);
   }
 

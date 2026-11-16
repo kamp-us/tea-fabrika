@@ -72,7 +72,9 @@ export const startHead = (
     Arr.findFirst(pushed, (p) => Arr.every(pushed, (q) => isAncestor(q, p))),
     () => pushed[0],
   );
-  return newest && !(saved && isAncestor(newest, saved)) ? newest : saved;
+  return newest !== undefined && newest !== "" && !(saved !== undefined && saved !== "" && isAncestor(newest, saved))
+    ? newest
+    : saved;
 };
 
 /**
@@ -88,7 +90,8 @@ export const questRoot = (
   fresh: string,
   base: string,
   isAncestor: (a: string, b: string) => boolean,
-): string => (saved && !isAncestor(saved, fresh) && isAncestor(saved, base) ? saved : fresh);
+): string =>
+  saved !== undefined && saved !== "" && !isAncestor(saved, fresh) && isAncestor(saved, base) ? saved : fresh;
 
 /** The step a git note names, or none when it does not read. */
 export const stepOf = (note: string): string[] => {

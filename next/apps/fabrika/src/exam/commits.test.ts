@@ -962,7 +962,7 @@ describe("0053 parent exam lists", () => {
       fc.property(anyNote, parentLists, (n, { left, right, paths }) => {
         const c = { ...commit({ ...n, step: "build" }, paths), exam: left };
         const matched = Arr.filter(paths, examMatcher(left)).sort();
-        const expected = matched.length ? [stuck("build_touched_exam", c.sha, { paths: matched })] : [];
+        const expected = matched.length > 0 ? [stuck("build_touched_exam", c.sha, { paths: matched })] : [];
         expect(refusals([c], examMatcher(right))).toEqual(expected);
         expect(refusals([c], examMatcher(left))).toEqual(expected);
       }),
@@ -984,7 +984,7 @@ describe("0053 parent exam lists", () => {
             ),
             main,
           );
-          expect(Arr.filter(result.answers, (a) => a._tag === "ask")).toEqual(matched.length ? [ask(matched)] : []);
+          expect(Arr.filter(result.answers, (a) => a._tag === "ask")).toEqual(matched.length > 0 ? [ask(matched)] : []);
         }
       }),
       runs,

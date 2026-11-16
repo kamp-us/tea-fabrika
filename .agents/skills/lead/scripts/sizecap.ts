@@ -220,7 +220,7 @@ const unfenced = (text: string): ReadonlyArray<string> => {
         mark?.[1] !== undefined &&
         mark[1][0] === fence[0] &&
         mark[1].length >= fence.length &&
-        !Str.trim(mark[2] ?? "")
+        Str.trim(mark[2] ?? "") === ""
       ) {
         fence = null;
       }

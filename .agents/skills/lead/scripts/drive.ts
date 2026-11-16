@@ -908,7 +908,7 @@ export const loadEnv = (): Env => {
   ]);
   const [MAIN = "", BOXES = "", GH_REPO = "", CODEX_MODEL = "", CODEX_EFFORT = ""] = Str.split(r.out, "\n");
 
-  if (r.code !== 0 || !MAIN) {
+  if (r.code !== 0 || MAIN === "") {
     throw new Error(`env.sh failed: ${r.err}`);
   }
 
@@ -1570,7 +1570,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           `- ${ended} drive.ts ${ask.step} in box ${ask.box}: ${outcome}${faultNote(outcome, e.reason)}, head ${pipe(e.head, Str.slice(0, 8))}. ${e.reason}\n`,
         );
 
-        if (!keep && ask.step !== "plan" && ask.box) {
+        if (!keep && ask.step !== "plan" && ask.box !== "") {
           rmSync(boxTree(env.BOXES, ask.box), { recursive: true, force: true });
           rmSync(join(env.BOXES, `${ask.box}-gitdata`), { recursive: true, force: true });
           // Its facts go with it, so no later stepcommit reads a dead box's plan hash.
@@ -2167,7 +2167,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   const saved = savedQuest(statePath);
   const ticket = p.ticket ?? saved?.ticket;
 
-  if (!ticket) {
+  if (ticket === undefined || ticket === "") {
     return usageError(`no ticket for quest ${quest} yet; pass --ticket`);
   }
 
@@ -2204,7 +2204,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   const from = step === "plan" ? "HEAD" : (p.from ?? lastHead ?? "origin/main");
   const base = Str.trim(sh("git", ["-C", env.MAIN, "rev-parse", "-q", "--verify", `${from}^{commit}`]).out);
 
-  if (!base) {
+  if (base === "") {
     return usageError(`${from} is not a commit in the main checkout`);
   }
 
@@ -2216,7 +2216,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     isAncestor,
   );
 
-  if (!root) {
+  if (root === "") {
     return usageError(`${pipe(base, Str.slice(0, 8))} shares no history with origin/main`);
   }
 

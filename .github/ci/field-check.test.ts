@@ -137,7 +137,7 @@ it("added rows preserve occurrence counts and head line numbers", () => {
   const line = fc.string({ maxLength: 24 }).map((s) => JSON.stringify(s));
   fc.assert(
     fc.property(fc.array(line, { maxLength: 15 }), fc.array(line, { minLength: 1, maxLength: 15 }), (base, extra) => {
-      const head = [...base.toReversed(), ...extra, ...(base.length ? [base[0]!] : [])];
+      const head = [...base.toReversed(), ...extra, ...(base.length > 0 ? [base[0]!] : [])];
       const remaining = [...base];
 
       const expected = head.flatMap((text, i) => {
@@ -151,8 +151,9 @@ it("added rows preserve occurrence counts and head line numbers", () => {
 
         return [];
       });
-
-      expect(checker.selectAdded(base.length ? `${base.join("\n")}\n` : "", `${head.join("\n")}\n`)).toEqual(expected);
+      expect(checker.selectAdded(base.length > 0 ? `${base.join("\n")}\n` : "", `${head.join("\n")}\n`)).toEqual(
+        expected,
+      );
       expect(checker.selectAdded("", "\n")).toEqual([{ line: 1, text: "" }]);
       expect(checker.selectAdded(`${head.join("\n")}\n`, `${head.join("\n")}\n`)).toEqual([]);
     }),
@@ -179,7 +180,7 @@ it("a push keeps its two event trees and refuses failed diff, tree or blob reads
               ? (args[4] === base ? existed : remains)
                 ? `${file}\0`
                 : ""
-              : args[1]?.startsWith(base)
+              : args[1]?.startsWith(base) === true
                 ? baseText
                 : headText;
 

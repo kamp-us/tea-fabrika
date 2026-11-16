@@ -752,7 +752,7 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
         const named = pipe(
           answers,
           Arr.filter(held),
-          Arr.map((a) => `${a.reason} ${pipe(a.sha, Str.slice(0, 8))}${a.step ? ` step ${a.step}` : ""}`),
+          Arr.map((a) => `${a.reason} ${pipe(a.sha, Str.slice(0, 8))}${a.step !== undefined ? ` step ${a.step}` : ""}`),
         );
 
         if (named.length === 0) {

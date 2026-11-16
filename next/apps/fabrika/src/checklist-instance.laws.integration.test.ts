@@ -705,7 +705,7 @@ describe("L13: notices name their process", () => {
                       ? []
                       : [
                           { type: "add", name: held },
-                          { type: items.get(held) ? "uncheck" : "check", name: held },
+                          { type: items.get(held) === true ? "uncheck" : "check", name: held },
                           { type: "remove", name: held },
                         ]),
                   ];

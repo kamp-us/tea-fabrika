@@ -68,8 +68,7 @@ const tree = (parent: number) => {
     .split("\n")
     .flatMap((row) => {
       const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row);
-
-      return m ? [{ pid: Number(m[1]), parent: Number(m[2]), command: m[3]! }] : [];
+      return m !== null ? [{ pid: Number(m[1]), parent: Number(m[2]), command: m[3]! }] : [];
     });
 
   const pids = new Set([parent]);

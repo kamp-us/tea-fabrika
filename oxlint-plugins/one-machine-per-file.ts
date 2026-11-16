@@ -181,7 +181,7 @@ export const oneMachinePerFile: CreateRule = {
 
             const variable = resolve(node);
 
-            if (variable === undefined || !Arr.some(variable.references, (ref) => ref.identifier === node)) {
+            if (variable === undefined || !Arr.some(variable.references, (ref) => ref.identifier === node) !== true) {
               continue;
             }
 

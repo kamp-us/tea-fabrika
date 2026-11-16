@@ -112,7 +112,7 @@ export const check = (index: Index, path: ReadonlyArray<string>): Result.Result<
       index.sections.find((section) => same(section.path, at)) ??
       index.sections.find((section) => i > 0 && prefix(at, section.path));
 
-    if (entry) {
+    if (entry !== undefined) {
       line = entry.line;
     }
 
@@ -133,12 +133,12 @@ export const check = (index: Index, path: ReadonlyArray<string>): Result.Result<
 const commentEdits = (text: string, index: Index, assignment: Assignment, removed: Range): Array<Splice> => {
   const comments = retained(text, index, removed);
 
-  if (!comments) {
+  if (comments === "") {
     return [];
   }
 
   // An inline member can follow a sibling's comments. Keep retained comments after that sibling.
-  const at = assignment.inline ? assignment.start : lineStart(text, assignment.start);
+  const at = assignment.inline !== undefined ? assignment.start : lineStart(text, assignment.start);
   const before = at > lineStart(text, at) ? ending(text) : "";
 
   return [{ start: at, end: at, text: before + comments }];
@@ -154,13 +154,13 @@ export const remove = (text: string, index: Index, path: ReadonlyArray<string>):
 
   const assignment = index.assignments.find((candidate) => same(candidate.path, path));
 
-  if (!assignment) {
+  if (assignment === undefined) {
     return Result.succeed(text);
   }
 
   const edits: Array<Splice> = [{ ...assignment, text: "" }, ...commentEdits(text, index, assignment, assignment)];
 
-  if (assignment.inline) {
+  if (assignment.inline !== undefined) {
     const start = assignment.inline.start;
     const parent = index.inlines.find((inline) => inline.start === start);
 
@@ -168,7 +168,7 @@ export const remove = (text: string, index: Index, path: ReadonlyArray<string>):
       parent?.commas.find((token) => token.start >= assignment.end) ??
       parent?.commas.findLast((token) => token.end <= assignment.start);
 
-    if (comma) {
+    if (comma !== undefined) {
       edits.push({ ...comma, text: "" });
     }
   }
@@ -204,7 +204,7 @@ export const set = (
 
   const assignment = index.assignments.find((candidate) => same(candidate.path, path));
 
-  if (assignment) {
+  if (assignment !== undefined) {
     if (equal(read(index.value, path), value)) {
       return Result.succeed(text);
     }
@@ -221,11 +221,10 @@ export const set = (
     .filter((inline) => prefix(inline.path, path))
     .sort((a, b) => b.path.length - a.path.length)[0];
 
-  if (parent) {
+  if (parent !== undefined) {
     const at = parent.end - 1;
     const last = parent.members.at(-1);
-    const separator = last && !parent.commas.some((comma) => comma.start >= last.end) ? ", " : "";
-
+    const separator = last !== undefined && !parent.commas.some((comma) => comma.start >= last.end) ? ", " : "";
     return Result.succeed(
       apply(text, [
         {

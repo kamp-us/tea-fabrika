@@ -224,10 +224,8 @@ const service = Effect.fnUntraced(function* (
         expect(after, "capture uses the nonblocking wait from zero").toBe(0);
 
         if (
-          lower !== undefined &&
-          stream === affected &&
-          failure !== undefined &&
-          pipe(failure.part, Str.endsWith("wait"))
+          lower !== undefined && stream === affected && failure !== undefined &&
+          pipe(failure.part, Str.endsWith("wait") === true)
         ) {
           return yield* lower;
         }
@@ -251,7 +249,7 @@ const service = Effect.fnUntraced(function* (
         return captured;
       }),
     read: (stream, after) =>
-      lower !== undefined && stream === affected && failure !== undefined && pipe(failure.part, Str.endsWith("read"))
+      lower !== undefined && stream === affected && failure !== undefined && pipe(failure.part, Str.endsWith("read")) === true
         ? ledger.read(stream, after).pipe(Stream.take(1), Stream.concat(Stream.fail(lower)))
         : ledger.read(stream, after),
   };

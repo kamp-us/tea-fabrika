@@ -47,15 +47,21 @@ const progress = Effect.fnUntraced(function* (outside: Outside, n: number, actio
     yield* outside.observe({ job: Outside.loaded(), listener: "waiting", children: "alive" });
   }
 
-  if (call.action === "ready" && !wait) {
+  if (call.action === "ready" && wait !== true) {
     yield* outside.observe({ listener: n % 3 === 0 ? "waiting" : "ready" });
   }
 
-  if (call.action === "inspect" && action === "stop" && outside.calls.includes("stop") && !wait && n % 3 !== 0) {
+  if (
+    call.action === "inspect" &&
+    action === "stop" &&
+    outside.calls.includes("stop") &&
+    wait !== true &&
+    n % 3 !== 0
+  ) {
     yield* outside.observe({ job: Outside.absent });
   }
 
-  if (call.action === "cleanup" && !wait) {
+  if (call.action === "cleanup" && wait !== true) {
     yield* outside.observe({ children: "gone", listener: "waiting" });
   }
 

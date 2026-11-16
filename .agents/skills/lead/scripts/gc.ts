@@ -91,7 +91,7 @@ export type PinVerdict = typeof PinVerdict.Type;
 export const backupsOf = (name: string, branch: string | null): string[] => {
   const own = `fabrikalfa/${name}-wip`;
   const wip = branch === null ? null : wipOf(branch);
-  return wip !== null && pipe(wip, Str.startsWith("fabrikalfa/")) && wip !== own ? [wip, own] : [own];
+  return wip !== null && pipe(wip, Str.startsWith("fabrikalfa/")) === true && wip !== own ? [wip, own] : [own];
 };
 
 /** The `state/*.box` files whose box folder is gone: facts of a dead box, which stepcommit would
@@ -258,7 +258,7 @@ const loadEnv = (): Env => {
   ]);
   const [MAIN = "", BOXES = "", GH_REPO = ""] = Str.split(r.out, "\n");
 
-  if (r.code !== 0 || !MAIN || !BOXES) {
+  if (r.code !== 0 || MAIN === "" || BOXES === "") {
     throw new Error(`env.sh failed: ${r.err}`);
   }
 
@@ -319,7 +319,7 @@ const gitDirOf = (box: string): string | null => {
 
   const m = /^gitdir:\s*(.+)$/m.exec(readFileSync(dot, "utf8"));
 
-  if (!m?.[1]) {
+  if (m?.[1] === undefined || m[1] === "") {
     return null;
   }
 
@@ -337,8 +337,7 @@ export const lastLogged = (log: string): number => {
 
   const last = pipe(readFileSync(log, "utf8"), Str.trimEnd, Str.split("\n")).at(-1) ?? "";
   const m = / (\d+) [+-]\d{4}\t/.exec(last);
-
-  return m?.[1] ? Number(m[1]) * 1000 : 0;
+  return m?.[1] !== undefined && m[1] !== "" ? Number(m[1]) * 1000 : 0;
 };
 
 /** When work last happened in a box: the newest of its folder (a box being made), its index (an
@@ -393,7 +392,7 @@ const keptByDrive = (boxes: string): Map<string, number> => {
       };
 
       for (const step of quest.steps ?? []) {
-        if (step.kept && step.box) {
+        if (step.kept === true && step.box !== undefined && step.box !== "") {
           kept.set(step.box, Date.parse(step.ended ?? "") || Date.now());
         }
       }
@@ -425,7 +424,7 @@ const sizeMb = (paths: readonly string[]) => {
 const keepRuns = (dir: string): boolean => {
   const r = sh("sh", [join(import.meta.dirname, "keepruns.sh"), dir]);
 
-  if (Str.trim(r.out)) {
+  if (Str.trim(r.out) !== "") {
     console.log(Str.trim(r.out));
   }
 
@@ -482,11 +481,11 @@ const main = () => {
       continue;
     }
 
-    if (ref) {
+    if (ref !== undefined && ref !== "") {
       prsOf.set(ref, [...(prsOf.get(ref) ?? []), state]);
     }
 
-    if (oid) {
+    if (oid !== undefined && oid !== "") {
       prsAt.set(oid, [...(prsAt.get(oid) ?? []), state]);
     }
   }
@@ -653,7 +652,7 @@ const main = () => {
     }
 
     if (!dry) {
-      if (gitDir !== null && pipe(gitDir, Str.startsWith(`${join(common, "worktrees")}/`))) {
+      if (gitDir !== null && pipe(gitDir, Str.startsWith(`${join(common, "worktrees")}/`)) === true) {
         repo("worktree", "remove", "--force", "--force", box);
       }
 
@@ -742,7 +741,7 @@ const main = () => {
       Option.getOrElse(() => ""),
     );
 
-    if (!path || path === env.MAIN || pipe(path, Str.startsWith(`${env.BOXES}/`)) || !existsSync(path)) {
+    if (path === "" || path === env.MAIN || pipe(path, Str.startsWith(`${env.BOXES}/`)) || !existsSync(path)) {
       continue;
     }
 

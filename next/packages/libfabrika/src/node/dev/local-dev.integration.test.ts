@@ -262,7 +262,7 @@ describe("P12 durable brain outbox", () => {
               Arr.join(
                 Arr.map(rows, (row) => JSON.stringify(row)),
                 "\n",
-              ) + (rows.length ? "\n" : "");
+              ) + (rows.length > 0 ? "\n" : "");
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const outbox = yield* brainOutbox(folder);

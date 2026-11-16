@@ -1017,7 +1017,7 @@ describe("mutbox gc against a stand-in docker", () => {
         PATH: `${join(dir, "bin")}:/usr/bin:/bin`,
         HOME: dir,
         FAKE: dir,
-        ...(setup.down ? { DOWN: "1" } : {}),
+        ...(setup.down === true ? { DOWN: "1" } : {}),
       },
     });
 
@@ -1063,7 +1063,9 @@ describe("a call past its bound is stopped, and its child with it", () => {
   const alive = (pid: number) => spawnSync("kill", ["-0", String(pid)]).status === 0;
 
   const readPid = (file: string) =>
-    Effect.sync(() => (existsSync(file) ? Number(Str.trim(readFileSync(file, "utf8"))) || 0 : 0));
+    Effect.sync(() => (existsSync(file) ? Number(Str.trim(readFileSync(file, "utf8"))) : 0)).pipe(
+      Effect.map((pid) => (Number.isNaN(pid) ? 0 : pid)),
+    );
   /** The line on stdin, at `delay` ms on the test clock, however late the child asked for it. */
   const lineAt = (delay: number) =>
     Stream.fromEffect(

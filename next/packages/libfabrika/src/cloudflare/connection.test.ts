@@ -539,7 +539,7 @@ const t864Prepare = Effect.fnUntraced(function* (db: DatabaseSync, draw: typeof 
   const now = yield* Clock.currentTimeMillis;
 
   if (
-    !db.prepare("SELECT name FROM sqlite_schema WHERE name='unsent'").get() ||
+    db.prepare("SELECT name FROM sqlite_schema WHERE name='unsent'").get() === undefined ||
     t864Pending(db).length === 0 ||
     t864Due(db, now).length === 0
   ) {

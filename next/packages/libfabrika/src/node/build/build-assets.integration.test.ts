@@ -125,9 +125,8 @@ const cssImport = (
     }),
     "",
   );
-
-  const target = `${quote}${quote && continuation ? `\\${continuation}` : ""}${ref}${quote}`;
-  return `@${keyword} ${pipe(form, Str.endsWith("string")) ? target : `${url}(${target})`}${media ? ` ${media}` : ""};`;
+  const target = `${quote}${quote !== "" && continuation !== "" ? `\\${continuation}` : ""}${ref}${quote}`;
+  return `@${keyword} ${pipe(form, Str.endsWith("string")) ? target : `${url}(${target})`}${media !== "" ? ` ${media}` : ""};`;
 };
 
 const homes: string[] = [];
@@ -434,7 +433,7 @@ describe("P16 assets and Compiler", () => {
             expect(styles).toContain(`--theme: ${id}`);
             expect(styles).toContain(`--tokens: ${id}`);
 
-            if (css.media) {
+            if (css.media !== "") {
               expect(styles).toContain(`@media ${css.media}`);
             }
           }),
@@ -987,7 +986,7 @@ describe("P16 cleanup and recording", () => {
                   const out = await handle.generate(o);
                   const css = Option.getOrUndefined(Arr.findFirst(out.output, (f) => pipe(f.fileName, Str.endsWith(".css")));
 
-                  if (!css) {
+                  if (css === undefined) {
                     return out;
                   }
 

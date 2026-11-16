@@ -77,11 +77,11 @@ export const checkPromiseTypes = (
   };
 
   const keyNames = (type: Type | undefined): readonly string[] | undefined => {
-    if (type?.isStringLiteralType()) {
+    if (type?.isStringLiteralType() === true) {
       return [type.value];
     }
 
-    if (!type?.isUnionType()) {
+    if (type?.isUnionType() !== true) {
       return undefined;
     }
 

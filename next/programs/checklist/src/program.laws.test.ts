@@ -318,7 +318,9 @@ describe("ticket 806 the checklist's laws", () => {
       ({ prev, msg, next, cmds }) =>
         cmds.length !== 0
           ? `${msg.type} returned ${cmds.length} Cmds`
-          : byName(next.items) === byName(expected(prev, msg)) || `${msg.type} broke the table`,
+          : byName(next.items) === byName(expected(prev, msg))
+            ? true
+            : `${msg.type} broke the table`,
       { seed: SEED, numRuns: RUNS },
     );
       }),

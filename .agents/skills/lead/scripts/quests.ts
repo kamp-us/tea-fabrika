@@ -181,7 +181,12 @@ export const verdict = (seen: Seen, now: Date, quiet = Beat.QUIET): Line => {
   const { record } = seen.found;
   const last = record.steps.at(-1) ?? null;
   const open = last !== null && last.endedAt === null ? last : null;
-  const box = open === null ? last?.line?.box || null : standing(seen.quest, open.step, seen.boxes);
+  const box =
+    open === null
+      ? last?.line?.box !== undefined && last.line.box !== ""
+        ? last.line.box
+        : null
+      : standing(seen.quest, open.step, seen.boxes);
   const quest = { ...nothing, step: last?.step ?? null, box };
 
   if (record.landed !== null) {

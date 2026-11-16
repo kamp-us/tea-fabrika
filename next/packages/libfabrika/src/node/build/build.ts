@@ -621,7 +621,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
       }
     },
   };
-  const assets: Record<string, Asset> = Rec.keys(windows).length
+  const assets: Record<string, Asset> = Rec.keys(windows).length > 0
     ? yield* bundle(
         Rec.fromEntries(Arr.map(Rec.keys(windows), (name) => [name, `${WINDOW}${name}`])),
         [entries, compiler, stylesheets(context, path)],
@@ -660,7 +660,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
   );
 
   // Every module a bundle reached is in `files` now: check them all, and the ledger for stale rows.
-  if (check(files, ledger).length) {
+  if (check(files, ledger).length > 0) {
     return yield* BuildError.make({ reason: "compiler" });
   }
 

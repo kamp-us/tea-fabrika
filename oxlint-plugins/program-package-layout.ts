@@ -530,7 +530,7 @@ export const programPackageLayout: CreateRule = {
     const matched = /^(.*\/next\/programs\/[^/]+)\//.exec(file);
 
     // A test file is judged like any other: it reports only when it is the '.' entry or pure code.
-    if (!matched?.[1]) {
+    if (matched?.[1] === undefined || matched[1] === "") {
       return {};
     }
 

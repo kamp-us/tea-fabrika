@@ -105,12 +105,19 @@ export const suite = (rig: Rig): void => {
             const known = [...history.keys()];
 
             const sender =
-              known.length && pick % 3 === 0
+              known.length > 0 && pick % 3 === 0
                 ? Option.getOrThrow(Option.fromUndefinedOr(known[pick % known.length]))
                 : `key-${pick % 4}`;
 
             const saved = history.get(sender);
-            const moves = ["take", "same", "reopen", "skip", "change", ...(saved ? ["back", "expiry"] : [])];
+            const moves = [
+              "take",
+              "same",
+              "reopen",
+              "skip",
+              "change",
+              ...(saved !== undefined ? ["back", "expiry"] : []),
+            ];
             const move = Option.getOrThrow(Option.fromUndefinedOr(moves[pick % moves.length]));
 
             if (move === "reopen") {
@@ -121,11 +128,11 @@ export const suite = (rig: Rig): void => {
               now += policy.window * 3;
             }
 
-            if (move === "back" && saved) {
+            if (move === "back" && saved !== undefined) {
               now = saved.at - 1;
             }
 
-            if (move === "expiry" && saved) {
+            if (move === "expiry" && saved !== undefined) {
               now = saved.until;
             }
 
@@ -143,10 +150,9 @@ export const suite = (rig: Rig): void => {
 
             const old = history.get(sender);
             const same = old?.policy === JSON.stringify(policy);
-            const at = old ? Math.max(now, old.at) : now;
-
+            const at = old !== undefined ? Math.max(now, old.at) : now;
             const row =
-              old && same
+              old !== undefined && same
                 ? old
                 : {
                     times: [],

@@ -164,7 +164,7 @@ const flow = async (sample: Flow) => {
   const part = (name: string) => {
     let db = parts.get(name);
 
-    if (!db) {
+    if (db === undefined) {
       db = new DatabaseSync(":memory:");
       parts.set(name, db);
     }

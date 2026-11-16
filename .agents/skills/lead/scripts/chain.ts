@@ -436,7 +436,7 @@ export const sectionsOf = (text: string): { head: string; sections: Record<strin
   for (const line of Str.split(text, "\n")) {
     const m = /^## (\S+)\s*$/.exec(line);
 
-    if (m) {
+    if (m !== null) {
       name = Str.toLowerCase(m[1] ?? "");
       bodies[name] ??= [];
       continue;
@@ -461,7 +461,7 @@ export const sectionsOf = (text: string): { head: string; sections: Record<strin
  * `## mutation` is needed only to start at mutation; an older brief that has one is still accepted.
  */
 export const lacks = (quest: ReturnType<typeof sectionsOf>, start: StepName): string[] =>
-  Arr.filter([...QUEST_STEPS, ...(start === "mutation" ? ["mutation"] : []), "pr"], (k) => !quest.sections[k]);
+  Arr.filter([...QUEST_STEPS, ...(start === "mutation" ? ["mutation"] : []), "pr"], (k) => (quest.sections[k] ?? "") === "");
 
 /** What one step is told about the quest: the brief's shared head, its section and the facts. */
 export type Facts = {
@@ -531,7 +531,7 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
     `This step starts at ${short(f.head)}; the quest left main at ${short(f.root)}.`,
     committedLine(f.commits),
     ...(heads.length > 0 ? [`Heads so far: ${Arr.join(heads, ", ")}.`] : []),
-    ...(f.note ? [`Last round: ${f.note}`] : []),
+    ...(f.note !== "" ? [`Last round: ${f.note}`] : []),
   ];
 
   if (step === "review") {
@@ -992,8 +992,8 @@ export const makeMachine = (limits: Limits) =>
 
         const quest: Quest = {
           ...s.quest,
-          head: accepted && line.head ? line.head : s.quest.head,
-          heads: verb === "done" && line.head ? { ...s.quest.heads, [s.step]: line.head } : s.quest.heads,
+          head: accepted && line.head !== "" ? line.head : s.quest.head,
+          heads: verb === "done" && line.head !== "" ? { ...s.quest.heads, [s.step]: line.head } : s.quest.heads,
           stucks: verb === "stuck" ? s.quest.stucks + 1 : 0,
           window: [...s.quest.window, markFrom(line)].slice(-limits.intensity.within),
           dollars: s.quest.dollars + (line.listUsd ?? 0),
@@ -1339,7 +1339,7 @@ const handlers = (s: Setup) => {
         };
 
         saveStep(entry);
-        note(`round ${round}: starting ${cmd.step} on ${agent}${cmd.note ? ` (${cmd.note})` : ""}`);
+        note(`round ${round}: starting ${cmd.step} on ${agent}${cmd.note !== "" ? ` (${cmd.note})` : ""}`);
         const minutes = yield* WaitMinutes;
         const times = yield* MaxWaits;
 
@@ -1501,7 +1501,7 @@ const handlers = (s: Setup) => {
         const r = readRecord();
         const last = Arr.findFirst(r.steps, (e) => e.round === earlier + cmd.round);
 
-        if (Option.isSome(last)) {
+        if (Option.isSome(last !== undefined)) {
           saveStep({ ...last.value, judged: { box, answer } });
         }
 
@@ -1526,7 +1526,7 @@ const handlers = (s: Setup) => {
         s.beats.enter("pr", null);
         const title = pipe(Str.split(s.brief.sections.pr ?? "", "\n")[0], Str.replace(/^#+\s*/, ""), Str.trim);
 
-        if (!title) {
+        if (title === undefined || title === "") {
           return { pr: null, detail: "the quest brief has no `## pr` section with a title line" };
         }
 
@@ -1582,7 +1582,7 @@ const handlers = (s: Setup) => {
         sh("git", ["-C", env.MAIN, "fetch", "-q", "origin", "main"]);
         const base = sh("git", ["-C", env.MAIN, "merge-base", "origin/main", cmd.head]);
 
-        if (base.code !== 0 || !Str.trim(base.out)) {
+        if (base.code !== 0 || Str.trim(base.out) === "") {
           return { code: 2, text: `no merge-base of origin/main and ${pipe(cmd.head, Str.slice(0, 8))}` };
         }
 
@@ -1755,7 +1755,7 @@ export const stepsTable = (
       // A line that is not JSON, or is JSON null, holds no row.
       const r = Result.getOrUndefined(Result.try(() => JSON.parse(raw) as { run?: string; listUsd?: number } | null));
 
-      if (r?.run && typeof r.listUsd === "number") {
+      if (typeof r?.run === "string" && r.run !== "" && typeof r.listUsd === "number") {
         dollars.set(r.run, r.listUsd);
       }
     }
@@ -1837,7 +1837,7 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
 
     const ticket = flag(args, "--ticket") ?? saved.ticket;
 
-    if (!ticket) {
+    if (ticket === undefined || ticket === "") {
       console.error(`chain.ts: no ticket for quest ${quest} yet; pass --ticket`);
       process.exit(2);
     }

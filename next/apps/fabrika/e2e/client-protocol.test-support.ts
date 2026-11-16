@@ -220,7 +220,7 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
         run.dispatch({ type: "press", tile: "tile_1", m: { type: "add", name }, via: "button" }).pipe(Effect.orDie),
       shown: Effect.map(state, (s) => {
         const pid = s.tiles[0]?.last;
-        const view = pid ? s.client.views[pid]?.view : undefined;
+        const view = pid !== null && pid !== undefined && pid !== "" ? s.client.views[pid]?.view : undefined;
         const data = Option.getOrUndefined(Schema.decodeOption(checklistWindow.data)(view));
         return Arr.map(data?.items ?? [], (i) => ({ name: i.name, checked: i.state === "checked" }));
       }),

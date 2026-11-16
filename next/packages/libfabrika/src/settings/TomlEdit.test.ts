@@ -175,7 +175,7 @@ const fixture = (l: Layout, n: number, trailingComma = false) => {
   }
 
   const text = lines
-    .map((line, i) => line + (i === lines.length - 1 && !l.final ? "" : l.mixed && i % 2 ? "\n" : l.eol))
+    .map((line, i) => line + (i === lines.length - 1 && !l.final ? "" : l.mixed && i % 2 !== 0 ? "\n" : l.eol))
     .join("");
 
   return { text, value: { untouched: "text # = [ ]", "box.a.b": n, box } };
@@ -330,7 +330,7 @@ describe("T877 public TOML edits, next/", () => {
         ];
 
         const paths = [["a.b"], ["second"], ["third"], ["fourth"]];
-        const endings = slots.map((_, i) => (l.mixed && i % 2 ? "\n" : l.eol));
+        const endings = slots.map((_, i) => (l.mixed && i % 2 !== 0 ? "\n" : l.eol));
         const prefix = `# first-雪${l.eol}date = 1979-05-27T07:32:00Z${l.eol}large = 9_223_372_036_854_775_807${l.eol}`;
         const suffix = `${l.eol}# last-雪${l.final ? l.eol : ""}`;
         const write = () => prefix + slots.map((s, i) => s.prefix + s.token + s.suffix + endings[i]).join("") + suffix;
@@ -908,7 +908,7 @@ describe("T877 public TOML edits, next/", () => {
           expect(decoded).toEqual({ instance: { port }, limits: { record: ByteSize.bytes(count) } });
           expect(get(parsed.value, bytes.segments)).toBe(Schema.encodeSync(Codec.file(bytes))(ByteSize.bytes(count)));
           expect(Exit.isFailure(yield* Effect.exit(checkedSet(text, Declarations.port, port, "repo")))).toBe(true);
-          const invalid = i % 2 ? 0 : 65536;
+          const invalid = i % 2 !== 0 ? 0 : 65536;
           expect(Exit.isFailure(yield* Effect.exit(checkedSet(text, Declarations.port, invalid, "person")))).toBe(true);
           // Raw TOML editing does not know a declaration's range or file scope.
           const raw = yield* toml.set(text, Declarations.port.segments, invalid);

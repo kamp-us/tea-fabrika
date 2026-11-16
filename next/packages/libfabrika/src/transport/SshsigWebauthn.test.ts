@@ -513,7 +513,7 @@ describe("P10 WebAuthn SSHSIG", () => {
       over: { rp?: string; origins?: ReadonlyArray<string> };
     }> = fc.oneof(
       bodyArb
-        .filter((body) => !Buffer.from(utf8(body)).equals(Buffer.from(utf8(text))))
+        .filter((body) => Buffer.from(utf8(body)).equals(Buffer.from(utf8(text))) !== true)
         .map((body) => ({ body, over: {} })),
       bodyArb.filter((rp) => rp !== policy.rp).map((rp) => ({ body: text, over: { rp } })),
       fc

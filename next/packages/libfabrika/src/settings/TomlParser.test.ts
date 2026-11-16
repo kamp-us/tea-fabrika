@@ -286,13 +286,13 @@ const arrays = (groups: ReadonlyArray<typeof Group.Type>) => {
       seen.elements++;
       const taken = fill(table, `[[${group.name}]]`, element.leaves);
 
-      if (element.sub && !taken.has(element.sub.name)) {
+      if (element.sub !== undefined && !taken.has(element.sub.name)) {
         taken.add(element.sub.name);
         fill(own(table, element.sub.name, {}), `[${group.name}.${element.sub.name}]`, element.sub.leaves);
         seen.subs++;
       }
 
-      if (element.items && !taken.has(element.items.name)) {
+      if (element.items !== undefined && !taken.has(element.items.name)) {
         const items = own(table, element.items.name, new Array<object>());
 
         for (const leaves of element.items.elements) {

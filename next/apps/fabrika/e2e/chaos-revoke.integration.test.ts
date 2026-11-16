@@ -172,7 +172,7 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
     buffered = Buffer.concat([buffered, bytes]);
   });
 
-  while (!buffered.includes("\r\n\r\n")) {
+  while (buffered.includes("\r\n\r\n") !== true) {
     yield* more;
   }
 

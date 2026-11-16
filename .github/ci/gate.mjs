@@ -112,7 +112,7 @@ export const read = async (env, io = {}) => {
   const event = env["GITHUB_EVENT_NAME"] ?? "";
   const head = env["GITHUB_SHA"] ?? "";
 
-  if (!token || !repository || workflow === undefined) {
+  if (token === undefined || token === "" || repository === undefined || repository === "" || workflow === undefined) {
     throw new Error("gate: no token, repository or workflow file");
   }
 
@@ -258,11 +258,11 @@ export const main = async (env, io = {}) => {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { code, output, summary, line } = await main(process.env);
 
-  if (output !== "" && process.env["GITHUB_OUTPUT"]) {
+  if (output !== "" && process.env["GITHUB_OUTPUT"] !== undefined && process.env["GITHUB_OUTPUT"] !== "") {
     appendFileSync(process.env["GITHUB_OUTPUT"], output);
   }
 
-  if (summary !== "" && process.env["GITHUB_STEP_SUMMARY"]) {
+  if (summary !== "" && process.env["GITHUB_STEP_SUMMARY"] !== undefined && process.env["GITHUB_STEP_SUMMARY"] !== "") {
     appendFileSync(process.env["GITHUB_STEP_SUMMARY"], summary);
   }
 

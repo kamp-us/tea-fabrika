@@ -276,7 +276,7 @@ export const lawShape: CreateRule = {
 
         for (const node of below(program)) {
           const named =
-            node.type === "FunctionDeclaration" && node.id
+            node.type === "FunctionDeclaration" && node.id !== null
               ? { name: node.id.name, fn: node }
               : node.type === "VariableDeclarator" && node.id.type === "Identifier" && isFn(node.init)
                 ? { name: node.id.name, fn: node.init }

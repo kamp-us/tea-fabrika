@@ -1275,8 +1275,8 @@ it.live(
             }
           : (() => {
               const run = runs.find((r) => path === `actions/runs/${r.id}/jobs`);
-
-              const names = !run?.full
+              const names =
+                run?.full !== true
                 ? ["gate", "tests", "report"]
                 : run.old
                   ? ["tooling (1)", "next (e2e-1)", "next (1)", "report"]
@@ -1299,8 +1299,8 @@ it.live(
       expect(await scheduled.github(env, send)!.lastGreen()).toBe(expected);
       reached.stepped += green[0] !== undefined && !green[0].full && expected !== null ? 1 : 0;
       reached.none += expected === null && green.length > 0 ? 1 : 0;
-      reached.first += green[0]?.full ? 1 : 0;
-      reached.old += green.find((r) => r.full)?.old ? 1 : 0;
+      reached.first += green[0]?.full === true ? 1 : 0;
+      reached.old += green.find((r) => r.full)?.old === true ? 1 : 0;
     }),
     options,
         ),

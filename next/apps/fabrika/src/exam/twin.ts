@@ -60,7 +60,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     const parsed = parseSync(file, body ?? text(file));
 
-    if (parsed.errors.length) {
+    if (parsed.errors.length > 0) {
       throw new Error(`unsupported-case: cannot parse ${file}`);
     }
 
@@ -95,7 +95,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
       return node.name;
     }
 
-    if (node?.type === "MemberExpression" && !node.computed) {
+    if (node?.type === "MemberExpression" && node.computed !== true) {
       const base = member(node.object);
 
       return base === null ? null : `${base}.${node.property.name}`;
@@ -129,16 +129,16 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     for (const node of ast.body) {
       if (node.type === "ExportAllDeclaration") {
-        if (node.exported && name(node.exported) === path[0]) {
+        if (node.exported !== null && name(node.exported) === path[0]) {
           const found = exported(source(file, node.source.value), path.slice(1), seen);
 
-          if (found) {
+          if (found !== null && found !== "") {
             return found;
           }
-        } else if (!node.exported) {
+        } else if (node.exported === null) {
           const found = exported(source(file, node.source.value), path, seen);
 
-          if (found) {
+          if (found !== null && found !== "") {
             return found;
           }
         }
@@ -157,13 +157,13 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
       }
 
       for (const spec of node.specifiers ?? []) {
-        if (name(spec.exported) !== path[0] || !node.source) {
+        if (name(spec.exported) !== path[0] || node.source === null) {
           continue;
         }
 
         const found = exported(source(file, node.source.value), [name(spec.local), ...path.slice(1)], seen);
 
-        if (found) {
+        if (found !== null && found !== "") {
           return found;
         }
       }
@@ -372,7 +372,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         }
       } else if (
         (node.type === "ExportAllDeclaration" || node.type === "ExportNamedDeclaration") &&
-        node.source &&
+        node.source !== null &&
         node.exportKind !== "type"
       ) {
         report(node, "unsupported-case: unfollowed stack re-export");
@@ -411,14 +411,18 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
       const first = call[0];
       const imported = first === undefined ? undefined : named.get(first);
 
-      if (first && helpers.has(first)) {
+      if (first !== undefined && first !== "" && helpers.has(first)) {
         report(node, "unsupported-case: unfollowed stack helper");
       }
 
       const parts =
-        first && cloud.has(first) ? call.slice(1) : imported !== undefined ? [imported, ...call.slice(1)] : null;
+        first !== undefined && first !== "" && cloud.has(first)
+          ? call.slice(1)
+          : imported !== undefined
+            ? [imported, ...call.slice(1)]
+            : null;
 
-      if (!parts) {
+      if (parts === null) {
         // Computed Cloudflare calls and aliased constructors must be understood before blocking.
         if (cloudImport(node.callee)) {
           checkRoot(node.callee);
@@ -432,8 +436,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
       if (["Worker", "Workers.Worker"].includes(Arr.join(parts, "."))) {
         const props = unwrap(node.arguments[1]);
-        const key = (p: Tree) => (p?.computed ? null : (p?.key?.name ?? p?.key?.value));
-
+        const key = (p: Tree) => (p?.computed === true ? null : (p?.key?.name ?? p?.key?.value));
         const literalKeys = (object: Tree): boolean => {
           if (object?.type !== "ObjectExpression") {
             report(object ?? node, "unsupported-case: class-name bindings are not a literal object");
@@ -478,7 +481,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
             }
           });
 
-          if (contracts.length !== 1 || !contracts[0]) {
+          if (contracts.length !== 1 || contracts[0] === undefined || contracts[0] === null) {
             throw new Error("missing Brain contract");
           }
 
@@ -491,13 +494,17 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
           hostName = host.value;
           const shape = contracts[0].callee?.typeArguments?.params?.[2];
 
-          if (!shape) {
+          if (shape === undefined || shape === null) {
             throw new Error("missing hosted objects");
           }
 
           const types = shape.type === "TSUnionType" ? shape.types : [shape];
           hostedNames = types.map((type: Tree) => {
-            if (type.type !== "TSTypeReference" || type.typeName?.type !== "Identifier" || type.typeArguments) {
+            if (
+              type.type !== "TSTypeReference" ||
+              type.typeName?.type !== "Identifier" ||
+              (type.typeArguments !== undefined && type.typeArguments !== null)
+            ) {
               throw new Error("unsupported host contract");
             }
 
@@ -532,7 +539,8 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
               const called = calledName === null ? [] : Str.split(calledName, ".");
               const first = called[0];
               const imported = first === undefined ? undefined : named.get(first);
-              const target = first && cloud.has(first) ? Arr.join(called.slice(1), ".") : imported;
+              const target =
+                first !== undefined && first !== "" && cloud.has(first) ? Arr.join(called.slice(1), ".") : imported;
 
               if (
                 value?.type === "CallExpression" &&
@@ -625,7 +633,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
       // spelling looks like an ordinary direct constructor or decorator call.
       if (
         (node.type === "CallExpression" || node.type === "MemberExpression") &&
-        node.optional &&
+        node.optional === true &&
         (cloudImport(node) ||
           cloudImport(node.callee) ||
           alchemy.has(root(node) ?? "") ||
@@ -636,11 +644,11 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
       for (const [key, child] of Rec.toEntries(node)) {
         // The name after a dot, and a literal object's key, are names rather than references.
-        if (node.type === "MemberExpression" && !node.computed && key === "property") {
+        if (node.type === "MemberExpression" && node.computed !== true && key === "property") {
           continue;
         }
 
-        if (node.type === "Property" && !node.computed && key === "key") {
+        if (node.type === "Property" && node.computed !== true && key === "key") {
           continue;
         }
 

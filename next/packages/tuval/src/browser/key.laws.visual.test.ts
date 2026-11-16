@@ -229,7 +229,7 @@ const failStore = (page: Page, name: string) =>
 const healStore = (page: Page) =>
   Effect.promise(() =>
     page.evaluate(() => {
-      if (globalThis.__realOpen) {
+      if (globalThis.__realOpen !== undefined) {
         indexedDB.open = globalThis.__realOpen;
       }
     }),
