@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { Match } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
@@ -93,7 +94,15 @@ const state: fc.Arbitrary<State> = fc.oneof(
 );
 
 const blockFor = (s: State): string | null =>
-  s._tag === "right" ? (s.tagged ? RIGHT_TAGGED : RIGHT) : s._tag === "missing" ? null : WRONG[s.way];
+  Match.valueTags(s, {
+    right: ({ tagged }) => (tagged ? RIGHT_TAGGED : RIGHT),
+    missing: () => null,
+    wrong: ({ way }) => WRONG[way],
+  });
+
+/** True for a block that is missing or wrong, which its export's line fires on. */
+const faulty = (s: State): boolean =>
+  Match.valueTags(s, { right: () => false, missing: () => true, wrong: () => true });
 
 /**
  * One piece of a file. `text` writes it with the block (or `null`) where its export takes one, and
@@ -181,7 +190,7 @@ describe("law 3: the rule reports exactly the exports whose block is missing or 
             const text = piece.text(n, shown);
             const at = piece.at(n, shown);
 
-            if (at !== null && s._tag !== "right") {
+            if (at !== null && faulty(s)) {
               fires.push(line + at);
             }
 

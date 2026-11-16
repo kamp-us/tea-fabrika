@@ -20,7 +20,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Option, Schema } from "effect";
+import { Match, Option, Schema } from "effect";
 import { type Argument, type Expression, parseSync, Visitor } from "oxc-parser";
 import { DRIVES, reader, type Open, type Receiver } from "./starters.ts";
 
@@ -268,25 +268,35 @@ const tree = (
 };
 
 const line = (finding: Finding): string =>
-  finding._tag === "integration_opens_nothing"
-    ? `${finding.file}: named .integration. but reaches no real thing through its code or its imports (0584). It runs on stand-ins, so name it \`.test.ts\` and it runs on every pull request; or, if it does start a real thing this check cannot see, say what in oxlint-plugins/README.md's integration-test-name section.`
-    : `advice: ${finding.file} reaches ${DRIVES[finding.opens._tag]} through ${finding.via.slice(1).join(" -> ")} (\`${finding.opens.call}\`). If the law calls it, name the file \`.integration.test.ts\` (0584).`;
+  Match.valueTags(finding, {
+    integration_opens_nothing: ({ file }) =>
+      `${file}: named .integration. but reaches no real thing through its code or its imports (0584). It runs on stand-ins, so name it \`.test.ts\` and it runs on every pull request; or, if it does start a real thing this check cannot see, say what in oxlint-plugins/README.md's integration-test-name section.`,
+    plain_opens: ({ file, opens, via }) =>
+      `advice: ${file} reaches ${DRIVES[opens._tag]} through ${via.slice(1).join(" -> ")} (\`${opens.call}\`). If the law calls it, name the file \`.integration.test.ts\` (0584).`,
+  });
 
 if (import.meta.main) {
   const root = process.argv[2] ?? join(import.meta.dirname, "..");
   const trees = SCOPE.map((scope) => tree(root, scope));
-  const unread = trees.flatMap((each) => (each._tag === "unread" ? [each.why] : []));
+  const unread = trees.flatMap((each) => Match.valueTags(each, { unread: ({ why }) => [why], read: () => [] }));
 
   if (unread.length > 0) {
     console.error(`test-kind: could not read:\n${unread.join("\n")}`);
     process.exit(2);
   }
 
-  const findings = judge(new Map(trees.flatMap((each) => (each._tag === "read" ? each.modules : []))));
-  const failed = findings.filter((each) => each._tag === "integration_opens_nothing");
+  const findings = judge(
+    new Map(trees.flatMap((each) => Match.valueTags(each, { read: ({ modules }) => modules, unread: () => [] }))),
+  );
+
+  const failed = findings.filter((each) =>
+    Match.valueTags(each, { integration_opens_nothing: () => true, plain_opens: () => false }),
+  );
 
   for (const finding of findings) {
-    (finding._tag === "plain_opens" ? console.log : console.error)(line(finding));
+    Match.valueTags(finding, { plain_opens: () => console.log, integration_opens_nothing: () => console.error })(
+      line(finding),
+    );
   }
 
   if (failed.length > 0) {

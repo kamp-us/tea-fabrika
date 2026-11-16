@@ -36,6 +36,7 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { Match } from "effect";
 import vitestPackage from "vitest/package.json" with { type: "json" };
 import { testConfig } from "../../vitest.config.ts";
 import { rowsAt } from "../../vitest.shards.ts";
@@ -139,7 +140,10 @@ export const choose = (seen: Seen, triggers: readonly string[], files: readonly 
  * words, a JSON map by leg.
  */
 export const outputs = (proof: Proof): string[] => {
-  const legs = proof._tag === "changed" ? proof.legs : {};
+  const legs: Readonly<Record<string, readonly string[]>> = Match.valueTags(proof, {
+    changed: (changed) => changed.legs,
+    full: () => ({}),
+  });
 
   return [
     `scope=${proof._tag}`,
@@ -152,17 +156,22 @@ export const outputs = (proof: Proof): string[] => {
 export const summary = (proof: Proof): string => {
   const head = `Proof run at ${proof.head.slice(0, 9)}, against origin/main at ${proof.base.slice(0, 9)} (decision 0590).`;
 
-  if (proof._tag === "full") {
-    return [
-      head,
-      "",
-      "The full set: the change touches a rerun trigger, so it runs every test, as main's full run does.",
-      "",
-      ...proof.triggers.map((path) => `- \`${path}\``),
-      "",
-    ].join("\n");
-  }
+  return Match.valueTags(proof, {
+    full: (full) =>
+      [
+        head,
+        "",
+        "The full set: the change touches a rerun trigger, so it runs every test, as main's full run does.",
+        "",
+        ...full.triggers.map((path) => `- \`${path}\``),
+        "",
+      ].join("\n"),
+    changed: (changed) => changedSummary(head, changed),
+  });
+};
 
+/** The summary of a changed set: how many files reach which legs, and each leg's files. */
+const changedSummary = (head: string, proof: Extract<Proof, { readonly _tag: "changed" }>): string => {
   const legs = Object.entries(proof.legs);
   const files = legs.reduce((sum, [, list]) => sum + list.length, 0);
 

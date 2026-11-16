@@ -8,7 +8,7 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Context, Effect, Exit, Layer, Option, Schema, Scope, Tracer } from "effect";
+import { Context, Effect, Exit, Layer, Match, Option, Schema, Scope, Tracer } from "effect";
 import { Digest } from "effect/crypto";
 import { vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
@@ -174,7 +174,11 @@ SettingsTest.suite((recipe, secret) =>
           : starts.record(wire as StartsTest.Input);
 
       const reply = yield* settingsReply(work);
-      captured[reply._tag === "ok" ? "transport" : "RPC failures"].push(reply);
+      const kept = Match.value(reply).pipe(
+        Match.tag("ok", () => "transport" as const),
+        Match.orElse(() => "RPC failures" as const),
+      );
+      captured[kept].push(reply);
 
       if (fault === "lost") {
         return yield* Effect.fail(lower);

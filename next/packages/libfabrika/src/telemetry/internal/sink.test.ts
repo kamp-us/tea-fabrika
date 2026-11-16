@@ -4,7 +4,7 @@
 // history of what was offered, what committed and what flush saw, never the machine's own table.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Arbitrary, Schema } from "effect";
+import { Arbitrary, Match, Schema } from "effect";
 import { Chain, Measurements, SpanRow } from "../Trace.ts";
 import { machine } from "./sink.ts";
 
@@ -63,7 +63,22 @@ type Draw = typeof Draw.Type;
 type Move = "commit_failed" | "committed" | "flush_checked";
 
 const spansIn = (model: Model): ReadonlyArray<Ended> =>
-  model._tag === "holding" || model._tag === "reported" ? model.spans : [];
+  Match.valueTags(model, {
+    holding: ({ spans }) => spans,
+    reported: ({ spans }) => spans,
+    clean: () => [],
+    failed: () => [],
+  });
+
+/** Each case of the Model as its own yes or no, matched, so a law reads which case it reached. */
+const inClean = (model: Model) =>
+  Match.valueTags(model, { clean: () => true, failed: () => false, holding: () => false, reported: () => false });
+
+const inFailed = (model: Model) =>
+  Match.valueTags(model, { clean: () => false, failed: () => true, holding: () => false, reported: () => false });
+
+const inReported = (model: Model) =>
+  Match.valueTags(model, { clean: () => false, failed: () => false, holding: () => false, reported: () => true });
 
 /** Moves possible from here, weighted so held spans meet blocked flushes before and after recovery,
  *  and a pending failure meets both a success and a flush. */
@@ -72,7 +87,7 @@ const movesFrom = (model: Model): ReadonlyArray<Move> => {
     return ["flush_checked", "committed", "flush_checked", "commit_failed", "committed"];
   }
 
-  if (model._tag === "failed") {
+  if (inFailed(model)) {
     return ["committed", "flush_checked", "commit_failed"];
   }
 
@@ -185,14 +200,14 @@ describe("T705, the span sink's machine", () => {
       for (const { before, msg, after, was, now } of walk(pool, draws)) {
         if (msg.type === "flush_checked") {
           const fails = was.held.length > 0 || was.unreported;
-          expect(before._tag !== "clean", "the flush fails from the case it captured").toBe(fails);
+          expect(!inClean(before), "the flush fails from the case it captured").toBe(fails);
           expect(spansIn(before).length, "the flush reports the held count").toBe(was.held.length);
         }
 
         const pending = now.held.length > 0 || now.unreported;
-        expect(after._tag === "clean", `clean after ${msg.type}`).toBe(!pending);
-        expect(after._tag === "failed", `failed after ${msg.type}`).toBe(now.held.length === 0 && now.unreported);
-        expect(after._tag === "reported", `reported after ${msg.type}`).toBe(now.held.length > 0 && !now.unreported);
+        expect(inClean(after), `clean after ${msg.type}`).toBe(!pending);
+        expect(inFailed(after), `failed after ${msg.type}`).toBe(now.held.length === 0 && now.unreported);
+        expect(inReported(after), `reported after ${msg.type}`).toBe(now.held.length > 0 && !now.unreported);
       }
     },
     props,

@@ -1,7 +1,7 @@
 // P12, next/. Real box methods, execution adapters, runner, manager, receipts and SQLite.
 import { Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer, Schema } from "effect";
+import { Cause, Effect, Exit, Layer, Match, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
@@ -249,11 +249,15 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
       const at = saved?.journal;
 
       const until =
-        at?._tag === "waiting_recovery" || at?._tag === "writing_down"
-          ? at.recovery.until
-          : at?._tag === "waiting_start" && at.timing._tag === "scheduled"
-            ? at.timing.until
-            : undefined;
+        at === undefined
+          ? undefined
+          : Match.value(at).pipe(
+              Match.tag("waiting_recovery", "writing_down", ({ recovery }) => recovery.until),
+              Match.tag("waiting_start", ({ timing }) =>
+                Match.valueTags(timing, { scheduled: (scheduled) => scheduled.until, immediate: () => undefined }),
+              ),
+              Match.orElse(() => undefined),
+            );
 
       if (until !== undefined) {
         expect(alarm).toBe(until);
@@ -393,7 +397,7 @@ it("P1: the Worker description carries the checked policy and rejects corrupt RP
             const decoded = Schema.decodeUnknownOption(Declaration)(r.described ?? raw);
             expect(decoded._tag).toBe(m.valid ? "Some" : "None");
 
-            if (decoded._tag === "Some") {
+            if (Option.isSome(decoded)) {
               checkPolicy(decoded.value, m.policy);
             }
           } else {

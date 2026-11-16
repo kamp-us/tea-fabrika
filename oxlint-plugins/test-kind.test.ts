@@ -10,6 +10,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import { Match } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import type { Tag } from "./starters.ts";
@@ -34,19 +35,15 @@ const SOURCE: Readonly<Record<Tag, string>> = {
   disk: 'import { mkdtempSync } from "node:fs";\nexport const go = () => mkdtempSync("t1073-");\n',
 };
 
-const sourceOf = (end: End): string => {
-  switch (end._tag) {
-    case "opens":
-      return SOURCE[end.tag];
-    case "needs_layer":
-      // A FileSystem service's temp folder, real only on Node's layer, which the module that runs it provides.
-      return 'import { Effect, FileSystem } from "effect";\nexport const go = Effect.gen(function* () {\n  const fs = yield* FileSystem.FileSystem;\n  return yield* fs.makeTempDirectory();\n});\n';
-    case "type_only":
-      return 'import type { spawnSync } from "node:child_process";\nexport type Go = typeof spawnSync;\n';
-    case "nothing":
-      return "export const go = () => 1;\n";
-  }
-};
+const sourceOf = (end: End): string =>
+  Match.valueTags(end, {
+    opens: ({ tag }) => SOURCE[tag],
+    // A FileSystem service's temp folder, real only on Node's layer, which the module that runs it provides.
+    needs_layer: () =>
+      'import { Effect, FileSystem } from "effect";\nexport const go = Effect.gen(function* () {\n  const fs = yield* FileSystem.FileSystem;\n  return yield* fs.makeTempDirectory();\n});\n',
+    type_only: () => 'import type { spawnSync } from "node:child_process";\nexport type Go = typeof spawnSync;\n',
+    nothing: () => "export const go = () => 1;\n",
+  });
 
 const end: fc.Arbitrary<End> = fc.oneof(
   fc
@@ -56,9 +53,11 @@ const end: fc.Arbitrary<End> = fc.oneof(
 );
 
 /** Whether a chain's end is a starter: for the integration walk, and alone, for the advice. */
-const reaches = (e: End) => e._tag === "opens" || e._tag === "needs_layer";
+const reaches = (e: End) =>
+  Match.valueTags(e, { opens: () => true, needs_layer: () => true, type_only: () => false, nothing: () => false });
 
-const alone = (e: End) => e._tag === "opens";
+const alone = (e: End) =>
+  Match.valueTags(e, { opens: () => true, needs_layer: () => false, type_only: () => false, nothing: () => false });
 
 /** An edge kind as code-graph answers it; only a type-only edge reaches nothing. */
 const edge = fc.constantFrom("static", "dynamic", "export-from", "type-only");
@@ -105,12 +104,17 @@ it("K3: in memory, an .integration. file fails exactly when no chain of value im
         const findings = judge(modules);
 
         seen.add(`${hops.length}:${last._tag}:${fails}:${advised}`);
-        expect(findings.filter((f) => f._tag === "integration_opens_nothing").map((f) => f.file)).toEqual(
-          fails ? [test] : [],
+
+        const nothing = findings.flatMap((f) =>
+          Match.valueTags(f, { integration_opens_nothing: ({ file }) => [file], plain_opens: () => [] }),
         );
-        expect(findings.filter((f) => f._tag === "plain_opens").map((f) => [f.file, f.via])).toEqual(
-          advised ? [[test, chain]] : [],
+
+        const plain = findings.flatMap((f) =>
+          Match.valueTags(f, { integration_opens_nothing: () => [], plain_opens: ({ file, via }) => [[file, via]] }),
         );
+
+        expect(nothing).toEqual(fails ? [test] : []);
+        expect(plain).toEqual(advised ? [[test, chain]] : []);
       },
     ),
     { seed: 119120, numRuns: 100 },

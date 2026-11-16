@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Match } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import * as scheduled from "./scheduled.mjs";
@@ -586,10 +587,13 @@ it("pinned: run 43723335863's report opens the issue and names both legs as time
     "issues",
   ]);
 
-  if (action._tag === "open") {
-    expect(action.body).toContain("- `next (4)` timed out: it ran into its 17-minute limit");
-    expect(action.body).toContain("- `next (e2e-1)` timed out: it ran into its 17-minute limit");
-  }
+  Match.value(action).pipe(
+    Match.tag("open", (opened) => {
+      expect(opened.body).toContain("- `next (4)` timed out: it ran into its 17-minute limit");
+      expect(opened.body).toContain("- `next (e2e-1)` timed out: it ran into its 17-minute limit");
+    }),
+    Match.orElse(() => undefined),
+  );
 
   const { LIMIT_NEXT: _next, LIMIT_TOOLING: _tooling, ...bare } = env;
 
@@ -720,9 +724,10 @@ it("property: red opens an issue or comments on the open one, green closes the o
 
         expect(action._tag).toBe(expected);
 
-        if (action._tag === "comment" || action._tag === "close") {
-          expect(action.number).toBe(open);
-        }
+        Match.value(action).pipe(
+          Match.tag("comment", "close", (written) => expect(written.number).toBe(open)),
+          Match.orElse(() => undefined),
+        );
       },
     ),
     options,
@@ -910,20 +915,23 @@ it("property: the report reads the run's jobs first, then makes exactly the call
           calls.some((c) => c.url.includes("/actions/workflows/scheduled.yaml/runs?branch=main&status=success")),
         ).toBe(result === "red");
 
-        if (action._tag === "open" || action._tag === "comment") {
-          for (const test of failed.slice(0, scheduled.SHOWN)) {
-            expect(action.body).toContain(test);
-          }
+        Match.value(action).pipe(
+          Match.tag("open", "comment", ({ body }) => {
+            for (const test of failed.slice(0, scheduled.SHOWN)) {
+              expect(body).toContain(test);
+            }
 
-          // Each leg that made it red is named in the issue.
-          for (const cause of scheduled.causes(jobs, LIMITS)) {
-            expect(action.body).toContain(`- \`${cause.leg}\` `);
-          }
+            // Each leg that made it red is named in the issue.
+            for (const cause of scheduled.causes(jobs, LIMITS)) {
+              expect(body).toContain(`- \`${cause.leg}\` `);
+            }
 
-          if (last !== null && last !== env.GITHUB_SHA) {
-            expect(action.body).toContain(`/compare/${last}...${env.GITHUB_SHA}`);
-          }
-        }
+            if (last !== null && last !== env.GITHUB_SHA) {
+              expect(body).toContain(`/compare/${last}...${env.GITHUB_SHA}`);
+            }
+          }),
+          Match.orElse(() => undefined),
+        );
       },
     ),
     options,
@@ -945,9 +953,12 @@ it("pinned: run 43673342835's report opens the issue, naming its failing test, a
       "issues",
     ]);
 
-    if (action._tag === "open") {
-      expect(action.body.includes("ProgramMailReads.integration.test.ts")).toBe(reports.length > 0);
-    }
+    Match.value(action).pipe(
+      Match.tag("open", ({ body }) =>
+        expect(body.includes("ProgramMailReads.integration.test.ts")).toBe(reports.length > 0),
+      ),
+      Match.orElse(() => undefined),
+    );
   }
 });
 

@@ -794,7 +794,7 @@ it.effect.prop(
           const sampled = yield* sample(answerCases[category], walk.seed + i * 3 + 1);
 
           const answer =
-            category === "parked_full" && sampled._tag === "parked"
+            category === "parked_full" && Answer.isAnyOf(["parked"])(sampled)
               ? { ...sampled, stream: sampled.stream.padEnd(FULL, "s") }
               : sampled;
 
@@ -802,7 +802,11 @@ it.effect.prop(
           w.answer(answer);
           const replies = w.frames.length;
           const before = w.calls.length;
-          const wait = answer._tag === "parked" ? { id: request.id, stream: answer.stream, after: answer.after } : null;
+          const wait = Answer.match(answer, {
+            parked: ({ stream, after }) => ({ id: request.id, stream, after }),
+            ok: () => null,
+            refused: () => null,
+          });
           const keeps = wait !== null && fits(wait);
           yield* service.message(w.socket, JSON.stringify(request));
 
@@ -836,15 +840,14 @@ it.effect.prop(
             expect(w.frames).toHaveLength(replies + 1);
             const reply = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!);
             expect(reply).toMatchObject(
-              answer._tag === "ok"
-                ? { id: request.id, result: answer.result }
-                : {
-                    id: request.id,
-                    error: { data: { reason: answer._tag === "parked" ? "too_many_waits" : answer.reason } },
-                  },
+              Answer.match(answer, {
+                ok: ({ result }) => ({ id: request.id, result }),
+                parked: () => ({ id: request.id, error: { data: { reason: "too_many_waits" } } }),
+                refused: ({ reason }) => ({ id: request.id, error: { data: { reason } } }),
+              }),
             );
 
-            if (answer._tag === "parked") {
+            if (Answer.isAnyOf(["parked"])(answer)) {
               reached.add("too_many_waits");
             }
           }

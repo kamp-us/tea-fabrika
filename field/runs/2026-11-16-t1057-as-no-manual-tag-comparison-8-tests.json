@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1057-as-no-manual-tag-comparison-8-tests",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-16T00:47:20-08:00",
+  "ended": "2026-11-16T01:12:15-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for anti-slop judgment slice AS-no-manual-tag-comparison-8 (rule anti-slop-effect/no-manual-tag-comparison, decision 0567), in next/ and our tooling, on branch fabrikalfa/antislop-no-manual-tag-comparison-8 at eeb8ecdbb, which holds pull request 1366. With the rule forced to error in a scratch config outside the repo, the five folders held 182 hits: .github/ci 38, oxlint-plugins 24, next/packages/tuval 25, libfabrika cloudflare 65, libfabrika telemetry 30. Split by exam-paths.json: .github/** and oxlint-plugins/** are exam paths whole, so all 62 tooling hits are this step's, test or not; in next/ the 40 hits in test files are exam paths and 80 hits in other files are product. 93 exam hits fixed by hand edits, plus small throwaway codemods kept in the scratchpad for repeated forms (field-check.test.ts 13 lines, Sink.integration.test.ts 6 lines, and exact-string renames in words.test.ts and spoken.test.ts). Forms used, by 0567's order: the union's own isAnyOf and match where a Schema.TaggedUnion is in reach (Finding, Written, Chain, Content, Answer, Start.Reply, WindowModel's reach and status messages, Link), Option.isSome and Option.exists for Option, Match.valueTags or Match.value with Match.tag and Match.orElse for plain TypeScript unions (Section, Proof, End, Role, Receiver, the local Result, the scheduled report's Action, the supervisor's journal, the sink machine's Model reached through machine.model), and Predicate.isTagged only on the two field rows whose type is Record<string, unknown> (field-schema.ts findingRow and findingOrRating). No assertion was deleted or narrowed, no disable line, no lock line and no .oxlintrc.json change. 9 exam hits left, unclear: .github/ci/scheduled.mjs:366, :370, :636, :639, :641, :697 and .github/ci/gate.mjs:255 run on bare Node before pnpm install (decision 0565's amendment of 2026-11-15), so they cannot import Match, and 0563 names no disable line for that case; oxlint-plugins/effect-jsdocs.ts:200 and :204 are Effect's own jsdocs grammar copied at effect@4.1.2 with a closed list of changes, so a rewrite there changes the copy, which needs a ruling. 80 product hits left for the build, none in a file that waits on 1366.",
+  "plants": [
+    {
+      "law": "parallel.test.ts: keeps a part's output when a signal kills it, and names the signal and 128 + n",
+      "plant": "oxlint-plugins/parallel.ts passed() answered true for a killed part, then restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "internal/sink.test.ts: every failure is reported by a flush, held spans block every flush, and a commit keeps an unreported failure",
+      "plant": "internal/sink.ts committed from holding went to clean instead of failed, then restored by copy",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "No new law: the slice rewrites existing laws' checks, so the two plants only prove two rewritten laws still fail. Ran in a cloud box at the working tree on eeb8ecdbb: pnpm format (exit 0), NODE_OPTIONS=--max-old-space-size=6144 pnpm lint (exit 0), the ratchet against origin/main (exit 0), tsc on .github/ci, oxlint-plugins, next/packages/tuval and next/packages/libfabrika (0 errors), effect-tsgo diagnostics on the same (no new diagnostic on a touched line), and one vitest file at a time: field-check, proof, scheduled, time-table and workflow-lint/scheduled tests; jsdocs, test-kind, integration-test-name and parallel tests; ObjectService, SettingsStarts, connection, entry-flows.laws, internal/sink, spoken and words tests; and the three integration files Records, Sink and supervision.laws. All passed. Adding an effect import to field-check.ts made fabrika/no-raw-try-catch fire on its two try blocks, so the row check moved to field-schema.ts's findingRow instead. Product hits by file, for the build: libfabrika cloudflare runtime.ts 27, connection.ts 11, SettingsStartsRemote.ts 5, mail.ts 2, box.ts 2, SettingsStartsLedger.ts 2, record.ts 1, quotas.ts 1, WatcherManagerRemote.ts 1; telemetry Sink.ts 7, internal/sink.ts 6; tuval window/main.tsx 11, window/words.ts 2, window/spoken.ts 1, browser/key.ts 1. The rule also misses optional-chain comparisons such as role?._tag in oxlint-plugins/starters.ts:177, :215 and :217, which this slice leaves as they are.",
+  "step": "tests"
+}

@@ -46,6 +46,7 @@
 // whether an example compiles, and a name sent on under a new binding (`const b = a; export { b }`),
 // which is asked for its block at `b`.
 import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
+import { Match } from "effect";
 import {
   buildTags,
   type DocScope,
@@ -64,6 +65,10 @@ type Comment = ESTree.Comment;
 
 /** What became of one export: its block holds `@internal`, it was reported, or it passed. */
 type Verdict = "internal" | "reported" | "passed";
+
+/** What Effect's tag grammar found wrong in a block's tags, none when they parsed. */
+const tagDiagnostics = (tags: ReturnType<typeof buildTags>): ReadonlyArray<JSDocDiagnostic> =>
+  Match.valueTags(tags, { Failure: ({ error }) => error.diagnostics, Success: () => [] });
 
 /** A doc block, the text oxlint gives as its value plus the two ends Effect's grammar reads. */
 const raw = (comment: Comment): string => `/*${comment.value}*/`;
@@ -92,9 +97,7 @@ const judge = (block: JSDocBlock, scope: DocScope, since: Since): ReadonlyArray<
   if (block.parsed !== undefined) {
     const tags = buildTags(scope, block.parsed.tags);
 
-    if (tags._tag === "Failure") {
-      found.push(...tags.error.diagnostics);
-    }
+    found.push(...tagDiagnostics(tags));
   }
 
   return withSince(found, block, since);
@@ -491,10 +494,7 @@ export const jsdocs: CreateRule = {
 
       const tags = buildTags("module", loose.tags);
 
-      const found = [
-        ...(tags._tag === "Failure" ? tags.error.diagnostics : []),
-        ...parseModuleExamples(loose).diagnostics,
-      ];
+      const found = [...tagDiagnostics(tags), ...parseModuleExamples(loose).diagnostics];
 
       const problems = withSince(found, loose, since);
 

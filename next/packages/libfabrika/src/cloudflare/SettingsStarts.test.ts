@@ -1,7 +1,7 @@
 // T753, next/. The caller owns the SQLite driver; settings/StartsTest owns the shared laws.
 import { DatabaseSync } from "node:sqlite"; // edge: the ledger's synchronous Sql driver needs node:sqlite
 import { describe, expect } from "@effect/vitest";
-import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Match, Option, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -261,7 +261,7 @@ StartsTest.law(
           const reply = yield* Schema.decodeUnknownEffect(Start.Reply)(raw);
           expect(reply._tag).toBe("ok");
 
-          if (reply._tag === "ok") {
+          if (Start.Reply.isAnyOf(["ok"])(reply)) {
             expect(reply.value).toMatchObject({
               start: current.start,
               settings: current.settings,
@@ -369,13 +369,13 @@ StartsTest.law(
         expect(error).toBeInstanceOf(StartsError);
         expect(error.reason._tag).toBe(reject ? "Unreachable" : "Decode");
 
-        if (error.reason._tag === "Unreachable") {
-          expect(error.reason.cause).toBe(lower);
-        }
-
-        if (error.reason._tag === "Decode") {
-          expect(Schema.isSchemaError(error.reason.cause)).toBe(true);
-        }
+        Match.valueTags(error.reason, {
+          Unreachable: ({ cause }) => expect(cause).toBe(lower),
+          Decode: ({ cause }) => expect(Schema.isSchemaError(cause)).toBe(true),
+          Missing: () => undefined,
+          Refused: () => undefined,
+          Storage: () => undefined,
+        });
 
         expect(calls - before).toBe(1);
       }

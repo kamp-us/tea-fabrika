@@ -22,6 +22,10 @@ const Tiles = WindowModel.fields.tiles.check(Schema.isMinLength(1), Schema.isMax
 
 const Said = WindowModel.fields.said;
 
+const Message = Said.fields.messages.value;
+
+const Reach = WindowModel.fields.tiles.value.fields.reach;
+
 const Pick = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 /**
@@ -62,7 +66,7 @@ describe("the polite region says the current burst as one line", () => {
     ({ tiles, said, pick }) => {
       const p = page(tiles, said, pick);
       const words = spoken(p.m, lookup(p), () => null);
-      const ends = new Set(p.m.said.messages.filter((x) => x._tag === "ended").map((x) => x.tile));
+      const ends = new Set(p.m.said.messages.filter(Message.isAnyOf(["ended"])).map((x) => x.tile));
 
       for (const t of p.desk.filter((t) => !ends.has(t.id))) {
         expect(words.includes(endLine(t)), `${endLine(t)} was said, and no end of it is in the burst`).toBe(false);
@@ -85,15 +89,18 @@ describe("the polite region says the current burst as one line", () => {
       for (const [x, part] of p.m.said.messages.map((x, i) => [x, parts[i]!] as const)) {
         const tile = lookup(p)(x.tile)!;
 
-        if (x._tag === "ended") {
-          expect(part, "an end is said in the tile guideline's words").toBe(endLine(tile));
-          expect(part.includes(x.reason._tag) || part.includes("("), "an end says no exit reason").toBe(false);
-        } else {
-          expect(
-            part !== "" && !part.includes(` in t${tile.n} `),
-            "a refusal's words are the frame's, with no tile name",
-          ).toBe(true);
-        }
+        Message.match(x, {
+          ended: ({ reason }) => {
+            expect(part, "an end is said in the tile guideline's words").toBe(endLine(tile));
+            expect(part.includes(reason._tag) || part.includes("("), "an end says no exit reason").toBe(false);
+          },
+          refused: () => {
+            expect(
+              part !== "" && !part.includes(` in t${tile.n} `),
+              "a refusal's words are the frame's, with no tile name",
+            ).toBe(true);
+          },
+        });
       }
 
       return true;
@@ -106,13 +113,13 @@ describe("the polite region says the current burst as one line", () => {
     { list: Arbitrary.array(Arbitrary.schema(Schema.Tuple([Tiles, Said, Pick])), { minLength: 30, maxLength: 30 }) },
     ({ list }) => {
       const pages = list.map(([tiles, said, pick]) => page(tiles, said, pick));
-      const ends = pages.flatMap((p) => p.m.said.messages.filter((x) => x._tag === "ended"));
+      const ends = pages.flatMap((p) => p.m.said.messages.filter(Message.isAnyOf(["ended"])));
       expect(pages.some((p) => p.m.said.messages.length >= 2)).toBe(true);
       expect(new Set(ends.map((x) => x.reason._tag)).size, "ends of more than one reason").toBeGreaterThan(1);
       expect(pages.some((p) => p.desk.some((t) => t.n >= 10))).toBe(true);
       expect(
         pages.some((p) =>
-          p.m.tiles.some((t) => t.reach._tag === "ended" && !p.m.said.messages.some((x) => x.tile === t.id)),
+          p.m.tiles.some((t) => Reach.isAnyOf(["ended"])(t.reach) && !p.m.said.messages.some((x) => x.tile === t.id)),
         ),
       ).toBe(true);
 

@@ -3,7 +3,7 @@
 // A finding row's core is decision 0035's own: its keys, the closed `rule` list and its proof.
 // Decision 0090: a new row is its own file, field/<log>/<date>-<slug>.json; the old .jsonl files
 // are history. Both hold the same rows, so one schema reads both.
-import { Schema } from "effect";
+import { Predicate, Schema } from "effect";
 
 const Log = Schema.Literals(["notes", "runs", "findings"]);
 
@@ -143,6 +143,16 @@ const words: Record<string, readonly string[]> = {
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+/**
+ * A findings row that is a finding, not a rating, read from its own `_tag`. A plain yes or no, so
+ * the row keeps its record type for the checks after it.
+ */
+export const findingRow = (value: Record<string, unknown>): boolean => Predicate.isTagged(value, "finding");
+
+/** A findings row is a finding or a rating, read from its own `_tag`. */
+const findingOrRating = (value: Record<string, unknown>): boolean =>
+  findingRow(value) || Predicate.isTagged(value, "rated");
+
 /** Never put a value or a decoder's input-bearing error into a finding. */
 export const checkRow = (file: string, line: number, value: unknown): Finding[] => {
   const error = (field: string, reason: string) => Finding.cases.error.make({ file, line, field, reason });
@@ -157,12 +167,12 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
   // A row file's own id is checked against its name in field-check.ts; a counter's shape is old.
   const folder = inFolder(file);
 
-  if (found && value["_tag"] !== "finding" && value["_tag"] !== "rated") {
+  if (found && !findingOrRating(value)) {
     return [error("_tag", "expected finding or rated")];
   }
 
   const schema =
-    log === "notes" ? Note : log === "runs" ? Run : found ? (value["_tag"] === "rated" ? Rated : Found) : null;
+    log === "notes" ? Note : log === "runs" ? Run : found ? (Predicate.isTagged(value, "rated") ? Rated : Found) : null;
 
   if (schema === null) {
     return [warning("row", "no detailed schema for this file")];

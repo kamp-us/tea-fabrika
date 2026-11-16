@@ -36,13 +36,20 @@ import type { Sql } from "../Sql.ts";
 import { Archive, type BucketCalls } from "./Archive.ts";
 import { RecordManager } from "./Records.ts";
 import { SinkError, SpanSink } from "./Sink.ts";
-import { type Chain, type SpanRow } from "./Trace.ts";
+import { type Chain, Content, type SpanRow } from "./Trace.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
 type ChainValue = Chain;
 
 type Row = SpanRow;
+
+/** A failed span's kept text, or `""` when there is none or it was deleted. */
+const keptMessage = (content: Option.Option<Content>): string =>
+  Option.match(content, {
+    onNone: () => "",
+    onSome: (found) => Content.match(found, { kept: ({ message }) => message, deleted: () => "" }),
+  });
 
 /** A folder of its own, and every file opened in it. The sink asks for a part's file with a plain
  *  call, so each file is opened into the scope that asked for the folder: that scope closes each
@@ -922,8 +929,8 @@ const storedStack = Effect.fnUntraced(function* (
     expect(rows.filter((row) => row.name === "sink.frames")).toHaveLength(1);
     const row = rows.find((row) => row.name === "sink.frames");
     const content = yield* RecordManager.use((records) => records.content(spans, row?.spanId ?? ""));
-    expect(Option.isSome(content) && content.value._tag === "kept").toBe(true);
-    const message = Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "";
+    expect(Option.exists(content, Content.isAnyOf(["kept"]))).toBe(true);
+    const message = keptMessage(content);
 
     return { pretty, message };
   }).pipe(Effect.provide(world(sql)));
@@ -1259,7 +1266,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
           }
 
           const content = yield* RecordManager.use((records) => records.content(job(P1), failed?.spanId ?? ""));
-          expect(Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "").toContain(NOTE);
+          expect(keptMessage(content)).toContain(NOTE);
 
           // Two weeks on, the day's raw rows go to R2: they hold the class, never the message.
           yield* TestClock.setTime(day + 15 * 24 * 3_600_000);
@@ -1433,7 +1440,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
         yield* flush;
         const [row] = yield* recorded(job(P1));
         const content = yield* RecordManager.use((records) => records.content(job(P1), row?.spanId ?? ""));
-        const message = Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "";
+        const message = keptMessage(content);
         const tail = /\n\[cut: (\d+) characters\]$/.exec(message);
         expect(tail, "the cut text ends with its full length").not.toBeNull();
         const full = Number(tail?.[1]);
@@ -1463,7 +1470,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
               yield* flush;
               const [row] = yield* recorded(job(P1));
               const content = yield* RecordManager.use((records) => records.content(job(P1), row?.spanId ?? ""));
-              const message = Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "";
+              const message = keptMessage(content);
               expect(message).toContain(`${outer}: ${tag}`);
               expect(message).not.toContain(NOTE);
               expect(message).not.toContain(NOTE_TWO);
@@ -1699,7 +1706,7 @@ describe("A-Sink S3, a typed failure through nested Effect.fn spans stores no ma
 
           for (const row of rows) {
             const content = yield* RecordManager.use((records) => records.content(spans, row.spanId));
-            const message = Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "";
+            const message = keptMessage(content);
             expect(message.includes(sample.tag) && message.includes(sample.reason), "tag and reason are kept").toBe(
               true,
             );

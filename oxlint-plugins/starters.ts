@@ -23,6 +23,7 @@
 // that do not assign to each other, so each has a small adapter that reads the facts out. This file
 // holds oxlint's (`visitor`); test-kind.ts holds oxc-parser's.
 import type { ESTree, Visitor } from "@oxlint/plugins";
+import { Match } from "effect";
 import { dotted } from "./match.ts";
 
 /** The real things 0584 names, by what a call opens. */
@@ -164,11 +165,14 @@ export const reader = <N>() => {
   const bind = (written: string, role: Role) => {
     bound.set(written, role);
 
-    if (role._tag === "layer") {
-      for (const layer of role.gives) {
-        provided.add(layer);
-      }
-    }
+    Match.value(role).pipe(
+      Match.tag("layer", ({ gives }) => {
+        for (const layer of gives) {
+          provided.add(layer);
+        }
+      }),
+      Match.orElse(() => undefined),
+    );
   };
 
   const service = (written: string): Layer | null => {
@@ -223,14 +227,28 @@ export const reader = <N>() => {
     calls: (node: N, written: string | null, method: string | null, on: Receiver | null, first: string | null) => {
       const role = written === null ? undefined : bound.get(written);
       const shown = `${written ?? `….${method}`}(…)`;
-      const needs = on === null ? null : on._tag === "yield" ? service(on.written) : (served.get(on.written) ?? null);
+
+      const needs =
+        on === null
+          ? null
+          : Match.valueTags(on, {
+              yield: ({ written }) => service(written),
+              name: ({ written }) => served.get(written) ?? null,
+            });
 
       if (role !== undefined) {
-        if (role._tag === "call") {
-          open(node, shown, opened(role.tag, first), role.needs);
-        } else if (role._tag === "sqlite" && first !== ":memory:") {
-          open(node, shown, "disk");
-        }
+        Match.valueTags(role, {
+          call: (called) => {
+            open(node, shown, opened(called.tag, first), called.needs);
+          },
+          sqlite: () => {
+            if (first !== ":memory:") {
+              open(node, shown, "disk");
+            }
+          },
+          layer: () => undefined,
+          service: () => undefined,
+        });
       } else if (written === "process.kill") {
         open(node, shown, "signal");
       } else if (written === "fetch" && remote(first)) {

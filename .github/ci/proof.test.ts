@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Match } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -174,7 +175,9 @@ it("property: the outputs give the changed job its legs and each leg its files a
       const words: Record<string, string> = JSON.parse(lists!.slice("files=".length));
       expect(parsed).toEqual(Object.keys(words));
       expect(parsed.flatMap((leg) => words[leg]!.split(" ")).toSorted()).toEqual([...files].toSorted());
-      expect(proof._tag === "changed" && Object.keys(proof.seconds)).toEqual(parsed);
+      expect(Match.valueTags(proof, { changed: (changed) => Object.keys(changed.seconds), full: () => false })).toEqual(
+        parsed,
+      );
     }),
     options,
   );

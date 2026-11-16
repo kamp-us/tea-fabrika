@@ -20,7 +20,7 @@ describe("an ended tile shows one word where its view was", () => {
     { reach: Arbitrary.schema(Reach), link: Arbitrary.schema(Link), drawn: Arbitrary.schema(Schema.Boolean) },
     ({ reach, link, drawn }) => {
       const word = bodyWord(reach, drawn);
-      const ended = reach._tag === "ended";
+      const ended = Reach.isAnyOf(["ended"])(reach);
 
       expect(!ended || word !== null, "an ended tile drew its last view").toBe(true);
       expect(
@@ -31,10 +31,12 @@ describe("an ended tile shows one word where its view was", () => {
         true,
       );
       expect(
-        reach._tag !== "ended" || link._tag !== "online" || stateWord(link, reach).includes(reach.reason._tag),
+        !Reach.isAnyOf(["ended"])(reach) ||
+          !Link.isAnyOf(["online"])(link) ||
+          stateWord(link, reach).includes(reach.reason._tag),
         "the online state slot of an ended tile names the reason",
       ).toBe(true);
-      expect(reach._tag !== "open" || !drawn || word === null, "an open tile's view was hidden").toBe(true);
+      expect(!Reach.isAnyOf(["open"])(reach) || !drawn || word === null, "an open tile's view was hidden").toBe(true);
       expect(drawn || word !== null, "a tile with no view to draw left its body blank").toBe(true);
 
       return true;
@@ -51,8 +53,8 @@ describe("an ended tile shows one word where its view was", () => {
       }),
     },
     ({ list }) => {
-      expect(list.some(([reach, drawn]) => reach._tag === "ended" && drawn)).toBe(true);
-      expect(list.some(([reach, drawn]) => reach._tag === "ended" && !drawn)).toBe(true);
+      expect(list.some(([reach, drawn]) => Reach.isAnyOf(["ended"])(reach) && drawn)).toBe(true);
+      expect(list.some(([reach, drawn]) => Reach.isAnyOf(["ended"])(reach) && !drawn)).toBe(true);
 
       return true;
     },

@@ -1,5 +1,5 @@
 import { relative, resolve } from "node:path";
-import { type Duration, Effect } from "effect";
+import { type Duration, Effect, Match } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import {
@@ -10,6 +10,7 @@ import {
   markdown,
   readFiles,
   readSteps,
+  type Section,
   SLOWEST,
   STEP,
   type Step,
@@ -24,6 +25,10 @@ import {
 const options = { seed: 119120, numRuns: 100 };
 
 const root = resolve("time-table-fixture");
+
+/** True when a section could not be read. */
+const unread = <A>(section: Section<A>): boolean =>
+  Match.valueTags(section, { read: () => false, unavailable: () => true });
 
 // A jobs API answer read while the time table step runs: the steps before it ended, the upload and
 // the stop step not started.
@@ -270,8 +275,8 @@ it("TT4: any input that is not a job or not a report gives an unavailable sectio
     fc.property(broken, broken, (steps, files) => {
       const isJob = Array.isArray((steps as { steps?: unknown } | null)?.steps);
       const isReport = Array.isArray((files as { testResults?: unknown } | null)?.testResults);
-      fc.pre(!isJob || readSteps(steps)._tag === "unavailable");
-      fc.pre(!isReport || readFiles(files, root)._tag === "unavailable");
+      fc.pre(!isJob || unread(readSteps(steps)));
+      fc.pre(!isReport || unread(readFiles(files, root)));
       const read = readSteps(job);
 
       const timings: Timings = {

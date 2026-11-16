@@ -16,7 +16,7 @@
 // (`.oxfmtrc.json`).
 import { constants } from "node:os";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Duration, Effect, Fiber, Result, Schema, Stdio, Stream } from "effect";
+import { Console, Duration, Effect, Fiber, Match, Result, Schema, Stdio, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** A piece of a part's output, and the stream it went to. */
@@ -45,7 +45,13 @@ class Failed extends Schema.TaggedError<Failed, { readonly brand: unique symbol 
   parts: Schema.Array(Schema.String),
 }) {}
 
-const passed = (end: End) => end._tag === "exited" && end.code === 0;
+const passed = (end: End) =>
+  Match.valueTags(end, {
+    exited: ({ code }) => code === 0,
+    killed: () => false,
+    unstarted: () => false,
+    unread: () => false,
+  });
 
 /** A shell's exit code over 128 is 128 + the number of the signal that killed what it ran. */
 const ended = (code: number): End => {
@@ -55,18 +61,13 @@ const ended = (code: number): End => {
 };
 
 /** How a part ended, in the words its header and the summary print. */
-const said = (end: End): string => {
-  switch (end._tag) {
-    case "exited":
-      return end.code === 0 ? "passed" : `failed, exit ${end.code}`;
-    case "killed":
-      return `failed, killed by ${end.signal}, exit ${end.code}`;
-    case "unstarted":
-      return `could not start: ${end.reason}`;
-    case "unread":
-      return `failed, no exit code: ${end.reason}`;
-  }
-};
+const said = (end: End): string =>
+  Match.valueTags(end, {
+    exited: ({ code }) => (code === 0 ? "passed" : `failed, exit ${code}`),
+    killed: ({ signal, code }) => `failed, killed by ${signal}, exit ${code}`,
+    unstarted: ({ reason }) => `could not start: ${reason}`,
+    unread: ({ reason }) => `failed, no exit code: ${reason}`,
+  });
 
 // `sh -c` runs a part's last command in its own place, so a signal that kills that command kills
 // the very process this file waits on, and Node then gives no exit code at all. So an outer shell

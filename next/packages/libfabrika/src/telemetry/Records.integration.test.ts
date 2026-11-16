@@ -32,9 +32,9 @@ import { TestClock } from "effect/testing";
 import { processId } from "../Id.test-support.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { Sql } from "../Sql.ts";
-import { RecordManager, type RecordCalls } from "./Records.ts";
+import { RecordManager, type RecordCalls, Written } from "./Records.ts";
 import { SinkError } from "./Sink.ts";
-import { type Chain, SpanRow } from "./Trace.ts";
+import { Chain, SpanRow } from "./Trace.ts";
 
 type ChainValue = Chain;
 
@@ -140,14 +140,17 @@ const send = (chain: ChainValue, from: number, rows: ReadonlyArray<{ span: Row; 
     for (let hops = 0; hops < 64; hops++) {
       const answer = yield* records.write(chain, at, left);
 
-      if (answer._tag === "written") {
+      if (Written.isAnyOf(["written"])(answer)) {
         return at;
       }
 
       const had = new Set(answer.had);
       left = left.filter((r) => !had.has(r.span.spanId));
       at += 1;
-      expect(answer.next).toBe(chain._tag === "job" ? `job/${chain.process}/${at}` : `spans/${at}`);
+      const part = at;
+      expect(answer.next).toBe(
+        Chain.match(chain, { job: ({ process }) => `job/${process}/${part}`, spans: () => `spans/${part}` }),
+      );
     }
 
     return yield* Effect.die(new Error("more than 64 rolls for one batch"));
@@ -216,7 +219,7 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
         let n = 0;
         let answer = yield* records.write(job, 0, [kept(row(id(n++), FILL))]);
 
-        while (answer._tag === "written" && n < 200) {
+        while (Written.isAnyOf(["written"])(answer) && n < 200) {
           answer = yield* records.write(job, 0, [kept(row(id(n++), FILL))]);
         }
 
@@ -261,7 +264,7 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
           const answer = yield* records.write(job, 0, again);
           expect(answer._tag).toBe("rolled");
 
-          if (answer._tag === "rolled") {
+          if (Written.isAnyOf(["rolled"])(answer)) {
             expect([...answer.had].sort()).toEqual(
               first
                 .slice(30)

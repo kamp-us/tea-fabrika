@@ -26,7 +26,7 @@ import { makeRequestEffect } from "@alchemy.run/cloudflare/Workers/HttpServer";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { describe, expect } from "@effect/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Context, Effect, Layer, Option, type Scope, Struct } from "effect";
+import { Context, Effect, Layer, Match, Option, type Scope, Struct } from "effect";
 import { HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -112,21 +112,20 @@ const damage = fc.oneof(
 const damaged = (
   good: Readonly<Record<string, unknown>>,
   recipe: typeof damage extends fc.Arbitrary<infer A> ? A : never,
-) => {
-  if (recipe._tag === "broken") {
-    // A proper prefix of a JSON object is never JSON: its closing brace is gone.
-    const text = JSON.stringify(good);
-    return text.slice(0, 1 + Math.floor(recipe.at * (text.length - 2)));
-  }
-
-  if (recipe._tag === "missing") {
-    const keys = Object.keys(good);
-    const { [keys[recipe.pick % keys.length]!]: _dropped, ...rest } = good;
-    return JSON.stringify(rest);
-  }
-
-  return JSON.stringify({ ...good, [`x-${recipe.key}`]: recipe.value });
-};
+) =>
+  Match.valueTags(recipe, {
+    broken: ({ at }) => {
+      // A proper prefix of a JSON object is never JSON: its closing brace is gone.
+      const text = JSON.stringify(good);
+      return text.slice(0, 1 + Math.floor(at * (text.length - 2)));
+    },
+    missing: ({ pick }) => {
+      const keys = Object.keys(good);
+      const { [keys[pick % keys.length]!]: _dropped, ...rest } = good;
+      return JSON.stringify(rest);
+    },
+    extra: ({ key, value }) => JSON.stringify({ ...good, [`x-${key}`]: value }),
+  });
 
 /** What Alchemy's `make` is handed for the Process object: the Layer's outer Effect, which answers
  *  the instance's slots and calls. */

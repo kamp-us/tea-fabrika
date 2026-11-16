@@ -9,7 +9,7 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Duration, Effect, Result, Schedule, Schema } from "effect";
+import { type Duration, Effect, Match, Result, Schedule, Schema } from "effect";
 
 /** The step's name in every test leg; it times the steps before it. workflow-lint.ts holds both. */
 export const STEP = "time table";
@@ -130,15 +130,15 @@ export const readFiles = (input: unknown, root: string): Section<TestFile> => {
  * True once every step before this one shows an end. GitHub writes a step's end a moment after it
  * ends, so a table read at once can miss the step just before.
  */
-export const settled = (steps: Section<Step>): boolean => {
-  if (steps._tag === "unavailable") {
-    return false;
-  }
+export const settled = (steps: Section<Step>): boolean =>
+  Match.valueTags(steps, {
+    unavailable: () => false,
+    read: ({ rows }) => {
+      const self = rows.findIndex((step) => step.name === STEP);
 
-  const self = steps.rows.findIndex((step) => step.name === STEP);
-
-  return self >= 0 && steps.rows.slice(0, self).every((step) => step.start === null || step.end !== null);
-};
+      return self >= 0 && rows.slice(0, self).every((step) => step.start === null || step.end !== null);
+    },
+  });
 
 /** The artifact's file name, beside the leg's report: `timings-<job>-<leg>.json`. */
 export const fileName = (leg: Pick<Leg, "job" | "leg">): string => `timings-${leg.job}-${leg.leg}.json`;
@@ -156,7 +156,10 @@ const table = (header: readonly string[], right: readonly number[], rows: readon
   ].join("\n");
 
 const section = <A>(title: string, read: Section<A>, render: (rows: readonly A[]) => string) =>
-  `### ${title}\n\n${read._tag === "read" ? render(read.rows) : `Unavailable: ${cell(read.reason)}`}`;
+  `### ${title}\n\n${Match.valueTags(read, {
+    read: ({ rows }) => render(rows),
+    unavailable: ({ reason }) => `Unavailable: ${cell(reason)}`,
+  })}`;
 
 const stepTable = (rows: readonly Step[]) =>
   table(
