@@ -16,9 +16,10 @@ import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Str
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
+import { TestConsole } from "effect/testing";
 import * as fc from "fast-check";
 import { chromium, type Page } from "playwright";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   APP,
   cli,
@@ -260,7 +261,10 @@ const edited = (source: string, k: number, more: (s: string) => string = (s) => 
   more(source.replace("inc: (s) => [{ count: s.count + 1 }, []]", `inc: (s) => [{ count: s.count + ${k} }, []]`));
 
 describe("P15 slice 1: hot reload on the real instance", () => {
-  // L17: the real build's warning printer, including importers outside the project root.
+  // L17: the real build's warning printer, including importers outside the project root. The build
+  // prints through Effect's Console, so each case reads its own lines from its own TestConsole
+  // (ticket 1067, L2). Plant: print `log.message` before bundle.ts's relative replacement, or drop
+  // the case's `Effect.provide(TestConsole.layer)`: red.
   it("L17: build warnings keep unresolved imports visible without absolute paths for generated roots", async () => {
     await fc.assert(
       fc.asyncProperty(
@@ -286,10 +290,6 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                 `import ${JSON.stringify(specifiers[0])}; import "../dependency/imported.ts";\n`,
               );
               yield* fs.writeFileString(imported, `import ${JSON.stringify(specifiers[1])};\n`);
-              const warnings = yield* Effect.acquireRelease(
-                Effect.sync(() => vi.spyOn(console, "warn").mockImplementation(() => {})),
-                (spy) => Effect.sync(() => spy.mockRestore()),
-              );
               yield* build({
                 root,
                 entry,
@@ -299,7 +299,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                 ledger: [],
                 chaos: false,
               });
-              const printed = warnings.mock.calls.map((args) => args.map(String).join(" ")).join("\n");
+              const printed = (yield* TestConsole.warnLines).map(String).join("\n");
 
               for (const specifier of specifiers) {
                 expect(printed.includes(specifier), "the unresolved import warning is still printed").toBe(true);
@@ -321,14 +321,14 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               // The real brain reaches dependencies whose diagnostic frames differ from simple imports.
               const copy = yield* fixture;
               yield* fixtureBuild(copy, path.join(home, "instance-build"));
-              const actual = warnings.mock.calls.map((args) => args.map(String).join(" ")).join("\n");
+              const actual = (yield* TestConsole.warnLines).map(String).join("\n");
 
               for (const forbidden of [ROOT, yield* fs.realPath(ROOT), home, copy.home]) {
                 for (const form of [forbidden, JSON.stringify(forbidden).slice(1, -1), encodeURIComponent(forbidden)]) {
                   expect(actual.includes(form), "the real brain build printed an absolute path").toBe(false);
                 }
               }
-            }),
+            }).pipe(Effect.provide(TestConsole.layer)),
           ),
       ),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }), endOnFailure: true },

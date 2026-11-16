@@ -162,6 +162,8 @@ patchedDependencies:
   # Effect-TS/effect#10539: A Schema string's shrink candidates are built on the
   # first shrink, not while generating (sampleFromValidatedShrink already is). Fixed upstream after
   # 4.1.4 (commit d021cee). Drop at the release that has it.
+  # And TestConsole.warnLines, the reader for the `Console.warn` calls TestConsole already keeps
+  # (ticket 1067); 4.1.4 and upstream main have none. Its upstream issue link goes here when filed.
   effect@4.1.3: patches/effect@4.1.3.patch
   # Manti's type files name each relative import without its `.js`, which only a bundler's
   # resolution finds; under our NodeNext none of its parts is seen. The patch adds the `.js`

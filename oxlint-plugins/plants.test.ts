@@ -24,7 +24,7 @@ import { dirname, join, relative } from "node:path";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
-import { BUILTIN_PLANTS, type Plant, REFLECT } from "./builtin-plants.ts";
+import { BUILTIN_PLANTS, type Plant, REFLECT, VI_METHODS } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -525,6 +525,57 @@ const banGlobs = (printed: Printed): ReadonlyArray<{ readonly glob: string; read
       : [];
   });
 
+/** The lines one rule's code refuses in each of these files of the temp repo at `at`, in order. */
+const refusedIn = (at: string, files: readonly string[], code: string): ReadonlyMap<string, readonly number[]> => {
+  const ran = spawnSync(
+    OXLINT,
+    [`--config=${join(at, ".oxlintrc.json")}`, "--disable-nested-config", "--format=json", ...files],
+    { cwd: at, encoding: "utf8", maxBuffer: 2 ** 28 },
+  );
+  const report: {
+    readonly diagnostics: ReadonlyArray<{
+      readonly code?: string;
+      readonly filename: string;
+      readonly labels: ReadonlyArray<{ readonly span: { readonly line: number } }>;
+    }>;
+  } = JSON.parse(ran.stdout);
+  return new Map(
+    files.map((file) => [
+      file,
+      report.diagnostics
+        .filter((d) => d.filename === file && d.code === code)
+        .flatMap((d) => (d.labels[0] === undefined ? [] : [d.labels[0].span.line]))
+        .sort((a, b) => a - b),
+    ]),
+  );
+};
+
+/** A temp repo at `at` with the real config and rules, and the config oxlint's --print-config reads there. */
+const configIn = (at: string): Printed => {
+  copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
+  // The rules are copied, not linked, so a plant under `oxlint-plugins/` stays in the temp repo.
+  mkdirSync(join(at, "oxlint-plugins"));
+
+  for (const entry of readdirSync(join(ROOT, "oxlint-plugins"), { withFileTypes: true })) {
+    if (entry.isFile()) {
+      copyFileSync(join(ROOT, "oxlint-plugins", entry.name), join(at, "oxlint-plugins", entry.name));
+    }
+  }
+
+  symlinkSync(join(ROOT, "oxlint-plugins", "node_modules"), join(at, "oxlint-plugins", "node_modules"));
+  symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
+  // The config loads the vendored anti-slop plugins from here (0563).
+  symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
+  const printed = spawnSync(OXLINT, [`--config=${join(at, ".oxlintrc.json")}`, "--print-config"], {
+    cwd: at,
+    encoding: "utf8",
+    maxBuffer: 2 ** 28,
+  });
+  expect(printed.status, printed.stderr).toBe(0);
+  const parsed: Printed = JSON.parse(printed.stdout);
+  return parsed;
+};
+
 describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
   // scenario: the repo's own config, read by oxlint's own --print-config, so every folder a ban block
   // lists today gets REFLECT's lines, a later slice's folder included.
@@ -533,27 +584,7 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
     const at = realpathSync(mkdtempSync(join(tmpdir(), "reflect-ban-")));
 
     try {
-      copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
-      // The rules are copied, not linked, so a plant under `oxlint-plugins/` stays in the temp repo.
-      mkdirSync(join(at, "oxlint-plugins"));
-
-      for (const entry of readdirSync(join(ROOT, "oxlint-plugins"), { withFileTypes: true })) {
-        if (entry.isFile()) {
-          copyFileSync(join(ROOT, "oxlint-plugins", entry.name), join(at, "oxlint-plugins", entry.name));
-        }
-      }
-
-      symlinkSync(join(ROOT, "oxlint-plugins", "node_modules"), join(at, "oxlint-plugins", "node_modules"));
-      symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
-      // The config loads the vendored anti-slop plugins from here (0563).
-      symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
-      const printed = spawnSync(OXLINT, [`--config=${join(at, ".oxlintrc.json")}`, "--print-config"], {
-        cwd: at,
-        encoding: "utf8",
-        maxBuffer: 2 ** 28,
-      });
-      expect(printed.status, printed.stderr).toBe(0);
-      const parsed: Printed = JSON.parse(printed.stdout);
+      const parsed = configIn(at);
       const globs = banGlobs(parsed);
       // Coverage: the tooling, a next/ folder where JSON.parse blocks and one where it still advises.
       expect(globs.map(({ glob }) => glob)).toEqual(
@@ -572,25 +603,65 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
         writeFileSync(join(at, file), text);
       }
 
-      const ran = spawnSync(
-        OXLINT,
-        [`--config=${join(at, ".oxlintrc.json")}`, "--disable-nested-config", "--format=json", ...files],
-        { cwd: at, encoding: "utf8", maxBuffer: 2 ** 28 },
-      );
-      const report: {
-        readonly diagnostics: ReadonlyArray<{
-          readonly code?: string;
-          readonly filename: string;
-          readonly labels: ReadonlyArray<{ readonly span: { readonly line: number } }>;
-        }>;
-      } = JSON.parse(ran.stdout);
+      const refused = refusedIn(at, files, REFLECT.code);
 
       for (const file of files) {
-        const refused = report.diagnostics
-          .filter((d) => d.filename === file && d.code === REFLECT.code)
-          .flatMap((d) => (d.labels[0] === undefined ? [] : [d.labels[0].span.line]))
-          .sort((a, b) => a - b);
-        expect(refused, file).toEqual(want);
+        expect(refused.get(file), file).toEqual(want);
+      }
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
+  }, 120_000);
+});
+
+/** The globs of every override that sets `vitest/no-restricted-vi-methods`, each with its level there. */
+const viGlobs = (printed: Printed): ReadonlyArray<{ readonly glob: string; readonly level: unknown }> =>
+  printed.overrides.flatMap(({ files, rules }) => {
+    const setting = rules["vitest/no-restricted-vi-methods"];
+    return setting === undefined
+      ? []
+      : files.map((glob) => ({ glob, level: Array.isArray(setting) ? setting[0] : setting }));
+  });
+
+/** A test file of one folder glob's own, such as `next/apps/fabrika/e2e/**` or `<folder>/*.ts`. */
+const testPlantPath = (glob: string, file: string): string =>
+  `${glob.replace(/\/\*\*(\/\*)?$|\/\*(\.ts)?$/, "")}/${file}`;
+
+describe("M1 of the mock sweep: every folder a vi-methods block lists refuses the vi mocks", () => {
+  // scenario: the repo's own config, read by oxlint's own --print-config, so every folder a
+  // `vitest/no-restricted-vi-methods` block lists today gets VI_METHODS' lines in a test file of its
+  // own, a later slice's folder included (decisions 0555, 0579; the app-e2e plan's L4).
+  // Plant: delete `next/apps/fabrika/e2e/**` from the block's `files`, and that folder's lines are not refused.
+  it("scenario: VI_METHODS' lines are refused exactly, in every folder of every vi-methods block", () => {
+    const at = realpathSync(mkdtempSync(join(tmpdir(), "vi-methods-")));
+
+    try {
+      const globs = viGlobs(configIn(at));
+      // Coverage: the app's e2e folder, the first to reach zero in this slice, and every block blocks.
+      expect(globs.map(({ glob }) => glob)).toEqual(expect.arrayContaining(["next/apps/fabrika/e2e/**"]));
+
+      for (const { glob, level } of globs) {
+        expect(level, glob).toBe("deny");
+      }
+
+      const text = `${[...VI_METHODS.prelude, ...VI_METHODS.lines.map(([line]) => line)].join("\n")}\n`;
+      const want = VI_METHODS.lines.flatMap(([, refused], i) => (refused ? [VI_METHODS.prelude.length + i + 1] : []));
+      const files = globs.map(({ glob }) => testPlantPath(glob, VI_METHODS.file ?? "planted.test.ts"));
+      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+      expect(
+        files.filter((file) => file.includes("*")),
+        "each glob names a folder",
+      ).toEqual([]);
+
+      for (const file of files) {
+        mkdirSync(dirname(join(at, file)), { recursive: true });
+        writeFileSync(join(at, file), text);
+      }
+
+      const refused = refusedIn(at, files, VI_METHODS.code);
+
+      for (const file of files) {
+        expect(refused.get(file), file).toEqual(want);
       }
     } finally {
       rmSync(at, { recursive: true, force: true });

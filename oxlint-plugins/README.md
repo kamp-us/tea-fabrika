@@ -1149,3 +1149,29 @@ direct files of `apps/fabrika/src` and `apps/fabrika/e2e`, and libfabrika's `cli
 every folder they list. `advice.test.ts` holds the runner's side: a `Reflect` fire at `warn`
 blocks, it never keeps a `JSON.parse` warn line alive, and each block keeps what the rule held
 before.
+
+## No `vi` mocks, spies or env stubs, decisions 0555 and 0579
+
+Oxlint's own `vitest/no-restricted-vi-methods` holds the mock sweep's lock. One block near the end
+of `.oxlintrc.json` turns it on as an error, with five messages: `vi.fn`, `vi.mock`, `vi.doMock`,
+`vi.spyOn` and `vi.stubEnv`, each saying what to use instead (a service and a test layer, the
+Recorder, `TestConsole` for `Console`, or a `ConfigProvider` layer). The block lists each folder
+whole the day its own slice of the sweep brings it to zero, and none is ever taken off. Oxlint
+takes the last matching block's options for a rule, so a later block for another folder lists all
+five again. The last slice folds the list into the `next/**/*` block. The first folder is
+`next/apps/fabrika/e2e/**` (ticket 1067).
+
+What oxlint 1.90.0 sees, from a probe and from `VI_METHODS` in `builtin-plants.ts`:
+
+- It fires on each of the five, through a renamed import (`import { vi as v }`, then `v.spyOn`),
+  a computed key (`vi["spyOn"]`) and an optional call (`vi?.fn()`).
+- It does not fire on `vi.hoisted`, which 0555 leaves open, `vi.waitFor`, a comment, a string or
+  another object's `fn`.
+- It misses a call chained onto the `vi` call: `vi.spyOn(console, "warn").mockImplementation(...)`
+  and `vi.fn().mockReturnValue(...)` pass, though the same call in parentheses is refused. Oxlint
+  1.93.0, the newest release on 2026-11-16, misses it too. This is the most common shape of a spy,
+  so until the rule reads through it, the lock holds only the plain forms and the review reads for
+  the rest.
+
+`plants.test.ts` reads every block that sets the rule from oxlint's own `--print-config` and plants
+`VI_METHODS` in a test file of every folder they list, as it does `REFLECT`.

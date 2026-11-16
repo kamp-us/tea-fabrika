@@ -54,6 +54,47 @@ export const REFLECT: Plant = {
   ],
 };
 
+/**
+ * M1 of the mock sweep (decisions 0555, 0579), the sweep's one lock law: `vi.fn`, `vi.mock`,
+ * `vi.doMock`, `vi.spyOn` and `vi.stubEnv` are refused, through a renamed import and a computed key
+ * too, and the rest of `vi` passes. plants.test.ts runs these lines in a test file of every folder a
+ * `vitest/no-restricted-vi-methods` block lists. They are not in BUILTIN_PLANTS: the rule is off
+ * beside that file, a tooling path.
+ * Plant: delete one entry from a block's `files`, or one method from its options, and that folder's
+ * line is not refused.
+ */
+export const VI_METHODS: Plant = {
+  code: "vitest(no-restricted-vi-methods)",
+  file: "planted.test.ts",
+  prelude: [TEST, 'import {vi as v} from "vitest";', "declare const other: {fn: () => unknown};"],
+  lines: [
+    ["export const a = vi.fn();", true],
+    ['vi.mock("./a.ts");', true],
+    ['vi.doMock("./b.ts");', true],
+    ['export const b = vi.spyOn(console, "warn");', true],
+    ['vi.stubEnv("A", "1");', true],
+    // A renamed import and a computed key are read through (app-e2e plan, L4).
+    ['export const c = v.spyOn(console, "warn");', true],
+    ['export const d = vi["spyOn"](console, "warn");', true],
+    ["export const e = v.fn();", true],
+    ["export const f = vi?.fn();", true],
+    // 0555 leaves vi.hoisted open, and vi.waitFor is no mock.
+    ["export const g = vi.hoisted(() => 1);", false],
+    ["export const h = vi.waitFor(() => 1);", false],
+    // Not a call of vi: a comment, a string, another object's fn.
+    ["// vi.fn() in a comment", false],
+    ['export const i = "vi.spyOn(console)";', false],
+    ["export const j = other.fn();", false],
+    ["export const k = [describe, expect, it];", false],
+    // A documented miss, in oxlint 1.90.0 and 1.93.0 alike: a call chained onto the vi call is not
+    // refused, though the same call in parentheses is. L17's old spy had this shape, so the lock
+    // does not hold it yet (the app-e2e plan's L5); the review reads for it.
+    ['export const l = vi.spyOn(console, "warn").mockImplementation(() => undefined);', false],
+    ["export const m = vi.fn().mockReturnValue(1);", false],
+    ['export const n = (vi.spyOn(console, "warn")).mockImplementation(() => undefined);', true],
+  ],
+};
+
 const eslint: readonly Plant[] = [
   REFLECT,
   {
