@@ -5,18 +5,15 @@
  *
  * It sends `fold` messages through `applyCell` and reads the reply. It never builds or edits a
  * Model itself.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import { Result } from "effect";
+import * as Result from "effect/Result";
 import type { Access, Folded, MemberEvent, Reason } from "./Access.ts";
 import { access, members } from "./Access.ts";
 
 /**
  * The Model before any event: the machine's own init, which is `unfounded`.
  *
- * @stability unstable
  * @category models
  */
 export const EMPTY: Folded = access.init(null, {})[0];
@@ -39,7 +36,6 @@ const step = (model: Folded, event: MemberEvent): Folded => {
  * An event whose id was already taken is accepted and leaves the Model as it was. Any event but
  * `founded` is refused with `not_member` on an unfounded Model.
  *
- * @stability unstable
  * @category combinators
  */
 export const allows = (model: Folded, event: MemberEvent): Result.Result<Folded, Reason> => {
@@ -54,7 +50,6 @@ export const allows = (model: Folded, event: MemberEvent): Result.Result<Folded,
  *
  * A refused event is skipped without error, so a later event can still be taken.
  *
- * @stability unstable
  * @category combinators
  */
 export const foldAccess = (events: ReadonlyArray<MemberEvent>): Access => members(events.reduce(step, EMPTY));

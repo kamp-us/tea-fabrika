@@ -4,6 +4,8 @@
     "plugins": [
       {
         "name": "@effect/language-service",
+        // preferSchemaTaggedError is named here too, as L3 of 0573 asks of a tsconfig with its own plugins.
+        "diagnosticSeverity": { "preferSchemaTaggedError": "error" },
         // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
         // The globs read from this folder. One entry per set of folders; its comment names its checks.
         "overrides": [
@@ -261,6 +263,32 @@
               "diagnosticSeverity": {
                 "catchToIgnore": "error"
               }
+            }
+          },
+          // A library imports each Effect module by its path (0577). On for the folders at zero, their
+          // tests too, until the package is at zero and the block moves up to the whole package.
+          // Each import slice adds its folders here.
+          {
+            "include": [
+              "src/*.ts",
+              "src/access/**/*.ts",
+              "src/ci/**/*.ts",
+              "src/client/**/*.ts",
+              "src/codehost/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/node/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/presence/**/*.ts",
+              "src/repositories/**/*.ts",
+              "src/schedules/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/tezgah/**/*.ts",
+              "src/transport/**/*.ts"
+            ],
+            "options": {
+              "namespaceImportPackages": ["effect"],
+              "diagnosticSeverity": { "preferNamespaceImport": "error" }
             }
           }
         ]

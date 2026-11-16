@@ -6,10 +6,9 @@
  * nests a new container, so nested containers alternate direction. Every change settles the tree:
  * a container of one part gives way to its part, and a container left inside one of its own
  * direction merges into it (AeroSpace's normalization, read through 0505 and 0277).
- *
- * @stability unstable
  */
-import { Predicate, Schema } from "effect";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import { type Container, Dir, type Layout, type Part, type TileId, type Workspace } from "./Workspace.ts";
 
 /** How far a container's percents may drift from 100 by float rounding before it is untidy. */
@@ -20,7 +19,6 @@ const DRIFT = 1e-6;
  * to 100, a container of one part, a container inside one of its own direction, a part with no
  * share, a focus or a `recent` entry that names no live tile, or `recent` naming a tile twice.
  *
- * @stability unstable
  * @category schemas
  */
 export const Violation = Schema.TaggedUnion({
@@ -37,7 +35,6 @@ export const Violation = Schema.TaggedUnion({
 /**
  * One way a workspace is untidy, as `Violation` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Violation = typeof Violation.Type;
@@ -45,7 +42,6 @@ export type Violation = typeof Violation.Type;
 /**
  * A rectangle in a window, in pixels from its top left.
  *
- * @stability unstable
  * @category models
  */
 export type Rect = { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
@@ -57,7 +53,6 @@ const isTile = (node: Layout): node is TileId => Predicate.isString(node);
 /**
  * Returns the layout's tiles in reading order: a container's parts in order, depth first.
  *
- * @stability unstable
  * @category getters
  */
 export const order = (layout: Layout): ReadonlyArray<TileId> =>
@@ -107,7 +102,6 @@ const focused = (recent: ReadonlyArray<TileId>, tile: TileId): ReadonlyArray<Til
  * Splits tile `at` in direction `dir`: `tile` takes the second half of `at`'s share, after it, and
  * takes focus. A workspace without `at` is returned as it was.
  *
- * @stability unstable
  * @category combinators
  */
 export const split = (w: Workspace, at: TileId, dir: Dir, tile: TileId): Workspace =>
@@ -119,7 +113,6 @@ export const split = (w: Workspace, at: TileId, dir: Dir, tile: TileId): Workspa
  * Focuses `tile`: it comes first in `recent`, the rest keep their order, and the layout stays. A
  * workspace without `tile` is returned as it was.
  *
- * @stability unstable
  * @category combinators
  */
 export const focus = (w: Workspace, tile: TileId): Workspace =>
@@ -178,7 +171,6 @@ const without = (node: Layout, tile: TileId): Layout | null => {
  * focus goes to the next tile in reading order, else the one before. A workspace's last tile, or a
  * tile it does not hold, is returned as it was.
  *
- * @stability unstable
  * @category combinators
  */
 export const remove = (w: Workspace, tile: TileId): Workspace => {
@@ -205,7 +197,6 @@ export const remove = (w: Workspace, tile: TileId): Workspace => {
  * The gap a frame draws between two parts of a container, and around a workspace, in CSS pixels:
  * 0492's 4px divider. A window's room check and its drawing both read this one number.
  *
- * @stability unstable
  * @category constants
  */
 export const GAP = 4;
@@ -216,7 +207,6 @@ export const GAP = 4;
  * of what is left, so a nested container loses its own gaps too (plan amendment 7). Without a gap
  * the parts share the whole area.
  *
- * @stability unstable
  * @category getters
  */
 export const rects = (
@@ -251,7 +241,6 @@ export const rects = (
 /**
  * A side of a tile, for a focus move: tmux's `select-pane -L -R -U -D`.
  *
- * @stability unstable
  * @category models
  */
 export type Side = "left" | "right" | "up" | "down";
@@ -279,7 +268,6 @@ const shared = (from: Rect, other: Rect, side: Side): number => {
  * a tie goes to the tile first in reading order. Null when `from` sits on the workspace's edge
  * there, or is not in the layout: a move with no neighbor does nothing, as in tmux.
  *
- * @stability unstable
  * @category getters
  */
 export const neighbor = (layout: Layout, from: TileId, side: Side): TileId | null => {
@@ -318,7 +306,6 @@ const untidy = (node: Container, parent: Dir | null): ReadonlyArray<Violation> =
  * container's parts summing to 100 with a share each, no container of one part, directions
  * alternating, and focus and `recent` naming only live tiles, each once.
  *
- * @stability unstable
  * @category getters
  */
 export const check = (w: Workspace): ReadonlyArray<Violation> => {

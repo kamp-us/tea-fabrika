@@ -1,4 +1,6 @@
-import { Context, type Effect, Schema } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 /** The class of a failure, from a fixed list of words. Never a message, a stack or a value. */
 export const ErrorClass = Schema.Literals([

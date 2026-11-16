@@ -1,17 +1,17 @@
 /**
  * A machine that picks the next due time of a repeating job. The runner owns the alarm.
- *
- * @stability unstable
  */
 import type { AnyCmdDef, CmdOf, Reducer, Settled } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
-import { Duration, Option, Result, Schema } from "effect";
+import * as Duration from "effect/Duration";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
 /**
  * Schema for the job's state: `idle` with the next due time, or `running` with the time of the
  * timer message that started it. Both keep the period in milliseconds.
  *
- * @stability unstable
  * @category models
  */
 export const Model = Schema.TaggedUnion({
@@ -22,7 +22,6 @@ export const Model = Schema.TaggedUnion({
  * The job's state: `idle` with the next due time, or `running` with the time of the timer message
  * that started it.
  *
- * @stability unstable
  * @category models
  */
 export type Model = typeof Model.Type;
@@ -32,7 +31,6 @@ const Timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite }
 /**
  * The period given to `make` is not a whole, positive number of milliseconds.
  *
- * @stability unstable
  * @category errors
  */
 export class ScheduledJobError extends Schema.TaggedError<ScheduledJobError, { readonly brand: unique symbol }>()(
@@ -45,7 +43,6 @@ export class ScheduledJobError extends Schema.TaggedError<ScheduledJobError, { r
 /**
  * Returns the time the runner should wake the job next, or null while the job is running.
  *
- * @stability unstable
  * @category getters
  */
 export const wake = (model: Model): number | null => (model._tag === "idle" ? model.next : null);
@@ -66,7 +63,6 @@ export const wake = (model: Model): number | null => (model._tag === "idle" ? mo
  *
  * The period must come to a whole number of milliseconds. A fraction of a millisecond is refused.
  *
- * @stability unstable
  * @category constructors
  */
 export const make = <C extends AnyCmdDef>(config: {
@@ -75,7 +71,7 @@ export const make = <C extends AnyCmdDef>(config: {
   readonly work: (due: number, period: number) => CmdOf<C>;
 }) => {
   if (typeof config.period === "number" && !Number.isSafeInteger(config.period)) {
-    return Result.fail(new ScheduledJobError({ reason: "bad_period" }));
+    return Result.fail(ScheduledJobError.make({ reason: "bad_period" }));
   }
 
   const duration = Duration.fromInput(config.period);
@@ -84,7 +80,7 @@ export const make = <C extends AnyCmdDef>(config: {
   const nanos = Option.flatMap(duration, Duration.toNanos);
 
   if (!Number.isSafeInteger(period) || period <= 0 || Option.isNone(nanos) || nanos.value % 1_000_000n !== 0n) {
-    return Result.fail(new ScheduledJobError({ reason: "bad_period" }));
+    return Result.fail(ScheduledJobError.make({ reason: "bad_period" }));
   }
 
   const settle = (s: Model, m: { readonly at: number }): readonly [Model, readonly CmdOf<C>[]] =>

@@ -38,9 +38,9 @@ export type Ask = {
 
 const checked = (branch: string) =>
   branch === "" || branch === "HEAD"
-    ? Effect.fail(new NoBranch({ reason: "HEAD is detached, so there is no branch to push" }))
+    ? Effect.fail(NoBranch.make({ reason: "HEAD is detached, so there is no branch to push" }))
     : branch === "main" || branch === "refs/heads/main"
-      ? Effect.fail(new NoBranch({ reason: "a commit step never pushes to main" }))
+      ? Effect.fail(NoBranch.make({ reason: "a commit step never pushes to main" }))
       : Effect.succeed(branch);
 
 export const publish = Effect.fn("Publish.publish")(function* (a: Ask) {

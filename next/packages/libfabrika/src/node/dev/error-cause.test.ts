@@ -4,7 +4,11 @@
 // last start's file), `:99` (an event to add that does not decode). An `id_reused` refusal has no
 // cause. `dev.ts`'s sites run inside `startDev`, against the local runtime's socket: a container's job.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { brainOutbox } from "./local-dev.ts";
 

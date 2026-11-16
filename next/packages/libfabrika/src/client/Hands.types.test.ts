@@ -5,8 +5,11 @@
 // typecheck is this law's runner. Plant (after build): put `PlatformError` in `Journal.write`'s
 // error channel.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Context, Effect, Layer, PlatformError } from "effect";
-import type { KeyValueStore } from "effect/persistence";
+import type * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
+import type * as KeyValueStore from "effect/persistence/KeyValueStore";
+import type * as PlatformError from "effect/PlatformError";
 import type { Rev } from "../Rev.ts";
 import type { Command, Result } from "../tasks/Task.ts";
 import type * as CommandsFront from "./Commands.ts";

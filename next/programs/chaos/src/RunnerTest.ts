@@ -388,7 +388,7 @@ export const suite = (open: Open, checklist: unknown) =>
                   case "refused":
                     return Outcome.ok(Chaos.Fired.cases.refused.make({ reason: "stale" }));
                   case "off":
-                    return Outcome.err(new Nemesis.NemesisError({ reason: new Nemesis.Off({ cause: null }) }));
+                    return Outcome.err(Nemesis.NemesisError.make({ reason: Nemesis.Off.make({ cause: null }) }));
                   case "failed":
                     return yield* Effect.die(new TypeError("controlled outside failure"));
                   case "interrupted":
@@ -541,7 +541,7 @@ export const suite = (open: Open, checklist: unknown) =>
                   yield* Deferred.await(release);
 
                   if (outcome === "off") {
-                    return Outcome.err(new Nemesis.NemesisError({ reason: new Nemesis.Off({ cause: null }) }));
+                    return Outcome.err(Nemesis.NemesisError.make({ reason: Nemesis.Off.make({ cause: null }) }));
                   }
 
                   if (outcome === "failed") {
@@ -741,7 +741,9 @@ export const suite = (open: Open, checklist: unknown) =>
               fire: () => Effect.succeed(Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }))),
               inspect: () =>
                 mode === "off"
-                  ? Effect.succeed(Outcome.err(new Nemesis.NemesisError({ reason: new Nemesis.Off({ cause: null }) })))
+                  ? Effect.succeed(
+                      Outcome.err(Nemesis.NemesisError.make({ reason: Nemesis.Off.make({ cause: null }) })),
+                    )
                   : Effect.die(new RangeError("controlled check failure")),
             };
             yield* Effect.scoped(
@@ -808,7 +810,7 @@ export const suite = (open: Open, checklist: unknown) =>
                   mode === "off"
                     ? Effect.succeed(
                         Outcome.err(
-                          new Nemesis.NemesisError({ reason: new Nemesis.Off({ cause: new Error(marker) }) }),
+                          Nemesis.NemesisError.make({ reason: Nemesis.Off.make({ cause: new Error(marker) }) }),
                         ),
                       )
                     : mode === "failed"

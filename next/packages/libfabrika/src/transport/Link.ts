@@ -11,7 +11,7 @@
 // to reach it, timed by the handler that dialed, or the wait the link's own timer ran for a stall it
 // fired. The machine reads no clock and does not read `ms`; a window copies it into its records.
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 
 /** No wait is longer than this: p5's 30-second cap. */
 export const CAP = 30_000;

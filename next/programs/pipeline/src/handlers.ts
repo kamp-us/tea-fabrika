@@ -34,7 +34,7 @@ const outcome =
           return Effect.interrupt;
         }
 
-        return Effect.fail(new HandlerDefect({ cmd }));
+        return Effect.fail(HandlerDefect.make({ cmd }));
       }),
     );
 

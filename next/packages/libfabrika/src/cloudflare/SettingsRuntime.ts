@@ -1,7 +1,5 @@
 /**
  * A runtime for one layer whose build can be tried again after it fails.
- *
- * @stability unstable
  */
 import { Context, Duration, Effect, Exit, Layer, ManagedRuntime, Scope, ScopedCache } from "effect";
 
@@ -14,7 +12,6 @@ import { Context, Duration, Effect, Exit, Layer, ManagedRuntime, Scope, ScopedCa
  * its scope is closed, and the next read builds the layer again. What the layer itself needs is
  * taken once, when the cache is made.
  *
- * @stability unstable
  * @category constructors
  */
 export const make = <ROut, E, RIn>(ready: Layer.Layer<ROut, E, RIn>) =>
@@ -49,7 +46,6 @@ export const make = <ROut, E, RIn>(ready: Layer.Layer<ROut, E, RIn>) =>
  * uses. A failed build is not kept, so the next use builds again. `dispose` closes the cache and
  * the build with it.
  *
- * @stability unstable
  * @category constructors
  */
 export const runtime = <ROut, E>(ready: Layer.Layer<ROut, E>) => {

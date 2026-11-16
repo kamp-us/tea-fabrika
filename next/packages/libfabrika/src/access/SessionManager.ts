@@ -6,10 +6,12 @@
  *
  * State lives in three tables of the given `Sql`: `gateway_sessions`, `gateway_ended` and
  * `gateway_receipts`. They are created on first use.
- *
- * @stability unstable
  */
-import { Context, Effect, Layer, Result, Schema } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { type InputId } from "../Id.ts";
 import { inNoticeSpace, inRunnerSpace, inSignalSpace } from "../processes/Process.ts";
 import { ProcessId } from "../ProcessId.ts";
@@ -19,7 +21,6 @@ import { type Sql } from "../Sql.ts";
 /**
  * Schema for who wrote an input: a person or an agent, with its key and the person it works for.
  *
- * @stability unstable
  * @category models
  */
 export const Writer = Schema.TaggedUnion({
@@ -29,7 +30,6 @@ export const Writer = Schema.TaggedUnion({
 /**
  * The decoded type of `Writer`.
  *
- * @stability unstable
  * @category models
  */
 export type Writer = typeof Writer.Type;
@@ -37,7 +37,6 @@ export type Writer = typeof Writer.Type;
 /**
  * An input as it arrived: its id, who wrote it, when it arrived, and the input itself.
  *
- * @stability unstable
  * @category models
  */
 export interface Envelope<A> {
@@ -53,7 +52,6 @@ const Span = Schema.Struct({ traceId: Schema.String, spanId: Schema.String });
  * Schema for what a signature stands for: the writer, the parent input id, and the trace and span
  * of the input.
  *
- * @stability unstable
  * @category models
  */
 export const Session = Schema.Struct({
@@ -65,7 +63,6 @@ export const Session = Schema.Struct({
 /**
  * The decoded type of `Session`.
  *
- * @stability unstable
  * @category models
  */
 export type Session = typeof Session.Type;
@@ -83,7 +80,6 @@ export type Session = typeof Session.Type;
  * receipt without all matching it. `signal` means the request id is in the signal, runner or
  * notice space, which only the brain uses.
  *
- * @stability unstable
  * @category errors
  */
 export class SigningRefused extends Schema.TaggedError<SigningRefused, { readonly brand: unique symbol }>()(
@@ -104,7 +100,6 @@ export class SigningRefused extends Schema.TaggedError<SigningRefused, { readonl
  * it for a client that is not online, a parent id that does not decode, a binding that does not
  * match, or a destination that is not live.
  *
- * @stability unstable
  * @category errors
  */
 export class NotGranted extends Schema.TaggedError<NotGranted, { readonly brand: unique symbol }>()("NotGranted", {}) {}
@@ -113,7 +108,6 @@ export class NotGranted extends Schema.TaggedError<NotGranted, { readonly brand:
  * Reason for a session table that could not be read or written: the `Sql` threw. The throw is
  * kept as `cause`.
  *
- * @stability unstable
  * @category errors
  */
 export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
@@ -124,7 +118,6 @@ export class Storage extends Schema.TaggedError<Storage, { readonly brand: uniqu
  * Reason for a saved input or receipt that does not decode. The decoder's failure is kept as
  * `cause`.
  *
- * @stability unstable
  * @category errors
  */
 export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
@@ -135,7 +128,6 @@ export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique 
  * Reason for a membership check that failed for any cause but `NotGranted`, such as the access
  * store below it. That failure is kept as `cause`.
  *
- * @stability unstable
  * @category errors
  */
 export class Membership extends Schema.TaggedError<Membership, { readonly brand: unique symbol }>()("Membership", {
@@ -147,7 +139,6 @@ export class Membership extends Schema.TaggedError<Membership, { readonly brand:
  * membership check it was given. A refusal by the rules is `SigningRefused` or `NotGranted`
  * instead.
  *
- * @stability unstable
  * @category errors
  */
 export class SessionManagerError extends Schema.TaggedError<SessionManagerError, { readonly brand: unique symbol }>()(
@@ -159,7 +150,7 @@ export class SessionManagerError extends Schema.TaggedError<SessionManagerError,
 
 /** The manager's own error for a throw in a stored step: a decoder's failure is a bad row. */
 const storageFault = (cause: unknown) =>
-  new SessionManagerError({ reason: Schema.isSchemaError(cause) ? new BadRow({ cause }) : new Storage({ cause }) });
+  SessionManagerError.make({ reason: Schema.isSchemaError(cause) ? BadRow.make({ cause }) : Storage.make({ cause }) });
 
 /**
  * Service that carries the id of one signing request.
@@ -169,7 +160,6 @@ const storageFault = (cause: unknown) =>
  * `SessionManager.signer` reads it. Asking again with the same id for the same parent, process and
  * kind returns the same session, and any other use of that id is refused as `spent`.
  *
- * @stability unstable
  * @category services
  */
 export class SignRequest extends Context.Service<SignRequest, { readonly id: string }>()(
@@ -200,7 +190,6 @@ const State = Schema.TaggedUnion({ recorded: {}, delivered: {} });
  * unless the input is delivered and belongs to the given process, and with `person_only` when the
  * kind needs a person and the input was not written by a person or is not person-only.
  *
- * @stability unstable
  * @category models
  */
 export class SavedInput extends Schema.Opaque<SavedInput, { readonly brand: unique symbol }>()(
@@ -213,11 +202,11 @@ export class SavedInput extends Schema.Opaque<SavedInput, { readonly brand: uniq
     const a = saved.input;
 
     if (saved.state._tag !== "delivered" || a.process !== process) {
-      return Result.fail(new SigningRefused({ reason: "not_delivered" }));
+      return Result.fail(SigningRefused.make({ reason: "not_delivered" }));
     }
 
     if (personOnly && (!a.personOnly || a.by._tag !== "person")) {
-      return Result.fail(new SigningRefused({ reason: "person_only" }));
+      return Result.fail(SigningRefused.make({ reason: "person_only" }));
     }
 
     return Result.succeed(Session.make({ by: a.by, parent: a.id, traceId: a.traceId, span: a.span }));
@@ -250,7 +239,6 @@ const decodeSession = Schema.decodeUnknownSync(Schema.fromJsonString(Session));
  * The membership check in `signer` and `sender` runs before the transaction, so a key removed in
  * between is not seen by that call. `receipt` runs `signer` again, so it checks membership again.
  *
- * @stability unstable
  * @category services
  */
 export class SessionManager extends Context.Service<
@@ -318,7 +306,7 @@ export class SessionManager extends Context.Service<
             yield* membership(saved.input.client).pipe(
               Effect.provideContext(context),
               Effect.mapError((cause) =>
-                Schema.is(NotGranted)(cause) ? cause : new SessionManagerError({ reason: new Membership({ cause }) }),
+                Schema.is(NotGranted)(cause) ? cause : SessionManagerError.make({ reason: Membership.make({ cause }) }),
               ),
             );
           }
@@ -326,12 +314,12 @@ export class SessionManager extends Context.Service<
         /** The session of an input delivered to a live process, read in the caller's transaction. */
         const deliveredTo = (parent: string, process: string, personOnly: boolean) => {
           if (ended(process)) {
-            return Result.fail(new SigningRefused({ reason: "ended" }));
+            return Result.fail(SigningRefused.make({ reason: "ended" }));
           }
 
           const current = load(parent);
           return current === null
-            ? Result.fail(new SigningRefused({ reason: "not_delivered" }))
+            ? Result.fail(SigningRefused.make({ reason: "not_delivered" }))
             : SavedInput.sign(current, process, personOnly);
         };
         const signer = Effect.fn("session.signer")(function* (parent: string, process: string, kind: string) {
@@ -340,7 +328,7 @@ export class SessionManager extends Context.Service<
           // A signal, runner or notice id is the brain's alone: refuse it before reading or writing,
           // so no receipt binds one and the delivery's one receipt stays free.
           if (inSignalSpace(request.id) || inRunnerSpace(request.id) || inNoticeSpace(request.id)) {
-            return yield* new SigningRefused({ reason: "signal" });
+            return yield* SigningRefused.make({ reason: "signal" });
           }
 
           yield* belongs(parent);
@@ -367,7 +355,7 @@ export class SessionManager extends Context.Service<
                   receipt.process === process &&
                   receipt.kind === kind
                   ? Result.succeed(decodeSession(receipt.session))
-                  : Result.fail(new SigningRefused({ reason: "spent" }));
+                  : Result.fail(SigningRefused.make({ reason: "spent" }));
               }
 
               sql.exec(
@@ -409,7 +397,7 @@ export class SessionManager extends Context.Service<
             });
 
             if (!exists) {
-              return yield* new SigningRefused({ reason: "not_delivered" });
+              return yield* SigningRefused.make({ reason: "not_delivered" });
             }
 
             return yield* signer(parent, process, kind).pipe(Effect.provideService(SignRequest, { id }));
@@ -420,7 +408,7 @@ export class SessionManager extends Context.Service<
                 ensure();
 
                 if (ended(input.process)) {
-                  return Result.fail(new SigningRefused({ reason: "ended" }));
+                  return Result.fail(SigningRefused.make({ reason: "ended" }));
                 }
 
                 const prior = load(input.id);
@@ -432,7 +420,7 @@ export class SessionManager extends Context.Service<
                 if (prior !== null) {
                   return JSON.stringify(prior.input) === JSON.stringify(saved.input)
                     ? Result.succeed(undefined)
-                    : Result.fail(new SigningRefused({ reason: "not_delivered" }));
+                    : Result.fail(SigningRefused.make({ reason: "not_delivered" }));
                 }
 
                 sql.exec("INSERT INTO gateway_sessions (parent,saved) VALUES (?,?)", input.id, encode(saved));
@@ -450,13 +438,13 @@ export class SessionManager extends Context.Service<
                 ensure();
 
                 if (ended(process)) {
-                  return Result.fail(new SigningRefused({ reason: "ended" }));
+                  return Result.fail(SigningRefused.make({ reason: "ended" }));
                 }
 
                 const saved = load(parent);
 
                 if (saved === null || saved.input.process !== process) {
-                  return Result.fail(new SigningRefused({ reason: "not_delivered" }));
+                  return Result.fail(SigningRefused.make({ reason: "not_delivered" }));
                 }
 
                 sql.exec(

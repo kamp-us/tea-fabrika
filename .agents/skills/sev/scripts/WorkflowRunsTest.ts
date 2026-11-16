@@ -20,7 +20,7 @@ export const world = (runs: ReadonlyArray<Run> = []): World => ({ runs: [...runs
 export const layer = (w: World, failing: Failing = {}): Layer.Layer<WorkflowRuns> => {
   const fails = (name: keyof Failing) => {
     const reason = failing[name];
-    return reason === undefined ? Effect.void : Effect.fail(new WorkflowRunsError({ reason }));
+    return reason === undefined ? Effect.void : Effect.fail(WorkflowRunsError.make({ reason }));
   };
 
   /** Puts `to` on run `id`, as GitHub would; a run it does not hold fails as GitHub's 404. */
@@ -29,7 +29,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<WorkflowRuns
     const found = w.runs[at];
 
     if (found === undefined) {
-      return Effect.fail(new WorkflowRunsError({ reason: `no run ${id}` }));
+      return Effect.fail(WorkflowRunsError.make({ reason: `no run ${id}` }));
     }
 
     w.runs[at] = { ...found, ...to };

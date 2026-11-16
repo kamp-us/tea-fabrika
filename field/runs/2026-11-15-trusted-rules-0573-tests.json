@@ -1,0 +1,57 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-trusted-rules-0573-tests",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1498",
+  "started": "2026-11-15T22:13:53-08:00",
+  "ended": "2026-11-15T22:32:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for decision 0573's first pull request, in next/ and our tooling (docs/plan/quests/trusted-rules-0573-PLAN.md). Merged origin/main (neither pull request 1494 nor 0592's libfabrika block had landed) and the branch's lead-approval commit. Swapped three of our lint rules for trusted ones: fabrika/no-data-taggederror for the Effect checker's preferSchemaTaggedError beside oxlint's no-restricted-properties on Data.TaggedError (in the root rules and all 7 blocks that set the rule), fabrika/no-node-filesystem for fabrika/no-node-imports, and fabrika/one-id-module for fabrika/modules. Deleted the three rules, their two test files, their index.ts names and plant, the vitest.shards.json row, and 8 agents-ledger.json entries pruned by a whole pnpm lint. Laws: L1 (plants.test.ts, TAGGED_ERROR in builtin-plants.ts) was red before the config change: apps/fabrika/e2e.ts: expected [] to deeply equal [ 3, 4, 5, 6, 7, 8 ]. L2 (plants.test.ts) was red before it: the root rules: expected false to be true. L3 (effect-checks-held.test.ts, new), L4 (no-node-imports.test.ts) and L5 (modules.test.ts) hold behavior that was already true, so they are red only under their plants. L6 is lint: a config that still names a deleted rule fails to start. L7 (the spacing superset) was stopped as the plan says: run over the padding test's generated files and scenarios and every 15th non-test next/packages source file with blank lines removed, anti-slop/require-readable-spacing missed 2 lines ours flags, both in the class-members scenario (a method after a field, a method after a method), and nothing in the real files. So padding-line-between-statements stays and L7 is not committed. The build owes one line that keeps pnpm lint red: .agents/skills/lead/scripts/chain.ts:113 still names fabrika/no-node-filesystem in its disable comment.",
+  "plants": [
+    {
+      "law": "oxlint-plugins/plants.test.ts: L1 scenario: TAGGED_ERROR's lines are refused exactly, in every folder of every block that sets the rule, and under none",
+      "plant": "the Data.TaggedError entry deleted from the .agents/**, .github/**, oxlint-plugins/** block of .oxlintrc.json",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/plants.test.ts: L2 scenario: the root rules and every override that sets no-restricted-properties carry the entry",
+      "plant": "a new block for next/programs/counter/** that sets no-restricted-properties with only a JSON.parse entry",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/effect-checks-held.test.ts: L3 scenario: preferSchemaTaggedError stays at error in every tracked tsconfig, for every path",
+      "plant": "preferSchemaTaggedError set to warning in tsconfig.base.json",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/effect-checks-held.test.ts: L3 scenario",
+      "plant": "an override in tsconfig.base.json with include next/**/*.ts that sets preferSchemaTaggedError off",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/no-node-imports.test.ts: holds every filesystem import form the retired no-node-filesystem held, at its paths",
+      "plant": "fs added to a skip in oxlint-plugins/no-node-imports.ts",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/modules.test.ts: refuses the retired Id module at data/id.ts for generated contents, and takes Id.ts and transport/id.ts",
+      "plant": "data added to the folders list of the fabrika/modules block in .oxlintrc.json",
+      "result": "red"
+    },
+    {
+      "law": "L6, lint: the config names none of the deleted rules",
+      "plant": "fabrika/one-id-module: error left in .oxlintrc.json's root rules after the file was deleted; oxlint-plugins/lint.ts exits 2, Rule 'one-id-module' not found in plugin 'fabrika'",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 18,
+  "note": "Run in a cloud box with no step keys, so the commit is unsigned (stepcommit --commit-only). Each plant ran once on a saved copy and was restored by copy. Tests at aae9a26 plus this step's edits: the plan's narrow paths and every oxlint-plugins, exam and .github/ci test that reads .oxlintrc.json, exam/plant.ts, vitest.shards.json or agents-ledger.json, 35 files, 579 tests, all green. vitest --changed origin/main was refused by the test config as a broad run. pnpm format and NODE_OPTIONS=--max-old-space-size=6144 pnpm lint: lint fails on one line only, the build's chain.ts:113. The list ratchet exits 0. No pnpm typecheck. No 0178-guarded law is reached.",
+  "step": "tests"
+}

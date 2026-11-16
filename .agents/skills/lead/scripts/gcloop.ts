@@ -272,9 +272,9 @@ export const paths = Effect.fn("gcloop.paths")(
     const [main = "", boxes = ""] = r.out.split("\n");
     return r.code === 0 && main !== "" && boxes !== ""
       ? { main, boxes, state: path.join(boxes, "state") }
-      : yield* new Broken({ reason: `env.sh gave no MAIN or BOXES: ${r.err.trim()}` });
+      : yield* Broken.make({ reason: `env.sh gave no MAIN or BOXES: ${r.err.trim()}` });
   },
-  Effect.catchTag("PlatformError", () => Effect.fail(new Broken({ reason: "env.sh could not run" }))),
+  Effect.catchTag("PlatformError", () => Effect.fail(Broken.make({ reason: "env.sh could not run" }))),
 );
 
 /** KB free on the volume that holds `path`, from `df -k`; `null` when df says nothing usable. */
@@ -398,7 +398,7 @@ const append = Effect.fn("gcloop.append")(
     yield* fs.makeDirectory(state, { recursive: true });
     yield* fs.writeFileString(`${state}/gc.jsonl`, `${Schema.encodeSync(SweepLine)(sweep)}\n`, { flag: "a" });
   },
-  Effect.mapError((e) => new Broken({ reason: `the record could not be written: ${e.message}` })),
+  Effect.mapError((e) => Broken.make({ reason: `the record could not be written: ${e.message}` })),
 );
 
 /** One sweep, start to record. It never fails for gc's sake: a gc that fails or hangs is a record. */
@@ -557,7 +557,7 @@ const plistCommand = Command.make("plist", {}, () =>
     });
 
     if (Result.isFailure(filled)) {
-      return yield* new Broken({ reason: filled.failure });
+      return yield* Broken.make({ reason: filled.failure });
     }
 
     yield* Console.log(filled.success.trimEnd());

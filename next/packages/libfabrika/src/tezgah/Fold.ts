@@ -9,8 +9,6 @@
  * percent, except that the part leading to the focused tile is held at the floor, or at all the
  * container has when that is less. `fold` is the fixpoint on that geometry: a tile folds only when
  * it is drawn under 220x120 where it folds, and the focused tile never folds.
- *
- * @stability unstable
  */
 import { GAP, order, type Rect } from "./Layout.ts";
 import type { Container, Layout, TileId, Workspace } from "./Workspace.ts";
@@ -18,7 +16,6 @@ import type { Container, Layout, TileId, Workspace } from "./Workspace.ts";
 /**
  * The smallest a tile may be drawn open: the readability floor from fold, not tabs. Not a setting.
  *
- * @stability unstable
  * @category constants
  */
 export const SMALLEST = { width: 220, height: 120 } as const;
@@ -27,7 +24,6 @@ export const SMALLEST = { width: 220, height: 120 } as const;
  * How far a strip reaches along its container's axis, in CSS pixels: 22px upright in a row, 20px
  * lying down in a column (the fold note).
  *
- * @stability unstable
  * @category constants
  */
 export const STRIP = { row: 22, column: 20 } as const;
@@ -39,7 +35,6 @@ type Size = { readonly width: number; readonly height: number };
  * Returns whether a layout draws as strips only: a tile in `strips`, or a container whose tiles all
  * are (a band).
  *
- * @stability unstable
  * @category getters
  */
 export const shut = (node: Layout, strips: ReadonlySet<TileId>): boolean =>
@@ -52,7 +47,6 @@ export const shut = (node: Layout, strips: ReadonlySet<TileId>): boolean =>
  * the container, they share its length equally and the open parts get nothing: that window is too
  * small for the layout (plan amendment 14).
  *
- * @stability unstable
  * @category getters
  */
 export const lengths = (
@@ -91,7 +85,6 @@ export const lengths = (
  * Returns each tile's drawn box in an area of `size`, from its top left, when `strips` are drawn as
  * strips. A band's strips lie along it, one after another with `GAP` between, sharing its length.
  *
- * @stability unstable
  * @category getters
  */
 export const drawn = (w: Workspace, size: Size, strips: ReadonlySet<TileId>): ReadonlyMap<string, Rect> => {
@@ -138,7 +131,6 @@ export const drawn = (w: Workspace, size: Size, strips: ReadonlySet<TileId>): Re
  * tile but the focused one drawn under 220x120, again on the geometry that leaves, until nothing
  * changes. Strips only grow, so it ends within the tile count.
  *
- * @stability unstable
  * @category getters
  */
 export const fold = (w: Workspace, size: Size): ReadonlySet<TileId> => {

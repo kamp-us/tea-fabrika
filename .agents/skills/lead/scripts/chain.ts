@@ -110,7 +110,7 @@
 
 // The chain's record, logs and brief are sync file calls: a debt agents-ledger.json named for this
 // import until three names left it and its line changed. The ledger only shrinks, so it is marked here.
-// oxlint-disable-next-line fabrika/no-node-imports, fabrika/no-node-filesystem -- edge: sync file calls not yet moved to Effect's FileSystem (0033)
+// oxlint-disable-next-line fabrika/no-node-imports -- edge: sync file calls not yet moved to Effect's FileSystem (0033)
 import { appendFileSync, existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
@@ -1278,7 +1278,7 @@ const handlers = (s: Setup) => {
             if (check !== null) {
               note(`drive refused ${cmd.step} (${check}); trying again in ${minutes} minutes`);
               s.beats.enter("wait", null);
-              return yield* new SlotRefused({ check, reason: prepared.reason });
+              return yield* SlotRefused.make({ check, reason: prepared.reason });
             }
 
             return {
@@ -1317,7 +1317,7 @@ const handlers = (s: Setup) => {
           Effect.retry({ schedule: slotSchedule(minutes), times }),
           Effect.catchTag("SlotRefused", (e) =>
             Effect.fail(
-              new RetriesExhausted({
+              RetriesExhausted.make({
                 schedule: `slotSchedule(${minutes} minutes)`,
                 times: times + 1,
                 reason: `${e.check}: ${e.reason}`,

@@ -213,7 +213,7 @@ export const wait = Effect.fn("typecheck.wait")(
         Option.isSome(found) && found.value.status === "completed"
           ? Effect.succeed(found.value)
           : Effect.fail(
-              new Pending({
+              Pending.make({
                 reason: Option.isSome(found) ? `the ${JOB} job was ${found.value.status}` : `no ${JOB} job yet`,
               }),
             ),

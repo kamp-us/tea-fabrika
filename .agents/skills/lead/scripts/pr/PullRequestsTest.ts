@@ -1,7 +1,7 @@
 // PullRequestsTest.layer: the PullRequests service in memory, on one list of pull requests that its
 // writes change as GitHub's would. It asks GitHub nothing. `calls` keeps every write, in order.
 import { Effect, Layer, Option, Schema } from "effect";
-import { type Detail, type PullRequest, PullRequests, PullRequestsError } from "./PullRequests.ts";
+import { type Detail, type Patch, type PullRequest, PullRequests, PullRequestsError } from "./PullRequests.ts";
 
 /** One write the layer took, as the caller made it. */
 export const Call = Schema.TaggedUnion({
@@ -16,7 +16,10 @@ export type Call = typeof Call.Type;
 
 /** The calls that fail with a reason, by name. */
 export type Failing = Partial<
-  Record<"openOn" | "all" | "draft" | "edit" | "ready" | "view" | "enqueue" | "files" | "arm" | "admin", string>
+  Record<
+    "openOn" | "all" | "draft" | "edit" | "ready" | "view" | "enqueue" | "files" | "patches" | "arm" | "admin",
+    string
+  >
 >;
 
 /** What `view` adds to a listed pull request; each part has a plain default. */
@@ -29,6 +32,8 @@ export type World = {
   readonly more: Map<number, More>;
   /** The files each pull request changes, by number: none when absent. */
   readonly files: Map<number, ReadonlyArray<string>>;
+  /** The diff hunks of each file a pull request changes, by number: none when absent. */
+  readonly patches: Map<number, ReadonlyArray<Patch>>;
 };
 
 /** A fresh world over these pull requests; the layer reads and changes it in place. */
@@ -37,12 +42,13 @@ export const world = (prs: ReadonlyArray<PullRequest> = []): World => ({
   calls: [],
   more: new Map(),
   files: new Map(),
+  patches: new Map(),
 });
 
 export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests> => {
   const fails = (name: keyof Failing) => {
     const reason = failing[name];
-    return reason === undefined ? Effect.void : Effect.fail(new PullRequestsError({ reason }));
+    return reason === undefined ? Effect.void : Effect.fail(PullRequestsError.make({ reason }));
   };
 
   return Layer.succeed(
@@ -79,7 +85,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
         Effect.flatMap(fails("view"), () => {
           const pr = w.prs.find((p) => p.number === number);
           return pr === undefined
-            ? Effect.fail(new PullRequestsError({ reason: `no pull request ${number}` }))
+            ? Effect.fail(PullRequestsError.make({ reason: `no pull request ${number}` }))
             : Effect.succeed({
                 ...pr,
                 base: "main",
@@ -94,6 +100,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
           w.calls.push(Call.cases.enqueue.make({ number, oid }));
         }),
       files: (number) => Effect.map(fails("files"), () => w.files.get(number) ?? []),
+      patches: (number) => Effect.map(fails("patches"), () => w.patches.get(number) ?? []),
       arm: (number, oid) =>
         Effect.map(fails("arm"), () => {
           w.calls.push(Call.cases.arm.make({ number, oid }));

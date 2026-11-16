@@ -11,11 +11,10 @@
  *
  * The window parent steps this machine by hand and turns each outcome into the Link machine's own
  * Msg (`transport/Link.ts`).
- *
- * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Option, Schema } from "effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { ErrorClass } from "./ClientRows.ts";
 
 const Dial = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -39,7 +38,6 @@ const doorWord = (said: string): string => (Schema.is(Reason)(said) ? said : "ot
  * failure, never its text. `refused` keeps the door's reason for refusing the hello when it is one
  * of the door's words, else `other`.
  *
- * @stability unstable
  * @category models
  */
 export const Handshake = Schema.TaggedUnion({
@@ -62,7 +60,6 @@ export const Handshake = Schema.TaggedUnion({
 /**
  * The type of a hello exchange's state.
  *
- * @stability unstable
  * @category models
  */
 export type Handshake = typeof Handshake.Type;
@@ -71,7 +68,6 @@ export type Handshake = typeof Handshake.Type;
  * Schema for what reaches the exchange: the socket opened, the door's challenge, its grant and its
  * waiting notice, and the door's answer to a request with a string id.
  *
- * @stability unstable
  * @category models
  */
 export const HandshakeMsg = Schema.Union([
@@ -98,7 +94,6 @@ export const HandshakeMsg = Schema.Union([
 /**
  * The type of a Msg the hello exchange takes.
  *
- * @stability unstable
  * @category models
  */
 export type HandshakeMsg = typeof HandshakeMsg.Type;
@@ -111,7 +106,6 @@ export type HandshakeMsg = typeof HandshakeMsg.Type;
  * It fails `key` when the key cannot sign, with the platform's class as `error`, and `closed` when
  * the dial has no open socket.
  *
- * @stability unstable
  * @category constructors
  */
 export const hello = Cmd.make("hello", {
@@ -123,7 +117,6 @@ export const hello = Cmd.make("hello", {
 /**
  * Cmd that sends `gateway.knock` with `id` on the dial's socket, asking the door for a code.
  *
- * @stability unstable
  * @category constructors
  */
 export const knock = Cmd.make("knock", {
@@ -172,7 +165,6 @@ const helloFor = (s: Handshake, dial: number, since: number, nonce: string): Ste
  * dial over. A Msg for another dial than the state's, and an answer whose id is not the live one,
  * change nothing.
  *
- * @stability unstable
  * @category constructors
  */
 export const handshakeMachine = Machine.make({

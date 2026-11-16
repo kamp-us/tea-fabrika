@@ -19,7 +19,6 @@ const isolates = new WeakMap<Env, Context.Context<RecordedStart>>();
  * recording the same start again answers the first receipt, so every such read gives the same
  * start. A failed read is not kept: the next use tries again.
  *
- * @stability unstable
  * @category getters
  */
 export const httpContext = (env: Env) =>

@@ -1,7 +1,8 @@
 import { applyCell, type CmdOf } from "@demlik/tea";
 import { Cmd } from "@demlik/tea/effect";
 import { arbGuidedSequence, propertyTrace, stubCtxThrowingProxy } from "@demlik/tea/pbt";
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import fc from "fast-check";
 import { expect, it } from "vitest";
 import * as ScheduledJob from "./ScheduledJob.ts";

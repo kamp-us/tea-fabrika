@@ -1,7 +1,5 @@
 /**
  * Installation and service-manager contract.
- *
- * @stability unstable
  */
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
@@ -12,7 +10,6 @@ import type * as Scope from "effect/Scope";
  * Schema for the job's state in the service manager: absent, or loaded with its executable,
  * arguments, home and configuration. A loaded job remains loaded even while it has no process.
  *
- * @stability unstable
  * @category schemas
  */
 export const Status = Schema.TaggedUnion({
@@ -29,7 +26,6 @@ export const Status = Schema.TaggedUnion({
 /**
  * Native command failure, including its observed exit code or termination signal.
  *
- * @stability unstable
  * @category errors
  */
 export class Command extends Schema.TaggedError<Command, { readonly brand: unique symbol }>()("Command", {
@@ -81,7 +77,6 @@ export class Command extends Schema.TaggedError<Command, { readonly brand: uniqu
 /**
  * File operation failure.
  *
- * @stability unstable
  * @category errors
  */
 export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
@@ -91,7 +86,6 @@ export class Storage extends Schema.TaggedError<Storage, { readonly brand: uniqu
 /**
  * Service-manager output, or a job value, that cannot be read or written without guessing.
  *
- * @stability unstable
  * @category errors
  */
 export class Unsupported extends Schema.TaggedError<Unsupported, { readonly brand: unique symbol }>()("Unsupported", {
@@ -101,7 +95,6 @@ export class Unsupported extends Schema.TaggedError<Unsupported, { readonly bran
 /**
  * The job or its file belongs to another configuration, or the home is not canonical.
  *
- * @stability unstable
  * @category errors
  */
 export class Conflict extends Schema.TaggedError<Conflict, { readonly brand: unique symbol }>()("Conflict", {
@@ -111,7 +104,6 @@ export class Conflict extends Schema.TaggedError<Conflict, { readonly brand: uni
 /**
  * Lower controller failure, preserving its protected cause.
  *
- * @stability unstable
  * @category errors
  */
 export class BrainControlError extends Schema.TaggedError<BrainControlError, { readonly brand: unique symbol }>()(
@@ -124,7 +116,6 @@ export class BrainControlError extends Schema.TaggedError<BrainControlError, { r
 /**
  * Operations on one checked installation.
  *
- * @stability unstable
  * @category services
  */
 export class BrainControl extends Context.Service<

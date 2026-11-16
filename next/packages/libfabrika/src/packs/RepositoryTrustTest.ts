@@ -2,8 +2,15 @@
 // No second trust reducer lives here: the opening machine consumes these saved events.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Context, Effect, Exit, Layer, Schema, type Scope, Stream } from "effect";
-import { Digest } from "effect/crypto";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Context from "effect/Context";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -188,7 +195,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
         const check = async () => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 30, full: 300 }) });
         // oxlint-disable-next-line fabrika/no-promises -- edge: await fast-check within the scoped test
-        yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => new TrustLawFailed({ cause }) });
+        yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => TrustLawFailed.make({ cause }) });
       }),
     );
 
@@ -303,7 +310,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
           const check = async () => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 30, full: 300 }) });
           // oxlint-disable-next-line fabrika/no-promises -- edge: await fast-check within the scoped test
-          yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => new TrustLawFailed({ cause }) });
+          yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => TrustLawFailed.make({ cause }) });
         }),
     );
 
@@ -363,7 +370,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       append: () => {
                         appends++;
                         return cell.move % 2 === 0
-                          ? Effect.fail(new LedgerError({ reason: "storage" }))
+                          ? Effect.fail(LedgerError.make({ reason: "storage" }))
                           : Effect.succeed(Appended.cases.refused.make({ reason: "bad_parent" }));
                       },
                     };
@@ -408,7 +415,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
         const check = async () => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 30, full: 300 }) });
         // oxlint-disable-next-line fabrika/no-promises -- edge: await fast-check within the scoped test
-        yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => new TrustLawFailed({ cause }) });
+        yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => TrustLawFailed.make({ cause }) });
       }),
     );
   });

@@ -107,7 +107,7 @@ export const judge = Effect.fnUntraced(function* (
   const before =
     base === null
       ? []
-      : yield* list.keys(base, renames).pipe(Effect.mapError(() => new BaseUnreadable({ file: list.file })));
+      : yield* list.keys(base, renames).pipe(Effect.mapError(() => BaseUnreadable.make({ file: list.file })));
   const after = yield* list.keys(head).pipe(Effect.option);
 
   if (Option.isNone(after)) {
@@ -138,14 +138,14 @@ const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
       });
       return { out, err, code: Number(code) };
     }),
-  ).pipe(Effect.mapError(() => new Failed({ message: "could not start git" })));
+  ).pipe(Effect.mapError(() => Failed.make({ message: "could not start git" })));
 });
 
 const must = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
   const r = yield* git(args);
 
   if (r.code !== 0) {
-    return yield* new Failed({ message: `git ${args.join(" ")}: ${r.err.trim()}` });
+    return yield* Failed.make({ message: `git ${args.join(" ")}: ${r.err.trim()}` });
   }
 
   return r.out;
@@ -160,7 +160,7 @@ const baseFrom = Effect.fnUntraced(function* (flag: string | undefined) {
   const sha = Schema.decodeUnknownOption(Sha)(flag);
 
   if (Option.isNone(sha)) {
-    return yield* new Failed({ message: `--base must be a full sha, "" or forty zeros, not ${String(flag)}` });
+    return yield* Failed.make({ message: `--base must be a full sha, "" or forty zeros, not ${String(flag)}` });
   }
 
   return sha;
