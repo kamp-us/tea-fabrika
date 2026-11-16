@@ -363,7 +363,7 @@ patchedDependencies:
   '@demlik/tea@0.25.0': a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3
   '@manti-ui/react@0.13.0': 520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef
   '@manti-ui/styles@0.13.0': 09f034efa447d755f779db1008ce64ea7787a3b2407951fd8c94b46513bba91e
-  effect@4.1.3: 062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9
+  effect@4.1.3: 407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f
   ghostty-web@0.4.0: 28f943f1f6dce932fac5730afcbd278dfbbe017f43b896765d7146580f6dfb54
 
 importers:
@@ -375,10 +375,10 @@ importers:
         version: 0.15.0(patch_hash=9642ccde7d166552e6fad6491fa02ea5d8cbcb6322f031e49f2c1c46a37ac915)
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:packages/fabrika
@@ -387,17 +387,17 @@ importers:
         version: link:packages/pipeline
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       '@demlik/structure-sweep':
         specifier: 'catalog:'
-        version: 0.4.1(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.4.1(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/tsgo':
         specifier: 'catalog:'
         version: 0.63.0
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@kampus/vitest':
         specifier: workspace:*
         version: link:next/packages/vitest
@@ -453,7 +453,7 @@ importers:
     dependencies:
       effect:
         specifier: 4.1.3
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       oxc-parser:
         specifier: 'catalog:'
@@ -472,10 +472,10 @@ importers:
         version: 0.0.81
       '@demlik/tea':
         specifier: catalog:old
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@kampus/fabrika-design':
         specifier: workspace:*
         version: link:../../packages/fabrika-design
@@ -538,7 +538,7 @@ importers:
         version: 12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       ghostty-web:
         specifier: 'catalog:'
         version: 0.4.0(patch_hash=28f943f1f6dce932fac5730afcbd278dfbbe017f43b896765d7146580f6dfb54)
@@ -593,16 +593,16 @@ importers:
         version: 0.3.316(@anthropic-ai/sdk@0.133.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.1(supports-color@10.2.2)(zod@4.6.7))(zod@4.6.7)
       '@demlik/tea':
         specifier: catalog:old
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../../packages/fabrika
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -615,16 +615,16 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: catalog:old
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../../packages/fabrika
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -637,7 +637,7 @@ importers:
     dependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@kampus/fabrika-design':
         specifier: workspace:*
         version: link:../../../packages/fabrika-design
@@ -652,7 +652,7 @@ importers:
         version: 0.13.0(patch_hash=09f034efa447d755f779db1008ce64ea7787a3b2407951fd8c94b46513bba91e)
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       oxc-parser:
         specifier: 'catalog:'
         version: 0.157.0
@@ -665,19 +665,19 @@ importers:
     devDependencies:
       '@alchemy.run/cloudflare':
         specifier: 'catalog:'
-        version: 2.0.0-beta.85(patch_hash=54f0ba306cb70c8383a3b53bf22114369d5dd5ed10aeb0cd09b4d89cbc1d1878)(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+        version: 2.0.0-beta.85(patch_hash=54f0ba306cb70c8383a3b53bf22114369d5dd5ed10aeb0cd09b4d89cbc1d1878)(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
       '@alchemy.run/cloudflare-runtime':
         specifier: 2.0.0-beta.85
-        version: 2.0.0-beta.85(patch_hash=14384a567c64fa21b5aa3aff50ba52e0f3e5c8ac403e5ad4e5b572fee1c62dc1)(@distilled.cloud/cloudflare@1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)))(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+        version: 2.0.0-beta.85(patch_hash=14384a567c64fa21b5aa3aff50ba52e0f3e5c8ac403e5ad4e5b572fee1c62dc1)(@distilled.cloud/cloudflare@1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)))(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
       '@cloudflare/workers-types':
         specifier: 5.20261027.1
         version: 5.20261027.1
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@kampus/chaos':
         specifier: workspace:*
         version: link:../../programs/chaos
@@ -707,7 +707,7 @@ importers:
         version: 19.3.0(@types/react@19.3.0)
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
+        version: 2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
       electron:
         specifier: 45.2.1
         version: 45.2.1(supports-color@10.2.2)
@@ -731,22 +731,22 @@ importers:
     dependencies:
       '@alchemy.run/cloudflare':
         specifier: 'catalog:'
-        version: 2.0.0-beta.85(patch_hash=54f0ba306cb70c8383a3b53bf22114369d5dd5ed10aeb0cd09b4d89cbc1d1878)(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+        version: 2.0.0-beta.85(patch_hash=54f0ba306cb70c8383a3b53bf22114369d5dd5ed10aeb0cd09b4d89cbc1d1878)(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
       '@alchemy.run/cloudflare-runtime':
         specifier: 2.0.0-beta.85
-        version: 2.0.0-beta.85(patch_hash=14384a567c64fa21b5aa3aff50ba52e0f3e5c8ac403e5ad4e5b572fee1c62dc1)(@distilled.cloud/cloudflare@1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)))(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+        version: 2.0.0-beta.85(patch_hash=14384a567c64fa21b5aa3aff50ba52e0f3e5c8ac403e5ad4e5b572fee1c62dc1)(@distilled.cloud/cloudflare@1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)))(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
       '@decimalturn/toml-patch':
         specifier: 3.3.2
         version: 3.3.2
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
+        version: 2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       lightningcss:
         specifier: 'catalog:'
         version: 1.33.0
@@ -771,10 +771,10 @@ importers:
         version: 5.20261027.1
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@kampus/vitest':
         specifier: workspace:*
         version: link:../vitest
@@ -798,10 +798,10 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/platform-browser':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
       '@kampus/fabrika-design':
         specifier: workspace:*
         version: link:../../../packages/fabrika-design
@@ -816,7 +816,7 @@ importers:
         version: 0.13.0(patch_hash=09f034efa447d755f779db1008ce64ea7787a3b2407951fd8c94b46513bba91e)
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       react:
         specifier: 'catalog:'
         version: 19.3.1
@@ -826,7 +826,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@kampus/vitest':
         specifier: workspace:*
         version: link:../vitest
@@ -859,11 +859,11 @@ importers:
     dependencies:
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -881,17 +881,17 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/libfabrika':
         specifier: workspace:*
         version: link:../../packages/libfabrika
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@kampus/vitest':
         specifier: workspace:*
         version: link:../../packages/vitest
@@ -912,7 +912,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/libfabrika':
         specifier: workspace:*
         version: link:../../packages/libfabrika
@@ -921,7 +921,7 @@ importers:
         version: 0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0(patch_hash=09f034efa447d755f779db1008ce64ea7787a3b2407951fd8c94b46513bba91e))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       react:
         specifier: 'catalog:'
         version: 19.3.1
@@ -931,7 +931,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@kampus/vitest':
         specifier: workspace:*
         version: link:../../packages/vitest
@@ -958,7 +958,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/libfabrika':
         specifier: workspace:*
         version: link:../../packages/libfabrika
@@ -967,7 +967,7 @@ importers:
         version: 0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0(patch_hash=09f034efa447d755f779db1008ce64ea7787a3b2407951fd8c94b46513bba91e))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       react:
         specifier: 'catalog:'
         version: 19.3.1
@@ -977,7 +977,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@kampus/vitest':
         specifier: workspace:*
         version: link:../../packages/vitest
@@ -1001,17 +1001,17 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/libfabrika':
         specifier: workspace:*
         version: link:../../packages/libfabrika
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -1029,23 +1029,23 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/libfabrika':
         specifier: workspace:*
         version: link:../../packages/libfabrika
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       picomatch:
         specifier: 4.0.7
         version: 4.0.7
     devDependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@kampus/vitest':
         specifier: workspace:*
         version: link:../../packages/vitest
@@ -1069,17 +1069,17 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/libfabrika':
         specifier: workspace:*
         version: link:../../packages/libfabrika
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -1097,7 +1097,7 @@ importers:
     devDependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@oxlint/plugins':
         specifier: 'catalog:'
         version: 1.90.0
@@ -1106,7 +1106,7 @@ importers:
         version: 26.6.6
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       fast-check:
         specifier: 'catalog:'
         version: 4.10.2
@@ -1133,7 +1133,7 @@ importers:
     dependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1))
       zod:
         specifier: 'catalog:'
         version: 4.6.7
@@ -1149,13 +1149,13 @@ importers:
         version: 0.0.81
       '@demlik/tea':
         specifier: catalog:old
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/opentelemetry':
         specifier: 'catalog:'
-        version: 4.1.3(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.223.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
+        version: 4.1.3(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.223.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@modelcontextprotocol/client':
         specifier: 'catalog:'
         version: 2.4.0
@@ -1182,7 +1182,7 @@ importers:
         version: 26.6.6
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
@@ -1209,7 +1209,7 @@ importers:
         version: 26.6.6
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       fast-check:
         specifier: 'catalog:'
         version: 4.10.2
@@ -1227,19 +1227,19 @@ importers:
     dependencies:
       '@alchemy.run/cloudflare':
         specifier: 'catalog:'
-        version: 2.0.0-beta.85(patch_hash=54f0ba306cb70c8383a3b53bf22114369d5dd5ed10aeb0cd09b4d89cbc1d1878)(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+        version: 2.0.0-beta.85(patch_hash=54f0ba306cb70c8383a3b53bf22114369d5dd5ed10aeb0cd09b4d89cbc1d1878)(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../fabrika
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
+        version: 2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
@@ -1261,7 +1261,7 @@ importers:
     dependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../fabrika
@@ -1280,10 +1280,10 @@ importers:
         version: 0.3.316(@anthropic-ai/sdk@0.133.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.1(supports-color@10.2.2)(zod@4.6.7))(zod@4.6.7)
       '@demlik/tea':
         specifier: catalog:old
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/opentelemetry':
         specifier: 'catalog:'
-        version: 4.1.3(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.223.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
+        version: 4.1.3(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.223.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
       '@opentelemetry/api':
         specifier: 'catalog:'
         version: 1.9.1
@@ -1313,7 +1313,7 @@ importers:
         version: 26.6.6
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       fast-check:
         specifier: 'catalog:'
         version: 4.10.2
@@ -1337,7 +1337,7 @@ importers:
         version: link:../../packages/pipeline
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1353,13 +1353,13 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: catalog:old
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1390,7 +1390,7 @@ importers:
         version: link:../../packages/pipeline
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1412,7 +1412,7 @@ importers:
         version: link:../../packages/pipeline
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1428,7 +1428,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: catalog:old
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
@@ -1443,7 +1443,7 @@ importers:
         version: 12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1471,7 +1471,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: catalog:old
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
@@ -1483,7 +1483,7 @@ importers:
         version: 0.3.0
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       mdast-util-from-markdown:
         specifier: 'catalog:'
         version: 2.1.0(supports-color@10.2.2)
@@ -1544,7 +1544,7 @@ importers:
         version: link:../../packages/pipeline
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1560,7 +1560,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: catalog:old
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
@@ -1575,7 +1575,7 @@ importers:
         version: link:../tracker
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1603,7 +1603,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: catalog:old
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
@@ -1618,7 +1618,7 @@ importers:
         version: link:../tracker
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1649,7 +1649,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: catalog:old
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
@@ -1661,7 +1661,7 @@ importers:
         version: 0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0(patch_hash=09f034efa447d755f779db1008ce64ea7787a3b2407951fd8c94b46513bba91e))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 'catalog:'
-        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+        version: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -6397,20 +6397,20 @@ snapshots:
     optionalDependencies:
       '@modelcontextprotocol/server': 2.4.0
 
-  '@alchemy.run/acme@2.0.0-beta.85(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))':
+  '@alchemy.run/acme@2.0.0-beta.85(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))':
     dependencies:
-      '@distilled.cloud/acme': 1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      alchemy: 2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      '@distilled.cloud/acme': 1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      alchemy: 2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
 
-  '@alchemy.run/cloudflare-runtime@2.0.0-beta.85(patch_hash=14384a567c64fa21b5aa3aff50ba52e0f3e5c8ac403e5ad4e5b572fee1c62dc1)(@distilled.cloud/cloudflare@1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)))(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))':
+  '@alchemy.run/cloudflare-runtime@2.0.0-beta.85(patch_hash=14384a567c64fa21b5aa3aff50ba52e0f3e5c8ac403e5ad4e5b572fee1c62dc1)(@distilled.cloud/cloudflare@1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)))(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))':
     dependencies:
       '@alchemy.run/node-utils': 2.0.0-beta.85
       '@cloudflare/unenv-preset': 2.16.2(unenv@2.0.0-rc.24)(workerd@1.20261026.1)
-      '@distilled.cloud/cloudflare': 1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
+      '@distilled.cloud/cloudflare': 1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
       '@puppeteer/browsers': 3.2.6(yauzl@3.4.0)
       capnp-es: 0.0.16(typescript@7.0.2)
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       magic-string: 0.30.21
       mime: 4.1.1
       sharp: 0.35.5(@types/node@26.6.6)
@@ -6418,7 +6418,7 @@ snapshots:
       workerd: 1.20261026.1
       yauzl: 3.4.0
     optionalDependencies:
-      '@effect/platform-node': 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))
+      '@effect/platform-node': 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1))
       rolldown: 1.2.13
       vite: 8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)
     transitivePeerDependencies:
@@ -6426,26 +6426,26 @@ snapshots:
       - proxy-agent
       - typescript
 
-  '@alchemy.run/cloudflare@2.0.0-beta.85(patch_hash=54f0ba306cb70c8383a3b53bf22114369d5dd5ed10aeb0cd09b4d89cbc1d1878)(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))':
+  '@alchemy.run/cloudflare@2.0.0-beta.85(patch_hash=54f0ba306cb70c8383a3b53bf22114369d5dd5ed10aeb0cd09b4d89cbc1d1878)(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))':
     dependencies:
-      '@alchemy.run/acme': 2.0.0-beta.85(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      '@alchemy.run/cloudflare-runtime': 2.0.0-beta.85(patch_hash=14384a567c64fa21b5aa3aff50ba52e0f3e5c8ac403e5ad4e5b572fee1c62dc1)(@distilled.cloud/cloudflare@1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)))(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
-      '@alchemy.run/docker': 2.0.0-beta.85(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      '@alchemy.run/sql': 2.0.0-beta.85(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      '@distilled.cloud/aws': 1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      '@distilled.cloud/aws4signer': 1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      '@distilled.cloud/cloudflare': 1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      '@distilled.cloud/core': 1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      '@distilled.cloud/iceberg': 1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      '@effect/sql-d1': 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      alchemy: 2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      '@alchemy.run/acme': 2.0.0-beta.85(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      '@alchemy.run/cloudflare-runtime': 2.0.0-beta.85(patch_hash=14384a567c64fa21b5aa3aff50ba52e0f3e5c8ac403e5ad4e5b572fee1c62dc1)(@distilled.cloud/cloudflare@1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)))(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+      '@alchemy.run/docker': 2.0.0-beta.85(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      '@alchemy.run/sql': 2.0.0-beta.85(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      '@distilled.cloud/aws': 1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      '@distilled.cloud/aws4signer': 1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      '@distilled.cloud/cloudflare': 1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      '@distilled.cloud/core': 1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      '@distilled.cloud/iceberg': 1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      '@effect/sql-d1': 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      alchemy: 2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       pathe: 2.0.3
       picomatch: 4.0.7
       rolldown: 1.2.13
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@effect/platform-node': 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))
+      '@effect/platform-node': 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1))
       vite: 8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)
     transitivePeerDependencies:
       - '@effect/sql-libsql'
@@ -6457,10 +6457,10 @@ snapshots:
       - proxy-agent
       - typescript
 
-  '@alchemy.run/docker@2.0.0-beta.85(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))':
+  '@alchemy.run/docker@2.0.0-beta.85(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))':
     dependencies:
-      alchemy: 2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      alchemy: 2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       rolldown: 1.2.13
 
   '@alchemy.run/node-utils@2.0.0-beta.85':
@@ -6472,10 +6472,10 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.3.0
 
-  '@alchemy.run/sql@2.0.0-beta.85(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))':
+  '@alchemy.run/sql@2.0.0-beta.85(alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))':
     dependencies:
-      alchemy: 2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      alchemy: 2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
 
   '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.316':
     optional: true
@@ -6893,10 +6893,10 @@ snapshots:
       yaml: 2.9.0
       zod: 4.0.0
 
-  '@demlik/structure-sweep@0.4.1(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
+  '@demlik/structure-sweep@0.4.1(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
     dependencies:
       '@demlik/code-graph': 0.13.0
-      '@demlik/tea': 0.23.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+      '@demlik/tea': 0.23.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       oxc-parser: 0.151.0
       oxc-resolver: 11.24.2
       smol-toml: 1.9.0
@@ -6913,76 +6913,76 @@ snapshots:
       - vitest
       - ws
 
-  '@demlik/tea@0.23.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
+  '@demlik/tea@0.23.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
     dependencies:
       '@standard-schema/spec': 1.1.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       fast-check: 4.10.2
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
       vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
       ws: 8.22.1
 
-  '@demlik/tea@0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
+  '@demlik/tea@0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
     dependencies:
       '@standard-schema/spec': 1.1.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       fast-check: 4.10.2
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
       vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
       ws: 8.22.1
 
-  '@demlik/tea@0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
+  '@demlik/tea@0.27.0(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
     dependencies:
       '@standard-schema/spec': 1.1.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       fast-check: 4.10.2
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
       vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
       ws: 8.22.1
 
-  '@distilled.cloud/acme@1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))':
+  '@distilled.cloud/acme@1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))':
     dependencies:
-      '@distilled.cloud/core': 1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      '@distilled.cloud/core': 1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
 
-  '@distilled.cloud/aws4signer@1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))':
+  '@distilled.cloud/aws4signer@1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))':
     dependencies:
-      '@distilled.cloud/core': 1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      '@distilled.cloud/core': 1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
 
-  '@distilled.cloud/aws@1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))':
+  '@distilled.cloud/aws@1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))':
     dependencies:
-      '@distilled.cloud/aws4signer': 1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      '@distilled.cloud/core': 1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      '@distilled.cloud/aws4signer': 1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      '@distilled.cloud/core': 1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
 
-  '@distilled.cloud/cloudflare@1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))':
+  '@distilled.cloud/cloudflare@1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))':
     dependencies:
-      '@distilled.cloud/core': 1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      '@distilled.cloud/core': 1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
 
-  '@distilled.cloud/core@1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))':
+  '@distilled.cloud/core@1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))':
     dependencies:
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
 
-  '@distilled.cloud/iceberg@1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))':
+  '@distilled.cloud/iceberg@1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))':
     dependencies:
-      '@distilled.cloud/core': 1.0.0-rc.18(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      '@distilled.cloud/core': 1.0.0-rc.18(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
 
-  '@effect/opentelemetry@4.1.3(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.223.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))':
+  '@effect/opentelemetry@4.1.3(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.223.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))':
     dependencies:
       '@opentelemetry/semantic-conventions': 1.43.0
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/api-logs': 0.223.0
@@ -6991,33 +6991,33 @@ snapshots:
       '@opentelemetry/sdk-metrics': 2.12.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 2.12.0(@opentelemetry/api@1.9.1)
 
-  '@effect/platform-browser@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))':
+  '@effect/platform-browser@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))':
     dependencies:
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
 
-  '@effect/platform-node-shared@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))':
+  '@effect/platform-node-shared@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))':
     dependencies:
       '@types/ws': 8.18.2
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       ws: 8.22.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))':
+  '@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1))':
     dependencies:
-      '@effect/platform-node-shared': 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      '@effect/platform-node-shared': 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       redis: 6.3.0(@opentelemetry/api@1.9.1)
       undici: 8.12.4
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/sql-d1@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))':
+  '@effect/sql-d1@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))':
     dependencies:
       '@cloudflare/workers-types': 5.20261109.1
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
 
   '@effect/tsgo-darwin-arm64@0.63.0':
     optional: true
@@ -7050,9 +7050,9 @@ snapshots:
       '@effect/tsgo-win32-arm64': 0.63.0
       '@effect/tsgo-win32-x64': 0.63.0
 
-  '@effect/vitest@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))':
+  '@effect/vitest@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))':
     dependencies:
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
 
   '@electron-internal/extract-zip@1.0.6': {}
@@ -9089,12 +9089,12 @@ snapshots:
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
-  alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1):
+  alchemy@2.0.0-beta.85(@effect/platform-node@4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1):
     dependencies:
       '@alchemy.run/node-utils': 2.0.0-beta.85
       '@alchemy.run/sigil': 0.1.0-alpha.1(@types/react@19.3.0)
       capnweb: 0.12.0
-      effect: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      effect: 4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f)
       fflate: 0.8.3
       pathe: 2.0.3
       picomatch: 4.0.7
@@ -9102,7 +9102,7 @@ snapshots:
       tinyglobby: 0.2.17
       yaml: 2.9.1
     optionalDependencies:
-      '@effect/platform-node': 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))
+      '@effect/platform-node': 4.1.3(effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f))(redis@6.3.0(@opentelemetry/api@1.9.1))
       vite: 8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)
       ws: 8.22.1
     transitivePeerDependencies:
@@ -9315,7 +9315,7 @@ snapshots:
 
   ee-first@1.1.1: {}
 
-  effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9): {}
+  effect@4.1.3(patch_hash=407b4c4bcb18f8aee6e9428455fd3b4166b106db2c13e4b7374681b6f135a22f): {}
 
   electron-to-chromium@1.5.467: {}
 

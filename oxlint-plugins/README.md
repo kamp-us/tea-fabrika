@@ -1136,6 +1136,65 @@ every folder they list. `advice.test.ts` holds the runner's side: a `Reflect` fi
 blocks, it never keeps a `JSON.parse` warn line alive, and each block keeps what the rule held
 before.
 
+## No `vi` mocks, spies or env stubs, decisions 0555 and 0579
+
+The mock sweep's lock is a pair of oxlint's own rules over the same files:
+`vitest/no-restricted-vi-methods` and `eslint/no-restricted-properties` with one `object: "vi"`
+entry per banned member. Its blocks near the end of `.oxlintrc.json` ban five members, `vi.fn`,
+`vi.mock`, `vi.doMock`, `vi.spyOn` and `vi.stubEnv`, each with the same message in both rules,
+saying what to use instead (a service and a test layer, the Recorder, `TestConsole` for `Console`,
+or a `ConfigProvider` layer). A folder joins whole the day its own slice of the sweep brings it to
+zero, and none is ever taken off. The last slice folds the lists into the `next/**/*` block. The
+first folder is `next/apps/fabrika/e2e` (ticket 1067).
+
+```jsonc
+// The shape of one block of the lock, cut short.
+{
+  "files": ["next/apps/fabrika/e2e/*"],
+  "rules": {
+    "vitest/no-restricted-vi-methods": ["error", { "spyOn": "Put the call behind a service ..." }],
+    "eslint/no-restricted-properties": [
+      "warn", // the level the JSON.parse entry these files already take has here
+      { "object": "JSON", "property": "parse", "message": "..." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service ..." },
+    ],
+  },
+}
+```
+
+Why two rules: the vitest rule misses a call chained onto the `vi` call (below), filed as
+[oxc#29656](https://github.com/oxc-project/oxc/issues/29656). `no-restricted-properties` matches
+the member access `vi.spyOn` itself, so it refuses the chained call, but it does not follow a
+renamed import, which the vitest rule does. The properties half stays until oxc fixes the issue.
+
+An override replaces a rule's options, so a lock block writes out again every
+`no-restricted-properties` entry its files take from the blocks above, at that block's level. That
+is why the e2e folder has two blocks: `e2e/*` takes the `warn` block's `Data.TaggedError` and
+`JSON.parse` entries, and `e2e/node/**` the Reflect ban's `error` block. A `vi` fire blocks at
+`warn` too: `pnpm lint` lets only a `JSON.parse` fire of this rule advise (`advice.ts`).
+
+What oxlint 1.90.0 sees, from a probe and from `VI_METHODS` in `builtin-plants.ts`:
+
+- It fires on each of the five, through a renamed import (`import { vi as v }`, then `v.spyOn`),
+  a computed key (`vi["spyOn"]`) and an optional call (`vi?.fn()`).
+- It does not fire on `vi.hoisted`, which 0555 leaves open, `vi.waitFor`, a comment, a string or
+  another object's `fn`.
+- It misses a call chained onto the `vi` call: `vi.spyOn(console, "warn").mockImplementation(...)`
+  and `vi.fn().mockReturnValue(...)` pass, though the same call in parentheses is refused. Oxlint
+  1.93.0, the newest release on 2026-11-16, misses it too
+  ([oxc#29656](https://github.com/oxc-project/oxc/issues/29656)). This is the most common shape of
+  a spy, so the lock's other half holds it.
+
+What the `vi` entries of `no-restricted-properties` see, from `VI_PROPERTIES`: each of the five,
+the two chained calls, a computed key and an optional call; not a renamed import, `vi.hoisted`,
+`vi.waitFor`, a comment, a string or another object's `fn`. A line is held when either plant
+refuses it.
+
+`plants.test.ts` reads every block that sets the vitest rule from oxlint's own `--print-config` and
+plants `VI_METHODS` and `VI_PROPERTIES` in a test file of every folder they list, as it does
+`REFLECT`. It also checks that every chained line `VI_METHODS` takes is one `VI_PROPERTIES`
+refuses, and that no `vi` fire is advice where the rule's level is `warn`.
+
 ## Rules that gave way to trusted ones, decision 0573
 
 [0573](../.decisions/0573-trusted-lint-rule-replaces-ours.md): where a trusted rule holds every line
