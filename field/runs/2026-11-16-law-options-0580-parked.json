@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-law-options-0580-parked",
+  "ticket": "580",
+  "pr": "kamp-us/tea-fabrika#1497",
+  "started": "2026-11-16T00:39:03-08:00",
+  "ended": null,
+  "parent": "2026-11-16-law-options-0580-fix3",
+  "active": null,
+  "role": "session",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "parked",
+  "why": "The 0580 job (docs/plan/quests/law-options-0580-PLAN.md, next/ and tooling) is parked until after the sev0, by the owner's scope ruling of 2026-11-16 that moves the @kalfa/vitest work, 0580 included, to right after it. Parked head d41837351. Slice 1 is built but has no passing review. The last recheck (row 2026-11-16-law-options-0580-review3, at 625dd21b1) sent it back: .github/ci/plant-check.ts:271 checked a run-row record only when its file was a head law file the pull request changes, so a record for a law in an unchanged head file on the package's it was skipped where the plan refuses it as unclaimed. The round still running at the ruling (row 2026-11-16-law-options-0580-fix3, the lead's last 0564 round) finished and pushed d41837351: readInputs now also reads, at head, each recorded law file outside the diff (present or not, which it), and check() skips a record only when its file is gone from head or on another it; the model law generates the unchanged-file case and a new scenario law holds readInputs' half, each red under its plant; the reviewer's own check() input now gives [\"unclaimed\"], and a record naming a file absent from head gives []. That round's own report says plant-check exits 0 as CI runs it, pnpm lint passed and pnpm typecheck exited 0. No recheck of d41837351 ran: the same reviewer had started one and was stopped at the ruling, and it committed nothing. Left: the same reviewer's recheck of 949487d90..d41837351 (the lead said a further fault in plant-check's unclaimed logic goes to the owner), then slice 1's head to the merge session for exam-to-lint's slice C, then slice 2 (22 calls in 13 libfabrika files) and slice 3 (StartsTest.ts and the deletion of property; pull request 1366 has merged), each with tests, build and one review.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Written by the coordinator, read-only apart from this row; no law ran in this row. Open alongside: field/findings/2026-11-16-plant-ts-type-error.json (plant.ts outside the .agents typecheck). stepcommit.sh refused the step name plan twice in this job; that refusal still needs its root cause and a ticket. The main checkout at the repo root holds stale copies of 949487d90's files under a branch ref the fix step's worktree moved to d41837351; nothing there is uncommitted work, and resetting it was refused by the permission check."
+}
