@@ -181,6 +181,32 @@ lands in this sweep, after PR 1366, since `local-instance.integration.test.ts` a
 each row's way is 0555's, but none was read call by call, and the tests step stops and reports any
 hit whose way needs a design call.
 
+**Amendment (2026-11-16 Pacific, the lead's ruling, after slice 5's tests step).** The tests step
+read every hit and found 43 on main, not 40: PR 1366 added `runtime-quotas.laws.test.ts` with 3
+more, and its 2 table mocks go the same way as the others. The build needs files the table below
+did not list; their rows are added there. The bundler is `Bundler`, a `Context.Reference` whose
+default is the live bundle, not a required service, so no caller of `build` must provide it. It
+answers a narrow output type, not Rolldown's whole `RolldownOutput`, so the law's `Layer.mock`
+stand-in needs no cast. Law L11 in `file-services.laws.integration.test.ts` gains a fixed example
+(fast-check's `examples`) that draws the `env` case: its plant on the env path was green at the
+fast depth, since 10 runs never drew that case, and red only at full depth.
+
+```ts
+// next/packages/libfabrika/src/node/build/Bundler.ts. A sketch.
+type Output = {
+  readonly output: ReadonlyArray<
+    | { readonly type: "chunk"; readonly fileName: string; readonly code: string }
+    | { readonly type: "asset"; readonly fileName: string; readonly source: string | Uint8Array }
+  >;
+};
+export const Bundler = Context.Reference<{
+  readonly bundle: (input: InputOptions, plugins: Plugins, options?: OutputOptions) => Effect.Effect<Output, BuildError>;
+}>("@kampus/libfabrika/node/build/Bundler", { defaultValue: () => ({ bundle: liveBundle }) });
+
+// next/apps/fabrika/src/runtime.ts: the entry hands the table in; only brain.ts imports the virtual module
+export const projectRuntime = (ctx, env, programs: Readonly<Record<string, BuiltProgram>>) => /* ... */;
+```
+
 ## The shape
 
 Sketches, not compiled. Names are the installed effect 4.1.3's and the Recorder's as built.
@@ -602,7 +628,7 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
 |---|---|---|---|
 | next/apps/fabrika/src/exam/** | tests | tests | (amendment 2026-11-16) the files of one of the lock's three blocks, the day the lock lands; no file changes in this sweep |
 | next/apps/fabrika/src/exam/ | tests | tests | the same folder |
-| next/apps/fabrika/src/file-services.laws.integration.test.ts | tests | tests | slice 1: A1 |
+| next/apps/fabrika/src/file-services.laws.integration.test.ts | tests | tests | slice 1: A1; slice 5 (amendment 2026-11-16): the env stubs go to `ConfigProvider`, dev.ts's `main` is run with its args, and L11 gains a fixed `examples` entry that draws the `env` case |
 | next/apps/fabrika/src/grant-readers.laws.test.ts | tests | tests | slice 1: A2, A3 |
 | next/apps/fabrika/src/door.integration.test.ts | tests | tests | slice 1: A4; slice 3: C1 to C4 |
 | next/apps/fabrika/src/instance-one-file.integration.test.ts | tests | tests | slice 2: B3 (amendment 2026-11-15: slice 1's A5 moves to the 0042 Alchemy mocks plan) |
@@ -637,7 +663,14 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
 | next/apps/fabrika/dev.ts | build | 12 | slice 5: `FABRIKA_HOME` read through `Config`; the program exported as an Effect for its law |
 | next/apps/fabrika/grant.ts | build | 6 | slice 5: the program exported as an Effect for its law |
 | next/apps/fabrika/hands.ts | build | 4 | slice 5: `FABRIKA_HOME` read through `Config` |
-| next/packages/libfabrika/src/node/build/Bundler.ts | build | 25 | slice 5, new: the bundler service 0555 names, the contract and its live layer |
+| next/packages/libfabrika/src/node/build/Bundler.ts | build | 25 | slice 5, new: the bundler 0555 names; (amendment 2026-11-16) a `Context.Reference` whose default is the live bundle, answering a narrow output type |
+| next/packages/libfabrika/src/node/build/build.ts | build | 6 | slice 5 (amendment 2026-11-16): every Rolldown bundle goes through `Bundler` (about lines 316, 580 and 603) |
+| next/packages/libfabrika/src/node/build/bundle.ts | build | 3 | slice 5 (amendment 2026-11-16): `bundlePrograms` goes through `Bundler` (about line 189) |
+| next/packages/libfabrika/package.json | build | 1 | slice 5 (amendment 2026-11-16): the export `"./node/build/Bundler"` |
+| next/apps/fabrika/src/brain.ts | build | 2 | slice 5 (amendment 2026-11-16): the entry, which alone imports `virtual:fabrika-built`, passes `programs` to `projectRuntime` (about line 36) |
+| next/apps/fabrika/src/objects.ts | build | 3 | slice 5 (amendment 2026-11-16): `processObject(programs)`, with `programs` from the entry's virtual import (about lines 8 and 24) |
+| next/apps/fabrika/src/start-child.test-support.ts | tests | tests | slice 5 (amendment 2026-11-16): `childProject(programs)` takes the table |
+| next/apps/fabrika/src/runtime-quotas.laws.test.ts | tests | tests | slice 5 (amendment 2026-11-16): from PR 1366; its 2 table mocks go, the table handed in |
 
 - Every test layer named stays beside its service (0538). The app's other test files that build
   `Gateway.layer` gain the `Mac` and `SecureRandom` layers and an `InputNames` layer in slice 3
