@@ -647,7 +647,11 @@ const storageSecrets = Effect.fnUntraced(function* () {
   const inventory = [...remaining];
   const reached = new Set<string>();
   const leaks = new Set<string>();
-  const perWalk = Math.max(4, Math.ceil(inventory.length / 100));
+  // Each cut starts a fresh Project, so a cut is the unit of cost. Every walk cuts exactly `perWalk`
+  // operations, so the walks together cut each operation once, and fewer than `walks` cuts repeat
+  // one. A walk of `perWalk` to `perWalk + 8` cuts repeated about a third of all cuts at this seed.
+  const walks = runsFor({ fast: 100, full: 100 });
+  const perWalk = Math.ceil(inventory.length / walks);
   const tape = fc
     .commands(
       [
@@ -657,11 +661,12 @@ const storageSecrets = Effect.fnUntraced(function* () {
           toString: () => JSON.stringify(pick),
         })),
       ],
-      { maxCommands: perWalk + 8, size: "max" },
+      { maxCommands: perWalk, size: "max" },
     )
     .filter((commands) => [...commands].length >= perWalk);
   const law = Effect.fnUntraced(function* (secret: string, commands: Iterable<fc.AsyncCommand<object, SecretWalk>>) {
     let moves = 0;
+    const secretForms = forms(secret);
     const step = Effect.fnUntraced(function* (pick: SecretPick) {
       // The model records completed cuts only. Pick an unvisited operation that its prepared
       // process state can reach, or repeat a visited one once the whole inventory is covered.
@@ -672,7 +677,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
         return yield* Effect.die("empty storage inventory");
       }
 
-      const marker = forms(secret)[pick.encoding] ?? secret;
+      const marker = secretForms[pick.encoding] ?? secret;
       const fault = Object.assign(new Error(`SQLITE_FULL at ${marker}`), {
         name: marker,
         code: marker,
@@ -711,7 +716,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
       outputs.log.push(...(printed ?? []));
 
       for (const [output, texts] of Object.entries(outputs)) {
-        if (texts.some((text) => forms(secret).some((form) => text.includes(form)))) {
+        if (texts.some((text) => secretForms.some((form) => text.includes(form)))) {
           leaks.add(`${cut.path}/${cut.operation} ${cut.statement} -> ${output}`);
         }
       }
@@ -730,8 +735,8 @@ const storageSecrets = Effect.fnUntraced(function* () {
   yield* Effect.promise(() =>
     fc.assert(
       fc.asyncProperty(Secret, tape, (secret, commands) => Effect.runPromise(law(secret, commands))),
-      // Every storage operation in every flow must be cut once, which takes all 100 walks at this seed.
-      { seed: 119120, numRuns: runsFor({ fast: 100, full: 100 }), endOnFailure: true },
+      // Every storage operation in every flow must be cut once, which takes all of the walks.
+      { seed: 119120, numRuns: walks, endOnFailure: true },
     ),
   );
   expect(remaining, "L11: every storage operation in every flow was cut").toEqual([]);
