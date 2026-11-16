@@ -19,7 +19,7 @@ import { MemberEvent } from "@kampus/libfabrika/access/Access";
 import { valueFor } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
-import { Effect, Fiber, Schema } from "effect";
+import { Effect, Fiber, Schema, String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -606,7 +606,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 const pid = resolveName(
                   yield* r.read(`processes/${NAME}`),
                   NAME,
-                  (by) => by === "brain" || by.startsWith("brain:"),
+                  (by) => by === "brain" || pipe(by, Str.startsWith("brain:")),
                 );
 
                 expect(pid, "the checklist's live process has a span chain").not.toBeNull();
@@ -622,9 +622,13 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                     .flatMap((g) => g.signatures)
                     .flatMap((signature) => [
                       signature,
-                      ...signature.split("\n").filter((line) => line.length > 20 && !line.startsWith("-----")),
+                      ...Str.split(signature, "\n").filter(
+                        (line) => line.length > 20 && !pipe(line, Str.startsWith("-----")),
+                      ),
                     ]),
-                  ...revoked.armored.split("\n").filter((line) => line.length > 20 && !line.startsWith("-----")),
+                  ...Str.split(revoked.armored, "\n").filter(
+                    (line) => line.length > 20 && !pipe(line, Str.startsWith("-----")),
+                  ),
                 ];
 
                 const access = yield* r.read("gateway/access");
@@ -711,8 +715,10 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 }
 
                 for (const form of [`itm_${item}`, encodeURIComponent(`itm_${item}`)]) {
-                  for (const [output, text] of checkedOutputs.filter(([o]) => o !== "page" && !o.startsWith("home"))) {
-                    expect(text.includes(form), `${output} copies an item's name`).toBe(false);
+                  for (const [output, text] of checkedOutputs.filter(
+                    ([o]) => o !== "page" && !pipe(o, Str.startsWith("home")),
+                  )) {
+                    expect(pipe(text, Str.includes(form)), `${output} copies an item's name`).toBe(false);
                   }
                 }
 
@@ -720,11 +726,11 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 const copies = new Set<string>();
 
                 for (const s of [...credentials, ...signatures]) {
-                  for (const form of [s, encodeURIComponent(s), btoa(s), JSON.stringify(s).slice(1, -1)]) {
+                  for (const form of [s, encodeURIComponent(s), btoa(s), pipe(JSON.stringify(s), Str.slice(1, -1))]) {
                     const checked = signatures.includes(s) ? checkedOutputs : credentialOutputs;
 
                     for (const [output, text] of checked) {
-                      if (text.includes(form)) {
+                      if (pipe(text, Str.includes(form))) {
                         copies.add(`${output} copies a ${signatures.includes(s) ? "signature" : "credential"}`);
                       }
                     }

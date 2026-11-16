@@ -19,6 +19,7 @@ import * as Logger from "effect/Logger";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { expect, expectTypeOf, it, vi } from "vitest";
 import { ConnectionService, connectionRuntime } from "../../cloudflare/connection.ts";
@@ -54,7 +55,9 @@ const config = {
 };
 
 const connectionInput = StartsTest.fixture(config, (algorithm, data) =>
-  createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  createHash(pipe(algorithm.name, Str.replaceAll("-", ""), Str.toLowerCase))
+    .update(data)
+    .digest(),
 );
 
 const destinations = ["spans", "logs", "journal", "measurements", "outbox"] as const;
@@ -68,7 +71,7 @@ const forms = (text: string) => [
   Buffer.from(text).toString("base64"),
   Buffer.from(text).toString("base64url"),
   encodeURIComponent(text),
-  JSON.stringify(text).slice(1, -1),
+  pipe(JSON.stringify(text), Str.slice(1, -1)),
 ];
 
 const strings = (value: unknown): Array<string> => {
@@ -94,7 +97,7 @@ const clean = (outputs: Outputs, words: ReadonlyArray<string>) => {
     const json = JSON.stringify(outputs[destination]);
     const text = json + inspect(outputs[destination], { depth: null }) + strings(JSON.parse(json)).join("\n");
 
-    if (forbidden.some((word) => text.includes(word))) {
+    if (forbidden.some((word) => pipe(text, Str.includes(word)))) {
       leaks.push(destination);
     }
   }
@@ -122,8 +125,7 @@ type Flow = ReturnType<typeof generated.generate>["value"];
 const flow = async (sample: Flow) => {
   const home = mkdtempSync(join(tmpdir(), "p12-sec-"));
   vi.stubEnv("FABRIKA_HOME", home);
-  const material = `${sample.word}/"\\\n`.padEnd(32, "!");
-
+  const material = pipe(`${sample.word}/"\\\n`, Str.padEnd(32, "!"));
   const random = Layer.succeed(
     SecureRandom.SecureRandom,
     SecureRandom.make((size) => {

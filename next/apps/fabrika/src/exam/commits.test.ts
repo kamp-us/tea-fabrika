@@ -1,7 +1,7 @@
 // next/, P32 and ticket 251: pure laws p83 to p87 and p89.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Option } from "effect";
+import { Option, String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -126,11 +126,11 @@ describe("signedText", () => {
         step: "build",
         ticket: "229",
         version: 3,
-        from: "a".repeat(40),
-        to: "b".repeat(40),
+        from: pipe("a", Str.repeat(40)),
+        to: pipe("b", Str.repeat(40)),
       }),
     ).toBe(
-      `fabrika-step attested v2\nstep build\nticket 229\nversion 3\nfrom ${"a".repeat(40)}\nto ${"b".repeat(40)}\n`,
+      `fabrika-step attested v2\nstep build\nticket 229\nversion 3\nfrom ${pipe("a", Str.repeat(40))}\nto ${pipe("b", Str.repeat(40))}\n`,
     );
   });
   // Plant: include key in the signed text.
@@ -168,7 +168,7 @@ describe("decoders", () => {
           JSON.stringify({ ...n, ticket: `${n.ticket}\nstep ${n.step}` }),
           JSON.stringify({ ...n, version: 0 }),
           JSON.stringify({ ...n, version: n.version + 0.5 }),
-          JSON.stringify({ ...n, from: n.from.slice(0, length) }),
+          JSON.stringify({ ...n, from: pipe(n.from, Str.slice(0, length)) }),
           JSON.stringify({ ...n, to: `${n.to}\n${text}` }),
           JSON.stringify({ ...n, sig: undefined }),
         ]) {
@@ -270,11 +270,11 @@ describe("keysProblem (p87, p87b)", () => {
           `lead valid-after="20260101",namespaces="fabrika-step" ssh-ed25519 ${file.keys[0]}`,
           line("lead", file.keys[0]!, `other:${JSON.stringify(text)}`),
           "",
-          line("lead", file.keys[0]!.slice(0, 60)),
+          line("lead", pipe(file.keys[0]!, Str.slice(0, 60))),
           `PLACEHOLDER ${JSON.stringify(text)}`,
           `ignored ${person}`,
           `${person} ignored`,
-          person.slice(0, -1),
+          pipe(person, Str.slice(0, -1)),
           `${person}D`,
           `build oops${JSON.stringify(text)}`,
         ];
@@ -792,7 +792,7 @@ describe("printed lines", () => {
         const input = `${path}\n::add-mask::\r|` + "`<>%";
         const text = plain(ask([input]));
         expect(text).not.toMatch(/[\n\r`<|]/);
-        expect(JSON.parse(text.slice("ask owner exam_read ".length))).toBe(input);
+        expect(JSON.parse(pipe(text, Str.slice("ask owner exam_read ".length)))).toBe(input);
       }),
       runs,
     );
@@ -804,7 +804,9 @@ describe("printed lines", () => {
         const raw = plain(ask([`${path}\n::add-mask::\r%`]), (p) => p);
         const text = annotate(raw);
         expect(text).not.toMatch(/[\n\r]/);
-        expect(text.replaceAll("%0A", "\n").replaceAll("%0D", "\r").replaceAll("%25", "%")).toBe(raw);
+        expect(pipe(text, Str.replaceAll("%0A", "\n"), Str.replaceAll("%0D", "\r"), Str.replaceAll("%25", "%"))).toBe(
+          raw,
+        );
       }),
       runs,
     );

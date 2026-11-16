@@ -4,6 +4,7 @@ import * as Option from "effect/Option";
 import * as ChildProcess from "effect/process/ChildProcess";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
+import { String as Str, pipe } from "effect";
 import { Result } from "../../../tasks/Task.ts";
 
 /** What one child has printed so far: its stdout's chunks in order, and each stream's byte count. */
@@ -34,7 +35,7 @@ const utf8 = new TextDecoder("utf-8", { fatal: true });
 /** stdout as UTF-8 with one trailing newline dropped, or "" when it is not UTF-8. */
 const version = (chunks: ReadonlyArray<Uint8Array>) =>
   Effect.try(() => utf8.decode(joined(chunks))).pipe(
-    Effect.map((text) => (text.endsWith("\n") ? text.slice(0, -1) : text)),
+    Effect.map((text) => (pipe(text, Str.endsWith("\n")) ? pipe(text, Str.slice(0, -1)) : text)),
     Effect.orElseSucceed(() => ""),
   );
 

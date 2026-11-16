@@ -14,6 +14,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import { String as Str } from "effect";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { devLife, type DevState } from "./DevLife.ts";
 
@@ -263,7 +264,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
     const text = yield* fs.readFileString(file);
 
     return yield* Effect.forEach(
-      text.split("\n").filter(Boolean),
+      Str.split(text, "\n").filter(Boolean),
       (row) => Schema.decodeEffect(Schema.fromJsonString(PendingEvent))(row),
       { concurrency: 1 },
     );

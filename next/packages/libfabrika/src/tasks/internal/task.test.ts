@@ -10,6 +10,7 @@
 // another process collect.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { type Executor, type Request, Result, State } from "../Task.ts";
 import {
@@ -167,7 +168,7 @@ const able = (request: Request, cell: Cell, base: Executor): Executor => ({
 });
 
 const near = (execution: string, variant: number): string =>
-  choose([`${execution}x`, execution.slice(0, -1) || "e", `other-${execution}`], variant);
+  choose([`${execution}x`, pipe(execution, Str.slice(0, -1)) || "e", `other-${execution}`], variant);
 
 type Expect = { readonly answer: "accepted" | "repeated" | "refused"; readonly reason?: string };
 

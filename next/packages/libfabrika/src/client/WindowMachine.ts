@@ -12,6 +12,7 @@ import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import { String as Str, pipe } from "effect";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace } from "../processes/Process.ts";
 import * as C from "../runtime/Client.ts";
@@ -483,7 +484,7 @@ const answered = (s: WindowModel, m: On, tag: Call["_tag"]) => {
 // --- Following a tile's process ---------------------------------------------------------------------
 
 /** The writer the window trusts for process facts and DOWNs: the brain's own. */
-const isBrain = (by: string): boolean => by === "brain" || by.startsWith("brain:");
+const isBrain = (by: string): boolean => by === "brain" || pipe(by, Str.startsWith("brain:"));
 
 /** The watch a tile holds and the pid it shows, while it is opening or open. */
 const held = (reach: Reach): { readonly pid: string; readonly ref: string } | null =>
@@ -1179,9 +1180,7 @@ const dated = (
     /^[a-z_]{1,40}$/.test(slot.m.type)
       ? slot.m.type
       : "other";
-
-  const command = owner?.does ?? `${tile?.name.split(":")[0] ?? "program"}.${type}`;
-
+  const command = owner?.does ?? `${tile === undefined ? "program" : Str.split(tile.name, ":")[0]}.${type}`;
   const rows =
     before?._tag === "dating" && slot?._tag === "ready" && owner !== undefined
       ? [
@@ -1765,7 +1764,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         const link = s.tezgah;
 
         if (link !== null && link.reach._tag === "resolving" && link.reach.id === m.id && found.call._tag === "read") {
-          const name = found.call.stream.slice("processes/".length);
+          const name = pipe(found.call.stream, Str.slice("processes/".length));
           const pid = C.resolveName(m.value, name, isBrain);
           const next = { ...s, flight: found.rest };
 

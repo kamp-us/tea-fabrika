@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import { String as Str, pipe } from "effect";
 import type { ObjectId } from "../../repositories/Repositories.ts";
 import {
   MissingPath,
@@ -57,7 +58,8 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
     const relative = path.relative(base, location);
 
     return (
-      relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+      relative === "" ||
+      (!pipe(relative, Str.startsWith(`..${path.sep}`)) && relative !== ".." && !path.isAbsolute(relative))
     );
   };
 
@@ -76,10 +78,10 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
   ) {
     let location = path.isAbsolute(name) ? path.parse(name).root : base;
     let directory = true;
-    const pending = name.split(path.sep).filter((part) => part !== "");
+    const pending = Str.split(name, path.sep).filter((part) => part !== "");
 
     // A trailing separator requires a directory, just like a following dot segment.
-    if (name.endsWith(path.sep)) {
+    if (pipe(name, Str.endsWith(path.sep))) {
       pending.push(".");
     }
 
@@ -126,7 +128,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
 
         link = yield* fs.readLink(next).pipe(Effect.mapError(failed));
       } else {
-        const relative = path.relative(options.root, next).split(path.sep).join("/");
+        const relative = Str.split(path.relative(options.root, next), path.sep).join("/");
         const entry = yield* options.entry(relative);
 
         if (entry === null) {
@@ -155,7 +157,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
         return yield* failed("symlink cycle");
       }
 
-      if (link === "" || link.includes("\0")) {
+      if (link === "" || pipe(link, Str.includes("\0"))) {
         return yield* failed("invalid symlink");
       }
 
@@ -177,8 +179,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
     }
 
     if (located.committed) {
-      const bytes = yield* options.read(path.relative(options.root, located.location).split(path.sep).join("/"));
-
+      const bytes = yield* options.read(Str.split(path.relative(options.root, located.location), path.sep).join("/"));
       return bytes === null ? null : { ...SourceMetadata.cases.committed.make({ commit: options.commit }), bytes };
     }
 
@@ -201,7 +202,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
     const located = yield* target(base, from, file === "repo");
 
     if (located.committed) {
-      const relative = path.relative(options.root, located.location).split(path.sep).join("/");
+      const relative = Str.split(path.relative(options.root, located.location), path.sep).join("/");
       const entry = relative === "" ? null : yield* options.entry(relative);
 
       if (relative !== "" && entry === null) {

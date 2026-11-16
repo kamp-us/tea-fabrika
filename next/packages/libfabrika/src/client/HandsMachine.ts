@@ -14,6 +14,7 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import { String as Str, pipe } from "effect";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Command, Task, Result } from "../tasks/Task.ts";
@@ -653,7 +654,7 @@ const frameIn = (s: HandsModel, m: { readonly dial: number; readonly text: strin
 
   const reason = frame.error === undefined ? null : (frame.error.data?.reason ?? "other");
 
-  if (frame.id.startsWith("h")) {
+  if (pipe(frame.id, Str.startsWith("h"))) {
     const [next, out] = shook(s, {
       type: "answer",
       dial: m.dial,
@@ -670,7 +671,7 @@ const frameIn = (s: HandsModel, m: { readonly dial: number; readonly text: strin
     return [key === null ? next : { ...next, key: key.identity.key }, out];
   }
 
-  if (frame.id.startsWith("k")) {
+  if (pipe(frame.id, Str.startsWith("k"))) {
     return waiting(frame.result);
   }
 
@@ -754,8 +755,8 @@ export const handsMachine = Machine.make({
     write_err: stay,
     hello_ok: (s, m): Step => shook(s, m),
     hello_err: (s, m): Step => shook(s, m),
-    knock_ok: (s, m): Step => (m.cmd.id.startsWith("h") ? shook(s, m) : stay(s)),
-    knock_err: (s, m): Step => (m.cmd.id.startsWith("h") ? shook(s, m) : stay(s)),
+    knock_ok: (s, m): Step => (pipe(m.cmd.id, Str.startsWith("h")) ? shook(s, m) : stay(s)),
+    knock_err: (s, m): Step => (pipe(m.cmd.id, Str.startsWith("h")) ? shook(s, m) : stay(s)),
     ping_ok: stay,
     ping_err: stay,
     journal_read_ok: (s, m): Step => {

@@ -9,6 +9,7 @@ import * as Layer from "effect/Layer";
 import * as R from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import { String as Str, pipe } from "effect";
 import * as Id from "../Id.ts";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerStreams } from "../ledger/LedgerStreams.ts";
@@ -233,7 +234,7 @@ export const layer = Layer.effect(
       forProcess: (process: typeof ProcessId.Type) =>
         streams.list(PREFIX).pipe(
           Stream.mapError((cause) => TasksError.make({ reason: "storage", cause })),
-          Stream.mapEffect((name) => read(name.slice(PREFIX.length))),
+          Stream.mapEffect((name) => read(pipe(name, Str.slice(PREFIX.length)))),
           Stream.filter((task) => task.state._tag !== "absent" && task.state.request.process === process),
         ),
     };

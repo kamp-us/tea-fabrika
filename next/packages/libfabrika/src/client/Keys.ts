@@ -15,6 +15,7 @@
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import { String as Str, pipe } from "effect";
 import type { Binding } from "../runtime/Program.ts";
 import type { Hello } from "../transport/Wire.ts";
 import type { Prefix } from "./Prefix.ts";
@@ -94,7 +95,7 @@ const AFTER = "<prefix>";
 const BROWSER = ["w", "t", "n", "q"] as const;
 
 /** The press a row's key means on a backend: `mod` becomes the backend's command key. */
-const resolved = (key: string, mod: Backend["mod"]): string => key.replace(/(^|\+)mod\+/, `$1${mod}+`);
+const resolved = (key: string, mod: Backend["mod"]): string => pipe(key, Str.replace(/(^|\+)mod\+/, `$1${mod}+`));
 
 /**
  * Returns the backend a window runs on. A browser tab keeps Mod-W, Mod-T, Mod-N and Mod-Q, and on
@@ -147,8 +148,8 @@ export const load = (bindings: ReadonlyArray<Binding>, on: Backend): Result.Resu
         return Result.fail(LoadError.cases.cannot.make({ does: row.does, key }));
       }
 
-      if (press.startsWith(AFTER)) {
-        after.set(press.slice(AFTER.length), row.does);
+      if (pipe(press, Str.startsWith(AFTER))) {
+        after.set(pipe(press, Str.slice(AFTER.length)), row.does);
       } else {
         alone.set(press, row.does);
       }
@@ -219,11 +220,11 @@ export const spell = (e: {
     return null;
   }
 
-  const named = NAMED[e.key] ?? (e.key.length === 1 ? null : e.key.toLowerCase());
+  const named = NAMED[e.key] ?? (e.key.length === 1 ? null : Str.toLowerCase(e.key));
   const mods = Arr.filter([e.ctrlKey ? "ctrl" : "", e.altKey ? "alt" : "", e.metaKey ? "meta" : ""], (m) => m !== "");
   // A printable key carries Shift in its own character; with Ctrl, Alt or Meta it is the letter
   // itself, lower case, and Shift is said.
   const shift = e.shiftKey && (named !== null || mods.length > 0) ? ["shift"] : [];
-  const base = named ?? (mods.length > 0 ? e.key.toLowerCase() : e.key);
+  const base = named ?? (mods.length > 0 ? Str.toLowerCase(e.key) : e.key);
   return Arr.join([...mods, ...shift, base], "+");
 };

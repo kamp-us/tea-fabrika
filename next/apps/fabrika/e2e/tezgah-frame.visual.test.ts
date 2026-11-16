@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, String as Str, pipe } from "effect";
 // Desk S2b, next/ (the desk program fabrika/tezgah, ticket named by its title): law L21 of the approved
 // plan, and the slice's shots. Written before the tab draws tezgah's workspace and before it reads a
 // key. Starts the real `dev.ts` in its own temp home on its own port and drives headless Chromium;
@@ -88,7 +88,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
               for (let tries = 0; ; tries++) {
                 const bar = yield* statusBar(page);
 
-                if (bar.text.includes("Esc cancel") || tries >= 120) {
+                if (pipe(bar.text, Str.includes("Esc cancel")) || tries >= 120) {
                   expect(bar.text, `the prefix line is up (${layout})`).toContain("Esc cancel");
                   expect(bar.tiles, `arming the prefix moves, resizes or folds no tile (${layout})`).toEqual(
                     idle.tiles,
@@ -236,7 +236,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
           const five = yield* drawnAs((n) => n === 5, "a quarter split right");
           const narrow = focused(five);
           expect(narrow.id, "L21: the quarter's new tile takes focus").not.toBe(quarter.id);
-          const box = (yield* drawn(page)).regions.find((x) => x.name.endsWith(`, t${narrow.n}`))?.box;
+          const box = (yield* drawn(page)).regions.find((x) => pipe(x.name, Str.endsWith(`, t${narrow.n}`)))?.box;
           expect(box?.width ?? 0, "the narrow tile is too narrow to split again").toBeLessThan(2 * 220);
           yield* keys(page, "Control+b", "%");
           yield* Effect.sleep(QUIET);
@@ -262,8 +262,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
 // started, and the brain answers it as it answers any stream never written, with no entries.
 // Everything else on the socket passes as it is. Then the socket drops, and the next dial reads the
 // tab's own tezgah, which exists.
-const NOBODY = `processes/tezgah:${typeId("person", 77).slice("person_".length)}`;
-
+const NOBODY = `processes/tezgah:${pipe(typeId("person", 77), Str.slice("person_".length))}`;
 const TEZGAH_READ = /"stream":"processes\/tezgah:[^"]*"/;
 
 describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah once it exists", () => {
@@ -301,7 +300,7 @@ describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah o
                 }
 
                 read.push(found[0]);
-                server.send(wire.hide ? message.replace(TEZGAH_READ, `"stream":"${NOBODY}"`) : message);
+                server.send(wire.hide ? pipe(message, Str.replace(TEZGAH_READ, `"stream":"${NOBODY}"`)) : message);
               });
             }),
           );

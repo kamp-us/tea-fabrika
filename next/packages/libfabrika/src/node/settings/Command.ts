@@ -4,13 +4,13 @@
  * person's file, the declared environment names and the declared flags. The whole report is built
  * before anything prints, and it writes nothing and starts nothing.
  */
-
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
+import { String as Str } from "effect";
 import * as Declarations from "../../settings/Declarations.ts";
 import * as Print from "../../settings/Print.ts";
 import * as Reference from "../../settings/Reference.ts";
@@ -85,6 +85,6 @@ export const make = (options: { readonly version: string }) =>
           yield* Console.error(warning);
         }
 
-        yield* Console.log(report.trimEnd());
+        yield* Console.log(Str.trimEnd(report));
       }),
   ).pipe(Command.withDescription("Print the settings this fabrika reads, with their origins and defaults."));

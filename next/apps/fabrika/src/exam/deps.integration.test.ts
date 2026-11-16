@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, String as Str, pipe } from "effect";
 import fc from "fast-check";
 import { rolldown, type Plugin } from "rolldown";
 
@@ -84,8 +84,7 @@ const codeFiles = (dir: string): ReadonlyArray<string> =>
           return /\.tsx?$/.test(entry.name) ? [path] : [];
         }
 
-        const skip = ["node_modules", "dist"].includes(entry.name) || entry.name.startsWith(".");
-
+        const skip = ["node_modules", "dist"].includes(entry.name) || pipe(entry.name, Str.startsWith("."));
         return skip ? [] : codeFiles(path);
       });
 
@@ -96,16 +95,18 @@ const IMPORTS = [
 ];
 
 const importsIn = (text: string): ReadonlyArray<string> =>
-  IMPORTS.flatMap((pattern) => [...text.matchAll(pattern)].flatMap((m) => (m[1] === undefined ? [] : [m[1]])));
+  IMPORTS.flatMap((pattern) =>
+    [...pipe(text, Str.matchAll(pattern))].flatMap((m) => (m[1] === undefined ? [] : [m[1]])),
+  );
 
 const importsInFile = (file: string): ReadonlyArray<string> => importsIn(readFileSync(file, "utf8"));
 
-const isRelative = (spec: string): boolean => spec.startsWith(".");
+const isRelative = (spec: string): boolean => pipe(spec, Str.startsWith("."));
 
 /** `@kampus/libfabrika/transport/Wire` is `{name: "@kampus/libfabrika", subpath: "./transport/Wire"}`. */
 const packageAt = (spec: string): { readonly name: string; readonly subpath: string } => {
-  const parts = spec.split("/");
-  const size = spec.startsWith("@") ? 2 : 1;
+  const parts = Str.split(spec, "/");
+  const size = pipe(spec, Str.startsWith("@")) ? 2 : 1;
   const rest = parts.slice(size);
 
   return {
@@ -117,8 +118,7 @@ const packageAt = (spec: string): { readonly name: string; readonly subpath: str
 /** The file a relative import names, as Node and the bundlers find it, or where it points if none. */
 const pointsAt = (from: string, spec: string): string => {
   const base = join(dirname(from), spec);
-  const tries = [base, `${base}.ts`, `${base}.tsx`, join(base, "index.ts"), base.replace(/\.js$/, ".ts")];
-
+  const tries = [base, `${base}.ts`, `${base}.tsx`, join(base, "index.ts"), pipe(base, Str.replace(/\.js$/, ".ts"))];
   return tries.find((path) => existsSync(path) && statSync(path).isFile()) ?? base;
 };
 
@@ -146,7 +146,7 @@ const exportMap = (pkg: Package): ReadonlyMap<string, string | undefined> => {
 
   const entries = Object.entries(exports);
 
-  if (!entries.every(([key]) => key.startsWith("."))) {
+  if (!entries.every(([key]) => pipe(key, Str.startsWith(".")))) {
     return new Map([[".", target(exports)]]);
   }
 
@@ -166,20 +166,20 @@ type Reached =
  * `*` of the target takes what the `*` of the key matched.
  */
 const exportAt = (map: ReadonlyMap<string, string | undefined>, subpath: string): Reached => {
-  if (map.has(subpath) && !subpath.includes("*")) {
+  if (map.has(subpath) && !pipe(subpath, Str.includes("*"))) {
     const file = map.get(subpath);
 
     return file === undefined ? { kind: "refused" } : { kind: "file", file };
   }
 
   const [best] = [...map.keys()]
-    .map((key) => ({ key, parts: key.split("*") }))
+    .map((key) => ({ key, parts: Str.split(key, "*") }))
     .filter(
       ({ key, parts }) =>
         parts.length === 2 &&
         subpath.length >= key.length &&
-        subpath.startsWith(parts[0] ?? "") &&
-        subpath.endsWith(parts[1] ?? ""),
+        pipe(subpath, Str.startsWith(parts[0] ?? "")) &&
+        pipe(subpath, Str.endsWith(parts[1] ?? "")),
     )
     .sort((a, b) => (b.parts[0] ?? "").length - (a.parts[0] ?? "").length || b.key.length - a.key.length);
 
@@ -188,16 +188,15 @@ const exportAt = (map: ReadonlyMap<string, string | undefined>, subpath: string)
   }
 
   const file = map.get(best.key);
-  const matched = subpath.slice((best.parts[0] ?? "").length, subpath.length - (best.parts[1] ?? "").length);
-
-  return file === undefined ? { kind: "refused" } : { kind: "file", file: file.split("*").join(matched) };
+  const matched = pipe(subpath, Str.slice((best.parts[0] ?? "").length, subpath.length - (best.parts[1] ?? "").length));
+  return file === undefined ? { kind: "refused" } : { kind: "file", file: Str.split(file, "*").join(matched) };
 };
 
 const ownerAt = (packages: ReadonlyArray<Package>, file: string): Package | undefined =>
-  packages.find((pkg) => file.startsWith(`${pkg.dir}${sep}`));
+  packages.find((pkg) => pipe(file, Str.startsWith(`${pkg.dir}${sep}`)));
 
 /** A path as the messages show it: relative to `from`, with `/`. */
-const shown = (from: string, file: string): string => relative(from, file).split(sep).join("/");
+const shown = (from: string, file: string): string => Str.split(relative(from, file), sep).join("/");
 
 // Planted trees: each scan is seen to fire on a planted break before it is trusted on `next/`.
 // A tree is planted in the scope of the test that reads it, which removes it when the test ends (0061).
@@ -230,7 +229,8 @@ const manifest = (name: string, extra: object = {}): object => ({
 });
 
 /** `node:fs`, `fs`, `cloudflare:workers`: the platform's own, not a package anyone lists. */
-const isPlatform = (spec: string): boolean => spec.includes(":") || builtinModules.includes(spec.split("/")[0] ?? "");
+const isPlatform = (spec: string): boolean =>
+  pipe(spec, Str.includes(":")) || builtinModules.includes(Str.split(spec, "/")[0] ?? "");
 
 /** Every name a manifest lists, in any of its four dependency fields. */
 const listed = (m: Package["manifest"]): ReadonlyMap<string, string> =>
@@ -261,8 +261,10 @@ const manifestFaults = (next: string): ReadonlyArray<string> => {
       ...(m.sideEffects === false ? [] : [`${location}: sideEffects is not false`]),
       ...(m.scripts?.["typecheck"] === undefined ? [`${location}: no typecheck script`] : []),
       ...[...listed(m)].flatMap(([name, range]) => [
-        ...(name.endsWith("-old") ? [`${location}: depends on ${name}, today's version`] : []),
-        ...(range.startsWith("workspace:") && !ours.has(name) && !(name === DESIGN && DESIGN_TAKERS.has(m.name))
+        ...(pipe(name, Str.endsWith("-old")) ? [`${location}: depends on ${name}, today's version`] : []),
+        ...(pipe(range, Str.startsWith("workspace:")) &&
+        !ours.has(name) &&
+        !(name === DESIGN && DESIGN_TAKERS.has(m.name))
           ? [`${location}: depends on ${name}, a workspace package outside next/`]
           : []),
       ]),
@@ -292,7 +294,7 @@ const importFaults = (next: string): ReadonlyArray<string> => {
       const found: Array<string> = [];
 
       if (isRelative(spec)) {
-        if (!pointsAt(file, spec).startsWith(`${pkg.dir}${sep}`)) {
+        if (!pipe(pointsAt(file, spec), Str.startsWith(`${pkg.dir}${sep}`))) {
           found.push(`${location} imports "${spec}": a relative path out of its package`);
         }
 
@@ -339,11 +341,11 @@ const importFaults = (next: string): ReadonlyArray<string> => {
 const FORBIDDEN: ReadonlyArray<{ readonly name: string; readonly test: (spec: string) => boolean }> = [
   {
     name: "node:*",
-    test: (spec) => spec.startsWith("node:") || builtinModules.includes(spec.split("/")[0] ?? ""),
+    test: (spec) => pipe(spec, Str.startsWith("node:")) || builtinModules.includes(Str.split(spec, "/")[0] ?? ""),
   },
-  { name: "electron", test: (spec) => spec === "electron" || spec.startsWith("electron/") },
-  { name: "cloudflare:*", test: (spec) => spec.startsWith("cloudflare:") },
-  { name: "@modelcontextprotocol/*", test: (spec) => spec.startsWith("@modelcontextprotocol/") },
+  { name: "electron", test: (spec) => spec === "electron" || pipe(spec, Str.startsWith("electron/")) },
+  { name: "cloudflare:*", test: (spec) => pipe(spec, Str.startsWith("cloudflare:")) },
+  { name: "@modelcontextprotocol/*", test: (spec) => pipe(spec, Str.startsWith("@modelcontextprotocol/")) },
 ];
 
 /** The front files the library's old barrels (`/transport`, `/data`, `/coordination`, `/door`) reached.
@@ -410,7 +412,7 @@ const browserEntries = (
       const reached = exportAt(exportMap(pkg), key);
 
       return reached.kind === "file" && existsSync(reached.file)
-        ? [{ label: key === "." ? name : `${name}${key.slice(1)}`, file: reached.file }]
+        ? [{ label: key === "." ? name : `${name}${pipe(key, Str.slice(1))}`, file: reached.file }]
         : [];
     });
   });
@@ -594,7 +596,8 @@ describe("planted breaks", () => {
 
       expect(
         (yield* Effect.promise(() => bundleFaults(tree))).some(
-          (fault) => fault.includes("@kampus/libfabrika/gateway/Gateway") && fault.includes("node:fs"),
+          (fault) =>
+            pipe(fault, Str.includes("@kampus/libfabrika/gateway/Gateway")) && pipe(fault, Str.includes("node:fs")),
         ),
       ).toBe(true);
     }),
@@ -830,8 +833,7 @@ describe("a module's front files and its internal/ in the exports map", () => {
               "apps/fabrika/package.json": manifest("@kampus/fabrika", { dependencies: { [LIBRARY]: "workspace:*" } }),
               "apps/fabrika/src/use.ts": lines(`import {x} from "${LIBRARY}/${subpath}";`),
             });
-
-            const faults = importFaults(tree).map((fault) => fault.replace(/^.*: /, ""));
+            const faults = importFaults(tree).map((fault) => pipe(fault, Str.replace(/^.*: /, "")));
 
             expect(faults).toEqual(
               kind === "front"

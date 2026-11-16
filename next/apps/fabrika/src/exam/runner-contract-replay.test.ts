@@ -12,7 +12,7 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
-import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
+import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream, String as Str, pipe } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { RateLimiter } from "effect/persistence";
 import {
@@ -55,7 +55,7 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
   const web = <A>(f: () => Promise<A>) => Effect.tryPromise({ try: f, catch: () => new Error("test crypto failed") });
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
   const raw = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
-  const fingerprint = `SHA256:${Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))).replace(/=+$/, "")}`;
+  const fingerprint = `SHA256:${pipe(Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))), Str.replace(/=+$/, ""))}`;
   const blob = new Uint8Array(51);
   new DataView(blob.buffer).setUint32(0, 11);
   blob.set(new TextEncoder().encode("ssh-ed25519"), 4);

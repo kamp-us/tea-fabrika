@@ -22,6 +22,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
 import { SettingsError } from "../../settings/Files.ts";
@@ -286,7 +287,7 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
             expect(row.value).toBe(wanted);
             expect(row.origin._tag).toBe(v.override ? "flag" : v.personPresent ? "file" : "default");
             const report = Print.report(rows, { all: v.all });
-            expect(report.includes(`${row.path} =`)).toBe(v.all || row.origin._tag !== "default");
+            expect(pipe(report, Str.includes(`${row.path} =`))).toBe(v.all || row.origin._tag !== "default");
             expect(touched).toEqual([PERSON]);
           }
         }

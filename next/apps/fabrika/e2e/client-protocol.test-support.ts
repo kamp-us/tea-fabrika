@@ -21,7 +21,7 @@ import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey";
 import { type ClientRow, ClientRows } from "@kampus/libfabrika/transport/ClientRows";
-import { Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect";
+import { Effect, Exit, Layer, Option, Schema, Scope, Stream, String as Str, pipe } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "../src/build.ts";
 import { localInstance } from "../src/local-instance.ts";
@@ -315,11 +315,9 @@ export const served = (h: Home) =>
         Effect.provide(ledger),
         Effect.orDie,
       );
-
-    const blob = Buffer.from(h.publicKey.split(" ")[1] ?? "", "base64");
-
+    const blob = Buffer.from(Str.split(h.publicKey, " ")[1] ?? "", "base64");
     const from = () => ({
-      by: `SHA256:${createHash("sha256").update(blob).digest("base64").replace(/=+$/, "")}`,
+      by: `SHA256:${pipe(createHash("sha256").update(blob).digest("base64"), Str.replace(/=+$/, ""))}`,
       for: PERSON,
       sentAt: new Date().toISOString(),
       seen: 0,

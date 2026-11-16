@@ -17,6 +17,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Tracer from "effect/Tracer";
+import * as Option from "effect/Option";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import type { RolldownOutput, RolldownOptions, OutputOptions } from "rolldown";
@@ -106,8 +108,7 @@ const cssImport = (
   url: string,
   continuation: string,
 ) => {
-  const quote = form.startsWith("single") ? "'" : form === "url" ? "" : '"';
-
+  const quote = pipe(form, Str.startsWith("single")) ? "'" : form === "url" ? "" : '"';
   const ref = [...path]
     .map((char) => {
       const required = char === "\\" || (quote === "" ? /[\s'"()]/.test(char) : char === quote);
@@ -116,13 +117,12 @@ const cssImport = (
         return char;
       }
 
-      return escape === "hex" ? `\\${char.codePointAt(0)!.toString(16)} ` : `\\${char}`;
+      return escape === "hex" ? `\\${pipe(char, Str.codePointAt(0), Option.getOrThrow).toString(16)} ` : `\\${char}`;
     })
     .join("");
 
   const target = `${quote}${quote && continuation ? `\\${continuation}` : ""}${ref}${quote}`;
-
-  return `@${keyword} ${form.endsWith("string") ? target : `${url}(${target})`}${media ? ` ${media}` : ""};`;
+  return `@${keyword} ${pipe(form, Str.endsWith("string")) ? target : `${url}(${target})`}${media ? ` ${media}` : ""};`;
 };
 
 const homes: string[] = [];
@@ -182,7 +182,7 @@ const fixture = (name: string, value: string) => {
   writeFileSync(join(pkg, "window.css"), `b { color: rgb(12, 34, 56); }`);
   cpSync(join(ROOT, "next/apps/fabrika/src"), join(home, "src"), {
     recursive: true,
-    filter: (p) => !p.endsWith(".test.ts"),
+    filter: (p) => !pipe(p, Str.endsWith(".test.ts")),
   });
 
   const options: Options = {
@@ -272,7 +272,7 @@ describe("P16 assets and Compiler", () => {
           expect(Object.values(built.assets).some((a) => a.type === "text/css; charset=utf-8")).toBe(true);
 
           for (const [route, asset] of Object.entries(built.assets)) {
-            expect(route.startsWith("/")).toBe(true);
+            expect(pipe(route, Str.startsWith("/"))).toBe(true);
             expect(asset.hash).toBe(createHash("sha256").update(asset.body).digest("hex"));
 
             const response = await Effect.runPromise(
@@ -382,12 +382,14 @@ describe("P16 assets and Compiler", () => {
 
             const verify = async (assets: Readonly<Record<string, Asset>>) => {
               for (const [route, asset] of Object.entries(assets)) {
-                if (asset.type.startsWith("text/css")) {
+                if (pipe(asset.type, Str.startsWith("text/css"))) {
                   expect(asset.body, "local CSS import must be included").not.toMatch(/@import\b/);
                   continue;
                 }
 
-                const refs = [...asset.body.matchAll(/(?:from\s*|import\s*\(?\s*)["']([^"']+)["']/g)].map((m) => m[1]!);
+                const refs = [...pipe(asset.body, Str.matchAll(/(?:from\s*|import\s*\(?\s*)["']([^"']+)["']/g))].map(
+                  (m) => m[1]!,
+                );
 
                 for (const ref of refs) {
                   if (/^(?:data:|https?:|#)/.test(ref)) {
@@ -402,7 +404,7 @@ describe("P16 assets and Compiler", () => {
             };
 
             // Plant the exact old behavior in real output: retain a CSS import to an absent route.
-            const stylesheet = Object.entries(built.assets).find(([, a]) => a.type.startsWith("text/css"));
+            const stylesheet = Object.entries(built.assets).find(([, a]) => pipe(a.type, Str.startsWith("text/css")));
             assert(stylesheet, "window stylesheet must be emitted");
             await expect(
               verify({
@@ -413,7 +415,7 @@ describe("P16 assets and Compiler", () => {
             await verify(built.assets);
 
             const styles = Object.values(built.assets)
-              .filter((a) => a.type.startsWith("text/css"))
+              .filter((a) => pipe(a.type, Str.startsWith("text/css")))
               .map((a) => a.body)
               .join("\n");
 
@@ -667,8 +669,8 @@ describe("P16 cleanup and recording", () => {
 
                 const rename: typeof fs.rename = (from, to) =>
                   Effect.gen(function* () {
-                    const backup = from === f.options.out && to.endsWith(".old");
-                    const final = to === f.options.out && !from.endsWith(".old");
+                    const backup = from === f.options.out && pipe(to, Str.endsWith(".old"));
+                    const final = to === f.options.out && !pipe(from, Str.endsWith(".old"));
 
                     if (!fired && point === "before final" && final) {
                       yield* stop;
@@ -768,13 +770,13 @@ describe("P16 cleanup and recording", () => {
 
                 const rename: typeof fs.rename = (from, to) =>
                   Effect.suspend(() => {
-                    const backup = from === f.options.out && to.endsWith(".old"),
-                      final = to === f.options.out && !from.endsWith(".old"),
+                    const backup = from === f.options.out && pipe(to, Str.endsWith(".old")),
+                      final = to === f.options.out && !pipe(from, Str.endsWith(".old")),
                       selected = !fired && (point === "backup" ? backup : final);
 
                     if (selected) {
                       fired = true;
-                      complete = readFileSync(join(backup ? to.slice(0, -4) : from, "brain.mjs"), "utf8");
+                      complete = readFileSync(join(backup ? pipe(to, Str.slice(0, -4)) : from, "brain.mjs"), "utf8");
                     }
 
                     return delayed(fs.rename(from, to), selected ? delays.rename : 0, selected);
@@ -975,7 +977,7 @@ describe("P16 cleanup and recording", () => {
                 ...handle,
                 generate: async (o: OutputOptions) => {
                   const out = await handle.generate(o);
-                  const css = out.output.find((f) => f.fileName.endsWith(".css"));
+                  const css = out.output.find((f) => pipe(f.fileName, Str.endsWith(".css")));
 
                   if (!css) {
                     return out;
@@ -1124,7 +1126,7 @@ describe("P16 cleanup and recording", () => {
 
             for (const marker of [ROOT, f.home, readFileSync(f.file, "utf8")]) {
               expect(recorded).not.toContain(marker);
-              expect(recorded).not.toContain(JSON.stringify(marker).slice(1, -1));
+              expect(recorded).not.toContain(pipe(JSON.stringify(marker), Str.slice(1, -1)));
             }
 
             expect(recorded).toContain(JSON.stringify(versions.rolldown));
@@ -1242,7 +1244,7 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
     for (const p of selected) {
       const marker = markers.get(p.module)!;
       // A window's entry is the one script that names its view; its chunk names `-chunk` instead.
-      const own = scripts.filter(([, a]) => a.body.includes(`${JSON.stringify(marker)}`));
+      const own = scripts.filter(([, a]) => pipe(a.body, Str.includes(`${JSON.stringify(marker)}`)));
       expect(own, `${p.name} has one window entry`).toHaveLength(1);
       const [route] = own[0]!;
       // Its route keeps the whole qualified name, so equal short names never meet on one route.
@@ -1275,7 +1277,7 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
     {
       possible: () => selected.length > 0,
       run: Effect.fnUntraced(function* (n) {
-        const short = selected[n % selected.length]!.name.split("/")[1]!;
+        const short = Str.split(selected[n % selected.length]!.name, "/")[1]!;
         selected = [...selected, { name: `fork${selected.length}/${short}`, module: yield* add(n) }];
       }),
     },

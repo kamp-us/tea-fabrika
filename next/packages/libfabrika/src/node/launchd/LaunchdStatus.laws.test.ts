@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import * as Status from "./LaunchdStatus.ts";
 
@@ -147,7 +148,7 @@ it.effect.each([
     // The first line is accepted only as that exact line, before the exact missing-service line.
     for (const err of [
       `${missing}Bad request.\n`,
-      `Bad request.\n${missing}`.replace("501", "502"),
+      pipe(`Bad request.\n${missing}`, Str.replace("501", "502")),
       `Bad request\n${missing}`,
       "Bad request.\n",
     ]) {
@@ -199,19 +200,21 @@ it("L3 missing, duplicate, nested, ambiguous and wrong-target fields fail Unsupp
 
         const broken =
           mutation === "missing-program"
-            ? text.replace(/\tprogram = .*\n/, "")
+            ? pipe(text, Str.replace(/\tprogram = .*\n/, ""))
             : mutation === "duplicate-program"
-              ? text.replace("\ttype =", `\tprogram = /test/${word}/Electron\n\ttype =`)
+              ? pipe(text, Str.replace("\ttype =", `\tprogram = /test/${word}/Electron\n\ttype =`))
               : mutation === "nested-program"
-                ? text.replace(/\tprogram = .*\n/, `\tunrelated = {\n\t\tprogram = /test/${word}/Electron\n\t}\n`)
+                ? pipe(
+                    text,
+                    Str.replace(/\tprogram = .*\n/, `\tunrelated = {\n\t\tprogram = /test/${word}/Electron\n\t}\n`),
+                  )
                 : mutation === "argument"
-                  ? text.replace(`/test/${word}/brain.mjs`, 'unbalanced "argument')
+                  ? pipe(text, Str.replace(`/test/${word}/brain.mjs`, 'unbalanced "argument'))
                   : mutation === "target"
-                    ? text.replace(target, "gui/502/foreign")
+                    ? pipe(text, Str.replace(target, "gui/502/foreign"))
                     : mutation === "duplicate-pid"
-                      ? text.replace("\tpid = 81", "\tpid = 82\n\tpid = 81")
-                      : text.slice(0, -3);
-
+                      ? pipe(text, Str.replace("\tpid = 81", "\tpid = 82\n\tpid = 81"))
+                      : pipe(text, Str.slice(0, -3));
         const exit = Effect.runSync(decode(0, broken).pipe(Effect.exit));
         expect(error(exit)).toMatchObject({
           _tag: "BrainControlError",

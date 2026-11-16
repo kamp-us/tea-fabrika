@@ -10,6 +10,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { BuildError, build } from "./build.ts";
 import { bundle } from "./bundle.ts";
@@ -92,7 +93,7 @@ const world = (step: Step, failure: unknown, bad: string) => {
   };
 };
 
-const stepReason = (step: Step) => (step.startsWith("manifest") ? "table" : "read");
+const stepReason = (step: Step) => (pipe(step, Str.startsWith("manifest")) ? "table" : "read");
 
 describe("T695, the build's shared callback keeps what failed", () => {
   // C5, build.ts:51 through :66, :71, :273 and :283. Plant: `const fail = (reason) => () => ...`.
@@ -115,7 +116,7 @@ describe("T695, the build's shared callback keeps what failed", () => {
         expect(error).toBeInstanceOf(BuildError);
         expect(error.reason).toBe(stepReason(step));
 
-        if (step.endsWith("_decode")) {
+        if (pipe(step, Str.endsWith("_decode"))) {
           expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);
         } else {
           expect(error.cause).toBe(failure);

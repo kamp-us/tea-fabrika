@@ -22,6 +22,7 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import { String as Str, pipe } from "effect";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { Installed, type Install } from "../../runtime/Code.ts";
@@ -88,7 +89,7 @@ const sample = (pid: number) =>
         return yield* ControlError.make({ reason: "sample" });
       }
 
-      return Number(text.trim()) * 1024;
+      return Number(Str.trim(text)) * 1024;
     }),
   ).pipe(Effect.mapError((cause) => ControlError.make({ reason: "sample", cause })));
 
@@ -103,7 +104,11 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
 
   return {
     checksums: {
-      sha256: Uint8Array.from((sha256.match(/../g) ?? []).map((byte) => Number.parseInt(byte, 16))).buffer,
+      sha256: Uint8Array.from(
+        Option.getOrElse(pipe(sha256, Str.match(/../g)), (): Array<string> => []).map((byte) =>
+          Number.parseInt(byte, 16),
+        ),
+      ).buffer,
     },
   };
 });

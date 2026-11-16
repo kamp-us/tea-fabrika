@@ -12,7 +12,7 @@ import {
   TezgahView as View,
   tezgahName,
 } from "@kampus/libfabrika/tezgah/Workspace";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, String as Str, pipe, Array as Arr } from "effect";
 import type { Page } from "playwright";
 import { expect } from "vitest";
 import { PERSON, type reader } from "./p14.test-support.ts";
@@ -85,7 +85,7 @@ export const typeId = (prefix: string, n: number): string => {
 /** format: a tile's accessible name, `tileName`'s words (0503, the plan): the program's own name after
  *  its pack, then `t<n>`, as `checklist, t1`. Tuval's L20 pins `tileName` to the same words. */
 export const regionName = (tile: Pick<Tile, "program" | "n">): string =>
-  `${tile.program.slice(tile.program.lastIndexOf("/") + 1)}, t${tile.n}`;
+  `${Arr.lastNonEmpty(Str.split(tile.program, "/"))}, t${tile.n}`;
 
 const Started = Schema.TaggedStruct("started", { body: Schema.Struct({ process: Schema.String }) });
 
@@ -148,11 +148,9 @@ export const drawn = (page: Page): Effect.Effect<Drawn> =>
     const mains = yield* promised(() => page.getByRole("main").count());
     const main = page.getByRole("main").first();
     const snapshot = mains === 0 ? "" : yield* promised(() => main.ariaSnapshot());
-
-    const names = snapshot.split("\n").flatMap((line) => {
+    const names = Str.split(snapshot, "\n").flatMap((line) => {
       const m = REGION.exec(line);
-
-      return m?.[1] === undefined ? [] : [m[1].replace(/\\(.)/g, "$1")];
+      return m?.[1] === undefined ? [] : [pipe(m[1], Str.replace(/\\(.)/g, "$1"))];
     });
 
     const regions = yield* Effect.forEach(
@@ -399,11 +397,9 @@ export const foldDrawn = (page: Page): Effect.Effect<FoldDrawn> =>
     const d = yield* drawn(page);
     const main = page.getByRole("main").first();
     const snapshot = d.mains === 0 ? "" : yield* promised(() => main.ariaSnapshot());
-
-    const names = snapshot.split("\n").flatMap((line) => {
+    const names = Str.split(snapshot, "\n").flatMap((line) => {
       const m = STRIP.exec(line);
-
-      return m?.[1] === undefined ? [] : [m[1].replace(/\\(.)/g, "$1")];
+      return m?.[1] === undefined ? [] : [pipe(m[1], Str.replace(/\\(.)/g, "$1"))];
     });
 
     const strips = yield* Effect.forEach(

@@ -23,6 +23,7 @@ import * as R from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -131,6 +132,9 @@ export const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
   return item;
 };
 
+/** The same process id with its last character flipped: "0" becomes "1", anything else "0". */
+const flipLast = (id: string): string => `${pipe(id, Str.slice(0, -1))}${pipe(id, Str.endsWith("0")) ? "1" : "0"}`;
+
 /** One field of a request changed to another valid value: same id, different bytes. */
 export const changedRequest = (request: Request, pick: number, other: Request): Request => {
   const field = choose(["target", "process", "name", "program", "needs", "build", "settings", "parent"] as const, pick);
@@ -141,8 +145,7 @@ export const changedRequest = (request: Request, pick: number, other: Request): 
   }
 
   if (field === "process") {
-    const flipped = request.process.replace(/.$/, (last) => (last === "0" ? "1" : "0"));
-
+    const flipped = flipLast(request.process);
     return { ...request, process: differs(request.process, other.process, flipped) };
   }
 
@@ -209,7 +212,7 @@ export const BAD_REQUEST: ReadonlyArray<readonly [string, unknown]> = [
   ["settings", MISSING],
   ["parent", "not-an-input"],
   ["parent", MISSING],
-  ["traceId", "0".repeat(32)],
+  ["traceId", pipe("0", Str.repeat(32))],
   ["traceId", "XYZ"],
 ];
 
@@ -481,7 +484,7 @@ const able = (saved: Saved, cell: Cell): Executor => ({
 
 /** Another execution identity than the saved one, close to it on purpose. */
 const otherExecution = (execution: string, variant: number): string =>
-  choose([`${execution}x`, execution.slice(0, -1) || "e", `other-${execution}`], variant);
+  choose([`${execution}x`, pipe(execution, Str.slice(0, -1)) || "e", `other-${execution}`], variant);
 
 /** A move, or a move in the one phase of the task it was played on. */
 type Done = Move | `${Move}@${Phase}` | "listed" | "listed_empty";
@@ -854,12 +857,7 @@ const walk = (
           // Another process generation, such as a successor, never takes this result.
           const saved = on(["finished", "collected"]);
           const other = choose(tape.requests, cell.variant).process;
-
-          const process =
-            other === saved.request.process
-              ? saved.request.process.replace(/.$/, (last) => (last === "0" ? "1" : "0"))
-              : other;
-
+          const process = other === saved.request.process ? flipLast(saved.request.process) : other;
           refused(
             yield* tasks((j) =>
               j.collected(saved.request.id, { process, letter: `${saved.request.id}/answer` }, recorded),
@@ -1135,7 +1133,7 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
             Tasks.use(f).pipe(Effect.provide(life));
 
           const wanted = a.request.process;
-          const other = wanted.replace(/.$/, (last) => (last === "0" ? "1" : "0"));
+          const other = flipLast(wanted);
           const said = { ...a.recorded, seen: 0 };
           const expected = new Map<string, Task>();
 

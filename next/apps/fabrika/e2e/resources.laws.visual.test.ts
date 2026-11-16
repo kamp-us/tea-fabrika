@@ -14,7 +14,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { connect } from "node:net";
 import { join, resolve } from "node:path";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, type TestContext } from "vitest";
 import { suite as scopedSuite } from "./p14.test-support.ts";
@@ -42,8 +42,7 @@ type Ended = { readonly code: number | null; readonly signal: NodeJS.Signals | n
 
 const rows = (file: string): ReadonlyArray<Row> =>
   existsSync(file)
-    ? readFileSync(file, "utf8")
-        .split("\n")
+    ? Str.split(readFileSync(file, "utf8"), "\n")
         .filter((line) => line !== "")
         .map((line) => Schema.decodeSync(Schema.fromJsonString(Row))(line))
     : [];

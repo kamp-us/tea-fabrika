@@ -12,6 +12,7 @@ import * as Fiber from "effect/Fiber";
 import * as Schema from "effect/Schema";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as TestClock from "effect/testing/TestClock";
+import { String as Str, pipe } from "effect";
 import { vi } from "vitest";
 import { lifeCell, signal, terminate } from "./local-dev.ts";
 
@@ -260,8 +261,8 @@ describe("the memory restart's bounded stop, next/", () => {
 
         // How many signals the replace sends: none for a sample the state does not vouch for, the
         // SIGTERM alone when the process went before the `killed` fold, else both.
-        const sent = stale || point === "before" ? 0 : point.startsWith("killed") || point === "after-SIGKILL" ? 2 : 1;
-
+        const sent =
+          stale || point === "before" ? 0 : pipe(point, Str.startsWith("killed")) || point === "after-SIGKILL" ? 2 : 1;
         const steps = [
           ["replacing", "SIGTERM"],
           ["killed", "SIGKILL"],

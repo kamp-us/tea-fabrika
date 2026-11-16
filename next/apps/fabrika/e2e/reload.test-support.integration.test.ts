@@ -9,7 +9,10 @@ import { NodeServices } from "@effect/platform-node";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { rebuildSpans, spanOutputs } from "./reload.test-support.ts";
@@ -53,7 +56,10 @@ const rebuild = (spanId: string): SpanRow => ({
  */
 const withDatabase = Effect.fnUntraced(function* (file: string, work: (db: DatabaseSync) => void) {
   const fs = yield* FileSystem.FileSystem;
-  yield* fs.makeDirectory(file.slice(0, file.lastIndexOf("/")), { recursive: true });
+  yield* fs.makeDirectory(
+    pipe(file, Str.lastIndexOf("/"), Option.match({ onNone: () => ".", onSome: (at) => pipe(file, Str.slice(0, at)) })),
+    { recursive: true },
+  );
   yield* Effect.scoped(
     TestDatabase.open(file).pipe(
       Effect.orDie,

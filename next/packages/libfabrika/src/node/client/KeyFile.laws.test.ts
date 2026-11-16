@@ -26,6 +26,7 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { property } from "../../Testing.test-support.ts";
 import { ClientKey, ClientKeyError, type Identity } from "../../transport/ClientKey.ts";
@@ -163,7 +164,7 @@ const damageStep = (form: "bytes" | "truncated" | "empty-object" | "other-key-ty
           : form === "empty-object"
             ? new TextEncoder().encode("{}")
             : form === "other-key-type"
-              ? new TextEncoder().encode(text.replace('"OKP"', '"RSA"').replace('"Ed25519"', '"P-256"'))
+              ? new TextEncoder().encode(pipe(text, Str.replace('"OKP"', '"RSA"'), Str.replace('"Ed25519"', '"P-256"')))
               : // Leading 0xFF: never JSON, whatever follows.
                 new Uint8Array([0xff, ...bytes]);
       m.file.damaged = true;

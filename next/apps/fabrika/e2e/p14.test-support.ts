@@ -17,7 +17,7 @@ import { revokeText } from "@kampus/libfabrika/access/Text";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Clock, DateTime, Effect, FileSystem, Schema, Stream } from "effect";
+import { Clock, DateTime, Effect, FileSystem, Schema, Stream, String as Str, pipe } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { type Browser, type BrowserContext, chromium, type Page, type WebSocket as PageSocket } from "playwright";
@@ -207,7 +207,9 @@ export const homeWithCredential = (credential: string) =>
       dir,
       key,
       credential,
-      publicKey: (yield* fs.readFileString(`${key}.pub`)).trim().split(/\s+/).slice(0, 2).join(" "),
+      publicKey: Str.split(Str.trim(yield* fs.readFileString(`${key}.pub`)), /\s+/)
+        .slice(0, 2)
+        .join(" "),
       grants: [] as Array<GrantSeen>,
     };
   }).pipe(Effect.provide(NodeServices.layer));
@@ -453,9 +455,7 @@ export const grant = (h: Home, w: Waiting, key = h.key) =>
         ],
         { concurrency: 4 },
       );
-
-      const sent = wire
-        .split("\n")
+      const sent = Str.split(wire, "\n")
         .filter((line) => line !== "")
         .map((line) => Schema.decodeSync(Schema.fromJsonString(GrantWire))(line));
 
@@ -545,7 +545,7 @@ const BOX = /^\s*- checkbox "((?:[^"\\]|\\.)*)"(.*)$/;
 /** The checklist tile of `name`, found by role: its region, its add field, a row's box and remove
  *  button, the rows it shows now, and the words tied to the field. */
 export const tile = (page: Page, name: string) => {
-  const region = page.getByRole("region", { name: new RegExp(name.replace(/[:]/g, "\\:")) });
+  const region = page.getByRole("region", { name: new RegExp(pipe(name, Str.replace(/[:]/g, "\\:"))) });
   const field = region.getByRole("textbox", { name: checklist.inputs.add.description });
 
   return {
@@ -586,11 +586,12 @@ export const tile = (page: Page, name: string) => {
     // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's ariaSnapshot is a Promise
     shown: Effect.promise(() => region.ariaSnapshot()).pipe(
       Effect.map((yaml): ReadonlyArray<Row> =>
-        yaml.split("\n").flatMap((line) => {
+        Str.split(yaml, "\n").flatMap((line) => {
           const m = BOX.exec(line);
           const [, item = "", state = ""] = m ?? [];
-
-          return m === null ? [] : [{ name: item.replace(/\\(.)/g, "$1"), checked: state.includes("[checked]") }];
+          return m === null
+            ? []
+            : [{ name: pipe(item, Str.replace(/\\(.)/g, "$1")), checked: pipe(state, Str.includes("[checked]")) }];
         }),
       ),
     ),
@@ -628,7 +629,7 @@ const identity = () => {
 
   return {
     raw: bytes.toString("base64url"),
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${pipe(createHash("sha256").update(bytes).digest("base64"), Str.replace(/=+$/, ""))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -688,7 +689,7 @@ export const reader = (h: Home, dev: Dev) =>
       "socket",
       Effect.sync(() => {
         const socket = new WebSocket(
-          `${dev.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+          `${pipe(dev.url, Str.replace("http", "ws"))}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
         );
 
         socket.addEventListener("message", ({ data }) => {

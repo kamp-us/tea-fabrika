@@ -12,6 +12,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
+import { String as Str, pipe } from "effect";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -212,7 +213,8 @@ const service = Effect.fnUntraced(function* (
   const ledger = yield* reader(sql);
   const failure = options.failure;
   const lower = failure === undefined ? undefined : LedgerError.make({ reason: failure.reason, cause: failure.cause });
-  const affected = failure?.part.startsWith("inbox") ? inbox(name) : `processes/${name}`;
+  const affected =
+    failure !== undefined && pipe(failure.part, Str.startsWith("inbox")) ? inbox(name) : `processes/${name}`;
 
   const controlled: Ledger["Service"] = {
     ...ledger,
@@ -220,7 +222,12 @@ const service = Effect.fnUntraced(function* (
       Effect.gen(function* () {
         expect(after, "capture uses the nonblocking wait from zero").toBe(0);
 
-        if (lower !== undefined && stream === affected && failure?.part.endsWith("wait")) {
+        if (
+          lower !== undefined &&
+          stream === affected &&
+          failure !== undefined &&
+          pipe(failure.part, Str.endsWith("wait"))
+        ) {
           return yield* lower;
         }
 
@@ -243,7 +250,7 @@ const service = Effect.fnUntraced(function* (
         return captured;
       }),
     read: (stream, after) =>
-      lower !== undefined && stream === affected && failure?.part.endsWith("read")
+      lower !== undefined && stream === affected && failure !== undefined && pipe(failure.part, Str.endsWith("read"))
         ? ledger.read(stream, after).pipe(Stream.take(1), Stream.concat(Stream.fail(lower)))
         : ledger.read(stream, after),
   };

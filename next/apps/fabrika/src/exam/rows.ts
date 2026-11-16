@@ -15,6 +15,7 @@
 //
 // A row may carry a `layer` (the local patch, demlik issue 913). A module's rank is its layer, so
 // moving a module is one edit and no other module moves. The exam's layers test reads it.
+import { String as Str, pipe } from "effect";
 
 /** One row of the rule file, as far as the exam reads it. */
 export interface Row {
@@ -35,14 +36,13 @@ const SPECIAL = /[.*+?^${}()|[\]\\]/g;
 const segmentSource = (segment: string): string =>
   segment === "*"
     ? "[^/]+"
-    : segment
-        .split("*")
-        .map((literal) => literal.replace(SPECIAL, "\\$&"))
+    : Str.split(segment, "*")
+        .map((literal) => pipe(literal, Str.replace(SPECIAL, "\\$&")))
         .join("[^/]*");
 
 /** The pattern as a test on a path: it claims its own path and everything below it. */
 const claims = (pattern: string): RegExp => {
-  const kept = pattern.split("/");
+  const kept = Str.split(pattern, "/");
 
   while (kept.at(-1) === "**") {
     kept.pop();
@@ -52,20 +52,20 @@ const claims = (pattern: string): RegExp => {
     return /^/;
   }
 
-  const body = kept
-    .map((segment) => (segment === "**" ? "(?:[^/]+/)*" : `${segmentSource(segment)}/`))
-    .join("")
-    .slice(0, -1);
+  const body = pipe(
+    kept.map((segment) => (segment === "**" ? "(?:[^/]+/)*" : `${segmentSource(segment)}/`)).join(""),
+    Str.slice(0, -1),
+  );
 
   return new RegExp(`^${body}(?:/|$)`);
 };
 
 const specificityAt = (pattern: string): Specificity => {
-  const segments = pattern.split("/");
+  const segments = Str.split(pattern, "/");
 
   return [
     segments.filter((segment) => segment !== "**").length,
-    segments.filter((segment) => !segment.includes("*")).length,
+    segments.filter((segment) => !pipe(segment, Str.includes("*"))).length,
     [...pattern].filter((character) => character !== "*" && character !== "/").length,
   ];
 };

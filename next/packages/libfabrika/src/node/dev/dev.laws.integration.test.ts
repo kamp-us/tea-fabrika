@@ -20,6 +20,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as TestClock from "effect/testing/TestClock";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
@@ -402,7 +403,13 @@ const REPLACE = "replace-test";
 
 const between = (minimum: number, maximum: number) => Schema.Int.check(Schema.isBetween({ minimum, maximum }));
 
-const install: Install = { id: "install-1", program: "p/replace", hash: "a".repeat(64), source: "", from: "watch" };
+const install: Install = {
+  id: "install-1",
+  program: "p/replace",
+  hash: pipe("a", Str.repeat(64)),
+  source: "",
+  from: "watch",
+};
 
 const Body = Schema.fromJsonString(Schema.Struct({ method: Schema.String }));
 

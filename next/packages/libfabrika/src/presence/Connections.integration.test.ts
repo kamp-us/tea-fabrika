@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { A, B, W, storage } from "../processes/Process.test-support.ts";
@@ -231,7 +232,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
         expect(
           (yield* gateways.online("key-a"))
             .map((row) => ({ client: row.client, state: row.state }))
-            .sort((a, b) => a.client.localeCompare(b.client)),
+            .sort((a, b) => pipe(a.client, Str.localeCompare(b.client))),
         ).toEqual([
           { client: "tab-a", state: "unknown" },
           { client: "tab-b", state: "online" },

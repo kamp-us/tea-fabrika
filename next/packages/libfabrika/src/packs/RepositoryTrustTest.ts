@@ -11,6 +11,7 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -117,8 +118,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     key,
                     label: "same-basename",
                     branch: "release",
-                    commit: "a".repeat(40),
-                    hash: "b".repeat(64),
+                    commit: pipe("a", Str.repeat(40)),
+                    hash: pipe("b", Str.repeat(64)),
                     present: true,
                     settings: snapshot,
                     request: selection,
@@ -146,25 +147,23 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     expect(same).toContainEqual(selected);
                     expect(same).toContainEqual(accepted);
                     // Fingerprints distinguish another clone and a changed destination, even with the same safe label.
-                    const otherKey = `${cell.move % 2 === 0 ? "c" : "d"}${key.slice(1)}`;
-
+                    const otherKey = `${cell.move % 2 === 0 ? "c" : "d"}${pipe(key, Str.slice(1))}`;
                     const distinct =
-                      otherKey === key ? `${key.slice(0, -1)}${key.endsWith("0") ? "1" : "0"}` : otherKey;
-
+                      otherKey === key
+                        ? `${pipe(key, Str.slice(0, -1))}${pipe(key, Str.endsWith("0")) ? "1" : "0"}`
+                        : otherKey;
                     const otherLocation = yield* trust.history(distinct, operator);
                     expect(otherLocation).toEqual([]);
-
                     const otherPerson = Schema.decodeSync(Id.make("person"))(
-                      `${operator.slice(0, -1)}${operator.endsWith("0") ? "1" : "0"}`,
+                      `${pipe(operator, Str.slice(0, -1))}${pipe(operator, Str.endsWith("0")) ? "1" : "0"}`,
                     );
 
                     const otherIdentity = yield* trust.history(key, otherPerson);
                     expect(otherIdentity).toEqual([]);
                     // New commits do not change the lookup identity or rewrite the answered commit.
                     expect(same.filter((event) => event._tag === "decision")).toEqual([accepted]);
-
                     const reopened = Schema.decodeSync(Id.InputId)(
-                      `${selection.slice(0, -1)}${selection.endsWith("0") ? "1" : "0"}`,
+                      `${pipe(selection, Str.slice(0, -1))}${pipe(selection, Str.endsWith("0")) ? "1" : "0"}`,
                     );
 
                     for (const candidate of [
@@ -186,7 +185,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                           settings: snapshot,
                           key: candidate.key,
                           person: candidate.person,
-                          commit: (cell.pick % 2 === 0 ? "c" : "d").repeat(40),
+                          commit: pipe(cell.pick % 2 === 0 ? "c" : "d", Str.repeat(40)),
                         },
                       });
 
@@ -258,8 +257,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       key,
                       label: "repo",
                       branch: "release",
-                      commit: "a".repeat(40),
-                      hash: "b".repeat(64),
+                      commit: pipe("a", Str.repeat(40)),
+                      hash: pipe("b", Str.repeat(64)),
                       present: true,
                       settings: snapshot,
                       request: selection,
@@ -370,8 +369,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     key,
                     label: "repo",
                     branch: "release",
-                    commit: "a".repeat(40),
-                    hash: "b".repeat(64),
+                    commit: pipe("a", Str.repeat(40)),
+                    hash: pipe("b", Str.repeat(64)),
                     present: true,
                     settings: snapshot,
                     request: selection,
@@ -382,8 +381,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     key,
                     selection,
                     request: selection,
-                    commit: "a".repeat(40),
-                    hash: "b".repeat(64),
+                    commit: pipe("a", Str.repeat(40)),
+                    hash: pipe("b", Str.repeat(64)),
                     decision: TrustDecision.cases.accepted.make({}),
                     actor: operator,
                     method: "terminal",

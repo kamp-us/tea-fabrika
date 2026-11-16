@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { runsFor } from "@kampus/vitest";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import * as ts from "typescript/unstable/ast";
 import type { Project } from "typescript/unstable/sync";
@@ -16,9 +17,13 @@ const checkSecretTypes = (project: Project, root: string) => {
   const findings: Array<{ file: string; line: number; reason: string }> = [];
 
   for (const path of program.getSourceFileNames()) {
-    const file = relative(root, path).replaceAll("\\", "/");
+    const file = pipe(relative(root, path), Str.replaceAll("\\", "/"));
 
-    if (!file.startsWith("next/") || /\/(?:exam|e2e)\//.test(file) || /\.(?:test|test-support|d)\.tsx?$/.test(file)) {
+    if (
+      !pipe(file, Str.startsWith("next/")) ||
+      /\/(?:exam|e2e)\//.test(file) ||
+      /\.(?:test|test-support|d)\.tsx?$/.test(file)
+    ) {
       continue;
     }
 
@@ -67,7 +72,7 @@ const checkSecretTypes = (project: Project, root: string) => {
           node.expression.name.text === "get" &&
           argument !== undefined &&
           ts.isStringLiteral(argument) &&
-          argument.text.toLowerCase() === "authorization"
+          Str.toLowerCase(argument.text) === "authorization"
         ) {
           reason = "Authorization read";
         }

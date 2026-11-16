@@ -22,6 +22,7 @@ import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as Id from "../../Id.ts";
@@ -62,12 +63,12 @@ const tape = fc.array(cell, { minLength: 1, maxLength: 8 });
 
 const repoSnapshot = (text: string | null) =>
   Schema.decodeSync(RepoSnapshot)({
-    key: "a".repeat(64),
+    key: pipe("a", Str.repeat(64)),
     branch: "release",
-    commit: "b".repeat(40),
+    commit: pipe("b", Str.repeat(40)),
     file: document,
     text,
-    hash: "c".repeat(64),
+    hash: pipe("c", Str.repeat(64)),
   });
 
 const reader = (text: string | null, touches: Array<string>) =>
@@ -152,8 +153,7 @@ describe("T878 composed repository opening", () => {
                 const index = c.pick % docs.length;
                 invalidPerson = c.move % 2 !== 0 && reasons[index] === null;
                 const padding = c.move % 6;
-                const body = docs[index] === null ? null : "\n".repeat(padding) + docs[index]!;
-
+                const body = docs[index] === null ? null : pipe("\n", Str.repeat(padding)) + docs[index]!;
                 const result = yield* OpenRepository.prepare("selected-repo", options).pipe(
                   Effect.provide([reader(body, touches), fs, counted]),
                   Effect.exit,
@@ -255,7 +255,7 @@ describe("T878 composed repository opening", () => {
 const forms = (word: string) => [
   word,
   encodeURIComponent(word),
-  JSON.stringify(word).slice(1, -1),
+  pipe(JSON.stringify(word), Str.slice(1, -1)),
   Buffer.from(word).toString("base64"),
   Buffer.from(word).toString("base64url"),
 ];
@@ -437,8 +437,8 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                   }
 
                   const args = command.args;
-                  const commit = "b".repeat(40);
-                  const blob = "d".repeat(40);
+                  const commit = pipe("b", Str.repeat(40));
+                  const blob = pipe("d", Str.repeat(40));
                   let output = "";
 
                   if (args.includes("--show-toplevel")) {

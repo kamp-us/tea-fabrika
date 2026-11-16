@@ -9,6 +9,7 @@ import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";
@@ -80,8 +81,7 @@ const session = (
               [Stream.mkString(Stream.decodeText(child.stdout)), Stream.runDrain(child.stderr), child.exitCode],
               { concurrency: "unbounded" },
             );
-
-            return { code, out: out.replaceAll(root, "<root>") };
+            return { code, out: pipe(out, Str.replaceAll(root, "<root>")) };
           }),
         );
       });
@@ -94,7 +94,7 @@ const session = (
       ) {
         const { code, out } = yield* git(cwd, args);
         transcript.push(
-          `git ${args.join(" ").replaceAll(root, "<root>")} => ${code}${data === undefined ? "" : ` ${data === "commits" ? named(out) : out}`}`,
+          `git ${pipe(args.join(" "), Str.replaceAll(root, "<root>"))} => ${code}${data === undefined ? "" : ` ${data === "commits" ? named(out) : out}`}`,
         );
 
         return out;

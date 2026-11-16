@@ -37,6 +37,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
@@ -214,8 +215,8 @@ const drain = (world: World, i: number) => {
       const on = { id: flight.id, dial: flight.dial };
 
       if (flight.call._tag === "read") {
-        const name = flight.call.stream.replace(/^processes\//, "");
-        const process = name.startsWith("tezgah:") ? TEZGAH_PID : `process_of_${name}`;
+        const name = pipe(flight.call.stream, Str.replace(/^processes\//, ""));
+        const process = pipe(name, Str.startsWith("tezgah:")) ? TEZGAH_PID : `process_of_${name}`;
         step(world, i, {
           type: "read_ok",
           ...on,

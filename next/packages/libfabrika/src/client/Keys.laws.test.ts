@@ -23,6 +23,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Result from "effect/Result";
 import * as Arr from "effect/Array";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import type { Binding } from "../runtime/Program.ts";
 import * as Keys from "./Keys.ts";
@@ -57,7 +58,7 @@ const FREE = ["<prefix>%", '<prefix>"', "<prefix>x", "<prefix>|", "<prefix>-", "
 const binding = (word: string, keys: ReadonlyArray<string>): Binding => ({
   does: `demo.${word}`,
   keys,
-  word: word.replace("_", " "),
+  word: pipe(word, Str.replace("_", " ")),
   label: word,
 });
 

@@ -1,7 +1,6 @@
 /**
  * `Repositories` on Node, through the `git` command.
  */
-
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -13,6 +12,8 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Option from "effect/Option";
+import { String as Str, pipe } from "effect";
 import {
   Branch,
   DefaultUnknown,
@@ -135,7 +136,7 @@ export const layer = (options: { readonly person: string }) =>
 
       const text = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
         // Git adds one newline. Other whitespace can belong to a directory or remote path.
-        return (yield* decode(yield* run(cwd, args))).replace(/\n$/, "");
+        return pipe(yield* decode(yield* run(cwd, args)), Str.replace(/\n$/, ""));
       });
 
       return Repositories.of({
@@ -164,7 +165,7 @@ export const layer = (options: { readonly person: string }) =>
               "remote.origin.url",
             ]).pipe(Effect.mapError((cause) => failure("origin", cause, true)));
 
-            if (destination === "" || destination.startsWith("-") || destination.includes("\n")) {
+            if (destination === "" || pipe(destination, Str.startsWith("-")) || pipe(destination, Str.includes("\n"))) {
               return yield* failure("origin", "invalid destination", true);
             }
 
@@ -201,16 +202,17 @@ export const layer = (options: { readonly person: string }) =>
               Effect.flatMap(decode),
               Effect.mapBoth({
                 onFailure: (cause) => failure("origin", cause, true),
-                onSuccess: (value) => value.replace(/\n$/, ""),
+                onSuccess: Str.replace(/\n$/, ""),
               }),
             );
 
             // Host URL rewrites apply; credentials are authority, never destination identity.
-            const identity = effective
-              .replace(/^(https?:\/\/)[^/@]*@/i, "$1")
-              .replace(/^(ssh:\/\/)[^/@]*@/i, "$1")
-              .replace(/^[^/@:]+@(?=[^/:]+:)/, "");
-
+            const identity = pipe(
+              effective,
+              Str.replace(/^(https?:\/\/)[^/@]*@/i, "$1"),
+              Str.replace(/^(ssh:\/\/)[^/@]*@/i, "$1"),
+              Str.replace(/^[^/@:]+@(?=[^/:]+:)/, ""),
+            );
             const key = yield* hash(JSON.stringify([common, identity])).pipe(
               Effect.flatMap(Schema.decodeUnknownEffect(Hash)),
               Effect.mapError((cause) => failure("fingerprint", cause)),
@@ -220,33 +222,35 @@ export const layer = (options: { readonly person: string }) =>
               Effect.flatMap(decode),
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
-
-            const lines = advertised.trim().split("\n");
-            const symbolic = lines.filter((line) => line.startsWith("ref: ") && line.endsWith("\tHEAD"));
+            const lines = Str.split(Str.trim(advertised), "\n");
+            const symbolic = lines.filter(
+              (line) => pipe(line, Str.startsWith("ref: ")) && pipe(line, Str.endsWith("\tHEAD")),
+            );
 
             if (symbolic.length !== 1) {
               return yield* failure("default branch", "missing or ambiguous HEAD", true);
             }
 
-            const ref = (symbolic[0] ?? "").slice(5, -5);
+            const ref = pipe(symbolic[0] ?? "", Str.slice(5, -5));
 
-            if (!ref.startsWith("refs/heads/")) {
+            if (!pipe(ref, Str.startsWith("refs/heads/"))) {
               return yield* failure("default branch", "not a branch", true);
             }
 
-            const branch = yield* Schema.decodeEffect(Branch)(ref.slice(11)).pipe(
+            const branch = yield* Schema.decodeEffect(Branch)(pipe(ref, Str.slice(11))).pipe(
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
-
-            const heads = lines.filter((line) => !line.startsWith("ref: ") && line.endsWith("\tHEAD"));
+            const heads = lines.filter(
+              (line) => !pipe(line, Str.startsWith("ref: ")) && pipe(line, Str.endsWith("\tHEAD")),
+            );
 
             if (heads.length !== 1) {
               return yield* failure("default branch", "missing HEAD object", true);
             }
 
-            const advertisedCommit = yield* Schema.decodeEffect(ObjectId)((heads[0] ?? "").slice(0, -5)).pipe(
-              Effect.mapError((cause) => failure("default branch", cause, true)),
-            );
+            const advertisedCommit = yield* Schema.decodeEffect(ObjectId)(
+              pipe(heads[0] ?? "", Str.slice(0, -5)),
+            ).pipe(Effect.mapError((cause) => failure("default branch", cause, true)));
 
             // Pin the advertised object. A branch move during fetch is a refusal, never a different selection.
             yield* isolated([
@@ -261,7 +265,7 @@ export const layer = (options: { readonly person: string }) =>
 
             const commit = yield* isolated(["rev-parse", "--verify", `${advertisedCommit}^{commit}`]).pipe(
               Effect.flatMap(decode),
-              Effect.map((value) => value.replace(/\n$/, "")),
+              Effect.map(Str.replace(/\n$/, "")),
               Effect.flatMap(Schema.decodeUnknownEffect(ObjectId)),
               Effect.mapError((cause) => failure("commit", cause, true)),
             );
@@ -275,14 +279,14 @@ export const layer = (options: { readonly person: string }) =>
 
               const [record] = yield* Schema.decodeUnknownEffect(
                 Schema.Tuple([Schema.NonEmptyString, Schema.Literal("")]),
-              )(listed.split("\0")).pipe(Effect.mapError((cause) => failure("tree", cause)));
+              )(Str.split(listed, "\0")).pipe(Effect.mapError((cause) => failure("tree", cause)));
+              const tab = pipe(record, Str.indexOf("\t"));
 
-              const tab = record.indexOf("\t"),
-                fields = record.slice(0, tab).split(" ");
-
-              if (record.slice(tab + 1) !== file) {
+              if (Option.isNone(tab) || pipe(record, Str.slice(tab.value + 1)) !== file) {
                 return yield* failure("tree", "unexpected path");
               }
+
+              const fields = pipe(record, Str.slice(0, tab.value), Str.split(" "));
 
               const [mode, type, id] = yield* Schema.decodeUnknownEffect(
                 Schema.Tuple([

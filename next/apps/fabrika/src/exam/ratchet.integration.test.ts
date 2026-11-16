@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, String as Str, pipe } from "effect";
 import { ROWS, text } from "./ratchet.test-support.ts";
 
 import { LISTS } from "./ratchet.ts";
@@ -36,7 +36,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
           throw new Error(`git ${args.join(" ")}: ${out.stderr}`);
         }
 
-        return out.stdout.trim();
+        return Str.trim(out.stdout);
       };
 
       const put = (file: string, entries: ReadonlyArray<object>) => writeFileSync(join(repo, file), text(entries));
@@ -64,9 +64,8 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
   );
 
   const jsonLines = (stdout: string) =>
-    stdout
-      .split("\n")
-      .filter((line) => line.startsWith("{"))
+    Str.split(stdout, "\n")
+      .filter((line) => pipe(line, Str.startsWith("{")))
       .map((line) => Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(line));
 
   it.effect("L4 scenario: a head that adds a row exits 1, naming the row in its JSON line and annotation", () =>
@@ -103,7 +102,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
       put("next-ledger.json", [...ROWS["next-ledger.json"], extra]);
       commit("head");
 
-      for (const none of ["", "0".repeat(40)]) {
+      for (const none of ["", pipe("0", Str.repeat(40))]) {
         const out = ratchet(none);
         expect(out.status).toBe(0);
         expect(out.stdout).toContain("no base");
@@ -150,7 +149,9 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
       commit("and one more row");
       const out = ratchet(start);
       expect(out.status).toBe(1);
-      expect(out.stdout).toContain(JSON.stringify(lintKey({ ...extra, file: "a.integration.ts" })).slice(1, -1));
+      expect(out.stdout).toContain(
+        pipe(JSON.stringify(lintKey({ ...extra, file: "a.integration.ts" })), Str.slice(1, -1)),
+      );
     }),
   );
 });

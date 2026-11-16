@@ -8,6 +8,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { String as Str } from "effect";
 import { Commands } from "../../client/Commands.ts";
 import type { Command } from "../../tasks/Task.ts";
 import { capped } from "./internal/capped.ts";
@@ -30,8 +31,7 @@ const onPath = Effect.fnUntraced(function* (name: string, PATH: string) {
       Effect.map((info) => info.type === "File" && (info.mode & 0o111) !== 0),
       Effect.orElseSucceed(() => false),
     );
-
-  const folders = PATH.split(":").filter((folder) => folder !== "");
+  const folders = Str.split(PATH, ":").filter((folder) => folder !== "");
   const found = yield* Effect.forEach(folders, runnable, { concurrency: "unbounded" });
 
   return found.includes(true);

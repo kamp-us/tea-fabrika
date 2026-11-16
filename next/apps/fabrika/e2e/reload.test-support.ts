@@ -8,17 +8,22 @@ import { build } from "@kampus/libfabrika/build";
 import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { String as Str, pipe } from "effect";
 import { ChildProcess } from "effect/process";
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
 import * as RecordWireTest from "../src/record-wire.test-support.ts";
 import { programs as selected } from "../src/table.ts";
 
-export const APP = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
-
-export const ROOT = new URL("../../../..", import.meta.url).pathname.replace(/\/$/, "");
-
+export const APP = pipe(new URL("..", import.meta.url).pathname, Str.replace(/\/$/, ""));
+export const ROOT = pipe(new URL("../../../..", import.meta.url).pathname, Str.replace(/\/$/, ""));
 export const PROGRAM = "fabrika/counter";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -80,8 +85,7 @@ const founderKey = (home: string) =>
     const fs = yield* FileSystem.FileSystem;
     const key = `${home}/person`;
     yield* Effect.sync(() => execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key]));
-
-    return { key, line: (yield* fs.readFileString(`${key}.pub`)).trim() };
+    return { key, line: Str.trim(yield* fs.readFileString(`${key}.pub`)) };
   });
 
 /** The instance, as dev.ts composes it, on the fixture copy: build, start, then watch. Every answer
@@ -172,11 +176,13 @@ export const SecureRandom = { layerWebCrypto: Layer.succeed(Real.SecureRandom,
   const entry = `${copy.home}/dev.ts`;
   yield* fs.writeFileString(
     entry,
-    original
-      .replace('"effect/crypto"', JSON.stringify(random))
-      .replace('"./src/build.ts"', JSON.stringify(wrapper))
-      .replace('"./src/local-instance.ts"', JSON.stringify(`${APP}/src/local-instance.ts`))
-      .replace('"./src/settings.ts"', JSON.stringify(`${APP}/src/settings.ts`)),
+    pipe(
+      original,
+      Str.replace('"effect/crypto"', JSON.stringify(random)),
+      Str.replace('"./src/build.ts"', JSON.stringify(wrapper)),
+      Str.replace('"./src/local-instance.ts"', JSON.stringify(`${APP}/src/local-instance.ts`)),
+      Str.replace('"./src/settings.ts"', JSON.stringify(`${APP}/src/settings.ts`)),
+    ),
   );
   const env = { ...process.env };
   delete env.TYPESAFE_API_KEY;
@@ -225,9 +231,7 @@ export const SecureRandom = { layerWebCrypto: Layer.succeed(Real.SecureRandom,
         }
       }
     }).pipe(Effect.timeoutOrElse({ duration: "60 seconds", orElse: () => Effect.die("dev printed no reload answer") }));
-
-  yield* nextLine((line) => line.startsWith('{"ready":'));
-
+  yield* nextLine((line) => pipe(line, Str.startsWith('{"ready":')));
   return { home, founder, stdout, stderr, nextLine, url: `http://127.0.0.1:${port.port}` };
 });
 

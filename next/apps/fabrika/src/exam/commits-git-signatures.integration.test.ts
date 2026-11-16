@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -77,12 +78,11 @@ describe("person git signatures (p83b)", () => {
         );
 
         const pgp = ["gpgsig -----BEGIN PGP SIGNATURE-----", " fixture", " -----END PGP SIGNATURE-----"];
-
-        const raw = r
-          .git("cat-file", "commit", unsigned)
-          .replace("\n\n", ["", ...(before ? [...decoys, ...pgp] : [...pgp, ...decoys]), "", ""].join("\n"));
-
-        const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
+        const raw = pipe(
+          r.git("cat-file", "commit", unsigned),
+          Str.replace("\n\n", ["", ...(before ? [...decoys, ...pgp] : [...pgp, ...decoys]), "", ""].join("\n")),
+        );
+        const c = Str.trim(sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw));
         expect(verifyCommit(r, c)).toBe(0);
         const out = r.check([], r.base, c);
         expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
@@ -108,8 +108,7 @@ describe("person git signatures (p83b)", () => {
             acceptPgp(r);
             const header = format === "sha256" ? "gpgsig-sha256" : "gpgsig";
             const sig = "-----BEGIN SSH SIGNATURE-----\n";
-            const decoy = `x-${name} ${value}${lineBreak}${header} ${sig.trimEnd()}`;
-
+            const decoy = `x-${name} ${value}${lineBreak}${header} ${Str.trimEnd(sig)}`;
             const pgp = [`${header} -----BEGIN PGP SIGNATURE-----`, " fixture", " -----END PGP SIGNATURE-----"].join(
               "\n",
             );
@@ -117,8 +116,7 @@ describe("person git signatures (p83b)", () => {
             const raw = r
               .git("cat-file", "commit", unsigned)
               .replace("\n\n", () => `\n${(before ? [decoy, pgp] : [pgp, decoy]).join("\n")}\n\n`);
-
-            const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
+            const c = Str.trim(sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw));
             expect(verifyCommit(r, c)).toBe(0);
             r.git("update-ref", "refs/heads/pr", c);
             const checked = r.check();
@@ -175,7 +173,7 @@ describe("person git signatures (p83b)", () => {
 
         const out = r.run(["check", "--base", r.base, "--head", "HEAD"], {
           ...ENV,
-          NODE_OPTIONS: `${ENV.NODE_OPTIONS ?? ""} --import=${preload}`.trim(),
+          NODE_OPTIONS: Str.trim(`${ENV.NODE_OPTIONS ?? ""} --import=${preload}`),
         });
 
         expect(out.code).toBe(2);
@@ -282,7 +280,7 @@ describe("person git signatures (p83b)", () => {
         const original = r.gitSigned();
         expect(verifyCommit(r, original)).toBe(0);
         const raw = `${r.git("cat-file", "commit", original)}changed after signing\n`;
-        const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
+        const c = Str.trim(sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw));
         r.git("update-ref", "HEAD", c);
         expect(verifyCommit(r, c)).not.toBe(0);
         const out = r.check();

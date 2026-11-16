@@ -13,6 +13,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import * as Arr from "effect/Array";
+import { String as Str, pipe } from "effect";
 import type { Request } from "../tasks/Task.ts";
 import { Command, Task, Result, State } from "../tasks/Task.ts";
 import { MemorySocket } from "./WindowStart.test-support.ts";
@@ -373,7 +374,7 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
       return;
     }
 
-    if (!call.method.startsWith("tasks.")) {
+    if (!pipe(call.method, Str.startsWith("tasks."))) {
       return;
     }
 

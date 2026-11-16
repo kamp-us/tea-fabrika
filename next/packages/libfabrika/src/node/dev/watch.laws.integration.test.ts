@@ -24,6 +24,7 @@ import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
 import { expectTypeOf } from "vitest";
@@ -258,7 +259,7 @@ describe("P15 slice 1: the watcher", () => {
               const path = yield* Path.Path;
               const { home, programs } = yield* fixture;
               const selected = programs[save.program % programs.length]!;
-              const short = selected.name.split("/")[1]!;
+              const short = Str.split(selected.name, "/")[1]!;
               const file = path.join(home, "programs", short, "program.ts");
               const original = yield* fs.readFileString(file);
               const sentinel = `P15SECRET${save.sentinel}`;
@@ -352,10 +353,10 @@ describe("P15 slice 1: the watcher", () => {
                 for (const forbidden of [sentinel, home]) {
                   for (const form of [
                     forbidden,
-                    JSON.stringify(forbidden).slice(1, -1),
+                    pipe(JSON.stringify(forbidden), Str.slice(1, -1)),
                     encodeURIComponent(forbidden),
                   ]) {
-                    expect(output.includes(form), "a rebuild output copied private input").toBe(false);
+                    expect(pipe(output, Str.includes(form)), "a rebuild output copied private input").toBe(false);
                   }
                 }
               }
@@ -416,7 +417,7 @@ describe("P15 slice 1: the watcher", () => {
               const path = yield* Path.Path;
               const { home, programs } = yield* fixture;
               const selected = programs[g(fc.nat, { max: programs.length - 1 })]!;
-              const file = path.join(home, "programs", selected.name.split("/")[1]!, "own.ts");
+              const file = path.join(home, "programs", Str.split(selected.name, "/")[1]!, "own.ts");
               const b = yield* brain;
               const answers = yield* Queue.unbounded<unknown>();
               const spans: Array<Tracer.NativeSpan> = [];
@@ -527,7 +528,7 @@ describe("P15 slice 1: the watcher", () => {
                   JSON.stringify(failures),
                 ]) {
                   for (const forbidden of [sentinel, home]) {
-                    expect(output.includes(forbidden)).toBe(false);
+                    expect(pipe(output, Str.includes(forbidden))).toBe(false);
                   }
                 }
 
@@ -579,7 +580,11 @@ describe("P15 slice 1: the watcher", () => {
                 const file = files[g(fc.nat, { max: files.length - 1 })]!;
                 const value = (values.get(file) ?? 0) + g(fc.integer, { min: 1, max: 99 });
                 values.set(file, value);
-                const name = file.endsWith("shared.ts") ? "shared" : file.endsWith("unused.ts") ? "unused" : "own";
+                const name = pipe(file, Str.endsWith("shared.ts"))
+                  ? "shared"
+                  : pipe(file, Str.endsWith("unused.ts"))
+                    ? "unused"
+                    : "own";
                 yield* fs.writeFileString(path.join(home, file), `export const ${name} = ${value};\n`);
                 const got = yield* drain(b.installs, 3000);
                 const changed = got.filter((i) => i.hash !== hashes.get(i.program)).map((i) => i.program);

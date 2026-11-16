@@ -2,8 +2,10 @@
  * Narrow decoding of launchctl's non-API print output.
  */
 import * as Effect from "effect/Effect";
+import { pipe } from "effect/Function";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { BrainControlError, Command, Status, Unsupported } from "../../desktop/BrainControl.ts";
 
 const Response = Schema.Struct({
@@ -36,7 +38,7 @@ export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) 
   const out = Redacted.value(response.stdout);
   // oxlint-disable-next-line fabrika/no-redacted-value -- edge: compare the exact absence response without exposing native diagnostics
   const err = Redacted.value(response.stderr);
-  const [, uid, label] = response.target.split("/");
+  const [, uid, label] = Str.split(response.target, "/");
 
   if (response.code !== 0) {
     const missing = `Could not find service "${label}" in domain for user gui: ${uid}\n`;
@@ -55,7 +57,7 @@ export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) 
     return yield* failed(response);
   }
 
-  const lines = out.trimEnd().split("\n");
+  const lines = Str.split(Str.trimEnd(out), "\n");
 
   if (lines.shift() !== `${response.target} = {` || lines.pop() !== "}") {
     return yield* failed(response);
@@ -69,7 +71,7 @@ export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) 
   let argumentPrefix = "";
 
   for (const line of lines) {
-    const text = line.trimStart();
+    const text = Str.trimStart(line);
 
     if (text === "") {
       continue;
@@ -87,7 +89,7 @@ export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) 
     const section = /^([^=]+?)\s*=\s*\{$/u.exec(text);
 
     if (section !== null) {
-      const name = (section[1] ?? "").trim();
+      const name = Str.trim(section[1] ?? "");
 
       if (stack.length === 0) {
         if (sections.has(name) || fields.has(name)) {
@@ -97,7 +99,7 @@ export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) 
         sections.add(name);
 
         if (name === "arguments") {
-          const indentation = line.slice(0, line.length - text.length);
+          const indentation = pipe(line, Str.slice(0, line.length - text.length));
 
           if (!/^\t+$/u.test(indentation)) {
             return yield* failed(response);
@@ -114,9 +116,9 @@ export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) 
     }
 
     if (stack.length === 1 && stack[0] === "arguments") {
-      const argument = line.slice(argumentPrefix.length);
+      const argument = pipe(line, Str.slice(argumentPrefix.length));
 
-      if (!line.startsWith(argumentPrefix) || !scalar(argument)) {
+      if (!pipe(line, Str.startsWith(argumentPrefix)) || !scalar(argument)) {
         return yield* failed(response);
       }
 
@@ -127,22 +129,22 @@ export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) 
     if (stack.length === 1 && stack[0] === "environment") {
       const pair = /^([^=]+?)\s*=> (.*)$/u.exec(text);
 
-      if (pair === null || env.has((pair[1] ?? "").trim()) || !scalar(pair[2] ?? "")) {
+      if (pair === null || env.has(Str.trim(pair[1] ?? "")) || !scalar(pair[2] ?? "")) {
         return yield* failed(response);
       }
 
-      env.set((pair[1] ?? "").trim(), pair[2] ?? "");
+      env.set(Str.trim(pair[1] ?? ""), pair[2] ?? "");
       continue;
     }
 
     if (stack.length === 0) {
       const pair = /^([^=]+?)\s*= (.*)$/u.exec(text);
 
-      if (pair === null || fields.has((pair[1] ?? "").trim()) || sections.has((pair[1] ?? "").trim())) {
+      if (pair === null || fields.has(Str.trim(pair[1] ?? "")) || sections.has(Str.trim(pair[1] ?? ""))) {
         return yield* failed(response);
       }
 
-      fields.set((pair[1] ?? "").trim(), pair[2] ?? "");
+      fields.set(Str.trim(pair[1] ?? ""), pair[2] ?? "");
     }
   }
 

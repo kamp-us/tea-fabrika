@@ -103,3 +103,4 @@ describe("edge-comment", async () => {
     expect(all(CODE, UNUSED)).toEqual([]);
   });
 });
+

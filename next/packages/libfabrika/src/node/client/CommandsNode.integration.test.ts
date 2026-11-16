@@ -15,6 +15,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schedule from "effect/Schedule";
+import { String as Str, pipe } from "effect";
 import { Commands } from "../../client/Commands.ts";
 import { Command } from "../../tasks/Task.ts";
 import * as CommandsNode from "./CommandsNode.ts";
@@ -37,10 +38,12 @@ describe("P39 slice 4b: the real command on a real host", () => {
         }
 
         expect(answer.code).toBe(0);
-        expect(answer.version.startsWith("git version "), `C4: ${JSON.stringify(answer.version)}`).toBe(true);
-        expect(answer.version.endsWith("\n"), "C4: the trailing newline is dropped").toBe(false);
+        expect(pipe(answer.version, Str.startsWith("git version ")), `C4: ${JSON.stringify(answer.version)}`).toBe(
+          true,
+        );
+        expect(pipe(answer.version, Str.endsWith("\n")), "C4: the trailing newline is dropped").toBe(false);
         // The line C1's vectors replay: one line, far under the cap.
-        expect(answer.version.includes("\n")).toBe(false);
+        expect(pipe(answer.version, Str.includes("\n"))).toBe(false);
         expect(new TextEncoder().encode(answer.version).length).toBeLessThan(CAP);
       }).pipe(Effect.provide(CommandsNode.layer.pipe(Layer.provideMerge(NodeServices.layer)))),
     30_000,

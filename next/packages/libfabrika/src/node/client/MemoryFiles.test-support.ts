@@ -10,6 +10,7 @@ import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
+import { String as Str, pipe } from "effect";
 
 type FileNode = { readonly type: "File"; bytes: Uint8Array; mode: number; mtime: Date };
 
@@ -39,7 +40,7 @@ const fail = (tag: PlatformError.SystemErrorTag, method: string, path: string) =
 
 /** A path as the disk keys it: no doubled or trailing slash, and `.` segments dropped. */
 export const normal = (path: string): string => {
-  const parts = path.split("/").filter((p) => p !== "" && p !== ".");
+  const parts = Str.split(path, "/").filter((p) => p !== "" && p !== ".");
   const kept: Array<string> = [];
 
   for (const part of parts) {
@@ -50,13 +51,16 @@ export const normal = (path: string): string => {
     }
   }
 
-  return `${path.startsWith("/") ? "/" : ""}${kept.join("/")}`;
+  return `${pipe(path, Str.startsWith("/")) ? "/" : ""}${kept.join("/")}`;
 };
 
 const parent = (path: string): string => {
-  const at = path.lastIndexOf("/");
-
-  return at <= 0 ? "/" : path.slice(0, at);
+  return pipe(
+    path,
+    Str.lastIndexOf("/"),
+    Option.filter((at) => at > 0),
+    Option.match({ onNone: () => "/", onSome: (at) => pipe(path, Str.slice(0, at)) }),
+  );
 };
 
 /** A new empty disk with the root and the folders given, each mode 0755. */
@@ -66,9 +70,7 @@ export const disk = (folders: ReadonlyArray<string> = []): Disk => {
   for (const folder of folders) {
     let at = "";
 
-    for (const part of normal(folder)
-      .split("/")
-      .filter((p) => p !== "")) {
+    for (const part of Str.split(normal(folder), "/").filter((p) => p !== "")) {
       at = `${at}/${part}`;
 
       if (!entries.has(at)) {
@@ -118,10 +120,8 @@ const concat = (a: Uint8Array, b: Uint8Array): Uint8Array => {
 };
 
 const isWrite = (flag: FileSystem.OpenFlag): boolean => flag !== "r";
-
-const isExclusive = (flag: FileSystem.OpenFlag): boolean => flag.includes("x");
-
-const isTruncate = (flag: FileSystem.OpenFlag): boolean => flag.startsWith("w");
+const isExclusive = (flag: FileSystem.OpenFlag): boolean => pipe(flag, Str.includes("x"));
+const isTruncate = (flag: FileSystem.OpenFlag): boolean => pipe(flag, Str.startsWith("w"));
 
 /** Effect's `FileSystem` over the disk. Each call is recorded in `calls`. */
 export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
@@ -187,7 +187,7 @@ export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
         seen(method, path);
         const flag = options?.flag ?? "w";
         const file = yield* create(method, path, flag, options?.mode);
-        file.bytes = flag.startsWith("a") ? concat(file.bytes, data) : new Uint8Array(data);
+        file.bytes = pipe(flag, Str.startsWith("a")) ? concat(file.bytes, data) : new Uint8Array(data);
         file.mtime = tick();
       });
 
@@ -245,7 +245,7 @@ export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
         return options?.force === true ? Effect.void : fail("NotFound", "remove", path);
       }
 
-      const below = [...d.entries.keys()].filter((k) => k.startsWith(`${path}/`));
+      const below = [...d.entries.keys()].filter((k) => pipe(k, Str.startsWith(`${path}/`)));
 
       if (known.type === "Directory" && below.length > 0 && options?.recursive !== true) {
         return fail("Busy", "remove", path);
@@ -274,7 +274,7 @@ export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
       seen("open", path);
       const flag = options?.flag ?? "r";
       const file = yield* create("open", path, flag, options?.mode);
-      let position = flag.startsWith("a") ? BigInt(file.bytes.length) : 0n;
+      let position = pipe(flag, Str.startsWith("a")) ? BigInt(file.bytes.length) : 0n;
       yield* Effect.addFinalizer(() => Effect.sync(() => seen("close", path)));
 
       const write = (buffer: Uint8Array) =>
@@ -413,8 +413,11 @@ export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
 
         return Effect.succeed(
           [...d.entries.keys()]
-            .filter((k) => k.startsWith(prefix) && k !== path && !k.slice(prefix.length).includes("/"))
-            .map((k) => k.slice(prefix.length)),
+            .filter(
+              (k) =>
+                pipe(k, Str.startsWith(prefix)) && k !== path && !pipe(k, Str.slice(prefix.length), Str.includes("/")),
+            )
+            .map((k) => pipe(k, Str.slice(prefix.length))),
         );
       }),
     makeTempFile: (options) =>

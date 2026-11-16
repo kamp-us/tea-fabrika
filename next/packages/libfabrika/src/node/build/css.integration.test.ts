@@ -12,6 +12,7 @@ import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import * as Tracer from "effect/Tracer";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { bundle, bundleAsync, type Rule, transform } from "lightningcss";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -441,13 +442,13 @@ describe("P16 CSS tokens", () => {
           const f = fixture(id);
           // A quoted url() allows whitespace before its quote, but no comment there.
           // https://www.w3.org/TR/css-syntax-3/#consume-ident-like-token
-          const space = gap.includes("/*") ? " " : gap;
+          const space = pipe(gap, Str.includes("/*")) ? " " : gap;
           imported(
             await Effect.runPromise(f.read(`@import${gap}url(${space}${quote}./child${id}.css${quote}${gap});`)),
             id,
           );
 
-          if (gap.includes("/*")) {
+          if (pipe(gap, Str.includes("/*"))) {
             expect(
               await failure(f.read(`@import${gap}url(${gap}${quote}./child${id}.css${quote}${gap});`)),
             ).toMatchObject({ message: expect.stringContaining("stylesheet has a broken url()") });
@@ -711,9 +712,7 @@ describe("P16 CSS tokens", () => {
       fc.asyncProperty(ids, fc.constantFrom("61", "000061", "62", "000062"), async (id, hex) => {
         const f = fixture(id),
           css = `a { --value: \\${hex}url(./file${id}.png); }`;
-
-        const expected = cssRules(`a { --value: ${hex.endsWith("61") ? "a" : "b"}url(./file${id}.png); }`);
-
+        const expected = cssRules(`a { --value: ${pipe(hex, Str.endsWith("61")) ? "a" : "b"}url(./file${id}.png); }`);
         const verify = (rules: readonly Rule[]) =>
           expect(meaning(rules), "the escaped function and its argument must remain").toEqual(meaning(expected));
 

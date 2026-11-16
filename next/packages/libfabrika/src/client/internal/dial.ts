@@ -14,6 +14,7 @@ import * as Random from "effect/Random";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
+import { String as Str, pipe } from "effect";
 import type { Identity } from "../../transport/ClientKey.ts";
 import { ErrorClass } from "../../transport/ClientRows.ts";
 import { backoff, CAP } from "../../transport/Link.ts";
@@ -125,7 +126,7 @@ export const dialer =
 
         const key = yield* identity;
         yield* dialWait(tries);
-        const url = `${options.origin.replace(/^http/, "ws")}/client/${encodeURIComponent(key.fingerprint)}/${encodeURIComponent(options.tab)}`;
+        const url = `${pipe(options.origin, Str.replace(/^http/, "ws"))}/client/${encodeURIComponent(key.fingerprint)}/${encodeURIComponent(options.tab)}`;
         const connection = yield* Socket.fromWebSocket(acquire(options.sockets, url));
 
         const pull = yield* Socket.readerString(connection).pipe(

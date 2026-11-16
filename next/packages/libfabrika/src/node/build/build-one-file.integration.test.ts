@@ -31,6 +31,7 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import { parseSync } from "oxc-parser";
@@ -208,7 +209,7 @@ const fixture = (value: string, count = 1) => {
 
   cpSync(join(ROOT, "next/apps/fabrika/src"), join(home, "src"), {
     recursive: true,
-    filter: (p) => !p.endsWith(".test.ts"),
+    filter: (p) => !pipe(p, Str.endsWith(".test.ts")),
   });
   vi.stubEnv("TYPESAFE_API_KEY", undefined);
   vi.stubEnv("FABRIKA_HOME", home);
@@ -545,7 +546,11 @@ describe("P16 p33 one-file build", () => {
 
           embedded(`export const source=${JSON.stringify(source)};`, [source]);
 
-          for (const changed of [source.replaceAll("\\r\\n", "\\n"), source.replaceAll("\\\\", "\\"), `${source}\n`]) {
+          for (const changed of [
+            pipe(source, Str.replaceAll("\\r\\n", "\\n")),
+            pipe(source, Str.replaceAll("\\\\", "\\")),
+            `${source}\n`,
+          ]) {
             assert.notEqual(changed, source);
             expect(() => embedded(`export const source=${JSON.stringify(changed)}`, [source])).toThrow(
               "compiled text changed",
@@ -600,10 +605,9 @@ const parsedRules = (css: string): unknown => {
 
 /** The rules of every `<style>` in the page, in document order, as one list. */
 const pageRules = (page: string): unknown =>
-  parsedRules([...page.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n"));
+  parsedRules([...pipe(page, Str.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi))].map((m) => m[1]).join("\n"));
 
-const count = (text: string, pattern: RegExp) => [...text.matchAll(pattern)].length;
-
+const count = (text: string, pattern: RegExp) => [...pipe(text, Str.matchAll(pattern))].length;
 // A style element ends at its first `</style`, as an HTML tokenizer reads raw text; what is left is markup.
 const STYLE = /<style\b[^>]*>[\s\S]*?<\/style\s*>/gi;
 
@@ -753,7 +757,7 @@ const tabHome = (value: string) => {
 
 /** The temporary folders a build makes beside `out`; none may outlive the build. */
 const leftovers = (home: string) =>
-  readdirSync(home).filter((n) => n.startsWith(".fabrika-build-") || n.endsWith(".old"));
+  readdirSync(home).filter((n) => pipe(n, Str.startsWith(".fabrika-build-")) || pipe(n, Str.endsWith(".old")));
 
 const outFiles = (out: string) => (existsSync(out) ? snapshot(out) : []);
 
@@ -824,7 +828,7 @@ const checkCarried = (
       parsedRules(given.join("\n")),
     );
     expect(page!.body, "no stylesheet in the page imports another file").not.toMatch(/@import\b/i);
-    const markup = page!.body.replace(STYLE, "");
+    const markup = pipe(page!.body, Str.replace(STYLE, ""));
     expect(count(page!.body, STYLE), "one style element per stylesheet").toBe(given.length);
     expect(count(markup, /<\/?style\b/gi), "no stylesheet text ends its element early").toBe(0);
     expect(count(markup, /<script\b/gi), "the page's one script").toBe(1);
@@ -1081,7 +1085,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
                 const form = NAMING[Math.floor(detail / BOUNDARY.length) % NAMING.length]!;
                 const depth = Math.floor(detail / (BOUNDARY.length * NAMING.length)) % 3;
                 f.chain(depth, form(specifier));
-                label = `import-${specifier.split(":")[0]}-${depth === 0 ? "direct" : "transitive"}`;
+                label = `import-${Str.split(specifier, ":")[0]}-${depth === 0 ? "direct" : "transitive"}`;
               }
 
               if (chosen === "url") {
@@ -1169,7 +1173,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
 
           const clean = (output: string, label: string) => {
             for (const form of forms) {
-              expect(output.includes(form), `${label} copies no credential`).toBe(false);
+              expect(pipe(output, Str.includes(form)), `${label} copies no credential`).toBe(false);
             }
           };
 
@@ -1204,7 +1208,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
             const built = (result as { readonly success: Built }).success;
             const page = built.assets[PAGE]?.body ?? "";
 
-            for (const [, url] of page.matchAll(/\b(?:src|href)="([^"]*)"/g)) {
+            for (const [, url] of pipe(page, Str.matchAll(/\b(?:src|href)="([^"]*)"/g))) {
               clean(url!, "a page URL");
               clean(decodeURIComponent(url!), "a decoded page URL");
             }
@@ -1222,7 +1226,10 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
             // A file route reaches no object: each binding answers nothing but the name lookup.
             const config = StartsTest.fixture(
               { name: "p14", port, person: "p", founder: "f", window: null, build: built.build },
-              (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+              (algorithm, data) =>
+                createHash(pipe(algorithm.name, Str.replaceAll("-", ""), Str.toLowerCase))
+                  .update(data)
+                  .digest(),
             );
 
             const binding = { getByName: () => ({ settingsStart: async () => StartsTest.reply(config) }) };
@@ -1237,7 +1244,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
             } as unknown as Parameters<typeof fetch>[1];
 
             for (const route of ["/", ...Object.keys(built.assets)]) {
-              for (const url of [route, route.split("/").map(encodeURIComponent).join("/")]) {
+              for (const url of [route, Str.split(route, "/").map(encodeURIComponent).join("/")]) {
                 const response = await Effect.runPromise(
                   fetch(
                     new Request(`http://127.0.0.1:${port}${url}`, { headers: { host: `127.0.0.1:${port}` } }),
@@ -1277,16 +1284,16 @@ type Pick = { readonly name: string; readonly module: string };
 const p40Runs = { seed: 119120, numRuns: runsFor({ fast: 3, full: 6 }) };
 
 const nameBreaks: ReadonlyArray<(name: string) => string> = [
-  (name) => name.split("/")[1]!,
+  (name) => Str.split(name, "/")[1]!,
   (name) => `/${name}`,
   (name) => `${name}/`,
-  (name) => name.replace("/", "//"),
+  (name) => pipe(name, Str.replace("/", "//")),
   (name) => `${name}/extra`,
   (name) => `../${name}`,
-  (name) => name.replace("/", "/./"),
-  (name) => name.replace("/", "."),
-  (name) => name.replace("/", " "),
-  (name) => `${name}${"x".repeat(257 - name.length)}`,
+  (name) => pipe(name, Str.replace("/", "/./")),
+  (name) => pipe(name, Str.replace("/", ".")),
+  (name) => pipe(name, Str.replace("/", " ")),
+  (name) => `${name}${pipe("x", Str.repeat(257 - name.length))}`,
 ];
 
 const p40Home = Effect.fn("p40.home")(function* () {
@@ -1379,7 +1386,7 @@ const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
     expect(Object.keys(built.programs).sort()).toEqual(selected.map((p) => p.name).sort());
 
     for (const p of selected) {
-      expect(p.name.split("/")).toHaveLength(2);
+      expect(Str.split(p.name, "/")).toHaveLength(2);
       const entry = built.programs[p.name]!;
       expect(entry.hash).toBe(sha(entry.source));
       // L3: each entry carries its own module's body and no other module's.
@@ -1395,7 +1402,7 @@ const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
     // L3: equal short names in two packs keep two entries, and different bodies keep two hashes.
     for (const a of selected) {
       for (const b of selected) {
-        if (a.name !== b.name && a.name.split("/")[1] === b.name.split("/")[1] && a.module !== b.module) {
+        if (a.name !== b.name && Str.split(a.name, "/")[1] === Str.split(b.name, "/")[1] && a.module !== b.module) {
           expect(built.programs[a.name]!.hash).not.toBe(built.programs[b.name]!.hash);
         }
       }
@@ -1456,7 +1463,7 @@ const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
       possible: () => selected.length > 0,
       run: Effect.fnUntraced(function* (n) {
         const from = selected[n % selected.length]!;
-        const short = from.name.split("/")[1]!;
+        const short = Str.split(from.name, "/")[1]!;
         const pack = `fork${selected.length}`;
         selected = [...selected, { name: `${pack}/${short}`, module: yield* addModule(n) }];
         forks++;

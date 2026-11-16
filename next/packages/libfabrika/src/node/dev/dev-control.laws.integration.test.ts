@@ -18,6 +18,7 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
+import { String as Str, pipe } from "effect";
 import { vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
@@ -271,7 +272,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
       if (key === "rename") {
         return (from: string, to: string) =>
           Effect.gen(function* () {
-            const held = to.endsWith("brain.pending.jsonl") ? gate : null;
+            const held = pipe(to, Str.endsWith("brain.pending.jsonl")) ? gate : null;
 
             if (held !== null) {
               yield* Deferred.await(held);
@@ -279,7 +280,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 
             yield* target.rename(from, to);
             // The startup flush rewrites the file too; only the walk's own writes are counted.
-            synced = to.endsWith("brain.pending.jsonl") && mode === "walk";
+            synced = pipe(to, Str.endsWith("brain.pending.jsonl")) && mode === "walk";
           });
       }
 
