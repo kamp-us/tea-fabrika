@@ -27,6 +27,8 @@ sequenceDiagram
   end
 ```
 
+> Until the first release the named-upgrade chain is set aside: [0572](0572-pre-release-shape-change-wipes-data.md) wipes the data on a shape change.
+
 ## Context
 
 Decided by the owner in [hot reload](../docs/direction/hot-reload.md) (H0 to H3), from experiment
