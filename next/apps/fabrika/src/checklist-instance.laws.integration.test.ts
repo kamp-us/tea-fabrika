@@ -544,7 +544,8 @@ describe("L21: the boot list", () => {
 
 const Notice = Schema.Struct({
   method: Schema.Literals(["view.whole", "view.patch"]),
-  params: Schema.Record(Schema.String, Schema.Unknown),
+  // A notice goes on the wire as JSON, so its params are a JSON object.
+  params: Schema.Record(Schema.String, Schema.Json),
 });
 
 const without = (params: (typeof Notice.Type)["params"]) => {

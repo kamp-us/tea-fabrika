@@ -5,6 +5,7 @@ import { it as effectIt } from "@effect/vitest";
 // supervision test is. Needs ports and its own processes, so it runs in the step's container (0045).
 import type { Descriptor } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
+import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { Started } from "@kampus/libfabrika/processes/Children";
 import { letterLine } from "@kampus/libfabrika/processes/Mailbox";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
@@ -50,8 +51,14 @@ const STARTS = [{ source: "p42/starter", to: "p42/child" }];
 const WAIT = 25_000;
 
 type Fixture = Effect.Success<ReturnType<typeof childInstance>>;
-// The instance's private local capability, read call by call as ticket 402's test reads it.
-type Instance = Fixture["instance"] & Record<string, any>;
+// The instance's private local capability, read call by call as ticket 402's test reads it: each
+// method answers `unknown`, which the helpers decode.
+type Instance = Fixture["instance"];
+
+/** A ledger entry as the project's `read` answers it, its body a JSON object. */
+const AuditRows = Schema.Array(Schema.Struct({ ...Entry.fields, body: Schema.Record(Schema.String, Schema.Json) }));
+/** The project's live processes, as its `info` answers them. */
+const InfoRows = Schema.Array(Schema.Struct({ name: Schema.String, process: Schema.String }));
 
 const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
 
@@ -194,14 +201,14 @@ const world = (
         const fixture = yield* childInstance(starts);
         const scope = yield* Effect.scope;
         const connect = (tab: string) =>
-          Effect.runPromise(Scope.provide(scope)(wire(fixture.instance as Instance, fixture.key, tab)));
+          Effect.runPromise(Scope.provide(scope)(wire(fixture.instance, fixture.key, tab)));
         yield* Effect.promise(() => test(fixture, connect));
       }),
     ),
   );
 
 const helpers = ({ instance, hashes, from }: Fixture) => {
-  const project = () => (instance as Instance).project(PROJECT);
+  const project = () => instance.project(PROJECT);
   const call = (method: string, ...args: ReadonlyArray<unknown>) => {
     const target = project();
     const invoke = target[method];
@@ -222,9 +229,13 @@ const helpers = ({ instance, hashes, from }: Fixture) => {
       return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
     },
     facts: async (stream: string) =>
-      ((await call("read", stream, 0, "audit")) as Array<any>).map((row) => ({ ...row.body, _tag: row._tag })),
+      // A fact is its entry's JSON body with the entry's case beside it.
+      Schema.decodeUnknownSync(AuditRows)(await call("read", stream, 0, "audit")).map((row): (typeof row)["body"] => ({
+        ...row.body,
+        _tag: row._tag,
+      })),
     live: async (name: string): Promise<string | undefined> =>
-      ((await call("info")) as Array<any>).find((row) => row.name === name)?.process,
+      Schema.decodeUnknownSync(InfoRows)(await call("info")).find((row) => row.name === name)?.process,
   };
 };
 

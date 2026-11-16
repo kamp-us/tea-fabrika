@@ -24,6 +24,7 @@ import { checklistView } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
 import * as Headless from "@kampus/libfabrika/client/Headless";
 import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
+import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey";
 import { ClientRows } from "@kampus/libfabrika/transport/ClientRows";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
@@ -100,8 +101,14 @@ const identity = () => {
 };
 
 type Key = ReturnType<typeof identity>;
-// The instance's private local capability, read call by call as ticket 402's test reads it.
-type Instance = Record<string, any>;
+// The instance's private local capability, read call by call as ticket 402's test reads it: each
+// project method answers `unknown`, which `calls` decodes.
+type Instance = Effect.Success<ReturnType<typeof localInstance>>;
+
+/** A ledger entry as the project's `read` answers it, its body a JSON object. */
+const AuditRows = Schema.Array(Schema.Struct({ ...Entry.fields, body: Schema.Record(Schema.String, Schema.Json) }));
+/** The project's live processes, as its `info` answers them. */
+const InfoRows = Schema.Array(Schema.Struct({ name: Schema.String, process: Schema.String }));
 
 const pause = (ms = 100) => new Promise<void>((done) => setTimeout(done, ms));
 
@@ -221,9 +228,15 @@ const startInstance = Effect.fnUntraced(
 const calls = (instance: Instance) => {
   const project = () => instance.project(PROJECT);
   return {
-    info: async (): Promise<Array<any>> => project().info(),
-    facts: async (stream: string): Promise<Array<any>> =>
-      ((await project().read(stream, 0, "audit")) as Array<any>).map((row) => ({ ...row.body, _tag: row._tag })),
+    info: async () => Schema.decodeUnknownSync(InfoRows)(await project().info?.()),
+    facts: async (stream: string) =>
+      // A fact is its entry's JSON body with the entry's case beside it.
+      Schema.decodeUnknownSync(AuditRows)(await project().read?.(stream, 0, "audit")).map(
+        (row): (typeof row)["body"] => ({
+          ...row.body,
+          _tag: row._tag,
+        }),
+      ),
   };
 };
 
@@ -236,7 +249,7 @@ const findTezgah = async (instance: Instance) => {
   );
   const found = rows.filter((row) => String(row.name).startsWith("tezgah:"));
   expect(found, "one tezgah process, for the one person").toHaveLength(1);
-  return { pid: String(found[0].process), name: String(found[0].name) };
+  return { pid: String(found[0]?.process), name: String(found[0]?.name) };
 };
 
 // L8's real half: the suite's walk, on its own instance, through the founder's door letters.

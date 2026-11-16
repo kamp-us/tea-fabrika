@@ -5,6 +5,7 @@
 // before the start it caused is asked, every run. A real instance gives no way to hold a step after
 // its letter is delivered.
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
+import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
 import { ProjectService } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Exit, Schema, Scope } from "effect";
@@ -58,7 +59,13 @@ const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) 
   throw new Error(`${label}: no answer in ${WAIT} ms; last observed ${JSON.stringify(last)}`);
 };
 
-type Instance = Record<string, any>;
+/** A booted local instance; its project's methods answer `unknown`, which the helpers decode. */
+type Instance = Effect.Success<Effect.Success<ReturnType<typeof childHome>>["boot"]>;
+
+/** A ledger entry as the project's `read` answers it, its body a JSON object. */
+const AuditRows = Schema.Array(Schema.Struct({ ...Entry.fields, body: Schema.Record(Schema.String, Schema.Json) }));
+/** The project's live processes, as its `info` answers them. */
+const InfoRows = Schema.Array(Schema.Struct({ name: Schema.String, process: Schema.String }));
 
 /** One frame the door pushed, as JSON. */
 const decodeFrame = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
@@ -129,11 +136,12 @@ const client = async (instance: Instance, key: Key, tab: string) => {
 };
 
 /** The project's rows of one stream, through the instance's private local capability. */
-const rows = async (instance: Instance, stream: string): Promise<Array<any>> =>
-  (await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>;
+const rows = async (instance: Instance, stream: string) =>
+  Schema.decodeUnknownSync(AuditRows)(await instance.project(PROJECT).read?.(stream, 0, "audit"));
 
 const livePid = async (instance: Instance, name: string): Promise<string | undefined> =>
-  ((await instance.project(PROJECT).info()) as Array<any>).find((row) => row.name === name)?.process;
+  Schema.decodeUnknownSync(InfoRows)(await instance.project(PROJECT).info?.()).find((row) => row.name === name)
+    ?.process;
 
 describe("T953: a start is checked against the member who caused it, end to end", () => {
   // scenario: L17. Only a real instance proves the brain's wiring: the gateway answers who sent the
@@ -148,7 +156,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const first = yield* Scope.make();
           const instance: Instance = yield* Scope.provide(first)(home.boot);
           yield* Effect.promise(async () => {
-            const started = await instance.project(PROJECT).start(
+            const started = await instance.project(PROJECT).start?.(
               {
                 _tag: "first",
                 id: "start-starter:1",

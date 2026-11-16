@@ -42,7 +42,7 @@ import { applyCell } from "@demlik/tea";
 // answer. The tiles are the checklist's tile shape (a draft and a submit that presses `add`), a second
 // generated tile machine, and a tile with none. Tuval may not import a program, so the checklist's own
 // tile is stepped through its registration in the checklist's laws (L22, L24).
-import type { Machine as MachineOf } from "@demlik/tea";
+import type { Machine as TeaMachine } from "@demlik/tea";
 import { Cmd as TeaCmd, Machine } from "@demlik/tea/effect";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
@@ -128,7 +128,7 @@ const POOL = ["milk", "bread", "eggs"] as const;
 const DRAFT = "draft~";
 
 /** The window's own Cmds, as its `init` and update cells give them. */
-type Cmd = typeof machine extends MachineOf<infer _S, infer _M, infer C, infer _U, infer _X> ? C : never;
+type Cmd = typeof machine extends TeaMachine<infer _S, infer _M, infer C, infer _U, infer _X> ? C : never;
 type Call = { readonly _tag: string; readonly [key: string]: Schema.Json };
 /** A socket write, its call read as JSON fields by name, as the laws read it. */
 type Write = { readonly type: "write"; readonly call: Call; readonly id: number; readonly dial: number };

@@ -1061,8 +1061,9 @@ const MachineRecipe = fc.record({
 type MachineRecipe = typeof MachineRecipe extends fc.Arbitrary<infer A> ? A : never;
 
 const built = (r: MachineRecipe, base: typeof machine): unknown => {
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- D4's probe: generated JSON keys beside machine fields that hold functions, tables, numbers or text, so the guard meets any value
-  const own: Record<string, unknown> = { ...r.extra };
+  // The machine fields the probe sets, each any value. The generated JSON keys (`r.extra`) go on before
+  // them, so a field the probe sets still wins over a generated key of the same name.
+  const own: { update?: unknown; init?: unknown; cmds?: unknown; model?: unknown; msg?: unknown } = {};
   const inherited: { update?: unknown; model?: unknown; msg?: unknown } = {};
   const table = { ...base.update };
 
@@ -1095,18 +1096,23 @@ const built = (r: MachineRecipe, base: typeof machine): unknown => {
 
   switch (r.container) {
     case "plain":
-      return Object.assign(Object.create(inherited), own);
+      return Object.assign(Object.create(inherited), r.extra, own);
     case "inherited":
-      return Object.create(Object.assign({}, inherited, own));
+      return Object.create(Object.assign({}, inherited, r.extra, own));
     case "array":
-      return Object.assign(Object.setPrototypeOf([], Object.assign(Object.create(Array.prototype), inherited)), own);
+      return Object.assign(
+        Object.setPrototypeOf([], Object.assign(Object.create(Array.prototype), inherited)),
+        r.extra,
+        own,
+      );
     case "instance":
       return Object.assign(
         Object.setPrototypeOf(new Shaped(), Object.assign(Object.create(Shaped.prototype), inherited)),
+        r.extra,
         own,
       );
     case "function":
-      return Object.assign(() => 0, inherited, own);
+      return Object.assign(() => 0, inherited, r.extra, own);
     case "null":
       return null;
     case "string":

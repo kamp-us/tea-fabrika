@@ -297,7 +297,11 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
         accounting: accounting(name),
       }).load,
     entries: Effect.sync(() =>
-      project.exec("SELECT * FROM entries ORDER BY rev").map((row) => Schema.decodeUnknownSync(Row)(row)),
+      project.exec("SELECT * FROM entries ORDER BY rev").map((row) => {
+        // The whole decoded row, every field kept for the suite's equality checks, with its case as `tag`.
+        const { _tag, ...rest } = Schema.decodeUnknownSync(Row)(row);
+        return { ...rest, tag: _tag };
+      }),
     ),
     snapshot: Effect.sync(() => Object.fromEntries([...sqls].map(([name, db]) => [name, snapshot(db)]))),
     reopen: store.reopen,

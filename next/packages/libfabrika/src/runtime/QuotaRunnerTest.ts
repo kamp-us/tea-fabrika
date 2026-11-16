@@ -52,11 +52,12 @@ export interface Local {
 }
 
 /**
- * One ledger row as the suite reads it: its case, id, stream and decoded JSON body. The driver
- * gives the ledger's own rows; `runtime/` never imports `ledger/`, so the suite names only what it reads.
+ * One ledger row as the suite reads it: its case as `tag`, its id, stream and decoded JSON body. The
+ * driver gives the ledger's own rows whole, with the case renamed, as `MonitorTest`'s rows do;
+ * `runtime/` never imports `ledger/`, so the suite names only what it reads.
  */
 interface LedgerRow {
-  readonly _tag: string;
+  readonly tag: string;
   readonly id: string;
   readonly stream: string;
   readonly body: Schema.Json;
@@ -215,7 +216,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               const settled = yield* w.program("sample/alpha");
               expect(settled.writes).toBe(2);
               expect(settled.ahead.writes).toBe(before.ahead.writes);
-              expect((yield* w.entries).filter((e) => e._tag === "stepped" && e.id === `step:pair:${n}`)).toHaveLength(
+              expect((yield* w.entries).filter((e) => e.tag === "stepped" && e.id === `step:pair:${n}`)).toHaveLength(
                 1,
               );
               const saved = yield* w.snapshot;
@@ -294,20 +295,19 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             expect((yield* w.local(name)).recovery.total.writes).toBeGreaterThan(0);
             expect((yield* w.projectRecovery(name)).total.writes).toBeGreaterThan(0);
             const entries = yield* w.entries;
-            expect(entries.some((e) => e._tag === "exited")).toBe(true);
-            expect(entries.some((e) => e._tag === "restarted")).toBe(true);
+            expect(entries.some((e) => e.tag === "exited")).toBe(true);
+            expect(entries.some((e) => e.tag === "restarted")).toBe(true);
             expect(
               entries.some(
                 (e) =>
-                  e._tag === "send" &&
+                  e.tag === "send" &&
                   e.stream === "beta:1/inbox" &&
                   Schema.is(Schema.Struct({ m: Schema.Struct({ ref: Schema.Literal("inbound") }) }))(e.body),
               ),
             ).toBe(true);
             expect(
               entries.some(
-                (e) =>
-                  e._tag === "demonitored" && Schema.is(Schema.Struct({ ref: Schema.Literal("outbound") }))(e.body),
+                (e) => e.tag === "demonitored" && Schema.is(Schema.Struct({ ref: Schema.Literal("outbound") }))(e.body),
               ),
             ).toBe(true);
             expect(entries.some((e) => typeof e.stream === "string" && e.stream.endsWith("/dead"))).toBe(true);
@@ -472,9 +472,9 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               const after = yield* w.entries;
 
               for (const id of messages) {
-                expect(
-                  after.filter((e) => e._tag === "stepped" && e.id === `step:${id}`).length,
-                ).toBeGreaterThanOrEqual(1);
+                expect(after.filter((e) => e.tag === "stepped" && e.id === `step:${id}`).length).toBeGreaterThanOrEqual(
+                  1,
+                );
               }
 
               w.limits(defaults);
@@ -515,7 +515,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
                 expect(yield* w.checkpoint("alpha:1")).toEqual(saved);
                 expect(yield* w.journal("alpha:1")).toEqual(journal);
                 expect((yield* w.local("alpha:1")).recovery).toEqual(usage.recovery);
-                expect((yield* w.entries).filter((e) => e._tag === "dead" || e._tag === "exited")).toEqual([]);
+                expect((yield* w.entries).filter((e) => e.tag === "dead" || e.tag === "exited")).toEqual([]);
               }
 
               yield* TestClock.setTime(at + 60_001);

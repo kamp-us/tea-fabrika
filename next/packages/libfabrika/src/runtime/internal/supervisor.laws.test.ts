@@ -38,7 +38,8 @@ const BUILD = "build-a";
 
 type Model = typeof Supervision.Type;
 type Journal = Model["journal"];
-type Msg = { readonly type: string; readonly [key: string]: unknown };
+/** A Msg as the fold sends it, schema-valid or not (a foreign `poison` too); every field is JSON, as the saved journal's are. */
+type Msg = { readonly type: string; readonly [key: string]: Schema.Json };
 
 const pid = (n: number): string => `process_0000000000e00800${String(n).padStart(10, "0")}`;
 /** A process no fold creates. */
