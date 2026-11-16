@@ -210,7 +210,7 @@ export const layer = (options: { readonly person: string }) =>
               return yield* failure("default branch", "not a branch", true);
             }
 
-            const branch = yield* Schema.decodeUnknownEffect(Branch)(ref.slice(11)).pipe(
+            const branch = yield* Schema.decodeEffect(Branch)(ref.slice(11)).pipe(
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
             const heads = lines.filter((line) => !line.startsWith("ref: ") && line.endsWith("\tHEAD"));
@@ -219,7 +219,7 @@ export const layer = (options: { readonly person: string }) =>
               return yield* failure("default branch", "missing HEAD object", true);
             }
 
-            const advertisedCommit = yield* Schema.decodeUnknownEffect(ObjectId)((heads[0] ?? "").slice(0, -5)).pipe(
+            const advertisedCommit = yield* Schema.decodeEffect(ObjectId)((heads[0] ?? "").slice(0, -5)).pipe(
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
             // Pin the advertised object. A branch move during fetch is a refusal, never a different selection.

@@ -144,7 +144,7 @@ const personRefusalControls = () => {
 
 const letters = (actual: ReadonlyArray<string>) => {
   for (const letter of actual) {
-    Schema.decodeUnknownSync(Id.Letter)(letter);
+    Schema.decodeSync(Id.Letter)(letter);
   }
 
   expect(new Set(actual).size).toBeLessThanOrEqual(1);

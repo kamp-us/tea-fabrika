@@ -74,7 +74,7 @@ export const runFlow = Effect.fn("flow.run")(function* (flow: Flow.Flow, options
 
   if (saved) {
     const text = yield* fs.readFileString(options.state).pipe(Effect.orElseSucceed(() => ""));
-    const model = Schema.decodeUnknownOption(Schema.fromJsonString(FlowMachine.Model))(text);
+    const model = Schema.decodeOption(Schema.fromJsonString(FlowMachine.Model))(text);
 
     if (Option.isNone(model)) {
       return yield* new Usage({ reason: `${options.state} holds no flow Model` });

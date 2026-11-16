@@ -36,7 +36,7 @@ const DeadRows = Schema.fromJsonString(
 type Renames = ReadonlyMap<string, string>;
 
 const lintKeys = (text: string, renames: Renames = new Map()) =>
-  Schema.decodeUnknownEffect(LintRows)(text).pipe(
+  Schema.decodeEffect(LintRows)(text).pipe(
     Effect.map(({ entries }) =>
       entries.map((row) => JSON.stringify([renames.get(row.file) ?? row.file, row.rule, row.code])),
     ),
@@ -44,7 +44,7 @@ const lintKeys = (text: string, renames: Renames = new Map()) =>
 
 // code-graph's ids name a file too, but no rename reaches them here: they are matched as written.
 const deadKeys = (text: string, _renames?: Renames) =>
-  Schema.decodeUnknownEffect(DeadRows)(text).pipe(
+  Schema.decodeEffect(DeadRows)(text).pipe(
     Effect.map(({ entries }) => entries.map((row) => JSON.stringify([row.scope, row.kind, row.id]))),
   );
 

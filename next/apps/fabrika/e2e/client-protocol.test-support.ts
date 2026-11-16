@@ -201,7 +201,7 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
       shown: Effect.map(state, (s) => {
         const pid = s.tiles[0]?.last;
         const view = pid ? s.client.views[pid]?.view : undefined;
-        const data = Option.getOrUndefined(Schema.decodeUnknownOption(checklistWindow.data)(view));
+        const data = Option.getOrUndefined(Schema.decodeOption(checklistWindow.data)(view));
         return (data?.items ?? []).map((i) => ({ name: i.name, checked: i.state === "checked" }));
       }),
       dials: count,

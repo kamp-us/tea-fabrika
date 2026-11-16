@@ -49,7 +49,7 @@ const key = Effect.fnUntraced(function* () {
   blob.set(new TextEncoder().encode("ssh-ed25519"), 4);
   new DataView(blob.buffer).setUint32(15, 32);
   blob.set(raw, 19);
-  const line = Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
+  const line = Schema.decodeSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
   const fingerprint = `SHA256:${Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))).replace(/=+$/, "")}`;
   return {
     raw: Base64Url.encode(raw),
@@ -192,7 +192,7 @@ type World = Effect.Success<ReturnType<typeof world>>;
 
 const identity = (input: Incoming, fingerprint: string) => {
   expect(input.envelope.by).toEqual({ _tag: "agent", key: fingerprint, for: person });
-  Schema.decodeUnknownSync(Id.InputId)(input.envelope.id);
+  Schema.decodeSync(Id.InputId)(input.envelope.id);
 };
 
 const failure = (exit: Exit.Exit<unknown, unknown>) => {
@@ -376,7 +376,7 @@ it.effect.prop(
         grant: (input) =>
           Effect.gen(function* () {
             const { text } = Schema.decodeUnknownSync(Schema.Struct({ text: Schema.String }))(input);
-            const change = Schema.decodeUnknownSync(Schema.fromJsonString(Change))(text);
+            const change = Schema.decodeSync(Schema.fromJsonString(Change))(text);
             return change._tag === "added"
               ? yield* w.door.grant({ text, armored: yield* Effect.orDie(w.root.sign(text)) })
               : yield* w.door.grant(input);

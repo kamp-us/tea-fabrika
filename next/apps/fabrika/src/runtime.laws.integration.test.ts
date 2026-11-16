@@ -459,7 +459,7 @@ StartsTest.law(
           expect(JSON.stringify(row)).not.toContain(`unused-target-${word}`);
         }
 
-        const input = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Settings))(w.env.INSTANCE);
+        const input = yield* Schema.decodeEffect(Schema.fromJsonString(Settings))(w.env.INSTANCE);
         const receipt = yield* w.settingsRead(input.start);
         expect(receipt).toMatchObject({ _tag: "ok" });
         expect(receipt).not.toHaveProperty("value.starts");

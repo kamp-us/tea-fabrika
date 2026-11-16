@@ -61,7 +61,7 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
   blob.set(new TextEncoder().encode("ssh-ed25519"), 4);
   new DataView(blob.buffer).setUint32(15, 32);
   blob.set(raw, 19);
-  const line = Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
+  const line = Schema.decodeSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
   const founder = {
     name: "P8",
     person,

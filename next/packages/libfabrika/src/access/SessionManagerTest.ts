@@ -232,7 +232,7 @@ const signingLaws = (open: Open) => {
           traceId: TRACE,
           span: { traceId: TRACE, spanId: SPAN },
         };
-        expect(Schema.decodeUnknownSync(Session)(session)).toEqual(session);
+        expect(Schema.decodeSync(Session)(session)).toEqual(session);
 
         for (const span of [{}, { traceId: TRACE }, { spanId: SPAN }]) {
           expect(Schema.is(Session)({ ...session, span })).toBe(false);

@@ -39,7 +39,7 @@ const Fault = Schema.Struct({
 export const fault =
   process.env.P14_E2E_FAULT === undefined
     ? undefined
-    : Schema.decodeUnknownSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
+    : Schema.decodeSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
 
 const trace = process.env.P14_E2E_TRACE;
 
@@ -397,7 +397,7 @@ export const grant = (h: Home, w: Waiting, key = h.key) =>
       const sent = wire
         .split("\n")
         .filter((line) => line !== "")
-        .map((line) => Schema.decodeUnknownSync(Schema.fromJsonString(GrantWire))(line));
+        .map((line) => Schema.decodeSync(Schema.fromJsonString(GrantWire))(line));
       const seen: GrantSeen = {
         urls: sent.map((row) => row.url),
         signatures: sent.flatMap((row) => (row.signature === undefined ? [] : [row.signature])),
@@ -614,7 +614,7 @@ export const reader = (h: Home, dev: Dev) =>
           const text = String(data);
 
           if (text !== "pong") {
-            frames.push(Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(text));
+            frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(text));
           }
         });
         socket.addEventListener("close", () => {

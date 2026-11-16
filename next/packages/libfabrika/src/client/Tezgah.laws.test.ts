@@ -358,7 +358,7 @@ const tileRow = (id: string, n: number): Tile =>
 /** A workspace of 1 + cuts tiles, split by `cuts`, focus on the tile `focus` picks. */
 const makeDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
   const first = typeId("tile", 1) as TileId;
-  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
+  let w: Workspace = Schema.decodeSync(Workspace)({
     id: typeId("workspace", 1),
     n: 1,
     layout: first,

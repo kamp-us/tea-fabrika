@@ -40,7 +40,7 @@ const rows = (file: string): ReadonlyArray<Row> =>
     ? readFileSync(file, "utf8")
         .split("\n")
         .filter((line) => line !== "")
-        .map((line) => Schema.decodeUnknownSync(Schema.fromJsonString(Row))(line))
+        .map((line) => Schema.decodeSync(Schema.fromJsonString(Row))(line))
     : [];
 
 /** A folder for one child's trace, given back by the scope. */

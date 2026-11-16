@@ -103,7 +103,7 @@ const processes = Effect.fn("P19Host.processes")(function* () {
  * and never reaches `kill`, where -1 means every process this user owns.
  */
 const signal = Effect.fn("P19Host.signal")(function* (name: "TERM" | "KILL", group: number) {
-  const owned = yield* Schema.decodeUnknownEffect(ProcessGroups.Owned)(group).pipe(
+  const owned = yield* Schema.decodeEffect(ProcessGroups.Owned)(group).pipe(
     Effect.mapError((cause) => new HostError({ reason: "refused-group", cause: Redacted.make(cause) })),
   );
   yield* command("kill", [`-${name}`, `-${owned}`]);
@@ -443,7 +443,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   );
   yield* bundle(`import ${JSON.stringify(helper)};`, controllerFile, root);
   yield* bundle(`import ${JSON.stringify(helper)};`, guardFile, root);
-  const spec = yield* Schema.decodeUnknownEffect(BrainSpec)({
+  const spec = yield* Schema.decodeEffect(BrainSpec)({
     home,
     executable,
     // The brain's mode and input go first; the last argument checks that launchd keeps argv as given.
@@ -458,7 +458,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   // plutil, not a hand-written XML parser, verifies the native compiler preserves checked values.
   const plist = yield* command("plutil", ["-convert", "json", "-o", "-", `${home}/brain.plist`]);
   yield* checked(plist.code === 0, "plist-does-not-compile");
-  const job = yield* Schema.decodeUnknownEffect(
+  const job = yield* Schema.decodeEffect(
     Schema.fromJsonString(Schema.Struct({ Label: Schema.String, ProgramArguments: Schema.Array(Schema.String) })),
   )(plist.stdout);
   yield* checked(
@@ -593,7 +593,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   // The small job proves a successful exit is not restarted. The four starts above used the real brain.
   const fixture = `${home}/fixture.mjs`;
   yield* bundle(`import ${JSON.stringify(path.join(root, "fixtures/next/p19-launchd/brain.ts"))};`, fixture, root);
-  const normal = yield* Schema.decodeUnknownEffect(BrainSpec)({ ...spec, args: [fixture] });
+  const normal = yield* Schema.decodeEffect(BrainSpec)({ ...spec, args: [fixture] });
   yield* fs.writeFileString(`${home}/spec.json`, JSON.stringify(Schema.encodeSync(BrainSpec)(normal)));
   const normalContext = yield* Layer.build(Native.layer(normal, settings));
   const normalControl = Context.get(normalContext, BrainControl);
@@ -639,7 +639,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
       groups: owned,
       normalExitObservationMs: throttle * 3,
       executable,
-      versions: yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(ready),
+      versions: yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(ready),
       settings,
     }),
   );

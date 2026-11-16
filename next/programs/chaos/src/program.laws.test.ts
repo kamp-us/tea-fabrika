@@ -23,9 +23,9 @@ type Command = ReturnType<
 >;
 
 const id = (n: number) =>
-  Schema.decodeUnknownSync(Fabrika.Chaos.ExperimentId)(`chaos_0000000000e008${n.toString(16).padStart(12, "0")}`);
+  Schema.decodeSync(Fabrika.Chaos.ExperimentId)(`chaos_0000000000e008${n.toString(16).padStart(12, "0")}`);
 
-const process = Schema.decodeUnknownSync(Fabrika.Id.Process)("process_0000000000e008000000000000");
+const process = Schema.decodeSync(Fabrika.Id.Process)("process_0000000000e008000000000000");
 
 const target = Fabrika.Chaos.Target.make({
   program: "fabrika/checklist",
@@ -45,9 +45,7 @@ const starts = fc.record({
       name: `checklist:${n}`,
       client: `client:${n}`,
       key: `public:${n}`,
-      process: Schema.decodeUnknownSync(Fabrika.Id.Process)(
-        `process_0000000000e008${n.toString(16).padStart(12, "0")}`,
-      ),
+      process: Schema.decodeSync(Fabrika.Id.Process)(`process_0000000000e008${n.toString(16).padStart(12, "0")}`),
     }),
   ),
   most: fc.integer({ min: 1, max: 12 }),

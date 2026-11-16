@@ -31,9 +31,9 @@ type Oracle = {
 };
 
 const ctx = stubCtxThrowingProxy<never>();
-const head = Schema.decodeUnknownSync(Commit)("a".repeat(40));
-const tree = Schema.decodeUnknownSync(Tree)("b".repeat(40));
-const other = Schema.decodeUnknownSync(Tree)("c".repeat(40));
+const head = Schema.decodeSync(Commit)("a".repeat(40));
+const tree = Schema.decodeSync(Tree)("b".repeat(40));
+const other = Schema.decodeSync(Tree)("c".repeat(40));
 const pid = "process_0000000000e008000000000001";
 
 const draw = fc.record({
@@ -126,7 +126,7 @@ const reasons = [...StartRefusal.literals, "bad_cmd"] as const;
 
 const startRefusalAnswer = (p: Program, cell: Cell): Msg => {
   const reason = reasons[cell.pick % reasons.length]!;
-  return Schema.decodeUnknownSync(p.msg)({
+  return Schema.decodeSync(p.msg)({
     type: "start_child_err",
     cmd: { type: "start_child" },
     reason,
@@ -137,7 +137,7 @@ const startRefusalAnswer = (p: Program, cell: Cell): Msg => {
 
 const startAnswer = (p: Program, cmd: Start, cell: Cell, allowRefusal = true): Msg => {
   const which = cell.pick % (allowRefusal ? reasons.length + 3 : 3);
-  return Schema.decodeUnknownSync(p.msg)(
+  return Schema.decodeSync(p.msg)(
     which < 3
       ? {
           type: "start_child_ok",
@@ -502,7 +502,7 @@ for (const [law, reached] of [
 
           // Keep the guided fold intact: interleaving another walk would orphan its answers.
           for (const msg of msgs) {
-            step(walk, Schema.decodeUnknownSync(walk.p.msg)(msg));
+            step(walk, Schema.decodeSync(walk.p.msg)(msg));
           }
 
           for (const cell of cells) {

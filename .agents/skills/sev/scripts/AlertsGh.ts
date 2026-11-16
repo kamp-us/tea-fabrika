@@ -22,7 +22,7 @@ const Listed = Schema.fromJsonString(
 
 /** `gh issue list --json`'s rows, as `Alert`s, oldest first. */
 export const alertsIn = (out: string): Effect.Effect<ReadonlyArray<Alert>, Schema.SchemaError> =>
-  Effect.map(Schema.decodeUnknownEffect(Listed)(out.trim() || "[]"), (rows) =>
+  Effect.map(Schema.decodeEffect(Listed)(out.trim() || "[]"), (rows) =>
     rows
       .map((r): Alert => ({ number: r.number, title: r.title, since: r.createdAt }))
       .toSorted((a, b) => a.number - b.number),

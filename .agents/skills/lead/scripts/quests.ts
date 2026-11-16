@@ -133,7 +133,7 @@ export type Line = typeof Line.Type;
 /** The last `{"outcome":...}` line in a chain's output, among whatever else was printed there. */
 export const lastOutcome = (out: string): Omit<End, "at"> | null => {
   for (const line of out.split("\n").toReversed()) {
-    const end = Schema.decodeUnknownOption(EndLine)(line.trim());
+    const end = Schema.decodeOption(EndLine)(line.trim());
 
     if (Option.isSome(end)) {
       return { outcome: end.value.outcome, reason: end.value.reason ?? "" };
@@ -237,7 +237,7 @@ const see = Effect.fn("quests.see")(function* (boxes: string, quest: string, sta
   const found = Option.match(record, {
     onNone: () => Found.cases.missing.make({}),
     onSome: (text) =>
-      Option.match(Schema.decodeUnknownOption(RecordText)(text), {
+      Option.match(Schema.decodeOption(RecordText)(text), {
         onNone: () => Found.cases.unreadable.make({}),
         onSome: (read) => Found.cases.read.make({ record: read }),
       }),

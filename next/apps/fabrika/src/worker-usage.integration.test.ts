@@ -107,7 +107,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
       const socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
-          frames.push(Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(String(event.data)));
+          frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data)));
         }
       });
       return socket;

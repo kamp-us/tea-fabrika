@@ -1790,7 +1790,7 @@ describe("P18 L6: a cut Model continues as the uncut run", () => {
       const pool = live.length > 0 && cut % 2 === 0 ? live : events.map((_, i) => i);
       const k = pool[cut % pool.length]!;
       const saved = Schema.encodeSync(Schema.fromJsonString(machine.model))(events[k]!.next);
-      const loaded = Schema.decodeUnknownSync(Schema.fromJsonString(machine.model))(saved);
+      const loaded = Schema.decodeSync(Schema.fromJsonString(machine.model))(saved);
       let [s] = machine.init(loaded, ctx);
       expect(s, "the saved Model did not load back as it was, with an empty region").toEqual(mounted(events[k]!.next));
       // The loaded run's region lacks the burst said before the cut, until the uncut run's burst ends.
@@ -2507,7 +2507,7 @@ const follow = (list: ReadonlyArray<FollowChoice>, each: (e: FollowEvent) => voi
         }
 
         w.cuts++;
-        const [loaded] = machine.init(Schema.decodeUnknownSync(save)(Schema.encodeSync(save)(next)), ctx);
+        const [loaded] = machine.init(Schema.decodeSync(save)(Schema.encodeSync(save)(next)), ctx);
         expect(loaded, "a saved Model did not load back as it was, with an empty region").toEqual(mounted(next));
         return loaded;
       },
@@ -3067,7 +3067,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
         const online = reached.filter((s) => s.link._tag === "online");
         const pool = online.length > 0 && cut % 4 !== 0 ? online : reached;
         const saved = pool[cut % pool.length]!;
-        const load = () => Schema.decodeUnknownSync(save)(Schema.encodeSync(save)(saved));
+        const load = () => Schema.decodeSync(save)(Schema.encodeSync(save)(saved));
 
         const [home] = machine.init(load(), ctx);
         seen.burst += saved.said.messages.length > 0 ? 1 : 0;
@@ -3762,7 +3762,7 @@ type FocusWorld = DeskWorld & {
 /** A workspace split by `cuts`, focus on the tile `focus` picks. */
 const focusDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
   const first = typeId("tile", 1) as TileId;
-  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
+  let w: Workspace = Schema.decodeSync(Workspace)({
     id: typeId("workspace", 1),
     n: 1,
     layout: first,

@@ -194,7 +194,7 @@ const life = Effect.fnUntraced(function* (
         Effect.provide(RepliesSql.layer(store.sql("recovery"), { capacity: 1024 ** 3 })),
       ),
     model: Effect.map(checkpoint, (saved) =>
-      saved === null ? null : Schema.decodeUnknownSync(program.state.schema)(saved.saved.model),
+      saved === null ? null : Schema.decodeSync(program.state.schema)(saved.saved.model),
     ),
   };
 });
@@ -220,7 +220,7 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
     current.runner.msg({
       id: `incoming-${++serial}`,
       envelope: {
-        id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${serial.toString(16).padStart(12, "0")}`),
+        id: Schema.decodeSync(InputId)(`input_0000000000e008${serial.toString(16).padStart(12, "0")}`),
         by: owner,
         arrivedAt: serial,
         input,

@@ -743,7 +743,7 @@ const readOut = Effect.fnUntraced(function* (box: string, name: string) {
 const decoded = <S extends Schema.Top>(schema: S, raw: string | null) =>
   raw === null
     ? Effect.succeed(null)
-    : Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(raw).pipe(Effect.catch(() => Effect.succeed(null)));
+    : Schema.decodeEffect(Schema.fromJsonString(schema))(raw).pipe(Effect.catch(() => Effect.succeed(null)));
 
 const readArm = Effect.fnUntraced(function* (box: string, name: "a" | "b", selected: number) {
   const fs = yield* FileSystem.FileSystem;

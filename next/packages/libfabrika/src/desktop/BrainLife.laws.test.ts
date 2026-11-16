@@ -14,7 +14,7 @@ import * as ServiceTest from "./BrainServiceTest.ts";
 const options = { seed: 119120, numRuns: 150 };
 const ctx = stubCtxThrowingProxy<unknown>();
 const Failure = Schema.TaggedUnion({ Operation: {} });
-const oldId = Schema.decodeUnknownSync(Id.Cmd)("cmd_01m6v5270hf3c8x2q7w9z4k5mn");
+const oldId = Schema.decodeSync(Id.Cmd)("cmd_01m6v5270hf3c8x2q7w9z4k5mn");
 
 const walks = (machine: ReturnType<typeof BrainLife.machine>) => {
   const settled = <A>(value: fc.Arbitrary<A>) => fc.record({ value, failed: fc.integer({ min: 0, max: 9 }) });

@@ -1,19 +1,29 @@
 {
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
-    // The window is React in a browser tab; its machines and their laws also run on Node.
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "types": ["node"],
-    "jsx": "react-jsx",
-    // Effect's `schemaNumber`: a finite number is `Schema.Finite`, since `Schema.Number` also takes NaN and Infinity (E4). All of this package is at zero.
     "plugins": [
       {
         "name": "@effect/language-service",
+        // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
+        // The globs read from this folder. One entry per set of folders; its comment names its checks.
         "overrides": [
-          { "include": ["**/*.ts", "**/*.tsx"], "options": { "diagnosticSeverity": { "schemaNumber": "error" } } }
+          // Whole package: schemaNumber (E4), preferTypedSchemaDecoder (E5).
+          {
+            "include": ["**/*.ts", "**/*.tsx"],
+            "options": {
+              "diagnosticSeverity": {
+                "schemaNumber": "error",
+                "preferTypedSchemaDecoder": "error"
+              }
+            }
+          }
         ]
       }
-    ]
+    ],
+    // The window is React in a browser tab; its machines and their laws also run on Node.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "jsx": "react-jsx"
   },
   "include": ["src"]
 }

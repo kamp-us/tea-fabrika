@@ -506,7 +506,7 @@ const AnswerAlone = Schema.fromJsonString(Schema.Struct({ verb: Schema.String, r
  * 871, 2026-11-12), and a correct merge-ready was refused.
  */
 const verdictText = (report: string) =>
-  Option.match(Schema.decodeUnknownOption(AnswerAlone)(report.trim()), {
+  Option.match(Schema.decodeOption(AnswerAlone)(report.trim()), {
     onNone: () => report,
     onSome: (answer) => answer.reason,
   });
@@ -1551,7 +1551,7 @@ const planOwners = (env: Env, plan: string) => {
   }
 
   const r = sh("sh", [join(HERE, "../../plan/scripts/plancheck.sh"), "--owners-json", plan], env.MAIN);
-  return r.code === 0 ? Option.getOrNull(Schema.decodeUnknownOption(Owners)(r.out.trim())) : null;
+  return r.code === 0 ? Option.getOrNull(Schema.decodeOption(Owners)(r.out.trim())) : null;
 };
 
 /**
@@ -1649,7 +1649,7 @@ const MutboxLine = Schema.fromJsonString(
 
 /** What mutbox.ts answered, from its last line: its outcome and why. Anything else is stuck. */
 export const mutboxAnswer = (stdout: string): { outcome: "done" | "skip" | "stuck"; reason: string } => {
-  const line = Schema.decodeUnknownOption(MutboxLine)(stdout.trim().split("\n").at(-1) ?? "");
+  const line = Schema.decodeOption(MutboxLine)(stdout.trim().split("\n").at(-1) ?? "");
   return line._tag === "Some"
     ? {
         outcome: line.value.outcome,
@@ -1819,7 +1819,7 @@ const FirstEvent = Schema.fromJsonString(Schema.Struct({ at: Schema.String }));
 
 /** When the agent's event log says it first did anything, in ms; `null` with no timed first line. */
 export const firstEventAt = (events: string): number | null => {
-  const first = Schema.decodeUnknownOption(FirstEvent)(events.split("\n", 1)[0] ?? "");
+  const first = Schema.decodeOption(FirstEvent)(events.split("\n", 1)[0] ?? "");
   const at = first._tag === "Some" ? Date.parse(first.value.at) : Number.NaN;
   return Number.isFinite(at) ? at : null;
 };

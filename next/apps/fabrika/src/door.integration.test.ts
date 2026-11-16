@@ -3465,7 +3465,7 @@ describe("P10 inputs, retries and signer", () => {
       const fields = Object.entries(state.schema.fields).filter(
         ([key, field]) =>
           Object.hasOwn(state.m, key) &&
-          (!missing || Schema.decodeUnknownResult(Schema.Struct({ [key]: field }))({})._tag === "Failure"),
+          (!missing || Schema.decodeResult(Schema.Struct({ [key]: field }))({})._tag === "Failure"),
       );
       assert(fields.length > 0, "the current message must have a field that can be broken");
       return Arbitrary.schema(Schema.Literals(fields.map(([key]) => key))).pipe(

@@ -346,7 +346,7 @@ const open = Effect.fnUntraced(function* (
     return yield* runner.msg({
       id: `incoming:${n}`,
       envelope: {
-        id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
+        id: Schema.decodeSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
         by: owner,
         arrivedAt: n,
         input,
@@ -413,9 +413,7 @@ const open = Effect.fnUntraced(function* (
       Effect.provide(current.context),
     );
     const model =
-      checkpoint === null
-        ? null
-        : Schema.decodeUnknownSync(programs["pipeline/queue"].state.schema)(checkpoint.saved.model);
+      checkpoint === null ? null : Schema.decodeSync(programs["pipeline/queue"].state.schema)(checkpoint.saved.model);
     return {
       model,
       view: model === null ? null : programs["pipeline/queue"].view.select(model),
