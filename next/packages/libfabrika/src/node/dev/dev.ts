@@ -386,7 +386,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
             ...(rss === undefined ? {} : { bytes: rss }),
           }),
         );
-        yield* Effect.forkIn(recorded(restartRuntime(ready)).pipe(Effect.ignore), scope);
+        yield* ready.pipe(restartRuntime, recorded, Effect.ignore, Effect.forkIn(scope));
       }
 
       if (event.type === "start") {

@@ -131,10 +131,12 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   });
   const domain = Effect.gen(function* () {
     const response = yield* success("/usr/bin/id", ["-u"]);
-    const uid = yield* Schema.decodeUnknownEffect(Schema.String.check(Schema.isPattern(/^(?:0|[1-9][0-9]*)\n$/u)))(
+    const uid = yield* response.stdout.pipe(
       // oxlint-disable-next-line fabrika/no-redacted-value -- edge: decode only the numeric UID from protected native output
-      Redacted.value(response.stdout),
-    ).pipe(Effect.mapError(unsupported));
+      Redacted.value,
+      Schema.decodeUnknownEffect(Schema.String.check(Schema.isPattern(/^(?:0|[1-9][0-9]*)\n$/u))),
+      Effect.mapError(unsupported),
+    );
     return `gui/${uid.trimEnd()}`;
   });
   const inspect = Effect.gen(function* () {
