@@ -1,7 +1,8 @@
 // The anti-slop rules the owner took (0563) are the exam, so each is seen to fire through the
 // repository's own .oxlintrc.json, and only where its block lists the folder (L2, L3). The config
 // names no other rule of the two plugins, and never turns a taken one down (L3, L5). The zero lock in
-// anti-slop.ts is a property of its own (L4).
+// anti-slop.ts is a property of its own (L4). The config loads the two plugins from vendor/anti-slop/
+// and from nowhere else (L7).
 //
 // Plants, each run once and undone:
 // - L2: drop the `anti-slop-effect` entry from `jsPlugins`. The two tag rules load no rule, and their
@@ -9,6 +10,8 @@
 // - L3: name a taken rule in the root `rules`. It fires in a folder its block does not list.
 // - L4: `lock` answers "nothing to add" for every input.
 // - L5: add `{ "files": ["next/**"], "rules": { "anti-slop/no-runtime-typeof": "off" } }` at the end.
+// - L7: load `anti-slop` from `./oxlint-plugins/fixtures/edited-copy/index.ts` in `.oxlintrc.json`.
+//   The scenario then reads a line naming that path.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -16,7 +19,7 @@ import { Predicate, Schema } from "effect";
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { folders, lock, TAKEN, WHOLE } from "./anti-slop.ts";
+import { folders, lock, strays, TAKEN, WHOLE } from "./anti-slop.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");
@@ -63,13 +66,14 @@ const Report = Schema.fromJsonString(
   }),
 );
 
-const printed = Schema.decodeUnknownSync(Printed)(
-  spawnSync(OXLINT, [`--config=${join(ROOT, ".oxlintrc.json")}`, "--print-config"], {
-    cwd: ROOT,
-    encoding: "utf8",
-    maxBuffer: 2 ** 28,
-  }).stdout,
-);
+/** The text of `oxlint --print-config` for the repository's own config. */
+const printout = spawnSync(OXLINT, [`--config=${join(ROOT, ".oxlintrc.json")}`, "--print-config"], {
+  cwd: ROOT,
+  encoding: "utf8",
+  maxBuffer: 2 ** 28,
+}).stdout;
+
+const printed = Schema.decodeUnknownSync(Printed)(printout);
 
 const levelOf = (setting: typeof Setting.Type): string => (Predicate.isString(setting) ? setting : setting[0]);
 const ofThePlugins = (rule: string): boolean => rule.startsWith("anti-slop/") || rule.startsWith("anti-slop-effect/");
@@ -140,6 +144,21 @@ const PLANTS: Readonly<Record<string, ReadonlyArray<string>>> = {
     'export type Ready = { readonly _tag: "Ready" }; // refused',
     "",
     'export type Plain = { readonly tag: "Ready" }; // taken',
+  ],
+  // 0567's two Match rules.
+  "anti-slop-effect/no-manual-tag-comparison": [
+    "declare const value: { readonly _tag: string; readonly status: string };",
+    "",
+    'export const isReady = value._tag === "Ready"; // refused',
+    "",
+    'export const isUp = value.status === "Ready"; // taken',
+  ],
+  "anti-slop-effect/prefer-effect-match": [
+    "declare const kind: string;",
+    "",
+    'export const chained = kind === "a" ? 1 : kind === "b" ? 2 : 3; // refused',
+    "",
+    'export const single = kind === "a" ? 1 : 2; // taken',
   ],
 };
 
@@ -301,5 +320,55 @@ describe("L5 no block for a taken rule says off or warn", () => {
     );
     expect(settings.length).toBeGreaterThan(0);
     expect(settings.filter(([, setting]) => levelOf(setting) !== "deny")).toEqual([]);
+  });
+});
+
+describe("L7 the config loads the fork's two plugins only from vendor/anti-slop/", () => {
+  const VENDORED = {
+    "anti-slop": "vendor/anti-slop/src/index.ts",
+    "anti-slop-effect": "vendor/anti-slop/src/effect/index.ts",
+  };
+  /** One `jsPlugins` entry, and whether `strays` must name it. */
+  const entry = fc.oneof(
+    fc.constantFrom("./oxlint-plugins/index.ts", "./other/plugin.ts").map((plugin) => ({ plugin, stray: false })),
+    fc
+      .record({
+        name: fc.constantFrom("anti-slop", "anti-slop-effect"),
+        dot: fc.boolean(),
+        elsewhere: fc.constantFrom("", "oxlint-plugins/fixtures/edited-copy/", "node_modules/anti-slop/"),
+      })
+      .map(({ name, dot, elsewhere }) => {
+        const path = elsewhere === "" ? VENDORED[name] : `${elsewhere}${VENDORED[name].split("/").pop()}`;
+        return { plugin: { name, specifier: `${dot ? "./" : ""}${path}` }, stray: elsewhere !== "" };
+      }),
+    fc
+      .constantFrom("fabrika", "anti-slop-other")
+      .map((name) => ({ plugin: { name, specifier: "./oxlint-plugins/fixtures/edited-copy/index.ts" }, stray: false })),
+  );
+
+  it("property: an entry named for one of the two plugins is refused exactly when its path is not the vendored one", () => {
+    const seen = new Set<string>();
+    fc.assert(
+      fc.property(fc.array(entry, { maxLength: 6 }), (entries) => {
+        for (const { stray } of entries) {
+          seen.add(String(stray));
+        }
+
+        const config = JSON.stringify({
+          jsPlugins: entries.map(({ plugin }) => plugin),
+          ignorePatterns: [],
+          overrides: [],
+        });
+        expect(strays(ROOT, config).length).toBe(entries.filter(({ stray }) => stray).length);
+      }),
+      { seed: 119120, numRuns: 100 },
+    );
+    // Coverage: both a stray entry and an entry that holds were drawn.
+    expect([...seen].toSorted()).toEqual(["false", "true"]);
+  });
+
+  it("scenario: the repository's own config loads both plugins from their vendored path", () => {
+    expect(strays(ROOT, printout)).toEqual([]);
+    expect(printout).toContain("anti-slop-effect");
   });
 });

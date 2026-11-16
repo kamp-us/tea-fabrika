@@ -545,6 +545,8 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
 
       symlinkSync(join(ROOT, "oxlint-plugins", "node_modules"), join(at, "oxlint-plugins", "node_modules"));
       symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
+      // The config loads the vendored anti-slop plugins from here (0563).
+      symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
       const printed = spawnSync(OXLINT, [`--config=${join(at, ".oxlintrc.json")}`, "--print-config"], {
         cwd: at,
         encoding: "utf8",

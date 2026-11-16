@@ -1,14 +1,16 @@
 // The anti-slop lint plugin, taken as it ships (decision 0563): the fork's `src/` sits unchanged in
 // vendor/anti-slop/ (vendored.ts holds that), and `.oxlintrc.json` loads its two plugins. The owner
-// took eight of its rules. Each is on as an error in the folders its own block at the end of the
+// took ten of its rules. Each is on as an error in the folders its own block at the end of the
 // config lists, and nowhere else: a folder goes on a rule's list in the pull request that brings it
 // to zero hits of that rule.
 //
-// A whole `pnpm lint` run calls `audit` here, which holds two things. The folder is the pinned
-// commit's code (vendored.ts). And the zero lock: one more oxlint run, with the eight rules over the
-// whole scope, fails on a folder with no hit of a rule that the rule's list does not name, and on a
-// listed glob that is not a folder of the scope. It keeps no list of its own: the folders still
-// waiting are the scope's folders minus the rule's list.
+// A whole `pnpm lint` run calls `audit` here, which holds three things. The config loads each of the
+// fork's two plugins from vendor/anti-slop/ and from nowhere else (`strays`), so an edited copy in
+// another folder cannot stand in for it. The folder is the pinned commit's code (vendored.ts). And
+// the zero lock: one more oxlint run, with the taken rules over the whole scope, fails on a folder
+// with no hit of a rule that the rule's list does not name, and on a listed glob that is not a folder
+// of the scope. It keeps no list of its own: the folders still waiting are the scope's folders minus
+// the rule's list.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,7 +18,10 @@ import { join, matchesGlob, relative, resolve } from "node:path";
 import { Exit, Predicate, Schema } from "effect";
 import { verify } from "./vendored.ts";
 
-/** The eight rules the owner took (0558, 0561, 0562, 0563), as the config names them. */
+/**
+ * The ten rules the owner took, as the config names them: eight by 0558, 0561, 0562 and 0563, and the
+ * two Match rules by 0567.
+ */
 export const TAKEN: ReadonlyArray<string> = [
   "anti-slop/max-ternary-depth",
   "anti-slop/require-safety-comment-for-type-assertion",
@@ -26,6 +31,8 @@ export const TAKEN: ReadonlyArray<string> = [
   "anti-slop/no-runtime-typeof",
   "anti-slop-effect/no-manual-tagged-construction",
   "anti-slop-effect/no-manual-tagged-type",
+  "anti-slop-effect/no-manual-tag-comparison",
+  "anti-slop-effect/prefer-effect-match",
 ];
 
 /** The fork's two plugins, as `.oxlintrc.json`'s `jsPlugins` names them, from the top of the repo. */
@@ -93,7 +100,9 @@ type Setting = typeof Setting.Type;
 /** The part of `oxlint --print-config`, oxlint's own reading of the config, that the lock reads. */
 const Printed = Schema.fromJsonString(
   Schema.Struct({
-    jsPlugins: Schema.Array(Schema.Union([Schema.String, Schema.Struct({ name: Schema.String })])),
+    jsPlugins: Schema.Array(
+      Schema.Union([Schema.String, Schema.Struct({ name: Schema.String, specifier: Schema.String })]),
+    ),
     ignorePatterns: Schema.Array(Schema.String),
     overrides: Schema.Array(
       Schema.Struct({ files: Schema.Array(Schema.String), rules: Schema.Record(Schema.String, Setting) }),
@@ -165,18 +174,43 @@ const count = (
   return hits;
 };
 
+const UNREAD = "anti-slop.ts: could not read oxlint --print-config, so nothing says the anti-slop plugin holds";
+
 /**
- * Every line a whole run prints for the anti-slop plugin, none when all holds: its folder is the
- * pinned commit's code (vendored.ts), and each taken rule's list is as the zero lock asks. `printed`
- * is the text of `oxlint --print-config` for the config the run lints with. A config that loads
- * neither of the fork's plugins, as a test's small repo has, runs none of their code, so there is
- * nothing here to hold.
+ * One line for each `jsPlugins` entry named for one of the fork's two plugins that loads it from
+ * anywhere but its vendored path, so an edited copy in another folder cannot stand in for the pinned
+ * one. `printed` is the text of `oxlint --print-config` for the config at the top of `root`.
+ */
+export const strays = (root: string, printed: string): ReadonlyArray<string> => {
+  const config = Schema.decodeUnknownExit(Printed)(printed);
+
+  if (Exit.isFailure(config)) {
+    return [UNREAD];
+  }
+
+  return config.value.jsPlugins.flatMap((plugin) => {
+    const pinned = Predicate.isString(plugin) ? undefined : PLUGINS.find(({ name }) => name === plugin.name);
+    const from = Predicate.isString(plugin) ? "" : relative(root, resolve(root, plugin.specifier));
+    return pinned === undefined || from === pinned.specifier
+      ? []
+      : [
+          `.oxlintrc.json: ${pinned.name} is loaded from ${from}, and only ${pinned.specifier} is the pinned copy (0563)`,
+        ];
+  });
+};
+
+/**
+ * Every line a whole run prints for the anti-slop plugin, none when all holds: the config loads its
+ * two plugins from vendor/anti-slop/ (`strays`), that folder is the pinned commit's code
+ * (vendored.ts), and each taken rule's list is as the zero lock asks. `printed` is the text of
+ * `oxlint --print-config` for the config the run lints with. A config that loads neither of the
+ * fork's plugins, as a test's small repo has, runs none of their code, so there is nothing to hold.
  */
 export const audit = (root: string, printed: string): ReadonlyArray<string> => {
   const config = Schema.decodeUnknownExit(Printed)(printed);
 
   if (Exit.isFailure(config)) {
-    return ["anti-slop.ts: could not read oxlint --print-config, so nothing says the anti-slop plugin holds"];
+    return [UNREAD];
   }
 
   const { jsPlugins, overrides, ignorePatterns } = config.value;
@@ -186,7 +220,7 @@ export const audit = (root: string, printed: string): ReadonlyArray<string> => {
     return [];
   }
 
-  const pinned = verify(root);
+  const pinned = [...strays(root, printed), ...verify(root)];
   /** The blocks that turn a rule on: each override that names it at error. */
   const blocks = (rule: string) =>
     overrides.flatMap((block) => {
