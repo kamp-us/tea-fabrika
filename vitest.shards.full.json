@@ -30,7 +30,6 @@
   "next/apps/fabrika/src/exam/rows.test.ts": 0.5,
   "next/apps/fabrika/src/exam/runner-contract-replay.test.ts": 33.2,
   "next/apps/fabrika/src/exam/runner-contract.test.ts": 22.8,
-  "next/apps/fabrika/src/exam/secret-types.integration.test.ts": 3.9,
   "next/apps/fabrika/src/exam/tsconfig-scope.integration.test.ts": 4.1,
   "next/apps/fabrika/src/exam/twin.integration.test.ts": 21.7,
   "next/apps/fabrika/src/file-services.laws.integration.test.ts": 22.5,

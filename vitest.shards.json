@@ -117,7 +117,6 @@
   "next/apps/fabrika/src/exam/ratchet.test.ts": 0.1,
   "next/apps/fabrika/src/exam/runner-contract-replay.test.ts": 40.5,
   "next/apps/fabrika/src/exam/runner-contract.test.ts": 43.3,
-  "next/apps/fabrika/src/exam/secret-types.integration.test.ts": 5.3,
   "next/apps/fabrika/src/exam/twin.integration.test.ts": 20.9,
   "next/apps/fabrika/src/file-services.laws.integration.test.ts": 4.4,
   "next/apps/fabrika/src/grant-readers.laws.test.ts": 1.3,

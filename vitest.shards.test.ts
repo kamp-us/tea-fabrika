@@ -466,8 +466,6 @@ const integrationSamples = {
   "next/apps/fabrika/src/exam/edges.integration.test.ts": [2.8, 2.9, 4.2],
   // A job 132292933326, B job 132315559534, C job 132330500993.
   "next/apps/fabrika/src/exam/laws-scan.integration.test.ts": [0.0, 0.0, 0.0],
-  // A job 132292933270, B job 132315559508, C job 132330501001.
-  "next/apps/fabrika/src/exam/secret-types.integration.test.ts": [5.1, 5.3, 5.4],
   // A job 132292933221, B job 132315559497, C job 132330501014.
   "next/apps/fabrika/src/exam/twin.integration.test.ts": [24.0, 16.0, 20.9],
   // A job 132292933169, B job 132315559497, C job 132330501014.
