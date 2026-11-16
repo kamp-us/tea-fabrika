@@ -1,0 +1,62 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-leakgrep-patch-added-tests",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T22:36:41-08:00",
+  "ended": "2026-11-15T22:52:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for a fast-tracked lead-tooling change with no tracker ticket, on branch fabrikalfa/leakgrep-patch-added-lines, today's tooling. The owner-approved change: leakgrep's style-only em_dash check also skips the added lines inside a hunk of a pnpm patch under patches/, as it already skips the removed and context lines there; every other shape still reads them. Laws written in .agents/skills/lead/scripts/leakgrep.patches.test.ts, each a fast-check property over generated one- or two-file patches with one to three hunks, read as a diff, a pushed commit and a whole draft. Law 1, 'an em dash on any added line inside a hunk of a patches/ file passes', is red on today's leakgrep.sh: diff mode exits 1 with 'leak em_dash at added line 18'. Law 2, four places outside a hunk (a context-looking line and an added-looking line before the last file's first hunk, the diff --git line, the +++ line) and three other paths (docs/upstream@1.0.0.patch, next/patches/upstream@1.0.0.patch, notes/upstream.md), still fails: green. Law 3, a GitHub-shaped key built at run time, a machine path, the private word and a canvas link on an added line inside a hunk, still fails: green. The old law 'an em dash on an inner added line of a patches/ file still fails' asserted the rule the owner turned around; its case was taken out of that loop and law 1 holds the new rule. Every other existing leakgrep law is unchanged and green.",
+  "plants": [
+    {
+      "law": "leakgrep.patches.test.ts: an em dash on any added line inside a hunk of a patches/ file passes",
+      "plant": "none needed: today's leakgrep.sh is the plant (Quotes.quoted counts only - and space lines)",
+      "result": "red"
+    },
+    {
+      "law": "leakgrep.patches.test.ts: all 21 laws",
+      "plant": "the intended build on a scratch copy: Quotes.quoted also counts + lines inside a hunk",
+      "result": "green"
+    },
+    {
+      "law": "leakgrep.patches.test.ts: an em dash on a patches/ file's <place> line outside a hunk still fails",
+      "plant": "Quotes.quoted ignores in_hunk and skips every -, space or + line",
+      "result": "red"
+    },
+    {
+      "law": "leakgrep.patches.test.ts: an em dash on a patches/ file's <place> line outside a hunk still fails",
+      "plant": "Quotes no longer ends a hunk at a diff line",
+      "result": "red"
+    },
+    {
+      "law": "leakgrep.patches.test.ts: an em dash on a patches/ file's diff-line line outside a hunk still fails",
+      "plant": "Quotes.quoted skips every line but @@",
+      "result": "red"
+    },
+    {
+      "law": "leakgrep.patches.test.ts: an em dash on an added line inside a hunk of <path> still fails",
+      "plant": "is_patch matches patches/ anywhere or any .patch file",
+      "result": "red"
+    },
+    {
+      "law": "leakgrep.patches.test.ts: an em dash on an added line inside a hunk of notes/upstream.md still fails",
+      "plant": "is_patch is true for every file",
+      "result": "red"
+    },
+    {
+      "law": "leakgrep.patches.test.ts: a <kind> on an added line inside a hunk of a patches/ file still fails",
+      "plant": "a quoted line skips every shape, not only the style ones",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 16,
+  "note": "Every plant ran once on a scratch copy of leakgrep.sh, pointed at with TEST_LEAKGREP; the product file was never edited. Plants on top of the intended build copy. Ran: the patches file at today's script (1 red, 20 green), the four other leakgrep test files once (all green), pnpm format, pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (exit 0), the list ratchet (exit 0). No pnpm typecheck: the file is outside .agents/tsconfig.json's include. stepcommit.sh was given ticket 'none', since this job has no tracker ticket.",
+  "step": "tests"
+}
