@@ -28,7 +28,6 @@ export const NOT_YET_PORTED: ReadonlyArray<string> = [
   ".agents/skills/lead/scripts/leakgrep.sh",
   ".agents/skills/lead/scripts/loosening.sh",
   ".agents/skills/lead/scripts/mutbox-entry.sh",
-  ".agents/skills/lead/scripts/redact.sh",
   ".agents/skills/lead/scripts/runplan.sh",
   ".agents/skills/lead/scripts/skillscheck.sh",
   ".agents/skills/mutation/scripts/run.sh",
