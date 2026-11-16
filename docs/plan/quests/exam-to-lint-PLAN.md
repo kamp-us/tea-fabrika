@@ -26,17 +26,15 @@ law("the browser entries bundle with no node: import", {
 
 ## Doubts, first
 
-- **One exam check holds nothing today, so it cannot move at zero (open question 1).**
+- **One exam check held nothing, so its hits are fixed before its rule turns on.**
   `laws-scan.integration.test.ts` asks that every file that calls `defineMachine(` has a laws file
   beside it that imports `@demlik/tea/pbt` and runs `syncTest(` or names why not. No file in
   `next/` calls `defineMachine(` any more: `rg -l "defineMachine" next` finds only the test itself,
-  and 47 non-test files make a machine with `Machine.make(`. 0579 moved property laws to `it.prop`,
+  and 35 product files make a machine with `Machine.make(`. 0579 moved property laws to `it.prop`,
   so a laws file need not import `@demlik/tea/pbt` either. The law passes because it finds no
-  machine. A rule on today's constructor has about 30 hits by a rough text scan (23 with no laws
-  file beside them that names pbt, 7 with no sync test), and some of those 23 have `.laws.test.ts`
-  files that use `it.prop`, so the scan over-counts. Porting the old text keeps a check that holds
-  nothing; porting it on `Machine.make(` blocks every pull request until a sweep. That is the
-  owner's call. The plan does not drop it: it stays a test until the owner answers.
+  machine. A check that checks nothing is not kept, and none is dropped: it becomes the lint rule
+  `fabrika/machine-has-laws` on `Machine.make(`, whose 30 hits on main are fixed first (slice E,
+  listed below), so the rule turns on at zero (0524).
 - **Moved rule tests leave the merge line's `next` job.** The exam's plant tests are in the `next`
   project today, and the merge line runs them when a lint file changes (`changes.mjs`'s `lint`
   gives scope `readers`). In `oxlint-plugins/` they are `tooling` tests, which no merge-line event
@@ -115,6 +113,10 @@ law("the browser entries bundle with no node: import", {
   `layer-rules.json`, the lockfile and the `oxlint-plugins/` folder are in `forceRerunTriggers`, so a change
   to one runs every test. A `reads:` entry for one would change no run. My call, 80%; the cost is a
   reader of the law sees the read only in its body.
+- **The first draft's two questions are settled by rules in force.** A check that checks nothing is
+  not kept and none is dropped, so `laws-scan` becomes `fabrika/machine-has-laws` with its hits
+  fixed first (0524). A check on code shape is a lint rule (AGENTS.md, "Checks", and 0591's own
+  principle), so `build.test.ts` and L9 go to lint and only the generated-files law keeps `reads:`.
 - **Is any of this a setting?** No. Each choice is a lint rule, a law's option or CI's own logic,
   not a value a person running fabrika picks in `fabrika.toml` (0069).
 
@@ -149,7 +151,7 @@ text. Paths in the cells are from the top of the repo.
 | edges.ts | no check | CI's `edges` step, which lists new edge comments and never blocks |
 | effect-checks.test.ts | reads | Pins that `tsconfig.base.json` sets `globalFetchInEffect` and `globalDateInEffect` at `error` for `next/`. A trigger file, so it declares nothing; it moves to `oxlint-plugins/`, beside 0573's planned `effect-checks-held.test.ts` (its L4 is the same shape for two other checks), and joins that file's list once 0573's pull request 1 is on main |
 | effect-functions.integration.test.ts | lint | `fabrika/effect-functions`, on today; plants to `oxlint-plugins/effect-functions.test.ts` (new). Its last law is on `edges.ts`'s `asks` span, no shape check: it moves to `edges.integration.test.ts` |
-| laws-scan.integration.test.ts | open | Open question 1 |
+| laws-scan.integration.test.ts | lint | New rule `fabrika/machine-has-laws`, keyed on `Machine.make(`, with the old planted folders rewritten to today's constructor and laws (see "The machines to fix first"). Turns on after slice E brings its 30 hits to zero |
 | layers.integration.test.ts | lint | The laws of `pnpm lint:layers`'s rule file and patched code-graph on planted trees. Moves to `oxlint-plugins/layers.test.ts`; reads `layer-rules.json`, a trigger, and runs the patched tool, which the lockfile pins |
 | ledger-sql.integration.test.ts | lint | `fabrika/no-ledger-sql`, on today; its generated plants to `oxlint-plugins/no-ledger-sql.test.ts` (new) |
 | no-effect-run-outside-edge.integration.test.ts | lint | `fabrika/no-effect-run-outside-edge`, on today; plants, the 18 old edge paths included, to `oxlint-plugins/no-effect-run-outside-edge.test.ts` (new) |
@@ -176,7 +178,7 @@ text. Paths in the cells are from the top of the repo.
 | twin.integration.test.ts | lint | Laws of `pnpm lint:twin`. They plant beside the real stack's text, so they stay beside `twin.ts` and declare `next/apps/fabrika/alchemy.run.ts`. Its last law, "pnpm lint:twin checks the real stack", is already held: `pnpm lint` runs `lint:twin` (`package.json`'s `lint` script), and `pnpm -s lint:twin` printed `lint:twin: 0 findings` at `0683861`. That one law goes |
 | twin.ts | lint | `pnpm lint:twin`, a step of `pnpm lint` today. Stays (doubt 3) |
 
-Counts: lint 21, already held 0 (one law inside `twin.integration.test.ts` is), reads 16, open 1,
+Counts: lint 22, already held 0 (one law inside `twin.integration.test.ts` is), reads 16, open 0,
 and 9 files that are no check. No exam file is held by a 0573 trusted rule today: 0573's pull
 request 1 swaps four rules no exam file plants, and `no-hand-tag`, the one overlap, waits on that
 plan's pull request 2.
@@ -280,12 +282,90 @@ below is run once and restored by the step that writes the law (0093).
 | R4. The removal is safe: every path the old `readers` list named, expanded to its test files at the removal's head, is gone, sits in `oxlint-plugins/`, reads only rerun triggers, is one of the nine "no check" files, or declares `reads:` that cover each file it reads | test | scenario: the seven entries as main has them at `0683861`, written once into the law as its `vector:` input | delete the `reads` entry from `bytes.integration.test.ts`: red | .github/ci/changes.test.ts |
 | R5. A proven comment-only `next/` change runs exactly the tests whose declared reads it matches, and a lint-file change needs no `next/` test | test | fc.subarray: the tracked test files, with proven paths from fc.constantFrom, seed 119120, 100 runs | keep `lint(path)` at `readers`: red | .github/ci/changes.test.ts |
 | R6. `readers` is gone from `changes.mjs`, `legs.ts` and `proof.ts`, so nothing keeps a list by hand | lint | lint | leave `export const readers` in `changes.mjs`: `pnpm lint:dead` refuses the unused export (0006) | .github/ci/changes.mjs .github/ci/legs.ts .github/ci/proof.ts |
+| M6. `fabrika/machine-has-laws` fires on a product file in `next/` that calls `Machine.make(` and has no sibling `<name>.laws.test.ts`, `<name>.<more>.laws.test.ts` or their `.integration.` and `.visual.` forms holding a property law (`it.prop`, `it.effect.prop`, `it.live.prop`, `fc.assert` or tea's pbt runners), or whose laws files neither call `syncTest(` nor say `// sync test left out: <why>` with a reason; it passes the rest, and test files | test | fc.constantFrom: the twelve planted folders and the three laws-file forms, seed 119120, 24 runs | accept a laws file with no sync test and no reason: red | oxlint-plugins/machine-has-laws.test.ts |
+| M7. `fabrika/one-page-runtime` fires on `next/apps/fabrika/src/entry/browser.tsx` unless it imports `runMain` from `@kampus/tuval/browser` once, starts it once as a statement of the module, and calls no other `run*` | test | scenario: the real entry and the four planted entries of the plants table | count a `runMain` inside a component as the start: red | oxlint-plugins/one-page-runtime.test.ts |
+| M8. `eslint/no-restricted-imports` refuses each import of the TOML adapter or its parser a caller may not make, in every spelling, and passes the rest | test | fc.uniqueArray: the generated callers and spellings of L9, seed 119120, 100 runs | drop the start test file from the adapter's allowed files: red | oxlint-plugins/settings-imports.test.ts |
 
 - M1 is the proof 0591 asks for before a test is deleted: the old and the new file run on the same
   plants, side by side, in the tests step's box, once, before the old file goes.
 - No law needs the real machine, so none is host-only. `bytes`, `client-manager-contract`,
   `deps` and the commit chain keep their `.integration.` names (0536).
 - No law reads a secret.
+
+## The machines to fix first
+
+`fabrika/machine-has-laws` has exactly 30 hits on main at `0683861`, counted with the rule's own
+definition (M6) by a scan of the 35 product files that call `Machine.make(`. The tests step
+recounts with the rule itself before slice E starts; a different count is reported, not fixed in
+silence. Every fix writes or edits a laws file, an exam path, so slice E is the tests step's.
+
+No laws file beside the machine (14). Each gets `<name>.laws.test.ts` with a property law over its
+messages and a `syncTest(` call, or a reason its sync test is left out. `Access.ts` is the one whose
+laws exist under another name, `AccessMachine.laws.test.ts`, which moves with `git mv` to
+`Access.laws.test.ts`.
+
+- next/packages/libfabrika/src/access/Access.ts
+- next/packages/libfabrika/src/gateway/internal/rateLimit.ts
+- next/packages/libfabrika/src/gateway/internal/waiting.ts
+- next/packages/libfabrika/src/node/dev/internal/watcher.ts
+- next/packages/libfabrika/src/packs/internal/open.ts
+- next/packages/libfabrika/src/permissions/internal/relationsTable.ts
+- next/packages/libfabrika/src/runtime/ChaosMachine.ts
+- next/packages/libfabrika/src/runtime/internal/handsDelivery.ts
+- next/packages/libfabrika/src/runtime/internal/reply.ts
+- next/packages/libfabrika/src/runtime/internal/watchers.ts
+- next/packages/libfabrika/src/schedules/ScheduledJob.ts
+- next/packages/libfabrika/src/tasks/internal/task.ts
+- next/packages/libfabrika/src/telemetry/internal/sink.ts
+- next/packages/libfabrika/src/transport/internal/connection.ts
+
+A laws file with a property law and no sync test or reason (16). Each gets a `syncTest(` call,
+or `// sync test left out: <why>` where the machine's model cannot round-trip, with the reason read
+from the machine (S2 in `docs/direction/saved-state.md`). The laws file is named after each machine.
+
+- next/packages/libfabrika/src/client/HandsMachine.ts
+- next/packages/libfabrika/src/client/Prefix.ts
+- next/packages/libfabrika/src/client/Tezgah.ts
+- next/packages/libfabrika/src/client/WindowMachine.ts
+- next/packages/libfabrika/src/desktop/Menu.ts
+- next/packages/libfabrika/src/node/dev/DevLife.ts
+- next/packages/libfabrika/src/processes/internal/processTable.ts
+- next/packages/libfabrika/src/runtime/Client.ts
+- next/packages/libfabrika/src/runtime/Code.ts
+- next/packages/libfabrika/src/transport/Handshake.ts
+- next/packages/libfabrika/src/transport/Link.ts
+- next/programs/checklist/src/tile.ts
+- next/programs/inbox/src/program.ts
+- next/programs/pipeline/src/Merger.ts
+- next/programs/pipeline/src/Queue.ts
+- next/programs/tezgah/src/program.ts
+
+A sync test that fails on a machine is a real fault the new law found: the tests step reports it,
+and the build fixes the machine. That is the one place slice E may need product lines.
+
+## The other readers, check by check
+
+0591 names the build tests and `settings-generated.test.ts` as `reads:` examples, and AGENTS.md
+says a check on the shape of code is a lint rule. Both hold: a check that lint can see becomes lint,
+and only a check on what lint cannot see keeps `reads:`.
+
+- `build.test.ts`, its one law (the page entry starts one Effect program through `runMain`, once,
+  at module scope, and calls no `run*`): **lint**, new rule `fabrika/one-page-runtime`. It reads the
+  entry's syntax tree and nothing else, which a rule sees. The file goes after M7's proof.
+- `settings-generated.test.ts`, "format: the committed person.json, repo.json and reference are
+  what generation writes": **reads**, `next/apps/fabrika/person.json`, `next/apps/fabrika/repo.json`
+  and `docs/settings-reference.md`. A generated file matching its source needs the generator run,
+  which lint cannot do.
+- `settings-generated.test.ts`, T843 and "outputs ignore declaration order": **no check on shape**,
+  laws on libfabrika's settings by import; they stay, with nothing to declare.
+- `settings-generated.test.ts`, L9: **lint**, already `eslint/no-restricted-imports` in
+  `.oxlintrc.json`. The law is that rule's plant test, so it moves to
+  `oxlint-plugins/settings-imports.test.ts` (M8).
+- `build.integration.test.ts`, `build-command.integration.test.ts`,
+  `instance-one-file.integration.test.ts` and the four laws files under
+  `next/packages/libfabrika/src/node/build/`: **reads**. Every text read in them is the build's
+  output (`brain.mjs`), its inputs as Rolldown reads them, an installed package's manifest, a token
+  file or a saved result. None checks the shape of a source file. Each read is declared in slice C.
 
 ## Plants carried, per lint row
 
@@ -316,6 +396,9 @@ local provider) run through `pnpm -s lint:twin` on a scratch copy of the stack: 
 | secret-types.integration.test.ts | the planted entropy, Authorization and binding reads at lines 6, 7, 8, wrapped ones passing, fc seed 119120 | M2, oxlint-plugins/promise-types.test.ts | drop the `~effect/Redacted` test |
 | tsconfig-scope.integration.test.ts | the planted type error at each generated path (the `P19Launchd` example first) and the generated include sets | M2, oxlint-plugins/promise-types.test.ts | open one package fewer |
 | twin.integration.test.ts, twin.ts | the review 5 and review 6 forms beside the real stack, and the binding, remote and alias plants | the moved laws beside `twin.ts`, with `reads:` | treat a computed resource call as local |
+| laws-scan.integration.test.ts | the planted folders `a` to `l`, rewritten to `Machine.make(`: a machine with no laws file, laws with no property law, an inline machine whose laws are another file's, laws with no sync test, an empty reason; a test file's machine and a plain file pass | M6, oxlint-plugins/machine-has-laws.test.ts | accept a laws file with no sync test and no reason |
+| build.test.ts | the real entry passes; planted entries fire: no `runMain` import from `@kampus/tuval/browser`, `runMain` inside a component, a second `runMain` start, an `Effect.runPromise` | M7, oxlint-plugins/one-page-runtime.test.ts | count a `runMain` inside a function as the module's start |
+| settings-generated.test.ts (L9) | the generated callers and import spellings of the TOML adapter and its parser, seed 119120 | M8, oxlint-plugins/settings-imports.test.ts | drop `src/settings-start.integration.test.ts` from the adapter's allowed files in `.oxlintrc.json` |
 | deps.integration.test.ts (its lint half) | the manifest and import breaks of the planted trees, the exam's own files outside a package, and the exports-map cases | M4, oxlint-plugins/next-manifests.test.ts and oxlint-plugins/package-deps.test.ts | pick the first exports key that fits, not the longest |
 
 **The deletion comes last, per file.** The tests step, for each row: (1) runs the new law on the real
@@ -346,6 +429,8 @@ slice A   moved plant tests, plant.ts, promise-types.ts          waits on nothin
 slice B   node-kinds.ts, next-manifests.ts, package-deps, typed  waits on nothing
 slice C   `reads` on LawOptions, lawReads, the declarations      waits on 0580's slice 1 on main
 slice D   `readers` goes from changes.mjs, legs.ts, proof.ts      waits on C and on pull request 1496 on main
+slice E   the 30 machine hits, then machine-has-laws at zero      waits on nothing
+slice F   one-page-runtime and the L9 plants, from the readers    waits on nothing
 ```
 
 - Every slice works on its own branch, `fabrikalfa/exam-to-lint-a` to `-d`, from this branch, and
@@ -356,7 +441,8 @@ slice D   `readers` goes from changes.mjs, legs.ts, proof.ts      waits on C and
 - 0573: its pull request 1 edits `plants.test.ts`'s "elsewhere" list and adds
   `effect-checks-held.test.ts`. Whichever lands second takes a short rebase of that list, and this
   sweep folds `effect-checks.test.ts` into 0573's file if 0573 is on main by slice A's build.
-- Laws-scan waits on the owner (open question 1) and is not in any slice.
+- Slice E turns `fabrika/machine-has-laws` on in its last commit, once its own run on the tree
+  has 0 hits, and only then deletes `laws-scan.integration.test.ts` (the deletion step above).
 
 ## Steps
 
@@ -382,7 +468,7 @@ Each slice runs plan (this file), tests, build and one review, each by its own a
 | next/apps/fabrika/src/exam/agent-may.test.ts next/apps/fabrika/src/exam/agents.test.ts next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts next/apps/fabrika/src/exam/bytes.integration.test.ts next/apps/fabrika/src/exam/client-manager-contract.integration.test.ts next/apps/fabrika/src/exam/commits-git-chain.integration.test.ts next/apps/fabrika/src/exam/commits-git-person.integration.test.ts next/apps/fabrika/src/exam/commits-git-signatures.integration.test.ts next/apps/fabrika/src/exam/commits-git-steps.integration.test.ts next/apps/fabrika/src/exam/commits.test.ts | tests | tests | slice C: each text-reading law takes its `reads:` from the table above, on the package's `it` |
 | next/apps/fabrika/src/exam/commits-git.test-support.ts next/apps/fabrika/src/exam/commits.ts next/apps/fabrika/src/exam/compiler.ts next/apps/fabrika/src/exam/twin.ts next/apps/fabrika/src/exam/rows.ts next/apps/fabrika/src/exam/rows.test.ts | tests | tests | read for this plan; unchanged but for import paths |
 | next/apps/fabrika/src/exam/edges.ts next/apps/fabrika/src/exam/ratchet.ts next/apps/fabrika/src/exam/ratchet.test.ts next/apps/fabrika/src/exam/ratchet.integration.test.ts next/apps/fabrika/src/exam/ratchet.test-support.ts next/apps/fabrika/src/exam/runner-contract.test.ts next/apps/fabrika/src/exam/runner-contract-replay.test.ts next/apps/fabrika/src/exam/runner-contract.test-support.ts | tests | tests | no check: unchanged |
-| next/apps/fabrika/src/exam/laws-scan.integration.test.ts | tests | tests | unchanged until open question 1 is answered |
+| next/apps/fabrika/src/exam/laws-scan.integration.test.ts | tests | tests | slice E: deleted after M6 is green on the tree and red under its break |
 | oxlint-plugins/no-clock-in-view.test.ts oxlint-plugins/edge-comment.test.ts oxlint-plugins/effect-functions.test.ts oxlint-plugins/no-ledger-sql.test.ts oxlint-plugins/no-effect-run-outside-edge.test.ts oxlint-plugins/no-hand-tag.test.ts oxlint-plugins/no-promises.test.ts oxlint-plugins/one-store-hook.test.ts oxlint-plugins/layers.test.ts oxlint-plugins/plant.ts oxlint-plugins/promise-types.ts oxlint-plugins/promise-types.test.ts | tests | tests | slice A, new paths: M1, M2 |
 | oxlint-plugins/no-of.test.ts oxlint-plugins/plants.test.ts oxlint-plugins/builtin-plants.ts oxlint-plugins/no-wall-clock.test.ts oxlint-plugins/no-question-word-key.test.ts oxlint-plugins/terminology.test.ts oxlint-plugins/no-default-export.test.ts oxlint-plugins/after-hooks.test.ts oxlint-plugins/door-is-library.test.ts oxlint-plugins/ledger.test.ts oxlint-plugins/package-imports.test.ts oxlint-plugins/one-id-module.test.ts oxlint-plugins/service-contract.test.ts oxlint-plugins/jsdocs.test.ts | tests | tests | slice A: folded plants, and `plant.ts`'s new import path; the "elsewhere" list names the new files |
 | oxlint-plugins/node-kinds.ts oxlint-plugins/node-kinds.test.ts oxlint-plugins/next-manifests.ts oxlint-plugins/next-manifests.test.ts oxlint-plugins/package-deps.ts oxlint-plugins/package-deps.test.ts oxlint-plugins/index.ts | tests | tests | slice B: the new commands and rule, M3, M4 |
@@ -395,10 +481,16 @@ Each slice runs plan (this file), tests, build and one review, each by its own a
 | next/packages/vitest/src/Law.types.test.ts | tests | tests | slice C: R3 |
 | vitest.config.ts | tests | tests | slice C: the `lawReads` plugin |
 | vitest.reads.ts vitest.reads.test.ts | tests | tests | slice C: `readsOf`, R1, R2 |
-| next/apps/fabrika/src/settings-generated.test.ts next/apps/fabrika/src/build.test.ts next/apps/fabrika/src/build.integration.test.ts next/apps/fabrika/src/build-command.integration.test.ts next/apps/fabrika/src/instance-one-file.integration.test.ts next/packages/libfabrika/src/node/build/build-assets.integration.test.ts next/packages/libfabrika/src/node/build/build-one-file.integration.test.ts next/packages/libfabrika/src/node/build/css.integration.test.ts next/packages/libfabrika/src/node/build/error-cause.integration.test.ts | tests | tests | slice C: the six other `readers` entries; each text-reading law declares what it reads (`person.json`, `repo.json`, `docs/settings-reference.md`, `src/entry/browser.tsx`, the build's inputs) |
+| next/apps/fabrika/src/settings-generated.test.ts next/apps/fabrika/src/build.test.ts next/apps/fabrika/src/build.integration.test.ts next/apps/fabrika/src/build-command.integration.test.ts next/apps/fabrika/src/instance-one-file.integration.test.ts next/packages/libfabrika/src/node/build/build-assets.integration.test.ts next/packages/libfabrika/src/node/build/build-one-file.integration.test.ts next/packages/libfabrika/src/node/build/css.integration.test.ts next/packages/libfabrika/src/node/build/error-cause.integration.test.ts | tests | tests | slice C: the six other `readers` entries; each text-reading law declares what it reads (`person.json`, `repo.json`, `docs/settings-reference.md`, the build's inputs and output); slice F: `build.test.ts` goes after M7, and L9 moves to M8 |
 | .github/ci/changes.mjs .github/ci/changes.test.ts .github/ci/legs.ts .github/ci/legs.test.ts .github/ci/proof.ts .github/ci/proof.test.ts | tests | tests | slice D: `readers` goes; R4, R5, R6 |
 | next/AGENTS.md | build | 2 | "What lint holds" gains `fabrika/package-deps` and the typed command's two checks |
 | docs/plan/README.md | build | docs | the sweep's row, the same pull request (0013) |
+| oxlint-plugins/machine-has-laws.ts oxlint-plugins/machine-has-laws.test.ts oxlint-plugins/one-page-runtime.ts oxlint-plugins/one-page-runtime.test.ts oxlint-plugins/settings-imports.test.ts | tests | tests | slices E and F: the two new rules and the moved L9 plants, M6, M7, M8 |
+| next/packages/libfabrika/src/gateway/internal/rateLimit.laws.test.ts next/packages/libfabrika/src/gateway/internal/waiting.laws.test.ts next/packages/libfabrika/src/node/dev/internal/watcher.laws.test.ts next/packages/libfabrika/src/packs/internal/open.laws.test.ts next/packages/libfabrika/src/permissions/internal/relationsTable.laws.test.ts next/packages/libfabrika/src/runtime/ChaosMachine.laws.test.ts next/packages/libfabrika/src/runtime/internal/handsDelivery.laws.test.ts next/packages/libfabrika/src/runtime/internal/reply.laws.test.ts next/packages/libfabrika/src/runtime/internal/watchers.laws.test.ts next/packages/libfabrika/src/schedules/ScheduledJob.laws.test.ts next/packages/libfabrika/src/tasks/internal/task.laws.test.ts next/packages/libfabrika/src/telemetry/internal/sink.laws.test.ts next/packages/libfabrika/src/transport/internal/connection.laws.test.ts | tests | tests | slice E: new laws files, a property law and a sync test or its reason |
+| next/packages/libfabrika/src/access/AccessMachine.laws.test.ts next/packages/libfabrika/src/access/Access.laws.test.ts | tests | tests | slice E: moved with `git mv` to the machine's name |
+| next/packages/libfabrika/src/client/HandsMachine.laws.test.ts next/packages/libfabrika/src/client/Prefix.laws.test.ts next/packages/libfabrika/src/client/Tezgah.laws.test.ts next/packages/libfabrika/src/client/WindowMachine.laws.test.ts next/packages/libfabrika/src/desktop/Menu.laws.test.ts next/packages/libfabrika/src/node/dev/DevLife.laws.test.ts next/packages/libfabrika/src/processes/internal/processTable.laws.test.ts next/packages/libfabrika/src/runtime/Client.laws.test.ts next/packages/libfabrika/src/runtime/Code.laws.test.ts next/packages/libfabrika/src/transport/Handshake.laws.test.ts next/packages/libfabrika/src/transport/Link.laws.test.ts next/programs/checklist/src/tile.laws.test.ts next/programs/inbox/src/program.laws.test.ts next/programs/pipeline/src/Merger.laws.test.ts next/programs/pipeline/src/Queue.laws.test.ts next/programs/tezgah/src/program.laws.test.ts | tests | tests | slice E: each gains a `syncTest(` call or a reason |
+| next/packages/libfabrika/src/access/Access.ts next/packages/libfabrika/src/gateway/internal/rateLimit.ts next/packages/libfabrika/src/gateway/internal/waiting.ts next/packages/libfabrika/src/node/dev/internal/watcher.ts next/packages/libfabrika/src/packs/internal/open.ts next/packages/libfabrika/src/permissions/internal/relationsTable.ts next/packages/libfabrika/src/runtime/ChaosMachine.ts next/packages/libfabrika/src/runtime/internal/handsDelivery.ts next/packages/libfabrika/src/runtime/internal/reply.ts next/packages/libfabrika/src/runtime/internal/watchers.ts next/packages/libfabrika/src/schedules/ScheduledJob.ts next/packages/libfabrika/src/tasks/internal/task.ts next/packages/libfabrika/src/telemetry/internal/sink.ts next/packages/libfabrika/src/transport/internal/connection.ts next/packages/libfabrika/src/client/HandsMachine.ts next/packages/libfabrika/src/client/Prefix.ts next/packages/libfabrika/src/client/Tezgah.ts next/packages/libfabrika/src/client/WindowMachine.ts next/packages/libfabrika/src/desktop/Menu.ts next/packages/libfabrika/src/node/dev/DevLife.ts next/packages/libfabrika/src/processes/internal/processTable.ts next/packages/libfabrika/src/runtime/Client.ts next/packages/libfabrika/src/runtime/Code.ts next/packages/libfabrika/src/transport/Handshake.ts next/packages/libfabrika/src/transport/Link.ts next/programs/checklist/src/tile.ts next/programs/inbox/src/program.ts next/programs/pipeline/src/Merger.ts next/programs/pipeline/src/Queue.ts next/programs/tezgah/src/program.ts | build | 0 | the 30 machines; changed only where a new sync test finds a real fault, which the tests step reports first |
+| next/apps/fabrika/src/entry/browser.tsx next/apps/fabrika/person.json next/apps/fabrika/repo.json docs/settings-reference.md | build | 0 | read by M7 and by the generated-files law; not changed |
 | .agents/skills/lead/scripts/movecheck.ts | tests | tests | read: imports `rows.ts`, which stays |
 | .github/ .github/ci .github/ci/ oxlint-plugins/ next/apps/fabrika/src/exam/ patches/ patches/@alchemy.run__cloudflare-runtime@2.0.0-beta.85.patch exam-paths.json layer-rules.json node-kinds.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json | tests | tests | named as folders of the scope, or as files a law reads; not changed by this sweep |
 
@@ -412,14 +504,19 @@ Each slice runs plan (this file), tests, build and one review, each by its own a
    250 test lines, and about 60 declaration lines in 20 files; about 2 agent hours.
 4. Slice D, the list goes: about 80 lines removed and 60 added in CI, 150 test lines; about 1.5
    agent hours.
+5. Slice E, the 30 machine hits and `machine-has-laws`: 13 new laws files and one moved, about
+   1,100 test lines, 16 sync tests or reasons, about 250 test lines, and a 150-line rule; 0 product
+   lines unless a sync test finds a fault; about 5 agent hours.
+6. Slice F, `one-page-runtime` and the L9 plants: about 120 lines of rule and 200 test lines moved
+   or written; 0 product lines; about 1 agent hour.
 
 Confidence 70% on these counts: slice B's `package-deps` rule is the doubt, since it resolves
 imports as `program-package-layout` does and may need more. Priced from the 0580 plan's figures
 from recent `field/runs/` rows (a tests step about $6, a build about $2.30, a review about $3.60, a
-fix round about $4.20, at list price), not recounted: four slices of three steps, plus two likely
-fix rounds.
+fix round about $4.20, at list price), not recounted: six slices of three steps, plus three likely
+fix rounds, the third for slice E, where a new sync test may find a real fault.
 
-Estimate: 14 steps, $56
+Estimate: 21 steps, $84
 
 ## Records
 
@@ -437,13 +534,13 @@ Estimate: 14 steps, $56
   shows it, as 0591's Consequences say.
 - Whether `lawReads` costs a measurable time on `vitest --changed`. It parses only files that hold
   the word `reads`; the tests step times one `vitest list --changed` before and after.
-- How many machines lack laws under today's constructor: the 30 above is a rough text scan.
+- Whether each of the 16 machines can pass a sync test. One that cannot either takes a reason line
+  or exposes a real fault; slice E's tests step reports which.
 
 ## Open questions
 
-1. `laws-scan.integration.test.ts` holds nothing today: it looks for `defineMachine(`, which no `next/` file calls, and for a `@demlik/tea/pbt` import, which 0579's `it.prop` replaced. Move it to a lint rule keyed on `Machine.make(` and a sibling `*.laws.test.ts` with a sync test or its reason, which blocks once about 30 machines are fixed in a sweep (lean, 70%), or keep the old text as written, which holds nothing?
-2. `build.test.ts` and `settings-generated.test.ts`'s L9 read source text to check its shape (the page entry's one `runMain`; which files import the TOML adapter, already through `no-restricted-imports`). 0591 names both as `reads:` examples, and AGENTS.md says a shape check is lint. Keep them `reads:` in this sweep as 0591 says (lean, 75%), or move them to lint too?
+None.
 
 ## Findings
 
-None outside this task: the one fault found, `laws-scan`'s dead pattern, is open question 1.
+None outside this task: the one fault found, `laws-scan`'s dead pattern, is fixed by slice E.
