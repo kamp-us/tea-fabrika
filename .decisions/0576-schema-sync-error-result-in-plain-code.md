@@ -1,12 +1,12 @@
 ---
-id: 0575
+id: 0576
 title: In next/ and our tooling, schemaSync is an error, a plain function decodes with the Result form and handles the failure, and Effect code uses the Effect form
 status: accepted
 date: 2026-11-15
 tags: [effect, tsgo, typecheck, schema, decode, encode, result, ledger, sweep, next, tooling]
 ---
 
-# 0575: In next/ and our tooling, schemaSync is an error, a plain function decodes with the Result form and handles the failure, and Effect code uses the Effect form
+# 0576: In next/ and our tooling, schemaSync is an error, a plain function decodes with the Result form and handles the failure, and Effect code uses the Effect form
 
 ```mermaid
 flowchart LR

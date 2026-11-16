@@ -1,7 +1,7 @@
 ---
 id: 0554
 title: In next/ and our tooling, no code calls Reflect.get, Reflect.set or Reflect.has, so a field is read through its type or a decode, never past it
-status: amended-in-part by [0575](0575-schema-sync-error-result-in-plain-code.md)
+status: amended-in-part by [0576](0576-schema-sync-error-result-in-plain-code.md)
 date: 2026-11-15
 tags: [lint, oxlint, reflect, types, schema, predicate, laws, next, tooling]
 ---
@@ -189,4 +189,4 @@ reads or writes past the types (owner, 2026-11-15).**
 
 ## Amendments
 
-- 2026-11-15: [0575](0575-schema-sync-error-result-in-plain-code.md) makes `schemaSync` an error, so `decodeUnknownSync` in the first row of the replacement table is no longer a replacement. Use `decodeUnknownOption`, `decodeUnknownResult`, `decodeUnknownExit` or `decodeUnknownEffect`.
+- 2026-11-15: [0576](0576-schema-sync-error-result-in-plain-code.md) makes `schemaSync` an error, so `decodeUnknownSync` in the first row of the replacement table is no longer a replacement. Use `decodeUnknownOption`, `decodeUnknownResult`, `decodeUnknownExit` or `decodeUnknownEffect`.
