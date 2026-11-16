@@ -699,6 +699,10 @@ plus three likely send-backs.
 
 Estimate: 18 steps, $54
 
+## What comes after
+
+- The `deps` and `laws-scan` splits leave slice 1 and become a later slice of their own, where each scan is a `pnpm lint` command, since both halves need one shared scanner that the exam folder refuses.
+
 ## What this cannot tell us
 
 - Whether the classification is right in every row: it comes from a read-only scan and my reading
