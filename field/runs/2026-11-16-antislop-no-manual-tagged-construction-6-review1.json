@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-manual-tagged-construction-6-review1",
+  "ticket": "kamp-us/tea-fabrika#1057",
+  "pr": null,
+  "started": "2026-11-16T00:44:52-08:00",
+  "ended": "2026-11-16T00:54:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send",
+  "why": "Review of slice AS-no-manual-tagged-construction-6 of ticket 1057 at f9701833e, in next/ and our tooling (oxlint-plugins/), against 0562, 0563, 0567, 0214 and 0135. Sent back to tests, one class with one case: next/packages/libfabrika/src/Testing.test.ts:125-129 defines a local Schema.TaggedUnion `Writer` that copies next/packages/libfabrika/src/permissions/Senders.ts:17 `Sender` (same two cases, same fields, its doc words copied), where 0562 says a tagged value in a test is made with the schema's own maker and 0040 says the existing tool comes first; Testing.test.ts is not a program's laws file, so 0135's leave to restate a shape does not cover it. The fix: import `Sender` from ./permissions/Senders.ts and make owner, person and agent with `Sender.cases.<case>.make`, deleting `Writer`. Everything else holds: the counts are right (the rule forced to error in a scratch config outside the repo counts 122 on origin/main, 36 of them outside test files, and 0 at f9701833e across the seven folders, while the same config still fires in next/programs/pipeline, so it is live); every hit is a hand edit to a maker; no disable line, no lock, no .oxlintrc.json change; each `toMatchObject` split on `_tag` (Id.test.ts:193, Connections.integration.test.ts:125 and :138, QuotaSettings.test.ts:163-166 and :190, counter program.laws.test.ts:103 and :111, runner.laws.integration.test.ts:119 and :563-565) checks the same tag and the same fields as before; tezgah's take hard-codes `refused` where it read `s._tag`, which is the same because Program.ts:487 Step has only the two cases; Data.taggedEnum makes plain objects (effect 4.1.3 Data.ts docs), so the oxlint-plugins product answers are unchanged, and nothing there prints them as JSON.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "Ran at f9701833e, Node 26.13.0, TYPESAFE_API_KEY unset, nice -n 15 --maxWorkers=3: the 9 libfabrika test files (86 tests), checklist, counter and tezgah laws with oxlint-plugins advice, jsdocs, test-kind and parallel (67 tests), the two .integration. files Connections and counter runner.laws (18 tests, not refused by the 0178 guard), integration-test-name and law-shape (10 tests), all green; one pnpm typecheck exits 0. loosening.sh: unrecognized-change hits on import lines, two 'tighter fast-check bound' hits at Files.test.ts:69-70 that are the same bounds moved into a .map chain, and five 'removed expect' hits that are each a split toMatchObject or a Result.isFailure in place of toMatchObject({ _tag: 'Failure' }); none loosens a law. No plant ran: no law was added or changed, and the split assertions were planted by reading. The diff adds three new fabrika/prefer-schema-arbitrary advice fires (Files.test.ts:74-75, Setting.test.ts:96) because the new local schemas now match their hand-written generators; the folder already holds that rule's warn line. merge-tree with origin/main 5c94f12f4 is clean. Not run: pnpm lint (the steps ran it; its only failure is the zero lock asking to add the seven folders now at zero, left to the later lock pull request).",
+  "step": "review"
+}
