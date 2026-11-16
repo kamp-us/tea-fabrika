@@ -1,4 +1,18 @@
 {
   "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // The whole package is at zero for this check. Each slice adds its checks here.
+        "overrides": [
+          {
+            "include": ["src/**/*.ts"],
+            "options": { "diagnosticSeverity": { "preferSucceedSomeOrNone": "error" } }
+          }
+        ]
+      }
+    ]
+  },
   "include": ["src"]
 }

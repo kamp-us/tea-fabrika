@@ -3,7 +3,20 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"],
     // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // The folders at zero for each check, their tests too. Each slice adds its folders here.
+        // The globs read from this folder.
+        "overrides": [
+          {
+            "include": ["src/processes/**/*.ts", "src/runtime/**/*.ts", "src/telemetry/**/*.ts"],
+            "options": { "diagnosticSeverity": { "preferSucceedSomeOrNone": "error" } }
+          }
+        ]
+      }
+    ]
   },
   "include": ["src"]
 }

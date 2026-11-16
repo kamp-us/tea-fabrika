@@ -268,7 +268,7 @@ const layer = (sql: Sql, next: Effect.Effect<string>, gate?: Gate, seen?: Seen) 
 };
 
 /** The gateway's answer for these starts: no member's input was delivered to any requester. */
-const noSenders = Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) });
+const noSenders = Layer.succeed(Senders, { sender: () => Effect.succeedNone });
 
 /** A raw value under `tag`, never made by a schema, so it can hold a shape its schema refuses. */
 const raw = (tag: string, fields: object): unknown =>
