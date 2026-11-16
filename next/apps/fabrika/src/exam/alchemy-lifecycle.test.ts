@@ -1,15 +1,18 @@
-// P12, next/. Run Alchemy's Runtime and Workerd; only the OS spawn is replaced.
-import childProcess from "node:child_process";
+// P12, next/. Run Alchemy's Runtime and Workerd; only the OS spawn is replaced, by the law's own
+// `ChildProcessSpawner`, which the local patch makes Node's `Workerd` spawn through.
+// B1's plant: in the patch, spawn with `node:child_process` again. The law's spawner then sees no
+// child, and the start events are missing.
+// B2's plant: edit the patch without `pnpm patch-commit`. The hash in the lockfile then differs.
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { createRequire, syncBuiltinESMExports } from "node:module";
+import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
-import { PassThrough } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer } from "effect";
+import { Deferred, Effect, Exit, Layer, PlatformError, Sink, Stream } from "effect";
+import { ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 const ROOT = resolve(import.meta.dirname, "../../../../..");
 const require = createRequire(import.meta.resolve("@alchemy.run/cloudflare"));
@@ -27,57 +30,68 @@ type Event = { worker: string } & (
   | { type: "stop"; exit: End; reason: "intensity" | "restart_failed" }
 );
 
-const spawned = () => {
-  const children: Array<{ pid: number; closed: boolean; crash: () => void }> = [];
-  const sockets: Array<string> = [];
-  const mock = vi.spyOn(childProcess, "spawn").mockImplementation(() => {
-    const control = new PassThrough();
-    const child = Object.assign(new childProcess.ChildProcess(), {
-      pid: 27000 + children.length,
-      stdin: new PassThrough(),
-      stdout: new PassThrough(),
-      stderr: new PassThrough(),
-      stdio: [null, null, null, control],
-      closed: false,
-      kill: () => {
-        child.crash();
-        return true;
-      },
-      crash: () => {
-        if (child.closed) {
-          return;
-        }
+type Child = { pid: number; closed: boolean; crash: () => void };
 
-        child.closed = true;
-        setImmediate(() => {
-          child.emit("close", null, "SIGKILL");
-          child.stdout.end();
-          child.stderr.end();
-        });
-      },
-    });
-    children.push(child);
-    queueMicrotask(() => {
-      child.emit("spawn");
-      control.write(
-        [
-          ...sockets.map((socket, i) => JSON.stringify({ event: "listen", socket, port: 27100 + i })),
-          JSON.stringify({ event: "listen", socket: "debug-port", port: 27101 }),
-          "",
-        ].join("\n"),
-      );
-    });
-    return child;
-  });
-  syncBuiltinESMExports();
-  return {
-    children,
-    sockets,
-    restore: () => {
-      mock.mockRestore();
-      syncBuiltinESMExports();
-    },
-  };
+const bytes = (text: string) => new TextEncoder().encode(text);
+
+// The law's spawner: each spawn answers a fake workerd that reports its sockets on fd 3 and lives
+// until it is crashed or its scope closes. A crash ends it the way Node's spawner reports a SIGKILL:
+// its exit code fails with the signal named in the cause.
+const spawned = () => {
+  const children: Array<Child> = [];
+  const sockets: Array<string> = [];
+  const spawner = ChildProcessSpawner.make(() =>
+    Effect.gen(function* () {
+      const ended = yield* Deferred.make<void>();
+      const child: Child = {
+        pid: 27000 + children.length,
+        closed: false,
+        crash: () => {
+          child.closed = true;
+          Deferred.doneUnsafe(ended, Exit.void);
+        },
+      };
+      children.push(child);
+      yield* Effect.addFinalizer(() => Effect.sync(child.crash));
+      const open = Stream.fromEffect(Deferred.await(ended)).pipe(Stream.drain);
+      const control = Stream.suspend(() =>
+        Stream.make(
+          bytes(
+            [
+              ...sockets.map((socket, i) => JSON.stringify({ event: "listen", socket, port: 27100 + i })),
+              JSON.stringify({ event: "listen", socket: "debug-port", port: 27101 }),
+              "",
+            ].join("\n"),
+          ),
+        ),
+      ).pipe(Stream.concat(open));
+      return ChildProcessSpawner.makeHandle({
+        pid: ChildProcessSpawner.ProcessId(child.pid),
+        exitCode: Deferred.await(ended).pipe(
+          Effect.andThen(
+            Effect.fail(
+              PlatformError.systemError({
+                _tag: "Unknown",
+                module: "ChildProcess",
+                method: "exitCode",
+                cause: new Error("Process interrupted due to receipt of signal: 'SIGKILL'"),
+              }),
+            ),
+          ),
+        ),
+        isRunning: Effect.sync(() => !child.closed),
+        kill: () => Effect.sync(child.crash),
+        stdin: Sink.drain,
+        stdout: open,
+        stderr: open,
+        all: open,
+        getInputFd: () => Sink.drain,
+        getOutputFd: (fd) => (fd === 3 ? control : Stream.empty),
+        unref: Effect.succeed(Effect.void),
+      });
+    }),
+  );
+  return { children, sockets, layer: Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner) };
 };
 
 describe("P12 Alchemy lifecycle patch", () => {
@@ -116,7 +130,7 @@ describe("P12 Alchemy lifecycle patch", () => {
               },
             };
           }),
-        ).pipe(Layer.provide(WorkerdLive));
+        ).pipe(Layer.provide(WorkerdLive), Layer.provide(os.layer));
         const runtime: Layer.Layer<unknown> = RuntimeLive.pipe(
           Layer.provide(observed),
           Layer.provide(Layer.succeed(Storage, { name: "storage" })),
@@ -144,79 +158,78 @@ describe("P12 Alchemy lifecycle patch", () => {
           ],
         };
 
-        try {
-          await Effect.runPromise(
-            Effect.scoped(
-              Effect.gen(function* () {
-                const service = yield* Runtime;
-                yield* service.start(worker);
+        await Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const service = yield* Runtime;
+              yield* service.start(worker);
 
-                for (let generation = 0; generation < 4; generation++) {
-                  yield* wait(() => events.filter((e) => e.type === "start").length > generation);
-                  const started = events.filter((e) => e.type === "start")[generation]!;
-                  expect(started.worker).toBe(worker.name);
-                  expect(started.pid).toBe(os.children[generation]!.pid);
-                  os.children[generation]!.crash();
-                }
+              for (let generation = 0; generation < 4; generation++) {
+                yield* wait(() => events.filter((e) => e.type === "start").length > generation);
+                const started = events.filter((e) => e.type === "start")[generation]!;
+                expect(started.worker).toBe(worker.name);
+                expect(os.children, "workerd must be spawned through the context's ChildProcessSpawner").toHaveLength(
+                  generation + 1,
+                );
+                expect(started.pid).toBe(os.children[generation]!.pid);
+                os.children[generation]!.crash();
+              }
 
-                yield* wait(() => events.some((e) => e.type === "stop"));
-                expect(events.map((e) => e.type)).toEqual([
-                  "start",
-                  "exit",
-                  "restart",
-                  "start",
-                  "exit",
-                  "restart",
-                  "start",
-                  "exit",
-                  "restart",
-                  "start",
-                  "exit",
-                  "stop",
-                ]);
-                expect(events.filter((e) => e.type === "restart").map((e) => e.delay)).toEqual([250, 500, 1000]);
-                expect(events.at(-1)).toMatchObject({
-                  type: "stop",
-                  worker: worker.name,
-                  reason: "intensity",
-                });
-                expect(events.filter((e) => e.type === "exit").every((e) => e.exit?.signal === "SIGKILL")).toBe(true);
-                expect(new Set(events.filter((e) => e.type === "start").map((e) => e.pid)).size).toBe(4);
-                const count = events.length;
-                yield* Effect.sleep("1200 millis");
-                expect(events).toHaveLength(count);
-              }),
-            ).pipe(Effect.provide(runtime)),
-          );
-          expect(os.children.every((child) => child.closed)).toBe(true);
-          const count = events.length;
-          await Effect.runPromise(
-            Effect.scoped(
-              Effect.gen(function* () {
-                const service = yield* Runtime;
-                yield* service.start({ ...worker, name: "p12-clean-stop" });
-              }),
-            ).pipe(Effect.provide(runtime)),
-          );
-          await Effect.runPromise(Effect.sleep("300 millis"));
-          expect(events.slice(count).map((e) => e.type)).toEqual(["start"]);
-          expect(os.children.at(-1)!.closed).toBe(true);
-          const pending = events.length;
-          await Effect.runPromise(
-            Effect.scoped(
-              Effect.gen(function* () {
-                const service = yield* Runtime;
-                yield* service.start({ ...worker, name: "p12-pending-stop" });
-                os.children.at(-1)!.crash();
-                yield* wait(() => events.slice(pending).some((e) => e.type === "restart"));
-              }),
-            ).pipe(Effect.provide(runtime)),
-          );
-          await Effect.runPromise(Effect.sleep("300 millis"));
-          expect(events.slice(pending).map((e) => e.type)).toEqual(["start", "exit", "restart"]);
-        } finally {
-          os.restore();
-        }
+              yield* wait(() => events.some((e) => e.type === "stop"));
+              expect(events.map((e) => e.type)).toEqual([
+                "start",
+                "exit",
+                "restart",
+                "start",
+                "exit",
+                "restart",
+                "start",
+                "exit",
+                "restart",
+                "start",
+                "exit",
+                "stop",
+              ]);
+              expect(events.filter((e) => e.type === "restart").map((e) => e.delay)).toEqual([250, 500, 1000]);
+              expect(events.at(-1)).toMatchObject({
+                type: "stop",
+                worker: worker.name,
+                reason: "intensity",
+              });
+              expect(events.filter((e) => e.type === "exit").every((e) => e.exit?.signal === "SIGKILL")).toBe(true);
+              expect(new Set(events.filter((e) => e.type === "start").map((e) => e.pid)).size).toBe(4);
+              const count = events.length;
+              yield* Effect.sleep("1200 millis");
+              expect(events).toHaveLength(count);
+            }),
+          ).pipe(Effect.provide(runtime)),
+        );
+        expect(os.children.every((child) => child.closed)).toBe(true);
+        const count = events.length;
+        await Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const service = yield* Runtime;
+              yield* service.start({ ...worker, name: "p12-clean-stop" });
+            }),
+          ).pipe(Effect.provide(runtime)),
+        );
+        await Effect.runPromise(Effect.sleep("300 millis"));
+        expect(events.slice(count).map((e) => e.type)).toEqual(["start"]);
+        expect(os.children.at(-1)!.closed).toBe(true);
+        const pending = events.length;
+        await Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const service = yield* Runtime;
+              yield* service.start({ ...worker, name: "p12-pending-stop" });
+              os.children.at(-1)!.crash();
+              yield* wait(() => events.slice(pending).some((e) => e.type === "restart"));
+            }),
+          ).pipe(Effect.provide(runtime)),
+        );
+        await Effect.runPromise(Effect.sleep("300 millis"));
+        expect(events.slice(pending).map((e) => e.type)).toEqual(["start", "exit", "restart"]);
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }), examples: [["p12-lifecycle"]] },
     );

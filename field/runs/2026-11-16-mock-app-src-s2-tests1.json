@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-app-src-s2-tests1",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-15T23:13:32-08:00",
+  "ended": "2026-11-15T23:53:27-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send",
+  "why": "Tests step for slice 2 of the mock sweep in next/ (ticket 1067, decision 0555), plan docs/plan/quests/mock-app-src-PLAN.md at 14e9b3134, on branch fabrikalfa/mock-app-src-s2, with no pull request of its own. The local patch patches/@alchemy.run__cloudflare-runtime@2.0.0-beta.85.patch now makes Alchemy's Node Workerd spawn workerd through Effect's ChildProcessSpawner from the context (as its Docker already does), made with pnpm patch and pnpm patch-commit, which also wrote the new hash into pnpm-lock.yaml. B1 (next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts) drops its vi.spyOn on node:child_process and hands Alchemy's real Runtime and Workerd a ChildProcessSpawner stand-in that answers fake workerd handles. B2, the patch hash law, is unchanged. B3 (next/apps/fabrika/src/instance-one-file.integration.test.ts) drops its vi.spyOn on node:child_process: afterChildrenStop hands the task a ChildProcessSpawner layer that wraps Node's and keeps each handle's exit, and the two real-instance laws provide it in front of NodeServices.layer. Before the patch B1 was red: the law's spawner saw no spawn, and a real workerd started through node:child_process and refused the fake config (ConfigError: durableObjectStorage config refers to a service \"storage\"). After the patch B1 and B2 are green. B3 is red for the reason the plan named as its stop: no layer reaches Alchemy's runtime from the law. Alchemy's deploy (alchemy/src/EvalStack.ts, its platform layer) provides its own PlatformServices, so a ChildProcessSpawner the law provides around the instance is shadowed; a probe counted 0 children through the law's spawner in each real-instance run. afterChildrenStop now takes the fewest spawns the task must make, and the two real-instance laws ask for 1, so they fail with 'every workerd Alchemy starts must be spawned through the task's spawner: expected 0 to be greater than or equal to 1'; the shutdown property and the other 4 laws of the file are green. The seam: next/packages/libfabrika/src/node/dev/dev.ts, where the local context for the stack is built (about line 327), adds the context's own ChildProcessSpawner, one line plus the import; alchemy.run.ts already provides that context to Cloudflare.providers inside Alchemy's platform. Tried once on a saved copy and restored: all 7 laws of the B3 file green. That file is in no row of the plan's Files table, so B3 goes back to plan. Counts before, on main at b510ed2e8 for the two files: alchemy-lifecycle 1 vi.spyOn, instance-one-file 1 spawn vi.spyOn (its getEntrypoint spy is slice 1's). After: 0 and 0 for this slice's sites. A build is needed once the plan adds the dev.ts row: that seam is product code.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Upstream issue text for the lead to file on alchemy-run/alchemy (not filed here). Title: \"cloudflare-runtime: Node Workerd spawns with node:child_process directly, so it cannot be given a ChildProcessSpawner\". Body: \"In @alchemy.run/cloudflare-runtime 2.0.0-beta.85, Docker reads Effect's ChildProcessSpawner from the context, but Node's Workerd (dist/core/node/workerd/Workerd.mjs, makeNode) calls node:child_process.spawn directly and WorkerdLive is a Layer.sync with no requirement. So a caller cannot stand workerd's spawn in for a test, or watch each child's exit, the way it can for Docker. Proposal: makeNode reads ChildProcessSpawner and spawns ChildProcess.make(command, args, { env, extendEnv: false, detached: false, killSignal: 'SIGKILL', additionalFds: { fd3: { type: 'output' } } }), reading the control pipe with handle.getOutputFd(3); WorkerdLive becomes Layer.effect and requires ChildProcessSpawner, which RuntimeServices' layerRuntime already requires through DockerLive. One gap on Effect's side: a signalled exit reaches the handle only as a failed exitCode whose cause message names the signal, so WorkerdExit.signal has to be read from that message.\" Three things differ from the old Node spawn and a reviewer should weigh them: the scope that served workerd now waits for workerd's exit before it closes (Effect's spawner release), not only sends SIGKILL; a startup error is classified from the last 4096 characters of stderr, not all of it; and the installed package's src/core/workerd/Workerd.ts is not changed to match dist (the old patch kept src in step; only dist runs). The plan's B3 plant reason did not hold: the shutdown property is what goes red; the two instances on one held port stayed green, because the law's spawner never reached workerd (see why) and the patched Workerd's scope waits for workerd's exit itself. One full run of the B3 file, before the spawns check was added, was red on the two real-instance laws after about 72 seconds each, with no error captured, while the shared box was under memory pressure from other sessions; six other runs of the same code were green. Its cause was not found. The plan said the lockfile change is 1 line; pnpm writes the patch hash in 5 places, so it is 10 lines of diff. No vi lock block was written (laptop lead's ruling).",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "B1",
+      "plant": "installed dist/core/node/workerd/Workerd.mjs put back to spawn with node:child_process (the old patch's file); a real workerd started instead of the law's fake and failed with ConfigError: durableObjectStorage config refers to a service \"storage\"",
+      "result": "red"
+    },
+    {
+      "law": "B2",
+      "plant": "one comment line of the patch file edited without pnpm patch-commit; the lockfile no longer contains the patch's sha256",
+      "result": "red"
+    },
+    {
+      "law": "B3",
+      "plant": "afterChildrenStop returns without awaiting the kept exits; the shutdown property is red, expected true to be false (the child is still running), while the two real-instance laws on one held port stay green",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

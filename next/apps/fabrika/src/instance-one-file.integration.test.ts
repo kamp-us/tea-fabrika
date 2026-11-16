@@ -3,19 +3,18 @@
 // Builder contract: the app's `build(options)` (src/build.ts) needs FileSystem and Path and
 // returns `{build, brain, programs, assets}`; the stack runs `built.brain` with `bundle: false`.
 import assert from "node:assert/strict";
-import childProcess, { spawn } from "node:child_process";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer as httpServer } from "node:http";
-import { syncBuiltinESMExports } from "node:module";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Id } from "@kampus/libfabrika";
 import { workerLoader } from "@kampus/libfabrika/workers";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Deferred, Effect, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -40,26 +39,50 @@ const home = () => {
 };
 
 // Alchemy sends SIGKILL when its scope closes, but the child can still hold its port.
-// Await the real close events before reusing that same port and saved state. No fixed sleep.
+// Await the real exits before reusing that same port and saved state. No fixed sleep.
 // The fixed brain port itself is Alchemy's in-process worker proxy, not workerd. Its 30-second
 // port reservation outlived the proxy until the local patch made a closed proxy drop it.
-const afterChildrenStop = async <A>(task: () => Promise<A>): Promise<A> => {
-  const spawn = childProcess.spawn,
-    closed: Promise<void>[] = [];
-  const spy = vi.spyOn(childProcess, "spawn").mockImplementation((...args) => {
-    const child = spawn(...args);
-    closed.push(new Promise<void>((done) => child.once("close", () => done())));
-    return child;
-  });
-  syncBuiltinESMExports();
+// The task provides `spawner` in front of Node's own, so every child it starts, workerd through
+// Alchemy's patched `Workerd` included, is spawned through it and its exit is kept.
+// B3's plant: return before the kept exits are awaited. The shutdown law's child is then still
+// running. The instance laws stay green under it, since the patched `Workerd`'s scope itself
+// waits for workerd's exit.
+type Spawner = Layer.Layer<ChildProcessSpawner.ChildProcessSpawner, never, ChildProcessSpawner.ChildProcessSpawner>;
+
+// `spawns` is the fewest children the task must start through `spawner`: a real instance starts
+// at least one workerd, so a spawner that does not reach Alchemy's runtime is red, not a wait on
+// nothing.
+const afterChildrenStop = async <A>(task: (spawner: Spawner) => Promise<A>, spawns = 0): Promise<A> => {
+  const exits: Array<Effect.Effect<unknown>> = [];
+  const spawner = Layer.effect(
+    ChildProcessSpawner.ChildProcessSpawner,
+    Effect.gen(function* () {
+      const real = yield* ChildProcessSpawner.ChildProcessSpawner;
+      return ChildProcessSpawner.make((command) =>
+        real.spawn(command).pipe(
+          Effect.tap((handle) =>
+            Effect.sync(() => {
+              exits.push(Effect.exit(handle.exitCode));
+            }),
+          ),
+        ),
+      );
+    }),
+  );
+
+  let result: A;
 
   try {
-    return await task();
+    result = await task(spawner);
   } finally {
-    spy.mockRestore();
-    syncBuiltinESMExports();
-    await Promise.all(closed);
+    await Effect.runPromise(Effect.all(exits, { concurrency: "unbounded", discard: true }));
   }
+
+  expect(
+    exits.length,
+    "every workerd Alchemy starts must be spawned through the task's spawner",
+  ).toBeGreaterThanOrEqual(spawns);
+  return result;
 };
 
 // Runs `use` on a brain port held for the whole call, so nobody else is given it between two instances
@@ -557,17 +580,25 @@ describe("P16 copied-file real instance, serial", () => {
   it("shutdown: a stopped child closes before the next instance, including when the prior instance fails", async () => {
     await fc.assert(
       fc.asyncProperty(fc.boolean(), fc.integer(), async (fail, value) => {
-        let closed = false;
-        const task = afterChildrenStop(async () => {
-          const child = spawn(process.execPath, ["-e", ""]);
-          child.once("close", () => {
-            closed = true;
-          });
-          await new Promise<void>((done, reject) => {
-            child.once("spawn", done);
-            child.once("error", reject);
-          });
-          child.kill("SIGKILL");
+        let running: Effect.Effect<boolean, unknown> | undefined;
+        const task = afterChildrenStop(async (spawner) => {
+          // The child outlives the task: it is still exiting when the task returns or fails, as a
+          // killed workerd still is when Alchemy's scope has closed.
+          const started = Effect.runSync(Deferred.make<void>());
+          Effect.runFork(
+            Effect.scoped(
+              Effect.gen(function* () {
+                const spawned = yield* ChildProcessSpawner.ChildProcessSpawner;
+                const child = yield* spawned.spawn(
+                  ChildProcess.make(process.execPath, ["-e", "setTimeout(() => {}, 300)"]),
+                );
+                running = child.isRunning;
+                yield* Deferred.succeed(started, undefined);
+                yield* child.exitCode;
+              }),
+            ).pipe(Effect.provide(spawner), Effect.provide(NodeServices.layer)),
+          );
+          await Effect.runPromise(Deferred.await(started));
 
           if (fail) {
             throw new Error(`planted instance failure ${value}`);
@@ -582,7 +613,8 @@ describe("P16 copied-file real instance, serial", () => {
           expect(await task).toBe(value);
         }
 
-        expect(closed, "next instance must wait for the real child close event").toBe(true);
+        expect(running, "the child must have started").toBeDefined();
+        expect(await Effect.runPromise(running!), "next instance must wait for the real child's exit").toBe(false);
       }),
       { ...runs, numRuns: runsFor({ fast: 3, full: 8 }) },
     );
@@ -662,86 +694,89 @@ describe("P16 copied-file real instance, serial", () => {
                 mode === "sealed" ? bytes : plantPolicy(bytes, mode, `P16_${n}`, String(n)),
               );
               hits = 0;
-              await afterChildrenStop(() =>
-                Effect.runPromise(
-                  Effect.scoped(
-                    Effect.gen(function* () {
-                      const instance = yield* localInstance(
-                        { ...built, brain: join(alone, "brain.mjs") },
-                        RecordWireTest.startupFixture({
-                          home: h,
-                          name: "p16-isolation",
-                          person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-                          founder: key.line,
-                          window: key.raw,
-                          port: brainPort,
-                        }),
-                      );
-                      yield* Effect.tryPromise({
-                        try: async () => {
-                          expect(Object.keys(built.programs).length).toBeGreaterThan(0);
+              await afterChildrenStop(
+                (spawner) =>
+                  Effect.runPromise(
+                    Effect.scoped(
+                      Effect.gen(function* () {
+                        const instance = yield* localInstance(
+                          { ...built, brain: join(alone, "brain.mjs") },
+                          RecordWireTest.startupFixture({
+                            home: h,
+                            name: "p16-isolation",
+                            person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+                            founder: key.line,
+                            window: key.raw,
+                            port: brainPort,
+                          }),
+                        );
+                        yield* Effect.tryPromise({
+                          try: async () => {
+                            expect(Object.keys(built.programs).length).toBeGreaterThan(0);
 
-                          for (const name of Object.keys(built.programs)) {
-                            const program: Loaded = await instance.loader.load(name, `probe-${n}-${mode}-${name}`);
+                            for (const name of Object.keys(built.programs)) {
+                              const program: Loaded = await instance.loader.load(name, `probe-${n}-${mode}-${name}`);
 
-                            if (name === "fabrika/counter") {
-                              const counted = await turn(CounterTurn, program, "init", [null]);
-                              expect(counted.model).toEqual({ count: 0 });
-                              continue;
-                            }
-
-                            // P14 slice 2: the table's second core program. It is no planted one, so
-                            // it loads and starts as itself, as the counter does.
-                            if (name === "fabrika/checklist") {
-                              const listed = await turn(ChecklistTurn, program, "init", [null]);
-                              expect(listed.model).toEqual({ items: [] });
-                              continue;
-                            }
-
-                            // Desk S2a: the table's third core program, tezgah. It is no planted one either.
-                            if (name === "fabrika/tezgah") {
-                              const desk = await turn(TezgahTurn, program, "init", [null]);
-                              expect(desk.model).toMatchObject({ workspaces: [], tiles: [] });
-                              continue;
-                            }
-
-                            let model = (await turn(SealedTurn, program, "init", [null])).model;
-
-                            // Read until the program's own fetch settles. The test time limit bounds the wait.
-                            while (model.outbound === "pending") {
-                              await new Promise((done) => setTimeout(done, 10));
-                              model = (await turn(SealedTurn, program, "step", [model, { type: "read" }])).model;
-                            }
-
-                            const closed = (model: unknown) =>
-                              assert.deepEqual(model, { keys: [], outbound: "denied" });
-
-                            if (mode === "sealed") {
-                              closed(model);
-                              expect(hits).toBe(0);
-                            } else {
-                              if (mode === "outbound") {
-                                expect(hits).toBeGreaterThan(0);
+                              if (name === "fabrika/counter") {
+                                const counted = await turn(CounterTurn, program, "init", [null]);
+                                expect(counted.model).toEqual({ count: 0 });
+                                continue;
                               }
 
-                              expect(() => closed(model)).toThrow();
-                              expect(model).toEqual(
-                                mode === "binding"
-                                  ? { keys: [`P16_${n}`], outbound: "denied" }
-                                  : { keys: [], outbound: "allowed" },
-                              );
+                              // P14 slice 2: the table's second core program. It is no planted one, so
+                              // it loads and starts as itself, as the counter does.
+                              if (name === "fabrika/checklist") {
+                                const listed = await turn(ChecklistTurn, program, "init", [null]);
+                                expect(listed.model).toEqual({ items: [] });
+                                continue;
+                              }
+
+                              // Desk S2a: the table's third core program, tezgah. It is no planted one either.
+                              if (name === "fabrika/tezgah") {
+                                const desk = await turn(TezgahTurn, program, "init", [null]);
+                                expect(desk.model).toMatchObject({ workspaces: [], tiles: [] });
+                                continue;
+                              }
+
+                              let model = (await turn(SealedTurn, program, "init", [null])).model;
+
+                              // Read until the program's own fetch settles. The test time limit bounds the wait.
+                              while (model.outbound === "pending") {
+                                await new Promise((done) => setTimeout(done, 10));
+                                model = (await turn(SealedTurn, program, "step", [model, { type: "read" }])).model;
+                              }
+
+                              const closed = (model: unknown) =>
+                                assert.deepEqual(model, { keys: [], outbound: "denied" });
+
+                              if (mode === "sealed") {
+                                closed(model);
+                                expect(hits).toBe(0);
+                              } else {
+                                if (mode === "outbound") {
+                                  expect(hits).toBeGreaterThan(0);
+                                }
+
+                                expect(() => closed(model)).toThrow();
+                                expect(model).toEqual(
+                                  mode === "binding"
+                                    ? { keys: [`P16_${n}`], outbound: "denied" }
+                                    : { keys: [], outbound: "allowed" },
+                                );
+                              }
                             }
-                          }
-                        },
-                        catch: (error) => new Error("P16 isolation check failed", { cause: error }),
-                      });
-                    }),
-                  ).pipe(
-                    Effect.provide(localState()),
-                    Effect.provide(SecureRandom.layerWebCrypto),
-                    Effect.provide(NodeServices.layer),
+                          },
+                          catch: (error) => new Error("P16 isolation check failed", { cause: error }),
+                        });
+                      }),
+                    ).pipe(
+                      Effect.provide(localState()),
+                      Effect.provide(SecureRandom.layerWebCrypto),
+                      Effect.provide(spawner),
+                      Effect.provide(NodeServices.layer),
+                    ),
                   ),
-                ),
+                1,
               );
             }
           });
@@ -784,136 +819,139 @@ describe("P16 copied-file real instance, serial", () => {
             stamped = "",
             total = 0;
           const instance = async (port: number, again: boolean) =>
-            afterChildrenStop(async () =>
-              Effect.runPromise(
-                Effect.scoped(
-                  Effect.gen(function* () {
-                    const runtime = yield* localInstance(copied, RecordWireTest.startupFixture(options(port)));
-                    yield* Effect.tryPromise({
-                      try: async () => {
-                        const a = new Client(runtime.url, key, "a"),
-                          b = new Client(runtime.url, key, "b");
+            afterChildrenStop(
+              async (spawner) =>
+                Effect.runPromise(
+                  Effect.scoped(
+                    Effect.gen(function* () {
+                      const runtime = yield* localInstance(copied, RecordWireTest.startupFixture(options(port)));
+                      yield* Effect.tryPromise({
+                        try: async () => {
+                          const a = new Client(runtime.url, key, "a"),
+                            b = new Client(runtime.url, key, "b");
 
-                        try {
-                          expect((await a.hello()).error).toBeUndefined();
-                          expect((await b.hello()).error).toBeUndefined();
-                          const rows = (await a.call("ledger.read", { stream: "processes/counter:1", after: 0 })).result
-                            .entries;
-                          // P40, L4 and L7: the brain's process facts name the qualified code
-                          // under the registered name, before and after the restart.
-                          expect(rows.findLast((r: any) => r._tag === "started").body).toMatchObject({
-                            name: "counter:1",
-                            program: "fabrika/counter",
-                          });
-                          const current = rows.findLast((r: any) => r._tag === "started").body.process;
-
-                          if (again) {
-                            expect(current).toBe(pid);
-                          } else {
-                            pid = current;
-                          }
-
-                          await b.call("view.open", { pid });
-
-                          for (const [n, type] of messages.entries()) {
-                            const answer = await a.call("process.send", {
-                              pid,
-                              letter: `p16-${n}`,
-                              m: { type },
-                              sentAt: "2026-11-08T04:00:00.000Z",
-                              seen: 0,
+                          try {
+                            expect((await a.hello()).error).toBeUndefined();
+                            expect((await b.hello()).error).toBeUndefined();
+                            const rows = (await a.call("ledger.read", { stream: "processes/counter:1", after: 0 }))
+                              .result.entries;
+                            // P40, L4 and L7: the brain's process facts name the qualified code
+                            // under the registered name, before and after the restart.
+                            expect(rows.findLast((r: any) => r._tag === "started").body).toMatchObject({
+                              name: "counter:1",
+                              program: "fabrika/counter",
                             });
-                            expect(answer.result).toMatchObject({ _tag: "accepted" });
+                            const current = rows.findLast((r: any) => r._tag === "started").body.process;
 
-                            if (n === 0) {
-                              if (again) {
-                                expect(answer.result).toEqual(first);
-                              } else {
-                                first = answer.result;
+                            if (again) {
+                              expect(current).toBe(pid);
+                            } else {
+                              pid = current;
+                            }
+
+                            await b.call("view.open", { pid });
+
+                            for (const [n, type] of messages.entries()) {
+                              const answer = await a.call("process.send", {
+                                pid,
+                                letter: `p16-${n}`,
+                                m: { type },
+                                sentAt: "2026-11-08T04:00:00.000Z",
+                                seen: 0,
+                              });
+                              expect(answer.result).toMatchObject({ _tag: "accepted" });
+
+                              if (n === 0) {
+                                if (again) {
+                                  expect(answer.result).toEqual(first);
+                                } else {
+                                  first = answer.result;
+                                }
+                              }
+
+                              if (!again) {
+                                total = type === "reset" ? 0 : total + (type === "inc" ? 1 : -1);
                               }
                             }
 
-                            if (!again) {
-                              total = type === "reset" ? 0 : total + (type === "inc" ? 1 : -1);
-                            }
-                          }
-
-                          const inbox = (await a.call("ledger.read", { stream: "counter:1/inbox", after: 0 })).result
-                            .entries;
-                          const acknowledged = inbox.filter((r: any) => String(r.id).startsWith("p16-"));
-                          expect(acknowledged).toHaveLength(messages.length);
-                          expect(new Set(acknowledged.map((r: any) => r.id)).size).toBe(messages.length);
-                          const input = inbox[0].parent;
-                          // The door's minted ID passes main's shared schema; a letter ID does not.
-                          const minted = Schema.is(Id.InputId);
-                          expect(minted(input), 'stamped input uses Id.make("input")').toBe(true);
-                          expect(minted(inbox[0].id), "the letter ID stays its own").toBe(false);
-
-                          if (again) {
-                            expect(input).toBe(stamped);
-                          } else {
-                            stamped = input;
-                          }
-
-                          if (again) {
-                            const retried = await a.call("process.send", {
-                              pid,
-                              letter: "unanswered",
-                              m: { type: "inc" },
-                              sentAt: "2026-11-08T04:00:00.000Z",
-                              seen: 0,
-                            });
-                            expect(retried.result).toMatchObject({ _tag: "accepted" });
-                            const after = (await a.call("ledger.read", { stream: "counter:1/inbox", after: 0 })).result
+                            const inbox = (await a.call("ledger.read", { stream: "counter:1/inbox", after: 0 })).result
                               .entries;
-                            expect(after.filter((r: any) => r.id === "unanswered")).toHaveLength(1);
+                            const acknowledged = inbox.filter((r: any) => String(r.id).startsWith("p16-"));
+                            expect(acknowledged).toHaveLength(messages.length);
+                            expect(new Set(acknowledged.map((r: any) => r.id)).size).toBe(messages.length);
+                            const input = inbox[0].parent;
+                            // The door's minted ID passes main's shared schema; a letter ID does not.
+                            const minted = Schema.is(Id.InputId);
+                            expect(minted(input), 'stamped input uses Id.make("input")').toBe(true);
+                            expect(minted(inbox[0].id), "the letter ID stays its own").toBe(false);
 
-                            for (const c of [a, b]) {
-                              expect((await c.call("view.open", { pid })).result.view).toEqual({
-                                count: total + 1,
-                              });
-                            }
-                          } else {
-                            for (const c of [a, b]) {
-                              expect((await c.call("view.open", { pid })).result.view).toEqual({
-                                count: total,
-                              });
+                            if (again) {
+                              expect(input).toBe(stamped);
+                            } else {
+                              stamped = input;
                             }
 
-                            a.ws.send(
-                              JSON.stringify({
-                                jsonrpc: "2.0",
-                                id: 999999,
-                                method: "process.send",
-                                params: {
-                                  pid,
-                                  letter: "unanswered",
-                                  m: { type: "inc" },
-                                  sentAt: "2026-11-08T04:00:00.000Z",
-                                  seen: 0,
-                                },
-                              }),
-                            );
+                            if (again) {
+                              const retried = await a.call("process.send", {
+                                pid,
+                                letter: "unanswered",
+                                m: { type: "inc" },
+                                sentAt: "2026-11-08T04:00:00.000Z",
+                                seen: 0,
+                              });
+                              expect(retried.result).toMatchObject({ _tag: "accepted" });
+                              const after = (await a.call("ledger.read", { stream: "counter:1/inbox", after: 0 }))
+                                .result.entries;
+                              expect(after.filter((r: any) => r.id === "unanswered")).toHaveLength(1);
+
+                              for (const c of [a, b]) {
+                                expect((await c.call("view.open", { pid })).result.view).toEqual({
+                                  count: total + 1,
+                                });
+                              }
+                            } else {
+                              for (const c of [a, b]) {
+                                expect((await c.call("view.open", { pid })).result.view).toEqual({
+                                  count: total,
+                                });
+                              }
+
+                              a.ws.send(
+                                JSON.stringify({
+                                  jsonrpc: "2.0",
+                                  id: 999999,
+                                  method: "process.send",
+                                  params: {
+                                    pid,
+                                    letter: "unanswered",
+                                    m: { type: "inc" },
+                                    sentAt: "2026-11-08T04:00:00.000Z",
+                                    seen: 0,
+                                  },
+                                }),
+                              );
+                              a.ws.close();
+                            }
+
+                            // Every embedded route must answer from this one file. P14 is absent on this base.
+                            const missing = await fetch(`${runtime.url}/p16-missing.js`);
+                            expect(missing.status).toBe(404);
+                          } finally {
                             a.ws.close();
+                            b.ws.close();
                           }
-
-                          // Every embedded route must answer from this one file. P14 is absent on this base.
-                          const missing = await fetch(`${runtime.url}/p16-missing.js`);
-                          expect(missing.status).toBe(404);
-                        } finally {
-                          a.ws.close();
-                          b.ws.close();
-                        }
-                      },
-                      catch: (error) => new Error("P16 recovery check failed", { cause: error }),
-                    });
-                  }),
-                ).pipe(
-                  Effect.provide((await import("alchemy/State/LocalState")).localState()),
-                  Effect.provide(SecureRandom.layerWebCrypto),
-                  Effect.provide(NodeServices.layer),
+                        },
+                        catch: (error) => new Error("P16 recovery check failed", { cause: error }),
+                      });
+                    }),
+                  ).pipe(
+                    Effect.provide((await import("alchemy/State/LocalState")).localState()),
+                    Effect.provide(SecureRandom.layerWebCrypto),
+                    Effect.provide(spawner),
+                    Effect.provide(NodeServices.layer),
+                  ),
                 ),
-              ),
+              1,
             );
           // The restart comes back on the same port: held across both starts, never re-asked.
           await onHeldPort(async (port) => {
