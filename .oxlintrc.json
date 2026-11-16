@@ -2355,6 +2355,7 @@
         "next/packages/vitest/**",
         "next/programs/chaos/**",
         "next/programs/checklist/**",
+        "next/programs/counter/**",
         "next/programs/inbox/**",
         "next/programs/tezgah/**"
       ],
