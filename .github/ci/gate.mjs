@@ -40,6 +40,13 @@ const MINUTE = 60_000;
  */
 
 /**
+ * What `read` answers: a Seen, and `started`, the last full run's start as GitHub wrote it (its
+ * earliest job's `started_at`), for the log line, so the gate prints GitHub's own text and builds
+ * no `Date`; null when there is no last run or no job of it gave a start that parses.
+ * @typedef {Seen & { started: string | null }} Read
+ */
+
+/**
  * What the gate says.
  * @typedef {{ _tag: "start", reason: "by_hand" | "due" } | { _tag: "skip", reason: "tested" | "too_soon" }} Decision
  */
@@ -95,7 +102,7 @@ const isMap = (value) => typeof value === "object" && value !== null && !Array.i
  * repository or workflow file, or when a call failed three times.
  * @param {Record<string, string | undefined>} env
  * @param {Io} [io]
- * @returns {Promise<Seen>}
+ * @returns {Promise<Read>}
  */
 export const read = async (env, io = {}) => {
   const send = io.send ?? globalThis.fetch;
@@ -181,17 +188,23 @@ export const read = async (env, io = {}) => {
 
   /** @type {Seen["last"]} */
   let last = null;
+  /** @type {string | null} */
+  let started = null;
 
   for (const run of await runs("&exclude_pull_requests=true")) {
     const found = await jobs(run);
 
     if (isFull(found)) {
-      const starts = found.flatMap((job) => (job.start === null ? [] : [Date.parse(job.start)]));
+      const starts = found.flatMap((job) =>
+        job.start === null ? [] : [{ text: job.start, at: Date.parse(job.start) }],
+      );
+      const at = Math.min(...starts.map((start) => start.at));
       last = {
         id: Number(run["id"]),
         sha: typeof run["head_sha"] === "string" ? run["head_sha"] : "",
-        at: Math.min(...starts),
+        at,
       };
+      started = starts.find((start) => start.at === at)?.text ?? null;
       break;
     }
   }
@@ -209,7 +222,7 @@ export const read = async (env, io = {}) => {
   }
 
   left();
-  return { event, now: now(), gap: Number(env["GAP_MINUTES"]), last, tested };
+  return { event, now: now(), gap: Number(env["GAP_MINUTES"]), last, tested, started };
 };
 
 /**
@@ -221,7 +234,7 @@ export const read = async (env, io = {}) => {
  * @returns {Promise<{ code: 0 | 1, output: string, summary: string, line: string }>}
  */
 export const main = async (env, io = {}) => {
-  /** @type {Seen} */
+  /** @type {Read} */
   let seen;
 
   try {
@@ -235,7 +248,7 @@ export const main = async (env, io = {}) => {
   const last =
     seen.last === null
       ? "no full run on main before"
-      : `the last full run on main, ${seen.last.id} at ${seen.last.sha.slice(0, 9)}, started ${new Date(seen.last.at).toISOString()}, ${Math.floor((seen.now - seen.last.at) / MINUTE)} minutes ago`;
+      : `the last full run on main, ${seen.last.id} at ${seen.last.sha.slice(0, 9)}, started ${seen.started ?? "at a time GitHub did not give"}, ${Math.floor((seen.now - seen.last.at) / MINUTE)} minutes ago`;
   const line = `gate: ${seen.event} at ${(env["GITHUB_SHA"] ?? "").slice(0, 9)}: ${decision._tag}, ${decision.reason}; ${last}; the gap is ${seen.gap} minutes${seen.event === "workflow_dispatch" ? "" : `; the head ${seen.tested ? "has had" : "has had no"} full run`}`;
   return { code: 0, output: `start=${decision._tag === "start"}\n`, summary: `${line}\n`, line };
 };

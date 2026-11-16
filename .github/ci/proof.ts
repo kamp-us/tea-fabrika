@@ -36,6 +36,7 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { DateTime } from "effect";
 import vitestPackage from "vitest/package.json" with { type: "json" };
 import { testConfig } from "../../vitest.config.ts";
 import { rowsAt } from "../../vitest.shards.ts";
@@ -236,7 +237,7 @@ if (import.meta.main) {
     table: rowsAt("full"),
   };
   const proof = choose(
-    { base, head, at: new Date().toISOString(), vitest: vitestPackage.version, changed },
+    { base, head, at: DateTime.formatIso(DateTime.nowUnsafe()), vitest: vitestPackage.version, changed },
     triggers,
     files,
     sizing,
