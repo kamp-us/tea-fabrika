@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-s9-tests1",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T20:27:03-08:00",
+  "ended": "2026-11-15T20:47:22-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "stopped",
+  "why": "Tests step of slice 9 of the Reflect ban (ticket 1056, 0554), the typed local dev client in next/packages/libfabrika/src/node/dev. Stopped before any law was written: the plan's doubt on where the dev client's method types come from (70%) is a new design call, and the plan on main (at f7169af) has no amendment for it. The types are ProjectBinding and ProcessBinding in cloudflare/bindings.ts, and layer-rules.json does not let next-node import next-workers. The dev client's shape is not the binding's: it renames connect to clientConnect, append to commit and alarm to savedAlarm, adds gateways and forProcess, answers Promises, and the bindings carry Rpc.DurableObjectBranded. dev-control.laws.integration.test.ts:470 calls a ping method no binding has. Choices: (A) move ProjectCalls and ProcessCalls, type-only, to a layer both may import, with cloudflare/bindings.ts re-exporting them (lean, about 70%, touches slice 10's folder); (B) let next-node import next-workers types in layer-rules.json; (C) a separate method list in node/dev/dev.ts, held by a type law against bindings.ts. Also needed: a ruling on the test-only ping call. Pull requests 1331 and 1341, which the slice waited on, have merged. No pull request was opened, by the coordinator's ruling that slices 9 to 15 land in one pull request, fabrikalfa/reflect-rest.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Nothing ran: no lint, no tests, no L5 plant. This row is the step's only file.",
+  "step": "tests",
+  "costUsd": null,
+  "billed": null
+}
