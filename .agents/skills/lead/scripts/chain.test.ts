@@ -1274,7 +1274,7 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
         spent,
         redacted: 0,
       }),
-    ) as Record<string, unknown>;
+    ) as Schema.JsonObject;
     expect(row).toMatchObject({
       run: "t1-build",
       ticket: "1",
@@ -1324,7 +1324,7 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
             redacted: null,
             plants: answer.plants,
           }),
-        ) as Record<string, unknown>;
+        ) as Schema.JsonObject;
         expect(row["plants"]).toEqual(plants);
         expect("plants" in row).toBe(plants !== undefined);
       }),

@@ -26,6 +26,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
 import { BUILTIN_PLANTS, type Plant, REFLECT } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
+import type { JsonObject } from "./json.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");
@@ -495,7 +496,7 @@ it("scenario: T1031 runs-from-depth refuses a bare count in a law over real IO, 
 });
 
 /** One override of oxlint's `--print-config`: its globs and its rules, a setting as `[level, options]`. */
-type Printed = { readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }> };
+type Printed = { readonly overrides: ReadonlyArray<{ files: string[]; rules: JsonObject }> };
 
 /** True for the ban's own entry, `{ object: "Reflect", property: "get" }`, in a rule's options. */
 const isReflectGet = (entry: unknown): boolean =>

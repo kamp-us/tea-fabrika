@@ -5,8 +5,9 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
 import { parseSync, Visitor } from "oxc-parser";
 import { ResolverFactory } from "oxc-resolver";
+import type { JsonObject } from "./json.ts";
 
-const map = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+const map = (x: unknown): x is JsonObject => typeof x === "object" && x !== null && !Array.isArray(x);
 
 const declaration = (file: string) => /\.d\.[cm]?ts$/.test(file);
 
@@ -102,7 +103,7 @@ const worker = (name: string) =>
 // What the package's manifest says of the names its code links: its own `imports` aliases and the
 // packages it depends on.
 type Names = {
-  readonly aliases: Readonly<Record<string, unknown>>;
+  readonly aliases: JsonObject;
   readonly dependencies: ReadonlySet<string>;
 };
 
@@ -541,7 +542,7 @@ export const programPackageLayout: CreateRule = {
     };
     const keys = map(raw) ? Object.keys(raw) : [];
     // A string, an array, null, or an object of conditions is the '.' export alone.
-    const exports: Record<string, unknown> =
+    const exports: JsonObject =
       map(raw) && Object.keys(raw).some((key) => key.startsWith(".")) ? raw : raw === undefined ? {} : { ".": raw };
     // Every target one export key names under a runtime condition, each resolved; a target that
     // names nothing real comes back as `undefined`. A pattern key gives its targets once per

@@ -21,6 +21,7 @@
 // own config.
 import { matchesGlob } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
+import type { JsonObject } from "./json.ts";
 import { pathIn, type Node } from "./match.ts";
 
 interface Part {
@@ -39,7 +40,7 @@ interface Table {
 const strings = (value: unknown): ReadonlyArray<string> =>
   Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
 
-const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+const record = (value: unknown): value is JsonObject => typeof value === "object" && value !== null;
 
 /** The config's table, or `null` when the rule was given none. */
 const tableIn = (options: ReadonlyArray<unknown>): Table | null => {

@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Expression, parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
+import type { JsonObject } from "./json.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 const KEY = "allowedDuplicatedPackages";
@@ -39,13 +40,13 @@ const value = (node: Expression): unknown => {
   }
 };
 
-const record = (x: unknown): Record<string, unknown> =>
+const record = (x: unknown): JsonObject =>
   typeof x === "object" && x !== null && !Array.isArray(x) ? Object.fromEntries(Object.entries(x)) : {};
 
 const list = (x: unknown): ReadonlyArray<unknown> => (Array.isArray(x) ? x : []);
 
 /** Effect's checker entry in `tsconfig.base.json`'s plugins. */
-const checker = (text: string): Record<string, unknown> => {
+const checker = (text: string): JsonObject => {
   const parsed = parseSync("tsconfig.base.ts", `(${text})`);
   expect(parsed.errors).toEqual([]);
   const statement = parsed.program.body[0];

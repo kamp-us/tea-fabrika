@@ -11,6 +11,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parse } from "yaml";
+import type { JsonObject } from "./json.ts";
 
 /** `catalog:` holds its version in pnpm-workspace.yaml, which is checked too. `workspace:*` is the
  * sibling in this repo, written as its exact version in a pack. `workspace:^` would be a range. */
@@ -26,7 +27,7 @@ const OVERRIDES = ["overrides", "resolutions"];
 const passes = (version: unknown): boolean =>
   typeof version === "string" && (POINTERS.has(version) || NAMED.test(version) || EXACT.test(version));
 
-const isMap = (value: unknown): value is Record<string, unknown> =>
+const isMap = (value: unknown): value is JsonObject =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** One line per name in `map` whose version does not pass. */

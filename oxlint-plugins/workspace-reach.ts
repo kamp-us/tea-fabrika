@@ -11,6 +11,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parse } from "yaml";
+import type { JsonObject } from "./json.ts";
 
 /** Folders whose packages are starts: nothing depends on an app, a tutorial or a tool. */
 const STARTS = ["apps/*", "docs/tutorials/*", "oxlint-plugins", ".github/ci"];
@@ -20,7 +21,7 @@ const LEFT_OUT = /^next\//;
 
 const FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
 
-const isMap = (value: unknown): value is Record<string, unknown> =>
+const isMap = (value: unknown): value is JsonObject =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** A pnpm-workspace.yaml glob as a test on a folder: `*` is one path part, as pnpm reads it here. */

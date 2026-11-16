@@ -12,6 +12,7 @@ import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { jsdocs } from "./jsdocs.ts";
+import type { JsonObject } from "./json.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 const RUNS = { seed: 119120, numRuns: 100 };
@@ -461,7 +462,7 @@ describe("law 9: the real config turns the rule on for every next/packages folde
     { cwd: ROOT, encoding: "utf8", timeout: 60_000 },
   );
   const config = JSON.parse(printed.stdout) as {
-    readonly overrides: ReadonlyArray<{ readonly files: string[]; readonly rules: Record<string, unknown> }>;
+    readonly overrides: ReadonlyArray<{ readonly files: string[]; readonly rules: JsonObject }>;
   };
   const warn = config.overrides
     .filter(({ rules }) => {

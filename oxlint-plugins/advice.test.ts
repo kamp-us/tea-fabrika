@@ -19,6 +19,7 @@ import { dirname, join, matchesGlob } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { advises, type Fire, stale, type WarnLine, warnLines } from "./advice.ts";
+import type { JsonObject } from "./json.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");
@@ -434,8 +435,9 @@ const jsdocsWarnFolders = ({ at, done }: { readonly at: string; readonly done: (
       timeout: 60_000,
     });
     expect(printed.status, printed.stderr).toBe(0);
-    const { overrides }: { readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }> } =
-      JSON.parse(printed.stdout);
+    const { overrides }: { readonly overrides: ReadonlyArray<{ files: string[]; rules: JsonObject }> } = JSON.parse(
+      printed.stdout,
+    );
     return overrides
       .filter(({ rules }) => {
         const setting = rules["fabrika/jsdocs"];
@@ -692,8 +694,9 @@ describe("Reflect ban L4 each ban block under next/ keeps what the rule held the
         timeout: 60_000,
       });
       expect(printed.status, printed.stderr).toBe(0);
-      const { overrides }: { readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }> } =
-        JSON.parse(printed.stdout);
+      const { overrides }: { readonly overrides: ReadonlyArray<{ files: string[]; rules: JsonObject }> } = JSON.parse(
+        printed.stdout,
+      );
       const settings = overrides.flatMap(({ files, rules }) => {
         const setting = rules["no-restricted-properties"];
         return Array.isArray(setting) && Array.isArray(setting[1])

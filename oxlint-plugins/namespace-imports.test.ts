@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Expression, parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
+import type { JsonObject } from "./json.ts";
 
 const CONFIG = join(import.meta.dirname, "..", "tsconfig.base.json");
 
@@ -41,7 +42,7 @@ const value = (node: Expression): unknown => {
   }
 };
 
-const record = (x: unknown): Record<string, unknown> =>
+const record = (x: unknown): JsonObject =>
   typeof x === "object" && x !== null && !Array.isArray(x) ? Object.fromEntries(Object.entries(x)) : {};
 
 const list = (x: unknown): ReadonlyArray<unknown> => (Array.isArray(x) ? x : []);

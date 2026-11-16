@@ -10,6 +10,7 @@ import { parseSync } from "oxc-parser";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import type { JsonObject } from "./json.ts";
 import { noStaticLayer } from "./no-static-layer.ts";
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
@@ -194,7 +195,7 @@ const configured = (): readonly string[] => {
   const text = readFileSync(join(root, ".oxlintrc.json"), "utf8");
   const tree: Tree = parseSync("oxlintrc.ts", `export default ${text}`).program;
   const config = toValue(tree.body[0].declaration) as {
-    readonly overrides: ReadonlyArray<{ readonly files: readonly string[]; readonly rules: Record<string, unknown> }>;
+    readonly overrides: ReadonlyArray<{ readonly files: readonly string[]; readonly rules: JsonObject }>;
   };
   return config.overrides.filter((o) => o.rules[RULE] === "error").flatMap((o) => o.files);
 };

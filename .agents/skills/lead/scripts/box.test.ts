@@ -363,7 +363,8 @@ class Box {
     return this.head(cwd);
   }
 
-  rows(): Array<Record<string, unknown>> {
+  // fieldrow.py writes each run row as flat JSON: every field a string, a number or null.
+  rows(): Array<{ readonly [field: string]: string | number | null }> {
     const path = join(this.boxes, "state/one.rows.jsonl");
     return existsSync(path)
       ? readFileSync(path, "utf8")

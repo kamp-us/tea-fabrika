@@ -160,7 +160,7 @@ const land = (world: World) => {
     );
     expect(said.status, said.stderr).toBe(0);
     const record = join(dir, "boxes/state/t652f.land.json");
-    const { quest: named, ...rest } = JSON.parse(readFileSync(record, "utf8")) as Record<string, unknown>;
+    const { quest: named, ...rest } = JSON.parse(readFileSync(record, "utf8")) as { readonly quest: string };
     expect(named).toBe("t652f");
 
     if (world.laneKey) {

@@ -155,7 +155,7 @@ describe("the lockfile follows the manifests, today's tooling", () => {
     "experiments/results/x-package.json",
   );
   const text = (o: object) => JSON.stringify(o, null, "\t");
-  const reversed = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).toReversed());
+  const reversed = (o: object) => Object.fromEntries(Object.entries(o).toReversed());
 
   // Plant: compare scripts too; compare raw text; drop the reorder canon.
   it("a workspace manifest is behind exactly when a locked field changed, never on a reorder or other fields", () => {

@@ -17,6 +17,7 @@ import type { CreateRule } from "@oxlint/plugins";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterEach, describe, expect, it } from "vitest";
+import type { Json, JsonObject } from "./json.ts";
 import { programPackageLayout } from "./program-package-layout.ts";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -34,7 +35,7 @@ const name = fc.integer({ min: 0, max: 100000 }).map((n) => `program${n}`);
 // The manifest a package is written with, from the fields the harness gives it, and symlinks:
 // each path in the package points to a path given from the package folder.
 type Package = {
-  readonly manifest?: (fields: Readonly<Record<string, unknown>>) => unknown;
+  readonly manifest?: (fields: JsonObject) => unknown;
   readonly links?: Readonly<Record<string, string>>;
 };
 
@@ -44,7 +45,7 @@ const HOME = "<home>";
 // One program package to lint: its name, its exports, its files and how it is set up.
 type Plant = {
   readonly name: string;
-  readonly exports: unknown;
+  readonly exports: Json;
   readonly sources: Readonly<Record<string, string>>;
   readonly package?: Package | undefined;
 };
@@ -187,7 +188,7 @@ const lint = (plants: readonly Plant[]): Finding[][] => {
   return found;
 };
 
-const run = (name: string, exports: unknown, sources: Readonly<Record<string, string>>, setup: Package = {}) =>
+const run = (name: string, exports: Json, sources: Readonly<Record<string, string>>, setup: Package = {}) =>
   lint([{ name, exports, sources, package: setup }])[0] ?? [];
 
 /** A plant's findings as one oxlint run and RuleTester can both say them: its home's number aside. */
@@ -218,7 +219,7 @@ describe("fabrika/program-package-layout", () => {
   // scratch package; a `#` alias is fine when every target its entry names is one of them.
   const fine: readonly {
     readonly line: string;
-    readonly manifest: Readonly<Record<string, unknown>>;
+    readonly manifest: JsonObject;
   }[] = [
     { line: 'import {join} from "node:path"; export {join};', manifest: {} },
     { line: 'export * from "dep-a";', manifest: { dependencies: { "dep-a": "1.0.0" } } },
@@ -246,7 +247,7 @@ describe("fabrika/program-package-layout", () => {
           "src/program.ts": 'export {helper} from "./helper.ts";',
           "src/helper.ts": "export const helper = 1;",
         };
-        const exports: Record<string, unknown> = {
+        const exports: Record<string, Json> = {
           ".": { import: "./src/program.ts", default: "./src/program.ts" },
         };
 
@@ -262,7 +263,7 @@ describe("fabrika/program-package-layout", () => {
             name,
             exports,
             sources: { ...files, "src/helper.ts": `${line}\nexport const helper = 1;` },
-            package: { manifest: (fields: Readonly<Record<string, unknown>>) => ({ ...fields, ...manifest }) },
+            package: { manifest: (fields: JsonObject) => ({ ...fields, ...manifest }) },
           })),
         ]);
         expect(plain).toEqual([]);
@@ -358,7 +359,7 @@ describe("fabrika/program-package-layout", () => {
           program = "export const program = 1;",
           fetch = "export default {fetch() { return new Response(''); }};",
           cases: readonly {
-            readonly exports: unknown;
+            readonly exports: Json;
             readonly files: Readonly<Record<string, string>>;
             readonly package?: Package;
           }[] = [
@@ -706,9 +707,9 @@ describe("fabrika/program-package-layout", () => {
   // Review 5 of P16b: the manifest's name, which a pattern asks the package's own exports by. With
   // none, or one that is not a string, every subpath a pattern matches counts as offered.
   const manifests = {
-    name: (fields: Readonly<Record<string, unknown>>) => fields,
-    "no name": ({ name: _, ...fields }: Readonly<Record<string, unknown>>) => fields,
-    "number name": (fields: Readonly<Record<string, unknown>>) => ({ ...fields, name: 7 }),
+    name: (fields: JsonObject) => fields,
+    "no name": ({ name: _, ...fields }: JsonObject) => fields,
+    "number name": (fields: JsonObject) => ({ ...fields, name: 7 }),
   } as const;
   const box = /\/(?:worker|workers|workerd|box|brain)(?:\/|$)/;
   it("plants: a Worker entry or a window behind any other export key is refused, by what it loads", () => {
@@ -749,7 +750,7 @@ describe("fabrika/program-package-layout", () => {
             written = shapes[shape]!.text(c),
             runtime = runtimeName.exec(written)?.[1],
             // The beside condition's file target comes first, so the resolver answers with it.
-            aliases: Record<string, unknown> =
+            aliases: JsonObject =
               runtime === undefined
                 ? {}
                 : link === "imports alias"
@@ -797,7 +798,7 @@ describe("fabrika/program-package-layout", () => {
               ...(link === ".ts" || link === "no extension" ? [`./${workerPath.slice("src/".length)}.impl`] : []),
             ],
             // The export that carries the Worker file, and the key its finding names.
-            carriers: Record<(typeof entries)[number], [string, Record<string, unknown>]> = {
+            carriers: Record<(typeof entries)[number], [string, JsonObject]> = {
               key: [workerKey, { [workerKey]: worker }],
               pattern: ["./*", { "./*": "./src/*.ts" }],
               "key pattern": [`${workerKey}/*`, { [`${workerKey}/*`]: "./src/*.ts" }],
@@ -1183,7 +1184,7 @@ describe("fabrika/program-package-layout", () => {
                   : form === "conditions"
                     ? { [condition]: path, default: "./src/program.ts" }
                     : { [condition]: [path], default: ["./src/program.ts"] },
-            messages = (exports: unknown) =>
+            messages = (exports: Json) =>
               run(name, exports, files, { manifest: (fields) => ({ ...fields, ...declared }) })
                 .map((d) => d.message)
                 .sort();
