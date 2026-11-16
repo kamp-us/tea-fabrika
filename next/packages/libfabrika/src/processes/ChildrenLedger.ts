@@ -12,6 +12,7 @@
  * @stability unstable
  */
 import { Cause, Data, Effect, Equal, Exit, Layer, Option, Result, Schema, Tracer } from "effect";
+import * as Arr from "effect/Array";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { StartProgram } from "../permissions/Model.ts";
@@ -75,9 +76,10 @@ const fits = (child: Child, from: From, m: Schema.Json): boolean => {
   const line = letterLine(from, m);
   const texts = [inbox(child.name), letterId(child.id), line.by, line.for, line.sentAt, line.parent];
   return (
-    [...texts, line.traceId, line.build, line._tag, JSON.stringify(line.body)].reduce(
-      (n, text) => n + (text === null ? 0 : encoder.encode(text).length),
+    Arr.reduce(
+      [...texts, line.traceId, line.build, line._tag, JSON.stringify(line.body)],
       0,
+      (n, text) => n + (text === null ? 0 : encoder.encode(text).length),
     ) <= INPUT_BYTES
   );
 };
@@ -157,8 +159,9 @@ const answer = (
   const saved = Option.getOrUndefined(table.saved(child.id));
 
   if (saved !== undefined) {
-    const letter = [...turn.read(inbox(saved.name), 0)].find((e) => e.id === letterId(child.id));
-    const m = letter === undefined ? Option.none() : Option.map(decodeLetter(letter.body), (body) => body.m);
+    const m = Arr.findFirst(turn.read(inbox(saved.name), 0), (e) => e.id === letterId(child.id)).pipe(
+      Option.flatMap((letter) => Option.map(decodeLetter(letter.body), (body) => body.m)),
+    );
     // The caller fields: name, program, requester and input, never the hash, so a rebuild retries alike.
     const same =
       saved.request._tag === "first" &&
@@ -336,7 +339,7 @@ export const layer = (config: {
       const relations = yield* Relations;
       const senders = yield* Senders;
       const rules: Rules = {
-        granted: (source, to) => config.grants.some((g) => g.source === source && g.to === to),
+        granted: (source, to) => Arr.some(config.grants, (g) => g.source === source && g.to === to),
         tuples: relations.within,
         fabrika: config.fabrika,
       };

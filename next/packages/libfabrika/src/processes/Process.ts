@@ -9,6 +9,7 @@
  */
 import { applyCell } from "@demlik/tea";
 import { Equal, Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { LedgerError } from "../ledger/Ledger.ts";
 import type { LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
@@ -299,7 +300,7 @@ export const recoverActivity = (raw: unknown): Result.Result<typeof Recovered.Ty
  * @category guards
  */
 export const canRestart = (times: ReadonlyArray<number>, now: number, period: number, intensity: number): boolean =>
-  times.filter((at) => at >= now - period).length + 1 <= intensity;
+  Arr.filter(times, (at) => at >= now - period).length + 1 <= intensity;
 
 /**
  * Error for a call the process table refuses. A refusal writes nothing.
@@ -467,9 +468,10 @@ export const noticeId = (key: string): string => JSON.stringify(["notice", key])
 /** The names the brain's own `registered` lines in `control` register, each once, in log order. */
 const registered = (control: ReadonlyArray<Entry>, by: string): ReadonlyArray<string> => [
   ...new Set(
-    control
-      .filter((entry) => entry._tag === "registered" && entry.by === by)
-      .map((entry) => Schema.decodeUnknownSync(ProcessEvent.cases.registered)(valueFor(entry)).name),
+    Arr.map(
+      Arr.filter(control, (entry) => entry._tag === "registered" && entry.by === by),
+      (entry) => Schema.decodeUnknownSync(ProcessEvent.cases.registered)(valueFor(entry)).name,
+    ),
   ),
 ];
 
@@ -515,7 +517,7 @@ export class ProcessTable {
   /** Every entry `read` folds from rev 0, oldest first. */
   static entries(read: (stream: string, after: number) => Iterable<Entry>, by: string): ReadonlyArray<Entry> {
     const control = [...read(ProcessTable.stream, 0)];
-    return [...control, ...registered(control, by).flatMap((name) => [...read(eventStream(name), 0)])].sort(
+    return [...control, ...Arr.flatMap(registered(control, by), (name) => [...read(eventStream(name), 0)])].sort(
       (a, b) => a.rev - b.rev,
     );
   }
@@ -533,7 +535,7 @@ export class ProcessTable {
   after(read: (stream: string, after: number) => Iterable<Entry>, rev: number): ReadonlyArray<Entry> {
     const control = [...read(ProcessTable.stream, rev)];
     const names = new Set([...this.#model.names.keys(), ...registered(control, this.#by)]);
-    return [...control, ...[...names].flatMap((name) => [...read(eventStream(name), rev)])].sort(
+    return [...control, ...Arr.flatMap([...names], (name) => [...read(eventStream(name), rev)])].sort(
       (a, b) => a.rev - b.rev,
     );
   }
@@ -597,7 +599,7 @@ export class ProcessTable {
 
   /** The life a start id saved, under whichever name it started. */
   saved(id: string): Option.Option<Life> {
-    return Option.fromUndefinedOr([...this.#model.lives.values()].find((life) => life.request.id === id));
+    return Arr.findFirst(this.#model.lives.values(), (life) => life.request.id === id);
   }
 
   /** OTP's `whereis`: the name's program and its current life. Public, so it checks no owner. */
@@ -611,7 +613,7 @@ export class ProcessTable {
 
   /** The registered name that asked for this name's first life, when a child start wrote one. */
   starter(name: string): Option.Option<string> {
-    const first = [...this.#model.lives.values()].find((life) => life.name === name);
+    const first = Option.getOrUndefined(Arr.findFirst(this.#model.lives.values(), (life) => life.name === name));
     const requester = first?.request._tag === "first" ? first.request.requester : undefined;
     return requester?._tag === "process"
       ? Option.map(this.life(requester.process), (life) => life.name)
@@ -730,15 +732,20 @@ export class ProcessTable {
   }
 
   inbound(process: string): ReadonlyArray<Watch> {
-    return [...this.#model.watches.values()]
-      .filter((watch) => watch._tag === "live" && watch.process === process)
-      .map(shown);
+    return Arr.map(
+      Arr.filter(this.#model.watches.values(), (watch) => watch._tag === "live" && watch.process === process),
+      shown,
+    );
   }
 
   outbound(process: string): ReadonlyArray<Watch> {
-    return [...this.#model.watches.values()]
-      .filter(({ _tag, to }) => _tag === "live" && to._tag === "process" && to.process === process)
-      .map(shown);
+    return Arr.map(
+      Arr.filter(
+        this.#model.watches.values(),
+        ({ _tag, to }) => _tag === "live" && to._tag === "process" && to.process === process,
+      ),
+      shown,
+    );
   }
 
   /**
@@ -747,12 +754,14 @@ export class ProcessTable {
    * monitor that fired is gone, so the session's leave has nothing left to end there.
    */
   held(session: string): ReadonlyArray<Watch> {
-    return [...this.#model.watches.values()]
-      .filter(
+    return Arr.map(
+      Arr.filter(
+        this.#model.watches.values(),
         ({ _tag, to, process }) =>
           _tag === "live" && to._tag === "client" && to.session === session && this.isLive(process),
-      )
-      .map(shown);
+      ),
+      shown,
+    );
   }
 
   /**
@@ -778,26 +787,30 @@ export class ProcessTable {
       return "mail";
     }
 
-    const round = Array.from({ length: watch.round }, (_, n) => n + 1).find((n) => entry.id === signalId(to, ref, n));
+    const round = Arr.findFirst(
+      Array.from({ length: watch.round }, (_, n) => n + 1),
+      (n) => entry.id === signalId(to, ref, n),
+    );
 
-    if (round === undefined) {
+    if (Option.isNone(round)) {
       return "mail";
     }
 
     // An earlier round's signal belongs to a watch already canceled.
-    const current = round === watch.round && watch._tag === "live";
+    const current = round.value === watch.round && watch._tag === "live";
     return current && to._tag === "process" && to.process === process ? "signal" : "drop";
   }
 
   get info(): ReadonlyArray<ProcessInfo> {
-    return [...this.#model.lives.values()]
-      .filter((life) => life.state._tag === "live")
-      .map((life) => ({
+    return Arr.map(
+      Arr.filter(this.#model.lives.values(), (life) => life.state._tag === "live"),
+      (life) => ({
         process: life.state.process,
         name: life.name,
         program: life.state.code.program,
         build: life.state.code.hash,
         restarts: this.#model.restarts.get(life.name)?.length ?? 0,
-      }));
+      }),
+    );
   }
 }

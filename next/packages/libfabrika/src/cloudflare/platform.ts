@@ -10,6 +10,7 @@ import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
 import type { Fetcher } from "@alchemy.run/cloudflare/Fetcher";
 import type { WorkerEvent } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Context, Effect, Predicate, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { LedgerError } from "../ledger/Ledger.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
@@ -28,7 +29,7 @@ export const isolateUsage = Effect.fnUntraced(function* (
   items: Extract<WorkerEvent, { type: "tail" }>["input"],
 ) {
   return yield* Schema.decodeUnknownEffect(Schema.Array(IsolateUsage.Usage))(
-    items.map((item) => {
+    Arr.map(items, (item) => {
       const event = item.event;
       const method = Predicate.hasProperty(event, "rpcMethod") ? event.rpcMethod : undefined;
       const outcome = item.outcome;

@@ -2,6 +2,7 @@
  * Paged history reads stopped at each stream's captured head.
  * @stability unstable
  */
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -105,7 +106,10 @@ export const layer: Layer.Layer<ProcessHistory, never, Ledger> = Layer.effect(
           boundary,
           processStream,
           processBoundary,
-          letters: letters.filter((entry) => entry._tag === "send").map(({ id, pos }) => ({ id, pos })),
+          letters: Arr.map(
+            Arr.filter(letters, (entry) => entry._tag === "send"),
+            ({ id, pos }) => ({ id, pos }),
+          ),
           restarts,
         };
       }),

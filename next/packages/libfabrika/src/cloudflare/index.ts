@@ -6,6 +6,7 @@
  * @stability unstable
  */
 import { Effect, Option, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { BuiltProgram } from "../runtime/Built.ts";
 import { Declaration, workerExecution, type ExecutionCalls, type ProgramSource } from "../runtime/Execution.ts";
 import { ProgramDown } from "../runtime/Program.ts";
@@ -100,7 +101,7 @@ export const workerLoader = (
     const found =
       hash === undefined
         ? built
-        : (Object.values(programs).find((p) => p.hash === hash) ??
+        : (Option.getOrUndefined(Arr.findFirst(Object.values(programs), (p) => p.hash === hash)) ??
           (lookup === undefined
             ? null
             : yield* lookup(hash).pipe(Effect.mapError((cause) => new ProgramDown({ reason: "load", cause })))));
