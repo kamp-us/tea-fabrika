@@ -1,12 +1,12 @@
 ---
-id: 0586
+id: 0587
 title: A plan's new helper names the existing tools it searched, a pull request's new name cites the industry's word, and code refuses a plan or a pull request that leaves either line out
 status: accepted
 date: 2026-11-15
 tags: [plan, review, pr, existing-tools, names, glossary, jscpd, copy-paste, checks, advice]
 ---
 
-# 0586: A plan's new helper names the existing tools it searched, a pull request's new name cites the industry's word, and code refuses a plan or a pull request that leaves either line out
+# 0587: A plan's new helper names the existing tools it searched, a pull request's new name cites the industry's word, and code refuses a plan or a pull request that leaves either line out
 
 ```mermaid
 flowchart LR

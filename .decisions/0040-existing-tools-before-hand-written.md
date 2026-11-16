@@ -1,7 +1,7 @@
 ---
 id: 0040
 title: Before we hand-write a check or a tool we try an existing, widely used one, and say in writing why when we do not use it
-status: amended-in-part by [0586](0586-new-helpers-and-names-cite-sources.md)
+status: amended-in-part by [0587](0587-new-helpers-and-names-cite-sources.md)
 date: 2026-11-09
 tags: [tooling, checks, scripts, existing-tools, known-way, edge-cases, trust]
 ---
@@ -109,5 +109,5 @@ we do not use it, we say why in writing.**
 - AGENTS.md gets one bullet under "Before you design anything".
 - Not decided here: which existing checks get replaced. Each is its own experiment, and the leak
   check's is the one in flight. Also not decided: how many users make a tool "widely used", and
-  whether code checks that a plan carries the list. [0586](0586-new-helpers-and-names-cite-sources.md)
+  whether code checks that a plan carries the list. [0587](0587-new-helpers-and-names-cite-sources.md)
   decides that one: code checks it, for every new helper.
