@@ -299,6 +299,7 @@
                 "effect/cli/Prompt",
                 "effect/crypto/Digest",
                 "effect/crypto/SecureRandom",
+                "effect/crypto/WebCrypto",
                 "effect/http/FetchHttpClient",
                 "effect/http/HttpClient",
                 "effect/http/HttpClientRequest",

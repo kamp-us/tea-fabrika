@@ -1,5 +1,5 @@
 // T695, next/. The transport's WebCrypto edge and its passkey writer keep the failure they translate
-// (decision 0043 rule 12). Audit sites: `internal/binary.ts:81` (the one callback digest, importKey
+// (decision 0043 rule 12). Audit sites: `internal/binary.ts:88` (the one callback digest, importKey
 // and verify share) and `Webauthn.ts:176` (client data that does not decode). Each run makes its
 // own passkey and signs with it, so only the client data is damaged. A rejection is injected through
 // Effect's own `WebCrypto` reference with a stand-in `Crypto`, so nothing is spied on (0555, ticket
@@ -54,6 +54,8 @@ const rejecting = <A, E>(method: Method, failure: unknown, work: Effect.Effect<A
 
 describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
   // C5, internal/binary.ts:88. Plant: `const fail = () => new WebCryptoError({ cause: undefined })`.
+  // C5 injects its rejection through `WebCrypto.layer`, so C6's plant (read the global again) reds
+  // it too.
   law(
     "C5: a generated rejection on any WebCrypto call is WebCryptoError with that very value as its cause",
     fc.record({

@@ -5,7 +5,7 @@
 //
 // Each member is read from the real object and bound to it, since Node's WebCrypto refuses a call
 // whose `this` is not its own object.
-import { Predicate } from "effect";
+import * as Predicate from "effect/Predicate";
 
 /**
  * The WebCrypto calls the transport's edge makes, the ones a law may make reject.
