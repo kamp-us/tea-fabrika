@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-lib-top-plan",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T20:31:07-08:00",
+  "ended": "2026-11-15T20:39:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "plan",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The plan for the mock sweep in libfabrika's top src/ files, in next/ (docs/plan/quests/mock-lib-top-PLAN.md), a slice of ticket 1067's sweep list. Ten vi.spyOn on main at f7169af: crypto.getRandomValues 9 and the Id format check's run 1. Id.ts draws random bytes from Effect's SecureRandom through a new makeGenerator, Generator.layer keeps providing SecureRandom.layerWebCrypto so no caller changes, nine laws get their bytes from SecureRandom.make(fill), and the allocation-order law checks the exact ids a model predicts. The lock is vitest/no-restricted-vi-methods on the top files, with a plant set as REFLECT's. One open question: whether every edge provides SecureRandom in place of the bundled layer.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Run in a cloud box with no subagents. plancheck.sh --draft passes. Nothing compiled or run apart from plancheck and pnpm format. The pull request number is not in this row: the draft PR was opened after this commit.",
+  "step": "plan"
+}
