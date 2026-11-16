@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-413-tests1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1375",
+  "started": "2026-11-15T16:03:06-08:00",
+  "ended": "2026-11-15T16:12:07-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for moving effect and its sibling packages from 4.1.2 to 4.1.3, in next/ and tooling (today's version shares the catalog). The ticket is not filed yet. The step wrote all of the change, as the plan's Files table gives every file to tests: the catalog pins, a new @effect/sql-d1 override at 4.1.3, the patch renamed to effect@4.1.3 with its bytes unchanged, the lockfile, the CI package pin, and law L1 in next/packages/libfabrika/src/processes/ExitReason.types.test.ts. L1 ran first on 4.1.2: the typecheck refused both assertions, the bound (line 16) and the misspelled tag (line 17), and nothing else. On 4.1.3 the whole typecheck passed with no error, so L1 is green and no product code needs a build step. Lockfile: every changed effect line reads 4.1.3 and none 4.1.4, the patch hash stays 062265f7..., @effect/tsgo stays 0.63.0, and no other package changed version; undici was already 8.12.4. Other packages that peer on effect changed only their snapshot keys. L3's pinned numbers held on 4.1.3 on both stock and patched Effect, and L4's fired map did not change, only its file count (432 to 439). Every narrow path in the plan passed on the laptop.",
+  "plants": [
+    {
+      "law": "L1 type: isAnyOf takes only the union's own tags (ExitReason.types.test.ts)",
+      "plant": "the typecheck run while effect was still 4.1.2, before the pins moved",
+      "result": "red"
+    },
+    {
+      "law": "L2 (effect-arbitrary.test.ts L1: passing checks build no shrink candidates)",
+      "plant": "the effect@4.1.3 row removed from patchedDependencies and installed, so stock 4.1.3 ran",
+      "result": "red"
+    },
+    {
+      "law": "L3 vector: generated cases and shrink paths stay unchanged (effect-arbitrary.test.ts)",
+      "plant": "sampleFromShrink in the installed patched dist/internal/arbitrary/model.js starts from its first shrink in place of the generated value",
+      "result": "red"
+    },
+    {
+      "law": "L4 jsdocs.test.ts law 8 on Effect's own source",
+      "plant": "number_of_files left at 432 on 4.1.3",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 12,
+  "note": "Each plant ran once and was undone: the workspace file and lockfile restored by copy and reinstalled with --frozen-lockfile, the dist file restored by copy and compared byte for byte. Two typecheck runs in all, one per version; one more start was refused before it ran because another agent's tsgo was running.",
+  "step": "tests"
+}
