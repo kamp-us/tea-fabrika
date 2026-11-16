@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-anti-slop-install-tests1",
+  "ticket": "1057",
+  "pr": "kamp-us/tea-fabrika#1373",
+  "started": "2026-11-15T15:58:51-08:00",
+  "ended": "2026-11-15T16:55:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Restart of the tests step for pull request 1 of the anti-slop install, in next/ and tooling, from a fresh clone of the fork at 5360c123dfe89a20edab7b277099dd423247a8dd (a clone a stopped run left in the scratch folder was not reused). All 70 files of the fork's src/ were read. Every rule file is a pure syntax walk importing only @oxlint/plugins and its own helpers. One file is not: src/rules/require-readable-spacing-cli.test.ts, a test of theirs, spawns `pnpm exec oxlint` and writes temp files. The step stopped there as the brief said, and the lead said yes to committing src/ whole, since the owner ruled it comes in unchanged and nothing here runs it; law L6 now holds that. Laws: L1 vendored.test.ts, a property over generated src trees and edits (byte, add, remove, tree id), committed or not, 20 runs plus 10 pinned examples; L2 to L5 in anti-slop.test.ts through the real config: L2 seven taken rules fire on their refused line and not their taken line in a listed folder, L3 each refused line stays silent in an unlisted folder and the config's root names no plugin rule, L4 a property on the zero lock, 100 runs, L5 no plugin rule at off or warn; L6 vendored.test.ts, a property over generated paths under vendor/ plus every real file against vitest's projects, and every tsconfig project as `tsc --showConfig` resolves it. Each was green on the real code and red by its plant. Found on the way: `oxlint --print-config` leaves JS plugins' rules out of the root `rules`, and tsconfig.base.json, a base nothing compiles alone, resolves to every file of the repo. Spacing has no folder at zero, so it has no block yet. The config change needed a vendor/ link in seven temp-repo setups and one exam-paths snapshot row; every law kept.",
+  "plants": [
+    { "law": "L1 vendored.test.ts: the vendored folder is the pinned commit's code", "plant": "vendored.ts: verify returns no line once it has read pin.json", "result": "red" },
+    { "law": "L2 anti-slop.test.ts: each taken rule fires through the repository's own config", "plant": ".oxlintrc.json: the anti-slop-effect entry dropped from jsPlugins (oxlint: Plugin 'anti-slop-effect' not found)", "result": "red" },
+    { "law": "L3 anti-slop.test.ts: a taken rule holds only where its block lists the folder", "plant": ".oxlintrc.json: anti-slop/no-runtime-typeof named in the root rules", "result": "red" },
+    { "law": "L4 anti-slop.test.ts: the zero lock names exactly the zero-hit folders not listed", "plant": "anti-slop.ts: lock answers add: [] for every input", "result": "red" },
+    { "law": "L5 anti-slop.test.ts: no block for a taken rule says off or warn", "plant": ".oxlintrc.json: { files: [next/**], rules: { anti-slop/no-runtime-typeof: off } } at the end", "result": "red" },
+    { "law": "L6 vendored.test.ts: no vitest project includes a path under vendor/", "plant": "vitest.config.ts: vendor/** added to the tooling project's include", "result": "red" },
+    { "law": "L6 vendored.test.ts: no tsconfig project includes a path under vendor/", "plant": "oxlint-plugins/tsconfig.json: ../vendor/**/*.ts added to its include", "result": "red" }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 56,
+  "note": "L1's real-repo half (one changed byte under vendor/anti-slop/src makes a whole pnpm lint fail with both tree ids) runs after the commit. Not run here: one-store-hook.integration.test.ts, which no laptop run may start, and pnpm typecheck, which the lead runs.",
+  "step": "tests"
+}

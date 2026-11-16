@@ -17,6 +17,39 @@ They began as GritQL rules in the `biome-plugins/` folder of [kamp-us/phoenix](h
 
 Five rules that only advised now block wherever their folder is at zero ([0523](../.decisions/0523-advice-rules-block-where-clean.md)): `law-shape`, `no-effect-promise`, `no-raw-try-catch`, `prefer-schema-arbitrary`, and oxlint's own `no-restricted-properties` (a bare `JSON.parse` in `next/`). Each is `"error"` in its base scope. The config's last overrides set it to `"warn"` for the folders that still have fires, and `lint.ts` prints a fire there as `advice, this folder is not at zero yet`, without failing. Any other fire fails, a warning included. `service-id` advised from ticket 737 until ticket 909, and blocks since. Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides (`advice.ts`). Experiment 125 found `no-effect-promise` and `no-raw-try-catch` wrong far too often to block when they were written (8 of 8 and 21 of 21 fires kept their code); 0523 sets that count aside, and each pull request that makes a folder block reports what it met.
 
+## The anti-slop plugin, taken as it ships
+
+Decision [0563](../.decisions/0563-anti-slop-plugin-as-it-ships.md) takes the anti-slop lint plugin as it ships. Its README says it is meant to be copied in, and there is no npm package, so the fork's `src/` sits in `vendor/anti-slop/` whole and unchanged, with its `LICENSE`. `vendor/anti-slop/pin.json` records where it came from:
+
+```json
+{
+  "repository": "https://github.com/K-Mistele/anti-slop",
+  "commit": "5360c123dfe89a20edab7b277099dd423247a8dd",
+  "tree": "e69eeeffb41e60d714f070ac4ed9474a5bb02cc9"
+}
+```
+
+`tree` is the git tree id of the fork's `src/` at that commit. Anyone can check it against the fork with `git rev-parse <commit>:src`. A whole `pnpm lint` run fails unless `git rev-parse HEAD:vendor/anti-slop/src` gives that id and nothing in `vendor/anti-slop/` is changed and not committed (`vendored.ts`). Their files are never edited, linted or formatted: `vendor/**` is in the ignore lists of `.oxlintrc.json` and `.oxfmtrc.json`, and in `exam-paths.json`, so no build step can change a rule. The root `package.json` names `@oxlint/plugins` from the catalog, so their import of it resolves, at exactly oxlint's version as their README asks.
+
+`.oxlintrc.json` loads its two plugins, `anti-slop` and `anti-slop-effect`. The owner took eight of their rules: `anti-slop/max-ternary-depth` (0558), `anti-slop/require-safety-comment-for-type-assertion` (0561), `anti-slop/require-readable-spacing`, `anti-slop/no-unknown-parameters`, `anti-slop/no-unknown-returns`, `anti-slop/no-runtime-typeof`, `anti-slop-effect/no-manual-tagged-construction` and `anti-slop-effect/no-manual-tagged-type` (0562, 0563). No other rule of the two plugins is on anywhere.
+
+**How a rule goes on in a folder.** Each taken rule has one block at the very end of `overrides`, and it lists the folders where the rule has no hit. A folder is one of: `.agents/**`, `.github/ci/**`, `oxlint-plugins/**`, the files right in libfabrika's `src/` as `next/packages/libfabrika/src/*`, each libfabrika module, each other package, each program and the app. A rule is never `"off"` or `"warn"`, and never in the root `rules`. A pull request that brings a folder to zero adds the folder to that rule's block. The zero lock (`anti-slop.ts`) makes that hold: a whole run lints the scope once more with the eight rules on, and fails on a folder with no hit that the rule's block does not list, and on a listed glob that is not a folder of the scope. When every folder is listed, the list becomes the scope's four globs: `next/**`, `.agents/**`, `oxlint-plugins/**` and `.github/ci/**`. `anti-slop/require-readable-spacing` has no block yet, since no folder is at zero for it: its first block comes with its first sweep.
+
+**How an update arrives.** Bring a newer commit of the fork in whole: replace `src/` and `LICENSE` from it, and change `commit` and `tree` in `pin.json`. Nothing else. That pull request's diff is their change, read like a version bump. It says which taken rules changed, and runs the count below again.
+
+Count on 2026-11-15, from the zero lock's own run over this branch (main at `6eaca8114` merged), with oxlint 1.90.0: the folders with no hit, which pull request 1 lists.
+
+| Rule | Folders at zero |
+|---|---|
+| `max-ternary-depth` | 18 |
+| `require-safety-comment-for-type-assertion` | 11 |
+| `require-readable-spacing` | 0 |
+| `no-unknown-parameters` | 11 |
+| `no-unknown-returns` | 15 |
+| `no-runtime-typeof` | 12 |
+| `no-manual-tagged-construction` | 10 |
+| `no-manual-tagged-type` | 15 |
+
 ## Where a rule still advises
 
 A warn line names one folder: a package's `src/<name>/**`, the files right in `src/` as `src/*`, or, outside a `src/`, one folder's own files as `<folder>/*`. So a dirty folder never holds back its clean siblings. `law-shape` and `prefer-schema-arbitrary` lines keep the rule's file kinds (`<folder>/**/*{.test.ts,.test.tsx,Test.ts}`), so a warn line never turns a rule on where its base scope has it off. A warn line goes the moment its folder reaches zero: a whole `pnpm lint` run reads the lines from `oxlint --print-config` and fails on one with no fire left, or one that names a file, and says which line to delete. A run on a path skips that check, since it does not see every fire. A folder that blocks never goes back to a warn line (0523).
