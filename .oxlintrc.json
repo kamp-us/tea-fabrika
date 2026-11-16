@@ -2357,6 +2357,7 @@
         "next/programs/chaos/**",
         "next/programs/checklist/**",
         "next/programs/inbox/**",
+        "next/programs/pipeline/**",
         "next/programs/tezgah/**"
       ],
       "rules": {
