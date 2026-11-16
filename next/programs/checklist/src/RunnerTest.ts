@@ -8,7 +8,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import type { ProgramRunner } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, DateTime, Effect, Schema, type Scope } from "effect";
+import { Arbitrary, Array as Arr, DateTime, Effect, Option, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { checklist } from "./program.ts";
 
@@ -81,15 +81,15 @@ const shown = (view: unknown) => {
   const v = Schema.decodeUnknownSync(View)(view);
 
   return {
-    items: v.items
-      .map((i) => ({ name: i.name, state: i.state, note: i.note }))
-      .sort((a, b) => (a.name < b.name ? -1 : 1)),
+    items: Arr.map(v.items, (i) => ({ name: i.name, state: i.state, note: i.note })).sort((a, b) =>
+      a.name < b.name ? -1 : 1,
+    ),
     left: v.left,
   };
 };
 
 /** Only the letters this suite sent: the runner's own timers are not a writer's. */
-const sent = (letters: ReadonlyArray<Saved>) => letters.filter((l) => l.id.startsWith("checklist-"));
+const sent = (letters: ReadonlyArray<Saved>) => Arr.filter(letters, (l) => l.id.startsWith("checklist-"));
 
 const NAMES = ["git", "node", "pnpm", "volta"] as const;
 
@@ -119,17 +119,19 @@ type Kept = { readonly done: boolean; readonly note: string | null };
 
 /** The record's view: no timer fires in L9 or L16, so an item is `new` until it is checked. */
 const recorded = (items: ReadonlyMap<string, Kept>) => ({
-  items: [...items]
-    .map(([name, { done, note }]) => ({ name, state: done ? "checked" : "new", note: done ? note : null }))
-    .sort((a, b) => (a.name < b.name ? -1 : 1)),
-  left: [...items.values()].filter((i) => !i.done).length,
+  items: Arr.map([...items], ([name, { done, note }]) => ({
+    name,
+    state: done ? "checked" : "new",
+    note: done ? note : null,
+  })).sort((a, b) => (a.name < b.name ? -1 : 1)),
+  left: Arr.filter([...items.values()], (i) => !i.done).length,
 });
 
 /** The input a step sends, named from what the record holds; `null` when nothing fits it. A `check`
  *  may name a checked item: it is accepted and changes nothing. */
 const named = (items: ReadonlyMap<string, Kept>, step: Step): Record<string, string> | null => {
   const here = [...items.keys()];
-  const free = NAMES.filter((n) => !items.has(n));
+  const free = Arr.filter(NAMES, (n) => !items.has(n));
   const name = here[step.pick % Math.max(here.length, 1)];
   const fresh = free[(step.pick >> 2) % Math.max(free.length, 1)];
 
@@ -318,9 +320,9 @@ export const suite = (open: Open, fresh: Fresh) =>
             }
 
             // Every accepted id is in the inbox exactly once, holding the body it was first sent with.
-            const ids = sent(yield* letters).map((l) => l.id);
-            expect([...ids].sort()).toEqual(accepted.map((a) => a.sent.id).sort());
-            const saved = new Map(sent(yield* letters).map((l) => [l.id, l.m]));
+            const ids = Arr.map(sent(yield* letters), (l) => l.id);
+            expect([...ids].sort()).toEqual(Arr.map(accepted, (a) => a.sent.id).sort());
+            const saved = new Map(Arr.map(sent(yield* letters), (l) => [l.id, l.m]));
 
             for (const { sent: first } of accepted) {
               expect(saved.get(first.id), first.id).toEqual(first.envelope.input);
@@ -353,7 +355,9 @@ export const suite = (open: Open, fresh: Fresh) =>
             yield* r.due(0);
             expect(yield* view, "the referee's time stamps it, not the writer's").toEqual(one("open", null));
             expect(alarms.at(-1), "since is the timer's arrivedAt").toBe(1000 + DAY);
-            expect((yield* letters).find((l) => !l.id.startsWith("checklist-"))?.m).toEqual({
+            expect(
+              Option.getOrUndefined(Arr.findFirst(yield* letters, (l) => !l.id.startsWith("checklist-")))?.m,
+            ).toEqual({
               type: "timer",
               at: 0,
               arrivedAt: 1000,
@@ -364,7 +368,7 @@ export const suite = (open: Open, fresh: Fresh) =>
             expect(yield* view).toEqual(one("checked", note));
             expect(alarms.at(-1), "nothing is left to wake for").toBeNull();
 
-            const saved = (yield* letters).find((l) => l.id === check.id);
+            const saved = Option.getOrUndefined(Arr.findFirst(yield* letters, (l) => l.id === check.id));
             const m = Schema.decodeUnknownSync(Schema.Struct({ note: Schema.String }))(saved?.m);
             expect(new TextEncoder().encode(m.note), "the note's exact bytes").toEqual(new TextEncoder().encode(note));
             expect(saved?.by, "the writer's checked key").toBe(key(writer));

@@ -6,7 +6,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Schema, String as Str, pipe } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
+import { String as Str, pipe, Array as Arr } from "effect";
 import { asks } from "./edges.ts";
 
 const PRODUCT = "next/packages/libfabrika/src/data/project.ts";
@@ -21,7 +24,7 @@ const CALL = "export const a = Effect.tryPromise(() => p);";
 
 const PRELUDE = 'import {Effect} from "effect";\ndeclare const p: Promise<number>;';
 
-const file = (...lines: ReadonlyArray<string>) => [PRELUDE, ...lines, ""].join("\n");
+const file = (...lines: ReadonlyArray<string>) => Arr.join([PRELUDE, ...lines, ""], "\n");
 
 const run = (base: Record<string, string>, head: Record<string, string>) =>
   Effect.runSync(asks(new Map(Object.entries(base)), new Map(Object.entries(head))));
@@ -76,8 +79,7 @@ describe("asks", () => {
         [OTHER]: file(EDGE, CALL),
       },
     );
-
-    expect(found.map((e) => [e.path, e.line])).toEqual([
+    expect(Arr.map(found, (e) => [e.path, e.line])).toEqual([
       [OTHER, 3],
       [PRODUCT, 5],
       [PRODUCT, 7],
@@ -124,7 +126,7 @@ describe("edges.ts, as CI runs it", () => {
         });
 
         if (out.status !== 0) {
-          throw new Error(`git ${args.join(" ")}: ${out.stderr}`);
+          throw new Error(`git ${Arr.join(args, " ")}: ${out.stderr}`);
         }
 
         return Str.trim(out.stdout);

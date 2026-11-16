@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runsFor } from "@kampus/vitest";
-import { String as Str, pipe } from "effect";
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -115,14 +115,14 @@ describe("ask exam_read (p85)", () => {
 
         expect(out.answers).toEqual([ask(name)]);
         const lines = Str.split(out.out, "\n");
-        expect(lines.some((l) => pipe(l, Str.startsWith("::add-mask::")))).toBe(false);
+        expect(Arr.some(lines, (l) => pipe(l, Str.startsWith("::add-mask::")))).toBe(false);
         expect(lines).toContain(
           `::warning title=commits::ask owner exam_read ${prefix}%0A::add-mask::next/apps/fabrika/src/exam/commits.ts`,
         );
         const written = readFileSync(summary, "utf8");
         expect(written).toContain(JSON.stringify(name));
-        expect(Str.split(written, "\n").some((l) => pipe(l, Str.startsWith("::")))).toBe(false);
-        expect(Str.split(out.err, "\n").some((l) => pipe(l, Str.startsWith("::")))).toBe(false);
+        expect(Arr.some(Str.split(written, "\n"), (l) => pipe(l, Str.startsWith("::")))).toBe(false);
+        expect(Arr.some(Str.split(out.err, "\n"), (l) => pipe(l, Str.startsWith("::")))).toBe(false);
       }),
       runs,
     );
@@ -371,10 +371,9 @@ describe("chain after the merge (p86 and p89)", () => {
     r.git("add", "-A");
     r.git("commit", "-q", "--amend", "-m", "squash");
     const squash = r.head();
-
-    const moved = rows.map((row) => ({
+    const moved = Arr.map(rows, (row) => ({
       ...row,
-      attested: row.attested.map((l) => ({ ...l, squash })),
+      attested: Arr.map(row.attested, (l) => ({ ...l, squash })),
     }));
 
     log(r, moved);
@@ -431,7 +430,7 @@ describe("chain after the merge (p86 and p89)", () => {
     r.write("f.txt", "vuln\n");
     const squash = r.commit("squash that reverts the fix");
     const forged = Str.trim(r.git("commit-tree", tree, "-p", fix, "-m", "forged"));
-    const rows = steps.map(({ note, commit }, i) => ({
+    const rows = Arr.map(steps, ({ note, commit }, i) => ({
       date: "2026-11-11",
       run: `r${i}`,
       attested: [
@@ -536,10 +535,9 @@ describe("chain after the merge (p86 and p89)", () => {
     const { rows } = squashed(r, steps);
     const main = r.head();
     r.git("checkout", "-q", "-b", "log", main);
-
-    const moved = rows.map((row) => ({
+    const moved = Arr.map(rows, (row) => ({
       ...row,
-      attested: row.attested.map((l) => ({ ...l, squash: fake })),
+      attested: Arr.map(row.attested, (l) => ({ ...l, squash: fake })),
     }));
 
     log(r, moved);
@@ -552,9 +550,9 @@ describe("chain after the merge (p86 and p89)", () => {
     const steps = twoSteps(r);
     const { squash, rows } = squashed(r, steps);
     const twin = Str.trim(r.git("commit-tree", "-p", r.base, "-m", "twin", r.head(`${r.base}^{tree}`)));
-    const moved = rows.map((row) => ({
+    const moved = Arr.map(rows, (row) => ({
       ...row,
-      attested: row.attested.map((l) => ({ ...l, base: twin })),
+      attested: Arr.map(row.attested, (l) => ({ ...l, base: twin })),
     }));
 
     log(r, moved);

@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, String as Str, pipe, Option } from "effect";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { scanner } from "./twin.ts";
@@ -112,9 +114,9 @@ describe("P12 local twin lint", () => {
         const args = kind === "remote" ? "" : `${JSON.stringify(name)}, {name: "test.invalid"}`;
         const findings = scan(stack, `${text()}\n${plant(ref, alias, args)}`);
         expect(findings.length).toBeGreaterThan(0);
-        expect(findings.every((f) => /^(remote override|no local provider:|unsupported-case:)/.test(f.reason))).toBe(
-          true,
-        );
+        expect(
+          Arr.every(findings, (f) => /^(remote override|no local provider:|unsupported-case:)/.test(f.reason)),
+        ).toBe(true);
       });
     }
   }
@@ -154,7 +156,7 @@ describe("P12 local twin lint", () => {
 
       const findings = scan(stack, `${text()}\n${callee}("Remote", {name: ${JSON.stringify(name)}});`);
       expect(findings.length).toBeGreaterThan(0);
-      expect(findings.every((f) => /^(no local provider:|unsupported-case:)/.test(f.reason))).toBe(true);
+      expect(Arr.every(findings, (f) => /^(no local provider:|unsupported-case:)/.test(f.reason))).toBe(true);
     });
   }
 
@@ -173,7 +175,7 @@ describe("P12 local twin lint", () => {
       );
 
       expect(findings.length).toBeGreaterThan(0);
-      expect(findings.some((f) => /remote|unsupported-case:/.test(f.reason))).toBe(true);
+      expect(Arr.some(findings, (f) => /remote|unsupported-case:/.test(f.reason))).toBe(true);
     });
   }
 
@@ -185,7 +187,7 @@ describe("P12 local twin lint", () => {
           : `const resourceAlias = ${alias}.Zone; resourceAlias("Remote", {name: ${JSON.stringify(name)}});`;
 
       const body = `${text()}\nimport {Zone as ${alias}} from "@alchemy.run/cloudflare";\n${call}`;
-      expect(scan(stack, body).map((f) => f.reason)).toContainEqual(
+      expect(Arr.map(scan(stack, body), (f) => f.reason)).toContainEqual(
         expect.stringContaining(`unsupported-case: ${reason}`),
       );
     });
@@ -197,12 +199,12 @@ describe("P12 local twin lint", () => {
       [`Zone as ${alias}`, `${alias}.Zone`],
     ]) {
       const body = `${text()}\nimport {${imported}} from "@alchemy.run/cloudflare";\n${call}("Remote", {name: ${JSON.stringify(name)}});`;
-      expect(scan(stack, body).map((f) => f.reason)).toContain("no local provider: Cloudflare.Zone.Zone");
+      expect(Arr.map(scan(stack, body), (f) => f.reason)).toContain("no local provider: Cloudflare.Zone.Zone");
     }
   });
   law("a called stack helper is inspected or reported as unsupported", ({ alias }) => {
     const body = `${text()}\nimport {extraResources as ${alias}} from "./unfollowed-stack-helper.ts";\n${alias}();`;
-    expect(scan(stack, body).some((f) => pipe(f.reason, Str.startsWith("unsupported-case:")))).toBe(true);
+    expect(Arr.some(scan(stack, body), (f) => pipe(f.reason, Str.startsWith("unsupported-case:")))).toBe(true);
   });
   law("the actual stack has no findings, with no second resource list", ({ name }) => {
     expect(scan(stack, `${text()}\nconst checkedName = ${JSON.stringify(name)};`)).toEqual([]);
@@ -217,7 +219,7 @@ describe("P12 local twin lint", () => {
     const binding = `${alias}.DurableObject("RecordPart")`;
     expect(scan("binding.ts", pipe(source(undefined), Str.replace('"Brain"', '"Other"')))).toEqual([]);
     expect(
-      scan("binding.ts", pipe(source(undefined), Str.replace('"Brain"', "workerName"))).some((f) =>
+      Arr.some(scan("binding.ts", pipe(source(undefined), Str.replace('"Brain"', "workerName"))), (f) =>
         pipe(f.reason, Str.startsWith("unsupported-case:")),
       ),
     ).toBe(true);
@@ -230,7 +232,8 @@ describe("P12 local twin lint", () => {
       pipe(contract, Str.replace("RecordPart", "Unknown[]")),
     ]) {
       expect(
-        check("binding.ts", source(`RECORD:${binding}`), broken).some(
+        Arr.some(
+          check("binding.ts", source(`RECORD:${binding}`), broken),
           (f) => f.reason === "unsupported-case: cannot read host contract",
         ),
       ).toBe(true);
@@ -243,7 +246,7 @@ describe("P12 local twin lint", () => {
     // Pinned review-2 escapes: later keys and spreads can replace a valid binding.
     for (const overwritten of ["undefined", '"Other"', "replacement"]) {
       expect(
-        scan("binding.ts", source(`RecordPart:${binding}, RecordPart:${overwritten}`)).some((f) =>
+        Arr.some(scan("binding.ts", source(`RecordPart:${binding}, RecordPart:${overwritten}`)), (f) =>
           pipe(f.reason, Str.startsWith("unsupported-case:")),
         ),
       ).toBe(true);
@@ -255,11 +258,14 @@ describe("P12 local twin lint", () => {
       `env:{RecordPart:${binding}, ...replacement}`,
     ]) {
       expect(
-        scan(
-          "binding.ts",
-          `import * as ${alias} from "@alchemy.run/cloudflare";
+        Arr.some(
+          scan(
+            "binding.ts",
+            `import * as ${alias} from "@alchemy.run/cloudflare";
            ${alias}.Workers.Worker("Brain", {main:"brain.mjs", ${props}});`,
-        ).some((f) => pipe(f.reason, Str.startsWith("unsupported-case:"))),
+          ),
+          (f) => pipe(f.reason, Str.startsWith("unsupported-case:")),
+        ),
       ).toBe(true);
     }
 
@@ -271,19 +277,21 @@ describe("P12 local twin lint", () => {
       [`RECORD:${binding}`, `${alias}.Workers.Worker("Other", {main:"other.mjs", env:{RecordPart:${binding}}});`],
     ]) {
       expect(
-        scan("binding.ts", source(bindings!, other)).some((f) => pipe(f.reason, Str.includes("class-name binding"))),
+        Arr.some(scan("binding.ts", source(bindings!, other)), (f) => pipe(f.reason, Str.includes("class-name binding"))),
       ).toBe(true);
     }
   });
   law("plant: a remote-only resource and remote override both fail", ({ alias, name }) => {
-    const body = [
-      `import * as ${alias} from "@alchemy.run/cloudflare";`,
-      'import * as Alchemy from "alchemy";',
-      `const remote = ${alias}.Zone.Zone("Zone", {name: ${JSON.stringify(name)}});`,
-      "remote.pipe(Alchemy.remote());",
-    ].join("\n");
-
-    expect(scan("plant.ts", body).map((f) => f.reason)).toEqual([
+    const body = Arr.join(
+      [
+        `import * as ${alias} from "@alchemy.run/cloudflare";`,
+        'import * as Alchemy from "alchemy";',
+        `const remote = ${alias}.Zone.Zone("Zone", {name: ${JSON.stringify(name)}});`,
+        "remote.pipe(Alchemy.remote());",
+      ],
+      "\n",
+    );
+    expect(Arr.map(scan("plant.ts", body), (f) => f.reason)).toEqual([
       "no local provider: Cloudflare.Zone.Zone",
       "remote override",
     ]);
@@ -299,13 +307,15 @@ describe("P12 local twin lint", () => {
     }
   });
   law("uses installed Worker and R2 local registrations, including import aliases", ({ alias, name }) => {
-    const body = [
-      `import * as ${alias} from "@alchemy.run/cloudflare";`,
-      // A generated name may be the host's, so include its binding.
-      `const worker = ${alias}.Workers.Worker(${JSON.stringify(name)}, {main: "brain.mjs", env: {RecordPart: ${alias}.DurableObject("RecordPart")}});`,
-      `const bucket = ${alias}.R2.Bucket("Measurements", {name: "measurements"});`,
-    ].join("\n");
-
+    const body = Arr.join(
+      [
+        `import * as ${alias} from "@alchemy.run/cloudflare";`,
+        // A generated name may be the host's, so include its binding.
+        `const worker = ${alias}.Workers.Worker(${JSON.stringify(name)}, {main: "brain.mjs", env: {RecordPart: ${alias}.DurableObject("RecordPart")}});`,
+        `const bucket = ${alias}.R2.Bucket("Measurements", {name: "measurements"});`,
+      ],
+      "\n",
+    );
     expect(scan("plant.ts", body)).toEqual([]);
   });
   law("plant: aliased constructors, subpath imports and named remote overrides fail closed", ({ alias, name }) => {

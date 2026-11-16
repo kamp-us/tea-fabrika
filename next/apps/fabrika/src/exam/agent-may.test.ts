@@ -22,7 +22,15 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream, String as Str, pipe } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { String as Str, pipe, Array as Arr } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { RateLimiter } from "effect/persistence";
 
@@ -519,7 +527,7 @@ const paths = [
 ];
 
 const presence = (files: ReadonlySet<string>, load: () => PolicyDoor): PolicyDoor | null => {
-  if (!paths.some((p) => files.has(p))) {
+  if (!Arr.some(paths, (p) => files.has(p))) {
     return null;
   }
 
@@ -580,7 +588,7 @@ it.effect.prop(
         }
       }
 
-      if (!paths.some((p) => found.has(p))) {
+      if (!Arr.some(paths, (p) => found.has(p))) {
         ctx.skip("not built: P25 agent policy");
       }
 
@@ -600,7 +608,7 @@ it.effect.prop(
         { name: "uncheck", readOnly: false, personOnly: false },
         { name: "left", readOnly: true, personOnly: false },
         { name: "items", readOnly: true, personOnly: false },
-        ...personInputs.map((name) => ({ name, readOnly: false, personOnly: true })),
+        ...Arr.map(personInputs, (name) => ({ name, readOnly: false, personOnly: true })),
       ]);
       yield* installedRefusal(policy, `planted.${c.unknown}`, c.body);
 

@@ -17,6 +17,8 @@
 // moving a module is one edit and no other module moves. The exam's layers test reads it.
 import { String as Str, pipe } from "effect";
 
+import { Array as Arr, pipe } from "effect";
+
 /** One row of the rule file, as far as the exam reads it. */
 export interface Row {
   readonly name: string;
@@ -36,9 +38,11 @@ const SPECIAL = /[.*+?^${}()|[\]\\]/g;
 const segmentSource = (segment: string): string =>
   segment === "*"
     ? "[^/]+"
-    : Str.split(segment, "*")
-        .map((literal) => pipe(literal, Str.replace(SPECIAL, "\\$&")))
-        .join("[^/]*");
+    : pipe(
+        Str.split(segment, "*"),
+        Arr.map((literal) => pipe(literal, Str.replace(SPECIAL, "\\$&"))),
+        Arr.join("[^/]*"),
+      );
 
 /** The pattern as a test on a path: it claims its own path and everything below it. */
 const claims = (pattern: string): RegExp => {
@@ -53,7 +57,9 @@ const claims = (pattern: string): RegExp => {
   }
 
   const body = pipe(
-    kept.map((segment) => (segment === "**" ? "(?:[^/]+/)*" : `${segmentSource(segment)}/`)).join(""),
+    kept,
+    Arr.map((segment) => (segment === "**" ? "(?:[^/]+/)*" : `${segmentSource(segment)}/`)),
+    Arr.join(""),
     Str.slice(0, -1),
   );
 
@@ -64,9 +70,9 @@ const specificityAt = (pattern: string): Specificity => {
   const segments = Str.split(pattern, "/");
 
   return [
-    segments.filter((segment) => segment !== "**").length,
-    segments.filter((segment) => !pipe(segment, Str.includes("*"))).length,
-    [...pattern].filter((character) => character !== "*" && character !== "/").length,
+    Arr.filter(segments, (segment) => segment !== "**").length,
+    Arr.filter(segments, (segment) => !pipe(segment, Str.includes("*"))).length,
+    Arr.filter([...pattern], (character) => character !== "*" && character !== "/").length,
   ];
 };
 
@@ -77,20 +83,28 @@ const compare = (a: Specificity, b: Specificity): number => a[0] - b[0] || a[1] 
  * none when no row names it, one when the rule file is clear, more when rows claim it equally.
  */
 export const rowsAt = (rows: ReadonlyArray<Row>, path: string): ReadonlyArray<string> => {
-  const found: ReadonlyArray<Claim> = rows.flatMap((row) =>
-    row.paths
-      .filter((pattern) => claims(pattern).test(path))
-      .map((pattern) => ({ name: row.name, specificity: specificityAt(pattern) })),
+  const found: ReadonlyArray<Claim> = Arr.flatMap(rows, (row) =>
+    pipe(
+      row.paths,
+      Arr.filter((pattern) => claims(pattern).test(path)),
+      Arr.map((pattern) => ({ name: row.name, specificity: specificityAt(pattern) })),
+    ),
   );
-
-  const best = found.reduce<Specificity | null>(
-    (top, claim) => (top === null || compare(claim.specificity, top) > 0 ? claim.specificity : top),
-    null,
+  const best = Arr.reduce(found, null, (top: Specificity | null, claim) =>
+    top === null || compare(claim.specificity, top) > 0 ? claim.specificity : top,
   );
 
   if (best === null) {
     return [];
   }
 
-  return [...new Set(found.filter((claim) => compare(claim.specificity, best) === 0).map((claim) => claim.name))];
+  return [
+    ...new Set(
+      pipe(
+        found,
+        Arr.filter((claim) => compare(claim.specificity, best) === 0),
+        Arr.map((claim) => claim.name),
+      ),
+    ),
+  ];
 };

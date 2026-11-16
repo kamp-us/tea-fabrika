@@ -17,6 +17,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
 import * as fc from "fast-check";
 import { type Browser, chromium, type Page } from "playwright";
 import { rolldown } from "rolldown";
@@ -134,16 +136,22 @@ const current = (page: Page, rejected: string | null) =>
 const claim = (page: Page) =>
   Effect.promise((): Promise<Answer<boolean>> => page.evaluate(() => globalThis.__key.claim()));
 
+/** One stored value, described: a key by its type and whether it can leave, bytes and strings as hex. */
+type Stored = {
+  readonly kind: string;
+  readonly extractable?: boolean;
+  readonly exported?: boolean;
+  readonly hex?: string;
+};
+
 /** Every value the profile's IndexedDB holds, described: private keys by their extractability, bytes and
- *  strings as hex, so the law can say no private material is stored. */
+ *  strings as hex, so the law can say no private material is stored. The page sends the raw bytes and the
+ *  hex is made here, since the function given to `page.evaluate` runs in the page, where no module import
+ *  reaches. */
 const stored = (page: Page) =>
   Effect.promise(() =>
     page.evaluate(async () => {
-      const out: Array<{ kind: string; extractable?: boolean; exported?: boolean; hex?: string }> = [];
-
-      const hex = (b: ArrayBufferLike | ArrayBufferView) =>
-        [...new Uint8Array(ArrayBuffer.isView(b) ? b.buffer : b)].map((x) => x.toString(16).padStart(2, "0")).join("");
-
+      const out: Array<{ kind: string; extractable?: boolean; exported?: boolean; bytes?: Array<number> }> = [];
       const walk = async (v: unknown): Promise<void> => {
         if (v instanceof CryptoKey) {
           const exported = await crypto.subtle.exportKey("pkcs8", v).then(
@@ -153,12 +161,9 @@ const stored = (page: Page) =>
 
           out.push({ kind: `key:${v.type}`, extractable: v.extractable, exported });
         } else if (v instanceof ArrayBuffer || ArrayBuffer.isView(v)) {
-          out.push({ kind: "bytes", hex: hex(v) });
+          out.push({ kind: "bytes", bytes: [...new Uint8Array(ArrayBuffer.isView(v) ? v.buffer : v)] });
         } else if (typeof v === "string") {
-          out.push({
-            kind: "string",
-            hex: [...new TextEncoder().encode(v)].map((x) => x.toString(16).padStart(2, "0")).join(""),
-          });
+          out.push({ kind: "string", bytes: [...new TextEncoder().encode(v)] });
         } else if (typeof v === "object" && v !== null) {
           for (const one of Object.values(v)) {
             await walk(one);
@@ -190,6 +195,21 @@ const stored = (page: Page) =>
 
       return out;
     }),
+  ).pipe(
+    Effect.map(
+      Arr.map(({ bytes, ...rest }): Stored =>
+        bytes === undefined
+          ? rest
+          : {
+              ...rest,
+              hex: Function.pipe(
+                bytes,
+                Arr.map((x) => x.toString(16).padStart(2, "0")),
+                Arr.join(""),
+              ),
+            },
+      ),
+    ),
   );
 
 /** Makes the tab's IndexedDB refuse to open, as private mode, a full quota or a block does. */
@@ -250,10 +270,9 @@ describe("L3: the browser key store", () => {
                         const first = yield* Effect.forEach(pages, (p) => current(p, null), {
                           concurrency: "unbounded",
                         });
-
-                        const prints = new Set(first.map((a) => a.ok?.fingerprint));
+                        const prints = new Set(Arr.map(first, (a) => a.ok?.fingerprint));
                         expect(prints.size, "racing tabs made more than one key").toBe(1);
-                        expect(first.filter((a) => a.ok?.found === "created")).toHaveLength(1);
+                        expect(Arr.filter(first, (a) => a.ok?.found === "created")).toHaveLength(1);
                         seen.created++;
                         let stored_ = first[0]!.ok!.fingerprint;
                         const removed: Array<string> = [];
@@ -303,7 +322,7 @@ describe("L3: the browser key store", () => {
                         }
 
                         const rest = yield* stored(pages[0]!);
-                        expect(rest.filter((v) => v.kind === "key:private").length).toBeGreaterThan(0);
+                        expect(Arr.filter(rest, (v) => v.kind === "key:private").length).toBeGreaterThan(0);
 
                         for (const v of rest) {
                           expect(

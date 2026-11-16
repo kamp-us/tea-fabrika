@@ -1,5 +1,7 @@
 import { String as Str } from "effect";
 // P12, next/. Shape belongs in lint; these laws test that rule with planted source.
+
+import { Array as Arr, pipe } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
@@ -25,11 +27,11 @@ describe("ledger SQL stays behind its service", () => {
             `INSERT INTO${space}${word} VALUES (?)`,
             `UPDATE${space}${word} SET stream=?`,
           ];
-
-          const body = `${queries
-            .map((query) => `sql.exec(${JSON.stringify(query)});`)
-            .join("\n")}\nsql.exec(\`SELECT * FROM entries WHERE stream=\${stream}\`);`;
-
+          const body = `${pipe(
+            queries,
+            Arr.map((query) => `sql.exec(${JSON.stringify(query)});`),
+            Arr.join("\n"),
+          )}\nsql.exec(\`SELECT * FROM entries WHERE stream=\${stream}\`);`;
           const findings = await plant({
             [FILE]: body,
             "next/packages/libfabrika/src/ledger/internal/ledgerStore.ts": body,

@@ -2,7 +2,7 @@
 // is judged on generated rows here; ratchet.integration.test.ts runs the script on a planted git
 // repository, as CI runs it, so it runs on the schedule (0536).
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import { Array as Arr, Effect, Exit } from "effect";
 import * as fc from "fast-check";
 import { ROWS, text } from "./ratchet.test-support.ts";
 
@@ -73,14 +73,14 @@ describe("row identity follows each reader (L2)", () => {
           }),
         ),
         ({ rows, i, name, suffix, order, list }) => {
-          const moved = rows.map((r, j) => (j === i ? { ...r, [name]: r[name] + suffix } : r));
+          const moved = Arr.map(rows, (r, j) => (j === i ? { ...r, [name]: r[name] + suffix } : r));
           expect(answer(list, text(rows), text(moved))).toEqual({
             _tag: "stuck",
             file: list.file,
             reason: "row_added",
             rows: [lintKey(moved[i]!)],
           });
-          const extra = order.map((r) => ({ ...r, note: suffix }));
+          const extra = Arr.map(order, (r) => ({ ...r, note: suffix }));
           expect(answer(list, text(rows), text(extra))).toEqual({ _tag: "done", file: list.file });
         },
       ),
@@ -101,14 +101,14 @@ describe("row identity follows each reader (L2)", () => {
           }),
         ),
         ({ rows, i, name, suffix, order }) => {
-          const moved = rows.map((r, j) => (j === i ? { ...r, [name]: r[name] + suffix } : r));
+          const moved = Arr.map(rows, (r, j) => (j === i ? { ...r, [name]: r[name] + suffix } : r));
           expect(answer(DEAD, text(rows), text(moved))).toEqual({
             _tag: "stuck",
             file: DEAD.file,
             reason: "row_added",
             rows: [deadKey(moved[i]!)],
           });
-          const reworded = order.map((r) => ({ ...r, reason: r.reason + suffix }));
+          const reworded = Arr.map(order, (r) => ({ ...r, reason: r.reason + suffix }));
           expect(answer(DEAD, text(rows), text(reworded))).toEqual({ _tag: "done", file: DEAD.file });
         },
       ),
@@ -121,7 +121,7 @@ describe("a file that comes, goes or does not read (L3)", () => {
   it("L3 scenario: per list, a new file is all added, a deleted file is done, an unreadable head is not a list", () => {
     for (const list of LISTS) {
       const rows = ROWS[list.file as keyof typeof ROWS];
-      const keys = rows.map((r) => ("scope" in r ? deadKey(r) : lintKey(r)));
+      const keys = Arr.map(rows, (r) => ("scope" in r ? deadKey(r) : lintKey(r)));
       expect(answer(list, null, text(rows))).toEqual({
         _tag: "stuck",
         file: list.file,
@@ -160,14 +160,14 @@ describe("a renamed file keeps its rows (L5)", () => {
         fc.uniqueArray(lintRow, { minLength: 1, maxLength: 6, selector: (r) => r.file }).chain((rows) =>
           fc.record({
             rows: fc.constant(rows),
-            renamed: fc.subarray(rows.map((r) => r.file)),
+            renamed: fc.subarray(Arr.map(rows, (r) => r.file)),
             extra: lintRow,
             list: fc.constantFrom(NEXT, AGENTS),
           }),
         ),
         ({ rows, renamed, extra, list }) => {
-          const renames = new Map(renamed.map((file) => [file, `${file}.integration`]));
-          const head = rows.map((r) => ({ ...r, file: renames.get(r.file) ?? r.file }));
+          const renames = new Map(Arr.map(renamed, (file) => [file, `${file}.integration`]));
+          const head = Arr.map(rows, (r) => ({ ...r, file: renames.get(r.file) ?? r.file }));
           expect(Effect.runSync(judge(list, text(rows), text(head), renames))).toEqual({
             _tag: "done",
             file: list.file,

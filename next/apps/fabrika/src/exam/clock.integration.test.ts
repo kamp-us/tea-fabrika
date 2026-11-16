@@ -1,5 +1,7 @@
 // The clock in a view (C1, owner 2026-11-05): React's `react/purity` refuses a clock or random read
 // in render and allows one in a handler; our `no-clock-in-view` refuses both.
+
+import { Array as Arr } from "effect";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
@@ -13,31 +15,37 @@ const CLEAN = "next/packages/tuval/src/window/clean.tsx";
 
 const PLAIN = "next/packages/tuval/src/window/model.ts";
 
-const view = [
-  "declare const send: (m: {type: string; at?: number}) => void;", // 1
-  "export const When = () => <time>{Date.now()}</time>;", // 2: render
-  "export const Roll = () => <b>{Math.random()}</b>;", // 3: render
-  "export const Press = () => (", // 4
-  '\t<button type="button" onClick={() => send({type: "press", at: performance.now()})} />', // 5: handler
-  ");", // 6
-  // Experiment 195's plant: 0.156.0's Compiler refused it, 0.157.0's compiles it.
-  "const Tile = (props: {readonly focus: () => void}) => (", // 7
-  '\t<button type="button" onClick={props.focus} />', // 8
-  ");", // 9
-  "export const Desk = (props: {readonly tiles: readonly string[]; readonly go: (s: string) => void}) => {", // 10
-  "\tconst said = () => new Date().toISOString();", // 11: a handler's helper
-  "\tconst focus = (tile: string) => props.go(tile + said());", // 12
-  "\treturn <main>{props.tiles.map((t) => <Tile key={t} focus={() => focus(t)} />)}</main>;", // 13
-  "};", // 14
-  "export const Id = () => <b onClick={() => send({type: crypto.randomUUID()})} />;", // 15
-  "export const Old = () => <b onClick={() => send({type: String(Date())})} />;", // 16
-].join("\n");
+const view = Arr.join(
+  [
+    "declare const send: (m: {type: string; at?: number}) => void;", // 1
+    "export const When = () => <time>{Date.now()}</time>;", // 2: render
+    "export const Roll = () => <b>{Math.random()}</b>;", // 3: render
+    "export const Press = () => (", // 4
+    '\t<button type="button" onClick={() => send({type: "press", at: performance.now()})} />', // 5: handler
+    ");", // 6
+    // Experiment 195's plant: 0.156.0's Compiler refused it, 0.157.0's compiles it.
+    "const Tile = (props: {readonly focus: () => void}) => (", // 7
+    '\t<button type="button" onClick={props.focus} />', // 8
+    ");", // 9
+    "export const Desk = (props: {readonly tiles: readonly string[]; readonly go: (s: string) => void}) => {", // 10
+    "\tconst said = () => new Date().toISOString();", // 11: a handler's helper
+    "\tconst focus = (tile: string) => props.go(tile + said());", // 12
+    "\treturn <main>{props.tiles.map((t) => <Tile key={t} focus={() => focus(t)} />)}</main>;", // 13
+    "};", // 14
+    "export const Id = () => <b onClick={() => send({type: crypto.randomUUID()})} />;", // 15
+    "export const Old = () => <b onClick={() => send({type: String(Date())})} />;", // 16
+  ],
+  "\n",
+);
 
-const clean = [
-  "declare const send: (m: {type: string}) => void;",
-  "export const Shown = (props: {readonly at: number}) => <time>{new Date(props.at).toISOString()}</time>;",
-  'export const Press = () => <button type="button" onClick={() => send({type: "press"})} />;',
-].join("\n");
+const clean = Arr.join(
+  [
+    "declare const send: (m: {type: string}) => void;",
+    "export const Shown = (props: {readonly at: number}) => <time>{new Date(props.at).toISOString()}</time>;",
+    'export const Press = () => <button type="button" onClick={() => send({type: "press"})} />;',
+  ],
+  "\n",
+);
 
 describe("the clock in a view", async () => {
   const all = await plant({

@@ -19,7 +19,7 @@
 // reasons, other words, free text or none.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Array as Arr, Schema, pipe } from "effect";
 import * as fc from "fast-check";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -81,11 +81,11 @@ const named = (html: string, tag: string): string | null => {
   const by = attr(tag, "aria-labelledby");
 
   if (by !== null) {
-    return by
-      .split(/\s+/)
-      .map((id) => byId(html, id) ?? "")
-      .join(" ")
-      .trim();
+    return pipe(
+      by.split(/\s+/),
+      Arr.map((id) => byId(html, id) ?? ""),
+      Arr.join(" "),
+    ).trim();
   }
 
   const id = attr(tag, "id");
@@ -94,7 +94,7 @@ const named = (html: string, tag: string): string | null => {
   return forLabel === null ? null : text(forLabel[1]!).trim();
 };
 
-const tags = (html: string, pattern: RegExp) => [...html.matchAll(pattern)].map((m) => m[0]);
+const tags = (html: string, pattern: RegExp) => Arr.map([...html.matchAll(pattern)], (m) => m[0]);
 
 const name = fc.oneof(
   fc.stringMatching(/^[a-z][a-z &<>"']{0,20}$/).map((s) => s.trimEnd()),
@@ -176,20 +176,31 @@ describe("L24: the checklist window's markup", () => {
           const html = render(view, null, draft);
           const boxes = tags(html, /<input[^>]*type="checkbox"[^>]*>/g);
           expect(boxes, "one box per item").toHaveLength(view.items.length);
-          expect(boxes.map((b) => named(html, b)).sort()).toEqual(view.items.map((i) => i.name).sort());
+          expect(Arr.map(boxes, (b) => named(html, b)).sort()).toEqual(Arr.map(view.items, (i) => i.name).sort());
           expect(
-            boxes.filter((b) => /\schecked=""/.test(b)).map((b) => named(html, b)),
+            pipe(
+              boxes,
+              Arr.filter((b) => /\schecked=""/.test(b)),
+              Arr.map((b) => named(html, b)),
+            ),
             "a box is checked exactly when its item is",
-          ).toEqual(view.items.filter((i) => i.state === "checked").map((i) => i.name));
+          ).toEqual(
+            pipe(
+              view.items,
+              Arr.filter((i) => i.state === "checked"),
+              Arr.map((i) => i.name),
+            ),
+          );
 
           const read = text(html);
 
           for (const word of new Set(Object.values(WORDS))) {
-            const count = view.items.filter((i) => WORDS[i.state] === word).length;
+            const count = Arr.filter(view.items, (i) => WORDS[i.state] === word).length;
             expect(read.match(new RegExp(`\\b${word}\\b`, "g"))?.length ?? 0, `${word} words`).toBe(count);
           }
 
-          const buttons = tags(html, /<button[^>]*>[\s\S]*?<\/button>/g).map(
+          const buttons = Arr.map(
+            tags(html, /<button[^>]*>[\s\S]*?<\/button>/g),
             (b) => attr(b, "aria-label") ?? text(b).trim(),
           );
 
@@ -202,8 +213,8 @@ describe("L24: the checklist window's markup", () => {
             view.items.length === 0,
           );
           seen.empty += view.items.length === 0 ? 1 : 0;
-          seen.checked += view.items.some((i) => i.state === "checked") ? 1 : 0;
-          seen.late += view.items.some((i) => i.state === "late") ? 1 : 0;
+          seen.checked += Arr.some(view.items, (i) => i.state === "checked") ? 1 : 0;
+          seen.late += Arr.some(view.items, (i) => i.state === "late") ? 1 : 0;
         }
       }),
       { seed: SEED, numRuns: 50 },
@@ -225,13 +236,12 @@ describe("L24: the checklist window's markup", () => {
         expect(named(html, field)).toBe(checklist.inputs.add.description);
         expect(attr(field, "maxLength") ?? attr(field, "maxlength")).toBe("80");
         expect(attr(field, "value") ?? "").toBe(draft);
-
-        const described = (attr(field, "aria-describedby") ?? "")
-          .split(/\s+/)
-          .filter((id) => id !== "")
-          .map((id) => byId(html, id) ?? "")
-          .join(" ")
-          .trim();
+        const described = pipe(
+          (attr(field, "aria-describedby") ?? "").split(/\s+/),
+          Arr.filter((id) => id !== ""),
+          Arr.map((id) => byId(html, id) ?? ""),
+          Arr.join(" "),
+        ).trim();
 
         if (words === null) {
           expect(described, "no refusal, no description words").toBe("");
@@ -257,13 +267,13 @@ describe("L24: the checklist window's markup", () => {
         expect(taken).not.toBe(missing);
         const word = (r: string) => /^[a-z_]{1,40}$/.test(r);
 
-        for (const r of [a, b].filter((r) => r !== "taken" && r !== "missing")) {
+        for (const r of Arr.filter([a, b], (r) => r !== "taken" && r !== "missing")) {
           const said = refused({ type: "remove", name: item }, r);
           expect(said.includes(`"${item}"`), `${r} named the item`).toBe(false);
           expect(said.includes(r), `${r}'s words`).toBe(word(r));
         }
 
-        const free = [a, b].filter((r) => !word(r));
+        const free = Arr.filter([a, b], (r) => !word(r));
 
         if (free.length === 2) {
           expect(refused({ type: "add", name: item }, free[0]!)).toBe(refused({ type: "add", name: item }, free[1]!));

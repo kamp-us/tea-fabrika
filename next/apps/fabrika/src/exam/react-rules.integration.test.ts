@@ -1,5 +1,7 @@
 // React's own rules (exam item 13, C2, C3 and C6): `react/refs`, `react/immutability` and
 // `react/display-name` block in next/'s `.tsx` files, tests left out.
+
+import { Array as Arr } from "effect";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
@@ -7,30 +9,36 @@ const FIRES = "next/packages/tuval/src/window/fires.tsx";
 
 const PASSES = "next/packages/tuval/src/window/passes.tsx";
 
-const fires = [
-  'import {memo, useId, useRef} from "react";', // 1
-  "export const Tip = () => {", // 2
-  "\tconst id = useRef(Math.random()).current;", // 3: refs, read in render
-  "\treturn <b id={String(id)} />;", // 4
-  "};", // 5
-  "export const Rows = (props: {readonly rows: readonly string[]}) => {", // 6
-  "\tlet i = 0;", // 7
-  "\treturn <ul>{props.rows.map((r) => { i += 1; return <li key={r}>{i}</li>; })}</ul>;", // 8: immutability
-  "};", // 9
-  "export const Tile = memo(() => <b />);", // 10: display-name
-  "export const kept = useId;", // 11
-].join("\n");
+const fires = Arr.join(
+  [
+    'import {memo, useId, useRef} from "react";', // 1
+    "export const Tip = () => {", // 2
+    "\tconst id = useRef(Math.random()).current;", // 3: refs, read in render
+    "\treturn <b id={String(id)} />;", // 4
+    "};", // 5
+    "export const Rows = (props: {readonly rows: readonly string[]}) => {", // 6
+    "\tlet i = 0;", // 7
+    "\treturn <ul>{props.rows.map((r) => { i += 1; return <li key={r}>{i}</li>; })}</ul>;", // 8: immutability
+    "};", // 9
+    "export const Tile = memo(() => <b />);", // 10: display-name
+    "export const kept = useId;", // 11
+  ],
+  "\n",
+);
 
-const passes = [
-  'import {useId} from "react";',
-  "export const Tip = () => {",
-  "\tconst id = useId();",
-  "\treturn <b id={id} />;",
-  "};",
-  "export const Rows = (props: {readonly rows: readonly string[]}) => (",
-  "\t<ul>{props.rows.map((r, i) => <li key={r}>{i + 1}</li>)}</ul>",
-  ");",
-].join("\n");
+const passes = Arr.join(
+  [
+    'import {useId} from "react";',
+    "export const Tip = () => {",
+    "\tconst id = useId();",
+    "\treturn <b id={id} />;",
+    "};",
+    "export const Rows = (props: {readonly rows: readonly string[]}) => (",
+    "\t<ul>{props.rows.map((r, i) => <li key={r}>{i + 1}</li>)}</ul>",
+    ");",
+  ],
+  "\n",
+);
 
 describe("React's rules in next/", async () => {
   const all = await plant({

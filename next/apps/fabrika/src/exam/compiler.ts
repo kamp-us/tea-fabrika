@@ -1,7 +1,12 @@
 // The exam command and the build share one Compiler check in libfabrika.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { check, Row } from "@kampus/libfabrika/compiler";
-import { Console, Effect, FileSystem, Path, Schema, String as Str, pipe } from "effect";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import { String as Str, pipe, Array as Arr } from "effect";
 
 export { check, compile, Row, type Finding } from "@kampus/libfabrika/compiler";
 
@@ -26,10 +31,11 @@ const lint = Effect.gen(function* () {
     Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Row)))),
   );
 
-  const paths = (yield* fs.glob("next/**/*.tsx", { root, exclude: ["**/node_modules/**"] }))
-    .map((p) => path.relative(root, path.join(root, p)))
-    .filter((p) => !pipe(p, Str.includes("node_modules")) && !pipe(p, Str.includes(".test.")))
-    .sort();
+  const paths = pipe(
+    yield* fs.glob("next/**/*.tsx", { root, exclude: ["**/node_modules/**"] }),
+    Arr.map((p) => path.relative(root, path.join(root, p))),
+    Arr.filter((p) => !pipe(p, Str.includes("node_modules")) && !pipe(p, Str.includes(".test."))),
+  ).sort();
 
   const files = new Map<string, string>();
 

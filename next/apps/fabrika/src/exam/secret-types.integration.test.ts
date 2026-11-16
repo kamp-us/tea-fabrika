@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { runsFor } from "@kampus/vitest";
-import { String as Str, pipe } from "effect";
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import * as ts from "typescript/unstable/ast";
 import type { Project } from "typescript/unstable/sync";
@@ -105,14 +105,16 @@ const checkSecretTypes = (project: Project, root: string) => {
     };
 
     visit(source);
-    const nodes = reads.flatMap((read) => read.ancestors);
+    const nodes = Arr.flatMap(reads, (read) => read.ancestors);
     const types = checker.getTypeAtLocation(nodes);
     let index = 0;
 
     for (const read of reads) {
-      const protectedRead = read.ancestors
-        .map(() => types[index++])
-        .some((type) => type !== undefined && checker.getPropertyOfType(type, "~effect/Redacted") !== undefined);
+      const protectedRead = pipe(
+        read.ancestors,
+        Arr.map(() => types[index++]),
+        Arr.some((type) => type !== undefined && checker.getPropertyOfType(type, "~effect/Redacted") !== undefined),
+      );
 
       if (!protectedRead) {
         findings.push({
@@ -144,10 +146,11 @@ it("pinned: [secrets] P12 source-read gap, actual sources keep secret values Red
     try {
       const findings = [
         ...new Map(
-          snapshot
-            .getProjects()
-            .flatMap((project) => checkSecretTypes(project, root))
-            .map((f) => [`${f.file}:${f.line}`, f]),
+          pipe(
+            snapshot.getProjects(),
+            Arr.flatMap((project) => checkSecretTypes(project, root)),
+            Arr.map((f) => [`${f.file}:${f.line}`, f]),
+          ),
         ).values(),
       ];
 
@@ -186,8 +189,7 @@ it("[secrets] source type plants catch plain entropy, Authorization and binding 
           `export const safeHeader = wrap${suffix}(request.headers.get("authorization"));`,
           `export const safeBinding = wrap${suffix}(ctx.props.token);`,
         ];
-
-        writeFileSync(path, prelude + lines.join("\n"));
+        writeFileSync(path, prelude + Arr.join(lines, "\n"));
         writeFileSync(
           config,
           JSON.stringify({
@@ -200,7 +202,7 @@ it("[secrets] source type plants catch plain entropy, Authorization and binding 
         try {
           const project = snapshot.getProject(config)!;
           expect(project.program.getSemanticDiagnostics()).toEqual([]);
-          expect(checkSecretTypes(project, folder).map((f) => f.line)).toEqual([6, 7, 8]);
+          expect(Arr.map(checkSecretTypes(project, folder), (f) => f.line)).toEqual([6, 7, 8]);
         } finally {
           snapshot.dispose();
         }

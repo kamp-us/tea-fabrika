@@ -16,7 +16,16 @@
 // It exits 2 when it could not read something. The answer comes back by hand for now: the lead agent
 // relays each line to the owner and posts the answer on the pull request (P35, flag 2).
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Config, Console, Effect, Exit, FileSystem, Option, Path, Schema, Stream, String as Str, pipe } from "effect";
+import * as Config from "effect/Config";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { String as Str, pipe, Array as Arr } from "effect";
 import { ChildProcess } from "effect/process";
 import { parseSync } from "oxc-parser";
 
@@ -48,7 +57,7 @@ const edgesIn = Effect.fnUntraced(function* (path: string, text: string) {
     return yield* Unparsed.make({ path });
   }
 
-  return parsed.comments.flatMap((comment): Edge[] => {
+  return Arr.flatMap(parsed.comments, (comment): Edge[] => {
     const rest = DISABLE.exec(comment.value)?.[1];
 
     if (rest === undefined) {
@@ -57,11 +66,13 @@ const edgesIn = Effect.fnUntraced(function* (path: string, text: string) {
 
     const at = pipe(rest, Str.search(REASON));
     const listed = Option.match(at, { onNone: () => rest, onSome: (start) => pipe(rest, Str.slice(0, start)) });
-    const rules = Str.split(listed, ",")
-      .map((rule) => Str.trim(rule))
-      .filter((rule) => rule !== "");
+    const rules = pipe(
+      Str.split(listed, ","),
+      Arr.map((rule) => Str.trim(rule)),
+      Arr.filter((rule) => rule !== ""),
+    );
 
-    if (!rules.some((rule) => EDGE_RULES.has(rule))) {
+    if (!Arr.some(rules, (rule) => EDGE_RULES.has(rule))) {
       return [];
     }
 
@@ -70,7 +81,7 @@ const edgesIn = Effect.fnUntraced(function* (path: string, text: string) {
       onSome: (start) => pipe(rest, Str.slice(start), Str.replace(REASON, ""), Str.trim),
     });
     const line = pipe(text, Str.slice(0, comment.start), Str.split("\n")).length;
-    return [{ path, line, rules: rules.join(", "), reason }];
+    return [{ path, line, rules: Arr.join(rules, ", "), reason }];
   });
 });
 
@@ -123,13 +134,13 @@ const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
   });
 
   if (code !== 0) {
-    return yield* GitFailed.make({ args: args.join(" "), code });
+    return yield* GitFailed.make({ args: Arr.join(args, " "), code });
   }
 
   return out;
 }, Effect.scoped);
 
-const lines = (text: string) => Str.split(text, "\n").filter((line) => line !== "");
+const lines = (text: string) => Arr.filter(Str.split(text, "\n"), (line) => line !== "");
 
 /** A note on one line of the diff, in GitHub's workflow command form. */
 const notice = (edge: Edge) => {
@@ -157,7 +168,7 @@ const main = Effect.gen(function* () {
   const before = new Map<string, string>();
   const after = new Map<string, string>();
 
-  for (const path of changed.filter((p) => CODE.test(p))) {
+  for (const path of Arr.filter(changed, (p) => CODE.test(p))) {
     if (atBase.has(path)) {
       before.set(path, yield* at(["show", `${base}:${path}`]));
     }
@@ -171,8 +182,7 @@ const main = Effect.gen(function* () {
 
   const head =
     found.length === 0 ? "No new edge comments in this pull request." : "Edges this pull request adds, for the owner:";
-
-  yield* Console.log([head, ...found.map(ask)].join("\n"));
+  yield* Console.log(Arr.join([head, ...Arr.map(found, ask)], "\n"));
   const summary = yield* Config.String("GITHUB_STEP_SUMMARY").pipe(Config.option);
 
   if (Option.isSome(summary)) {
@@ -180,8 +190,8 @@ const main = Effect.gen(function* () {
       yield* Console.log(notice(edge));
     }
 
-    const body = [`### ${head}`, "", ...found.map((edge) => `- \`${ask(edge)}\``), ""];
-    yield* fs.writeFileString(summary.value, `${body.join("\n")}\n`, { flag: "a" });
+    const body = [`### ${head}`, "", ...Arr.map(found, (edge) => `- \`${ask(edge)}\``), ""];
+    yield* fs.writeFileString(summary.value, `${Arr.join(body, "\n")}\n`, { flag: "a" });
   }
 });
 

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { String as Str, pipe } from "effect";
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -94,7 +94,7 @@ describe("build_touched_exam (p84)", () => {
   it("scenario: a build commit dropping a row from exam-paths.json and touching that path: the base's list counts", () => {
     const r = new Repo();
     const rows = JSON.parse(EXAM_LIST) as Array<{ glob: string }>;
-    r.write("exam-paths.json", JSON.stringify(rows.filter((row) => row.glob !== "boundary-rules.json")));
+    r.write("exam-paths.json", JSON.stringify(Arr.filter(rows, (row) => row.glob !== "boundary-rules.json")));
     r.write("boundary-rules.json", "[3]\n");
     const c = r.commit();
     r.sign("build");
@@ -259,7 +259,7 @@ describe("the run fails (p87), judging no commit", () => {
   it.each([
     [
       "an ECDSA key",
-      `${[keyLine("tests", "tests"), keyLine("build", "build"), keyLine("lead", "ecdsa")].join("\n")}\n`,
+      `${Arr.join([keyLine("tests", "tests"), keyLine("build", "build"), keyLine("lead", "ecdsa")], "\n")}\n`,
     ],
     ["a key under tests and build", `${GOOD_KEYS}${keyLine("build", "tests")}\n`],
     ["an unknown principal", `${GOOD_KEYS}${keyLine("owner", "stranger")}\n`],

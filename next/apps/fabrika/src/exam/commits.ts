@@ -18,7 +18,16 @@
 // imports no product code, so a builder cannot weaken it by changing one (p84). Exit 1 on any `stuck`,
 // 0 on `done` and `ask`, 2 when the run fails: a keys file p87 refuses, or something it could not read.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Config, Console, Effect, Exit, FileSystem, Option, Path, Schema, Stream, String as Str, pipe } from "effect";
+import * as Config from "effect/Config";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { String as Str, pipe, Array as Arr } from "effect";
 import { ChildProcess } from "effect/process";
 
 export const ROLES = ["tests", "build", "lead"] as const;
@@ -107,15 +116,18 @@ export const signedText = (link: {
   readonly from: string;
   readonly to: string;
 }) =>
-  [
-    "fabrika-step attested v2",
-    `step ${link.step}`,
-    `ticket ${link.ticket}`,
-    `version ${link.version}`,
-    `from ${link.from}`,
-    `to ${link.to}`,
-    "",
-  ].join("\n");
+  Arr.join(
+    [
+      "fabrika-step attested v2",
+      `step ${link.step}`,
+      `ticket ${link.ticket}`,
+      `version ${link.version}`,
+      `from ${link.from}`,
+      `to ${link.to}`,
+      "",
+    ],
+    "\n",
+  );
 
 export const decodeNote = Schema.decodeUnknownOption(Schema.fromJsonString(Note));
 
@@ -166,9 +178,8 @@ export const keysProblem = (text: string | null): string | null => {
     roles.add(role);
   }
 
-  const missing = ROLES.filter((r) => !roles.has(r));
-
-  return missing.length === 0 ? null : `no key for ${missing.join(", ")}`;
+  const missing = Arr.filter(ROLES, (r) => !roles.has(r));
+  return missing.length === 0 ? null : `no key for ${Arr.join(missing, ", ")}`;
 };
 
 /** One row of `exam-paths.json`: a glob and why it is the exam's. */
@@ -186,8 +197,9 @@ export const decodeExam = Schema.decodeUnknownOption(Schema.fromJsonString(ExamL
 /** A glob as the list writes it: `**` crosses folders, `*` stays inside one, dots match like letters. */
 const globRegex = (glob: string) =>
   new RegExp(
-    `^${Str.split(glob, /(\*\*\/|\/\*\*$|\*\*|\*)/)
-      .map((part) => {
+    `^${pipe(
+      Str.split(glob, /(\*\*\/|\/\*\*$|\*\*|\*)/),
+      Arr.map((part) => {
         if (part === "**/") {
           return "(?:.*/)?";
         }
@@ -205,28 +217,28 @@ const globRegex = (glob: string) =>
         }
 
         return pipe(part, Str.replace(/[.+?^${}()|[\]\\]/g, "\\$&"));
-      })
-      .join("")}$`,
+      }),
+      Arr.join(""),
+    )}$`,
     "s",
   );
 
 /** p85: an exam path is on the list, or holds a control character, which never passes quietly. */
 export const examMatcher = (list: ExamList) => {
-  const res = list.map((row) => globRegex(row.glob));
-  const control = (path: string) =>
-    [...path].some((ch) =>
+  const res = Arr.map(list, (row) => globRegex(row.glob));
+  const control = (path: string) => Arr.some([...path], (ch) =>
       pipe(
         ch,
         Str.charCodeAt(0),
         Option.exists((code) => code < 0x20 || code === 0x7f),
       ),
     );
-  return (path: string) => control(path) || res.some((re) => re.test(path));
+  return (path: string) => control(path) || Arr.some(res, (re) => re.test(path));
 };
 
 /** The scope rule: only a change under `next/` or on the exam list is judged. */
 export const inScope = (changed: ReadonlyArray<string>, isExam: (path: string) => boolean) =>
-  changed.some((p) => pipe(p, Str.startsWith("next/")) || isExam(p));
+  Arr.some(changed, (p) => pipe(p, Str.startsWith("next/")) || isExam(p));
 
 /** A note as CI saw it: decoded, and the role whose key verified its text, or null. */
 interface Signed {
@@ -274,15 +286,25 @@ export const staleSteps = (
   const stale = new Set<Role>();
 
   for (const role of ROLES) {
-    const mine = all.filter((s) => verified(s) && s.note.step === role && s.note.ticket === ticket);
+    const mine = Arr.filter(all, (s) => verified(s) && s.note.step === role && s.note.ticket === ticket);
 
     if (mine.length === 0) {
       continue;
     }
 
-    const top = Math.max(...mine.map((s) => s.note.version));
-    const newest = new Set(mine.filter((s) => s.note.version === top).map((s) => signedText(s.note)));
-    const chain = used.filter((n) => n.step === role).map(signedText);
+    const top = Math.max(...Arr.map(mine, (s) => s.note.version));
+    const newest = new Set(
+      pipe(
+        mine,
+        Arr.filter((s) => s.note.version === top),
+        Arr.map((s) => signedText(s.note)),
+      ),
+    );
+    const chain = pipe(
+      used,
+      Arr.filter((n) => n.step === role),
+      Arr.map(signedText),
+    );
     const [only] = newest;
     const at = only === undefined ? -1 : chain.indexOf(only);
 
@@ -297,15 +319,15 @@ export const staleSteps = (
 /** p83 to p86 and p89 at pull request time. The scope rule is the caller's, before it gathers. */
 export const check = (pr: PullRequest, isExam: (path: string) => boolean) => {
   const fits = (c: Commit) => verified(c.signed) && c.signed.note.from === c.parentTree && c.signed.note.to === c.tree;
-  const ticket = pr.commits.find(fits)?.signed?.note.ticket ?? null;
+  const ticket = Option.getOrUndefined(Arr.findFirst(pr.commits, fits))?.signed?.note.ticket ?? null;
   const role = (c: Commit) => (fits(c) && c.signed?.note.ticket === ticket ? c.signed.note.step : null);
-  const used = pr.commits.flatMap((c) => (role(c) === null || c.signed === null ? [] : [c.signed.note]));
+  const used = Arr.flatMap(pr.commits, (c) => (role(c) === null || c.signed === null ? [] : [c.signed.note]));
   const stale = ticket === null ? new Set<Role>() : staleSteps(ticket, pr.notes, used);
   const answers: Answer[] = [];
 
   for (const c of pr.commits) {
     const step = role(c);
-    const touched = step === "build" && c.exam !== null ? c.paths.filter(examMatcher(c.exam)).sort() : [];
+    const touched = step === "build" && c.exam !== null ? Arr.filter(c.paths, examMatcher(c.exam)).sort() : [];
 
     if (step === null && !(c.signed === null && c.person === true)) {
       answers.push(stuck("unsigned_commit", c.sha));
@@ -319,12 +341,12 @@ export const check = (pr: PullRequest, isExam: (path: string) => boolean) => {
   }
 
   for (const step of stale) {
-    if (!pr.commits.some((c) => role(c) === step)) {
+    if (!Arr.some(pr.commits, (c) => role(c) === step)) {
       answers.push(stuck("stale_link", pr.head, { step }));
     }
   }
 
-  const exam = [...new Set(pr.changed.filter(isExam))].sort();
+  const exam = [...new Set(Arr.filter(pr.changed, isExam))].sort();
 
   if (exam.length > 0) {
     answers.push(Answer.cases.ask.make({ to: "owner", for: "exam_read", paths: exam }));
@@ -367,40 +389,37 @@ export const chain = (
   trees: ReadonlyMap<string, string>,
   placed: Placed,
 ): ReadonlyArray<Answer> => {
-  const mine = rows.filter((r) => r.link.squash === squash);
-  const links = mine.map((r) => r.link);
-  const tickets = new Set(links.map((l) => l.ticket));
-  const moves = links.filter((l) => l.from !== l.to);
-  const empty = links.filter((l) => l.from === l.to);
+  const mine = Arr.filter(rows, (r) => r.link.squash === squash);
+  const links = Arr.map(mine, (r) => r.link);
+  const tickets = new Set(Arr.map(links, (l) => l.ticket));
+  const moves = Arr.filter(links, (l) => l.from !== l.to);
+  const empty = Arr.filter(links, (l) => l.from === l.to);
   const first = links[0];
   const last = links.at(-1);
-  const visited = new Set([first?.from, ...moves.map((l) => l.to)]);
-
+  const visited = new Set([first?.from, ...Arr.map(moves, (l) => l.to)]);
   const whole =
     first !== undefined &&
     last !== undefined &&
     placed.onMain &&
-    links.every((l) => placed.before.has(l.base)) &&
-    mine.every((r) => r.signer === r.link.step) &&
+    Arr.every(links, (l) => placed.before.has(l.base)) &&
+    Arr.every(mine, (r) => r.signer === r.link.step) &&
     tickets.size === 1 &&
     visited.size === moves.length + 1 &&
-    new Set(empty.map((l) => l.from)).size === empty.length &&
+    new Set(Arr.map(empty, (l) => l.from)).size === empty.length &&
     first.from === trees.get(first.base) &&
-    links.every((l, i) => i === 0 || l.from === links[i - 1]?.to) &&
+    Arr.every(links, (l, i) => i === 0 || l.from === links[i - 1]?.to) &&
     (last.to === trees.get(squash) || last.to === placed.head);
 
   if (!whole || first === undefined) {
     return [stuck("broken_chain", squash)];
   }
 
-  const all = rows.flatMap(({ link, signer }): Signed[] =>
+  const all = Arr.flatMap(rows, ({ link, signer }): Signed[] =>
     link.step === "person" || signer === "person" ? [] : [{ note: link, signer }],
   );
-
-  const steps = links.filter((l): l is Link => l.step !== "person");
+  const steps = Arr.filter(links, (l): l is Link => l.step !== "person");
   const stale = staleSteps(first.ticket, all, steps);
-
-  return stale.size === 0 ? [done] : [...stale].map((step) => stuck("stale_link", squash, { step }));
+  return stale.size === 0 ? [done] : Arr.map([...stale], (step) => stuck("stale_link", squash, { step }));
 };
 
 // The edge: git and ssh-keygen through effect/process, and the files a run reads and writes.
@@ -434,7 +453,7 @@ const must = Effect.fnUntraced(function* (cmd: string, args: ReadonlyArray<strin
     Effect.flatMap((r) =>
       r.code === 0
         ? Effect.succeed(r.out)
-        : Effect.fail(Failed.make({ message: `${cmd} ${args.join(" ")}: ${Str.trim(r.err)}` })),
+        : Effect.fail(Failed.make({ message: `${cmd} ${Arr.join(args, " ")}: ${Str.trim(r.err)}` })),
     ),
   );
 });
@@ -447,8 +466,8 @@ const gitMaybe = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
   return yield* run("git", args).pipe(Effect.map((r) => (r.code === 0 ? r.out : null)));
 });
 
-const nul = (out: string) => Str.split(out, "\0").filter((p) => p !== "");
-const words = (out: string) => Str.split(out, "\n").filter((p) => p !== "");
+const nul = (out: string) => Arr.filter(Str.split(out, "\0"), (p) => p !== "");
+const words = (out: string) => Arr.filter(Str.split(out, "\n"), (p) => p !== "");
 
 const treeAt = Effect.fnUntraced(function* (rev: string) {
   return yield* gitMaybe(["rev-parse", "--verify", "-q", `${rev}^{tree}`]);
@@ -510,7 +529,7 @@ const headerField = (lines: ReadonlyArray<string>, name: string) => {
       value.push(pipe(lines[i] ?? "", Str.slice(1)));
     }
 
-    values.push(value.join("\n"));
+    values.push(Arr.join(value, "\n"));
   }
 
   return values.length === 1 ? values[0] : undefined;
@@ -523,7 +542,7 @@ const personVerifier = Effect.gen(function* () {
 
   return Effect.fnUntraced(function* (keys: string) {
     return yield* Effect.gen(function* () {
-      const people = words(keys).filter((line) => pipe(line, Str.startsWith("person:")));
+      const people = Arr.filter(words(keys), (line) => pipe(line, Str.startsWith("person:")));
 
       if (people.length === 0) {
         return Effect.fnUntraced(function* (_sha: string, _link?: PersonLink) {
@@ -533,8 +552,7 @@ const personVerifier = Effect.gen(function* () {
 
       const fs = yield* FileSystem.FileSystem;
       const allowed = yield* fs.makeTempFileScoped();
-      yield* fs.writeFileString(allowed, `${people.join("\n")}\n`);
-
+      yield* fs.writeFileString(allowed, `${Arr.join(people, "\n")}\n`);
       return Effect.fnUntraced(function* (sha: string, link?: PersonLink) {
         // gpg.format chooses how to sign; verification detects the signature's own format.
         const raw = yield* gitMaybe(["cat-file", "commit", sha]);
@@ -633,7 +651,7 @@ const endpoints = Effect.gen(function* () {
     const pr = flag("--pr");
     const shas = [base, head, main ?? ""];
 
-    if (!shas.every((sha) => HEX.test(sha)) || (pr !== undefined && !/^[0-9]+$/.test(pr))) {
+    if (!Arr.every(shas, (sha) => HEX.test(sha)) || (pr !== undefined && !/^[0-9]+$/.test(pr))) {
       return yield* Failed.make({ message: "--fetch takes 40-hex shas, --main included, and a number" });
     }
 
@@ -668,11 +686,10 @@ export const plain = (a: Answer, show: (path: string) => string = quote) => {
   }
 
   if (a._tag === "ask") {
-    return `ask owner exam_read ${a.paths.map(show).join(" ")}`;
+    return `ask owner exam_read ${pipe(a.paths, Arr.map(show), Arr.join(" "))}`;
   }
 
-  const paths = a.paths === undefined ? "" : ` ${a.paths.map(show).join(" ")}`;
-
+  const paths = a.paths === undefined ? "" : ` ${pipe(a.paths, Arr.map(show), Arr.join(" "))}`;
   return `stuck ${a.reason} ${a.sha}${a.step === undefined ? "" : ` step ${a.step}`}${paths}`;
 };
 
@@ -694,15 +711,15 @@ const report = Effect.fnUntraced(function* (title: string, answers: ReadonlyArra
       yield* Console.log(`::${level} title=${title}::${annotate(plain(a, (p) => p))}`);
     }
 
-    const rows = answers.map((a) => `| \`${a._tag}\` | \`${plain(a)}\` |`);
+    const rows = Arr.map(answers, (a) => `| \`${a._tag}\` | \`${plain(a)}\` |`);
     const body = [`### ${title}${extra}`, "", "| answer | detail |", "|---|---|", ...rows, ""];
     const fs = yield* FileSystem.FileSystem;
     yield* fs
-      .writeFileString(summary.value, `${body.join("\n")}\n`, { flag: "a" })
+      .writeFileString(summary.value, `${Arr.join(body, "\n")}\n`, { flag: "a" })
       .pipe(Effect.mapError(() => Failed.make({ message: "could not write the step summary" })));
   }
 
-  return answers.some((a) => a._tag === "stuck") ? 1 : 0;
+  return Arr.some(answers, (a) => a._tag === "stuck") ? 1 : 0;
 });
 
 const changedPaths = Effect.fnUntraced(function* (from: string, sha: string) {
@@ -758,7 +775,7 @@ const checkMain = Effect.gen(function* () {
   });
 
   const notes = yield* notesOn("fabrika");
-  const byCommit = new Map(notes.map((n) => [n.commit, n.note]));
+  const byCommit = new Map(Arr.map(notes, (n) => [n.commit, n.note]));
   const commits: Commit[] = [];
 
   for (const sha of words(yield* git(["rev-list", "--topo-order", "--reverse", `${main}..${head}`]))) {
@@ -782,7 +799,7 @@ const checkMain = Effect.gen(function* () {
   }
 
   // p89 reads every note on the ref, but only one naming a ticket of this pull request can matter.
-  const tickets = new Set(commits.flatMap((c) => (c.signed === null ? [] : [c.signed.note.ticket])));
+  const tickets = new Set(Arr.flatMap(commits, (c) => (c.signed === null ? [] : [c.signed.note.ticket])));
   const all: Signed[] = [];
 
   for (const n of notes) {
@@ -790,7 +807,7 @@ const checkMain = Effect.gen(function* () {
       continue;
     }
 
-    const mine = commits.find((c) => c.sha === n.commit)?.signed;
+    const mine = Option.getOrUndefined(Arr.findFirst(commits, (c) => c.sha === n.commit))?.signed;
     all.push(mine ?? (yield* signedBy(n.note)));
   }
 
@@ -829,7 +846,7 @@ const loggedAt = Effect.fnUntraced(function* (rev: string) {
       continue;
     }
 
-    if (!Array.isArray(links)) {
+    if (!Arr.isArray(links)) {
       return yield* Failed.make({ message: `field/runs.jsonl line ${i + 1}: attested is not a list` });
     }
 
@@ -920,8 +937,16 @@ const chainMain = Effect.gen(function* () {
     const head = ends.head;
     main = ends.main;
     rev = head;
-    const before = new Set((yield* loggedAt(main)).map((l) => l.line));
-    squashes = [...new Set((yield* loggedAt(head)).filter((l) => !before.has(l.line)).map((l) => l.link.squash))];
+    const before = new Set(Arr.map(yield* loggedAt(main), (l) => l.line));
+    squashes = [
+      ...new Set(
+        pipe(
+          yield* loggedAt(head),
+          Arr.filter((l) => !before.has(l.line)),
+          Arr.map((l) => l.link.squash),
+        ),
+      ),
+    ];
   }
 
   const verify = yield* verifier;
@@ -956,7 +981,14 @@ const chainMain = Effect.gen(function* () {
   for (const squash of squashes) {
     const trees = new Map<string, string>();
 
-    for (const sha of [squash, ...rows.filter((r) => r.link.squash === squash).map((r) => r.link.base)]) {
+    for (const sha of [
+      squash,
+      ...pipe(
+        rows,
+        Arr.filter((r) => r.link.squash === squash),
+        Arr.map((r) => r.link.base),
+      ),
+    ]) {
       const tree = yield* treeAt(sha);
 
       if (tree !== null) {
@@ -966,14 +998,14 @@ const chainMain = Effect.gen(function* () {
 
     const before = new Set<string>();
 
-    for (const r of rows.filter((r) => r.link.squash === squash)) {
+    for (const r of Arr.filter(rows, (r) => r.link.squash === squash)) {
       if (yield* ancestor(r.link.base, `${squash}^1`)) {
         before.add(r.link.base);
       }
     }
 
     const onMain = yield* ancestor(squash, main);
-    const mine = rows.filter((r) => r.link.squash === squash);
+    const mine = Arr.filter(rows, (r) => r.link.squash === squash);
     const first = mine.at(0)?.link;
     const last = mine.at(-1)?.link;
 
