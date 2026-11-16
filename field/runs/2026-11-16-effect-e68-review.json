@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e68-review",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:55:13-08:00",
+  "ended": "2026-11-16T02:09:15-08:00",
+  "parent": "2026-11-16-effect-e68-tests",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of slice E68 (schemaStructWithTag) at 62540e02e, the one commit on 891075e7a, in next/: merge-ready, two finding rows. All 4 swaps are exact: in the installed effect 4.1.3, Schema.TaggedStruct(value, fields) is Struct({ _tag: tag(value), ...fields }) and tag is Literal(value) with only a constructor default (node_modules/effect/src/Schema.ts:6268 and :6364), so Schema.is checks the same one key with the same literal at runtime-quotas.laws.test.ts:837, runtime-recovery.laws.integration.test.ts:1460 and :1465 and worker-quotas.integration.test.ts:381; no assertion changed. Own recount, only schemaStructWithTag at error through an --lspconfig, one effect-tsgo diagnostics run per tsconfig: 0 hits in all 12 of .agents, oxlint-plugins, next/apps/fabrika, libfabrika, tuval, vitest and the six programs. The tooling tsconfig under the CI folder was not run (its path holds a word the worktree guard refuses); its own tsconfig already locks the check at error for the whole package (E11), and pnpm typecheck covers it. The same command on today's apps/fabrika/tsconfig.json found exactly the 4 left hits (messages.ts:207, :211, projects.ts:70, :80), which proves the method sees the check; the plan (effect-sweep-PLAN.md line 5) says today's version is not touched, and AGENTS.md says today's version takes only fixes daily use or CI needs, so leaving them is right. The tests row lists the one folder with a hit, next/apps/fabrika/src, which matches. pnpm typecheck with no override: exit 0. loosening.sh 891075e7a HEAD: 3 'unrecognized change' hits, one per swap line; none loosens a law, since each predicate accepts the same values. Decisions 0565, 0209 and 0214 hold. The L16 failure: T753 L16 (runtime-recovery.laws.integration.test.ts:1137) timed out at 60000 ms in the whole file, and passed alone in 59.96 s; it never calls runFlow, the only code the diff changed in that file, so the diff cannot reach it. It is the known flake of field/findings/2026-11-14-t753-l16-times-out-on-a-loaded-ci-machine.json, now at a new path and near its limit even alone (a finding row). The tests row's ended time, 01:55:30, is after its own commit at 01:54:14, so it was not read from a clock (a finding row).",
+  "tokens": null,
+  "tools": null,
+  "minutes": 14,
+  "note": "Read-only apart from this row. Tests run from the repo root at 62540e02e with --maxWorkers=1 and TYPESAFE_API_KEY unset: runtime-quotas.laws.test.ts 2 passed; worker-quotas.integration.test.ts 3 passed; runtime-recovery.laws.integration.test.ts 12 passed and L16 timed out at 60 s, then L16 alone passed in 59.96 s. No .integration. law was refused by the 0178 guard; FABRIKA_HOST_RUN_OWNER_APPROVED was never set. A first run from next/apps/fabrika used vitest's 5 s default, since that folder has no config of its own; those runs are not counted. oxfmt --check on the 4 files: clean. Not run: pnpm lint in full (one box, memory). The fold branch fabrikalfa/effect-mechanical was not found on origin when fetched; git merge-tree against the last fetched copy: no conflict.",
+  "step": "review"
+}
