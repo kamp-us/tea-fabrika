@@ -7,12 +7,13 @@ import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, PlatformError, Sink, Stream, Tracer } from "effect";
 import { SecureRandom } from "effect/crypto";
+import { FetchHttpClient } from "effect/http";
 import { ChildProcessSpawner } from "effect/process";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
-import { bodyText, fetchClient } from "./dev-client.test-support.ts";
+import { bodyText } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 
@@ -45,7 +46,7 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
         const home = mkdtempSync(join(tmpdir(), "p12-err-"));
         vi.stubEnv("FABRIKA_HOME", home);
         const reason = mode === "json" || mode === "schema" ? "bad_row" : mode === "remote" ? `remote-${id}` : mode;
-        const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+        const fetch = vi.fn<typeof globalThis.fetch>(async () => {
           if (mode === "unreachable") {
             throw new Error(id);
           }
@@ -69,7 +70,8 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
                 deploy(mode === "offline" ? 0 : 27002),
               ),
             ).pipe(
-              Effect.provide(fetchClient),
+              Effect.provide(FetchHttpClient.layer),
+              Effect.provideService(FetchHttpClient.Fetch, fetch),
               Effect.provide(ProcessIdGenerator.layer),
               Effect.provide(SecureRandom.layerWebCrypto),
               Effect.provide(rssLayer(() => 0)),
@@ -79,7 +81,6 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
           failure(exit, reason);
           expect(fetch.mock.calls.length === 0).toBe(mode === "offline");
         } finally {
-          fetch.mockRestore();
           vi.unstubAllEnvs();
           rmSync(home, { recursive: true, force: true });
         }
@@ -112,7 +113,7 @@ it("instance reports start_timeout when deployment never opens the control liste
               return yield* Fiber.await(running);
             }),
           ).pipe(
-            Effect.provide(fetchClient),
+            Effect.provide(FetchHttpClient.layer),
             Effect.provide(ProcessIdGenerator.layer),
             Effect.provide(SecureRandom.layerWebCrypto),
             Effect.provide(rssLayer(() => 0)),
@@ -151,7 +152,7 @@ for (const mode of ["exit", "spawn"] as const) {
             return span;
           },
         });
-        const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+        const fetch = vi.fn<typeof globalThis.fetch>(async (_url, options) => {
           const call = JSON.parse(bodyText(options));
           return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
         });
@@ -195,7 +196,8 @@ for (const mode of ["exit", "spawn"] as const) {
                 yield* TestClock.adjust("1 second");
               }),
             ).pipe(
-              Effect.provide(fetchClient),
+              Effect.provide(FetchHttpClient.layer),
+              Effect.provideService(FetchHttpClient.Fetch, fetch),
               Effect.provide(ProcessIdGenerator.layer),
               Effect.provide(SecureRandom.layerWebCrypto),
               Effect.provide(spawner),
@@ -209,7 +211,6 @@ for (const mode of ["exit", "spawn"] as const) {
           expect(samples).toHaveLength(1);
           failure(samples[0]!, "sample");
         } finally {
-          fetch.mockRestore();
           kill.mockRestore();
           vi.unstubAllEnvs();
           rmSync(home, { recursive: true, force: true });

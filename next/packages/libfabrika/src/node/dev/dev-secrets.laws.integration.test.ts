@@ -11,6 +11,7 @@ import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Context, Effect, Exit, Layer, Logger, ManagedRuntime, Redacted, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
+import { FetchHttpClient } from "effect/http";
 import * as fc from "fast-check";
 import { expect, expectTypeOf, it, vi } from "vitest";
 import { ConnectionService, connectionRuntime } from "../../cloudflare/connection.ts";
@@ -26,7 +27,7 @@ import * as StartsTest from "../../settings/StartsTest.ts";
 import { recordPart } from "../../telemetry/Records.ts";
 import { Chain, SpanRow } from "../../telemetry/Trace.ts";
 import { Attached } from "../../transport/Wire.ts";
-import { bodyText, fetchClient } from "./dev-client.test-support.ts";
+import { bodyText } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
@@ -160,7 +161,7 @@ const flow = async (sample: Flow) => {
     const store = recordPart(nodeSql(part(name)), chain, at, 1_000_000_000);
     return Effect.runPromise(store.write(rows));
   };
-  const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+  const fetch = vi.fn<typeof globalThis.fetch>(async (_url, options) => {
     const call = Schema.decodeUnknownSync(
       Schema.fromJsonString(
         Schema.Struct({
@@ -400,7 +401,8 @@ const flow = async (sample: Flow) => {
           outputs.outbox.push(yield* outbox.pending);
         }),
       ).pipe(
-        Effect.provide(fetchClient),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provideService(FetchHttpClient.Fetch, fetch),
         Effect.provide(ProcessIdGenerator.layer),
         Effect.provide(random),
         Effect.provide(rssLayer(() => 0)),
@@ -463,8 +465,6 @@ const flow = async (sample: Flow) => {
     expect(outputs.measurements.flat().length).toBeGreaterThan(0);
     return { outputs, words, answer };
   } finally {
-    fetch.mockRestore();
-
     for (const spy of consoleSpies) {
       spy.mockRestore();
     }

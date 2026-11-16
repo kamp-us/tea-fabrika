@@ -10,6 +10,7 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Duration, Effect, Result, Schedule, Schema } from "effect";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 
 /** The step's name in every test leg; it times the steps before it. workflow-lint.ts holds both. */
 export const STEP = "time table";
@@ -256,22 +257,17 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const env = process.env;
   const api = env["GITHUB_API_URL"] ?? "https://api.github.com";
   const io: Io = {
+    // Any answer but a 2xx, a network failure or no answer within 5 s is the same Unread.
     job: (id) =>
-      Effect.tryPromise({
-        try: async (signal) => {
-          const answer = await fetch(`${api}/repos/${env["GITHUB_REPOSITORY"]}/actions/jobs/${id}`, {
-            headers: { authorization: `Bearer ${env["GITHUB_TOKEN"] ?? ""}`, accept: "application/vnd.github+json" },
-            signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
-          });
-
-          if (!answer.ok) {
-            throw new Error(`GitHub answered ${answer.status}`);
-          }
-
-          return answer.json();
-        },
-        catch: (cause) => new Unread({ cause }),
-      }),
+      HttpClient.get(`${api}/repos/${env["GITHUB_REPOSITORY"]}/actions/jobs/${id}`, {
+        headers: { authorization: `Bearer ${env["GITHUB_TOKEN"] ?? ""}`, accept: "application/vnd.github+json" },
+      }).pipe(
+        Effect.flatMap(HttpClientResponse.filterStatusOk),
+        Effect.flatMap((answer) => answer.json),
+        Effect.timeout("5 seconds"),
+        Effect.mapError((cause) => new Unread({ cause })),
+        Effect.provide(FetchHttpClient.layer),
+      ),
     read: (path) => Effect.try({ try: () => readFileSync(path, "utf8"), catch: (cause) => new Unread({ cause }) }),
   };
 

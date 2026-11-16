@@ -9,12 +9,13 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Clock, Context, Deferred, Duration, Effect, FileSystem, Option, Queue, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
+import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
-import { vi } from "vitest";
+import { type Mock, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
-import { bodyText, fetchClient } from "./dev-client.test-support.ts";
+import { bodyText } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
@@ -175,7 +176,7 @@ type Seen = {
   readonly woken: Woken | null;
 };
 
-const run = Effect.fnUntraced(function* (walk: Walk) {
+const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalThis.fetch>) {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t708-" });
   const clock = yield* Clock.Clock;
@@ -281,38 +282,33 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
     },
   });
 
-  yield* Effect.acquireRelease(
-    Effect.sync(() =>
-      vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
-        const body = JSON.parse(bodyText(options)) as Call["body"];
-        // The address as `fetch` parses it, given as a string or as the client's URL object.
-        sent.push({ url: new URL(String(url)).href, body });
+  fetch.mockImplementation(async (url, options) => {
+    const body = JSON.parse(bodyText(options)) as Call["body"];
+    // The address as `fetch` parses it, given as a string or as the client's URL object.
+    sent.push({ url: new URL(String(url)).href, body });
 
-        if (mode === "startup") {
-          return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
-        }
+    if (mode === "startup") {
+      return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
+    }
 
-        if (body.method === "brain") {
-          // Keep lifecycle rows in the real outbox so the walk can read every one.
-          return Response.json({ error: { reason: "offline" } });
-        }
+    if (body.method === "brain") {
+      // Keep lifecycle rows in the real outbox so the walk can read every one.
+      return Response.json({ error: { reason: "offline" } });
+    }
 
-        if (body.target === "record") {
-          return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
-        }
+    if (body.target === "record") {
+      return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
+    }
 
-        if (world.phase !== "up") {
-          throw new Error("connection refused");
-        }
+    if (world.phase !== "up") {
+      throw new Error("connection refused");
+    }
 
-        const answer = answers.get(body.name) ?? "value";
-        return Response.json(
-          answer === "value" ? { value: { echo: body.name } } : { error: { reason: `remote-${body.name}` } },
-        );
-      }),
-    ),
-    (spy) => Effect.sync(() => spy.mockRestore()),
-  );
+    const answer = answers.get(body.name) ?? "value";
+    return Response.json(
+      answer === "value" ? { value: { echo: body.name } } : { error: { reason: `remote-${body.name}` } },
+    );
+  });
   yield* Effect.acquireRelease(
     Effect.sync(() =>
       vi.spyOn(process, "kill").mockImplementation((pid) => {
@@ -561,15 +557,18 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   return { startup, rows, facts, calls, restartReads, spans, world, kills };
 });
 
-// Each run gets its own clock, file system, process ids and secrets.
-const walked = (walk: Walk) =>
-  run(walk).pipe(
-    Effect.provide(fetchClient),
+// Each run gets its own clock, file system, process ids, secrets and platform stand-in.
+const walked = (walk: Walk) => {
+  const fetch = vi.fn<typeof globalThis.fetch>();
+  return run(walk, fetch).pipe(
+    Effect.provide(FetchHttpClient.layer),
+    Effect.provideService(FetchHttpClient.Fetch, fetch),
     Effect.provide(ProcessIdGenerator.layer),
     Effect.provide(SecureRandom.layerWebCrypto),
     Effect.provide(NodeServices.layer),
     Effect.provide(TestClock.layer()),
   );
+};
 
 describe("T708 dev control laws", () => {
   // Plant (the memory restart plan's L8, crash path): dial `address` in place of `reachable`: a call

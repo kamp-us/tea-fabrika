@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effect } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
 import { heldPort } from "../src/port.test-support.ts";
@@ -98,12 +99,17 @@ const start = async () => {
       throw new Error(`P12 dev.ts did not start: ${output}`);
     }
 
-    try {
-      if ((await fetch(url)).ok) {
-        break;
-      }
-    } catch {
-      /* Not listening yet. */
+    // One HTTP request. A refused connection is "not listening yet", never a failure.
+    const ok = await Effect.runPromise(
+      HttpClient.get(url).pipe(
+        Effect.map((answer) => answer.status >= 200 && answer.status <= 299),
+        Effect.orElseSucceed(() => false),
+        Effect.provide(FetchHttpClient.layer),
+      ),
+    );
+
+    if (ok) {
+      break;
     }
 
     await pause();
