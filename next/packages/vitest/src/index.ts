@@ -15,3 +15,11 @@ export * from "./Depth.ts";
  * @category testing
  */
 export * as Recorder from "./Recorder.ts";
+/**
+ * The one stand-in for a platform object (decision 0554): `Stub.make(rest, own)` answers `own`'s
+ * members as given and every other method with `rest(name)`.
+ *
+ * @stability unstable
+ * @category testing
+ */
+export * as Stub from "./Stub.ts";

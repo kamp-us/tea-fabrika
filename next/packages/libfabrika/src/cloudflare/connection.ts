@@ -32,7 +32,7 @@ const routed = Effect.fnUntraced(function* (work: Effect.Effect<typeof Answer.Ty
         : error;
     }),
     Effect.tap((answer) =>
-      answer._tag === "refused" && ["reserved", "rate_limited"].includes(answer.reason)
+      answer._tag === "refused" && ["reserved", "rate_limited", "quota"].includes(answer.reason)
         ? Effect.annotateCurrentSpan(REFUSED, answer.reason)
         : Effect.void,
     ),

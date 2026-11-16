@@ -95,9 +95,15 @@ for each new name, and code refuses either one when a line is missing.**
 
 - A plan and a pull request each gain one short section when they add a helper or a name. A plan
   or pull request that adds neither has nothing new to write.
-- `plancheck.sh` gets a new plan version, so a plan approved at an older version keeps passing.
+- `plancheck.sh` checks the line in draft mode only, so a plan approved before this keeps passing.
 - A pull request opened before this decision and landed after it needs a `## New names` section
   added to its description when its diff adds an exported name.
 - CI runs jscpd once per pull request, about 2 seconds on the whole tree on a laptop.
 - Not decided here: when jscpd blocks, and what counts as a name the code check cannot see (a
   setting key, a record field). Those wait on measurement.
+
+## Amendments
+
+- 2026-11-15: `plancheck.sh` checks the line in draft mode, with no new plan version, so plans
+  approved earlier keep passing. jscpd was measured on main before it advises: 5 of 60 fresh clones
+  were false alarms, 8% ([experiment 297](../experiments/297-jscpd-false-alarms.md)).

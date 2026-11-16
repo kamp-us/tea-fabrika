@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-ban-s4-tests1",
+  "ticket": "1056",
+  "pr": null,
+  "started": "2026-11-15T18:10:00-08:00",
+  "ended": "2026-11-15T18:35:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 4 of the Reflect ban (decision 0554), next/ only: Handshake.laws.test.ts checks the error tag with Predicate.isTagged (kind 2, 1 fire), and Connection.test.ts keeps its two Reflect lines (has, get) in the hostile-input Proxy trap, each with an oxlint-disable-next-line and its reason (kind 9). The folder next/packages/libfabrika/src/transport/** joins the fourth Reflect block of .oxlintrc.json, which stays at warn for JSON.parse and blocks every Reflect fire. Law L5 is lint. Connection.test.ts (6 tests) and Handshake.laws.test.ts (2 tests) pass; typecheck passes.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "No new law: the ban is a lint rule (L5 of the plan). Each plant was run once with oxlint-plugins/lint.ts and undone.",
+  "plants": [
+    {
+      "law": "L5",
+      "plant": "Reflect.get(Object(m[\"error\"]), \"_tag\") put back in Handshake.laws.test.ts:232: lint.ts exits 1 with eslint(no-restricted-properties) 'Reflect.get' is restricted",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
