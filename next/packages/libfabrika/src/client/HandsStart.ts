@@ -3,12 +3,14 @@
  * and output. Each Cmd becomes a write on its dial's socket, a journal call or the one command, and
  * each socket event becomes a Msg. It decides nothing: the machine's Model says which dial is
  * current and what runs next. Nothing here names a platform, so a browser tab could run it.
- *
- * @stability unstable
  */
 import { run } from "@demlik/tea/effect";
-import { DateTime, Effect, Predicate, Schema, Stream } from "effect";
-import { Socket } from "effect/socket";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
 import * as Id from "../Id.ts";
 import { ClientKey } from "../transport/ClientKey.ts";
 import { ErrorClass } from "../transport/ClientRows.ts";
@@ -25,7 +27,6 @@ import { Journal, type JournalError } from "./Journal.ts";
  * shows the person who grants its key, and the host's `os`, which the hello sends; a start that
  * gives none sends `unknown`.
  *
- * @stability unstable
  * @category models
  */
 export type StartOptions = {
@@ -63,7 +64,6 @@ const stamped = (params: unknown, sentAt: string): unknown =>
  * `journal_read`, `journal_write` and `execute` Cmds reach the journal and the command. A write, a
  * ping or a hello for a dial with no open socket fails at once.
  *
- * @stability unstable
  * @category constructors
  */
 export const start = Effect.fn("HandsStart.start")(function* (options: StartOptions) {

@@ -4,7 +4,10 @@
 // slice 1). Plants: answer a notification; route before initialize; turn a failure into err.
 import { assert, describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
-import { Effect, Layer, Schema, Tracer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { answerFrame } from "./Answer.ts";
 import { RouteError, Routes } from "./Routes.ts";
@@ -198,7 +201,7 @@ describe("P10 JSON-RPC", () => {
       const attached = online();
       let runs = 0;
       const first =
-        mode === "failure" ? Effect.fail(new RouteError({ cause: "offline" })) : Effect.die("route crashed");
+        mode === "failure" ? Effect.fail(RouteError.make({ cause: "offline" })) : Effect.die("route crashed");
       const route = () =>
         Effect.suspend(() => {
           runs += 1;

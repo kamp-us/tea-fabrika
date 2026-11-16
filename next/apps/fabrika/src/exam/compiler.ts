@@ -14,7 +14,7 @@ const lint = Effect.gen(function* () {
   const path = yield* Path.Path;
   const root = path.resolve(import.meta.dirname, "../../../../..");
   const read = (file: string) =>
-    fs.readFileString(path.join(root, file)).pipe(Effect.mapError(() => new Unread({ path: file })));
+    fs.readFileString(path.join(root, file)).pipe(Effect.mapError(() => Unread.make({ path: file })));
   const ledger = yield* read("compiler-ledger.json").pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Row)))),
   );
@@ -37,7 +37,7 @@ const lint = Effect.gen(function* () {
   yield* Console.log(`lint:compiler: ${files.size} files, ${findings.length} findings, ${ledger.length} ledger rows`);
 
   if (findings.length > 0) {
-    return yield* new Refused({ findings: findings.length });
+    return yield* Refused.make({ findings: findings.length });
   }
 });
 

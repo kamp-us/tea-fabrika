@@ -5,8 +5,9 @@
 // Effect's own `WebCrypto` reference with a stand-in `Crypto`, so nothing is spied on (0555, ticket
 // 1067 slice 1).
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
-import { WebCrypto } from "effect/crypto";
+import * as WebCrypto from "effect/crypto/WebCrypto";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { checkHello, helloText } from "./Hello.ts";
 import { subtle } from "./internal/binary.ts";
@@ -52,7 +53,7 @@ const rejecting = <A, E>(method: Method, failure: unknown, work: Effect.Effect<A
   work.pipe(Effect.provide(WebCrypto.layer(Rejecting.crypto(method, failure))));
 
 describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
-  // C5, internal/binary.ts:85. Plant: `const fail = () => new WebCryptoError({ cause: undefined })`.
+  // C5, internal/binary.ts:88. Plant: `const fail = () => new WebCryptoError({ cause: undefined })`.
   law(
     "C5: a generated rejection on any WebCrypto call is WebCryptoError with that very value as its cause",
     fc.record({
@@ -77,7 +78,7 @@ describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
       }),
   );
 
-  // C6, internal/binary.ts:84: the edge reads the provided `WebCrypto`, never the global. A hello
+  // C6, internal/binary.ts:87: the edge reads the provided `WebCrypto`, never the global. A hello
   // that passes every check before its fingerprint reaches `digest`, which the stand-in rejects, so
   // `checkHello` fails with WebCryptoError carrying that rejection, and admission is never reached
   // (its stand-in dies). Plant: read `globalThis.crypto.subtle` in `binary.ts` again; the real

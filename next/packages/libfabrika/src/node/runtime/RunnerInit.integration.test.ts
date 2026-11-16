@@ -1,7 +1,10 @@
 // Ticket 762 A-Merge, next/. Run runtime's init laws on scoped SQLite files (0062, 0061).
 import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for the referee's transactions
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path, type Scope } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import type * as Scope from "effect/Scope";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import * as RunnerInitTest from "../../runtime/RunnerInitTest.ts";
 import type { Sql, SqlValue } from "../../Sql.ts";

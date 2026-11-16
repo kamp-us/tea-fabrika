@@ -5,7 +5,8 @@
 // starts `<n>:`. It prints `ready` once one full round is saved, so every one of the sixteen keys
 // holds an entry the journal already said was saved, then writes until it is killed.
 import { NodeRuntime } from "@effect/platform-node";
-import { Effect, Layer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { Entry, Journal } from "../../client/Journal.ts";
 import * as JournalStore from "../../client/JournalStore.ts";
 import { Result } from "../../tasks/Task.ts";

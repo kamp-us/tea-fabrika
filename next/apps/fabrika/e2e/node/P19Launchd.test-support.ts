@@ -46,8 +46,8 @@ class HostError extends Schema.TaggedError<HostError>()("HostError", {
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}
 
-const fail = (cause: unknown) => new HostError({ reason: "host-check", cause: Redacted.make(cause) });
-const checked = (ok: boolean, reason: string) => (ok ? Effect.void : Effect.fail(new HostError({ reason })));
+const fail = (cause: unknown) => HostError.make({ reason: "host-check", cause: Redacted.make(cause) });
+const checked = (ok: boolean, reason: string) => (ok ? Effect.void : Effect.fail(HostError.make({ reason })));
 
 const command = Effect.fn("P19Host.command")(function* (executable: string, args: ReadonlyArray<string>) {
   return yield* Effect.scoped(
@@ -104,7 +104,7 @@ const processes = Effect.fn("P19Host.processes")(function* () {
  */
 const signal = Effect.fn("P19Host.signal")(function* (name: "TERM" | "KILL", group: number) {
   const owned = yield* Schema.decodeUnknownEffect(ProcessGroups.Owned)(group).pipe(
-    Effect.mapError((cause) => new HostError({ reason: "refused-group", cause: Redacted.make(cause) })),
+    Effect.mapError((cause) => HostError.make({ reason: "refused-group", cause: Redacted.make(cause) })),
   );
   yield* command("kill", [`-${name}`, `-${owned}`]);
 });
@@ -346,8 +346,8 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
         ? Readiness.cases.ready.make({})
         : Readiness.cases.waiting.make({});
     }).pipe(
-      Effect.mapError(
-        (cause: unknown) => new BrainProbeError({ reason: new Unreachable({ cause: Redacted.make(cause) }) }),
+      Effect.mapError((cause: unknown) =>
+        BrainProbeError.make({ reason: Unreachable.make({ cause: Redacted.make(cause) }) }),
       ),
     ),
     cleanup: Effect.gen(function* () {
@@ -365,8 +365,8 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
 
       return (yield* listening(spec.url)) ? Children.cases.waiting.make({}) : Children.cases.gone.make({});
     }).pipe(
-      Effect.mapError(
-        (cause: unknown) => new BrainProbeError({ reason: new Cleanup({ cause: Redacted.make(cause) }) }),
+      Effect.mapError((cause: unknown) =>
+        BrainProbeError.make({ reason: Cleanup.make({ cause: Redacted.make(cause) }) }),
       ),
     ),
   });
@@ -512,7 +512,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
     const current = yield* status(config.target);
 
     if (current._tag !== "loaded" || current.pid === null) {
-      return yield* new HostError({ reason: "no-process-to-observe" });
+      return yield* HostError.make({ reason: "no-process-to-observe" });
     }
 
     const expected = ProcessGroups.descendants(yield* processes(), current.pid);

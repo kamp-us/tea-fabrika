@@ -88,7 +88,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
           const cause = new Error(options.token === undefined ? "scripted host failure" : reveal(options.token));
 
           if (fault?.kind === "fault") {
-            return Effect.fail(new CodeHostError({ reason: new reasons[fault.reason]({ cause }) }));
+            return Effect.fail(CodeHostError.make({ reason: reasons[fault.reason].make({ cause }) }));
           }
 
           if (fault?.kind === "defect") {
@@ -120,7 +120,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                 const found = changes.get(change);
 
                 if (found === undefined) {
-                  return Effect.fail(new CodeHostError({ reason: new Refused({ cause: missing(change) }) }));
+                  return Effect.fail(CodeHostError.make({ reason: Refused.make({ cause: missing(change) }) }));
                 }
 
                 if (found.state !== "open") {
@@ -169,7 +169,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                 const found = changes.get(change);
 
                 if (found === undefined) {
-                  return Effect.fail(new CodeHostError({ reason: new Refused({ cause: missing(change) }) }));
+                  return Effect.fail(CodeHostError.make({ reason: Refused.make({ cause: missing(change) }) }));
                 }
 
                 if (found.state === "draft" || found.state === "closed") {

@@ -3,7 +3,41 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"],
     // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": { "preferSchemaTaggedError": "error" },
+        // A library imports each Effect module by its path (0577). On for the folders at zero, their
+        // tests too, until the package is at zero and the block moves up to the whole package.
+        // The globs read from this folder. Each import slice adds its folders here.
+        "overrides": [
+          {
+            "include": [
+              "src/*.ts",
+              "src/access/**/*.ts",
+              "src/ci/**/*.ts",
+              "src/client/**/*.ts",
+              "src/codehost/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/node/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/presence/**/*.ts",
+              "src/repositories/**/*.ts",
+              "src/schedules/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/tezgah/**/*.ts",
+              "src/transport/**/*.ts"
+            ],
+            "options": {
+              "namespaceImportPackages": ["effect"],
+              "diagnosticSeverity": { "preferNamespaceImport": "error" }
+            }
+          }
+        ]
+      }
+    ]
   },
   "include": ["src"]
 }

@@ -84,7 +84,7 @@ const gh = Effect.fn("heartbeat.gh")(function* (path: string) {
     ],
     { concurrency: 3 },
   );
-  return Number(code) === 0 ? out : yield* new ReadFailed({ path, reason: err.trim() });
+  return Number(code) === 0 ? out : yield* ReadFailed.make({ path, reason: err.trim() });
 }, Effect.scoped);
 
 const main = Effect.gen(function* () {
@@ -106,7 +106,7 @@ const main = Effect.gen(function* () {
   yield* Console.log(line(now, b));
 
   if (b._tag === "late") {
-    return yield* new Late();
+    return yield* Late.make();
   }
 });
 

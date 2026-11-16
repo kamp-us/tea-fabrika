@@ -1,5 +1,17 @@
 {
   "extends": "../tsconfig.base.json",
-  "compilerOptions": { "allowJs": true, "checkJs": true },
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    // Tooling scripts are programs, so they import Effect from the barrel, as 0577 has programs do
+    // (call 2 of docs/plan/quests/effect-sweep-PLAN.md).
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "barrelImportPackages": ["effect"],
+        "diagnosticSeverity": { "preferBarrelImport": "error", "preferSchemaTaggedError": "error" }
+      }
+    ]
+  },
   "include": ["*.ts", "gitignore.mjs", "css/*.ts", "../stylelint.config.ts"]
 }
