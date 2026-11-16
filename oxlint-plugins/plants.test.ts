@@ -24,7 +24,7 @@ import { dirname, join, relative } from "node:path";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
-import { BUILTIN_PLANTS, type Plant, REFLECT, TAGGED_ERROR, VI_METHODS } from "./builtin-plants.ts";
+import { BUILTIN_PLANTS, type Plant, REFLECT, TAGGED_ERROR, VI_METHODS, VI_PROPERTIES } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -640,7 +640,9 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
   // Plant: delete one entry from one block of `.oxlintrc.json`, and that folder's line is not refused.
   it("scenario: REFLECT's lines are refused exactly, in every folder of every ban block", () => {
     inConfigCopy(({ printed, lint }) => {
-      const globs = globsHolding(printed, isReflectGet);
+      // One per glob: a later block that writes the entries out again, such as the mock lock's, lists
+      // a folder a second time, and oxlint reads that folder by the last block that sets the rule.
+      const globs = [...new Map(globsHolding(printed, isReflectGet).map((g) => [g.glob, g])).values()];
       // Coverage: the tooling, a next/ folder where JSON.parse blocks and one where it still advises.
       expect(globs.map(({ glob }) => glob)).toEqual(
         expect.arrayContaining([".agents/**", ".github/**", "oxlint-plugins/**"]),
@@ -669,9 +671,13 @@ const viGlobs = (printed: Printed): ReadonlyArray<string> =>
 describe("M1 of the mock sweep: every folder a block lists refuses vi's mocks", () => {
   // scenario: the repo's own config, read by oxlint's own --print-config, so every folder a block of
   // `vitest/no-restricted-vi-methods` lists today gets each file of VI_METHODS, a later slice's
-  // folder included.
+  // folder included. The lock is a pair (amendment 2026-11-16): the same folders also get VI_PROPERTIES,
+  // under `no-restricted-properties`, which refuses the calls chained onto a vi call that the vitest
+  // rule misses (oxc#29656).
   // Plant: delete one folder from the block of `.oxlintrc.json`, and that folder's lines are not refused.
-  it("scenario: VI_METHODS' lines are refused exactly, in every folder of every block that sets the rule", () => {
+  // Plant: drop the block's `vi` entries from `eslint/no-restricted-properties`, and VI_PROPERTIES'
+  // chained lines are not refused.
+  it("scenario: VI_METHODS' and VI_PROPERTIES' lines are refused exactly, in every folder of every block that sets the rule", () => {
     inConfigCopy(({ printed, lint }) => {
       const globs = viGlobs(printed);
       // Coverage: the gateway and telemetry slice's two folders, at least.
@@ -681,8 +687,16 @@ describe("M1 of the mock sweep: every folder a block lists refuses vi's mocks", 
           "next/packages/libfabrika/src/telemetry/**",
         ]),
       );
+      // Coverage: each chained line the vitest rule takes alone is refused by the other half.
+      const chained = (line: string) => /\)\.mock\w*\(/.test(line);
+      const missed = VI_METHODS.flatMap((p) => p.lines.filter(([line, refused]) => !refused && chained(line)));
+      expect(missed.length, "VI_METHODS plants the vitest rule's chained miss").toBeGreaterThan(0);
+      expect(
+        VI_PROPERTIES.lines.filter(([line, refused]) => refused && chained(line)).length,
+        "VI_PROPERTIES refuses the chained lines",
+      ).toBe(2);
 
-      for (const [i, p] of VI_METHODS.entries()) {
+      for (const [i, p] of [...VI_METHODS, VI_PROPERTIES].entries()) {
         const { text, want } = textOf(p);
         const files = globs.map((glob) => plantPath(glob).replace(/\.ts$/, `-vi-${i}.test.ts`));
         expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);

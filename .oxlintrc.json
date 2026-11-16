@@ -2472,6 +2472,12 @@
     {
       // Decisions 0555 and 0579: no vi mock in a law. The block lists the folders at zero; a folder
       // joins the day its own slice brings it to zero, and none is taken off (0524).
+      // The lock is a pair of oxlint's own rules over the same files. `vitest/no-restricted-vi-methods`
+      // misses a call chained onto the vi call, such as `vi.fn().mockReturnValue(1)` (oxc#29656), and
+      // `no-restricted-properties` refuses the member `vi.fn` itself, so it holds that form. An
+      // override replaces a rule's options, so the entries of the Reflect ban's warn block above are
+      // written out again, at its level; the vi entries still block there, since only a JSON.parse fire
+      // advises (advice.ts).
       "files": ["next/packages/libfabrika/src/gateway/**", "next/packages/libfabrika/src/telemetry/**"],
       "rules": {
         "vitest/no-restricted-vi-methods": [
@@ -2482,6 +2488,48 @@
             "doMock": "Give the code a service and provide a test layer (0555).",
             "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
             "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+          }
+        ],
+        "eslint/no-restricted-properties": [
+          "warn",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          },
+          {
+            "object": "vi",
+            "property": "fn",
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)."
+          },
+          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+          {
+            "object": "vi",
+            "property": "doMock",
+            "message": "Give the code a service and provide a test layer (0555)."
+          },
+          {
+            "object": "vi",
+            "property": "spyOn",
+            "message": "Put the call behind a service and record it with a Recorder (0555, 0579)."
+          },
+          {
+            "object": "vi",
+            "property": "stubEnv",
+            "message": "Read through Config and provide a ConfigProvider layer (0555)."
           }
         ]
       }

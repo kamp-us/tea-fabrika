@@ -70,6 +70,10 @@ const viLines = (vi: string): readonly (readonly [string, boolean])[] => [
   [`// ${vi}.fn() in a comment`, false],
   [`export const d = "${vi}.spyOn(x)";`, false],
   ["other.fn();", false],
+  // A documented miss of this rule alone (oxc#29656): a call chained onto the vi call passes. The
+  // lock's other half, `no-restricted-properties` (VI_PROPERTIES), refuses these.
+  [`${vi}.spyOn(console, "warn").mockImplementation(() => undefined);`, false],
+  [`export const e = ${vi}.fn().mockReturnValue(1);`, false],
 ];
 
 /**
@@ -89,6 +93,37 @@ export const VI_METHODS: readonly Plant[] = [
   prelude: [from, "declare const other: { fn: () => void };"],
   lines: viLines(vi),
 }));
+
+/**
+ * M4 of the mock sweep, the lock's other half (amendment 2026-11-16 of
+ * mock-gateway-processes-telemetry-PLAN.md): oxlint's own `no-restricted-properties` refuses the
+ * member `vi.fn`, `vi.mock`, `vi.doMock`, `vi.spyOn` and `vi.stubEnv` itself, so a call chained onto
+ * it is refused too, which `vitest/no-restricted-vi-methods` misses (oxc#29656). The rest of `vi`
+ * passes. A line is held by the lock when this plant or VI_METHODS refuses it. plants.test.ts runs
+ * these lines in every folder of every block that sets the vitest rule.
+ * Plant: drop the block's `vi` entries from `eslint/no-restricted-properties`, and the chained lines
+ * are not refused.
+ */
+export const VI_PROPERTIES: Plant = {
+  code: "eslint(no-restricted-properties)",
+  prelude: ['import { vi } from "vitest";', "declare const other: { fn: () => void };"],
+  lines: [
+    ['vi.spyOn(console, "warn").mockImplementation(() => undefined);', true],
+    ["export const a = vi.fn().mockReturnValue(1);", true],
+    ["export const b = vi.fn();", true],
+    ['vi.mock("./a.ts");', true],
+    ['vi.doMock("./a.ts");', true],
+    ['export const c = vi.spyOn(console, "log");', true],
+    ['vi.stubEnv("A", "b");', true],
+    // 0555 and 0579 do not decide the rest of vi.
+    ["export const d = vi.hoisted(() => 1);", false],
+    ["export const e = vi.waitFor(() => 1);", false],
+    // Not a member of vi: a comment, a string, another object's member of the same name.
+    ["// vi.fn() in a comment", false],
+    ['export const f = "vi.spyOn(x)";', false],
+    ["other.fn();", false],
+  ],
+};
 
 /**
  * L1 of the trusted-rules swap (decision 0573): `Data.TaggedError` is refused in each value form
