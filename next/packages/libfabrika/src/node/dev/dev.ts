@@ -42,11 +42,14 @@ import { brainOutbox, checkMemory, lifeCell, signal, terminate } from "./local-d
  * @stability unstable
  * @category errors
  */
-export class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
-  reason: Schema.String,
-  /** The failure this error translates, kept in memory for diagnosis. */
-  cause: Schema.optional(Schema.Defect()),
-}) {}
+export class ControlError extends Schema.TaggedError<ControlError, { readonly brand: unique symbol }>()(
+  "ControlError",
+  {
+    reason: Schema.String,
+    /** The failure this error translates, kept in memory for diagnosis. */
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
 
 type Target = "project" | "process" | "record" | "loader" | "bucket";
 type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;

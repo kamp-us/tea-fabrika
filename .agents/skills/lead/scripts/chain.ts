@@ -199,17 +199,20 @@ export const QueueMinutes = Context.Reference<number>("chain/QueueMinutes", {
 export const slotSchedule = (minutes: number) => Schedule.spaced(Duration.minutes(minutes));
 
 /** drive refused the step for a full laptop (agent_cap or low_disk); retried on `slotSchedule`. */
-export class SlotRefused extends Schema.TaggedError<SlotRefused>()("SlotRefused", {
+export class SlotRefused extends Schema.TaggedError<SlotRefused, { readonly brand: unique symbol }>()("SlotRefused", {
   check: Schema.String,
   reason: Schema.String,
 }) {}
 
 /** A named schedule ran out; the quest reports it as stuck. */
-export class RetriesExhausted extends Schema.TaggedError<RetriesExhausted>()("RetriesExhausted", {
-  schedule: Schema.String,
-  times: Schema.Number,
-  reason: Schema.String,
-}) {}
+export class RetriesExhausted extends Schema.TaggedError<RetriesExhausted, { readonly brand: unique symbol }>()(
+  "RetriesExhausted",
+  {
+    schedule: Schema.String,
+    times: Schema.Number,
+    reason: Schema.String,
+  },
+) {}
 
 /** Whether a drive outcome is a slot refusal, the one kind the schedule retries. */
 export const slotRefusal = (outcome: string): string | null => {

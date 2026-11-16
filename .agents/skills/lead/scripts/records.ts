@@ -594,10 +594,14 @@ export const resolutionLine = (resolution: Resolution, paths: ReadonlyMap<string
 // ---------------------------------------------------------------- the world
 
 /** origin/main could not be fetched or read, so the list and the next number are unknown. */
-class Unknown extends Schema.TaggedError<Unknown>()("Unknown", { reason: Schema.String }) {}
+class Unknown extends Schema.TaggedError<Unknown, { readonly brand: unique symbol }>()("Unknown", {
+  reason: Schema.String,
+}) {}
 
 /** `next` was asked of a folder whose records have no numbers. */
-class NoNumbers extends Schema.TaggedError<NoNumbers>()("NoNumbers", { folder: Schema.String }) {}
+class NoNumbers extends Schema.TaggedError<NoNumbers, { readonly brand: unique symbol }>()("NoNumbers", {
+  folder: Schema.String,
+}) {}
 
 const collected = (chunks: ReadonlyArray<Uint8Array>) => {
   const bytes = new Uint8Array(chunks.reduce((n, chunk) => n + chunk.length, 0));

@@ -16,7 +16,9 @@ import * as FlowMachine from "./machine.ts";
 import * as Runners from "./Runners.ts";
 
 /** The command was used wrong, or its files do not fit: exit 2. */
-export class Usage extends Schema.TaggedError<Usage>()("Usage", { reason: Schema.String }) {
+export class Usage extends Schema.TaggedError<Usage, { readonly brand: unique symbol }>()("Usage", {
+  reason: Schema.String,
+}) {
   readonly [Runtime.errorExitCode] = 2;
 }
 

@@ -144,10 +144,13 @@ export const ADAPTER_SCRIPTS = [
 ] as const;
 
 /** The pinned adapters could not be installed: the step's agent cannot start. */
-export class AdaptersMissing extends Schema.TaggedError<AdaptersMissing>()("AdaptersMissing", {
-  missing: Schema.Array(Schema.String),
-  said: Schema.String,
-}) {}
+export class AdaptersMissing extends Schema.TaggedError<AdaptersMissing, { readonly brand: unique symbol }>()(
+  "AdaptersMissing",
+  {
+    missing: Schema.Array(Schema.String),
+    said: Schema.String,
+  },
+) {}
 
 /** How the install ran: its exit code and its last lines. */
 export type Install = (folder: string) => Effect.Effect<{ readonly code: number; readonly said: string }>;

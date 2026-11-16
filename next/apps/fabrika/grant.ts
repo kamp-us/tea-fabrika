@@ -6,7 +6,9 @@ import { SecureRandom } from "effect/crypto";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess } from "effect/process";
 
-class GrantError extends Schema.TaggedError<GrantError>()("GrantError", { reason: Schema.String }) {}
+class GrantError extends Schema.TaggedError<GrantError, { readonly brand: unique symbol }>()("GrantError", {
+  reason: Schema.String,
+}) {}
 
 const Target = Schema.NullOr(
   Schema.Struct({

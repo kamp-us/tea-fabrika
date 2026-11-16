@@ -340,7 +340,7 @@ export const planLine = (size: PlanSize): string => {
 };
 
 /** The run could not finish: git or the plan file failed it. */
-export class Failed extends Schema.TaggedError<Failed>()("Failed", {
+export class Failed extends Schema.TaggedError<Failed, { readonly brand: unique symbol }>()("Failed", {
   reason: Schema.Literals(["git", "file"]),
   message: Schema.String,
 }) {}

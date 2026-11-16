@@ -50,7 +50,9 @@ import { Argument, Command, Flag } from "effect/cli";
 
 export const SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing";
 
-export class Refused extends Schema.TaggedError<Refused>()("Refused", { reason: Schema.String }) {}
+export class Refused extends Schema.TaggedError<Refused, { readonly brand: unique symbol }>()("Refused", {
+  reason: Schema.String,
+}) {}
 
 /** One call's tokens by how they are priced: uncached input, the two cache writes, cache reads, output. */
 export interface Tokens {

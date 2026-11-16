@@ -102,13 +102,13 @@ export const KILL_GRACE_SECONDS = 2;
  */
 export const GC_SECONDS = 3 * DOCKER_SECONDS.call + DOCKER_SECONDS.prune + 4 * KILL_GRACE_SECONDS + 10;
 
-class Stuck extends Schema.TaggedError<Stuck>()("Stuck", {
+class Stuck extends Schema.TaggedError<Stuck, { readonly brand: unique symbol }>()("Stuck", {
   reason: Schema.String,
   detail: Schema.String,
 }) {}
 
 /** A command passed its time limit and was stopped; nothing it would have said was read. */
-export class CallTimeout extends Schema.TaggedError<CallTimeout>()("CallTimeout", {
+export class CallTimeout extends Schema.TaggedError<CallTimeout, { readonly brand: unique symbol }>()("CallTimeout", {
   command: Schema.String,
   seconds: Schema.Number,
 }) {}

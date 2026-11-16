@@ -42,10 +42,13 @@ export type Snapshot = typeof Snapshot.Type;
  * @stability unstable
  * @category errors
  */
-export class SnapshotError extends Schema.TaggedError<SnapshotError>()("SnapshotError", {
-  message: Schema.String,
-  cause: Schema.optionalKey(Schema.Defect()),
-}) {}
+export class SnapshotError extends Schema.TaggedError<SnapshotError, { readonly brand: unique symbol }>()(
+  "SnapshotError",
+  {
+    message: Schema.String,
+    cause: Schema.optionalKey(Schema.Defect()),
+  },
+) {}
 
 const hashValues = Effect.fnUntraced(function* (values: Snapshot["values"]) {
   const sorted = Object.entries(values).sort(([a], [b]) => (a < b ? -1 : 1));

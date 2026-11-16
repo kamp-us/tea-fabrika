@@ -299,7 +299,7 @@ export const Archived = Schema.TaggedStruct("archived", {
  * @stability unstable
  * @category errors
  */
-export class SinkError extends Schema.TaggedError<SinkError>()("SinkError", {
+export class SinkError extends Schema.TaggedError<SinkError, { readonly brand: unique symbol }>()("SinkError", {
   /** `unreachable`: a record or archive call that never answered. `bad_row`: an answer or a row
    *  that does not decode. `storage`: SQLite threw, for example `SQLITE_FULL`. */
   reason: Schema.Literals(["unreachable", "bad_row", "storage"]),

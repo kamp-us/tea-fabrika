@@ -64,9 +64,12 @@ export const armor = (blob: Uint8Array): string => {
 };
 
 /** @internal */
-export class WebCryptoError extends Schema.TaggedError<WebCryptoError>()("WebCryptoError", {
-  cause: Schema.optional(Schema.Defect()),
-}) {}
+export class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()(
+  "WebCryptoError",
+  {
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
 
 type CryptoMethod = "digest" | "importKey" | "verify";
 type CryptoArgs = { [M in CryptoMethod]: Parameters<SubtleCrypto[M]> };

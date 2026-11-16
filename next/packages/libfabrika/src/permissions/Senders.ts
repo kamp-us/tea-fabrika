@@ -38,10 +38,13 @@ export type Sender = typeof Sender.Type;
  * @stability unstable
  * @category errors
  */
-export class SendersError extends Schema.TaggedError<SendersError>()("SendersError", {
-  reason: Schema.Literals(["removed", "ended", "storage"]),
-  cause: Schema.optionalKey(Schema.Defect()),
-}) {}
+export class SendersError extends Schema.TaggedError<SendersError, { readonly brand: unique symbol }>()(
+  "SendersError",
+  {
+    reason: Schema.Literals(["removed", "ended", "storage"]),
+    cause: Schema.optionalKey(Schema.Defect()),
+  },
+) {}
 
 /**
  * Service that answers who sent an input delivered to a process.
