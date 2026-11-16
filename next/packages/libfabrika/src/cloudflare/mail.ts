@@ -13,11 +13,11 @@ const fromMailReply = Effect.fnUntraced(function* (reply: unknown) {
     Effect.mapError(() => ProgramMailError.storage()),
   );
 
-  if (checked._tag === "refused") {
+  if (MailReplies.isAnyOf(["refused"])(checked)) {
     return yield* ProgramMailError.refused(checked.reason);
   }
 
-  if (checked._tag === "full") {
+  if (MailReplies.isAnyOf(["full"])(checked)) {
     yield* Effect.annotateCurrentSpan({ "fab.mail.unread": checked.unread, "fab.mail.cap": checked.cap });
 
     return yield* ProgramMailError.full(checked.unread);

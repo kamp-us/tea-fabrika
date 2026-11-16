@@ -40,9 +40,12 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("flush_checked") }),
 ]);
 
+/** @internal Whether a Model is `clean`: no spans held and no failure waiting for a flush. */
+export const clean = Model.isAnyOf(["clean"]);
+
 /** @internal The spans a Model holds, oldest first. */
 export const held = (model: Model): ReadonlyArray<Ended> =>
-  model._tag === "holding" || model._tag === "reported" ? model.spans : [];
+  Model.isAnyOf(["holding", "reported"])(model) ? model.spans : [];
 
 /** @internal */
 export const machine = Machine.make({
@@ -65,14 +68,14 @@ export const machine = Machine.make({
       const checked = m.sized && m.hour > s.checked ? m.hour : s.checked;
 
       return [
-        s._tag === "failed" || s._tag === "holding"
+        Model.isAnyOf(["failed", "holding"])(s)
           ? Model.cases.failed.make({ checked })
           : Model.cases.clean.make({ checked }),
         [],
       ];
     },
     flush_checked: (s) => [
-      s._tag === "holding" || s._tag === "reported"
+      Model.isAnyOf(["holding", "reported"])(s)
         ? Model.cases.reported.make({ checked: s.checked, spans: s.spans })
         : Model.cases.clean.make({ checked: s.checked }),
       [],

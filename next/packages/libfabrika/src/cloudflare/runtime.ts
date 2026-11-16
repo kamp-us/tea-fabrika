@@ -15,6 +15,7 @@ import {
   Exit,
   Fiber,
   Layer,
+  Match,
   Option,
   Result,
   Schema,
@@ -43,7 +44,7 @@ import { LedgerStreams } from "../ledger/LedgerStreams.ts";
 import * as LedgerStreamsSql from "../ledger/LedgerStreamsSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
-import { type Appended, type Entry, fromHere, Line, lineFor, valueFor, type Waited } from "../ledger/Log.ts";
+import { Appended, type Entry, fromHere, Line, lineFor, valueFor, type Waited } from "../ledger/Log.ts";
 import { Referee } from "../ledger/Referee.ts";
 import * as RefereeSql from "../ledger/RefereeSql.ts";
 import { WritePolicy } from "../ledger/WritePolicy.ts";
@@ -59,7 +60,7 @@ import {
   ChildrenError,
   type ChildStop,
   type StartGrant,
-  type Started,
+  Started,
 } from "../processes/Children.ts";
 import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
 import { decodeExitReason, type ExitReason } from "../processes/ExitReason.ts";
@@ -77,11 +78,17 @@ import {
   recoverActivity,
   Start,
   type StartAnswer,
-  type State,
+  State,
 } from "../processes/Process.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessManager, remoteProcessManager, type ProcessCalls } from "../processes/ProcessManager.ts";
-import { ProgramMail, type ProgramMailError, type Delivery, type Grants } from "../processes/ProgramMail.ts";
+import {
+  MailFailure,
+  ProgramMail,
+  type ProgramMailError,
+  type Delivery,
+  type Grants,
+} from "../processes/ProgramMail.ts";
 import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
 import { Quotas, type QuotasError } from "../processes/Quotas.ts";
 import * as Audit from "../runtime/Audit.ts";
@@ -102,8 +109,8 @@ import { ProgramDown } from "../runtime/Program.ts";
 import * as QuotaRunner from "../runtime/QuotaRunner.ts";
 import type { RecoveryStoreError } from "../runtime/RecoveryStore.ts";
 import type { RepliesError } from "../runtime/Replies.ts";
-import type { Descriptor, Opened, RunnerError, Swapped } from "../runtime/Runner.ts";
-import { defaultPolicy, ProgramRunner, Sent } from "../runtime/Runner.ts";
+import type { Descriptor, Opened, RunnerError } from "../runtime/Runner.ts";
+import { defaultPolicy, ProgramRunner, Sent, Swapped } from "../runtime/Runner.ts";
 import type { Publication } from "../runtime/WatcherManager.ts";
 import type { WatchersError } from "../runtime/Watchers.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
@@ -557,8 +564,16 @@ const monitorReply = (
     ),
   );
 
+/** A line or entry that records a code swap. The log keeps a line's case as an open string, so it
+ *  is matched with `Match`, not a union's own matcher. */
+const swappedLine = (line: { readonly _tag: string }): boolean =>
+  Match.value(line).pipe(
+    Match.tag("code.swapped", () => true),
+    Match.orElse(() => false),
+  );
+
 const processValue = Effect.fnUntraced(function* <A>(reply: ProcessReply<A>) {
-  if (reply._tag === "ok") {
+  if (ProcessReplies.isAnyOf(["ok"])(reply)) {
     return reply.value;
   }
 
@@ -577,15 +592,12 @@ const checkedValue = Effect.fnUntraced(function* <A>(
     | typeof SigningReply.cases.SigningRefused.Type
     | typeof SigningReply.cases.NotGranted.Type,
 ) {
-  if (reply._tag === "SigningRefused") {
-    return yield* new SigningRefused({ reason: reply.reason });
-  }
-
-  if (reply._tag === "NotGranted") {
-    return yield* new NotGranted({});
-  }
-
-  return reply.value;
+  // The value's type is the call's own, so the reply is matched by `Match`, not the schema's matcher.
+  return yield* Match.valueTags(reply, {
+    SigningRefused: ({ reason }) => Effect.fail(new SigningRefused({ reason })),
+    NotGranted: () => Effect.fail(new NotGranted({})),
+    ok: ({ value }) => Effect.succeed(value),
+  });
 });
 
 /**
@@ -1001,7 +1013,7 @@ const projectLogic = Effect.fn("project.init")(function* (
   for (const entry of folded) {
     const fact = decodeCode(valueFor(entry));
 
-    if (Option.isSome(fact) && fact.value._tag === "code.loaded") {
+    if (Option.isSome(fact) && CodeEvent.isAnyOf(["code.loaded"])(fact.value)) {
       select(fact.value, entry.id);
     }
   }
@@ -1040,7 +1052,7 @@ const projectLogic = Effect.fn("project.init")(function* (
         });
         const placed = yield* ledger.append("gateway/code", id, lineFor(yield* from(), fact));
 
-        if (placed._tag === "refused") {
+        if (Appended.isAnyOf(["refused"])(placed)) {
           return yield* new LedgerError({ reason: "refused" });
         }
 
@@ -1126,7 +1138,7 @@ const projectLogic = Effect.fn("project.init")(function* (
         processes.table(turn).life(process.process),
       );
       const requester =
-        Option.isSome(life) && life.value.request._tag === "first" ? life.value.request.requester : undefined;
+        Option.isSome(life) && Start.isAnyOf(["first"])(life.value.request) ? life.value.request.requester : undefined;
       // A child's start may have committed before its descriptor. Its object has never been
       // configured, so rebuild from the saved life and its requester's recorded owner.
       const descriptor = yield* requester?._tag === "process"
@@ -1344,12 +1356,11 @@ const projectLogic = Effect.fn("project.init")(function* (
     return yield* write(
       Effect.gen(function* () {
         let chosen = request;
-        const row =
-          request._tag === "first"
-            ? sql.exec("SELECT request, hash FROM dev_starts WHERE id=?", request.id)[0]
-            : undefined;
+        const row = Start.isAnyOf(["first"])(request)
+          ? sql.exec("SELECT request, hash FROM dev_starts WHERE id=?", request.id)[0]
+          : undefined;
 
-        if (request._tag === "first") {
+        if (Start.isAnyOf(["first"])(request)) {
           if (row !== undefined) {
             const prior = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Start))(row.request).pipe(
               Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
@@ -1377,7 +1388,7 @@ const projectLogic = Effect.fn("project.init")(function* (
         );
 
         // Keep the choice before the start can commit and lose its answer.
-        if (request._tag === "first" && row === undefined) {
+        if (Start.isAnyOf(["first"])(request) && row === undefined) {
           sql.exec(
             "INSERT OR IGNORE INTO dev_starts (id,request,hash) VALUES (?,?,?)",
             request.id,
@@ -1389,7 +1400,7 @@ const projectLogic = Effect.fn("project.init")(function* (
         const result = yield* processes.start(chosen, origin).pipe(
           Effect.tapError((error) =>
             Effect.sync(() => {
-              if (request._tag === "first" && row === undefined && error instanceof ProcessError) {
+              if (Start.isAnyOf(["first"])(request) && row === undefined && error instanceof ProcessError) {
                 sql.exec("DELETE FROM dev_starts WHERE id=?", request.id);
               }
             }),
@@ -1414,7 +1425,7 @@ const projectLogic = Effect.fn("project.init")(function* (
           "INSERT OR IGNORE INTO dev_descriptors (process,value,pending) VALUES (?,?,?)",
           result.process,
           JSON.stringify(descriptor),
-          request._tag === "first" ? 1 : 0,
+          Start.isAnyOf(["first"])(request) ? 1 : 0,
         );
         return result;
       }),
@@ -1423,7 +1434,7 @@ const projectLogic = Effect.fn("project.init")(function* (
   const start = Effect.fnUntraced(function* (request: Start, origin: From) {
     const result = yield* place(request, origin);
 
-    if (request._tag === "first") {
+    if (Start.isAnyOf(["first"])(request)) {
       yield* configure(result.process);
     }
 
@@ -1454,12 +1465,12 @@ const projectLogic = Effect.fn("project.init")(function* (
     const answer = yield* referee.append(stream, id, input);
     const line = Schema.decodeUnknownOption(Line)(input);
 
-    if (answer._tag === "refused" || Option.isNone(line) || line.value._tag !== "code.swapped") {
+    if (Appended.isAnyOf(["refused"])(answer) || !Option.exists(line, swappedLine)) {
       return answer;
     }
 
     const latest = yield* ledger.read(stream, answer.rev - 1).pipe(
-      Stream.filter((entry) => entry._tag === "code.swapped"),
+      Stream.filter((entry) => swappedLine(entry)),
       Stream.runLast,
     );
 
@@ -1479,7 +1490,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       Effect.gen(function* () {
         const answer = yield* children.start(input, origin);
 
-        if (answer._tag === "started") {
+        if (Started.isAnyOf(["started"])(answer)) {
           // The child acts for the person its requester acts for, as the boot's child does.
           const [requester] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", input.requester.process);
           const { owner } = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ owner: Writer })))(
@@ -1503,7 +1514,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       }),
     );
 
-    if (answer._tag === "started") {
+    if (Started.isAnyOf(["started"])(answer)) {
       yield* configure(answer.process);
     }
 
@@ -1519,7 +1530,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       const table = processes.table(turn);
       return table
         .inbound(pid)
-        .flatMap(({ to }) => (to._tag === "process" ? Option.toArray(table.life(to.process)) : []))
+        .flatMap(({ to }) => (Recipient.isAnyOf(["process"])(to) ? Option.toArray(table.life(to.process)) : []))
         .map((life) => life.name);
     });
     const wakeups = Context.get(services, MailWakeups);
@@ -1595,7 +1606,7 @@ const projectLogic = Effect.fn("project.init")(function* (
         Effect.retry({ times: 2, while: (error) => error instanceof LedgerError && error.reason === "unreachable" }),
       );
 
-      if (outcome._tag === "swapped" || outcome._tag === "same") {
+      if (Swapped.isAnyOf(["swapped", "same"])(outcome)) {
         yield* write(
           Effect.gen(function* () {
             if (selected[program]?.hash === hash) {
@@ -1623,7 +1634,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       if (cmd.type === "append") {
         const placed = yield* ledger.append("gateway/code", cmd.id, lineFor(yield* from(), cmd.event));
 
-        if (placed._tag === "refused") {
+        if (Appended.isAnyOf(["refused"])(placed)) {
           return yield* new LedgerError({ reason: "refused" });
         }
 
@@ -1865,12 +1876,12 @@ const projectLogic = Effect.fn("project.init")(function* (
         Effect.catchTag("ProgramMailError", (error): Effect.Effect<MailReply, ProgramMailError> => {
           const reason = error.reason;
 
-          if (reason._tag === "storage") {
+          if (MailFailure.isAnyOf(["storage"])(reason)) {
             return Effect.fail(error);
           }
 
           return Effect.succeed(
-            reason._tag === "full"
+            MailFailure.isAnyOf(["full"])(reason)
               ? MailReplies.cases.full.make({ unread: reason.unread, cap })
               : MailReplies.cases.refused.make({ reason: reason._tag }),
           );
@@ -2320,7 +2331,7 @@ const processLogic = Effect.fnUntraced(function* (
         Effect.flatMap(processValue),
         Effect.tap((status) =>
           Effect.sync(() => {
-            if (name === saved.name && status.state._tag === "live") {
+            if (name === saved.name && State.isAnyOf(["live"])(status.state)) {
               active = status.state.process;
             }
           }),
@@ -2344,7 +2355,10 @@ const processLogic = Effect.fnUntraced(function* (
         Effect.flatMap(Schema.decodeUnknownEffect(ChildReplies)),
         Effect.mapError((cause) => new ChildrenError({ reason: "storage", cause })),
         Effect.flatMap((reply) =>
-          reply._tag === "ok" ? Effect.succeed(reply.value) : Effect.fail(new ChildrenError({ reason: reply.reason })),
+          ChildReplies.match(reply, {
+            ok: ({ value }) => Effect.succeed(value),
+            ChildrenError: ({ reason }) => Effect.fail(new ChildrenError({ reason })),
+          }),
         ),
       ),
     // A stop is decided in the project too, so the stopped child's object learns it from the table.
@@ -2353,7 +2367,10 @@ const processLogic = Effect.fnUntraced(function* (
         Effect.flatMap(Schema.decodeUnknownEffect(StopReplies)),
         Effect.mapError((cause) => new ChildrenError({ reason: "storage", cause })),
         Effect.flatMap((reply) =>
-          reply._tag === "ok" ? Effect.void : Effect.fail(new ChildrenError({ reason: reply.reason })),
+          StopReplies.match(reply, {
+            ok: () => Effect.void,
+            ChildrenError: ({ reason }) => Effect.fail(new ChildrenError({ reason })),
+          }),
         ),
       ),
   });
@@ -2364,7 +2381,10 @@ const processLogic = Effect.fnUntraced(function* (
         Effect.flatMap(Schema.decodeUnknownEffect(MonitorReplies)),
         Effect.mapError((cause) => new MonitorsError({ reason: "storage", cause })),
         Effect.flatMap((reply) =>
-          reply._tag === "ok" ? Effect.succeed(reply.value) : Effect.fail(new MonitorsError({ reason: reply.reason })),
+          MonitorReplies.match(reply, {
+            ok: ({ value }) => Effect.succeed(value),
+            MonitorsError: ({ reason }) => Effect.fail(new MonitorsError({ reason })),
+          }),
         ),
       ),
     demonitor: (unwatch, from) =>

@@ -13,7 +13,7 @@ export const layer = <E>(
         Effect.mapError((cause) => new WatcherManagerError({ reason: new Unreachable({ cause }) })),
       );
 
-      if (outcome._tag === "gone") {
+      if (Publication.isAnyOf(["gone"])(outcome)) {
         return yield* new WatcherManagerError({ reason: new Gone({ cause: outcome }) });
       }
     }),

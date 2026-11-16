@@ -3,7 +3,9 @@
 // spinner, no skeleton. A tile whose process ended follows that rule too, so it never keeps drawing
 // the ended process's last view (docs/direction/tile-guidelines.md, "Empty and loading", and its
 // "Tuval" line on a tile kept after a crash).
-import type { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
+import { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
+
+const Link = WindowModel.fields.link;
 
 type Link = WindowModel["link"];
 
@@ -12,8 +14,8 @@ type Reach = WindowModel["tiles"][number]["reach"];
 /** A tile's state in words, never color alone (0502): an ended tile names its exit's reason, and a
  *  tile with no reach yet, one the window has no row for, is opening. */
 export const stateWord = (link: Link, reach: Reach | undefined) => {
-  if (link._tag !== "online") {
-    return link._tag === "retrying" ? "Retrying" : "Connecting";
+  if (!Link.isAnyOf(["online"])(link)) {
+    return Link.isAnyOf(["retrying"])(link) ? "Retrying" : "Connecting";
   }
 
   switch (reach?._tag) {

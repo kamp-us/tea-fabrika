@@ -1,7 +1,7 @@
 /**
  * Instance starts recorded and read through RPC calls to the object that keeps them.
  */
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Match, Schema } from "effect";
 import * as Start from "../settings/Start.ts";
 import {
   Decode,
@@ -69,7 +69,7 @@ const call = Effect.fnUntraced(function* (
     Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
   );
 
-  if (reply._tag === "ok") {
+  if (Start.Reply.isAnyOf(["ok"])(reply)) {
     const saved = yield* SettingsInput.receipt(reply.value, input).pipe(
       Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
     );
@@ -81,16 +81,13 @@ const call = Effect.fnUntraced(function* (
     return saved;
   }
 
-  const reason =
-    reply._tag === "Missing"
-      ? new Missing({ target: MissingTarget.cases.instance.make({ start }) })
-      : reply._tag === "Decode"
-        ? new Decode({ cause: reply })
-        : reply._tag === "Refused"
-          ? new Refused({ cause: reply })
-          : reply._tag === "Storage"
-            ? new Storage({ cause: reply })
-            : new Unreachable({ cause: reply });
+  const reason = Match.valueTags(reply, {
+    Missing: () => new Missing({ target: MissingTarget.cases.instance.make({ start }) }),
+    Decode: (cause) => new Decode({ cause }),
+    Refused: (cause) => new Refused({ cause }),
+    Storage: (cause) => new Storage({ cause }),
+    Unreachable: (cause) => new Unreachable({ cause }),
+  });
 
   return yield* new StartsError({ reason });
 });

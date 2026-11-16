@@ -17,6 +17,7 @@ import {
   Effect,
   Exit,
   Layer,
+  Match,
   Option,
   Predicate,
   Redacted,
@@ -37,8 +38,8 @@ import {
   writeHealth,
   writeSize,
 } from "./internal/measurements.ts";
-import { type Ended, held, machine } from "./internal/sink.ts";
-import { RecordManager } from "./Records.ts";
+import { clean, type Ended, held, machine } from "./internal/sink.ts";
+import { RecordManager, Written } from "./Records.ts";
 import {
   Chain,
   causeClass,
@@ -113,19 +114,19 @@ const keep = (attributes: Iterable<readonly [string, unknown]>) => {
 };
 
 /** The span's own `fab.process`, else its nearest ancestor's, else none. */
-const findProcess = (span: Tracer.AnySpan): Option.Option<string> => {
-  if (span._tag === "ExternalSpan") {
-    return Option.none();
-  }
+const findProcess = (span: Tracer.AnySpan): Option.Option<string> =>
+  Match.valueTags(span, {
+    ExternalSpan: () => Option.none(),
+    Span: (span) => {
+      const own = span.attributes.get(PROCESS);
 
-  const own = span.attributes.get(PROCESS);
+      if (typeof own === "string" && own !== "") {
+        return Option.some(own);
+      }
 
-  if (typeof own === "string" && own !== "") {
-    return Option.some(own);
-  }
-
-  return Option.flatMap(span.parent, findProcess);
-};
+      return Option.flatMap(span.parent, findProcess);
+    },
+  });
 
 /** The largest numeric tag whose key ends in `.lag`, such as P6's `fab.ledger.lag`. */
 const largestLag = (tags: Readonly<Record<string, Tag>>): number | null => {
@@ -319,7 +320,7 @@ class SinkSpan extends Tracer.NativeSpan {
   }
 
   override end(endTime: bigint, exit: Exit.Exit<unknown, unknown>): void {
-    if (this.status._tag === "Ended") {
+    if (Match.valueTags(this.status, { Started: () => false, Ended: () => true })) {
       return;
     }
 
@@ -537,14 +538,17 @@ const make = (sql: Sql, options: { readonly object: string }) => {
 
     while (left.length > 0) {
       const answer = yield* records.write(chain, at, left);
-      const landed = answer._tag === "written" ? left.map((row) => row.span.spanId) : answer.had;
+      const landed = Written.match(answer, {
+        written: () => left.map((row) => row.span.spanId),
+        rolled: ({ had }) => had,
+      });
       const next = at + 1;
       yield* attempt(() => {
         for (const spanId of landed) {
           sql.exec(`DELETE FROM unsent WHERE "spanId" = ?`, spanId);
         }
 
-        if (answer._tag === "rolled") {
+        if (Written.isAnyOf(["rolled"])(answer)) {
           sql.exec(
             `INSERT INTO parts (chain, part) VALUES (?, ?)
 							ON CONFLICT (chain) DO UPDATE SET part = excluded.part`,
@@ -555,7 +559,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
       });
       sent += landed.length;
 
-      if (answer._tag === "written") {
+      if (Written.isAnyOf(["written"])(answer)) {
         return sent;
       }
 
@@ -571,7 +575,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     const before = state;
     state = applyCell(machine, state, { type: "flush_checked" })[0];
 
-    if (before._tag !== "clean") {
+    if (!clean(before)) {
       return yield* Effect.fail(new SinkError({ reason: "storage", held: held(before).length }));
     }
 
@@ -611,7 +615,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
   const check = Effect.suspend(() => {
     const before = state;
     state = applyCell(machine, state, { type: "flush_checked" })[0];
-    return before._tag === "clean" && counts.size === 0
+    return clean(before) && counts.size === 0
       ? Effect.void
       : Effect.fail(new SinkError({ reason: "storage", held: held(before).length + counts.size }));
   });

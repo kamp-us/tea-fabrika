@@ -6,6 +6,7 @@ import { RecordedStart } from "../settings/RecordedStart.ts";
 import { targetStream } from "../tasks/Tasks.ts";
 import { causeClass, REFUSED, SinkError } from "../telemetry/Trace.ts";
 import { connection } from "../transport/Connection.ts";
+import { CheckedHello } from "../transport/Hello.ts";
 import { Answer, Attached, Hello, RateCountFailure } from "../transport/Wire.ts";
 import type { ConnectionId } from "./bindings.ts";
 import { cloudflareSql } from "./CloudflareSql.ts";
@@ -32,7 +33,7 @@ const routed = Effect.fnUntraced(function* (work: Effect.Effect<typeof Answer.Ty
         : error;
     }),
     Effect.tap((answer) =>
-      answer._tag === "refused" && ["reserved", "rate_limited", "quota"].includes(answer.reason)
+      Answer.isAnyOf(["refused"])(answer) && ["reserved", "rate_limited", "quota"].includes(answer.reason)
         ? Effect.annotateCurrentSpan(REFUSED, answer.reason)
         : Effect.void,
     ),
@@ -54,11 +55,11 @@ const waitOn = (p: ProjectClient["Service"]) =>
       : p.route(client, "ledger.wait", { stream, after }, reader);
     const answer = yield* rpc(routed(asked));
 
-    if (answer._tag === "parked") {
+    if (Answer.isAnyOf(["parked"])(answer)) {
       return Waited.cases.parked.make({});
     }
 
-    if (answer._tag !== "ok") {
+    if (!Answer.isAnyOf(["ok"])(answer)) {
       return yield* Effect.fail(answer);
     }
 
@@ -163,7 +164,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
               }),
             );
 
-            if (result._tag === "refused") {
+            if (CheckedHello.isAnyOf(["refused"])(result)) {
               if (Result.isSuccess(hello)) {
                 ws.serializeAttachment(
                   Attached.cases.waiting.make({
@@ -206,7 +207,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
             )(params).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
             const result = yield* rpc(p.knock(client, input));
 
-            if (result._tag === "ok") {
+            if (Answer.isAnyOf(["ok"])(result)) {
               const waiting = yield* Schema.decodeUnknownEffect(
                 Schema.Struct({ code: Schema.String, until: Schema.Number }),
               )(result.result).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
@@ -269,7 +270,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
     const onRefused = (reason: string) => Effect.sync(() => span.attribute(REFUSED, reason));
 
     for (const ws of ctx.getWebSockets()) {
-      if ((yield* attached(ws))._tag === "online") {
+      if (Attached.isAnyOf(["online"])(yield* attached(ws))) {
         yield* (yield* connected(ws)).ring(stream, rev, onRefused);
       }
     }
@@ -278,7 +279,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
   });
   const probe = Effect.fn("connection.probe")(function* (session: string) {
     for (const ws of ctx.getWebSockets(session)) {
-      if ((yield* attached(ws))._tag === "online") {
+      if (Attached.isAnyOf(["online"])(yield* attached(ws))) {
         return yield* (yield* connected(ws)).probe(session);
       }
     }
@@ -309,7 +310,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
   for (const ws of ctx.getWebSockets()) {
     const work = (yield* make(ws)).wake();
-    yield* (yield* attached(ws))._tag === "online" ? recorded(work) : work;
+    yield* Attached.isAnyOf(["online"])(yield* attached(ws)) ? recorded(work) : work;
   }
 
   return {
@@ -348,20 +349,20 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       }
 
       const work = (yield* connected(ws)).frame(text);
-      yield* state._tag === "online" ? recorded(work) : work;
+      yield* Attached.isAnyOf(["online"])(state) ? recorded(work) : work;
     }),
     close: Effect.fnUntraced(function* (ws: WebSocket, code?: number) {
       if (code !== undefined) {
         yield* answerClose(ws, code);
       }
 
-      return yield* (yield* attached(ws))._tag === "online" ? recorded(close(ws)) : close(ws);
+      return yield* Attached.isAnyOf(["online"])(yield* attached(ws)) ? recorded(close(ws)) : close(ws);
     }),
     ring: (stream: string, rev: number) => recorded(ring(stream, rev), (counted) => counted).pipe(Effect.asVoid),
     probe: (session: string) => recorded(probe(session)),
     notify: Effect.fnUntraced(function* (client: string, news: unknown) {
       const states = yield* Effect.forEach(ctx.getWebSockets(), attached, { concurrency: 1 });
-      const online = states.some((state) => state.client === client && state._tag === "online");
+      const online = states.some((state) => state.client === client && Attached.isAnyOf(["online"])(state));
       return yield* online ? recorded(notify(client, news)) : notify(client, news);
     }),
   };

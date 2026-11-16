@@ -10,6 +10,7 @@ import * as Schema from "effect/Schema";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Appended, lineFor } from "../ledger/Log.ts";
 import { QuotaRefused } from "../ledger/WritePolicy.ts";
+import { State } from "../processes/Process.ts";
 import type { ProcessManager } from "../processes/ProcessManager.ts";
 import { Quotas, QuotasError, Storage, type Accounting } from "../processes/Quotas.ts";
 import * as QuotasSql from "../processes/QuotasSql.ts";
@@ -93,7 +94,7 @@ export const admitsInput = Effect.fnUntraced(function* (
 ) {
   const found = yield* Effect.option(processes.resolve(process));
 
-  if (Option.isNone(found) || found.value.state._tag !== "live") {
+  if (Option.isNone(found) || !State.isAnyOf(["live"])(found.value.state)) {
     return true;
   }
 

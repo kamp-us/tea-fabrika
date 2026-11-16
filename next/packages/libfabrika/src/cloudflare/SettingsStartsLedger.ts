@@ -1,7 +1,7 @@
 /**
  * Instance starts kept in the ledger, one entry per start.
  */
-import { DateTime, Effect, Equal, Layer, Schema } from "effect";
+import { DateTime, Effect, Equal, Layer, Match, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { Doorbell } from "../ledger/Ledger.ts";
 import { Appended, type Entry, lineFor } from "../ledger/Log.ts";
@@ -34,12 +34,13 @@ const saved = Effect.fnUntraced(function* (entry: Entry, start: string) {
     name: "ledger",
   }).pipe(Effect.mapError(decode));
 
-  if (
-    entry.id !== start ||
-    body.start !== start ||
-    entry.stream !== stream(start) ||
-    entry._tag !== "instance_started"
-  ) {
+  // The log keeps a line's case as an open string, so the case is matched by `Match`, not a union.
+  const started = Match.value(entry).pipe(
+    Match.tag("instance_started", () => true),
+    Match.orElse(() => false),
+  );
+
+  if (entry.id !== start || body.start !== start || entry.stream !== stream(start) || !started) {
     return yield* decode("Conflicting instance start");
   }
 
@@ -136,7 +137,7 @@ export const fromLedger = () =>
         const reply = yield* ledger.append(stream(input.start), input.start, line).pipe(Effect.mapError(storage));
         const ack = yield* Schema.decodeUnknownEffect(Appended)(reply).pipe(Effect.mapError(decode));
 
-        if (ack._tag !== "placed") {
+        if (!Appended.isAnyOf(["placed"])(ack)) {
           return yield* new StartsError({ reason: new Refused({ cause: ack }) });
         }
 

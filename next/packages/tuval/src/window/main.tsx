@@ -19,7 +19,7 @@ import {
   lastCursor,
   type Unread,
   type windowMachineFor,
-  type WindowModel,
+  WindowModel,
   type WindowMsg,
 } from "@kampus/libfabrika/client/WindowMachine";
 import { fold } from "@kampus/libfabrika/tezgah/Fold";
@@ -103,10 +103,16 @@ const Waiting = ({
 
 type Row = WindowModel["tiles"][number];
 
+const Link = WindowModel.fields.link;
+
+const Prefix = WindowModel.fields.prefix;
+
+const Reach = WindowModel.fields.tiles.value.fields.reach;
+
 /** The word a tile's title bar says and whether it takes input, from the link and its reach. */
 const tileState = (link: WindowModel["link"], row: Row | undefined) => ({
   word: stateWord(link, row?.reach),
-  live: link._tag === "online" && row?.reach._tag === "open",
+  live: Link.isAnyOf(["online"])(link) && row !== undefined && Reach.isAnyOf(["open"])(row.reach),
 });
 
 const TileBody = ({
@@ -339,13 +345,13 @@ const Desk = (props: PageProps) => {
     ).live,
     layout: space === undefined ? "" : JSON.stringify(space.layout),
   });
-  const asked = prefix._tag === "asking" ? view?.tiles.find((t) => t.id === prefix.tile) : undefined;
+  const asked = Prefix.isAnyOf(["asking"])(prefix) ? view?.tiles.find((t) => t.id === prefix.tile) : undefined;
 
   const line = none ? (
     NO_TEZGAH
   ) : asked !== undefined ? (
     question(asked)
-  ) : prefix._tag === "armed" ? (
+  ) : Prefix.isAnyOf(["armed"])(prefix) ? (
     <PrefixLine table={props.keys} />
   ) : roomless !== undefined ? (
     noRoom(roomless)
@@ -385,7 +391,7 @@ const Desk = (props: PageProps) => {
           </Layout>
         )}
       </div>
-      <div className={prefix._tag === "idle" ? "statusbar" : "statusbar on"}>{said}</div>
+      <div className={Prefix.isAnyOf(["idle"])(prefix) ? "statusbar" : "statusbar on"}>{said}</div>
     </>
   );
 };
@@ -417,44 +423,43 @@ const Page = (props: PageProps) => {
   const words = [
     ...(none ? [NO_TEZGAH] : []),
     ...(burst === "" ? [] : [burst]),
-    ...(prefix._tag === "armed" ? ["prefix"] : []),
+    ...(Prefix.isAnyOf(["armed"])(prefix) ? ["prefix"] : []),
     ...(roomless === undefined ? [] : [noRoom(roomless)]),
   ].join(" ");
 
-  const asked = prefix._tag === "asking" ? named(prefix.tile) : undefined;
+  const asked = Prefix.isAnyOf(["asking"])(prefix) ? named(prefix.tile) : undefined;
 
-  const content =
-    link._tag === "waiting_grant" ? (
-      <Waiting code={link.code} fingerprint={link.fingerprint} origin={props.origin} />
-    ) : link._tag === "removed" ? (
-      <main className="screen">
-        <h1>Removed</h1>
-        <p>This window was removed</p>
-        <p>Ask again to make a new key and wait for a new grant.</p>
-        <Button variant="primary" onClick={() => send({ type: "ask_again", dial: dials + 1 })}>
-          Ask again
-        </Button>
-      </main>
-    ) : link._tag === "blocked" ? (
-      <main className="screen">
-        <h1>Blocked</h1>
-        <p>The browser could not keep or use this window's key. {link.reason}</p>
-      </main>
-    ) : link._tag !== "online" && Object.keys(views).length === 0 ? (
-      <main className="screen">
-        <p>Connecting</p>
-      </main>
-    ) : (
-      <div className="frame">
-        <header className="topbar">
-          <span role="status">
-            {link._tag === "online" ? "Online" : "Connection lost. Retrying."}
-            {trouble ? ` ${trouble}` : ""}
-          </span>
-        </header>
-        <Desk {...props} />
-      </div>
-    );
+  const content = Link.isAnyOf(["waiting_grant"])(link) ? (
+    <Waiting code={link.code} fingerprint={link.fingerprint} origin={props.origin} />
+  ) : Link.isAnyOf(["removed"])(link) ? (
+    <main className="screen">
+      <h1>Removed</h1>
+      <p>This window was removed</p>
+      <p>Ask again to make a new key and wait for a new grant.</p>
+      <Button variant="primary" onClick={() => send({ type: "ask_again", dial: dials + 1 })}>
+        Ask again
+      </Button>
+    </main>
+  ) : Link.isAnyOf(["blocked"])(link) ? (
+    <main className="screen">
+      <h1>Blocked</h1>
+      <p>The browser could not keep or use this window's key. {link.reason}</p>
+    </main>
+  ) : !Link.isAnyOf(["online"])(link) && Object.keys(views).length === 0 ? (
+    <main className="screen">
+      <p>Connecting</p>
+    </main>
+  ) : (
+    <div className="frame">
+      <header className="topbar">
+        <span role="status">
+          {Link.isAnyOf(["online"])(link) ? "Online" : "Connection lost. Retrying."}
+          {trouble ? ` ${trouble}` : ""}
+        </span>
+      </header>
+      <Desk {...props} />
+    </div>
+  );
 
   return (
     <>

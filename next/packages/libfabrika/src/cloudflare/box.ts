@@ -2,7 +2,7 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { Effect } from "effect";
 import * as Audit from "../runtime/Audit.ts";
 import { Declaration, type Execution, executionFailure, nodeExecution, Reply } from "../runtime/Execution.ts";
-import { ProgramDown, stepper } from "../runtime/Program.ts";
+import { Input, ProgramDown, stepper } from "../runtime/Program.ts";
 
 const checked = Effect.fnUntraced(function* <A>(work: Effect.Effect<A, ProgramDown>) {
   return yield* work.pipe(
@@ -51,7 +51,10 @@ export const programBox = (declared: unknown, build: string) => {
           inputs: Object.fromEntries(
             Object.entries(pure.program.inputs).map(([name, p]) => [
               name,
-              { write: p._tag === "write", personOnly: p._tag === "write" && p.personOnly },
+              Input.match(p, {
+                write: ({ personOnly }) => ({ write: true, personOnly }),
+                read: () => ({ write: false, personOnly: false }),
+              }),
             ]),
           ),
           cmds: (pure.program.machine.cmds ?? []).map((d) => d.cmdType),

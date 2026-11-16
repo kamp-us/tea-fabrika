@@ -15,6 +15,7 @@ import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { errorClass } from "./index.ts";
 
@@ -184,7 +185,7 @@ const makeKey = Effect.gen(function* () {
 const lineFor = Effect.fnUntraced(function* (raw: string): Effect.fn.Return<KeyLine, StoreError> {
   const bytes = Base64Url.decode(raw);
 
-  if (bytes._tag === "Failure") {
+  if (Result.isFailure(bytes)) {
     return yield* StoreError.make({ op: "read", error: "DataError" });
   }
 

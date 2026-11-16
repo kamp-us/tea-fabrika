@@ -4,7 +4,7 @@ import { Context, Effect, Layer, Schema } from "effect";
 import { RecordedStart } from "../settings/RecordedStart.ts";
 import { recordPart } from "../telemetry/RecordPart.ts";
 import { SinkError } from "../telemetry/Sink.ts";
-import { type Chain } from "../telemetry/Trace.ts";
+import { Chain } from "../telemetry/Trace.ts";
 import { cloudflareSql } from "./CloudflareSql.ts";
 import { RecordPart, type RecordShape } from "./objects.ts";
 import { recordedLayer, settingsFailure, type Env } from "./runtime.ts";
@@ -26,7 +26,10 @@ const part = Effect.fnUntraced(function* (
     Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
   )(ctx.id.name).pipe(Effect.mapError((cause) => new SinkError({ reason: "bad_row", held: 0, cause })));
 
-  const expected = chain._tag === "spans" ? `spans/${at}` : `job/${chain.process}/${at}`;
+  const expected = Chain.match(chain, {
+    spans: () => `spans/${at}`,
+    job: ({ process }) => `job/${process}/${at}`,
+  });
 
   if (name !== expected) {
     return yield* new SinkError({ reason: "bad_row", held: 0 });

@@ -5,7 +5,7 @@
 // the program and the handle come from `tileWords`, the source the tile's own name reads, and the
 // exit reason stays in the title bar. The machine writes an end only for a tile without focus.
 import type { AnyTile, WindowRegistration } from "@kampus/libfabrika";
-import type { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
+import { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
 import type { Tile } from "@kampus/libfabrika/tezgah/Workspace";
 import type { ReactNode } from "react";
 import { tileWords } from "./Layout.tsx";
@@ -13,6 +13,8 @@ import { tileWords } from "./Layout.tsx";
 export type TileWindow = WindowRegistration<any, ReactNode, AnyTile>;
 
 type Refusal = NonNullable<WindowModel["tiles"][number]["refusal"]>;
+
+const StatusMessage = WindowModel.fields.said.fields.messages.value;
 
 type StatusMessage = WindowModel["said"]["messages"][number];
 
@@ -45,7 +47,10 @@ const wordsFor = <T extends Named>(
 
   const { program, handle } = tileWords(tile);
 
-  return message._tag === "ended" ? `${program} in ${handle} ended` : refusalFor(windowFor(tile), message);
+  return StatusMessage.match(message, {
+    ended: () => `${program} in ${handle} ended`,
+    refused: (refused) => refusalFor(windowFor(tile), refused),
+  });
 };
 
 /** The polite region's words: the current burst's status messages, in order, as one line. */
