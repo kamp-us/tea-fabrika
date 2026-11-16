@@ -1,7 +1,14 @@
 // next/: TypeIDs with UUIDv7 suffixes. It draws random bits from Effect's SecureRandom;
 // `Generator.layer` provides the WebCrypto one.
-import { type Brand, Clock, Context, Effect, Layer, Order as Ordering, Result, Schema as S } from "effect";
-import { SecureRandom } from "effect/crypto";
+import type * as Brand from "effect/Brand";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Ordering from "effect/Order";
+import * as Result from "effect/Result";
+import * as S from "effect/Schema";
 
 const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 const low62 = (1n << 62n) - 1n;
@@ -69,7 +76,7 @@ type Specific<P extends string> = ReturnType<typeof specific<P>>;
 /** A schema branded for one trusted prefix. An invalid prefix throws, as Schema.make does. */
 export const make = <const P extends string>(prefix: P): Specific<P> => {
   if (!validPrefix(prefix)) {
-    throw new IdError({ reason: "prefix" });
+    throw IdError.make({ reason: "prefix" });
   }
 
   return specific(prefix);
@@ -78,7 +85,7 @@ export const make = <const P extends string>(prefix: P): Specific<P> => {
 /** The factory for a supplied prefix: invalid prefixes fail with a typed IdError. */
 export const makeEffect = Effect.fn("id.makeEffect")(function* <const P extends string>(prefix: P) {
   if (!validPrefix(prefix)) {
-    return yield* new IdError({ reason: "prefix" });
+    return yield* IdError.make({ reason: "prefix" });
   }
 
   return specific(prefix);
@@ -174,14 +181,14 @@ export const makeGenerator: Effect.Effect<Generator["Service"], never, SecureRan
     // A throw from the random source is a defect of SecureRandom; the generator translates it.
     const draw = secure.randomBytes(10).pipe(
       Effect.map(toRandom),
-      Effect.catchDefect((cause) => Effect.fail(new IdError({ reason: "entropy", cause }))),
+      Effect.catchDefect((cause) => Effect.fail(IdError.make({ reason: "entropy", cause }))),
     );
     return {
       next: Effect.fn("id.next")(function* <P extends string>(schema: IdSchema<P>) {
         const prefix = prefixes.get(schema);
 
         if (prefix === undefined) {
-          return yield* new IdError({ reason: "prefix" });
+          return yield* IdError.make({ reason: "prefix" });
         }
 
         yield* Effect.annotateCurrentSpan({ type: prefix });
@@ -189,7 +196,7 @@ export const makeGenerator: Effect.Effect<Generator["Service"], never, SecureRan
 
         // The clock is checked before any draw, so a bad clock is `clock` even when entropy fails.
         if (!validClock(now)) {
-          return yield* new IdError({ reason: "clock" });
+          return yield* IdError.make({ reason: "clock" });
         }
 
         // The draw is an Effect, so it runs before the step. `at` only grows, so a millisecond that
@@ -199,14 +206,14 @@ export const makeGenerator: Effect.Effect<Generator["Service"], never, SecureRan
         const moved = advance(last, now, fresh);
 
         if (moved === undefined) {
-          return yield* new IdError({ reason: "exhausted" });
+          return yield* IdError.make({ reason: "exhausted" });
         }
 
         last = moved;
         const decoded = S.decodeUnknownResult(schema)(`${prefix}_${encode(last.at, last.random)}`);
 
         if (Result.isFailure(decoded)) {
-          return yield* new IdError({ reason: "prefix", cause: decoded.failure });
+          return yield* IdError.make({ reason: "prefix", cause: decoded.failure });
         }
 
         return decoded.success;

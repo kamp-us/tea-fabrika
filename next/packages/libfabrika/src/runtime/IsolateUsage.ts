@@ -1,7 +1,5 @@
 /**
  * Isolate call timings, attributed to the process whose load produced them.
- *
- * @stability stable
  */
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -13,7 +11,6 @@ const Millis = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0), Schema.isFi
 /**
  * Schema for the execution methods kept in timing records.
  *
- * @stability stable
  * @category schemas
  */
 export const Method = Schema.Literals([
@@ -34,7 +31,6 @@ export const Method = Schema.Literals([
 /**
  * Schema for platform outcomes, with unrecognized words recorded as `other`.
  *
- * @stability stable
  * @category schemas
  */
 export const Outcome = Schema.Literals(["ok", "exception", "exceededCpu", "exceededMemory", "canceled", "other"]);
@@ -42,7 +38,6 @@ export const Outcome = Schema.Literals(["ok", "exception", "exceededCpu", "excee
 /**
  * Schema for one call's CPU and wall milliseconds. The process comes from its load.
  *
- * @stability stable
  * @category schemas
  */
 export const Usage = Schema.Struct({
@@ -56,7 +51,6 @@ export const Usage = Schema.Struct({
 /**
  * Records one CPU-duration span per call. The caller commits the batch together.
  *
- * @stability stable
  * @category combinators
  */
 export const record = Effect.fnUntraced(function* (usage: ReadonlyArray<typeof Usage.Type>) {

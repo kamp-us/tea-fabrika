@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-trusted-rules-0573-review",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1498",
+  "started": "2026-11-15T22:47:23-08:00",
+  "ended": "2026-11-15T22:58:30-08:00",
+  "parent": "2026-11-15-trusted-rules-0573-build",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send plan",
+  "why": "next/ and our tooling, the one review of edd790e7e for decision 0573's first pull request: changes 2. (1) A gap 0573 forbids: the deleted fabrika/no-data-taggederror refused Data.TaggedError in type positions through its TSQualifiedName visitor (typeof Data.TaggedError, InstanceType<ReturnType<typeof Data.TaggedError<\"X\">>>), and on the branch nothing refuses them: oxlint's no-restricted-properties, typescript/no-restricted-types and the checker's preferSchemaTaggedError all miss them (run in a scratch config with main's rule beside the new entry). The plan's L1 and builtin-plants.ts TAGGED_ERROR mark typeof Data.TaggedError as a false line, not the ban, and the README lists only the alias as a documented miss. The plan kept no-context-tag for the same kind of type-position miss, so by the same principle the fix is a plan call: keep no-data-taggederror until a trusted rule holds type positions, or take the miss to the owner as a loosening. (2) Two laws miss cases their class names: L4 (no-node-imports.test.ts) says each of the 8 module names, but fast-check counts the 3 examples inside numRuns 8 and seed 119120 draws only 6, never fs or node:path/posix, the same 6 as the deleted test; L3 (effect-checks-held.test.ts) stays green with ignoreEffectErrorsInTscExitCode true or diagnostics false in tsconfig.base.json's checker block, which switch the checker's errors off for every path. Everything else holds: no-node-imports covers every file, form and edge rule no-node-filesystem did; modules rule 2 holds data/id.ts; the root rules and all 7 blocks carry the entry, and a merge of origin/main 9598eee (PR 1481's new folders) is clean and still has 8 of 8; L1, L2, L5 and L6 plants are real; L7's stop keeps padding-line-between-statements, as the plan says; no rule is turned off and no list entry is added.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "note": "Read-only apart from this row, at edd790e7e, Node 26.13.0. Ran one at a time under nice -n 15 --maxWorkers=3: plants.test.ts 237, effect-checks-held.test.ts 1, no-node-imports.test.ts 3, modules.test.ts 16, ledger.test.ts 7, advice.test.ts 16, all green. Not run: 0178 guard, next/apps/fabrika/src/exam/edge-comment.integration.test.ts (the branch lacks PR 1508). NODE_OPTIONS=--max-old-space-size=6144 pnpm lint exit 0; one pnpm typecheck exit 0. Plants: in a scratch copy of L3 with its tsconfigs, preferSchemaTaggedError warning red, ignoreEffectErrorsInTscExitCode true green (missed), diagnostics false green (missed); fast-check replay of L4's arbitraries drew 6 of 8 modules; L1, L2 and L5 by reading. loosening.sh: 20 hits, all the planned deletion of the three rules and their tests, the old ledger.test.ts expect on the deleted rule, and the Reflect law's refactor into shared helpers with the same checks; no law of a kept rule is loosened. vitest.shards.json needs no rows for the new test (shard-rows.ts places a file with no row by its fallback).",
+  "step": "review"
+}

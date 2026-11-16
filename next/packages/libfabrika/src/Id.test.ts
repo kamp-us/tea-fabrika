@@ -4,8 +4,15 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import * as Public from "@kampus/libfabrika";
-import { Arbitrary, Cause, Clock, Effect, Exit, Schema, SchemaIssue, Tracer } from "effect";
-import { TestClock } from "effect/testing";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
+import * as SchemaIssue from "effect/SchemaIssue";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { bytes, generatorWith } from "./Id.test-support.ts";
 import * as Front from "./Id.ts";

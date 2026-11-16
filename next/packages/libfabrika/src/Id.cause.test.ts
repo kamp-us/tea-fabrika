@@ -4,8 +4,10 @@
 // prefix is the other site, and no generated input can make it fail.
 // T1067: the random source is a SecureRandom the law builds (`generatorWith`), never a spy (0555).
 import { describe, expect, it } from "@effect/vitest";
-import { Duration, Effect, Layer } from "effect";
-import { TestClock } from "effect/testing";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
 import { bytes, generatorWith, throws } from "./Id.test-support.ts";
 import * as Id from "./Id.ts";

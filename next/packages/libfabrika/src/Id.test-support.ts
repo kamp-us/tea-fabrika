@@ -1,5 +1,8 @@
-import { Arbitrary, Effect, Layer, Schema } from "effect";
-import { SecureRandom } from "effect/crypto";
+import * as Arbitrary from "effect/Arbitrary";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Id from "./Id.ts";
 

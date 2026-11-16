@@ -1,9 +1,12 @@
 // P34c, next/. Only the Node runner imports the driver; all policy and recovery are real code.
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Clock, Effect, Layer, Schema } from "effect";
-import { Digest } from "effect/crypto";
-import { TestClock } from "effect/testing";
+import * as Clock from "effect/Clock";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as TestClock from "effect/testing/TestClock";
 import { Writer } from "../access/SessionManager.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
