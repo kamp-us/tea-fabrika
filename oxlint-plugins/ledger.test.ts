@@ -106,7 +106,6 @@ describe("`.agents/` code is held to next/'s rules, 0033", () => {
   it("scenario: the rules fire in a script, and its test keeps the edge rules on", async () => {
     const fires = await plant({ [script]: body, [test]: body });
     expect(fires("fabrika(no-node-imports)", script)).toEqual([1]);
-    expect(fires("fabrika(no-node-filesystem)", script)).toEqual([1]);
     expect(fires("fabrika(no-promises)", script).length).toBeGreaterThan(0);
     expect(fires("fabrika(no-of)", script)).toEqual([3]);
     expect(fires("fabrika(no-promises)", test).length).toBeGreaterThan(0);

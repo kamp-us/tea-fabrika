@@ -1,10 +1,11 @@
 /**
  * One Rolldown bundle as an Effect, and the program bundles built on it.
- *
- * @stability unstable
  */
-import { Cause, Effect, Exit, Path } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import effectPackage from "effect/package.json" with { type: "json" };
+import * as Path from "effect/Path";
 import {
   rolldown,
   VERSION,
@@ -22,7 +23,6 @@ export {
   /**
    * Error for a build that stopped, re-exported from the runtime's build tables.
    *
-   * @stability unstable
    * @category errors
    */
   BuildError,
@@ -30,7 +30,6 @@ export {
    * Computes the SHA-256 of a text's UTF-8 bytes as lowercase hex, re-exported from the runtime's
    * build tables.
    *
-   * @stability unstable
    * @category combinators
    */
   hash,
@@ -40,7 +39,6 @@ export {
  * Which bundle of a build this is. It is recorded on the bundle's span, with no path or content,
  * and it decides which imports the bundle leaves external.
  *
- * @stability unstable
  * @category models
  */
 export type Phase = "program" | "window" | "tab" | "brain";
@@ -81,7 +79,6 @@ const emitted = (output: RolldownOutput) =>
  * and Effect versions that ran, and how many files and bytes came out. A failure is a `BuildError`
  * with `reason: "bundle"`.
  *
- * @stability unstable
  * @category constructors
  */
 export const bundle = Effect.fn("build.bundle")(function* (
@@ -108,7 +105,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
     "rolldown.version": VERSION,
     "effect.version": effectPackage.version,
   });
-  const fail = (cause: unknown) => new BuildError({ reason: "bundle", message: String(cause), cause });
+  const fail = (cause: unknown) => BuildError.make({ reason: "bundle", message: String(cause), cause });
   const config = {
     input,
     plugins,
@@ -174,7 +171,6 @@ export const bundle = Effect.fn("build.bundle")(function* (
  * libfabrika's program box. It answers, by program name, each module's source with the SHA-256 of
  * that source.
  *
- * @stability unstable
  * @category constructors
  */
 export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (options: {

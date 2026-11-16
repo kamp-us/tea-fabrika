@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e0-tests2",
+  "ticket": "1075",
+  "pr": "kamp-us/tea-fabrika#1417",
+  "started": "2026-11-15T19:12:00-08:00",
+  "ended": "2026-11-15T19:26:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round after the E0 review (field/runs/2026-11-15-effect-e0-review.json, changes 2), one agent writing the laws and the fixes, all in exam paths, in next/ and our tooling. origin/main merged first. L2 (oxlint-plugins/effect-checks.test.ts) now walks the program the checker checks: each tsconfig include less its exclude, then its files, each key from the nearest config in the extends chain, then every file those reach by a relative import, read with oxc-parser (static imports, re-exports, dynamic imports with a plain string; a ?raw import names no code). It fails when a relative import names no file it can find. It does not read references or paths, which no scope tsconfig sets; the README says so. L3 (oxlint-plugins/no-bare-disable.ts) now reads the whole text for the checker word, refuses it anywhere but at the start of a line comment of its own, and refuses a reason that holds <check>:<level>. The rule file builds the word from two pieces so its own text never holds it. On main at 9201aeb02 no code file holds the word, so the rule fires 0 times: 0 false alarms. The first row claim for L4, that the reason tail is no part of the directive, is marked wrong there: it holds only while the reason has no <check>:<level>. The git mv of the old law could not be split into a pure rename commit without rewriting history, so the PR body names it. plants.test.ts spawns lint processes, so it is .integration.-kind under 0584, but it is still named plain on main, so it ran here as before, one file at a time.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 14,
+  "note": "Ran: effect-checks.test.ts 1 passed; plants.test.ts 251 passed; pnpm lint exit 0; one pnpm typecheck exit 0 after pgrep -x tsgo found none.",
+  "plants": [
+    {
+      "law": "L2",
+      "plant": "the reviewer plant: Math.random() appended to oxlint-plugins/script-reads.mjs, which only a relative import reaches, and an override setting globalRandom off for that one file in oxlint-plugins/tsconfig.json and .github/ci/tsconfig.json: effect-checks.test.ts fails with two globalRandom rows, one per project",
+      "result": "red"
+    },
+    {
+      "law": "L3",
+      "plant": "no-bare-disable takes the checker word outside a line comment of its own: the refused cases in a block, after other words, after plain words, in a doc block and in a string fail",
+      "result": "red"
+    },
+    {
+      "law": "L3",
+      "plant": "no-bare-disable stops checking the reason for a <check>:<level>: the refused case with a check in the reason fails",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

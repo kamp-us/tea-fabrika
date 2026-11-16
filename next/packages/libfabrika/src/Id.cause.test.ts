@@ -2,8 +2,10 @@
 // 12). Audit site: `Id.ts:198`, a throw while drawing random bits. `Id.ts:183` decodes an ID the
 // generator built from its own registered prefix, which no generated input can make fail.
 import { describe, expect, it, vi } from "@effect/vitest";
-import { Duration, Effect, Layer } from "effect";
-import { TestClock } from "effect/testing";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
 import * as Id from "./Id.ts";
 

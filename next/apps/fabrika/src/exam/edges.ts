@@ -41,7 +41,7 @@ const edgesIn = Effect.fnUntraced(function* (path: string, text: string) {
   const parsed = parseSync(path, text);
 
   if (parsed.errors.length > 0) {
-    return yield* new Unparsed({ path });
+    return yield* Unparsed.make({ path });
   }
 
   return parsed.comments.flatMap((comment): Edge[] => {
@@ -115,7 +115,7 @@ const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
   });
 
   if (code !== 0) {
-    return yield* new GitFailed({ args: args.join(" "), code });
+    return yield* GitFailed.make({ args: args.join(" "), code });
   }
 
   return out;

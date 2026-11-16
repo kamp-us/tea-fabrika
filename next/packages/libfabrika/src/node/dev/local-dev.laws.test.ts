@@ -5,8 +5,13 @@
 // its moment and what the state said as it went out. No law here reaches the real `process.kill`:
 // the signals are a stand-in, and L6's `signal` runs against a spy.
 import { describe, expect, it } from "@effect/vitest";
-import { Clock, Effect, Exit, Fiber, Schema, SubscriptionRef } from "effect";
-import { TestClock } from "effect/testing";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Schema from "effect/Schema";
+import * as SubscriptionRef from "effect/SubscriptionRef";
+import * as TestClock from "effect/testing/TestClock";
 import { vi } from "vitest";
 import type { devLife } from "./DevLife.ts";
 import { lifeCell, signal, terminate } from "./local-dev.ts";

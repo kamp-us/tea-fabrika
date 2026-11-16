@@ -2,22 +2,18 @@
  * The local brain driver's helpers on Node: the local runtime's life state and the one way to
  * change it, the memory check that replaces a brain that grew too big, the bounded stop that ends
  * it, the signal it sends, and the durable outbox for its lifecycle events.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import {
-  type Duration,
-  Effect,
-  FileSystem,
-  Option,
-  Path,
-  Result,
-  Schema,
-  Semaphore,
-  Stream,
-  SubscriptionRef,
-} from "effect";
+import type * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { devLife, type DevState } from "./DevLife.ts";
 
@@ -43,7 +39,6 @@ type Signal = Replacing["signal"];
  * Every fold waits for a `then` in flight, so `then` does only what must not be overtaken: the
  * fact a signal follows, and the signal.
  *
- * @stability unstable
  * @category constructors
  */
 export const lifeCell = Effect.fnUntraced(function* (last: string | null) {
@@ -99,7 +94,6 @@ const PendingEvent = Schema.declare<typeof BrainEvent.Type>((raw): raw is typeof
  * `sample` answers the bytes a pid holds. `replace` gets the reason, the pid and the bytes, and is
  * the one that ends the process. `limit` is the `desktop.brain-memory` setting, in bytes.
  *
- * @stability unstable
  * @category combinators
  */
 export const checkMemory = Effect.fn("brain.checkMemory")(function* <E, R>(options: {
@@ -137,7 +131,6 @@ class SignalError extends Schema.TaggedError<SignalError>()("SignalError", {
  *
  * It checks nothing about the pid: send it only from a `lifeCell` step whose state holds that pid.
  *
- * @stability unstable
  * @category combinators
  */
 export const signal = (pid: number, name: Signal): Effect.Effect<void> =>
@@ -145,7 +138,7 @@ export const signal = (pid: number, name: Signal): Effect.Effect<void> =>
     try: () => {
       process.kill(pid, name);
     },
-    catch: (cause) => new SignalError({ reason: isMissing(cause) ? "missing" : "refused", cause }),
+    catch: (cause) => SignalError.make({ reason: isMissing(cause) ? "missing" : "refused", cause }),
   }).pipe(
     Effect.catchIf(
       (error) => error.reason === "missing",
@@ -177,7 +170,6 @@ const Ended = Schema.TaggedUnion({ refused: {}, itself: {}, killed: {} });
  * No signal follows a folded exit. A process that Node has reaped but whose exit is not folded yet
  * can still get one: only a signal through Node's own child handle would close that gap.
  *
- * @stability unstable
  * @category combinators
  */
 export const terminate = Effect.fn("brain.terminate")(function* <E, R>(options: {
@@ -242,7 +234,6 @@ export const terminate = Effect.fn("brain.terminate")(function* <E, R>(options: 
  * Every write goes to a temporary file that is synced and renamed, and then the folder is synced,
  * so a crash leaves the old file or the new one, never half of one.
  *
- * @stability unstable
  * @category constructors
  */
 export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
@@ -262,7 +253,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
       (row) => Schema.decodeUnknownEffect(Schema.fromJsonString(PendingEvent))(row),
       { concurrency: 1 },
     );
-  }).pipe(Effect.mapError((cause) => new BrainError({ reason: "bad_row", cause })));
+  }).pipe(Effect.mapError((cause) => BrainError.make({ reason: "bad_row", cause })));
   const durableWrite = Effect.fnUntraced(
     function* (target: string, text: string) {
       yield* fs.makeDirectory(home, { recursive: true });
@@ -283,7 +274,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
         }),
       );
     },
-    Effect.mapError((cause) => new BrainError({ reason: "storage", cause })),
+    Effect.mapError((cause) => BrainError.make({ reason: "storage", cause })),
   );
   const write = (rows: ReadonlyArray<typeof BrainEvent.Type>) =>
     durableWrite(file, rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""));
@@ -302,7 +293,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
       return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.NonEmptyString))(
         yield* fs.readFileString(lastFile),
       );
-    }).pipe(Effect.mapError((cause) => new BrainError({ reason: "bad_row", cause })));
+    }).pipe(Effect.mapError((cause) => BrainError.make({ reason: "bad_row", cause })));
   });
   const saveLast = Effect.fnUntraced(function* () {
     const start = yield* last();
@@ -319,14 +310,14 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
     add: Effect.fn("brain.pending")(function* (raw: Schema.Json) {
       yield* Effect.gen(function* () {
         const event = yield* Schema.decodeUnknownEffect(PendingEvent)(raw).pipe(
-          Effect.mapError((cause) => new BrainError({ reason: "bad_row", cause })),
+          Effect.mapError((cause) => BrainError.make({ reason: "bad_row", cause })),
         );
         const rows = yield* read;
         const old = rows.find((row) => row.id === event.id);
 
         if (old !== undefined) {
           if (JSON.stringify(old) !== JSON.stringify(event)) {
-            return yield* new BrainError({ reason: "id_reused" });
+            return yield* BrainError.make({ reason: "id_reused" });
           }
 
           return;

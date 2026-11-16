@@ -2,7 +2,13 @@
 // folder they acquire (0061). The laws watch the real handles, files and finalizer order.
 import { NodeFileSystem } from "@effect/platform-node";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, FileSystem, Schema, type Scope } from "effect";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import type { Sql } from "../Sql.ts";
 import type * as RecordPartTest from "../telemetry/RecordPartTest.ts";
 import * as RecordPartSupport from "./RecordPart.test-support.ts";

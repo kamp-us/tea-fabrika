@@ -1,7 +1,5 @@
 /**
  * Checked inputs and ownership rules for one local brain.
- *
- * @stability unstable
  */
 import * as Schema from "effect/Schema";
 
@@ -24,7 +22,6 @@ const Home = Absolute.check(
 /**
  * Immutable installation facts. No identity keys belong in this value.
  *
- * @stability unstable
  * @category schemas
  */
 export class BrainSpec extends Schema.Opaque<BrainSpec>()(

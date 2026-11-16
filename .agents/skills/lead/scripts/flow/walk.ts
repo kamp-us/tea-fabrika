@@ -51,17 +51,17 @@ export const runFlow = Effect.fn("flow.run")(function* (flow: Flow.Flow, options
   const missing = flow.steps.filter((s) => !runners.names.has(s.name)).map((s) => s.name);
 
   if (missing.length > 0) {
-    return yield* new Usage({ reason: `no runner for steps ${missing.join(", ")}` });
+    return yield* Usage.make({ reason: `no runner for steps ${missing.join(", ")}` });
   }
 
   const saved = yield* fs.exists(options.state).pipe(Effect.orElseSucceed(() => false));
 
   if (saved && !options.resume) {
-    return yield* new Usage({ reason: `${options.state} exists; pass --resume to go on from it` });
+    return yield* Usage.make({ reason: `${options.state} exists; pass --resume to go on from it` });
   }
 
   if (!saved && options.resume) {
-    return yield* new Usage({ reason: `${options.state} does not exist; there is nothing to resume` });
+    return yield* Usage.make({ reason: `${options.state} does not exist; there is nothing to resume` });
   }
 
   if (saved) {
@@ -69,11 +69,11 @@ export const runFlow = Effect.fn("flow.run")(function* (flow: Flow.Flow, options
     const model = Schema.decodeUnknownOption(Schema.fromJsonString(FlowMachine.Model))(text);
 
     if (Option.isNone(model)) {
-      return yield* new Usage({ reason: `${options.state} holds no flow Model` });
+      return yield* Usage.make({ reason: `${options.state} holds no flow Model` });
     }
 
     if (!Flow.equals(model.value.flow, flow)) {
-      return yield* new Usage({ reason: `the flow file changed since ${options.state} was saved; start a new flow` });
+      return yield* Usage.make({ reason: `the flow file changed since ${options.state} was saved; start a new flow` });
     }
   }
 

@@ -229,7 +229,7 @@ const stepsOf = (id: string | undefined, io: Io, pause: Duration.Input): Effect.
 const filesOf = (path: string | undefined, root: string, io: Io): Effect.Effect<Section<TestFile>> =>
   path
     ? io.read(path).pipe(
-        Effect.flatMap((text) => Effect.try({ try: () => JSON.parse(text), catch: (cause) => new Unread({ cause }) })),
+        Effect.flatMap((text) => Effect.try({ try: () => JSON.parse(text), catch: (cause) => Unread.make({ cause }) })),
         Effect.map((report) => readFiles(report, root)),
         Effect.catch((error) =>
           Effect.succeed(unavailable<TestFile>(`the report could not be read: ${reasonOf(error.cause)}`)),
@@ -270,9 +270,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 
           return answer.json();
         },
-        catch: (cause) => new Unread({ cause }),
+        catch: (cause) => Unread.make({ cause }),
       }),
-    read: (path) => Effect.try({ try: () => readFileSync(path, "utf8"), catch: (cause) => new Unread({ cause }) }),
+    read: (path) => Effect.try({ try: () => readFileSync(path, "utf8"), catch: (cause) => Unread.make({ cause }) }),
   };
 
   // The leg's file beside its report, its table in the job summary and the log. A write that fails
@@ -288,7 +288,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
           appendFileSync(env["GITHUB_STEP_SUMMARY"], text);
         }
       },
-      catch: (cause) => new Unread({ cause }),
+      catch: (cause) => Unread.make({ cause }),
     });
 
   await Effect.runPromise(

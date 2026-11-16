@@ -9,7 +9,8 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Option, Schema } from "effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 

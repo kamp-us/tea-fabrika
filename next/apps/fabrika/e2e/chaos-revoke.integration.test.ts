@@ -43,19 +43,19 @@ const identity = Effect.fn("RevokeTest.identity")(function* () {
   const pair = yield* Effect.acquireRelease(
     Effect.tryPromise({
       try: () => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]),
-      catch: (cause) => new WireFailure({ cause }),
+      catch: (cause) => WireFailure.make({ cause }),
     }),
     () => Effect.void,
   );
   const bytes = new Uint8Array(
     yield* Effect.tryPromise({
       try: () => crypto.subtle.exportKey("raw", pair.publicKey),
-      catch: (cause) => new WireFailure({ cause }),
+      catch: (cause) => WireFailure.make({ cause }),
     }),
   );
   const digest = yield* Effect.tryPromise({
     try: () => crypto.subtle.digest("SHA-256", bytes),
-    catch: (cause) => new WireFailure({ cause }),
+    catch: (cause) => WireFailure.make({ cause }),
   });
   const line = Schema.decodeUnknownSync(KeyLine)(
     `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(bytes)]).toString("base64")}`,
@@ -72,7 +72,7 @@ const identity = Effect.fn("RevokeTest.identity")(function* () {
         sign: (bytes) =>
           Effect.tryPromise({
             try: () => crypto.subtle.sign("Ed25519", pair.privateKey, new Uint8Array(bytes)),
-            catch: (cause) => new WireFailure({ cause }),
+            catch: (cause) => WireFailure.make({ cause }),
           }).pipe(Effect.map((signed) => new Uint8Array(signed))),
       }),
   };
@@ -149,7 +149,7 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
     const bytes = yield* Queue.take(chunks).pipe(Effect.timeout("20 seconds"));
 
     if (bytes.length === 0) {
-      return yield* new WireFailure({ cause: "transport closed" });
+      return yield* WireFailure.make({ cause: "transport closed" });
     }
 
     buffered = Buffer.concat([buffered, bytes]);
@@ -162,7 +162,7 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
   const boundary = buffered.indexOf("\r\n\r\n");
 
   if (!/^HTTP\/1\.1 101 /.test(buffered.subarray(0, boundary).toString())) {
-    return yield* new WireFailure({ cause: "upgrade refused" });
+    return yield* WireFailure.make({ cause: "upgrade refused" });
   }
 
   buffered = buffered.subarray(boundary + 4);
@@ -184,7 +184,7 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
         short === 126 ? buffered.readUInt16BE(2) : short === 127 ? Number(buffered.readBigUInt64BE(2)) : short;
 
       if (!Number.isSafeInteger(size) || size > 1024 * 1024) {
-        return yield* new WireFailure({ cause: "oversized test frame" });
+        return yield* WireFailure.make({ cause: "oversized test frame" });
       }
 
       while (buffered.length < header + size) {
@@ -254,12 +254,12 @@ const invoke = Effect.fn("RevokeTest.control")(function* (
   const target = binding[method];
 
   if (target === undefined) {
-    return yield* new WireFailure({ cause: new Error(`the binding has no ${method} call`) });
+    return yield* WireFailure.make({ cause: new Error(`the binding has no ${method} call`) });
   }
 
   return yield* Effect.tryPromise({
     try: () => Reflect.apply(target, binding, args),
-    catch: (cause) => new WireFailure({ cause }),
+    catch: (cause) => WireFailure.make({ cause }),
   });
 });
 
@@ -311,7 +311,7 @@ const served = Effect.gen(function* () {
   });
   const { localState } = yield* Effect.tryPromise({
     try: () => import("alchemy/State/LocalState"),
-    catch: (cause) => new WireFailure({ cause }),
+    catch: (cause) => WireFailure.make({ cause }),
   });
   const { port } = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
   const instance = yield* localInstance(

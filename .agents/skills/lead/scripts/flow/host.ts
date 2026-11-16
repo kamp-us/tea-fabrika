@@ -147,13 +147,13 @@ export const electronLock = Effect.fn("host.electronLock")(function* (lock: stri
     const owner = Number((yield* fs.readFileString(lock).pipe(Effect.orElseSucceed(() => ""))).trim());
 
     if (Number.isInteger(owner) && owner > 0 && (yield* alive(owner))) {
-      return yield* new Held({ pid: owner });
+      return yield* Held.make({ pid: owner });
     }
 
     yield* fs.remove(lock, { force: true }).pipe(Effect.ignore);
 
     if (!(yield* write)) {
-      return yield* new Held({ pid: 0 });
+      return yield* Held.make({ pid: 0 });
     }
   });
   // `Schedule.spaced` never ends, so a held lock is waited on for as long as it is held, and `Held`
@@ -181,7 +181,7 @@ export const exec = Effect.fn("host.exec")(
   },
   Effect.scoped,
   (effect, dir, command) =>
-    Effect.mapError(effect, () => new StepFailed({ reason: `${command} could not start in ${dir}` })),
+    Effect.mapError(effect, () => StepFailed.make({ reason: `${command} could not start in ${dir}` })),
 );
 
 /**
@@ -218,7 +218,7 @@ const runLine = Effect.fn("host.runLine")(
     return Number(code);
   },
   Effect.scoped,
-  (effect, _dir, line) => Effect.mapError(effect, () => new StepFailed({ reason: `\`${line}\` could not start` })),
+  (effect, _dir, line) => Effect.mapError(effect, () => StepFailed.make({ reason: `\`${line}\` could not start` })),
 );
 
 /** The last lines of the log, for a reason. */
@@ -266,7 +266,7 @@ export const worktree = Effect.fn("host.worktree")(function* (main: string, dir:
   yield* Effect.acquireRelease(
     git("worktree", "add", "-q", "--detach", dir, head).pipe(
       Effect.flatMap((r) =>
-        r.code === 0 ? Effect.void : Effect.fail(new StepFailed({ reason: `git worktree add failed: ${r.output}` })),
+        r.code === 0 ? Effect.void : Effect.fail(StepFailed.make({ reason: `git worktree add failed: ${r.output}` })),
       ),
     ),
     () => git("worktree", "remove", "--force", dir).pipe(Effect.ignore),
@@ -291,7 +291,7 @@ const boxFacts = Effect.fn("host.boxFacts")(function* (a: HostArgs, name: string
   const path = yield* Path.Path;
   const plan = yield* fs
     .readFile(a.plan)
-    .pipe(Effect.mapError(() => new StepFailed({ reason: `the plan ${a.plan} cannot be read` })));
+    .pipe(Effect.mapError(() => StepFailed.make({ reason: `the plan ${a.plan} cannot be read` })));
   const first = plan.indexOf(10);
   const second = first === -1 ? -1 : plan.indexOf(10, first + 1);
   const body = second === -1 ? new Uint8Array() : plan.subarray(second + 1);
@@ -308,7 +308,7 @@ const boxFacts = Effect.fn("host.boxFacts")(function* (a: HostArgs, name: string
   yield* Effect.acquireRelease(
     fs
       .writeFileString(facts, `${text.join("\n")}\n`)
-      .pipe(Effect.mapError(() => new StepFailed({ reason: `${facts} cannot be written` }))),
+      .pipe(Effect.mapError(() => StepFailed.make({ reason: `${facts} cannot be written` }))),
     () => fs.remove(facts, { force: true }).pipe(Effect.ignore),
   );
 }, Effect.provide(Digest.layerWebCrypto));
@@ -332,17 +332,17 @@ export const host = Effect.fn("host.run")(function* (a: HostArgs) {
   const scripts = path.join(import.meta.dirname, "..");
   yield* fs
     .writeFileString(log, `host ${name} at ${a.head}\n`)
-    .pipe(Effect.mapError(() => new StepFailed({ reason: `${log} cannot be written` })));
+    .pipe(Effect.mapError(() => StepFailed.make({ reason: `${log} cannot be written` })));
   yield* electronLock(path.join(a.boxes, "state", "electron.lock"), "20 seconds");
   const dir = yield* worktree(a.main, path.join(a.boxes, name), a.head);
   const tmp = yield* fs
     .makeTempDirectoryScoped({ directory: "/tmp", prefix: "fh" })
-    .pipe(Effect.mapError(() => new StepFailed({ reason: "no temp folder in /tmp" })));
-  yield* fs.makeDirectory(`${tmp}/home`).pipe(Effect.mapError(() => new StepFailed({ reason: `${tmp}/home` })));
+    .pipe(Effect.mapError(() => StepFailed.make({ reason: "no temp folder in /tmp" })));
+  yield* fs.makeDirectory(`${tmp}/home`).pipe(Effect.mapError(() => StepFailed.make({ reason: `${tmp}/home` })));
   const node = yield* repoNode(dir);
   yield* fs
     .writeFileString(log, `node: ${node ?? "the laptop's own (the repo names none)"}\n`, { flag: "a" })
-    .pipe(Effect.mapError(() => new StepFailed({ reason: `${log} cannot be written` })));
+    .pipe(Effect.mapError(() => StepFailed.make({ reason: `${log} cannot be written` })));
   const failed = yield* runCommands(dir, [INSTALL, ...a.commands], hostEnv(tmp), log, a.minutes, node);
   const ran = `${a.commands.length} host commands`;
 
@@ -486,7 +486,7 @@ type Spawns = ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | 
 export const runners: Readonly<Record<string, Runner<Spawns>>> = {
   host: Effect.fn("host.runner")(function* (step) {
     const args = yield* Schema.decodeUnknownEffect(HostArgs)(step.args).pipe(
-      Effect.mapError((e) => new StepFailed({ reason: `${step.name}'s args do not parse: ${e.message}` })),
+      Effect.mapError((e) => StepFailed.make({ reason: `${step.name}'s args do not parse: ${e.message}` })),
     );
     return Outcome.answer((yield* host(args)).outcome);
   }),

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-pr-check-file-laws-plan-moves-deleted-tests",
+  "date": "2026-11-15",
+  "by": "tests",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "docs/plan/quests/pr-check-file-laws-PLAN.md",
+    "line": 486
+  },
+  "says": "In our tooling, the pr-check-file-laws plan's Files table git-mvs oxlint-plugins/no-node-filesystem.test.ts (line 486) and oxlint-plugins/one-id-module.test.ts (line 492) to .integration.test.ts names, but the trusted-rules pull request (0573) deletes both files and moves their laws into no-node-imports.test.ts and modules.test.ts. The same table does not list the new oxlint-plugins/effect-checks-held.test.ts, which starts a child process (git ls-files), so by 0584 it is a test that table should rename too.",
+  "proof": "git show origin/main:docs/plan/quests/pr-check-file-laws-PLAN.md lines 486 and 492 name the two files; pull request kamp-us/tea-fabrika#1498 deletes them; oxlint-plugins/effect-checks-held.test.ts on that branch calls execFileSync(\"git\", [\"ls-files\", ...]) and is not named in the plan.",
+  "cost": "Whichever pull request lands second meets a git mv of a missing file, and one process-starting test stays a plain test.",
+  "head": "b510ed2e8926120c21777a5c1201099f20649996",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1498"
+}

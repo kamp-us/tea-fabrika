@@ -1,8 +1,6 @@
 /**
  * The app's brain Worker: its Durable Object classes, the private control entrypoint and the default
  * `fetch`, each a thin handoff into libfabrika's Cloudflare runtime.
- *
- * @stability unstable
  */
 import { makeDurableObjectBridge, makeWorkerBridge } from "@alchemy.run/cloudflare/Bridge";
 import type { SettingsStart } from "@kampus/libfabrika";
@@ -32,7 +30,6 @@ import { projectRuntime, type Env } from "./runtime.ts";
  * It implements `ProjectBinding`, the type every caller's stub has, so a call the binding names and
  * this class does not forward is a type error here, never a rejected call at run time.
  *
- * @stability unstable
  * @category objects
  */
 export class Project extends DurableObject<Env> implements ProjectBinding {
@@ -306,7 +303,6 @@ const Bridge = makeDurableObjectBridge(DurableObject, meta);
 /**
  * Durable Object for the Record, bridged to Alchemy's object of that name.
  *
- * @stability unstable
  * @category objects
  */
 export class RecordPart extends Bridge("RecordPart") {}
@@ -314,7 +310,6 @@ export class RecordPart extends Bridge("RecordPart") {}
 /**
  * Durable Object for one connection at the door, bridged to Alchemy's object of that name.
  *
- * @stability unstable
  * @category objects
  */
 export class Connection extends Bridge("Connection") {}
@@ -322,7 +317,6 @@ export class Connection extends Bridge("Connection") {}
 /**
  * Durable Object for one registered name's processes, bridged to Alchemy's object of that name.
  *
- * @stability unstable
  * @category objects
  */
 export class Process extends Bridge("Process") {}
@@ -330,7 +324,6 @@ export class Process extends Bridge("Process") {}
 /**
  * Worker entrypoint that receives the program isolates' tail events, bridged to Alchemy's Worker.
  *
- * @stability unstable
  * @category objects
  */
 export class IsolateTail extends makeWorkerBridge(WorkerEntrypoint, meta) {}
@@ -339,7 +332,6 @@ export class IsolateTail extends makeWorkerBridge(WorkerEntrypoint, meta) {}
  * Worker entrypoint for the private local control socket: each request runs `control` with the
  * token from its props.
  *
- * @stability unstable
  * @category objects
  */
 export class Control extends WorkerEntrypoint<Env, { token: string }> {
