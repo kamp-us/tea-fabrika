@@ -3,13 +3,15 @@
 // failure text out of tags). The methods come from each client's own keys, so a new method joins the
 // law without an edit here. Plant: `catch: unreachable` that ignores its argument, as before this ticket.
 import { it } from "@effect/vitest";
+import { Stub } from "@kampus/vitest";
 import { encodeRpcError, ErrorTag, RpcCallError } from "alchemy/Rpc";
 import { Deferred, Effect, Fiber, Schema } from "effect";
-import { expect } from "vitest";
+import { assert, expect } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Activity } from "../processes/Process.ts";
 import * as RepliesTest from "../runtime/RepliesTest.ts";
+import type { ConnectionBinding, ProcessBinding, ProjectBinding } from "./bindings.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient, rejected } from "./platform.ts";
 
 class WireFault extends Error {
@@ -22,29 +24,35 @@ const faults = [
   { name: "WireFault", make: (message: string): Error => new WireFault(message) },
 ] as const;
 
-/** A platform stub whose every method rejects with `fault`, standing in for a binding, storage or
- *  bucket; a method `own` holds answers as `own` says. */
-const rejecting = <A>(fault: unknown, own: object = {}) =>
-  new Proxy(own, {
-    get: (target, key) =>
-      Reflect.has(target, key)
-        ? Reflect.get(target, key)
-        : async () => {
-            throw fault;
-          },
-  }) as A;
+/** A platform call that rejects with `fault`: what each stub below answers for a method it does not
+ *  hold, whether it stands in for a binding, storage or a bucket. */
+const thrower = (fault: unknown) => async () => {
+  throw fault;
+};
 
-const clients = (fault: Error) => ({
-  Project: ProjectClient.make(rejecting(fault)),
-  Process: ProcessClient.make(rejecting(fault)),
-  Gateway: GatewayClient.make(rejecting(fault)),
-  Storage: StorageClient.make(rejecting(fault)),
-  Bucket: BucketClient.make(rejecting(fault)),
+const clients = (fault: unknown) => ({
+  Project: ProjectClient.make(Stub.make<ProjectBinding>(() => thrower(fault))),
+  Process: ProcessClient.make(Stub.make<ProcessBinding>(() => thrower(fault))),
+  Gateway: GatewayClient.make(Stub.make<ConnectionBinding>(() => thrower(fault))),
+  Storage: StorageClient.make(Stub.make<DurableObjectStorage>(() => thrower(fault))),
+  Bucket: BucketClient.make(Stub.make<R2Bucket>(() => thrower(fault))),
 });
 
-const methods = Object.entries(clients(new Error("probe"))).flatMap(([client, service]) =>
-  Object.keys(service).map((method) => `${client}.${method}`),
-);
+/** One client's calls, each called with what a law hands it. */
+type Calls = Readonly<Record<string, (...args: Array<never>) => Effect.Effect<unknown, unknown>>>;
+
+/** A client's calls by name, as `Object.entries` hands each function back with its name. */
+const named = (service: Calls) => new Map(Object.entries(service));
+
+/** Every client's calls, by `Client.method`, over stubs that reject with `fault`. */
+const everyCall = (fault: unknown) =>
+  new Map(
+    Object.entries(clients(fault)).flatMap(([client, service]) =>
+      [...named(service)].map(([method, call]) => [`${client}.${method}`, call] satisfies [string, unknown]),
+    ),
+  );
+
+const methods = [...everyCall(new Error("probe")).keys()];
 
 it.effect.prop(
   "a rejected platform call fails with LedgerError unreachable, carrying the thrown error's name and text",
@@ -55,20 +63,17 @@ it.effect.prop(
   },
   ({ call, name, text }) =>
     Effect.gen(function* () {
-      const [client = "", method = ""] = call.split(".");
       const kind = faults.find((fault) => fault.name === name)!;
-
-      const service: Record<string, (request: Request) => Effect.Effect<unknown, unknown>> = Reflect.get(
-        clients(kind.make(text)),
-        client,
-      );
-
       // A real Request, so a client that hands `fetch` to a typed stub has one to read; the
       // rejecting stub ignores what every other method is given.
-      const error = yield* Effect.flip(service[method]!(new Request("http://127.0.0.1:8787/client/a/b")));
+      const answer: Effect.Effect<unknown, unknown> = Reflect.apply(everyCall(kind.make(text)).get(call)!, undefined, [
+        new Request("http://127.0.0.1:8787/client/a/b"),
+      ]);
+      const error = yield* Effect.flip(answer);
       expect(error).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
-      expect(Reflect.get(Object(error), "message")).toContain(kind.name);
-      expect(Reflect.get(Object(error), "message")).toContain(text);
+      assert(error instanceof LedgerError);
+      expect(error.message).toContain(kind.name);
+      expect(error.message).toContain(text);
     }),
   { arbitrary: { runs: 200, seed: 119120 } },
 );
@@ -78,10 +83,7 @@ it.effect.prop(
 // answer is `unreachable`, with Alchemy's RpcCallError kept as its cause. The methods come from the
 // client's own keys. Plants: map every failure to `unreachable`; build `unreachable` from the
 // thrown value alone, so the RpcCallError is dropped.
-const processMethods = Object.keys(ProcessClient.make(rejecting(new Error("probe"))));
-
-/** A Process stub whose every method resolves with `answer`, as the object's bridge does. */
-const answeringProcess = <A>(answer: unknown) => new Proxy({}, { get: () => async () => answer }) as A;
+const processMethods = Object.keys(ProcessClient.make(Stub.make<ProcessBinding>(() => thrower(new Error("probe")))));
 
 it.effect.prop(
   "a LedgerError the Process object fails with crosses ProcessClient as itself, never as unreachable by translation",
@@ -95,15 +97,13 @@ it.effect.prop(
       // The bridge answers a typed failure as data: Alchemy's error envelope around the encoded error.
       const envelope = { _tag: ErrorTag, error: encodeRpcError(new LedgerError({ reason, message: text })) };
 
-      const call: () => Effect.Effect<unknown, unknown> = Reflect.get(
-        ProcessClient.make(answeringProcess(envelope)),
-        method,
-      );
-
-      const error = yield* Effect.flip(call());
+      // A Process stub whose every method resolves with the envelope, as the object's bridge does.
+      const answering = Stub.make<ProcessBinding>(() => async () => envelope);
+      const error = yield* Effect.flip(named(ProcessClient.make(answering)).get(method)!());
       expect(error).toBeInstanceOf(LedgerError);
       expect(error).toMatchObject({ reason, message: text });
-      expect(Reflect.get(Object(error), "cause")).toBeUndefined();
+      assert(error instanceof LedgerError);
+      expect(error.cause).toBeUndefined();
     }),
   { arbitrary: { runs: 200, seed: 119120 } },
 );
@@ -118,13 +118,15 @@ it.effect.prop(
   ({ method, name, text }) =>
     Effect.gen(function* () {
       const fault = faults.find((kind) => kind.name === name)!.make(text);
-      const call: () => Effect.Effect<unknown, unknown> = Reflect.get(ProcessClient.make(rejecting(fault)), method);
+      const call = named(ProcessClient.make(Stub.make<ProcessBinding>(() => thrower(fault)))).get(method)!;
       const error = yield* Effect.flip(call());
       expect(error).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
-      const cause = Reflect.get(Object(error), "cause");
+      assert(error instanceof LedgerError);
+      const cause = error.cause;
       expect(cause).toBeInstanceOf(RpcCallError);
       expect(cause).toMatchObject({ method });
-      expect(Reflect.get(Object(cause), "cause")).toBe(fault);
+      assert(cause instanceof RpcCallError);
+      expect(cause.cause).toBe(fault);
     }),
   { arbitrary: { runs: 200, seed: 119120 } },
 );
@@ -136,16 +138,9 @@ it.effect.prop(
 // above and error-cause.test.ts hold it.
 // Plants: no `errors: [LedgerError]` on the stub; map every failure to `unreachable`; keep the
 // thrown value and drop the RpcCallError.
-const calls = Object.keys(GatewayClient.make(rejecting(new Error("probe")))).filter((method) => method !== "fetch");
-
-/** A Connection stub whose every call resolves with `answer`, as the object's bridge answers. */
-const answering = <A>(answer: unknown) =>
-  new Proxy(
-    {},
-    {
-      get: () => () => Promise.resolve(answer),
-    },
-  ) as A;
+const calls = Object.keys(GatewayClient.make(Stub.make<ConnectionBinding>(() => thrower(new Error("probe"))))).filter(
+  (method) => method !== "fetch",
+);
 
 it.effect("vector: the Connection client has calls for this law to walk", () =>
   // A floor, so a client that loses its methods cannot shrink the law below to nothing.
@@ -162,26 +157,35 @@ it.effect.prop(
   },
   ({ call, reason, name, text }) =>
     Effect.gen(function* () {
-      const method = (stub: Parameters<typeof GatewayClient.make>[0]): Effect.Effect<unknown, unknown> =>
-        Reflect.apply(Reflect.get(GatewayClient.make(stub), call), undefined, []);
+      const method = (stub: ConnectionBinding) => named(GatewayClient.make(stub)).get(call)!();
 
-      // The bridge answers a typed failure as this envelope (alchemy, Rpc.ts `encodeRpcError`).
+      // The bridge answers a typed failure as this envelope (alchemy, Rpc.ts `encodeRpcError`). A
+      // Connection stub whose every call resolves with it, as the object's bridge answers.
+      const envelope = { _tag: ErrorTag, error: encodeRpcError(new LedgerError({ reason })) };
       const typed = yield* Effect.flip(
-        method(answering({ _tag: ErrorTag, error: encodeRpcError(new LedgerError({ reason })) })),
+        method(
+          Stub.make<ConnectionBinding>(
+            // @ts-expect-error the bridge's error envelope is no member's answer: the law feeds it in as the bridge sends it
+            () => async () => envelope,
+          ),
+        ),
       );
 
       expect(typed).toBeInstanceOf(LedgerError);
       expect(typed).toMatchObject({ reason });
-      expect(Reflect.get(Object(typed), "cause"), "nothing was lost on the way, so no cause").toBeUndefined();
+      assert(typed instanceof LedgerError);
+      expect(typed.cause, "nothing was lost on the way, so no cause").toBeUndefined();
 
       const fault = faults.find((kind) => kind.name === name)!.make(text);
-      const lost = yield* Effect.flip(method(rejecting(fault)));
+      const lost = yield* Effect.flip(method(Stub.make<ConnectionBinding>(() => thrower(fault))));
       expect(lost).toBeInstanceOf(LedgerError);
       expect(lost).toMatchObject({ reason: "unreachable" });
-      const cause: unknown = Reflect.get(Object(lost), "cause");
+      assert(lost instanceof LedgerError);
+      const cause = lost.cause;
       expect(cause).toBeInstanceOf(RpcCallError);
       expect(cause).toMatchObject({ method: call });
-      expect(Reflect.get(Object(cause), "cause"), "the RpcCallError keeps what the platform threw").toBe(fault);
+      assert(cause instanceof RpcCallError);
+      expect(cause.cause, "the RpcCallError keeps what the platform threw").toBe(fault);
     }),
   { arbitrary: { runs: 100, seed: 119120 } },
 );
@@ -240,7 +244,9 @@ it.effect.prop(
         },
       };
 
-      const answer = yield* GatewayClient.make(rejecting(new Error("only fetch is called"), answering)).fetch(request);
+      const answer = yield* GatewayClient.make(
+        Stub.make<ConnectionBinding>(() => thrower(new Error("only fetch is called")), answering),
+      ).fetch(request);
 
       expect(received).toHaveLength(1);
       const into = received[0]!;
@@ -271,7 +277,9 @@ it.effect.prop(
       };
 
       const pending = yield* Effect.forkChild(
-        GatewayClient.make(rejecting(new Error("only fetch is called"), waiting)).fetch(ask()),
+        GatewayClient.make(
+          Stub.make<ConnectionBinding>(() => thrower(new Error("only fetch is called")), waiting),
+        ).fetch(ask()),
       );
 
       const signal = yield* Deferred.await(reached);
@@ -339,10 +347,12 @@ it.effect.prop(
       const [client = "", method = ""] = call.split(".");
 
       const service =
-        client === "Gateway" ? GatewayClient.make(rejecting(thrown)) : ProcessClient.make(rejecting(thrown));
+        client === "Gateway"
+          ? GatewayClient.make(Stub.make<ConnectionBinding>(() => thrower(thrown)))
+          : ProcessClient.make(Stub.make<ProcessBinding>(() => thrower(thrown)));
 
       const lost: Effect.Effect<unknown, unknown> = Reflect.apply(
-        Reflect.get(service, method),
+        named(service).get(method)!,
         undefined,
         letter(call, secret),
       );
@@ -351,7 +361,9 @@ it.effect.prop(
 
       // The text did go through: the caller gets the lost call, with what the platform threw inside.
       expect(failure).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
-      expect(Reflect.get(Object(Reflect.get(Object(failure), "cause")), "cause")).toBe(thrown);
+      assert(failure instanceof LedgerError);
+      assert(failure.cause instanceof RpcCallError);
+      expect(failure.cause.cause).toBe(thrown);
       RepliesTest.unleaked(captured.text(), [secret]);
     }),
   // 100 runs walked the three Connection calls; 500 keep that reach over all fifteen.
@@ -371,8 +383,9 @@ it.effect.prop(
       const thrown = rejected(new LedgerError({ reason: "unreachable", message: `${name}: ${text}` }));
       expect(thrown).toBeInstanceOf(Error);
       expect(thrown).not.toBeInstanceOf(LedgerError);
-      expect(Reflect.get(Object(thrown), "name")).toBe(name);
-      expect(Reflect.get(Object(thrown), "message")).toBe(text);
+      assert(thrown instanceof Error);
+      expect(thrown.name).toBe(name);
+      expect(thrown.message).toBe(text);
     }),
   { arbitrary: { runs: 200, seed: 119120 } },
 );

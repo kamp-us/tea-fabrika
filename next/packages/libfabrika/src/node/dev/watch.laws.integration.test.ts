@@ -72,16 +72,8 @@ vi.mock("rolldown", async (original) => {
           if (event.code === "ERROR") {
             cycle.push({
               ...event,
-              result: new Proxy(event.result, {
-                get(target, key) {
-                  if (key === "close") {
-                    // Replay owns no new Rolldown result to close.
-                    return async () => undefined;
-                  }
-
-                  return Reflect.get(target, key);
-                },
-              }),
+              // Replay owns no new Rolldown result to close. `close` is the result's one member.
+              result: { close: async () => undefined },
             });
           } else if (event.code !== "BUNDLE_END") {
             cycle.push(event);

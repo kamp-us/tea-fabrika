@@ -480,12 +480,12 @@ describe("Program.make authoring laws, next/", () => {
         fc.property(declarations, broken, ({ fields }, change) => {
           // Deliberately untrusted JavaScript reaches the same constructors without a cast.
           const raw: unknown = { ...fields, ...change };
-          const make = Reflect.get(Program, "make");
-          const makeEffect = Reflect.get(Program, "makeEffect");
-          expect(() => Reflect.apply(make, Program, [raw])).toThrow();
+          // @ts-expect-error raw is untrusted JavaScript, which the type refuses and this law feeds in on purpose
+          expect(() => Program.make(raw)).toThrow();
           let checked: Effect.Effect<unknown, unknown> = Effect.void;
           expect(() => {
-            checked = Reflect.apply(makeEffect, Program, [raw]);
+            // @ts-expect-error raw is untrusted JavaScript, which the type refuses and this law feeds in on purpose
+            checked = Program.makeEffect(raw);
           }).not.toThrow();
           const exit = Effect.runSyncExit(Effect.result(checked));
           expect(Exit.isSuccess(exit)).toBe(true);
@@ -958,10 +958,10 @@ describe("P34 a program sets its own maxDeliveries, next/", () => {
   });
 
   const refused = (raw: unknown) => {
-    const make = Reflect.get(Program, "make");
-    const makeEffect = Reflect.get(Program, "makeEffect");
-    expect(() => Reflect.apply(make, Program, [raw])).toThrow();
-    const exit = Effect.runSyncExit(Effect.result(Reflect.apply(makeEffect, Program, [raw])));
+    // @ts-expect-error raw is untrusted JavaScript, which the type refuses and this law feeds in on purpose
+    expect(() => Program.make(raw)).toThrow();
+    // @ts-expect-error raw is untrusted JavaScript, which the type refuses and this law feeds in on purpose
+    const exit = Effect.runSyncExit(Effect.result(Program.makeEffect(raw)));
     expect(Exit.isSuccess(exit) && Result.isFailure(exit.value)).toBe(true);
   };
 
@@ -971,11 +971,10 @@ describe("P34 a program sets its own maxDeliveries, next/", () => {
         const raw = limit === undefined ? fields : withLimit(fields, limit);
 
         const own = (u: unknown) =>
-          typeof u === "object" && u !== null && Object.hasOwn(u, "maxDeliveries")
-            ? Reflect.get(u, "maxDeliveries")
-            : undefined;
+          Predicate.hasProperty(u, "maxDeliveries") && Object.hasOwn(u, "maxDeliveries") ? u.maxDeliveries : undefined;
 
-        const p: unknown = Reflect.apply(Reflect.get(Program, "make"), Program, [raw]);
+        // @ts-expect-error raw is untrusted JavaScript, which the type refuses and this law feeds in on purpose
+        const p: unknown = Program.make(raw);
         expect(own(p)).toBe(limit);
         const decoded = Schema.decodeUnknownResult(Program.schema)(p);
         expect(Result.isSuccess(decoded)).toBe(true);
@@ -985,7 +984,8 @@ describe("P34 a program sets its own maxDeliveries, next/", () => {
         }
 
         expect(own(load(p).program)).toBe(limit);
-        const effect: unknown = Effect.runSync(Reflect.apply(Reflect.get(Program, "makeEffect"), Program, [raw]));
+        // @ts-expect-error raw is untrusted JavaScript, which the type refuses and this law feeds in on purpose
+        const effect: unknown = Effect.runSync(Program.makeEffect(raw));
         expect(own(effect)).toBe(limit);
       }),
       { ...parameters, examples: [[fc.sample(declarations, { seed: SEED, numRuns: 1 })[0]!, 7]] },
@@ -1039,11 +1039,11 @@ const oldTyped = (u: unknown): u is { readonly type: string } =>
 
 const oldCode = (u: unknown) => typeof u === "function";
 
-/** A made program's `machine`. A value Reflect.get cannot read fails the law, as its throw did. */
+/** A made program's `machine`. A value that is not an object fails the law, as reading it would. */
 const madeMachine = (made: unknown): unknown => {
   expect(Predicate.isObjectKeyword(made)).toBe(true);
 
-  return Predicate.isObjectKeyword(made) ? Reflect.get(made, "machine") : undefined;
+  return Predicate.hasProperty(made, "machine") ? made.machine : undefined;
 };
 
 class Shaped {
@@ -1319,11 +1319,13 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
             throw new Error("has");
           }
 
+          // oxlint-disable-next-line eslint/no-restricted-properties -- the Proxy is the hostile value this law feeds in; the trap forwards every other key
           return typeof key === "string" && key in fields ? fields[key]!.present : Reflect.has(t, key);
         },
         get: (t, key, receiver) => {
           trace.push(`get:${String(key)}`);
 
+          // oxlint-disable-next-line eslint/no-restricted-properties -- the Proxy is the hostile value this law feeds in; the trap forwards every other key
           return typeof key === "string" && key in fields ? next(key) : Reflect.get(t, key, receiver);
         },
       });

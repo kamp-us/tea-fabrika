@@ -26,31 +26,58 @@ const Request = Schema.Struct({
   args: Schema.Array(Schema.Unknown),
 });
 
+/** The door's table: each target's callable names, checked against its client's own methods, so a
+ *  name always reaches the method of that name and the list cannot drift from the client. */
 const methods = {
-  project: new Set([
-    "clientConnect",
-    "challenge",
-    "initialize",
-    "route",
-    "grant",
-    "read",
-    "append",
-    "wait",
-    "start",
-    "exit",
-    "info",
-    "sign",
-    "commit",
-    "join",
-    "leave",
-    "online",
-    "brain",
-    "codeInstall",
-    "codeFailed",
-  ]),
-  process: new Set(["msg", "open", "due", "restart", "abort", "activity", "recover", "savedAlarm"]),
-  record: new Set(["write", "read", "content", "deleteContent"]),
+  project: Schema.is(
+    Schema.Literals([
+      "clientConnect",
+      "challenge",
+      "initialize",
+      "route",
+      "grant",
+      "read",
+      "append",
+      "wait",
+      "start",
+      "exit",
+      "info",
+      "sign",
+      "commit",
+      "join",
+      "leave",
+      "online",
+      "brain",
+      "codeInstall",
+      "codeFailed",
+    ] satisfies ReadonlyArray<keyof ProjectClient["Service"]>),
+  ),
+  process: Schema.is(
+    Schema.Literals([
+      "msg",
+      "open",
+      "due",
+      "restart",
+      "abort",
+      "activity",
+      "recover",
+      "savedAlarm",
+    ] satisfies ReadonlyArray<keyof ProcessClient["Service"]>),
+  ),
+  record: Schema.is(
+    Schema.Literals(["write", "read", "content", "deleteContent"] satisfies ReadonlyArray<
+      keyof RecordClient["Service"]
+    >),
+  ),
 };
+
+/** Calls a client's method with the request's arguments as the body gave them: the door checks the
+ *  name, and the arguments cross to the object as they did before the table. */
+const call = (
+  method: (...args: never) => Effect.Effect<unknown, unknown>,
+  client: object,
+  args: ReadonlyArray<unknown>,
+): Effect.Effect<unknown, unknown> => Reflect.apply(method, client, args);
 
 const dispatch = Effect.fnUntraced(function* (
   env: Env,
@@ -97,34 +124,40 @@ const dispatch = Effect.fnUntraced(function* (
     return yield* Effect.fail({ reason: "unknown_method" });
   }
 
-  if (!methods[target].has(method)) {
+  // Only the names in the table above are callable. Public fetch never reaches this entrypoint.
+  if (target === "project") {
+    if (!methods.project(method)) {
+      return yield* Effect.fail({ reason: "unknown_method" });
+    }
+
+    if (method === "commit" && typeof args[1] === "object" && args[1] !== null && "process" in args[1]) {
+      return yield* Effect.fail({ reason: "reserved" });
+    }
+
+    const client = ProjectClient.make(projectStub(env, project));
+    return yield* rpc(call(client[method], client, args));
+  }
+
+  if (target === "process") {
+    if (!methods.process(method)) {
+      return yield* Effect.fail({ reason: "unknown_method" });
+    }
+
+    // A process ID reaches the object its registered name owns; the Project refuses an unknown ID.
+    const client = ProcessClient.make(
+      processStub(env, project, yield* rpc(ProjectClient.make(projectStub(env, project)).processObject(name))),
+    );
+    const answer = call(client[method], client, args);
+    return yield* method === "abort" ? answer.pipe(Effect.ignore) : rpc(answer);
+  }
+
+  if (!methods.record(method)) {
     return yield* Effect.fail({ reason: "unknown_method" });
   }
 
-  if (
-    target === "project" &&
-    method === "commit" &&
-    typeof args[1] === "object" &&
-    args[1] !== null &&
-    "process" in args[1]
-  ) {
-    return yield* Effect.fail({ reason: "reserved" });
-  }
+  const client = RecordClient.make(recordStub(env, project, name));
 
-  // A process ID reaches the object its registered name owns; the Project refuses an unknown ID.
-  const client =
-    target === "project"
-      ? ProjectClient.make(projectStub(env, project))
-      : target === "process"
-        ? ProcessClient.make(
-            processStub(env, project, yield* rpc(ProjectClient.make(projectStub(env, project)).processObject(name))),
-          )
-        : RecordClient.make(recordStub(env, project, name));
-
-  // Only the fixed internal method set above is callable. Public fetch never reaches this entrypoint.
-  const answer: Effect.Effect<unknown, unknown> = Reflect.apply(Reflect.get(client, method), client, args);
-
-  return yield* target === "process" && method === "abort" ? answer.pipe(Effect.ignore) : rpc(answer);
+  return yield* rpc(call(client[method], client, args));
 });
 
 /**

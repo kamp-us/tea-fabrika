@@ -193,7 +193,7 @@ type Seen = {
 const run = Effect.fnUntraced(function* (walk: Walk) {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t708-" });
-  const clock = yield* Clock.Clock;
+  const clock = yield* TestClock.testClockWith((testClock) => Effect.succeed(testClock));
   const acks = yield* Queue.unbounded<void>();
   const killed = yield* Queue.unbounded<number>();
   const sleeps = yield* Queue.unbounded<void>();
@@ -227,82 +227,67 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   };
 
   // Count the instance's wall-clock reads, and tell the walk when the 1-second sampler sleeps again.
-  const counted = new Proxy(clock, {
-    get: (target, key) => {
-      if (key === "currentTimeMillis") {
-        return Effect.sync(() => {
-          reads.total++;
+  // A plain TestClock that forwards every other member, so the walk's own TestClock.setTime and
+  // adjust still reach the real one while this stands in as the Clock.
+  const counted: TestClock.TestClock = {
+    currentTimeMillis: Effect.sync(() => {
+      reads.total++;
 
-          return target.currentTimeMillisUnsafe();
-        });
-      }
+      return clock.currentTimeMillisUnsafe();
+    }),
+    currentTimeMillisUnsafe: () => {
+      reads.total++;
 
-      if (key === "currentTimeMillisUnsafe") {
-        return () => {
-          reads.total++;
-
-          return target.currentTimeMillisUnsafe();
-        };
-      }
-
-      if (key === "sleep") {
-        return (duration: Duration.Duration) => {
-          if (Duration.toMillis(duration) === 1000) {
-            sampler.due = target.currentTimeMillisUnsafe() + 1000;
-            Queue.offerUnsafe(sleeps, undefined);
-          }
-
-          return target.sleep(duration);
-        };
-      }
-
-      const value: unknown = Reflect.get(target, key);
-
-      return typeof value === "function" ? value.bind(target) : value;
+      return clock.currentTimeMillisUnsafe();
     },
-  });
+    sleep: (duration) => {
+      if (Duration.toMillis(duration) === 1000) {
+        sampler.due = clock.currentTimeMillisUnsafe() + 1000;
+        Queue.offerUnsafe(sleeps, undefined);
+      }
+
+      return clock.sleep(duration);
+    },
+    currentTimeNanos: clock.currentTimeNanos,
+    currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe(),
+    monotonicTimeNanos: clock.monotonicTimeNanos,
+    monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+    adjust: (duration) => clock.adjust(duration),
+    setTime: (timestamp) => clock.setTime(timestamp),
+    withLive: (effect) => clock.withLive(effect),
+  };
 
   // Hold each pending-file rename, and acknowledge the write once its folder sync has closed: the
   // instance then runs to its next queue take without another file step.
   let synced = false;
 
-  const gated = new Proxy(fs, {
-    get: (target, key) => {
-      if (key === "rename") {
-        return (from: string, to: string) =>
-          Effect.gen(function* () {
-            const held = to.endsWith("brain.pending.jsonl") ? gate : null;
+  const gated: FileSystem.FileSystem = {
+    ...fs,
+    rename: (from, to) =>
+      Effect.gen(function* () {
+        const held = to.endsWith("brain.pending.jsonl") ? gate : null;
 
-            if (held !== null) {
-              yield* Deferred.await(held);
-            }
+        if (held !== null) {
+          yield* Deferred.await(held);
+        }
 
-            yield* target.rename(from, to);
-            // The startup flush rewrites the file too; only the walk's own writes are counted.
-            synced = to.endsWith("brain.pending.jsonl") && mode === "walk";
-          });
+        yield* fs.rename(from, to);
+        // The startup flush rewrites the file too; only the walk's own writes are counted.
+        synced = to.endsWith("brain.pending.jsonl") && mode === "walk";
+      }),
+    open: (path, options) => {
+      if (!synced || path !== home) {
+        return fs.open(path, options);
       }
 
-      if (key === "open") {
-        return (path: string, options?: Parameters<FileSystem.FileSystem["open"]>[1]) => {
-          if (!synced || path !== home) {
-            return target.open(path, options);
-          }
+      synced = false;
 
-          synced = false;
-
-          // Registered first, so it runs after the folder handle's own release.
-          return Effect.addFinalizer(() => Effect.sync(() => Queue.offerUnsafe(acks, undefined))).pipe(
-            Effect.andThen(target.open(path, options)),
-          );
-        };
-      }
-
-      const value: unknown = Reflect.get(target, key);
-
-      return typeof value === "function" ? value.bind(target) : value;
+      // Registered first, so it runs after the folder handle's own release.
+      return Effect.addFinalizer(() => Effect.sync(() => Queue.offerUnsafe(acks, undefined))).pipe(
+        Effect.andThen(fs.open(path, options)),
+      );
     },
-  });
+  };
 
   yield* Effect.acquireRelease(
     Effect.sync(() =>
@@ -500,7 +485,9 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
             woken: null,
           });
 
-          const answered = (Reflect.get(dev.process(name), "ping")() as Promise<unknown>).then(
+          // @ts-expect-error ping is no method of a Process; this law fakes fetch, so any name reaches the wire
+          const ping: () => Promise<unknown> = dev.process(name).ping;
+          const answered = ping().then(
             (value): Answer => ({ _tag: "value", value }),
             (error: unknown): Answer => ({ _tag: "error", error }),
           );
