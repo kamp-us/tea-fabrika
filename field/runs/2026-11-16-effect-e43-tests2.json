@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e43-tests2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T22:01:03-08:00",
+  "ended": "2026-11-15T22:56:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Second tests round for judgment slice E43 of the Effect-check sweep (missingPipeableSignature), in next/ and our tooling, under the owner's ruling that every remaining hit gets Function.dual. Recounted with only this check at error through --lspconfig over the 13 tsconfigs (nothing written to a tsconfig): 377 hits at df235a1, 167 in exam paths, 185 in product files and 25 in PR 1366's files. Fixed 148 exam-path hits and left 19. Each fix keeps the data-first call as it was. 64 plain functions were wrapped by a scratch codemod with written overload types; 22 functions with a long inferred return type keep their body under a local <name>Body const and type both overloads with ReturnType of it; 13 workflow-lint rules take Function.dual under a Rule type that now holds both overloads; the rest were written by hand. A function with an optional argument decides by a predicate on its arguments (an array, a string, a property such as grants, control or sql, Queue.isQueue, Layer.isLayer), never by count. Where the arguments cannot tell a piped call from a direct one, the optional argument became an option object: personLine, sizedLegs and e2eShard take { signer }, { plain } and { gap } beside a dual; first and loaded take one option object and need no dual; again takes (after, { id, code }) with a dual. The four Schema decoder constants (commits.ts decodeNote, decodeLink, decodeExam; Sshsig.test-support.ts decodeLine) became one-argument functions over a private decoder, since no caller passes parse options. Five CI scripts that newly import effect had a raw try/catch that fabrika/no-raw-try-catch then refused; each became Result.try with the same outcome (program.ts refusal, shard-times.ts main loop, field-check.ts parse and main, workflow-lint/shared.ts parsed, workflow-lint/scheduled.ts lintScheduled). Left: changes.mjs (9) and scheduled.mjs (6), which run before install and cannot import effect (ruling Q4 excludes them from the lock by path); effect-jsdocs.ts (3), excluded by path (ruling Q5); and plant.ts:39 (1), whose Function.dual form makes lint:promise-types refuse two Promise lines that would need new fabrika/no-promises edge lines, which this session was not allowed to add, so plant keeps its function form and waits on the lead. Product hits left for the build: 185.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 55,
+  "note": "Folders (tsconfig projects) with a missingPipeableSignature hit at df235a1, for the judgment integrator's lock: .agents (92 product), .github/ci (60 exam), oxlint-plugins (11 exam), next/packages/libfabrika (80 product, 41 exam, 25 in PR 1366's files), next/packages/tuval (5 product), next/packages/vitest (3 product), next/programs/chaos (2 exam), next/programs/checklist (1 exam), next/programs/pipeline (3 product), next/apps/fabrika (2 product, 52 exam). After this round: .agents 92, .github/ci 15 (the two .mjs files), oxlint-plugins 3 (effect-jsdocs.ts), libfabrika 80 product plus 25 in PR 1366's files, tuval 5, vitest 3, pipeline 3, next/apps/fabrika 2 product and 1 exam (plant.ts:39); chaos and checklist are at zero. Product hits by folder: .agents/skills/lead 83, .agents/skills/sev 7, .agents/skills/mutation 2, libfabrika settings 13, runtime 13, processes 13, cloudflare 8, telemetry 7, client 5, permissions 4, node 4, ledger 3, transport 2, gateway 2, top-level 2, tezgah 1, desktop 1, ci 1, access 1, tuval 5, vitest 3, pipeline 3, next/apps/fabrika 2 (alchemy.run.ts:19, src/runtime.ts:37). Tests ran at df235a1 plus this change, one file at a time on Node 26.13.0: 108 test files that are changed or import a changed file, all green; not run: the 7 .visual. files (no browser here) and JournalSqlite.integration (real SIGKILL), instance-wire.integration and chaos-revoke.integration (they start dev servers). pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144), the list ratchet and one pnpm typecheck pass. No lock line, no tsconfig change, no disable or @effect-diagnostics comment, nothing in PR 1366's 67 files.",
+  "plants": [
+    {
+      "law": ".github/ci/legs.test.ts: every selected file lands on exactly one leg, on any count up to the full one",
+      "plant": "legs.ts split's dual predicate made always false, so a direct split(files, count) reads as piped",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/processes/ProcessLifecycle.integration.test.ts",
+      "plant": "Process.test-support.ts again's dual decided by an arity of 2, so again(A, { id }) reads as piped",
+      "result": "red"
+    },
+    {
+      "law": ".github/ci/workflow-lint/next-job.test.ts",
+      "plant": "wiring.test-support.ts e2eShard's predicate drops the string count, so e2eShard(\"x\") reads as piped",
+      "result": "green"
+    }
+  ],
+  "step": "tests"
+}

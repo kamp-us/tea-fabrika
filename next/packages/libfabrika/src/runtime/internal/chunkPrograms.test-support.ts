@@ -13,7 +13,7 @@
 // `type` (`CmdInput` is `{ type?: never }`, and `Cmd.make`'s value is `{ ...input, type: name }`,
 // @demlik/tea 0.25.0), so a `type` operand would be overwritten by "send_chunks".
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import { Schema, Function } from "effect";
 import { Program } from "../Program.ts";
 import { send, sendChunks } from "../Send.ts";
 
@@ -52,8 +52,12 @@ const Big = Schema.Struct({
 });
 
 /** @internal The items a `big` input makes: `count` items of send `n`, the last padded with `tail`. */
-export const madeItems = (n: number, count: number, size: number, tail: number) =>
-  Array.from({ length: count }, (_, i) => ({ s: n, i, pad: "x".repeat(i === count - 1 ? tail : size) }));
+export const madeItems: {
+  (count: number, size: number, tail: number): (n: number) => { s: number; i: number; pad: string }[];
+  (n: number, count: number, size: number, tail: number): { s: number; i: number; pad: string }[];
+} = Function.dual(4, (n: number, count: number, size: number, tail: number) =>
+  Array.from({ length: count }, (_, i) => ({ s: n, i, pad: "x".repeat(i === count - 1 ? tail : size) })),
+);
 
 /** A plain send's number, read back from the letter its answer echoes. */
 const numbered = (m: unknown): number => {
@@ -109,9 +113,7 @@ export const pipeWriter = (peer: string) => {
   });
 };
 
-/** @internal A writer that sends plain letters and chunked sends to `peer`, and an `aside` letter to
- *  `other`, `peer` when left out. */
-export const chunkWriter = (peer: string, other: string = peer) => {
+const chunkWriterBody = (peer: string, other: string) => {
   const machine = Machine.make({
     model: WriterModel,
     msg: Schema.Union([Letter, Aside, Rows, Big]),
@@ -151,6 +153,13 @@ export const chunkWriter = (peer: string, other: string = peer) => {
     wake: () => null,
   });
 };
+
+/** @internal A writer that sends plain letters and chunked sends to `peer`, and an `aside` letter to
+ *  `other`. */
+export const chunkWriter: {
+  (other: string): (peer: string) => ReturnType<typeof chunkWriterBody>;
+  (peer: string, other: string): ReturnType<typeof chunkWriterBody>;
+} = Function.dual(2, chunkWriterBody);
 
 const Part = Schema.Struct({ id: Schema.String, seq: Schema.Int, last: Schema.Boolean });
 

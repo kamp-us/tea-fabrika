@@ -4,6 +4,7 @@
 // moment its folder reaches zero: `stale` names it, and a whole `pnpm lint` run fails until it is
 // deleted.
 import { matchesGlob } from "node:path";
+import * as Function from "effect/Function";
 
 /** One fire as oxlint reports it, its filename from the top of the repo. */
 export interface Fire {
@@ -94,7 +95,10 @@ export const warnLines = (printed: unknown): ReadonlyArray<WarnLine> => {
 };
 
 /** Each warn line no advice fire of its rule matches, and each one whose last part names a file. */
-export const stale = (lines: ReadonlyArray<WarnLine>, advice: ReadonlyArray<Fire>): ReadonlyArray<Stale> =>
+export const stale: {
+  (advice: ReadonlyArray<Fire>): (lines: ReadonlyArray<WarnLine>) => ReadonlyArray<Stale>;
+  (lines: ReadonlyArray<WarnLine>, advice: ReadonlyArray<Fire>): ReadonlyArray<Stale>;
+} = Function.dual(2, (lines: ReadonlyArray<WarnLine>, advice: ReadonlyArray<Fire>): ReadonlyArray<Stale> =>
   lines.flatMap((line): ReadonlyArray<Stale> => {
     if (!(line.glob.split("/").at(-1) ?? "").includes("*")) {
       return [{ _tag: "file", line }];
@@ -104,4 +108,5 @@ export const stale = (lines: ReadonlyArray<WarnLine>, advice: ReadonlyArray<Fire
       (fire) => fire.code === line.rule && fire.filename !== undefined && matchesGlob(fire.filename, line.glob),
     );
     return held ? [] : [{ _tag: "zero", line }];
-  });
+  }),
+);

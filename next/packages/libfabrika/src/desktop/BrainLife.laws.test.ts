@@ -37,7 +37,12 @@ const walks = (machine: ReturnType<typeof BrainLife.machine>) => {
       answers: {
         inspect: {
           draw: settled(
-            fc.constantFrom(Outside.absent, Outside.loaded(), Outside.loaded(Outside.spec, null), Outside.foreign),
+            fc.constantFrom(
+              Outside.absent,
+              Outside.loaded(),
+              Outside.loaded({ value: Outside.spec, pid: null }),
+              Outside.foreign,
+            ),
           ),
           make: reply,
         },

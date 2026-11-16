@@ -1,3 +1,5 @@
+import * as Function from "effect/Function";
+import * as Result from "effect/Result";
 // Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC13).
 import { parse } from "yaml";
 import {
@@ -93,14 +95,17 @@ const listed = (job: Record<string, unknown>): unknown[] => {
  * scheduled.yaml's shape. `check` is check.yaml's text: the schedule runs next on its full matrix
  * of legs, so the measured split (vitest.shards.ts) and each leg's `/N` hold for both.
  */
-export const lintScheduled = (text: string, check: string): string[] => {
-  let source: unknown;
+export const lintScheduled: {
+  (check: string): (text: string) => string[];
+  (text: string, check: string): string[];
+} = Function.dual(2, (text: string, check: string): string[] => {
+  const read = Result.try((): unknown => parse(text));
 
-  try {
-    source = parse(text);
-  } catch {
+  if (Result.isFailure(read)) {
     return ["scheduled.yaml: invalid YAML"];
   }
+
+  const source = read.success;
 
   const workflow = map(source),
     on = map(workflow["on"]),
@@ -337,4 +342,4 @@ export const lintScheduled = (text: string, check: string): string[] => {
       ), `SC13: ${TESTS_JOB}'s own timeout-minutes is each leg's suite limit and ${BACKSTOP} minutes more`);
 
   return errors;
-};
+});

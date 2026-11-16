@@ -4,7 +4,7 @@
 // It also reads the real git lines C4's runs saved (`fixtures/next/hands/git-version.json`).
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { Deferred, Effect, Layer, PlatformError, Schema, Sink, Stream } from "effect";
+import { Deferred, Effect, Layer, PlatformError, Schema, Sink, Stream, Function } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import type { ChildProcess } from "effect/process";
 
@@ -30,8 +30,7 @@ const spawnFailure = () =>
   // oxlint-disable-next-line fabrika/no-hand-tag -- edge: Effect's PlatformError takes its system error tag as `_tag`
   PlatformError.systemError({ _tag: "NotFound", module: "ChildProcess", method: "spawn", pathOrDescriptor: "git" });
 
-/** A spawner that plays `child` for every command, recording what it was given into `seen`. */
-export const spawner = (child: Child, seen: Seen) =>
+const spawnerBody = (child: Child, seen: Seen) =>
   Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make((command) =>
@@ -78,6 +77,12 @@ export const spawner = (child: Child, seen: Seen) =>
       }),
     ),
   );
+
+/** A spawner that plays `child` for every command, recording what it was given into `seen`. */
+export const spawner: {
+  (seen: Seen): (child: Child) => ReturnType<typeof spawnerBody>;
+  (child: Child, seen: Seen): ReturnType<typeof spawnerBody>;
+} = Function.dual(2, spawnerBody);
 
 const Vectors = Schema.fromJsonString(
   Schema.Struct({

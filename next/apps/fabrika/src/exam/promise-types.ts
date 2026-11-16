@@ -1,7 +1,7 @@
 // The typed half of no-promises. Oxlint's JS plugins have no type checker. This lint
 // command uses the installed TypeScript 7.0.2 API, without emitting code or type diagnostics.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path } from "effect";
+import { Effect, FileSystem, Path, Function } from "effect";
 import * as ts from "typescript/unstable/ast";
 import {
   API,
@@ -19,11 +19,10 @@ interface PromiseFinding {
   readonly reason: string;
 }
 
-export const checkPromiseTypes = (
-  project: Project,
-  root: string,
-  pathService: Path.Path,
-): readonly PromiseFinding[] => {
+export const checkPromiseTypes: {
+  (root: string, pathService: Path.Path): (project: Project) => readonly PromiseFinding[];
+  (project: Project, root: string, pathService: Path.Path): readonly PromiseFinding[];
+} = Function.dual(3, (project: Project, root: string, pathService: Path.Path): readonly PromiseFinding[] => {
   const { checker, program } = project;
   const found = new Map<string, PromiseFinding>();
   const memo = new Map<number, boolean>();
@@ -287,7 +286,7 @@ export const checkPromiseTypes = (
   }
 
   return [...found.values()].sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
-};
+});
 
 const main = Effect.gen(function* () {
   const path = yield* Path.Path;

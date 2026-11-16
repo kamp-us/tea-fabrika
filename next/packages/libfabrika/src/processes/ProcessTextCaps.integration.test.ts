@@ -53,7 +53,10 @@ const seed = (store: Storage) =>
   Effect.gen(function* () {
     const processes = yield* ProcessManager;
     yield* processes.start(first(), from());
-    yield* processes.start(first("watcher:start", "watcher:1", { program: "watcher", hash: "build-a" }), from());
+    yield* processes.start(
+      first({ id: "watcher:start", name: "watcher:1", code: { program: "watcher", hash: "build-a" } }),
+      from(),
+    );
   }).pipe(Effect.provide(manager(store, brain(), ids(A, W).next)));
 
 const monitor = (store: Storage, ref: string) =>

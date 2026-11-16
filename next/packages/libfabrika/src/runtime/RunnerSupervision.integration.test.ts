@@ -918,7 +918,7 @@ describe("P34 runner supervision", () => {
                           .map((row) => row.attributes),
                       ).toMatchObject([{ "fab.process": A, "fab.runner.build": w.controls.build }]);
                     } else if (path === "external adoption") {
-                      yield* ProcessManager.use((p) => p.start(again(A, `external-${id}`), from())).pipe(
+                      yield* ProcessManager.use((p) => p.start(again(A, { id: `external-${id}` }), from())).pipe(
                         Effect.provide(w.manager()),
                       );
                       w.reopen();
@@ -1022,7 +1022,7 @@ describe("P34 runner supervision", () => {
               return rows;
             }).pipe(Effect.provide(w.layer()));
             // A trusted caller starts B outside the runner's recovery action.
-            yield* ProcessManager.use((p) => p.start(again(A, `external-${id}`), from())).pipe(
+            yield* ProcessManager.use((p) => p.start(again(A, { id: `external-${id}` }), from())).pipe(
               Effect.provide(w.manager()),
             );
             w.reopen();
@@ -1229,7 +1229,7 @@ describe("P34 runner supervision", () => {
             yield* ProgramRunner.use((r) => failed(r.msg(w.input()))).pipe(Effect.provide(w.layer()));
             const build = `build-${id}`;
             yield* ProcessManager.use((p) =>
-              p.start(again(A, `external-${id}`, { program: "counter", hash: build }), from()),
+              p.start(again(A, { id: `external-${id}`, code: { program: "counter", hash: build } }), from()),
             ).pipe(Effect.provide(w.manager()));
             w.controls.build = build;
             w.reopen();
@@ -1334,7 +1334,7 @@ describe("P34 runner supervision", () => {
           Effect.gen(function* () {
             const w = world();
             yield* w.boot;
-            yield* ProcessManager.use((p) => p.start(first("child:start", "child:1"), from())).pipe(
+            yield* ProcessManager.use((p) => p.start(first({ id: "child:start", name: "child:1" }), from())).pipe(
               Effect.provide(w.manager()),
             );
             const watching = ProcessManager.layer({ ...brain(), ...watcher(A) }, ids().next).pipe(

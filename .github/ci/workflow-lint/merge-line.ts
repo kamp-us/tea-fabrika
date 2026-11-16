@@ -1,8 +1,19 @@
+import * as Function from "effect/Function";
 // Today's CI, serving both versions. What the merge line runs no more: no tooling test (T1, 0539),
 // in check.yaml and in every other workflow a pull request or the merge queue starts, and nothing of
 // today's app (T2) or today's promise checks (T6, 0525, 0533).
 import { parse } from "yaml";
-import { CHANGED_FROM_BASE, compact, denominator, map, type Rule, SHARD_OF, steps } from "./shared.ts";
+import {
+  CHANGED_FROM_BASE,
+  compact,
+  denominator,
+  map,
+  type Require,
+  type Rule,
+  type Workflow,
+  SHARD_OF,
+  steps,
+} from "./shared.ts";
 
 // Today's app: its package name, or its folder outside next/. No command in check.yaml runs it.
 const TODAYS_APP = /fabrika-app-old|(?<!next\/)apps\/fabrika\b/;
@@ -86,16 +97,19 @@ const toolingJobs = (workflow: Record<string, unknown>): string[] => {
 };
 
 /** T1 for one more workflow: a pull request or merge queue one; any other runs no merge line. */
-export const lintNoTooling = (path: string, text: string): string[] => {
+export const lintNoTooling: {
+  (text: string): (path: string) => string[];
+  (path: string, text: string): string[];
+} = Function.dual(2, (path: string, text: string): string[] => {
   const workflow = map(parse(text));
   const on = workflow["on"];
   const events = typeof on === "string" ? [on] : Array.isArray(on) ? on : Object.keys(map(on));
   return events.includes("pull_request") || events.includes("merge_group")
     ? toolingJobs(workflow).map((job) => `${path}: T1: ${job} runs no tooling test (0539)`)
     : [];
-};
+});
 
-export const mergeLine: Rule = ({ workflow, jobs }, require) => {
+export const mergeLine: Rule = Function.dual(2, ({ workflow, jobs }: Workflow, require: Require) => {
   // T1 (0539). No event here runs a tooling test: their author runs the narrow ones on the laptop,
   // and the schedule runs them all (scheduled.yaml's tooling job, SC8). Today's version is frozen
   // (0525, 0533), so its tests run on no event either. `toolingJobs` says how a vitest call passes.
@@ -115,4 +129,4 @@ export const mergeLine: Rule = ({ workflow, jobs }, require) => {
       ), `T6: ${name} runs no promise check of today's version`);
     }
   }
-};
+});

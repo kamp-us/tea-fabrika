@@ -1,6 +1,19 @@
+import * as Function from "effect/Function";
 // Today's CI, serving both versions. check.yaml's Q1: the record a ready pull request run leaves
 // for the merge queue, its one upload, and every job testing the tree the record names.
-import { allSteps, classifier, compact, FLAGS, map, type Rule, sameEntries, steps, uses } from "./shared.ts";
+import {
+  allSteps,
+  classifier,
+  compact,
+  FLAGS,
+  map,
+  type Require,
+  type Rule,
+  type Workflow,
+  sameEntries,
+  steps,
+  uses,
+} from "./shared.ts";
 import { isTimings, TIMED_LEGS } from "./time-tables.ts";
 
 // Q1. The record a ready pull request run leaves for the merge queue: its pass of changes.mjs, on a
@@ -17,7 +30,7 @@ const RECORD_UPLOAD = {
   "if-no-files-found": "error",
 };
 
-export const record: Rule = ({ jobs }, require) => {
+export const record: Rule = Function.dual(2, ({ jobs }: Workflow, require: Require) => {
   const changes = map(jobs["changes"]),
     outputs = map(changes["outputs"]);
   const changeSteps = steps(changes);
@@ -90,4 +103,4 @@ export const record: Rule = ({ jobs }, require) => {
     uploaders.every(
       (s) => s === upload || timingsUploads.includes(s),
     ), "Q1: the record's upload is the one step in check.yaml that uploads an artifact, beside the test legs' timings");
-};
+});

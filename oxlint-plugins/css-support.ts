@@ -1,5 +1,6 @@
 // Today's CSS rules share parsing and reporting, so the runner can count known debt too.
 import { relative } from "node:path";
+import * as Function from "effect/Function";
 import valueParser from "postcss-value-parser";
 import stylelint from "stylelint";
 import names from "../packages/fabrika-design/src/token-names.json" with { type: "json" };
@@ -64,7 +65,10 @@ export const references = (decl: Declaration) => {
   return found;
 };
 
-export const media = (decl: Declaration, feature: string, value: string) => {
+export const media: {
+  (feature: string, value: string): (decl: Declaration) => boolean;
+  (decl: Declaration, feature: string, value: string): boolean;
+} = Function.dual(3, (decl: Declaration, feature: string, value: string) => {
   const condition = new RegExp(`\\(\\s*${feature}\\s*:\\s*${value}\\s*\\)`, "i");
   let parent: Root["parent"] | Declaration["parent"] = decl.parent;
 
@@ -81,7 +85,7 @@ export const media = (decl: Declaration, feature: string, value: string) => {
   }
 
   return false;
-};
+});
 
 type Fire = (decl: Declaration, detail: string, debt?: string) => void;
 type Check = (root: Root, fire: Fire) => void;
@@ -91,7 +95,10 @@ type Options = { known: readonly string[] };
 type Counts = { fires: number; known: Set<string> };
 export type CssResult = stylelint.PostcssResult & { fabrika?: Map<string, Counts> };
 
-export const plugin = (name: string, check: Check) => {
+export const plugin: {
+  (check: Check): (name: string) => stylelint.Plugin;
+  (name: string, check: Check): stylelint.Plugin;
+} = Function.dual(2, (name: string, check: Check) => {
   const ruleName = `fabrika/${name}`;
   const messages = stylelint.utils.ruleMessages(ruleName, { rejected: (detail: string) => detail });
   const rule: stylelint.Rule<boolean, Options> = Object.assign(
@@ -124,4 +131,4 @@ export const plugin = (name: string, check: Check) => {
     { ruleName, messages },
   );
   return stylelint.createPlugin(ruleName, rule);
-};
+});

@@ -10,6 +10,7 @@
 //
 // It sees no types: the same read through a helper in a `.ts` file passes. Report any miss.
 import type { CreateRule } from "@oxlint/plugins";
+import * as Function from "effect/Function";
 import { dotted } from "./match.ts";
 
 /** The written name without a leading `window.` or `globalThis.`. */
@@ -20,7 +21,10 @@ const plain = (name: string | null): string | null =>
  * A rule that refuses `Date()`, `new Date()` with no arguments and each call `reads` names, with one
  * message. `no-wall-clock` is the same rule with `Date.now` alone.
  */
-export const clockReads = (reads: ReadonlySet<string>, message: string): CreateRule => ({
+export const clockReads: {
+  (message: string): (reads: ReadonlySet<string>) => CreateRule;
+  (reads: ReadonlySet<string>, message: string): CreateRule;
+} = Function.dual(2, (reads: ReadonlySet<string>, message: string): CreateRule => ({
   create(context) {
     return {
       CallExpression(node) {
@@ -37,7 +41,7 @@ export const clockReads = (reads: ReadonlySet<string>, message: string): CreateR
       },
     };
   },
-});
+}));
 
 export const noClockInView: CreateRule = clockReads(
   new Set(["Date.now", "performance.now", "Math.random", "crypto.randomUUID"]),

@@ -84,7 +84,7 @@ it.effect.prop(
                 ...Outside.foreign,
                 args: v.sameArity ? Outside.spec.args.map((arg) => `${arg}.foreign`) : Outside.foreign.args,
               }
-            : Outside.loaded(Outside.spec, v.initial === "starting" ? null : 81);
+            : Outside.loaded({ value: Outside.spec, pid: v.initial === "starting" ? null : 81 });
       const outside = yield* Outside.make({
         job,
         file: v.initial === "absent" ? "absent" : "matching",

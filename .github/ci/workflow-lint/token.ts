@@ -1,9 +1,10 @@
+import * as Function from "effect/Function";
 // Today's CI, serving both versions. check.yaml's M1: changes' classify step and the test jobs' time
 // tables are the steps but the stop steps that get the token.
-import { map, type Rule, steps, TOKEN } from "./shared.ts";
+import { map, type Require, type Rule, type Workflow, steps, TOKEN } from "./shared.ts";
 import { TIME_TABLE, TIMED_LEGS, timeTableEnv } from "./time-tables.ts";
 
-export const token: Rule = ({ jobs }, require) => {
+export const token: Rule = Function.dual(2, ({ jobs }: Workflow, require: Require) => {
   const changeSteps = steps(map(jobs["changes"]));
 
   // M1. A push that a merge queue run already tested skips next (changes.mjs's
@@ -24,4 +25,4 @@ export const token: Rule = ({ jobs }, require) => {
       (s) => s === classify || tables.includes(s) || !/github\.token|secrets\.GITHUB_TOKEN/.test(JSON.stringify(s)),
     ),
   ), "M1: only changes' classify step and the test jobs' time tables get the token");
-};
+});

@@ -8,7 +8,7 @@ import { DatabaseSync } from "node:sqlite"; // edge: inspect the real instance's
 import { build } from "@kampus/libfabrika/build";
 import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
-import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import { Effect, FileSystem, Option, Path, Queue, Schema, Stream, Function } from "effect";
 import { ChildProcess } from "effect/process";
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
@@ -114,20 +114,23 @@ export const instance = (copy: Effect.Success<typeof fixture>) =>
   });
 
 /** Wait for an answer that belongs to the save, within one deadline, including skipped no-ops. */
-export const nextAnswer = (
-  answers: Queue.Queue<unknown>,
-  ms = 60_000,
-  accept: (answer: unknown) => boolean = () => true,
-) =>
-  Effect.gen(function* () {
-    while (true) {
-      const answer = yield* Queue.take(answers);
+export const nextAnswer: {
+  (ms?: number, accept?: (answer: unknown) => boolean): (answers: Queue.Queue<unknown>) => Effect.Effect<unknown>;
+  (answers: Queue.Queue<unknown>, ms?: number, accept?: (answer: unknown) => boolean): Effect.Effect<unknown>;
+} = Function.dual(
+  // A direct call starts with the queue; a piped one with the deadline, the test, or nothing.
+  (args) => Queue.isQueue(args[0]),
+  (answers: Queue.Queue<unknown>, ms = 60_000, accept: (answer: unknown) => boolean = () => true) =>
+    Effect.gen(function* () {
+      while (true) {
+        const answer = yield* Queue.take(answers);
 
-      if (accept(answer)) {
-        return answer;
+        if (accept(answer)) {
+          return answer;
+        }
       }
-    }
-  }).pipe(Effect.timeoutOrElse({ duration: ms, orElse: () => Effect.die("the watcher gave no answer") }));
+    }).pipe(Effect.timeoutOrElse({ duration: ms, orElse: () => Effect.die("the watcher gave no answer") })),
+);
 
 /** Runs dev.ts's real CLI and printer, with the fixture's build and watch configuration. */
 export const cli = Effect.fnUntraced(function* (

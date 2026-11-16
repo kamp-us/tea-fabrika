@@ -14,7 +14,7 @@
 // list grew or no longer reads as a list, 0 when none did or there is no base, 2 when the base is
 // not a sha, git fails, or the base's own file does not read (main is broken, so it fails closed).
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Exit, Option, Schema, Stream } from "effect";
+import { Console, Effect, Exit, Option, Schema, Stream, Function } from "effect";
 import { ChildProcess } from "effect/process";
 
 const ZEROS = "0".repeat(40);
@@ -62,7 +62,10 @@ export const LISTS: ReadonlyArray<List> = [
 ];
 
 /** The keys `head` holds beyond `base`, counted, in head order: one more copy of a key is added. */
-export const added = (base: ReadonlyArray<string>, head: ReadonlyArray<string>): ReadonlyArray<string> => {
+export const added: {
+  (head: ReadonlyArray<string>): (base: ReadonlyArray<string>) => ReadonlyArray<string>;
+  (base: ReadonlyArray<string>, head: ReadonlyArray<string>): ReadonlyArray<string>;
+} = Function.dual(2, (base: ReadonlyArray<string>, head: ReadonlyArray<string>): ReadonlyArray<string> => {
   const left = new Map<string, number>();
 
   for (const key of base) {
@@ -74,7 +77,7 @@ export const added = (base: ReadonlyArray<string>, head: ReadonlyArray<string>):
     left.set(key, n - 1);
     return n <= 0;
   });
-};
+});
 
 const Answer = Schema.TaggedUnion({
   done: { file: Schema.String },

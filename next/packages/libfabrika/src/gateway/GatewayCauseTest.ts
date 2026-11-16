@@ -12,7 +12,7 @@
 // of the wrong length, which has no cause), `GatewayNonce.ts:29` (the one WebCrypto callback that
 // importKey, sign and verify share).
 import { describe, expect } from "@effect/vitest";
-import { Effect, Predicate, Result, Schema } from "effect";
+import { Effect, Predicate, Result, Schema, Function } from "effect";
 import { Base64Url } from "effect/encoding";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
@@ -93,7 +93,10 @@ const rejecting = <A, E>(method: "importKey" | "sign" | "verify", failure: unkno
 const TTL = 60_000;
 const CAP = 100;
 
-export const suite = (law: Law, { fresh }: Harness) => {
+export const suite: {
+  ({ fresh }: Harness): (law: Law) => void;
+  (law: Law, { fresh }: Harness): void;
+} = Function.dual(2, (law: Law, { fresh }: Harness) => {
   describe("T695, the door's store keeps what failed", () => {
     // C1, GatewayStore.ts:27. Plant: build the `Storage` reason without the caught value.
     law(
@@ -205,4 +208,4 @@ export const suite = (law: Law, { fresh }: Harness) => {
         }),
     );
   });
-};
+});

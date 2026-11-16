@@ -6,6 +6,7 @@ import {
   Deferred,
   Effect,
   FileSystem,
+  Function,
   Layer,
   Option,
   Path,
@@ -373,5 +374,12 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
   };
 });
 
-export const nodeFiles: BrainFilesTest.Open = (fault, replacement) =>
-  open(fault, undefined, undefined, undefined, replacement).pipe(Effect.provide(NodeServices.layer));
+export const nodeFiles: {
+  (replacement?: BrainFilesTest.Replacement): (fault: BrainFilesTest.Fault) => ReturnType<BrainFilesTest.Open>;
+  (fault: BrainFilesTest.Fault, replacement?: BrainFilesTest.Replacement): ReturnType<BrainFilesTest.Open>;
+} = Function.dual(
+  // A direct call starts with the fault, a word; a piped one with the replacement, or nothing.
+  (args) => typeof args[0] === "string",
+  (fault: BrainFilesTest.Fault, replacement?: BrainFilesTest.Replacement): ReturnType<BrainFilesTest.Open> =>
+    open(fault, undefined, undefined, undefined, replacement).pipe(Effect.provide(NodeServices.layer)),
+);

@@ -31,11 +31,16 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Arbitrary, Effect, Layer, Schema, Stream } from "effect";
+import { Arbitrary, Effect, Layer, Schema, Stream, Function } from "effect";
 import { TestClock } from "effect/testing";
 
 export const opts = { arbitrary: { seed: 119120, runs: 300, size: 4096, concurrency: 1 }, timeout: 60_000 };
-export const number = (min: number, max: number) => Schema.Int.check(Schema.isBetween({ minimum: min, maximum: max }));
+
+export const number: {
+  (max: number): (min: number) => Schema.Int;
+  (min: number, max: number): Schema.Int;
+} = Function.dual(2, (min: number, max: number) => Schema.Int.check(Schema.isBetween({ minimum: min, maximum: max })));
+
 export const text = (max: number) => Schema.String.check(Schema.isMinLength(0), Schema.isMaxLength(max));
 
 export const Body = Schema.Union([
@@ -70,7 +75,7 @@ type Msg = typeof Msg.Type;
 const probe = Cmd.make("probe", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
 export const empty = { body: "", version: 0 };
 
-export const makeProgram = (refuse: (s: Model, m: Msg) => Refusal | null, throws = false) => {
+const makeProgramBody = (refuse: (s: Model, m: Msg) => Refusal | null, throws = false) => {
   const machine = Machine.make({
     model: Model,
     msg: Msg,
@@ -111,6 +116,15 @@ export const makeProgram = (refuse: (s: Model, m: Msg) => Refusal | null, throws
   });
 };
 
+export const makeProgram: {
+  (throws?: boolean): (refuse: (s: Model, m: Msg) => Refusal | null) => ReturnType<typeof makeProgramBody>;
+  (refuse: (s: Model, m: Msg) => Refusal | null, throws?: boolean): ReturnType<typeof makeProgramBody>;
+} = Function.dual(
+  // A direct call starts with the refusal; a piped one with `throws`, or nothing.
+  (args) => typeof args[0] === "function",
+  makeProgramBody,
+);
+
 export const person = "person_0000000000e008000000000001";
 export const process = Schema.decodeUnknownSync(Id.Process)("process_0000000000e008000000000001");
 export const writer = Writer.cases.agent.make({ key: "SHA256:exam-agent", for: person });
@@ -118,21 +132,33 @@ export const writer = Writer.cases.agent.make({ key: "SHA256:exam-agent", for: p
 const name = "notes-exam:1";
 export const build = "p8-exam";
 
-export const id = (prefix: "input" | "letter", n: number) =>
-  `${prefix}_0000000000e008${n.toString(16).padStart(12, "0")}`;
+export const id: {
+  (n: number): (prefix: "input" | "letter") => string;
+  (prefix: "input" | "letter", n: number): string;
+} = Function.dual(
+  2,
+  (prefix: "input" | "letter", n: number) => `${prefix}_0000000000e008${n.toString(16).padStart(12, "0")}`,
+);
 
-export const incoming = (n: number, body: string, base = 0, work = false): Incoming => ({
-  id: id("letter", n),
-  envelope: {
-    id: Schema.decodeUnknownSync(Id.InputId)(id("input", n)),
-    by: writer,
-    arrivedAt: n,
-    input: { type: "save", body, base, work },
-  },
-  sentAt: "2030-01-01T00:00:00Z",
-  seen: 0,
-  span: { traceId: "00000000000000000000000000000001", spanId: "0000000000000001" },
-});
+export const incoming: {
+  (body: string, base?: number, work?: boolean): (n: number) => Incoming;
+  (n: number, body: string, base?: number, work?: boolean): Incoming;
+} = Function.dual(
+  // A direct call starts with the letter's number; a piped one with its body.
+  (args) => typeof args[0] === "number",
+  (n: number, body: string, base = 0, work = false): Incoming => ({
+    id: id("letter", n),
+    envelope: {
+      id: Schema.decodeUnknownSync(Id.InputId)(id("input", n)),
+      by: writer,
+      arrivedAt: n,
+      input: { type: "save", body, base, work },
+    },
+    sentAt: "2030-01-01T00:00:00Z",
+    seen: 0,
+    span: { traceId: "00000000000000000000000000000001", spanId: "0000000000000001" },
+  }),
+);
 
 export const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgram>) {
   const db = yield* Effect.acquireRelease(
@@ -266,4 +292,7 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
   };
 });
 
-export const unchanged = (before: unknown, after: unknown) => expect(after).toEqual(before);
+export const unchanged: {
+  (after: unknown): (before: unknown) => void;
+  (before: unknown, after: unknown): void;
+} = Function.dual(2, (before: unknown, after: unknown) => expect(after).toEqual(before));

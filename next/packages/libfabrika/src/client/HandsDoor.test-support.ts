@@ -8,7 +8,7 @@
 // `door` is the door in front of it, one in-memory socket per dial: it challenges each socket,
 // answers the hello and the knock as its gate says, and keeps every socket, so a law can read every
 // frame the client wrote as it was sent (`MemorySocket.sent`), not only what the door kept of it.
-import { Layer, Option, Schema } from "effect";
+import { Layer, Option, Schema, Function } from "effect";
 import { Socket } from "effect/socket";
 import type { Request } from "../tasks/Task.ts";
 import { Command, Task, Result, State } from "../tasks/Task.ts";
@@ -248,14 +248,18 @@ export const brain = () => {
 export type Brain = ReturnType<typeof brain>;
 
 /** The JSON-RPC text that answers call `id` with `outcome`. A parked wait has no text until it is rung. */
-export const answerText = (id: string | number, outcome: Outcome): string | null =>
+export const answerText: {
+  (outcome: Outcome): (id: string | number) => string | null;
+  (id: string | number, outcome: Outcome): string | null;
+} = Function.dual(2, (id: string | number, outcome: Outcome): string | null =>
   outcome._tag === "parked"
     ? null
     : JSON.stringify(
         outcome._tag === "result"
           ? { jsonrpc: "2.0", id, result: outcome.result }
           : { jsonrpc: "2.0", id, error: { code: -32000, message: outcome.reason, data: { reason: outcome.reason } } },
-      );
+      ),
+);
 
 /** The door's admission of the hands key `key`, as it answers `initialize`. */
 export const admitted = (key: string) => ({
@@ -313,8 +317,7 @@ type DoorState = {
 const failed = (id: string | number, reason: string) =>
   JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32000, message: reason, data: { reason } } });
 
-/** The door as a script over the brain `b`, for the hands key `key`: one socket per dial, the challenge waiting in it. */
-export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
+const doorBody = (b: Brain, key: string, gate: Gate = admitsAll) => {
   const state: DoorState = { open: null, cut: null, parked: [], hellos: [], calls: [], sockets: [], dials: 0 };
   const answer = (text: string, on: MemorySocket) => {
     if (text === "ping") {
@@ -417,3 +420,13 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
     remove: () => state.open?.drop(4003),
   };
 };
+
+/** The door as a script over the brain `b`, for the hands key `key`: one socket per dial, the challenge waiting in it. */
+export const door: {
+  (key: string, gate?: Gate): (b: Brain) => ReturnType<typeof doorBody>;
+  (b: Brain, key: string, gate?: Gate): ReturnType<typeof doorBody>;
+} = Function.dual(
+  // A direct call starts with the brain; a piped one with the hands key.
+  (args) => typeof args[0] !== "string",
+  doorBody,
+);

@@ -19,7 +19,7 @@
  *
  * @stability unstable
  */
-import { Schema } from "effect";
+import { Schema, Function } from "effect";
 import { parseSync } from "oxc-parser";
 import { type OxcError, transformSync } from "oxc-transform-react";
 
@@ -53,6 +53,16 @@ export interface Finding {
   readonly reason: string;
 }
 
+const compileBody = (file: string, code: string) =>
+  transformSync(file, code, {
+    jsx: { runtime: "automatic" },
+    reactCompiler: {
+      panicThreshold: "none",
+      reportDiagnostics: true,
+      environment: { validateNoImpureFunctionsInRender: true },
+    },
+  });
+
 /**
  * Compiles one `.tsx` file with oxc's Rust port of the React Compiler, and answers the code with
  * what the Compiler reported.
@@ -65,15 +75,10 @@ export interface Finding {
  * @stability unstable
  * @category constructors
  */
-export const compile = (file: string, code: string) =>
-  transformSync(file, code, {
-    jsx: { runtime: "automatic" },
-    reactCompiler: {
-      panicThreshold: "none",
-      reportDiagnostics: true,
-      environment: { validateNoImpureFunctionsInRender: true },
-    },
-  });
+export const compile: {
+  (code: string): (file: string) => ReturnType<typeof compileBody>;
+  (file: string, code: string): ReturnType<typeof compileBody>;
+} = Function.dual(2, compileBody);
 
 interface Fn {
   readonly name: string;
@@ -271,7 +276,10 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
  * @stability unstable
  * @category checking
  */
-export const check = (files: ReadonlyMap<string, string>, ledger: readonly Row[]): readonly Finding[] => [
+export const check: {
+  (ledger: readonly Row[]): (files: ReadonlyMap<string, string>) => readonly Finding[];
+  (files: ReadonlyMap<string, string>, ledger: readonly Row[]): readonly Finding[];
+} = Function.dual(2, (files: ReadonlyMap<string, string>, ledger: readonly Row[]): readonly Finding[] => [
   ...[...files].flatMap(([file, text]) =>
     checkFile(
       file,
@@ -287,4 +295,4 @@ export const check = (files: ReadonlyMap<string, string>, ledger: readonly Row[]
       line: 0,
       reason: "a stale row in compiler-ledger.json: its file is gone. Drop the row.",
     })),
-];
+]);

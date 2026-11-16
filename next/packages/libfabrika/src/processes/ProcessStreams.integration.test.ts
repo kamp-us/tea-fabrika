@@ -71,8 +71,11 @@ const brainSide = (process: string) => process === "processes" || process.starts
 const seed = (store: Storage, name = "counter:1") =>
   Effect.gen(function* () {
     const processes = yield* ProcessManager;
-    yield* processes.start(first("start:counter:1", name), from());
-    yield* processes.start(first("watcher:start", "watcher:1", { program: "watcher", hash: "build-a" }), from());
+    yield* processes.start(first({ id: "start:counter:1", name }), from());
+    yield* processes.start(
+      first({ id: "watcher:start", name: "watcher:1", code: { program: "watcher", hash: "build-a" } }),
+      from(),
+    );
   }).pipe(Effect.provide(manager(store, brain(), ids(A, W).next)));
 
 const monitor = (store: Storage, ref = "watch:1", target = A, by = BRAIN) =>
@@ -202,9 +205,9 @@ describe("P33, every process event lives on a stream only the brain may write", 
       const next = ids(A, B);
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
-        yield* processes.start(first("first", tail), from());
+        yield* processes.start(first({ id: "first", name: tail }), from());
         const before = store.rows();
-        const answer = yield* Effect.result(processes.start(first("different", tail), from()));
+        const answer = yield* Effect.result(processes.start(first({ id: "different", name: tail }), from()));
         expect(Result.isFailure(answer)).toBe(true);
 
         if (Result.isFailure(answer)) {
@@ -224,14 +227,14 @@ describe("P33, every process event lives on a stream only the brain may write", 
       const store = storage();
       let winner: ReadonlyArray<Entry> = [];
       const next = Effect.gen(function* () {
-        yield* ProcessManager.use((p) => p.start(first("winner", name), from())).pipe(
+        yield* ProcessManager.use((p) => p.start(first({ id: "winner", name }), from())).pipe(
           Effect.provide(manager(store, brain(), ids(A).next)),
         );
         winner = store.rows();
         return B;
       }).pipe(Effect.orDie);
       return Effect.gen(function* () {
-        const answer = yield* ProcessManager.use((p) => Effect.result(p.start(first("loser", name), from())));
+        const answer = yield* ProcessManager.use((p) => Effect.result(p.start(first({ id: "loser", name }), from())));
         expect(Result.isFailure(answer)).toBe(true);
 
         if (Result.isFailure(answer)) {
@@ -403,7 +406,10 @@ describe("P33, every brain-written line records who asked", () => {
         );
         asks(added(store, before), clientKey);
         yield* ProcessManager.use((p) =>
-          p.start(first("watcher:start", "watcher:1", { program: "watcher", hash: "build-a" }), from()),
+          p.start(
+            first({ id: "watcher:start", name: "watcher:1", code: { program: "watcher", hash: "build-a" } }),
+            from(),
+          ),
         ).pipe(Effect.provide(manager(store, brain(), ids(W).next)));
         before = store.rows();
         yield* monitor(store, "watch:1", A, watcherKey);
@@ -439,7 +445,7 @@ describe("P33, every brain-written line records who asked", () => {
           asked: BRAIN,
         });
         const started = yield* Effect.result(
-          ProcessManager.use((p) => p.start(first("start:counter:1", name), from())).pipe(
+          ProcessManager.use((p) => p.start(first({ id: "start:counter:1", name }), from())).pipe(
             Effect.provide(manager(store, brain(), ids(A).next)),
           ),
         );
@@ -461,7 +467,9 @@ describe("P33, a process name never meets a gateway stream", () => {
     examples([["gateway"]], (name: string) => {
       const store = storage();
       return Effect.gen(function* () {
-        const answer = yield* Effect.result(ProcessManager.use((p) => p.start(first("start:gateway", name), from())));
+        const answer = yield* Effect.result(
+          ProcessManager.use((p) => p.start(first({ id: "start:gateway", name }), from())),
+        );
         expect(Result.isFailure(answer)).toBe(true);
 
         if (Result.isFailure(answer)) {

@@ -15,6 +15,7 @@
 //
 // A row may carry a `layer` (the local patch, demlik issue 913). A module's rank is its layer, so
 // moving a module is one edit and no other module moves. The exam's layers test reads it.
+import { Function } from "effect";
 
 /** One row of the rule file, as far as the exam reads it. */
 export interface Row {
@@ -76,7 +77,10 @@ const compare = (a: Specificity, b: Specificity): number => a[0] - b[0] || a[1] 
  * The rows that claim `path` (from the top of the repo, with `/`) with the most specific pattern:
  * none when no row names it, one when the rule file is clear, more when rows claim it equally.
  */
-export const rowsAt = (rows: ReadonlyArray<Row>, path: string): ReadonlyArray<string> => {
+export const rowsAt: {
+  (path: string): (rows: ReadonlyArray<Row>) => ReadonlyArray<string>;
+  (rows: ReadonlyArray<Row>, path: string): ReadonlyArray<string>;
+} = Function.dual(2, (rows: ReadonlyArray<Row>, path: string): ReadonlyArray<string> => {
   const found: ReadonlyArray<Claim> = rows.flatMap((row) =>
     row.paths
       .filter((pattern) => claims(pattern).test(path))
@@ -92,4 +96,4 @@ export const rowsAt = (rows: ReadonlyArray<Row>, path: string): ReadonlyArray<st
   }
 
   return [...new Set(found.filter((claim) => compare(claim.specificity, best) === 0).map((claim) => claim.name))];
-};
+});

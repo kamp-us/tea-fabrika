@@ -1,3 +1,5 @@
+import * as Function from "effect/Function";
+import * as Result from "effect/Result";
 // Today's CI, serving both versions. What every workflow-lint rule reads with: the parsed
 // workflow's parts, step lists, expression spacing, and the values more than one rule pins.
 import { parse } from "yaml";
@@ -13,7 +15,10 @@ export interface Workflow {
 export type Require = (holds: boolean, reason: string) => void;
 
 /** One family of check.yaml's laws: it calls `require` once for each law it holds. */
-export type Rule = (workflow: Workflow, require: Require) => void;
+export type Rule = {
+  (require: Require): (workflow: Workflow) => void;
+  (workflow: Workflow, require: Require): void;
+};
 
 export const isMap = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -91,12 +96,24 @@ export const VISUAL_LABEL = "contains(github.event.pull_request.labels.*.name, '
 export const TOKEN = `\${{ github.token }}`;
 
 /** Two lists of key and value pairs hold the same pairs, in any order. */
-export const sameEntries = (left: readonly [string, unknown][], right: readonly [string, unknown][]) =>
-  left.length === right.length &&
-  right.every(([key, value]) => left.some(([other, held]) => other === key && held === value));
+export const sameEntries: {
+  (right: readonly [string, unknown][]): (left: readonly [string, unknown][]) => boolean;
+  (left: readonly [string, unknown][], right: readonly [string, unknown][]): boolean;
+} = Function.dual(
+  2,
+  (left: readonly [string, unknown][], right: readonly [string, unknown][]) =>
+    left.length === right.length &&
+    right.every(([key, value]) => left.some(([other, held]) => other === key && held === value)),
+);
 
-export const uses = (step: Record<string, unknown>, action: string) =>
-  typeof step["uses"] === "string" && step["uses"].startsWith(`${action}@`);
+export const uses: {
+  (action: string): (step: Record<string, unknown>) => boolean;
+  (step: Record<string, unknown>, action: string): boolean;
+} = Function.dual(
+  2,
+  (step: Record<string, unknown>, action: string) =>
+    typeof step["uses"] === "string" && step["uses"].startsWith(`${action}@`),
+);
 
 // Chromium's OS packages come from apt, so the step first finds a mirror that answers (apt.sh).
 export const chromium =
@@ -114,14 +131,14 @@ export const ON_E2E = `startsWith(matrix.shard, '${E2E_PREFIX}')`;
 export const VISUAL_FILES = "hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''";
 const FALLBACKS = /^fromJSON\(needs\.changes\.outputs\.shards\|\|\((.*)&&'(.*)'\|\|'(.*)'\)\)$/s;
 
-const parsed = (text: string | undefined): unknown[] => {
-  try {
-    const value: unknown = JSON.parse(text ?? "");
-    return Array.isArray(value) ? value : [];
-  } catch {
-    return [];
-  }
-};
+const parsed = (text: string | undefined): unknown[] =>
+  Result.getOrElse(
+    Result.try((): unknown[] => {
+      const value: unknown = JSON.parse(text ?? "");
+      return Array.isArray(value) ? value : [];
+    }),
+    () => [],
+  );
 
 /**
  * next's matrix, `fromJSON(needs.changes.outputs.shards || (<when> && '<full>' || '<vitest legs>'))`:
@@ -156,8 +173,14 @@ export const ROW_INSTALL = "pnpm install --frozen-lockfile --filter @tea-fabrika
 // run divides by its own count of that kind, and every other run by the full matrix's.
 export const SHARD_OF = String.raw`\$\{\{\s*matrix\.shard\s*\}\}`;
 
-export const denominator = (kind: "vitest" | "e2e", full: number | string) =>
-  String.raw`\$\{\{\s*needs\.changes\.outputs\.${kind}-legs\s*\|\|\s*${full}\s*\}\}`;
+export const denominator: {
+  (full: number | string): (kind: "vitest" | "e2e") => string;
+  (kind: "vitest" | "e2e", full: number | string): string;
+} = Function.dual(
+  2,
+  (kind: "vitest" | "e2e", full: number | string) =>
+    String.raw`\$\{\{\s*needs\.changes\.outputs\.${kind}-legs\s*\|\|\s*${full}\s*\}\}`,
+);
 
 // The end-to-end step's narrowing, from changes' `base` alone (next-job.ts's E-laws hold its use).
 export const CHANGED_FROM_BASE = `\${{ needs.changes.outputs.base && format('--changed={0} --passWithNoTests', needs.changes.outputs.base) || '' }}`;

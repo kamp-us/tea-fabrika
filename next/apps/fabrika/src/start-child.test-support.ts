@@ -16,7 +16,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path, Schema, Function } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { programs } from "virtual:fabrika-built";
 import { build } from "./build.ts";
@@ -183,8 +183,13 @@ export const childInstance = Effect.fnUntraced(function* (
   return { instance, key, hashes, from };
 });
 
+const letterBody = (pid: string, id: string, m: unknown) => ({ pid, letter: id, m, sentAt: SENT, seen: 0 });
+
 /** A letter for the door's `process.send`. */
-export const letter = (pid: string, id: string, m: unknown) => ({ pid, letter: id, m, sentAt: SENT, seen: 0 });
+export const letter: {
+  (id: string, m: unknown): (pid: string) => ReturnType<typeof letterBody>;
+  (pid: string, id: string, m: unknown): ReturnType<typeof letterBody>;
+} = Function.dual(3, letterBody);
 
 // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: platform RPC doubles return Promises to the public client adapters
 const remote = <A>(work: Effect.Effect<A>) => Effect.runPromise(work);

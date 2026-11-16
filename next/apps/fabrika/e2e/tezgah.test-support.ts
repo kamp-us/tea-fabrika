@@ -12,7 +12,7 @@ import {
   TezgahView as View,
   tezgahName,
 } from "@kampus/libfabrika/tezgah/Workspace";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Function } from "effect";
 import type { Page } from "playwright";
 import { expect } from "vitest";
 import { PERSON, type reader } from "./p14.test-support.ts";
@@ -66,7 +66,10 @@ const drawnRule = (layout: TezgahView["workspaces"][number]["layout"], area: Box
 const ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 
 /** A canonical TypeID with prefix `prefix` and a body from `n`, for a tile id the test mints itself. */
-export const typeId = (prefix: string, n: number): string => {
+export const typeId: {
+  (n: number): (prefix: string) => string;
+  (prefix: string, n: number): string;
+} = Function.dual(2, (prefix: string, n: number): string => {
   let uuid = (BigInt(n) << 80n) | (7n << 76n) | (2n << 62n);
   let suffix = "";
 
@@ -76,7 +79,7 @@ export const typeId = (prefix: string, n: number): string => {
   }
 
   return `${prefix}_${suffix}`;
-};
+});
 
 /** format: a tile's accessible name, `tileName`'s words (0503, the plan): the program's own name after
  *  its pack, then `t<n>`, as `checklist, t1`. Tuval's L20 pins `tileName` to the same words. */
@@ -104,18 +107,26 @@ export const tezgahPid = (r: Reader) =>
   });
 
 /** tezgah's view now, as the brain sends it to any client that opens it. */
-export const tezgahView = (r: Reader, pid: string): Effect.Effect<TezgahView> =>
+export const tezgahView: {
+  (pid: string): (r: Reader) => Effect.Effect<TezgahView>;
+  (r: Reader, pid: string): Effect.Effect<TezgahView>;
+} = Function.dual(2, (r: Reader, pid: string): Effect.Effect<TezgahView> =>
   Effect.flatMap(r.call("view.open", { pid }), (frame) => Schema.decodeUnknownEffect(Opened)(frame)).pipe(
     Effect.map((o) => o.result.view),
     Effect.orDie,
-  );
+  ),
+);
 
 /** Sends tezgah one letter as a client does, through the door: for a layout no key reaches yet (focus
  *  moves are the next slice), never for what a law presses. */
-export const tell = (r: Reader, pid: string, m: unknown, letter: string) =>
+export const tell: {
+  (pid: string, m: unknown, letter: string): (r: Reader) => Effect.Effect<void, never, never>;
+  (r: Reader, pid: string, m: unknown, letter: string): Effect.Effect<void, never, never>;
+} = Function.dual(4, (r: Reader, pid: string, m: unknown, letter: string) =>
   Effect.flatMap(r.call("process.send", { pid, letter, m, sentAt: new Date().toISOString(), seen: 0 }), (frame) =>
     frame.error === undefined ? Effect.void : Effect.die(new Error(`the door refused ${JSON.stringify(frame.error)}`)),
-  );
+  ),
+);
 
 /** What the tab draws: how many mains, each region in document order with its name and box, the
  *  main's box, the names of every element marked `aria-current`, and the polite region's words. */
@@ -183,7 +194,10 @@ export const drawn = (page: Page): Effect.Effect<Drawn> =>
 /** Every way the tab's drawing differs from workspace 1 of tezgah's `view`: the regions in reading
  *  order, each named by `tileName`'s words, `aria-current` on the focused tile alone, and each tile
  *  where tezgah's percents put it in the main. Empty when they agree. */
-export const differences = (view: TezgahView, d: Drawn): ReadonlyArray<string> => {
+export const differences: {
+  (d: Drawn): (view: TezgahView) => ReadonlyArray<string>;
+  (view: TezgahView, d: Drawn): ReadonlyArray<string>;
+} = Function.dual(2, (view: TezgahView, d: Drawn): ReadonlyArray<string> => {
   const space = view.workspaces.find((w) => w.n === WORKSPACE);
 
   if (space === undefined) {
@@ -245,10 +259,9 @@ export const differences = (view: TezgahView, d: Drawn): ReadonlyArray<string> =
   }
 
   return out;
-};
+});
 
-/** Polls until `check` holds of the tab and tezgah's view, or fails with the last of both after 30 s. */
-export const settle = (
+const settleBody = (
   page: Page,
   r: Reader,
   pid: string,
@@ -268,6 +281,23 @@ export const settle = (
       yield* Effect.sleep("250 millis");
     }
   });
+
+/** Polls until `check` holds of the tab and tezgah's view, or fails with the last of both after 30 s. */
+export const settle: {
+  (
+    r: Reader,
+    pid: string,
+    check: (view: TezgahView, d: Drawn) => ReadonlyArray<string>,
+    label: string,
+  ): (page: Page) => ReturnType<typeof settleBody>;
+  (
+    page: Page,
+    r: Reader,
+    pid: string,
+    check: (view: TezgahView, d: Drawn) => ReadonlyArray<string>,
+    label: string,
+  ): ReturnType<typeof settleBody>;
+} = Function.dual(5, settleBody);
 
 /** The tiles of workspace 1 in reading order. */
 export const shown = (view: TezgahView): ReadonlyArray<Tile> => {
@@ -293,17 +323,23 @@ export type Shot = "one-tile" | "side-by-side" | "stacked" | "grid-2x2" | "small
 
 /** A shot of the tab as it is now, named by state and layout, into the folder `SHOTS` names; nothing
  *  when `SHOTS` is unset, so a plain run writes no file. */
-export const shoot = (page: Page, state: string, layout: Shot) => {
+export const shoot: {
+  (state: string, layout: Shot): (page: Page) => Effect.Effect<void, never, never>;
+  (page: Page, state: string, layout: Shot): Effect.Effect<void, never, never>;
+} = Function.dual(3, (page: Page, state: string, layout: Shot) => {
   const folder = process.env.SHOTS;
   return folder === undefined || folder === ""
     ? Effect.void
     : promised(() => page.screenshot({ path: join(folder, `tezgah-${state}-${layout}.png`), fullPage: false }));
-};
+});
 
 // Desk S3, next/: what the focus law reads on top of the frame's helpers.
 
 /** A registered process's id, from `processes/<name>`, as a window finds it. */
-export const processId = (r: Reader, name: string) =>
+export const processId: {
+  (name: string): (r: Reader) => Effect.Effect<string, never, never>;
+  (r: Reader, name: string): Effect.Effect<string, never, never>;
+} = Function.dual(2, (r: Reader, name: string) =>
   Effect.gen(function* () {
     const entries = yield* r.read(`processes/${name}`);
     const started = entries.flatMap((e) => {
@@ -312,7 +348,8 @@ export const processId = (r: Reader, name: string) =>
     });
     const pid = started.at(-1);
     return pid === undefined ? yield* Effect.die(new Error(`the brain did not start ${name}`)) : pid;
-  });
+  }),
+);
 
 /** Where DOM focus is in a tab: the name of the tile region holding it (null outside every tile),
  *  the `data-cursor` key of the nearest element around it that carries one (0165), and the first
@@ -336,8 +373,7 @@ export const domFocus = (page: Page): Effect.Effect<DomFocus> =>
     }),
   );
 
-/** Polls until `check` holds of where DOM focus is, or fails with the last reading after 30 s. */
-export const domSettles = (page: Page, check: (f: DomFocus) => boolean, label: string) =>
+const domSettlesBody = (page: Page, check: (f: DomFocus) => boolean, label: string) =>
   Effect.gen(function* () {
     for (let tries = 0; ; tries++) {
       const f = yield* domFocus(page);
@@ -350,6 +386,12 @@ export const domSettles = (page: Page, check: (f: DomFocus) => boolean, label: s
       yield* Effect.sleep("250 millis");
     }
   });
+
+/** Polls until `check` holds of where DOM focus is, or fails with the last reading after 30 s. */
+export const domSettles: {
+  (check: (f: DomFocus) => boolean, label: string): (page: Page) => ReturnType<typeof domSettlesBody>;
+  (page: Page, check: (f: DomFocus) => boolean, label: string): ReturnType<typeof domSettlesBody>;
+} = Function.dual(3, domSettlesBody);
 
 // Desk S4, next/: what the fold law reads on top of the frame's helpers.
 
@@ -458,7 +500,10 @@ const padded = (main: Box): Box => ({
  *  written here from its words. From no strips, every open tile but the focused one that the rule
  *  draws under 220x120 in the tab's own main folds, again, until nothing changes. Never read from the
  *  product's `fold`. */
-export const stripsHere = (view: TezgahView, main: Box): ReadonlyArray<Tile> => {
+export const stripsHere: {
+  (main: Box): (view: TezgahView) => ReadonlyArray<Tile>;
+  (view: TezgahView, main: Box): ReadonlyArray<Tile>;
+} = Function.dual(2, (view: TezgahView, main: Box): ReadonlyArray<Tile> => {
   const space = view.workspaces.find((w) => w.n === WORKSPACE);
 
   if (space === undefined) {
@@ -479,7 +524,7 @@ export const stripsHere = (view: TezgahView, main: Box): ReadonlyArray<Tile> => 
 
     strips = new Set([...strips, ...due.map(([t]) => t)]);
   }
-};
+});
 
 const off = (a: Box, b: Box) =>
   Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y), Math.abs(a.width - b.width), Math.abs(a.height - b.height));
@@ -490,7 +535,10 @@ const off = (a: Box, b: Box) =>
  *  `aria-current`, every open tile but the focused one is drawn at least 220x120, every region and
  *  every strip outside a band is drawn where the rule puts it, within 1px, and the strips of a band lie
  *  inside it, apart. Empty when they agree. */
-export const foldDifferences = (view: TezgahView, d: FoldDrawn): ReadonlyArray<string> => {
+export const foldDifferences: {
+  (d: FoldDrawn): (view: TezgahView) => ReadonlyArray<string>;
+  (view: TezgahView, d: FoldDrawn): ReadonlyArray<string>;
+} = Function.dual(2, (view: TezgahView, d: FoldDrawn): ReadonlyArray<string> => {
   const space = view.workspaces.find((w) => w.n === WORKSPACE);
 
   if (space === undefined || d.main === null) {
@@ -589,11 +637,9 @@ export const foldDifferences = (view: TezgahView, d: FoldDrawn): ReadonlyArray<s
   }
 
   return out;
-};
+});
 
-/** Whether each named element's text is drawn whole in tab `on`: no element in it cut by its own box
- *  (its scroll size within its client size, either way it is written), as a person reads it. */
-export const whole = (on: Page, selector: string) =>
+const wholeBody = (on: Page, selector: string) =>
   promised(() =>
     on.evaluate((css) => {
       const found = [...document.querySelectorAll(css)];
@@ -610,6 +656,13 @@ export const whole = (on: Page, selector: string) =>
       };
     }, selector),
   );
+
+/** Whether each named element's text is drawn whole in tab `on`: no element in it cut by its own box
+ *  (its scroll size within its client size, either way it is written), as a person reads it. */
+export const whole: {
+  (selector: string): (on: Page) => ReturnType<typeof wholeBody>;
+  (on: Page, selector: string): ReturnType<typeof wholeBody>;
+} = Function.dual(2, wholeBody);
 
 /** The status bar as a person reads it: its words, its height, its two ends (the mode word and the way
  *  out) each with whether it is drawn whole inside the bar and the window, how far the way out's right
@@ -662,9 +715,7 @@ export const statusBar = (on: Page) =>
     }),
   );
 
-/** Polls until `check` holds of the tab, strips included, and tezgah's view, or fails with the last
- *  of both after 30 s. */
-export const foldSettle = (
+const foldSettleBody = (
   page: Page,
   r: Reader,
   pid: string,
@@ -685,6 +736,24 @@ export const foldSettle = (
       yield* Effect.sleep("250 millis");
     }
   });
+
+/** Polls until `check` holds of the tab, strips included, and tezgah's view, or fails with the last
+ *  of both after 30 s. */
+export const foldSettle: {
+  (
+    r: Reader,
+    pid: string,
+    check: (view: TezgahView, d: FoldDrawn) => ReadonlyArray<string>,
+    label: string,
+  ): (page: Page) => ReturnType<typeof foldSettleBody>;
+  (
+    page: Page,
+    r: Reader,
+    pid: string,
+    check: (view: TezgahView, d: FoldDrawn) => ReadonlyArray<string>,
+    label: string,
+  ): ReturnType<typeof foldSettleBody>;
+} = Function.dual(5, foldSettleBody);
 
 /** The element that has DOM focus: its tag, its accessible name, and whether the page draws a focus
  *  ring on it (an outline or a box shadow), as a person sees it. */

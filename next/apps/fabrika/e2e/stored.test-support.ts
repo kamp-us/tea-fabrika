@@ -1,7 +1,7 @@
 // L17's scan of an instance's home (P14 slice 2, ticket 828), in a file of its own so its law in
 // `stored.test.ts` can run it on a folder that a writer changes under it.
 import { Row as LedgerRow } from "@kampus/libfabrika/ledger/Log";
-import { Effect, FileSystem, Path, type PlatformError, Schema } from "effect";
+import { Effect, FileSystem, Path, type PlatformError, Schema, Function } from "effect";
 import { instanceDatabase } from "../src/instance-database.test-support.ts";
 
 /** An instance's home, and the stop that ends every process that writes in it. */
@@ -21,22 +21,41 @@ export type Instance<E> = { readonly dir: string; readonly stop: Effect.Effect<v
  *  Two places keep a signature on purpose, and only its `armored` text is omitted there: a verified
  *  access entry's signed.armored, and the gateway's replay rows. Checking cells too catches a copy of
  *  that entire body in another table or stream. */
-export const stored = <E>(
-  instance: Instance<E>,
-  accessBodies: ReadonlyMap<string, string>,
-  proofs: ReadonlyArray<string>,
-) =>
-  Effect.gen(function* () {
-    const running = yield* scan(instance.dir, "running", accessBodies, proofs);
-    yield* instance.stop;
-    const stopped = yield* scan(instance.dir, "stopped", accessBodies, proofs);
-    return {
-      outputs: [...running.outputs, ...stopped.outputs],
-      raw: [...running.raw, ...stopped.raw],
-      /** The files the running pass read, each by its path under the home, as `/brain.last.json`. */
-      running: running.files,
-    };
-  });
+export const stored: {
+  (
+    accessBodies: ReadonlyMap<string, string>,
+    proofs: ReadonlyArray<string>,
+  ): <E>(
+    instance: Instance<E>,
+  ) => Effect.Effect<
+    { outputs: Array<readonly [string, string]>; raw: Array<readonly [string, string]>; running: Array<string> },
+    E | PlatformError.PlatformError,
+    FileSystem.FileSystem | Path.Path
+  >;
+  <E>(
+    instance: Instance<E>,
+    accessBodies: ReadonlyMap<string, string>,
+    proofs: ReadonlyArray<string>,
+  ): Effect.Effect<
+    { outputs: Array<readonly [string, string]>; raw: Array<readonly [string, string]>; running: Array<string> },
+    E | PlatformError.PlatformError,
+    FileSystem.FileSystem | Path.Path
+  >;
+} = Function.dual(
+  3,
+  <E>(instance: Instance<E>, accessBodies: ReadonlyMap<string, string>, proofs: ReadonlyArray<string>) =>
+    Effect.gen(function* () {
+      const running = yield* scan(instance.dir, "running", accessBodies, proofs);
+      yield* instance.stop;
+      const stopped = yield* scan(instance.dir, "stopped", accessBodies, proofs);
+      return {
+        outputs: [...running.outputs, ...stopped.outputs],
+        raw: [...running.raw, ...stopped.raw],
+        /** The files the running pass read, each by its path under the home, as `/brain.last.json`. */
+        running: running.files,
+      };
+    }),
+);
 
 /** One pass over the home. Its labels start with `home`, and the running pass's say so. */
 const scan = (

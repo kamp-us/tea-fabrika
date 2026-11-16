@@ -3,7 +3,7 @@
 // A finding row's core is decision 0035's own: its keys, the closed `rule` list and its proof.
 // Decision 0090: a new row is its own file, field/<log>/<date>-<slug>.json; the old .jsonl files
 // are history. Both hold the same rows, so one schema reads both.
-import { Schema } from "effect";
+import { Schema, Function } from "effect";
 
 const Log = Schema.Literals(["notes", "runs", "findings"]);
 export type Log = typeof Log.Type;
@@ -140,7 +140,10 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** Never put a value or a decoder's input-bearing error into a finding. */
-export const checkRow = (file: string, line: number, value: unknown): Finding[] => {
+export const checkRow: {
+  (line: number, value: unknown): (file: string) => Finding[];
+  (file: string, line: number, value: unknown): Finding[];
+} = Function.dual(3, (file: string, line: number, value: unknown): Finding[] => {
   const error = (field: string, reason: string) => Finding.cases.error.make({ file, line, field, reason });
   const warning = (field: string, reason: string) => Finding.cases.warning.make({ file, line, field, reason });
 
@@ -323,4 +326,4 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
   }
 
   return findings;
-};
+});

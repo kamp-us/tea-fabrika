@@ -1,7 +1,7 @@
 // P13 slice 2, next/. Project audit laws take scoped storage and RPC handles from their driver (0062).
 import { createHash, generateKeyPairSync, sign } from "node:crypto"; // edge: Effect has no SSH Ed25519 key export or signing API
 import { Machine } from "@demlik/tea/effect";
-import { Effect, Layer, Schema, type Scope, Stream } from "effect";
+import { Effect, Layer, Schema, type Scope, Stream, Function } from "effect";
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
 import { InputId } from "../Id.ts";
@@ -332,7 +332,10 @@ const projectWalk = Effect.fnUntraced(function* (
 });
 
 /** Registers A13's project walk without choosing a database driver. */
-export const suite = (harness: Harness, register: Register) => {
+export const suite: {
+  (register: Register): (harness: Harness) => void;
+  (harness: Harness, register: Register): void;
+} = Function.dual(2, (harness: Harness, register: Register) => {
   const reached = new Set<string>();
   register(
     "A13: project routing keeps unknown message types as normal refusals through the real audit callback",
@@ -364,4 +367,4 @@ export const suite = (harness: Harness, register: Register) => {
     usage,
     ["valid", "retry", "usage"],
   );
-};
+});

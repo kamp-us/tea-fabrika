@@ -1,6 +1,6 @@
 // P19 next/. Which process groups a host test may signal. Pure: nothing here reads or signals a process.
 // On 2026-11-13 a host run signaled group 1, and `kill -TERM -1` ended every process its user owned.
-import { Schema } from "effect";
+import { Schema, Function } from "effect";
 
 /** One row of `ps -axo pid=,ppid=,pgid=`. */
 export const Row = Schema.Struct({ pid: Schema.Int, parent: Schema.Int, group: Schema.Int });
@@ -24,7 +24,10 @@ export const Saved = Schema.Array(Owned);
  * spawns can still sit in it. A root of 1 or below has the whole machine beneath it, so it owns
  * nothing.
  */
-export const descendants = (rows: ReadonlyArray<typeof Row.Type>, root: number): ReadonlyArray<number> => {
+export const descendants: {
+  (root: number): (rows: ReadonlyArray<typeof Row.Type>) => ReadonlyArray<number>;
+  (rows: ReadonlyArray<typeof Row.Type>, root: number): ReadonlyArray<number>;
+} = Function.dual(2, (rows: ReadonlyArray<typeof Row.Type>, root: number): ReadonlyArray<number> => {
   if (root <= 1) {
     return [];
   }
@@ -41,4 +44,4 @@ export const descendants = (rows: ReadonlyArray<typeof Row.Type>, root: number):
 
   const led = rows.filter((row) => tree.has(row.pid) && tree.has(row.group) && row.group > 1);
   return [...new Set(led.map((row) => row.group))];
-};
+});

@@ -4,13 +4,18 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as Function from "effect/Function";
+import * as Result from "effect/Result";
 import { readPaths, validSha } from "./changes.mjs";
 import { checkRow, Finding, inFolder, type Log, logOf, rowName } from "./field-schema.ts";
 
 const lines = (text: string): string[] =>
   text === "" ? [] : (text.endsWith("\n") ? text.slice(0, -1) : text).split("\n");
 
-export const selectAdded = (base: string, head: string): { line: number; text: string }[] => {
+export const selectAdded: {
+  (head: string): (base: string) => { line: number; text: string }[];
+  (base: string, head: string): { line: number; text: string }[];
+} = Function.dual(2, (base: string, head: string): { line: number; text: string }[] => {
   const counts = new Map<string, number>();
 
   for (const text of lines(base)) {
@@ -27,15 +32,9 @@ export const selectAdded = (base: string, head: string): { line: number; text: s
     counts.set(text, count - 1);
     return [];
   });
-};
+});
 
-const parse = (text: string): unknown => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-};
+const parse = (text: string): unknown => Result.getOrUndefined(Result.try((): unknown => JSON.parse(text)));
 
 // GitHub annotation escaping applies to property values as well as message text.
 const escape = (text: string) =>
@@ -136,8 +135,12 @@ const checkRowFile = (file: string, base: string, head: string): Report => {
   return report(findings, 1);
 };
 
-export const checkFile = (file: string, base: string, head: string): Report =>
-  inFolder(file) ? checkRowFile(file, base, head) : checkLines(file, base, head);
+export const checkFile: {
+  (base: string, head: string): (file: string) => Report;
+  (file: string, base: string, head: string): Report;
+} = Function.dual(3, (file: string, base: string, head: string): Report =>
+  inFolder(file) ? checkRowFile(file, base, head) : checkLines(file, base, head),
+);
 
 /** The paths the field job reads: a direct `.jsonl` file, or anything in a log's folder. */
 export const isFieldPath = (path: string) => /^field\/[^/]+\.jsonl$/.test(path) || inFolder(path);
@@ -149,41 +152,49 @@ const git: Runner = (args) => spawnSync("git", args, { encoding: "utf8", maxBuff
  * A missing tree or unreadable blob is an error, never an empty successful delta.
  * A PR's rows start at the merge base, as changes.mjs reads its paths; a push uses its two trees.
  */
-export const readFieldFiles = (base: string, head: string, event: string, run: Runner = git) => {
-  if (!validSha(base) || !validSha(head)) {
-    throw new Error("field: valid base and head SHAs are required");
-  }
-
-  const read = (args: string[]) => {
-    const result = run(args);
-
-    if (result.status !== 0) {
-      throw new Error("field: Git could not read the requested history");
+export const readFieldFiles: {
+  (head: string, event: string, run?: Runner): (base: string) => { file: string; base: string; head: string }[];
+  (base: string, head: string, event: string, run?: Runner): { file: string; base: string; head: string }[];
+} = Function.dual(
+  // A piped call's third argument, when it has one, is the runner; a direct call's is the event.
+  (args) => args.length === 4 || typeof args[2] === "string",
+  (base: string, head: string, event: string, run: Runner = git): { file: string; base: string; head: string }[] => {
+    if (!validSha(base) || !validSha(head)) {
+      throw new Error("field: valid base and head SHAs are required");
     }
 
-    return result.stdout;
-  };
-  const from = event === "pull_request" ? read(["merge-base", base, head]).trim() : base;
+    const read = (args: string[]) => {
+      const result = run(args);
 
-  if (!validSha(from)) {
-    throw new Error("field: the merge base could not be read");
-  }
+      if (result.status !== 0) {
+        throw new Error("field: Git could not read the requested history");
+      }
 
-  const paths = readPaths(from, head, "push", run);
+      return result.stdout;
+    };
+    const from = event === "pull_request" ? read(["merge-base", base, head]).trim() : base;
 
-  if (paths === null) {
-    throw new Error("field: changed paths could not be read");
-  }
+    if (!validSha(from)) {
+      throw new Error("field: the merge base could not be read");
+    }
 
-  const tree = (ref: string) => new Set(read(["ls-tree", "-r", "--name-only", "-z", ref, "--", "field/"]).split("\0"));
-  const before = tree(from),
-    after = tree(head);
-  return paths.filter(isFieldPath).map((file) => ({
-    file,
-    base: before.has(file) ? read(["show", `${from}:${file}`]) : "",
-    head: after.has(file) ? read(["show", `${head}:${file}`]) : "",
-  }));
-};
+    const paths = readPaths(from, head, "push", run);
+
+    if (paths === null) {
+      throw new Error("field: changed paths could not be read");
+    }
+
+    const tree = (ref: string) =>
+      new Set(read(["ls-tree", "-r", "--name-only", "-z", ref, "--", "field/"]).split("\0"));
+    const before = tree(from),
+      after = tree(head);
+    return paths.filter(isFieldPath).map((file) => ({
+      file,
+      base: before.has(file) ? read(["show", `${from}:${file}`]) : "",
+      head: after.has(file) ? read(["show", `${head}:${file}`]) : "",
+    }));
+  },
+);
 
 const names = (text: string) => text.split("\0").filter((name) => name !== "");
 
@@ -194,39 +205,48 @@ const names = (text: string) => text.split("\0").filter((name) => name !== "");
  * ones readFieldFiles gives once this tree is committed: from the merge base with `main`, a missing
  * file's side empty. Unreadable history is an error, never an empty list.
  */
-export const readLocalFieldFiles = (main: string, run: Runner = git) => {
-  const read = (args: string[]) => {
-    const result = run(args);
+export const readLocalFieldFiles: {
+  (run?: Runner): (main: string) => { file: string; base: string; head: string }[];
+  (main: string, run?: Runner): { file: string; base: string; head: string }[];
+} = Function.dual(
+  // A direct call starts with the branch name; a piped one with the runner, or with nothing.
+  (args) => typeof args[0] === "string",
+  (main: string, run: Runner = git): { file: string; base: string; head: string }[] => {
+    const read = (args: string[]) => {
+      const result = run(args);
 
-    if (result.status !== 0) {
-      throw new Error("field: Git could not read the requested history");
+      if (result.status !== 0) {
+        throw new Error("field: Git could not read the requested history");
+      }
+
+      return result.stdout;
+    };
+    const root = read(["rev-parse", "--show-toplevel"]).trim();
+    const from = read(["merge-base", main, "HEAD"]).trim();
+
+    if (!validSha(from)) {
+      throw new Error("field: the merge base could not be read");
     }
 
-    return result.stdout;
-  };
-  const root = read(["rev-parse", "--show-toplevel"]).trim();
-  const from = read(["merge-base", main, "HEAD"]).trim();
-
-  if (!validSha(from)) {
-    throw new Error("field: the merge base could not be read");
-  }
-
-  const changed = names(read(["diff", "--no-renames", "--name-only", "-z", from, "--"]));
-  const added = names(read(["ls-files", "--others", "--exclude-standard", "--full-name", "-z", "--", ":(top)field/"]));
-  const before = new Set(names(read(["ls-tree", "--full-tree", "-r", "--name-only", "-z", from, "--", "field/"])));
-  const disk = (file: string) => {
-    const path = join(root, file);
-    return existsSync(path) ? readFileSync(path, "utf8") : "";
-  };
-  return [...new Set([...changed, ...added])]
-    .filter(isFieldPath)
-    .toSorted()
-    .map((file) => ({
-      file,
-      base: before.has(file) ? read(["show", `${from}:${file}`]) : "",
-      head: disk(file),
-    }));
-};
+    const changed = names(read(["diff", "--no-renames", "--name-only", "-z", from, "--"]));
+    const added = names(
+      read(["ls-files", "--others", "--exclude-standard", "--full-name", "-z", "--", ":(top)field/"]),
+    );
+    const before = new Set(names(read(["ls-tree", "--full-tree", "-r", "--name-only", "-z", from, "--", "field/"])));
+    const disk = (file: string) => {
+      const path = join(root, file);
+      return existsSync(path) ? readFileSync(path, "utf8") : "";
+    };
+    return [...new Set([...changed, ...added])]
+      .filter(isFieldPath)
+      .toSorted()
+      .map((file) => ({
+        file,
+        base: before.has(file) ? read(["show", `${from}:${file}`]) : "",
+        head: disk(file),
+      }));
+  },
+);
 
 const main = (local: boolean) => {
   const base = process.env["BASE"] ?? "";
@@ -258,9 +278,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (local && process.env["GITHUB_ACTIONS"] === "true") {
     console.log("field: this CI run's field job checks the added rows");
   } else {
-    try {
-      main(local);
-    } catch {
+    if (Result.isFailure(Result.try(() => main(local)))) {
       console.error(
         local
           ? "field: origin/main or this checkout could not be read; fetch origin main and run it again"

@@ -1,6 +1,7 @@
+import * as Function from "effect/Function";
 // Today's CI, serving both versions. check.yaml's check job (F1, ticket 985): each step on its own
 // flag, the field rows last, and the one ratchet step that holds every list file to shrinking (0524).
-import { compact, env, map, ROW_INSTALL, type Rule, steps } from "./shared.ts";
+import { compact, env, map, ROW_INSTALL, type Require, type Rule, type Workflow, steps } from "./shared.ts";
 
 const BUILD = "needs.changes.outputs.build!='false'";
 // The commit a run's change starts from, for vitest's `--changed`: a pull request's base, a merge
@@ -15,7 +16,7 @@ const CHECK = "needs.changes.outputs.check!='false'";
 const ROWS = "!cancelled()&&needs.changes.outputs.field!='false'";
 const ROWS_ALONE = "needs.changes.outputs.check=='false'";
 
-export const checkJob: Rule = ({ jobs }, require) => {
+export const checkJob: Rule = Function.dual(2, ({ jobs }: Workflow, require: Require) => {
   // A draft's check is lint alone: the build skips on changes' build flag.
   // F1. check also holds the field row check (ticket 985): its setup runs on any flag, its full
   // install and lint on the check flag, the CI package's install when only rows changed, and the
@@ -59,4 +60,4 @@ export const checkJob: Rule = ({ jobs }, require) => {
     compact(ratchets[0]?.["if"]) === CHECK &&
     ratchets[0]?.["continue-on-error"] ===
       undefined, `check runs ${RATCHET} once, on the test base, and its failure blocks`);
-};
+});

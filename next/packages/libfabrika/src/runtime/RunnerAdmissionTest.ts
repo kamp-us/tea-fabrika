@@ -3,7 +3,7 @@ import { applyCell } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Cause, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream, Function } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Writer, SinkError } from "../coordination/index.ts";
@@ -923,7 +923,7 @@ const walk = Effect.fnUntraced(function* (
   yield* check();
 });
 
-export const suite = (harness: Harness, register: Register) =>
+const suiteBody = (harness: Harness, register: Register) =>
   describe("P13 runner admission", () => {
     const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<string>, runs = COUNTS) => {
       const reached = new Set<string>();
@@ -1016,3 +1016,8 @@ export const suite = (harness: Harness, register: Register) =>
       ],
     );
   });
+
+export const suite: {
+  (register: Register): (harness: Harness) => ReturnType<typeof suiteBody>;
+  (harness: Harness, register: Register): ReturnType<typeof suiteBody>;
+} = Function.dual(2, suiteBody);

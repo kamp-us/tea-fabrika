@@ -2,6 +2,8 @@
 // comment-only change under next/ runs only the reader tests (the plan for CI paths, slice 2).
 // changes.mjs imports this file only after the parser's install, and a failed import runs every
 // next/ test, so nothing here may be needed by its first pass.
+import * as Function from "effect/Function";
+import * as Result from "effect/Result";
 import { parseSync } from "oxc-parser";
 
 /** How CI runs git: the arguments, then the exit status and what it printed. */
@@ -73,15 +75,14 @@ const unmatched = (from: readonly Comment[], to: readonly Comment[]) => {
  */
 const refusal = (name: string, before: string, after: string, parse: typeof parseSync): string | undefined => {
   const options = { lang: name.endsWith(".tsx") ? "tsx" : "ts", sourceType: "module" } as const;
-  let old;
-  let fresh;
+  const parsed = Result.try(() => ({ old: parse(name, before, options), fresh: parse(name, after, options) }));
 
-  try {
-    old = parse(name, before, options);
-    fresh = parse(name, after, options);
-  } catch (error) {
+  if (Result.isFailure(parsed)) {
+    const error = parsed.failure;
     return `the parser threw: ${error instanceof Error ? error.message : String(error)}`;
   }
+
+  const { old, fresh } = parsed.success;
 
   if (old.errors.length > 0 || fresh.errors.length > 0) {
     return `a parse error on the ${old.errors.length > 0 ? "old" : "new"} side`;
@@ -102,8 +103,15 @@ const refusal = (name: string, before: string, after: string, parse: typeof pars
  * language (`.ts` or `.tsx`). `parse` is the parser, oxc-parser's own unless a test hands one in; a
  * parser that throws is no proof.
  */
-export const sameProgram = (name: string, before: string, after: string, parse = parseSync): boolean =>
-  refusal(name, before, after, parse) === undefined;
+export const sameProgram: {
+  (before: string, after: string, parse?: typeof parseSync): (name: string) => boolean;
+  (name: string, before: string, after: string, parse?: typeof parseSync): boolean;
+} = Function.dual(
+  // A piped call's third argument, when it has one, is the parser; a direct call's is a text.
+  (args) => args.length === 4 || typeof args[2] === "string",
+  (name: string, before: string, after: string, parse: typeof parseSync = parseSync): boolean =>
+    refusal(name, before, after, parse) === undefined,
+);
 
 /** Why one path is not proven, or `undefined` when it is. */
 const judge = (base: string, head: string, path: string, run: Runner): string | undefined => {
@@ -127,15 +135,33 @@ const judge = (base: string, head: string, path: string, run: Runner): string | 
  * missing, so a file added or deleted is left out, as is one that is not `.ts` or `.tsx`. `note`
  * hears each path's verdict, so the run can say why it went light or did not.
  */
-export const samePaths = (
-  base: string,
-  head: string,
-  paths: readonly string[],
-  run: Runner,
-  note: (path: string, verdict: string) => void = () => {},
-): string[] =>
-  paths.filter((path) => {
-    const verdict = judge(base, head, path, run);
-    note(path, verdict ?? "same program");
-    return verdict === undefined;
-  });
+export const samePaths: {
+  (
+    head: string,
+    paths: readonly string[],
+    run: Runner,
+    note?: (path: string, verdict: string) => void,
+  ): (base: string) => string[];
+  (
+    base: string,
+    head: string,
+    paths: readonly string[],
+    run: Runner,
+    note?: (path: string, verdict: string) => void,
+  ): string[];
+} = Function.dual(
+  // A direct call's second argument is the head commit; a piped call's is the path list.
+  (args) => typeof args[1] === "string",
+  (
+    base: string,
+    head: string,
+    paths: readonly string[],
+    run: Runner,
+    note: (path: string, verdict: string) => void = () => {},
+  ): string[] =>
+    paths.filter((path) => {
+      const verdict = judge(base, head, path, run);
+      note(path, verdict ?? "same program");
+      return verdict === undefined;
+    }),
+);

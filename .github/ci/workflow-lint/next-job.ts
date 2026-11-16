@@ -1,3 +1,4 @@
+import * as Function from "effect/Function";
 // Today's CI, serving both versions. check.yaml's next job: its legs (E1, E10), each leg's
 // `--shard` (E2), the vitest and end-to-end steps (E3, E11), and its pinned commands.
 import {
@@ -11,7 +12,9 @@ import {
   legs,
   map,
   ON_E2E,
+  type Require,
   type Rule,
+  type Workflow,
   SHARD_OF,
   steps,
   VISUAL_FILES,
@@ -22,7 +25,7 @@ import { TIME_TABLE } from "./time-tables.ts";
 // The vitest legs of next's matrix, "1" to "5", each a string.
 const VITEST_LEGS = ["1", "2", "3", "4", "5"];
 
-export const nextLaws: Rule = ({ jobs }, require) => {
+export const nextLaws: Rule = Function.dual(2, ({ jobs }: Workflow, require: Require) => {
   const nextJob = map(jobs["next"]),
     strategy = map(nextJob["strategy"]),
     matrix = map(strategy["matrix"]),
@@ -148,4 +151,4 @@ export const nextLaws: Rule = ({ jobs }, require) => {
       compact(matches[0]?.["if"]) ===
         compact(condition), `next runs ${command} once, only on ${leg}, with its pinned condition`);
   }
-};
+});

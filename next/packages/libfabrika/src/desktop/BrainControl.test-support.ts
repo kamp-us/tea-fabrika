@@ -16,7 +16,9 @@ export const spec = Schema.decodeUnknownSync(BrainSpec)({
 
 export const absent = Status.cases.absent.make({});
 
-export const loaded = (value: BrainSpec = spec, pid: number | null = 81) =>
+// The spec and the pid are options, each with its default: with every argument optional, no pipeable
+// form could tell a piped call from a direct one.
+export const loaded = ({ value = spec, pid = 81 }: { readonly value?: BrainSpec; readonly pid?: number | null } = {}) =>
   Status.cases.loaded.make({
     executable: value.executable,
     args: value.args,
@@ -25,7 +27,9 @@ export const loaded = (value: BrainSpec = spec, pid: number | null = 81) =>
     pid,
   });
 
-export const foreign = loaded(Schema.decodeUnknownSync(BrainSpec)({ ...spec, args: [...spec.args, "foreign"] }));
+export const foreign = loaded({
+  value: Schema.decodeUnknownSync(BrainSpec)({ ...spec, args: [...spec.args, "foreign"] }),
+});
 
 const World = Schema.Struct({
   job: Status,

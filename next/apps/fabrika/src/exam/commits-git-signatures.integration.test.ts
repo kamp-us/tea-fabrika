@@ -34,7 +34,7 @@ describe("person git signatures (p83b)", () => {
     fc.assert(
       fc.property(fc.uniqueArray(id, { minLength: 2, maxLength: 2 }), name, fc.string(), (ids, name, content) => {
         for (const multiple of [false, true]) {
-          const keys = `${GOOD_KEYS}${personLine(ids[0]!)}\n${multiple ? `${personLine(ids[1]!, "stranger")}\n` : ""}`;
+          const keys = `${GOOD_KEYS}${personLine(ids[0]!)}\n${multiple ? `${personLine(ids[1]!, { signer: "stranger" })}\n` : ""}`;
           const r = new Repo(keys);
           r.write(`next/packages/x/src/${name}.ts`, content);
           const c = r.gitSigned(multiple ? "stranger" : "person");

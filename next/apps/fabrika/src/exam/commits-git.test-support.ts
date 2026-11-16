@@ -8,6 +8,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { runsFor } from "@kampus/vitest";
+import { Function } from "effect";
 import * as fc from "fast-check";
 import { afterAll, expect } from "vitest";
 import { type Role, signedText } from "./commits.ts";
@@ -31,15 +32,22 @@ const ENV: NodeJS.ProcessEnv = {
 delete ENV.GITHUB_STEP_SUMMARY;
 delete ENV.GITHUB_ACTIONS;
 
-const sh = (cwd: string, cmd: string, args: string[], input?: string, env = ENV) => {
-  const ran = spawnSync(cmd, args, { cwd, env, input, encoding: "utf8" });
+const sh: {
+  (cmd: string, args: string[], input?: string, env?: NodeJS.ProcessEnv): (cwd: string) => string;
+  (cwd: string, cmd: string, args: string[], input?: string, env?: NodeJS.ProcessEnv): string;
+} = Function.dual(
+  // A direct call's third argument is the argument list; a piped call's is the input, or nothing.
+  (args) => Array.isArray(args[2]),
+  (cwd: string, cmd: string, args: string[], input?: string, env = ENV) => {
+    const ran = spawnSync(cmd, args, { cwd, env, input, encoding: "utf8" });
 
-  if (ran.status !== 0) {
-    throw new Error(`${cmd} ${args.join(" ")}: ${ran.stderr}`);
-  }
+    if (ran.status !== 0) {
+      throw new Error(`${cmd} ${args.join(" ")}: ${ran.stderr}`);
+    }
 
-  return ran.stdout;
-};
+    return ran.stdout;
+  },
+);
 
 const KEYS = join(TOP, "keys");
 mkdirSync(KEYS, { mode: 0o700 });
@@ -62,13 +70,26 @@ const fingerprint = (signer: string) =>
   // oxlint-disable-next-line typescript/no-non-null-assertion -- Moved test setup reads ssh-keygen's fixed output after checking its exit code.
   sh(KEYS, "ssh-keygen", ["-l", "-f", join(KEYS, `${signer}.pub`)]).split(" ")[1]!;
 
-const keyLine = (role: string, signer: string) => `${role} namespaces="fabrika-step" ${pub(signer)}`;
+const keyLine: {
+  (signer: string): (role: string) => string;
+  (role: string, signer: string): string;
+} = Function.dual(2, (role: string, signer: string) => `${role} namespaces="fabrika-step" ${pub(signer)}`);
 
 const stepKeys = (build = "build") =>
   `${[keyLine("tests", "tests"), keyLine("build", build), keyLine("lead", "lead")].join("\n")}\n`;
 
 const GOOD_KEYS = stepKeys();
-const personLine = (id: string, signer = "person") => `person:${id} namespaces="git" ${pub(signer)}`;
+
+// The signer is an option, so a piped call (an option or nothing) never reads as a direct one (an id).
+const personLine: {
+  (options?: { readonly signer: string }): (id: string) => string;
+  (id: string, options?: { readonly signer: string }): string;
+} = Function.dual(
+  (args) => typeof args[0] === "string",
+  (id: string, { signer }: { readonly signer: string } = { signer: "person" }) =>
+    `person:${id} namespaces="git" ${pub(signer)}`,
+);
+
 const PERSON_KEYS = `${GOOD_KEYS}${personLine("github:42")}\n`;
 
 let count = 0;
@@ -192,7 +213,7 @@ const runs = { seed: 119120, numRuns: runsFor({ fast: 3, full: 5 }) };
 const id = fc.stringMatching(/^[A-Za-z0-9._:-]{1,20}$/);
 const name = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
 
-const stuck = (reason: string, sha: string, more: object = {}) => ({
+const stuckBody = (reason: string, sha: string, more: object = {}) => ({
   // oxlint-disable-next-line fabrika/no-hand-tag -- Expected wire answer for the git exam, preserved from the moved tests.
   _tag: "stuck",
   reason,
@@ -200,18 +221,34 @@ const stuck = (reason: string, sha: string, more: object = {}) => ({
   ...more,
 });
 
+const stuck: {
+  (sha: string, more?: object): (reason: string) => ReturnType<typeof stuckBody>;
+  (reason: string, sha: string, more?: object): ReturnType<typeof stuckBody>;
+} = Function.dual(
+  // A direct call's second argument is the commit; a piped call's is the extra fields, or nothing.
+  (args) => typeof args[1] === "string",
+  stuckBody,
+);
+
 // oxlint-disable-next-line fabrika/no-hand-tag -- Expected wire answer for the git exam, preserved from the moved tests.
 const ask = (...paths: string[]) => ({ _tag: "ask", to: "owner", for: "exam_read", paths });
 
-const verifyCommit = (r: Repo, sha: string, keys = PERSON_KEYS) => {
-  const allowed = join(TOP, "git-allowed-signers");
-  writeFileSync(allowed, keys);
-  return spawnSync("git", ["-c", `gpg.ssh.allowedSignersFile=${allowed}`, "verify-commit", sha], {
-    cwd: r.dir,
-    env: ENV,
-    encoding: "utf8",
-  }).status;
-};
+const verifyCommit: {
+  (sha: string, keys?: string): (r: Repo) => number | null;
+  (r: Repo, sha: string, keys?: string): number | null;
+} = Function.dual(
+  // A direct call starts with the repository; a piped one with the commit.
+  (args) => typeof args[0] === "object",
+  (r: Repo, sha: string, keys = PERSON_KEYS) => {
+    const allowed = join(TOP, "git-allowed-signers");
+    writeFileSync(allowed, keys);
+    return spawnSync("git", ["-c", `gpg.ssh.allowedSignersFile=${allowed}`, "verify-commit", sha], {
+      cwd: r.dir,
+      env: ENV,
+      encoding: "utf8",
+    }).status;
+  },
+);
 
 /** Git accepts PGP here, so the exam must still prove that the real header is SSH. */
 const acceptPgp = (r: Repo) => {
@@ -236,7 +273,7 @@ const acceptPgp = (r: Repo) => {
   r.git("config", "gpg.program", verifier);
 };
 
-const personLink = (r: Repo, sha: string, signer = "person") => {
+const personLinkBody = (r: Repo, sha: string, signer = "person") => {
   const signature = /^gpgsig(?:-sha256)? (.*(?:\n .*)*)/m.exec(r.git("cat-file", "commit", sha));
   expect(signature).not.toBeNull();
   return {
@@ -253,14 +290,26 @@ const personLink = (r: Repo, sha: string, signer = "person") => {
   };
 };
 
-const verifies = (repo: Repo, note: { sig: string; step: Role }, text: string) => {
+const personLink: {
+  (sha: string, signer?: string): (r: Repo) => ReturnType<typeof personLinkBody>;
+  (r: Repo, sha: string, signer?: string): ReturnType<typeof personLinkBody>;
+} = Function.dual(
+  // A direct call starts with the repository; a piped one with the commit.
+  (args) => typeof args[0] === "object",
+  personLinkBody,
+);
+
+const verifies: {
+  (note: { sig: string; step: Role }, text: string): (repo: Repo) => boolean;
+  (repo: Repo, note: { sig: string; step: Role }, text: string): boolean;
+} = Function.dual(3, (repo: Repo, note: { sig: string; step: Role }, text: string) => {
   writeFileSync(join(repo.dir, ".allowed"), GOOD_KEYS);
   writeFileSync(join(repo.dir, ".sig"), note.sig);
   const args = ["-Y", "verify", "-f", ".allowed", "-I", note.step, "-n", "fabrika-step", "-s", ".sig"];
   return spawnSync("ssh-keygen", args, { cwd: repo.dir, input: text }).status === 0;
-};
+});
 
-const squashed = (r: Repo, notes: Array<{ note: object; commit: string }>, moveMain = false) => {
+const squashedBody = (r: Repo, notes: Array<{ note: object; commit: string }>, moveMain = false) => {
   r.git("checkout", "-q", "main");
 
   if (moveMain) {
@@ -293,10 +342,22 @@ const squashed = (r: Repo, notes: Array<{ note: object; commit: string }>, moveM
   return { squash, rows };
 };
 
-const log = (r: Repo, rows: object[]) => {
+const squashed: {
+  (notes: Array<{ note: object; commit: string }>, moveMain?: boolean): (r: Repo) => ReturnType<typeof squashedBody>;
+  (r: Repo, notes: Array<{ note: object; commit: string }>, moveMain?: boolean): ReturnType<typeof squashedBody>;
+} = Function.dual(
+  // A direct call starts with the repository; a piped one with the notes.
+  (args) => !Array.isArray(args[0]),
+  squashedBody,
+);
+
+const log: {
+  (rows: object[]): (r: Repo) => string;
+  (r: Repo, rows: object[]): string;
+} = Function.dual(2, (r: Repo, rows: object[]) => {
   r.write("field/runs.jsonl", `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
   return r.commit("log");
-};
+});
 
 /** A branch with a tests commit and a build commit, each signed. */
 const twoSteps = (r: Repo) => {

@@ -1,7 +1,19 @@
+import * as Function from "effect/Function";
 // Today's CI, serving both versions. TT1 and TT2: each test leg's time table (time-table.ts) and
 // its timings upload, in check.yaml and scheduled.yaml.
 import { fileName, STEP } from "../time-table.ts";
-import { compact, env, map, type Rule, sameEntries, steps, TOKEN, uses } from "./shared.ts";
+import {
+  compact,
+  env,
+  map,
+  type Require,
+  type Rule,
+  type Workflow,
+  sameEntries,
+  steps,
+  TOKEN,
+  uses,
+} from "./shared.ts";
 
 // Each test leg's time table (time-table.ts): its steps' seconds from GitHub's jobs API, read with
 // the workflow's token, and its slowest test files from its report, in the job summary. Then the same
@@ -49,7 +61,10 @@ export const isTimings = (step: Record<string, unknown>): boolean => {
  * the job's last command, so it times every step before it; it runs on every result, a red or
  * canceled leg too, and never fails the job. Its timings file is uploaded after it, the same way.
  */
-export const timed = (name: string, job: Record<string, unknown>, report: string): string[] => {
+export const timed: {
+  (job: Record<string, unknown>, report: string): (name: string) => string[];
+  (name: string, job: Record<string, unknown>, report: string): string[];
+} = Function.dual(3, (name: string, job: Record<string, unknown>, report: string): string[] => {
   const list = steps(job);
   const tables = list.filter((s) => s["run"] === TIME_TABLE);
   const uploads = list.filter((s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === TIMINGS.path);
@@ -91,13 +106,13 @@ export const timed = (name: string, job: Record<string, unknown>, report: string
   }
 
   return errors;
-};
+});
 
 // TT1 and TT2: every test leg writes its time table and uploads its timings file.
-export const timeTables: Rule = ({ jobs }, require) => {
+export const timeTables: Rule = Function.dual(2, ({ jobs }: Workflow, require: Require) => {
   for (const [name, report] of TIMED_LEGS) {
     for (const reason of timed(name, map(jobs[name]), report)) {
       require(false, reason);
     }
   }
-};
+});

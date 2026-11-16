@@ -1,3 +1,4 @@
+import * as Function from "effect/Function";
 // Today's CI, serving both versions. What the workflow-lint tests share: `wiring`, a generated
 // valid check.yaml, lookups of a step by its name, and `rejects`, which gives each listed plant to
 // every generated valid workflow, one at a time, so an unrelated error cannot mask it.
@@ -58,28 +59,43 @@ type StepOf<T> = T extends { steps: readonly (infer S)[] } ? S : never;
  * position broke three times on 2026-11-14, each time a job gained a step. Throws when no step or
  * more than one has the name.
  */
-export const step = <W extends { jobs: object }, J extends keyof W["jobs"] & string>(
-  w: W,
-  job: J,
-  name: string,
-): StepOf<W["jobs"][J]> => {
-  const steps = (w.jobs as Record<string, { steps: StepOf<W["jobs"][J]>[] } | undefined>)[job]?.steps ?? [];
-  const [found, ...more] = steps.filter((s) => (s as { name?: unknown }).name === name);
+export const step: {
+  <J extends string>(
+    job: J,
+    name: string,
+  ): <W extends { jobs: Partial<Record<J, unknown>> }>(w: W) => StepOf<W["jobs"][J]>;
+  <J extends string, W extends { jobs: Partial<Record<J, unknown>> }>(w: W, job: J, name: string): StepOf<W["jobs"][J]>;
+} = Function.dual(
+  3,
+  <J extends string, W extends { jobs: Partial<Record<J, unknown>> }>(
+    w: W,
+    job: J,
+    name: string,
+  ): StepOf<W["jobs"][J]> => {
+    const steps = (w.jobs as Record<string, { steps: StepOf<W["jobs"][J]>[] } | undefined>)[job]?.steps ?? [];
+    const [found, ...more] = steps.filter((s) => (s as { name?: unknown }).name === name);
 
-  if (found === undefined || more.length > 0) {
-    throw new Error(
-      `${job} has ${more.length + (found === undefined ? 0 : 1)} steps named "${name}"; a lookup needs exactly one`,
-    );
-  }
+    if (found === undefined || more.length > 0) {
+      throw new Error(
+        `${job} has ${more.length + (found === undefined ? 0 : 1)} steps named "${name}"; a lookup needs exactly one`,
+      );
+    }
 
-  return found;
-};
+    return found;
+  },
+);
 
 /** Where `job`'s step named `name` sits, for a plant that moves or removes it. */
-export const place = <W extends { jobs: object }, J extends keyof W["jobs"] & string>(w: W, job: J, name: string) => {
-  const found = step(w, job, name);
-  return (w.jobs as Record<string, { steps: unknown[] }>)[job]?.steps.indexOf(found) ?? -1;
-};
+export const place: {
+  <J extends string>(job: J, name: string): <W extends { jobs: Partial<Record<J, unknown>> }>(w: W) => number;
+  <J extends string, W extends { jobs: Partial<Record<J, unknown>> }>(w: W, job: J, name: string): number;
+} = Function.dual(
+  3,
+  <J extends string, W extends { jobs: Partial<Record<J, unknown>> }>(w: W, job: J, name: string): number => {
+    const found = step(w, job, name);
+    return (w.jobs as Record<string, { steps: unknown[] }>)[job]?.steps.indexOf(found) ?? -1;
+  },
+);
 
 export const testEnv = {
   BASE: `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`,
@@ -135,26 +151,44 @@ export const nextLegs = (count: number) => [
 
 // S1: the matrix is changes' `shards`, else a fallback (legs.ts): the full matrix on a pull request
 // with the `visual` label, the vitest legs alone everywhere else (0536, E10).
-export const sizedLegs = (legs: readonly unknown[], plain: readonly unknown[] = ["1", "2", "3", "4", "5"]) =>
-  `\${{ fromJSON(needs.changes.outputs.shards || (${visualLabel} && '${JSON.stringify(legs)}' || '${JSON.stringify(plain)}')) }}`;
+// The plain fallback is an option, so a piped call (an option or nothing) never reads as a direct one
+// (a list of legs).
+export const sizedLegs: {
+  (options?: { readonly plain: readonly unknown[] }): (legs: readonly unknown[]) => string;
+  (legs: readonly unknown[], options?: { readonly plain: readonly unknown[] }): string;
+} = Function.dual(
+  (args) => Array.isArray(args[0]),
+  (
+    legs: readonly unknown[],
+    { plain }: { readonly plain: readonly unknown[] } = { plain: ["1", "2", "3", "4", "5"] },
+  ) =>
+    `\${{ fromJSON(needs.changes.outputs.shards || (${visualLabel} && '${JSON.stringify(legs)}' || '${JSON.stringify(plain)}')) }}`,
+);
 
 /** The full matrix a workflow's next job falls back to, as `sizedLegs` wrote it. */
 export const legsOf = (w: { jobs: { next: { strategy: { matrix: { shard: string } } } } }): unknown[] =>
   JSON.parse(/&& '(.*?)' \|\|/s.exec(w.jobs.next.strategy.matrix.shard)?.[1] ?? "[]");
 
-export const setLegs = (
-  w: { jobs: { next: { strategy: { matrix: { shard: string } } } } },
-  legs: readonly unknown[],
-) => {
+export const setLegs: {
+  (legs: readonly unknown[]): (w: { jobs: { next: { strategy: { matrix: { shard: string } } } } }) => void;
+  (w: { jobs: { next: { strategy: { matrix: { shard: string } } } } }, legs: readonly unknown[]): void;
+} = Function.dual(2, (w: { jobs: { next: { strategy: { matrix: { shard: string } } } } }, legs: readonly unknown[]) => {
   w.jobs.next.strategy.matrix.shard = sizedLegs(legs);
-};
+});
 
 // A leg's `--shard`: its own kind's count from changes' size step, else the full matrix's.
 export const vitestShard = (gap = " ") =>
   `\${{${gap}matrix.shard${gap}}}/\${{${gap}needs.changes.outputs.vitest-legs || 5${gap}}}`;
 
-export const e2eShard = (count: number | string, gap = " ") =>
-  `\${{${gap}matrix.shard${gap}}}/\${{${gap}needs.changes.outputs.e2e-legs || ${count}${gap}}}`;
+// The gap is an option, so a piped call (an option or nothing) never reads as a direct one (a count).
+export const e2eShard: {
+  (options?: { readonly gap: string }): (count: number | string) => string;
+  (count: number | string, options?: { readonly gap: string }): string;
+} = Function.dual(
+  (args) => typeof args[0] === "number" || typeof args[0] === "string",
+  (count: number | string, { gap }: { readonly gap: string } = { gap: " " }) =>
+    `\${{${gap}matrix.shard${gap}}}/\${{${gap}needs.changes.outputs.e2e-legs || ${count}${gap}}}`,
+);
 
 // S1: changes' sizing install and size step run only when it sizes next, all of it or the reader
 // tests alone; its setup also for the parser.
@@ -419,8 +453,14 @@ const valid = (label: string, extra: string) => ({
 export type Workflow = ReturnType<typeof valid>;
 
 /** A job's steps as one plain list, whatever its own step type. */
-export const stepsOf = (w: Workflow, job: (typeof stopping)[number] | "ci-required"): Record<string, unknown>[] =>
-  w.jobs[job].steps as Record<string, unknown>[];
+export const stepsOf: {
+  (job: (typeof stopping)[number] | "ci-required"): (w: Workflow) => Record<string, unknown>[];
+  (w: Workflow, job: (typeof stopping)[number] | "ci-required"): Record<string, unknown>[];
+} = Function.dual(
+  2,
+  (w: Workflow, job: (typeof stopping)[number] | "ci-required"): Record<string, unknown>[] =>
+    w.jobs[job].steps as Record<string, unknown>[],
+);
 
 /** Sets a next step's SHARD, kept in its place among the step's env keys. */
 const setShard = (found: NextStep, shard: string) => {
@@ -437,7 +477,7 @@ export const wiring = fc
 
     if (whitespace) {
       setShard(step(clean, "next", "vitest"), vitestShard(gap));
-      setShard(step(clean, "next", "end to end"), e2eShard(e2es, gap));
+      setShard(step(clean, "next", "end to end"), e2eShard(e2es, { gap }));
 
       // The vitest step's guard and the three leg conditions, respaced around each operator.
       for (const guarded of ["vitest", "chromium", "end to end", "edges"].map((n) => step(clean, "next", n))) {

@@ -64,8 +64,14 @@ const seed = (store: Storage) =>
   Effect.gen(function* () {
     const processes = yield* ProcessManager;
     yield* processes.start(first(), from());
-    yield* processes.start(first("watcher:start", "watcher:1", { program: "watcher", hash: "build-a" }), from());
-    yield* processes.start(first("observer:start", "observer:1", { program: "observer", hash: "build-a" }), from());
+    yield* processes.start(
+      first({ id: "watcher:start", name: "watcher:1", code: { program: "watcher", hash: "build-a" } }),
+      from(),
+    );
+    yield* processes.start(
+      first({ id: "observer:start", name: "observer:1", code: { program: "observer", hash: "build-a" } }),
+      from(),
+    );
   }).pipe(Effect.provide(manager(store, brain(), ids(A, W, X).next)));
 
 const monitor = (store: Storage, ref: string, target = A, to = W) =>
@@ -641,7 +647,7 @@ describe("P33, a client's inbox is not a process's inbox", () => {
       yield* seed(store);
       const placed = yield* Effect.exit(
         ProcessManager.use((p) =>
-          p.start(first(`start:${name}`, name, { program: "notes", hash: "build-a" }), from()),
+          p.start(first({ id: `start:${name}`, name, code: { program: "notes", hash: "build-a" } }), from()),
         ).pipe(Effect.provide(manager(store, brain(), ids(B).next))),
       );
 

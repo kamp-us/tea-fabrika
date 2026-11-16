@@ -3,7 +3,20 @@
 // chosen from what the walk has stored so far, and every answer is compared with an independent
 // record of the first reply under each registered name and letter.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Predicate, Result, Schema, Scope, Tracer } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Context,
+  Effect,
+  Exit,
+  Layer,
+  Predicate,
+  Result,
+  Schema,
+  Scope,
+  Tracer,
+  Function,
+} from "effect";
 import { expectTypeOf } from "vitest";
 import type { Sql } from "../Sql.ts";
 import type * as Module from "./Replies.ts";
@@ -30,7 +43,10 @@ expectTypeOf<Effect.Services<ReturnType<Service["reply"]>>>().toEqualTypeOf<neve
 expectTypeOf<Effect.Services<ReturnType<Service["rememberReply"]>>>().toEqualTypeOf<never>();
 
 /** The `i`th item, wrapping around; a walk only asks when the list is not empty. */
-export const nth = <A>(items: ReadonlyArray<A>, i: number): A => {
+export const nth: {
+  (i: number): <A>(items: ReadonlyArray<A>) => A;
+  <A>(items: ReadonlyArray<A>, i: number): A;
+} = Function.dual(2, <A>(items: ReadonlyArray<A>, i: number): A => {
   const item = items[i % items.length];
 
   if (item === undefined) {
@@ -38,7 +54,7 @@ export const nth = <A>(items: ReadonlyArray<A>, i: number): A => {
   }
 
   return item;
-};
+});
 
 /** The answer the record expects, made by its own schema rather than the module's. */
 const Refused = Schema.TaggedStruct("refused", {
@@ -64,12 +80,15 @@ const forms = (secret: string): ReadonlyArray<string> => [
 /** Fails when any output holds any form of any secret, and names each output that does. It scans
  *  first and asserts once: one `expect` for each output and form took more than half of a walk
  *  that looks after every move. */
-export const unleaked = (outputs: ReadonlyArray<string>, secrets: ReadonlyArray<string>) => {
+export const unleaked: {
+  (secrets: ReadonlyArray<string>): (outputs: ReadonlyArray<string>) => void;
+  (outputs: ReadonlyArray<string>, secrets: ReadonlyArray<string>): void;
+} = Function.dual(2, (outputs: ReadonlyArray<string>, secrets: ReadonlyArray<string>) => {
   const leaks = secrets.flatMap(forms);
   const leaked = outputs.filter((output) => leaks.some((form) => output.includes(form)));
   // The outputs go in the message: a property law prints the message and not the diff.
   expect(leaked, `input text leaked: ${leaked.join("\n")}`).toEqual([]);
-};
+});
 
 /** Made-up input text with a quote, a space, a slash and a non-ASCII letter, so its three forms
  *  differ. Its core is upper case, which no other generated text here uses. */
@@ -82,10 +101,14 @@ export const sentinel = Arbitrary.array(Arbitrary.schema(Schema.Literals([..."AB
 export const nat = Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })));
 
 /** Text of these characters, as long as asked. */
-export const text = (chars: string, maxLength: number) =>
+export const text: {
+  (maxLength: number): (chars: string) => Arbitrary.Arbitrary<string>;
+  (chars: string, maxLength: number): Arbitrary.Arbitrary<string>;
+} = Function.dual(2, (chars: string, maxLength: number) =>
   Arbitrary.array(Arbitrary.schema(Schema.Literals([...chars])), { minLength: 1, maxLength }).pipe(
     Arbitrary.map((cs) => cs.join("")),
-  );
+  ),
+);
 
 /** A tracer that keeps every span it makes. */
 export const capture = () => {

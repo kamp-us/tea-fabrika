@@ -17,7 +17,7 @@ import { revokeText } from "@kampus/libfabrika/access/Text";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Clock, DateTime, Effect, FileSystem, Schema, Stream } from "effect";
+import { Clock, DateTime, Effect, FileSystem, Schema, Stream, Function, Predicate } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { type Browser, type BrowserContext, chromium, type Page, type WebSocket as PageSocket } from "playwright";
@@ -68,7 +68,10 @@ export const stopped = Effect.callback<never, Stopped>((resume) => {
 });
 
 /** Vitest aborts its signal on timeout. Wait for that interruption's finalizers before the worker exits. */
-export const suite = <A>(body: Effect.Effect<A, unknown, import("effect").Scope.Scope>, context: TestContext) => {
+export const suite: {
+  (context: TestContext): <A>(body: Effect.Effect<A, unknown, import("effect").Scope.Scope>) => Promise<A>;
+  <A>(body: Effect.Effect<A, unknown, import("effect").Scope.Scope>, context: TestContext): Promise<A>;
+} = Function.dual(2, <A>(body: Effect.Effect<A, unknown, import("effect").Scope.Scope>, context: TestContext) => {
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest starts this scoped Effect with its cancellation signal
   const running = Effect.runPromise(
     Effect.scoped(
@@ -88,7 +91,7 @@ export const suite = <A>(body: Effect.Effect<A, unknown, import("effect").Scope.
     );
   context.onTestFinished(finished, 90_000);
   return running;
-};
+});
 
 const note = (row: Readonly<Record<string, unknown>>) =>
   Effect.sync(() => {
@@ -184,8 +187,7 @@ const stop = (c: NodeChildProcess) =>
     c.kill("SIGTERM");
   });
 
-/** The real `dev.ts` on a held port in `h`, ready when `/` answers. `env` adds to its environment. */
-export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =>
+const devServerBody = (h: Home, env: Readonly<Record<string, string>> = {}) =>
   Effect.gen(function* () {
     const { port } = yield* owned(
       "port",
@@ -245,6 +247,16 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
     return { url, port, output: () => out.join(""), stop: stop(child).pipe(Effect.timeout("10 seconds")) };
   });
 
+/** The real `dev.ts` on a held port in `h`, ready when `/` answers. `env` adds to its environment. */
+export const devServer: {
+  (env?: Readonly<Record<string, string>>): (h: Home) => ReturnType<typeof devServerBody>;
+  (h: Home, env?: Readonly<Record<string, string>>): ReturnType<typeof devServerBody>;
+} = Function.dual(
+  // A direct call starts with the home, which holds its grants; a piped one with the environment, or nothing.
+  (args) => Predicate.hasProperty(args[0], "grants"),
+  devServerBody,
+);
+
 export type Dev = Effect.Success<ReturnType<typeof devServer>>;
 
 /** The headless browser, as a server process whose pid the supervisor can watch. */
@@ -285,8 +297,7 @@ export type Seen = {
   readonly opened: Array<PageSocket>;
 };
 
-/** One tab of a profile, open at `url`, with what it says recorded from its first instant. */
-export const tab = (context: BrowserContext, url: string) =>
+const tabBody = (context: BrowserContext, url: string) =>
   Effect.gen(function* () {
     const seen: Seen = { console: [], errors: [], urls: [], sockets: [], opened: [] };
     const page = yield* owned(
@@ -312,6 +323,12 @@ export const tab = (context: BrowserContext, url: string) =>
     yield* Effect.promise(() => page.goto(`${url}/`));
     return { page, seen };
   });
+
+/** One tab of a profile, open at `url`, with what it says recorded from its first instant. */
+export const tab: {
+  (url: string): (context: BrowserContext) => ReturnType<typeof tabBody>;
+  (context: BrowserContext, url: string): ReturnType<typeof tabBody>;
+} = Function.dual(2, tabBody);
 
 /** What the waiting screen shows: the line to run, read as the person copies it. */
 export type Waiting = {
@@ -360,8 +377,7 @@ globalThis.fetch = (url, options) => {
 
 const GrantWire = Schema.Struct({ url: Schema.String, signature: Schema.optionalKey(Schema.String) });
 
-/** Runs the waiting screen's CLI with its own scoped process, recording output even on a refusal. */
-export const grant = (h: Home, w: Waiting, key = h.key) =>
+const grantBody = (h: Home, w: Waiting, key = h.key) =>
   Effect.scoped(
     Effect.gen(function* () {
       const child = yield* ChildProcess.make(
@@ -408,6 +424,16 @@ export const grant = (h: Home, w: Waiting, key = h.key) =>
     }),
   ).pipe(Effect.provide(NodeServices.layer));
 
+/** Runs the waiting screen's CLI with its own scoped process, recording output even on a refusal. */
+export const grant: {
+  (w: Waiting, key?: string): (h: Home) => ReturnType<typeof grantBody>;
+  (h: Home, w: Waiting, key?: string): ReturnType<typeof grantBody>;
+} = Function.dual(
+  // A direct call starts with the home, which holds its grants; a piped one with the waiting screen.
+  (args) => Predicate.hasProperty(args[0], "grants"),
+  grantBody,
+);
+
 /** The door's own record of what is waiting for `w`: the client's raw key, its person and project. */
 const Target = Schema.Struct({ key: Schema.String, for: Schema.String, to: Schema.String });
 
@@ -422,9 +448,7 @@ export const target = (w: Waiting) => {
   );
 };
 
-/** Removes the client key `t` with the person's key, as the door takes a revocation: the tab's socket
- *  is closed with 4003. */
-export const remove = (h: Home, dev: Dev, t: typeof Target.Type) =>
+const removeBody = (h: Home, dev: Dev, t: typeof Target.Type) =>
   Effect.gen(function* () {
     const text = revokeText({
       id: `revoke_${yield* Clock.currentTimeMillis}`,
@@ -446,6 +470,13 @@ export const remove = (h: Home, dev: Dev, t: typeof Target.Type) =>
     );
     return { ok: r.status >= 200 && r.status <= 299, text, armored };
   });
+
+/** Removes the client key `t` with the person's key, as the door takes a revocation: the tab's socket
+ *  is closed with 4003. */
+export const remove: {
+  (dev: Dev, t: typeof Target.Type): (h: Home) => ReturnType<typeof removeBody>;
+  (h: Home, dev: Dev, t: typeof Target.Type): ReturnType<typeof removeBody>;
+} = Function.dual(3, removeBody);
 
 /** What the tab keeps in IndexedDB, read in the page: every value but its keys, as source text so the
  *  page's own Promises stay in the page. */
@@ -474,9 +505,7 @@ export type Row = { readonly name: string; readonly checked: boolean };
 /** format: Playwright's ARIA snapshot lines for a checkbox, `- checkbox "<name>"` with `[checked]`. */
 const BOX = /^\s*- checkbox "((?:[^"\\]|\\.)*)"(.*)$/;
 
-/** The checklist tile of `name`, found by role: its region, its add field, a row's box and remove
- *  button, the rows it shows now, and the words tied to the field. */
-export const tile = (page: Page, name: string) => {
+const tileBody = (page: Page, name: string) => {
   const region = page.getByRole("region", { name: new RegExp(name.replace(/[:]/g, "\\:")) });
   const field = region.getByRole("textbox", { name: checklist.inputs.add.description });
   return {
@@ -538,6 +567,13 @@ export const tile = (page: Page, name: string) => {
   };
 };
 
+/** The checklist tile of `name`, found by role: its region, its add field, a row's box and remove
+ *  button, the rows it shows now, and the words tied to the field. */
+export const tile: {
+  (name: string): (page: Page) => ReturnType<typeof tileBody>;
+  (page: Page, name: string): ReturnType<typeof tileBody>;
+} = Function.dual(2, tileBody);
+
 // --- A reader of the instance's streams ----------------------------------------------------------
 
 const field = (value: Buffer | string) => {
@@ -595,10 +631,7 @@ const Entries = Schema.Struct({
   entries: Schema.Array(Entry),
 });
 
-/** A client of the instance with a key of its own, granted by the person as the tab is, through the
- *  waiting code and `grant.ts client`. Its socket is acquired in the caller's scope. `read(stream)`
- *  answers every entry of `stream`, page by page. */
-export const reader = (h: Home, dev: Dev) =>
+const readerBody = (h: Home, dev: Dev) =>
   Effect.gen(function* () {
     const key = identity();
     const tab = "p14-reader";
@@ -745,6 +778,14 @@ export const reader = (h: Home, dev: Dev) =>
         }),
     };
   });
+
+/** A client of the instance with a key of its own, granted by the person as the tab is, through the
+ *  waiting code and `grant.ts client`. Its socket is acquired in the caller's scope. `read(stream)`
+ *  answers every entry of `stream`, page by page. */
+export const reader: {
+  (dev: Dev): (h: Home) => ReturnType<typeof readerBody>;
+  (h: Home, dev: Dev): ReturnType<typeof readerBody>;
+} = Function.dual(2, readerBody);
 
 /** The door's first answer to a key it has not granted: not admitted, so the reader must knock. */
 const expectWaiting = (f: Frame) => {

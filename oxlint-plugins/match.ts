@@ -3,6 +3,7 @@
 // `Effect.all<T>(x)` and `x.Effect.all(y)` did not. The rules keep that exactly: README.md says how
 // that was measured.
 import type { Context, ESTree, Visitor } from "@oxlint/plugins";
+import * as Function from "effect/Function";
 
 type Source = Context["sourceCode"];
 export type Node = ESTree.Node;
@@ -61,7 +62,10 @@ export const isWritten = (node: Node): boolean => {
 };
 
 /** The pairs of parentheses written around a node, not counting a call's own. */
-export const grouped = (source: Source, node: Node): number => {
+export const grouped: {
+  (node: Node): (source: Source) => number;
+  (source: Source, node: Node): number;
+} = Function.dual(2, (source: Source, node: Node): number => {
   let pairs = 0;
   let before = source.getTokenBefore(node);
   let after = source.getTokenAfter(node);
@@ -85,7 +89,7 @@ export const grouped = (source: Source, node: Node): number => {
   }
 
   return pairs;
-};
+});
 
 /**
  * The linted file's path from where oxlint runs, with `/` between folders: `next/apps/fabrika/brain.ts`.
@@ -141,8 +145,14 @@ export const quoted = (node: Node): string | null =>
   node.type === "Literal" && typeof node.value === "string" ? node.raw : null;
 
 /** The empty string, in either quote, with no parentheses around it. */
-export const isEmptyString = (source: Source, node: Node | null): boolean =>
-  node !== null && quoted(node)?.length === 2 && grouped(source, node) === 0;
+export const isEmptyString: {
+  (node: Node | null): (source: Source) => boolean;
+  (source: Source, node: Node | null): boolean;
+} = Function.dual(
+  2,
+  (source: Source, node: Node | null): boolean =>
+    node !== null && quoted(node)?.length === 2 && grouped(source, node) === 0,
+);
 
 /** Every node under one, the node included. */
 export function* below(node: Node): Generator<Node> {

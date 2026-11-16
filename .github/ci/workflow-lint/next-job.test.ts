@@ -167,7 +167,7 @@ const plants: Plant[] = [
   [
     "E10: the plain fallback holds a visual leg",
     (w) => {
-      w.jobs.next.strategy.matrix.shard = sizedLegs(nextLegs(2), ["e2e-1", "1", "2", "3", "4", "5"]);
+      w.jobs.next.strategy.matrix.shard = sizedLegs(nextLegs(2), { plain: ["e2e-1", "1", "2", "3", "4", "5"] });
     },
   ],
   [

@@ -3,7 +3,7 @@
 // real `ssh-keygen` and so runs on the schedule (0536).
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Function } from "effect";
 import { checkSshsig, KeyLine, writeSshsig } from "./Sshsig.ts";
 
 export const SPACE = "fabrika-client";
@@ -18,8 +18,17 @@ export const signer = at("signer.pub").trim();
 export const other = at("other.pub").trim();
 export const ecdsa = at("ecdsa.pub").trim();
 
-export const check = (armored: string, signers: ReadonlyArray<string>, body: string = text) =>
+const checkBody = (armored: string, signers: ReadonlyArray<string>, body: string = text) =>
   checkSshsig({ text: body, armored, space: SPACE, signers });
+
+export const check: {
+  (signers: ReadonlyArray<string>, body?: string): (armored: string) => ReturnType<typeof checkBody>;
+  (armored: string, signers: ReadonlyArray<string>, body?: string): ReturnType<typeof checkBody>;
+} = Function.dual(
+  // A direct call starts with the armored signature; a piped one with the signers.
+  (args) => typeof args[0] === "string",
+  checkBody,
+);
 
 // The wire, for building blobs by hand: RFC 4251's `string` is a u32 length, then the bytes.
 export const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
@@ -61,8 +70,15 @@ export const unarmor = (armored: string): Uint8Array =>
 
 export const keyBlob = (key: Uint8Array): Uint8Array => join8(str("ssh-ed25519"), str(key));
 
-export const lineFor = (blob: Uint8Array, comment?: string): string =>
-  comment === undefined ? `ssh-ed25519 ${base64(blob)}` : `ssh-ed25519 ${base64(blob)} ${comment}`;
+export const lineFor: {
+  (comment?: string): (blob: Uint8Array) => string;
+  (blob: Uint8Array, comment?: string): string;
+} = Function.dual(
+  // A direct call starts with the key's bytes; a piped one with the comment, or nothing.
+  (args) => args[0] instanceof Uint8Array,
+  (blob: Uint8Array, comment?: string): string =>
+    comment === undefined ? `ssh-ed25519 ${base64(blob)}` : `ssh-ed25519 ${base64(blob)} ${comment}`,
+);
 
 /** PROTOCOL.sshsig's blob, field by field. */
 export type Blob = {
@@ -96,12 +112,23 @@ const parse = (bytes: Uint8Array): Blob => {
   };
 };
 
-export const build = (b: Blob, tail: Uint8Array = new Uint8Array()): Uint8Array =>
-  join8(b.magic, u32(b.version), str(b.key), str(b.space), str(b.reserved), str(b.hash), str(b.signature), tail);
+export const build: {
+  (tail?: Uint8Array): (b: Blob) => Uint8Array;
+  (b: Blob, tail?: Uint8Array): Uint8Array;
+} = Function.dual(
+  // A direct call starts with the blob's fields; a piped one with the tail's bytes, or nothing.
+  (args) => args.length > 0 && !(args[0] instanceof Uint8Array),
+  (b: Blob, tail: Uint8Array = new Uint8Array()): Uint8Array =>
+    join8(b.magic, u32(b.version), str(b.key), str(b.space), str(b.reserved), str(b.hash), str(b.signature), tail),
+);
 
 /** What the signature covers: "SSHSIG", then namespace, reserved, hash name and H(message). */
-export const toSign = (space: string, hash: string, digest: Uint8Array): Uint8Array =>
-  join8(utf8("SSHSIG"), str(space), str(""), str(hash), str(digest));
+export const toSign: {
+  (hash: string, digest: Uint8Array): (space: string) => Uint8Array;
+  (space: string, hash: string, digest: Uint8Array): Uint8Array;
+} = Function.dual(3, (space: string, hash: string, digest: Uint8Array): Uint8Array =>
+  join8(utf8("SSHSIG"), str(space), str(""), str(hash), str(digest)),
+);
 
 export const good = parse(unarmor(goodSig));
 /** `ssh-ed25519`, then a 32-byte key: 4 + 11 + 4 bytes before the key itself. */
@@ -156,21 +183,37 @@ export const signWith =
     );
   };
 
-export const digest = (name: "SHA-256" | "SHA-384" | "SHA-512", bytes: Uint8Array) =>
+export const digest: {
+  (
+    bytes: Uint8Array,
+  ): (name: "SHA-256" | "SHA-384" | "SHA-512") => Effect.Effect<Uint8Array<ArrayBuffer>, never, never>;
+  (name: "SHA-256" | "SHA-384" | "SHA-512", bytes: Uint8Array): Effect.Effect<Uint8Array<ArrayBuffer>, never, never>;
+} = Function.dual(2, (name: "SHA-256" | "SHA-384" | "SHA-512", bytes: Uint8Array) =>
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes the test's bytes
   Effect.tryPromise({ try: () => crypto.subtle.digest(name, new Uint8Array(bytes)), catch: fail }).pipe(
     Effect.map((d) => new Uint8Array(d)),
     Effect.orDie,
-  );
+  ),
+);
 
-export const decodeLine = Schema.decodeUnknownEffect(KeyLine);
+// The decoder takes the line alone: no caller passes parse options, and a decoder with a second,
+// optional argument has no pipeable form that a call could not misread.
+const lineDecoder = Schema.decodeUnknownEffect(KeyLine);
+export const decodeLine = (input: unknown) => lineDecoder(input);
 
 /** `writeSshsig` over `body` with `key`, its line decoded first, as every caller must. */
-export const write = (key: Key, body: string) =>
-  Effect.flatMap(decodeLine(key.line), (line) => writeSshsig({ text: body, space: SPACE, line, sign: signWith(key) }));
+export const write: {
+  (body: string): (key: Key) => Effect.Effect<string, Schema.SchemaError, never>;
+  (key: Key, body: string): Effect.Effect<string, Schema.SchemaError, never>;
+} = Function.dual(2, (key: Key, body: string) =>
+  Effect.flatMap(decodeLine(key.line), (line) => writeSshsig({ text: body, space: SPACE, line, sign: signWith(key) })),
+);
 
 /** A blob signed by hand, with any hash name: what `ssh-keygen` would write if it used one. */
-export const signedByHand = (key: Key, hash: string, digested: Uint8Array) =>
+export const signedByHand: {
+  (hash: string, digested: Uint8Array): (key: Key) => Effect.Effect<string, never, never>;
+  (key: Key, hash: string, digested: Uint8Array): Effect.Effect<string, never, never>;
+} = Function.dual(3, (key: Key, hash: string, digested: Uint8Array) =>
   Effect.map(signWith(key)(toSign(SPACE, hash, digested)), (raw) =>
     armor(
       build({
@@ -183,4 +226,5 @@ export const signedByHand = (key: Key, hash: string, digested: Uint8Array) =>
         signature: join8(str("ssh-ed25519"), str(raw)),
       }),
     ),
-  );
+  ),
+);

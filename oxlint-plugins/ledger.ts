@@ -10,6 +10,7 @@
 //
 // An entry is keyed by file, rule and the finding's line of code with its spaces collapsed, never a
 // line number, so code moving up or down keeps its entry and a changed line loses it.
+import * as Function from "effect/Function";
 
 /** One finding, or one ledger entry: the same three keys. */
 export interface Finding {
@@ -33,8 +34,12 @@ export const LEDGERS: readonly Ledger[] = [
 export const fingerprint = (line: string): string => line.trim().replace(/\s+/g, " ");
 
 /** The entries outside the ledger's folder: each one is refused, not read. */
-export const outside = (entries: readonly Finding[], root: string): readonly Finding[] =>
-  entries.filter((entry) => !entry.file.startsWith(root));
+export const outside: {
+  (root: string): (entries: readonly Finding[]) => readonly Finding[];
+  (entries: readonly Finding[], root: string): readonly Finding[];
+} = Function.dual(2, (entries: readonly Finding[], root: string): readonly Finding[] =>
+  entries.filter((entry) => !entry.file.startsWith(root)),
+);
 
 const key = ({ file, rule, code }: Finding) => JSON.stringify([file, rule, code]);
 
@@ -43,37 +48,58 @@ const key = ({ file, rule, code }: Finding) => JSON.stringify([file, rule, code]
  * finding still matched, in the ledger's order. Each entry covers one finding, so two equal lines
  * need two entries. Only an entry inside `root` is read.
  */
-export const settle = (
-  entries: readonly Finding[],
-  findings: readonly Finding[],
-  root: string,
-): {
-  readonly waived: readonly Finding[];
-  readonly blocks: readonly Finding[];
-  readonly kept: readonly Finding[];
-} => {
-  const open = new Map<string, number[]>();
+export const settle: {
+  (
+    findings: readonly Finding[],
+    root: string,
+  ): (entries: readonly Finding[]) => {
+    readonly waived: readonly Finding[];
+    readonly blocks: readonly Finding[];
+    readonly kept: readonly Finding[];
+  };
+  (
+    entries: readonly Finding[],
+    findings: readonly Finding[],
+    root: string,
+  ): {
+    readonly waived: readonly Finding[];
+    readonly blocks: readonly Finding[];
+    readonly kept: readonly Finding[];
+  };
+} = Function.dual(
+  3,
+  (
+    entries: readonly Finding[],
+    findings: readonly Finding[],
+    root: string,
+  ): {
+    readonly waived: readonly Finding[];
+    readonly blocks: readonly Finding[];
+    readonly kept: readonly Finding[];
+  } => {
+    const open = new Map<string, number[]>();
 
-  for (const [i, entry] of entries.entries()) {
-    if (entry.file.startsWith(root)) {
-      open.set(key(entry), [...(open.get(key(entry)) ?? []), i]);
+    for (const [i, entry] of entries.entries()) {
+      if (entry.file.startsWith(root)) {
+        open.set(key(entry), [...(open.get(key(entry)) ?? []), i]);
+      }
     }
-  }
 
-  const used = new Set<number>();
-  const waived: Finding[] = [];
-  const blocks: Finding[] = [];
+    const used = new Set<number>();
+    const waived: Finding[] = [];
+    const blocks: Finding[] = [];
 
-  for (const finding of findings) {
-    const i = open.get(key(finding))?.shift();
+    for (const finding of findings) {
+      const i = open.get(key(finding))?.shift();
 
-    if (i === undefined) {
-      blocks.push(finding);
-    } else {
-      used.add(i);
-      waived.push(finding);
+      if (i === undefined) {
+        blocks.push(finding);
+      } else {
+        used.add(i);
+        waived.push(finding);
+      }
     }
-  }
 
-  return { waived, blocks, kept: entries.filter((_, i) => used.has(i)) };
-};
+    return { waived, blocks, kept: entries.filter((_, i) => used.has(i)) };
+  },
+);

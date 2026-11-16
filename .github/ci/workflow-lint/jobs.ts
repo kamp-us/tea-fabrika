@@ -1,9 +1,10 @@
+import * as Function from "effect/Function";
 // Today's CI, serving both versions. check.yaml's jobs: what each gated job waits on and when it
 // skips, which jobs may not come back (F3, ticket 985), and every job's time limit (ticket 496).
 import { gated, gates } from "../required.mjs";
-import { compact, map, type Rule } from "./shared.ts";
+import { compact, map, type Require, type Rule, type Workflow } from "./shared.ts";
 
-export const jobLaws: Rule = ({ jobs }, require) => {
+export const jobLaws: Rule = Function.dual(2, ({ jobs }: Workflow, require: Require) => {
   // Each gated job needs changes alone, and runs unless every flag it runs on is false
   // (required.mjs's `gates`): check on check or field rows, next on next, which already holds the
   // sizing.
@@ -26,4 +27,4 @@ export const jobLaws: Rule = ({ jobs }, require) => {
     const limit = map(job)["timeout-minutes"];
     require(typeof limit === "number" && limit > 0 && limit < 360, `${name} sets timeout-minutes`);
   }
-};
+});

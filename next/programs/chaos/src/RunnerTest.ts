@@ -5,7 +5,7 @@ import { Outcome } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Chaos, type Handler, type Incoming, Nemesis, type ProgramRunner, type Update } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Fiber, Schema, type Scope } from "effect";
+import { Arbitrary, Deferred, Effect, Fiber, Schema, type Scope, Function } from "effect";
 import { chaos } from "./program.ts";
 
 const SEED = 119120;
@@ -126,8 +126,7 @@ const noLeak = (value: unknown, marker: string, output: string) => {
   }
 };
 
-/** Every law here opens real files, so each property has 25 runs. */
-export const suite = (open: Open, checklist: unknown) =>
+const suiteBody = (open: Open, checklist: unknown) =>
   describe("P17b slice 2 real runner", () => {
     it.effect.prop(
       "a forged chaos declaration cannot grant fire to another registered program",
@@ -885,3 +884,9 @@ export const suite = (open: Open, checklist: unknown) =>
       );
     }
   });
+
+/** Every law here opens real files, so each property has 25 runs. */
+export const suite: {
+  (checklist: unknown): (open: Open) => ReturnType<typeof suiteBody>;
+  (open: Open, checklist: unknown): ReturnType<typeof suiteBody>;
+} = Function.dual(2, suiteBody);

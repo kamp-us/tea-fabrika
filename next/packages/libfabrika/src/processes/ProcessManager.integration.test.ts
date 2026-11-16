@@ -26,7 +26,7 @@ const hash = fc.string({ minLength: 1, maxLength: 80 });
 
 const fixture = (hash: string) => {
   const CODE = { ...originalCode, hash };
-  return { CODE, first: (id?: string, name?: string) => makeFirst(id, name, CODE) };
+  return { CODE, first: (id?: string, name?: string) => makeFirst({ id, name, code: CODE }) };
 };
 
 const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: A[], law: (a: A) => Effect.Effect<void, E, R>) =>

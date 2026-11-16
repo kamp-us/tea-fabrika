@@ -8,7 +8,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import type { ProgramRunner } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, DateTime, Effect, Schema, type Scope } from "effect";
+import { Arbitrary, DateTime, Effect, Schema, type Scope, Function } from "effect";
 import { TestClock } from "effect/testing";
 import { checklist } from "./program.ts";
 
@@ -183,7 +183,7 @@ const AnyNote = Arbitrary.flatMap(Arbitrary.schema(Schema.Literals(["any", "any"
 const Skew = Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: -DAY, maximum: DAY })));
 const BASE = Date.parse("2026-11-11T00:00:00.000Z");
 
-export const suite = (open: Open, fresh: Fresh) =>
+const suiteBody = (open: Open, fresh: Fresh) =>
   describe("ticket 806 the checklist at the runner", () => {
     it.live.prop(
       "L9: an agent's add, rename and remove are refused, its check with or without a note and uncheck accepted, a note past the wall bad_msg and unwritten, a person's five all accepted",
@@ -430,3 +430,8 @@ export const suite = (open: Open, fresh: Fresh) =>
       { timeout: 600_000 },
     );
   });
+
+export const suite: {
+  (fresh: Fresh): (open: Open) => ReturnType<typeof suiteBody>;
+  (open: Open, fresh: Fresh): ReturnType<typeof suiteBody>;
+} = Function.dual(2, suiteBody);

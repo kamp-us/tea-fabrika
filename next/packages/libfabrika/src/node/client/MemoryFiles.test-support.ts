@@ -4,7 +4,7 @@
 // file, `rename` replaces, and `stat` reports the type bits with the permission bits, as Node does.
 // Nothing here touches the disk. A call it does not model fails, as `layerNoop` makes it.
 import type { Layer, Scope } from "effect";
-import { Effect, FileSystem, Option, PlatformError } from "effect";
+import { Effect, FileSystem, Option, PlatformError, Function } from "effect";
 import { ByteSize } from "effect";
 
 type FileNode = { readonly type: "File"; bytes: Uint8Array; mode: number; mtime: Date };
@@ -73,15 +73,21 @@ export const disk = (folders: ReadonlyArray<string> = []): Disk => {
 };
 
 /** Puts a file on the disk as a person or another program would, with its mode. */
-export const put = (d: Disk, path: string, bytes: Uint8Array, mode: number): void => {
+export const put: {
+  (path: string, bytes: Uint8Array, mode: number): (d: Disk) => void;
+  (d: Disk, path: string, bytes: Uint8Array, mode: number): void;
+} = Function.dual(4, (d: Disk, path: string, bytes: Uint8Array, mode: number): void => {
   d.entries.set(normal(path), { type: "File", bytes: new Uint8Array(bytes), mode: mode & 0o7777, mtime: new Date(0) });
-};
+});
 
 /** A file's bytes and permission bits, or null when the path holds no file. */
-export const read = (d: Disk, path: string): { readonly bytes: Uint8Array; readonly mode: number } | null => {
+export const read: {
+  (path: string): (d: Disk) => { readonly bytes: Uint8Array; readonly mode: number } | null;
+  (d: Disk, path: string): { readonly bytes: Uint8Array; readonly mode: number } | null;
+} = Function.dual(2, (d: Disk, path: string): { readonly bytes: Uint8Array; readonly mode: number } | null => {
   const entry = d.entries.get(normal(path));
   return entry?.type === "File" ? { bytes: new Uint8Array(entry.bytes), mode: entry.mode } : null;
-};
+});
 
 const info = (entry: Entry): FileSystem.File.Info => ({
   type: entry.type,

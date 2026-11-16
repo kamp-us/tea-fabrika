@@ -21,7 +21,7 @@ import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey";
 import { type ClientRow, ClientRows } from "@kampus/libfabrika/transport/ClientRows";
-import { Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect";
+import { Effect, Exit, Layer, Option, Schema, Scope, Stream, Function } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "../src/build.ts";
 import { localInstance } from "../src/local-instance.ts";
@@ -97,8 +97,7 @@ const until = (label: string, check: Effect.Effect<boolean>, last?: Effect.Effec
     return yield* new SuiteError({ waited: label, ...(last === undefined ? {} : { last: yield* last }) });
   });
 
-/** The one round trip: dial, wait, grant, sign the hello, ping in text, open, submit, read back. */
-export const roundTrip = (h: Home, dev: Dev, backend: Backend) =>
+const roundTripBody = (h: Home, dev: Dev, backend: Backend) =>
   Effect.gen(function* () {
     const w = yield* backend.waiting;
     const first = backend.dials();
@@ -126,8 +125,13 @@ export const roundTrip = (h: Home, dev: Dev, backend: Backend) =>
     return { first, kept, sent: sent.length };
   });
 
-/** The library's headless client in this process: the same machine and start as the tab. */
-export const headlessBackend = (dev: Dev, key: Identity) =>
+/** The one round trip: dial, wait, grant, sign the hello, ping in text, open, submit, read back. */
+export const roundTrip: {
+  (dev: Dev, backend: Backend): (h: Home) => ReturnType<typeof roundTripBody>;
+  (h: Home, dev: Dev, backend: Backend): ReturnType<typeof roundTripBody>;
+} = Function.dual(3, roundTripBody);
+
+const headlessBackendBody = (dev: Dev, key: Identity) =>
   Effect.gen(function* () {
     const rows: Array<ClientRow> = [];
     const window = windowMachineFor({
@@ -238,6 +242,12 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
     return backend;
   });
 
+/** The library's headless client in this process: the same machine and start as the tab. */
+export const headlessBackend: {
+  (key: Identity): (dev: Dev) => ReturnType<typeof headlessBackendBody>;
+  (dev: Dev, key: Identity): ReturnType<typeof headlessBackendBody>;
+} = Function.dual(2, headlessBackendBody);
+
 // --- P18 slice 2, law E1 ------------------------------------------------------------------------
 
 const PROJECT = "p18-follow";
@@ -339,13 +349,7 @@ const newest = (facts: ReadonlyArray<Fact>) =>
     .map((f) => String(field(f.body, "process")))
     .at(-1);
 
-/**
- * E1's walk: grant the client and wait for its open tile, end the tile's process as crashed through
- * the control endpoint, wait for the tile to say so, start the successor through the same endpoint,
- * wait for the tile to be online on it, submit one `add`, then close the client. Its answer is what
- * the ledger holds for the law to judge.
- */
-export const followRestart = (h: Home, s: Served, backend: Backend) =>
+const followRestartBody = (h: Home, s: Served, backend: Backend) =>
   Effect.gen(function* () {
     const w = yield* backend.waiting;
     const granted = yield* grant(h, w);
@@ -426,3 +430,14 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
       })),
     };
   });
+
+/**
+ * E1's walk: grant the client and wait for its open tile, end the tile's process as crashed through
+ * the control endpoint, wait for the tile to say so, start the successor through the same endpoint,
+ * wait for the tile to be online on it, submit one `add`, then close the client. Its answer is what
+ * the ledger holds for the law to judge.
+ */
+export const followRestart: {
+  (s: Served, backend: Backend): (h: Home) => ReturnType<typeof followRestartBody>;
+  (h: Home, s: Served, backend: Backend): ReturnType<typeof followRestartBody>;
+} = Function.dual(3, followRestartBody);

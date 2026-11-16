@@ -16,7 +16,7 @@
 // the public `Ledger.read` and keeps its own list of what each key was asked for. Plant (after
 // build): append the `target:` line on a repeated request too.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Result as R, type Scope, Schema, Arbitrary, Stream } from "effect";
+import { Effect, Layer, Result as R, type Scope, Schema, Arbitrary, Stream, Function } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -113,7 +113,10 @@ export type Said = Omit<Recorded, "seen">;
 export const copied = <A>(value: A): A => JSON.parse(JSON.stringify(value)) as A;
 
 /** The item a tape number picks; never called on an empty list. */
-export const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
+export const choose: {
+  (pick: number): <A>(items: ReadonlyArray<A>) => A;
+  <A>(items: ReadonlyArray<A>, pick: number): A;
+} = Function.dual(2, <A>(items: ReadonlyArray<A>, pick: number): A => {
   const item = items[pick % items.length];
 
   if (item === undefined) {
@@ -121,10 +124,13 @@ export const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
   }
 
   return item;
-};
+});
 
 /** One field of a request changed to another valid value: same id, different bytes. */
-export const changedRequest = (request: Request, pick: number, other: Request): Request => {
+export const changedRequest: {
+  (pick: number, other: Request): (request: Request) => Request;
+  (request: Request, pick: number, other: Request): Request;
+} = Function.dual(3, (request: Request, pick: number, other: Request): Request => {
   const field = choose(["target", "process", "name", "program", "needs", "build", "settings", "parent"] as const, pick);
   const differs = <A>(a: A, b: A, fallback: A): A => (JSON.stringify(a) === JSON.stringify(b) ? fallback : b);
 
@@ -162,10 +168,13 @@ export const changedRequest = (request: Request, pick: number, other: Request): 
   }
 
   return { ...request, parent: request.parent === null ? other.parent : null };
-};
+});
 
 /** A value one field away from valid: wrong type, empty text or a missing key. */
-export const broken = (value: object, pick: number, bad: ReadonlyArray<readonly [string, unknown]>): unknown => {
+export const broken: {
+  (pick: number, bad: ReadonlyArray<readonly [string, unknown]>): (value: object) => unknown;
+  (value: object, pick: number, bad: ReadonlyArray<readonly [string, unknown]>): unknown;
+} = Function.dual(3, (value: object, pick: number, bad: ReadonlyArray<readonly [string, unknown]>): unknown => {
   const [key, replacement] = choose(bad, pick);
 
   if (replacement === MISSING) {
@@ -174,7 +183,7 @@ export const broken = (value: object, pick: number, bad: ReadonlyArray<readonly 
   }
 
   return { ...value, [key]: replacement };
-};
+});
 
 export const MISSING = Symbol("missing");
 
@@ -233,13 +242,16 @@ export const BAD_RECORDED: ReadonlyArray<readonly [string, unknown]> = [
 ];
 
 /** A result one field away from valid, for the case it has. */
-export const brokenResult = (result: Result, pick: number): unknown => {
+export const brokenResult: {
+  (pick: number): (result: Result) => unknown;
+  (result: Result, pick: number): unknown;
+} = Function.dual(2, (result: Result, pick: number): unknown => {
   const fits = BAD_RESULT.filter(
     ([key]) =>
       key === "_tag" || (key === "code" ? result._tag === "exited" : key === "reason" && result._tag !== "exited"),
   );
   return broken(result, pick, fits);
-};
+});
 
 // ---------------------------------------------------------------------------------------------
 // The walk on a real store.

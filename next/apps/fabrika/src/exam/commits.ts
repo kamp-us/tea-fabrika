@@ -18,7 +18,7 @@
 // imports no product code, so a builder cannot weaken it by changing one (p84). Exit 1 on any `stuck`,
 // 0 on `done` and `ask`, 2 when the run fails: a keys file p87 refuses, or something it could not read.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Config, Console, Effect, Exit, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { Config, Console, Effect, Exit, FileSystem, Option, Path, Schema, Stream, Function } from "effect";
 import { ChildProcess } from "effect/process";
 
 export const ROLES = ["tests", "build", "lead"] as const;
@@ -104,8 +104,12 @@ export const signedText = (link: {
     "",
   ].join("\n");
 
-export const decodeNote = Schema.decodeUnknownOption(Schema.fromJsonString(Note));
-export const decodeLink = Schema.decodeUnknownOption(ChainLink, { onExcessProperty: "error" });
+// Each decoder takes the input alone: no caller passes parse options, and a decoder with a second,
+// optional argument has no pipeable form that a call could not misread.
+const noteDecoder = Schema.decodeUnknownOption(Schema.fromJsonString(Note));
+const linkDecoder = Schema.decodeUnknownOption(ChainLink, { onExcessProperty: "error" });
+export const decodeNote = (input: unknown) => noteDecoder(input);
+export const decodeLink = (input: unknown) => linkDecoder(input);
 
 const KEY_LINE = /^(\S+) namespaces="(fabrika-step|git)" ssh-ed25519 (AAAAC3NzaC1lZDI1NTE5AAAAI[A-Za-z0-9+/]{43})$/;
 
@@ -164,7 +168,8 @@ const ExamList = Schema.Array(
   ),
 );
 type ExamList = typeof ExamList.Type;
-export const decodeExam = Schema.decodeUnknownOption(Schema.fromJsonString(ExamList));
+const examDecoder = Schema.decodeUnknownOption(Schema.fromJsonString(ExamList));
+export const decodeExam = (input: unknown) => examDecoder(input);
 
 /** A glob as the list writes it: `**` crosses folders, `*` stays inside one, dots match like letters. */
 const globRegex = (glob: string) =>
@@ -201,9 +206,14 @@ export const examMatcher = (list: ExamList) => {
   return (path: string) => control(path) || res.some((re) => re.test(path));
 };
 
-/** The scope rule: only a change under `next/` or on the exam list is judged. */
-export const inScope = (changed: ReadonlyArray<string>, isExam: (path: string) => boolean) =>
+const inScopeBody = (changed: ReadonlyArray<string>, isExam: (path: string) => boolean) =>
   changed.some((p) => p.startsWith("next/") || isExam(p));
+
+/** The scope rule: only a change under `next/` or on the exam list is judged. */
+export const inScope: {
+  (isExam: (path: string) => boolean): (changed: ReadonlyArray<string>) => ReturnType<typeof inScopeBody>;
+  (changed: ReadonlyArray<string>, isExam: (path: string) => boolean): ReturnType<typeof inScopeBody>;
+} = Function.dual(2, inScopeBody);
 
 /** A note as CI saw it: decoded, and the role whose key verified its text, or null. */
 interface Signed {
@@ -243,11 +253,10 @@ const verified = (s: Signed | null): s is Signed => s !== null && s.signer === s
  * chain's links in order. A tie at the top version counts neither, and an older link of the step
  * must come before its newest.
  */
-export const staleSteps = (
-  ticket: string,
-  all: ReadonlyArray<Signed>,
-  used: ReadonlyArray<Note>,
-): ReadonlySet<Role> => {
+export const staleSteps: {
+  (all: ReadonlyArray<Signed>, used: ReadonlyArray<Note>): (ticket: string) => ReadonlySet<Role>;
+  (ticket: string, all: ReadonlyArray<Signed>, used: ReadonlyArray<Note>): ReadonlySet<Role>;
+} = Function.dual(3, (ticket: string, all: ReadonlyArray<Signed>, used: ReadonlyArray<Note>): ReadonlySet<Role> => {
   const stale = new Set<Role>();
 
   for (const role of ROLES) {
@@ -269,10 +278,9 @@ export const staleSteps = (
   }
 
   return stale;
-};
+});
 
-/** p83 to p86 and p89 at pull request time. The scope rule is the caller's, before it gathers. */
-export const check = (pr: PullRequest, isExam: (path: string) => boolean) => {
+const checkBody = (pr: PullRequest, isExam: (path: string) => boolean) => {
   const fits = (c: Commit) => verified(c.signed) && c.signed.note.from === c.parentTree && c.signed.note.to === c.tree;
   const ticket = pr.commits.find(fits)?.signed?.note.ticket ?? null;
   const role = (c: Commit) => (fits(c) && c.signed?.note.ticket === ticket ? c.signed.note.step : null);
@@ -310,6 +318,12 @@ export const check = (pr: PullRequest, isExam: (path: string) => boolean) => {
   return { ticket, answers: answers.length === 0 ? [done] : answers };
 };
 
+/** p83 to p86 and p89 at pull request time. The scope rule is the caller's, before it gathers. */
+export const check: {
+  (isExam: (path: string) => boolean): (pr: PullRequest) => ReturnType<typeof checkBody>;
+  (pr: PullRequest, isExam: (path: string) => boolean): ReturnType<typeof checkBody>;
+} = Function.dual(2, checkBody);
+
 /** A logged link, and its signer verified against the keys at its `keys` commit. */
 export interface Logged<L extends ChainLink = Link> {
   readonly link: L;
@@ -338,44 +352,59 @@ interface Placed {
  * main when its step started, so after a `lead` merge of a moved main it is older than the squash's
  * first parent, and an ancestor is what is asked, not that parent.
  */
-export const chain = (
-  squash: string,
-  rows: ReadonlyArray<Logged<ChainLink>>,
-  trees: ReadonlyMap<string, string>,
-  placed: Placed,
-): ReadonlyArray<Answer> => {
-  const mine = rows.filter((r) => r.link.squash === squash);
-  const links = mine.map((r) => r.link);
-  const tickets = new Set(links.map((l) => l.ticket));
-  const moves = links.filter((l) => l.from !== l.to);
-  const empty = links.filter((l) => l.from === l.to);
-  const first = links[0];
-  const last = links.at(-1);
-  const visited = new Set([first?.from, ...moves.map((l) => l.to)]);
-  const whole =
-    first !== undefined &&
-    last !== undefined &&
-    placed.onMain &&
-    links.every((l) => placed.before.has(l.base)) &&
-    mine.every((r) => r.signer === r.link.step) &&
-    tickets.size === 1 &&
-    visited.size === moves.length + 1 &&
-    new Set(empty.map((l) => l.from)).size === empty.length &&
-    first.from === trees.get(first.base) &&
-    links.every((l, i) => i === 0 || l.from === links[i - 1]?.to) &&
-    (last.to === trees.get(squash) || last.to === placed.head);
+export const chain: {
+  (
+    rows: ReadonlyArray<Logged<ChainLink>>,
+    trees: ReadonlyMap<string, string>,
+    placed: Placed,
+  ): (squash: string) => ReadonlyArray<Answer>;
+  (
+    squash: string,
+    rows: ReadonlyArray<Logged<ChainLink>>,
+    trees: ReadonlyMap<string, string>,
+    placed: Placed,
+  ): ReadonlyArray<Answer>;
+} = Function.dual(
+  4,
+  (
+    squash: string,
+    rows: ReadonlyArray<Logged<ChainLink>>,
+    trees: ReadonlyMap<string, string>,
+    placed: Placed,
+  ): ReadonlyArray<Answer> => {
+    const mine = rows.filter((r) => r.link.squash === squash);
+    const links = mine.map((r) => r.link);
+    const tickets = new Set(links.map((l) => l.ticket));
+    const moves = links.filter((l) => l.from !== l.to);
+    const empty = links.filter((l) => l.from === l.to);
+    const first = links[0];
+    const last = links.at(-1);
+    const visited = new Set([first?.from, ...moves.map((l) => l.to)]);
+    const whole =
+      first !== undefined &&
+      last !== undefined &&
+      placed.onMain &&
+      links.every((l) => placed.before.has(l.base)) &&
+      mine.every((r) => r.signer === r.link.step) &&
+      tickets.size === 1 &&
+      visited.size === moves.length + 1 &&
+      new Set(empty.map((l) => l.from)).size === empty.length &&
+      first.from === trees.get(first.base) &&
+      links.every((l, i) => i === 0 || l.from === links[i - 1]?.to) &&
+      (last.to === trees.get(squash) || last.to === placed.head);
 
-  if (!whole || first === undefined) {
-    return [stuck("broken_chain", squash)];
-  }
+    if (!whole || first === undefined) {
+      return [stuck("broken_chain", squash)];
+    }
 
-  const all = rows.flatMap(({ link, signer }): Signed[] =>
-    link.step === "person" || signer === "person" ? [] : [{ note: link, signer }],
-  );
-  const steps = links.filter((l): l is Link => l.step !== "person");
-  const stale = staleSteps(first.ticket, all, steps);
-  return stale.size === 0 ? [done] : [...stale].map((step) => stuck("stale_link", squash, { step }));
-};
+    const all = rows.flatMap(({ link, signer }): Signed[] =>
+      link.step === "person" || signer === "person" ? [] : [{ note: link, signer }],
+    );
+    const steps = links.filter((l): l is Link => l.step !== "person");
+    const stale = staleSteps(first.ticket, all, steps);
+    return stale.size === 0 ? [done] : [...stale].map((step) => stuck("stale_link", squash, { step }));
+  },
+);
 
 // The edge: git and ssh-keygen through effect/process, and the files a run reads and writes.
 
@@ -615,18 +644,25 @@ const quote = (path: string) =>
   JSON.stringify(path).replaceAll("`", "\\u0060").replaceAll("<", "\\u003c").replaceAll("|", "\\u007c");
 
 /** One answer as a line, its paths shown by `show`. */
-export const plain = (a: Answer, show: (path: string) => string = quote) => {
-  if (a._tag === "done") {
-    return "done";
-  }
+export const plain: {
+  (show?: (path: string) => string): (a: Answer) => string;
+  (a: Answer, show?: (path: string) => string): string;
+} = Function.dual(
+  // A direct call starts with the answer; a piped one with `show`, or nothing.
+  (args) => typeof args[0] === "object",
+  (a: Answer, show: (path: string) => string = quote): string => {
+    if (a._tag === "done") {
+      return "done";
+    }
 
-  if (a._tag === "ask") {
-    return `ask owner exam_read ${a.paths.map(show).join(" ")}`;
-  }
+    if (a._tag === "ask") {
+      return `ask owner exam_read ${a.paths.map(show).join(" ")}`;
+    }
 
-  const paths = a.paths === undefined ? "" : ` ${a.paths.map(show).join(" ")}`;
-  return `stuck ${a.reason} ${a.sha}${a.step === undefined ? "" : ` step ${a.step}`}${paths}`;
-};
+    const paths = a.paths === undefined ? "" : ` ${a.paths.map(show).join(" ")}`;
+    return `stuck ${a.reason} ${a.sha}${a.step === undefined ? "" : ` step ${a.step}`}${paths}`;
+  },
+);
 
 /**
  * Prints each answer three ways and returns the exit code, 1 on any `stuck`: one JSON line on stdout,

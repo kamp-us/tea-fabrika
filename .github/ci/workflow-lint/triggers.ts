@@ -1,7 +1,8 @@
+import * as Function from "effect/Function";
 // Today's CI, serving both versions. check.yaml's triggers: the events that start a run, the paths
 // a pull request ignores, what cancels a run, and a draft's own check names.
 import { ignored } from "../changes.mjs";
-import { compact, map, type Rule } from "./shared.ts";
+import { compact, map, type Require, type Rule, type Workflow } from "./shared.ts";
 
 // A draft's check and ci-required carry their own names, so a draft's green answer on a head never
 // stands in for the ready run's on the same head (catchup.sh reads `check`, the ruleset
@@ -18,7 +19,7 @@ const TYPES = ["opened", "synchronize", "reopened", "ready_for_review", "labeled
 const CANCEL =
   "github.event_name=='pull_request'&&(github.event.action=='synchronize'||(github.event.action=='labeled'&&github.event.label.name=='visual'))";
 
-export const triggers: Rule = ({ workflow, on, jobs }, require) => {
+export const triggers: Rule = Function.dual(2, ({ workflow, on, jobs }: Workflow, require: Require) => {
   const push = map(on["push"]),
     pr = map(on["pull_request"]),
     queue = map(on["merge_group"]);
@@ -56,4 +57,4 @@ export const triggers: Rule = ({ workflow, on, jobs }, require) => {
   for (const [job, expected] of Object.entries(DRAFT_NAMES)) {
     require(compact(map(jobs[job])["name"]) === expected, `${job} has its own name on a draft`);
   }
-};
+});

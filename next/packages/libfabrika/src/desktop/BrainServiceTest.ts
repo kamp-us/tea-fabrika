@@ -11,7 +11,7 @@
 // Lead runs L13 and its disposable host plants: no KeepAlive, stop on controller release,
 // leave a detached child, and return at bootout. Observe each over three declared throttle intervals.
 // P19 next/. No duplicate lifecycle: controlled OS services feed the real driver.
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Function, Predicate } from "effect";
 import { Digest } from "effect/crypto";
 import * as Declarations from "../settings/Declarations.ts";
 import * as Snapshot from "../settings/Snapshot.ts";
@@ -37,7 +37,7 @@ export const timing = Effect.fn("BrainServiceTest.timing")(function* (flags: Rec
   return yield* Snapshot.make(Declarations.all, resolved).pipe(Effect.provide(Digest.layerWebCrypto));
 });
 
-export const layer = (
+const layerBody = (
   outside: Effect.Success<ReturnType<typeof ControlTest.make>>,
   settings: Snapshot.Snapshot,
   sink: SpanSink["Service"] = {
@@ -59,3 +59,19 @@ export const layer = (
       ),
     ),
   );
+
+export const layer: {
+  (
+    settings: Snapshot.Snapshot,
+    sink?: SpanSink["Service"],
+  ): (outside: Effect.Success<ReturnType<typeof ControlTest.make>>) => ReturnType<typeof layerBody>;
+  (
+    outside: Effect.Success<ReturnType<typeof ControlTest.make>>,
+    settings: Snapshot.Snapshot,
+    sink?: SpanSink["Service"],
+  ): ReturnType<typeof layerBody>;
+} = Function.dual(
+  // A direct call starts with the outside world, which holds its control layer; a piped one with the settings.
+  (args) => Predicate.hasProperty(args[0], "control"),
+  layerBody,
+);

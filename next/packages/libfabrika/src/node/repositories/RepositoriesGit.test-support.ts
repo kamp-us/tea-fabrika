@@ -1,7 +1,7 @@
 // T878, next/. The git fixture and reader RepositoriesGit.test.ts and
 // RepositoriesGit.identity.test.ts share, moved out of RepositoriesGit.test.ts unchanged so each
 // file stays under about 60 s on a CI leg. Each runs on the git layers of GitLaws (0535).
-import { Effect, FileSystem, Path } from "effect";
+import { Effect, FileSystem, Function, Path } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
@@ -53,5 +53,10 @@ export const fixture = Effect.fnUntraced(function* (format: "sha1" | "sha256", b
   return { fs, path, root, origin, repo, person, branch, commit };
 });
 
-export const withReader = <A, E, R>(person: string, body: Effect.Effect<A, E, R>) =>
+const withReaderBody = <A, E, R>(person: string, body: Effect.Effect<A, E, R>) =>
   body.pipe(Effect.provide(RepositoriesGit.layer({ person })));
+
+export const withReader: {
+  <A, E, R>(body: Effect.Effect<A, E, R>): (person: string) => ReturnType<typeof withReaderBody<A, E, R>>;
+  <A, E, R>(person: string, body: Effect.Effect<A, E, R>): ReturnType<typeof withReaderBody<A, E, R>>;
+} = Function.dual(2, withReaderBody);

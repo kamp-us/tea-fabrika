@@ -9,7 +9,7 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Duration, Effect, Result, Schedule, Schema } from "effect";
+import { type Duration, Effect, Result, Schedule, Schema, Function } from "effect";
 
 /** The step's name in every test leg; it times the steps before it. workflow-lint.ts holds both. */
 export const STEP = "time table";
@@ -106,7 +106,10 @@ export const readSteps = (input: unknown): Section<Step> => {
 };
 
 /** Each test file of a Vitest JSON report, its path from `root`. */
-export const readFiles = (input: unknown, root: string): Section<TestFile> => {
+export const readFiles: {
+  (root: string): (input: unknown) => Section<TestFile>;
+  (input: unknown, root: string): Section<TestFile>;
+} = Function.dual(2, (input: unknown, root: string): Section<TestFile> => {
   const decoded = Schema.decodeUnknownResult(Report)(input);
   return Result.isSuccess(decoded)
     ? {
@@ -119,7 +122,7 @@ export const readFiles = (input: unknown, root: string): Section<TestFile> => {
         })),
       }
     : unavailable(`the report is not Vitest's JSON: ${reasonOf(decoded.failure)}`);
-};
+});
 
 /**
  * True once every step before this one shows an end. GitHub writes a step's end a moment after it
@@ -241,16 +244,32 @@ const filesOf = (path: string | undefined, root: string, io: Io): Effect.Effect<
  * One leg's timings from its environment and what `io` answers. It cannot fail. The two inputs are
  * read side by side: the report needs no wait on the jobs API's pauses.
  */
-export const collect = (
-  env: Readonly<Record<string, string | undefined>>,
-  root: string,
-  io: Io,
-  pause: Duration.Input = PAUSE,
-): Effect.Effect<Timings> =>
-  Effect.all(
-    { steps: stepsOf(env["JOB_ID"], io, pause), files: filesOf(env["REPORT"], root, io) },
-    { concurrency: 2 },
-  ).pipe(Effect.map(({ steps, files }) => ({ ...legOf(env), steps, files })));
+export const collect: {
+  (
+    root: string,
+    io: Io,
+    pause?: Duration.Input,
+  ): (env: Readonly<Record<string, string | undefined>>) => Effect.Effect<Timings>;
+  (
+    env: Readonly<Record<string, string | undefined>>,
+    root: string,
+    io: Io,
+    pause?: Duration.Input,
+  ): Effect.Effect<Timings>;
+} = Function.dual(
+  // A direct call starts with the environment; a piped one with the root folder.
+  (args) => typeof args[0] === "object",
+  (
+    env: Readonly<Record<string, string | undefined>>,
+    root: string,
+    io: Io,
+    pause: Duration.Input = PAUSE,
+  ): Effect.Effect<Timings> =>
+    Effect.all(
+      { steps: stepsOf(env["JOB_ID"], io, pause), files: filesOf(env["REPORT"], root, io) },
+      { concurrency: 2 },
+    ).pipe(Effect.map(({ steps, files }) => ({ ...legOf(env), steps, files }))),
+);
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const env = process.env;

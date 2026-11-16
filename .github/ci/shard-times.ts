@@ -2,12 +2,17 @@
 import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as Function from "effect/Function";
+import * as Result from "effect/Result";
 import { measured } from "../../vitest.shards.ts";
 
 export const LIMIT = 60;
 export type Row = { readonly path: string; readonly seconds: number };
 
-export const reportRows = (report: unknown, root: string): Row[] => {
+export const reportRows: {
+  (root: string): (report: unknown) => Row[];
+  (report: unknown, root: string): Row[];
+} = Function.dual(2, (report: unknown, root: string): Row[] => {
   if (
     typeof report !== "object" ||
     report === null ||
@@ -34,18 +39,22 @@ export const reportRows = (report: unknown, root: string): Row[] => {
     const seconds = (file.endTime - file.startTime) / 1000;
     return Number.isFinite(seconds) && seconds >= 0 ? [{ path: relative(root, file.name), seconds }] : [];
   });
-};
+});
 
-export const staleRows = (table: Readonly<Record<string, number>>, real: readonly Row[]): Row[] =>
+export const staleRows: {
+  (real: readonly Row[]): (table: Readonly<Record<string, number>>) => Row[];
+  (table: Readonly<Record<string, number>>, real: readonly Row[]): Row[];
+} = Function.dual(2, (table: Readonly<Record<string, number>>, real: readonly Row[]): Row[] =>
   real
     .filter((row) => Math.abs(row.seconds - (table[row.path] ?? 1)) > LIMIT)
-    .toSorted((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    .toSorted((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)),
+);
 
 export const rowLine = (row: Row): string => `  ${JSON.stringify(row.path)}: ${row.seconds.toFixed(1)},`;
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   for (const path of process.argv.slice(2)) {
-    try {
+    const advised = Result.try(() => {
       const rows = reportRows(JSON.parse(readFileSync(path, "utf8")), process.cwd());
 
       for (const row of staleRows(measured, rows)) {
@@ -54,7 +63,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         );
         console.log(rowLine(row));
       }
-    } catch {
+    });
+
+    if (Result.isFailure(advised)) {
       console.log("shard-times: report unavailable; no timing advice for this report");
     }
   }

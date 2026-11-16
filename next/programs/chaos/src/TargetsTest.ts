@@ -4,7 +4,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { type Incoming, type ProgramRunner, Sent } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, Schema, type Scope } from "effect";
+import { Arbitrary, Effect, Schema, type Scope, Function } from "effect";
 import type { Open as RunnerOpen } from "./RunnerTest.ts";
 
 type World = Effect.Success<RunnerOpen>;
@@ -67,7 +67,7 @@ const Controller = Schema.TaggedStruct("armed", {
   attempts: Schema.Array(Schema.Struct({ process: Schema.String, error: Schema.String })),
 });
 
-export const suite = (open: Open, checklist: unknown) =>
+const suiteBody = (open: Open, checklist: unknown) =>
   describe("P17b real checklist faults and replies", () => {
     it.effect.prop(
       "legal checklist walks keep state, writer, first agent note and terminal replies through duplicates and reopen",
@@ -337,3 +337,8 @@ export const suite = (open: Open, checklist: unknown) =>
       options,
     );
   });
+
+export const suite: {
+  (checklist: unknown): (open: Open) => ReturnType<typeof suiteBody>;
+  (open: Open, checklist: unknown): ReturnType<typeof suiteBody>;
+} = Function.dual(2, suiteBody);

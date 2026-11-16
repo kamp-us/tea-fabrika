@@ -357,9 +357,13 @@ describe("p97, process spans", () => {
       const { tracer, ended, spans } = capture();
       return Effect.gen(function* () {
         const manager = yield* ProcessManager;
-        const request = firstStart("start:notes:1", name, {
-          program,
-          hash,
+        const request = firstStart({
+          id: "start:notes:1",
+          name,
+          code: {
+            program,
+            hash,
+          },
         });
         yield* manager.start(request, from());
         expect((yield* Effect.flip(manager.start(request, from({ parent: null })))).reason).toBe("id_reused");
@@ -514,7 +518,7 @@ describe("p97, names and numbers only", () => {
         yield* mailbox.send(long("n"), long("i"), { value: M_MARK }, from({ by: long("b") }));
         yield* Stream.runCollect(mailbox.receive(long("n"), 0));
         yield* manager.start(
-          firstStart("start:long", capped("p"), { program: capped("g"), hash: capped("h") }),
+          firstStart({ id: "start:long", name: capped("p"), code: { program: capped("g"), hash: capped("h") } }),
           from({ seen: 1 }),
         );
         yield* write(granted(long("k"), "t1"));

@@ -23,7 +23,7 @@ describe("person keys (p87b)", () => {
   it("G01: distinct generated person ids and signer order pass beside the step roles", () => {
     fc.assert(
       fc.property(fc.uniqueArray(id, { minLength: 2, maxLength: 2 }), fc.boolean(), name, (ids, reverse, name) => {
-        const lines = [personLine(ids[0]!), personLine(ids[1]!, "stranger")];
+        const lines = [personLine(ids[0]!), personLine(ids[1]!, { signer: "stranger" })];
         const r = new Repo(`${GOOD_KEYS}${(reverse ? lines.reverse() : lines).join("\n")}\n`);
         r.change(`${name}.ts`);
         r.sign("tests");
@@ -40,8 +40,8 @@ describe("person keys (p87b)", () => {
     fc.assert(
       fc.property(id, name, (id, name) => {
         for (const people of [
-          [personLine(id), personLine(id, "stranger")],
-          [personLine(id, "tests")],
+          [personLine(id), personLine(id, { signer: "stranger" })],
+          [personLine(id, { signer: "tests" })],
           [personLine(id), personLine(`${id}:other`)],
           [personLine("")],
           [keyLine(`person:${id}`, "person")],

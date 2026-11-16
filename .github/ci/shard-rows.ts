@@ -1,6 +1,7 @@
 // Today's CI, about next/'s test files.
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as Function from "effect/Function";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
 import { full, measured } from "../../vitest.shards.ts";
@@ -9,12 +10,15 @@ import { full, measured } from "../../vitest.shards.ts";
  * next/ rows whose file is not among `files`, in path order. A file with no row is not listed:
  * `assign` places it by its fallback until CI's `shard-times` step gives it a row.
  */
-export const stale = (table: Readonly<Record<string, number>>, files: readonly string[]): string[] => {
+export const stale: {
+  (files: readonly string[]): (table: Readonly<Record<string, number>>) => string[];
+  (table: Readonly<Record<string, number>>, files: readonly string[]): string[];
+} = Function.dual(2, (table: Readonly<Record<string, number>>, files: readonly string[]): string[] => {
   const selected = new Set(files);
   return Object.keys(table)
     .filter((path) => path.startsWith("next/") && !selected.has(path))
     .toSorted();
-};
+});
 
 /**
  * Test files under `root` as Vitest itself selects them from one project's `include` and
@@ -51,13 +55,20 @@ export const nextFiles = async (root: string) =>
 export const visualFiles = (root: string) => selected(root, "next-visual");
 
 /** Write the lint diagnostic for each stale row of `table` and return its exit code. */
-export const main = (rows: readonly string[], write: (line: string) => void, table = "vitest.shards.json"): number => {
-  for (const path of rows) {
-    write(`stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in ${table}`);
-  }
+export const main: {
+  (write: (line: string) => void, table?: string): (rows: readonly string[]) => number;
+  (rows: readonly string[], write: (line: string) => void, table?: string): number;
+} = Function.dual(
+  // A direct call starts with the rows; a piped one with the writer.
+  (args) => Array.isArray(args[0]),
+  (rows: readonly string[], write: (line: string) => void, table = "vitest.shards.json"): number => {
+    for (const path of rows) {
+      write(`stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in ${table}`);
+    }
 
-  return rows.length === 0 ? 0 : 1;
-};
+    return rows.length === 0 ? 0 : 1;
+  },
+);
 
 // L1, run by `pnpm lint`. Plant, run once on the table and restored: add a row for
 // next/apps/fabrika/src/gone.test.ts. The check printed its stale shard row line and exited 1;

@@ -1,6 +1,6 @@
 // Shared by libfabrika's own laws: a fast-check property whose check is a scoped Effect, run as one
 // Effect from the shared seed, so a law file does not paste its own runner and failure type.
-import { Effect, Schema, type Scope } from "effect";
+import { Effect, Schema, type Scope, Function } from "effect";
 import * as fc from "fast-check";
 
 /** The shared fixed seed every law runs from. */
@@ -37,17 +37,30 @@ export const stopOnAbort = (signal: AbortSignal) =>
  * flight is interrupted too, so its scope closes, and `stopOnAbort` ends the fast-check run, so no
  * shrink starts another run that would go on into later laws.
  */
-export const property = <A>(
-  arbitrary: fc.Arbitrary<A>,
-  law: (value: A) => Effect.Effect<unknown, unknown, Scope.Scope>,
-  parameters: fc.Parameters<[A]>,
-): Effect.Effect<void, PropertyFailed> => {
-  const run = (signal: AbortSignal, value: A) => stopOnAbort(signal).pipe(Effect.andThen(Effect.scoped(law(value))));
-  const checked = (signal: AbortSignal) =>
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each scoped check
-    fc.asyncProperty(arbitrary, (value) => Effect.runPromise(Effect.asVoid(run(signal, value)), { signal }));
-  const options = { seed: SEED, includeErrorInReport: true, ...parameters };
-  const assert = (signal: AbortSignal) => fc.assert(checked(signal), options);
-  // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-  return Effect.tryPromise({ try: assert, catch: (cause) => new PropertyFailed({ cause }) });
-};
+export const property: {
+  <A>(
+    law: (value: A) => Effect.Effect<unknown, unknown, Scope.Scope>,
+    parameters: fc.Parameters<[A]>,
+  ): (arbitrary: fc.Arbitrary<A>) => Effect.Effect<void, PropertyFailed>;
+  <A>(
+    arbitrary: fc.Arbitrary<A>,
+    law: (value: A) => Effect.Effect<unknown, unknown, Scope.Scope>,
+    parameters: fc.Parameters<[A]>,
+  ): Effect.Effect<void, PropertyFailed>;
+} = Function.dual(
+  3,
+  <A>(
+    arbitrary: fc.Arbitrary<A>,
+    law: (value: A) => Effect.Effect<unknown, unknown, Scope.Scope>,
+    parameters: fc.Parameters<[A]>,
+  ): Effect.Effect<void, PropertyFailed> => {
+    const run = (signal: AbortSignal, value: A) => stopOnAbort(signal).pipe(Effect.andThen(Effect.scoped(law(value))));
+    const checked = (signal: AbortSignal) =>
+      // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each scoped check
+      fc.asyncProperty(arbitrary, (value) => Effect.runPromise(Effect.asVoid(run(signal, value)), { signal }));
+    const options = { seed: SEED, includeErrorInReport: true, ...parameters };
+    const assert = (signal: AbortSignal) => fc.assert(checked(signal), options);
+    // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
+    return Effect.tryPromise({ try: assert, catch: (cause) => new PropertyFailed({ cause }) });
+  },
+);

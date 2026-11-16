@@ -1,8 +1,9 @@
+import * as Function from "effect/Function";
 // Today's CI, serving both versions. check.yaml's changes job, its own work: the small scans that
 // run after any failure, the full-history checkout, and the classify step with the run's event.
-import { classifier, commands, compact, map, type Rule, steps } from "./shared.ts";
+import { classifier, commands, compact, map, type Require, type Rule, type Workflow, steps } from "./shared.ts";
 
-export const classifyStep: Rule = ({ jobs }, require) => {
+export const classifyStep: Rule = Function.dual(2, ({ jobs }: Workflow, require: Require) => {
   const changes = map(jobs["changes"]);
   const classify = steps(changes).find((s) => s["id"] === "diff");
 
@@ -31,4 +32,4 @@ export const classifyStep: Rule = ({ jobs }, require) => {
   for (const [key, expected] of Object.entries(classifier)) {
     require(map(classify?.["env"])[key] === expected, `changes passes event ${key} through env`);
   }
-};
+});

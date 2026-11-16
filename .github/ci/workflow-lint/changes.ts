@@ -1,6 +1,19 @@
+import * as Function from "effect/Function";
 // Today's CI, serving both versions. check.yaml's changes job (S1): its flags and outputs, the
 // parser's pass, and the size step that sizes next's legs (legs.ts).
-import { classifier, compact, env, FLAGS, map, ROW_INSTALL, type Rule, steps, VISUAL_LABEL } from "./shared.ts";
+import {
+  classifier,
+  compact,
+  env,
+  FLAGS,
+  map,
+  ROW_INSTALL,
+  type Require,
+  type Rule,
+  type Workflow,
+  steps,
+  VISUAL_LABEL,
+} from "./shared.ts";
 
 // When changes' size step sizes next: any run next tests, all of next/ or the reader tests alone, as
 // the parser's pass left next, a pull request, a merge queue group and a push to main alike (0534);
@@ -31,7 +44,7 @@ const SIZE_ENV = {
   VISUAL: `\${{ ${VISUAL_LABEL} }}`,
 };
 
-export const changesJob: Rule = ({ jobs }, require) => {
+export const changesJob: Rule = Function.dual(2, ({ jobs }: Workflow, require: Require) => {
   const changes = map(jobs["changes"]),
     outputs = map(changes["outputs"]);
   require(!("if" in changes) && !("needs" in changes), "changes starts on every event");
@@ -118,4 +131,4 @@ export const changesJob: Rule = ({ jobs }, require) => {
   require(changeSteps.some(
     (s) => s["run"] === ROW_INSTALL && compact(s["if"]) === PROBE,
   ), "changes installs the parser for its pass");
-};
+});

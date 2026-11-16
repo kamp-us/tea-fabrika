@@ -1,7 +1,8 @@
+import * as Function from "effect/Function";
 // Today's CI, serving both versions. check.yaml's ci-required job, the one required check.
-import { compact, map, type Rule, steps } from "./shared.ts";
+import { compact, map, type Require, type Rule, type Workflow, steps } from "./shared.ts";
 
-export const ciRequired: Rule = ({ jobs }, require) => {
+export const ciRequired: Rule = Function.dual(2, ({ jobs }: Workflow, require: Require) => {
   // The one required check: it waits on every other job, never skips, and judges them all.
   const summary = map(jobs["ci-required"]),
     others = Object.keys(jobs).filter((name) => name !== "ci-required");
@@ -16,4 +17,4 @@ export const ciRequired: Rule = ({ jobs }, require) => {
     compact(map(judged[0]?.["env"])["NEEDS"]) === "toJSON(needs)" &&
     !("if" in (judged[0] ?? {})) &&
     judged[0]?.["continue-on-error"] === undefined, "ci-required judges toJSON(needs) with required.mjs");
-};
+});
