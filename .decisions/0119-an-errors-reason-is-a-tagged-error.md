@@ -1,7 +1,7 @@
 ---
 id: 0119
 title: In next/, a service error's reason is a tagged error of its own, as Effect's SqlError has it, never a string
-status: accepted
+status: amended-in-part by [0568](0568-error-cause-follows-effect.md)
 date: 2026-11-11
 tags: [errors, reason, effect, schema, cause, services, next]
 ---
@@ -83,7 +83,8 @@ The owner picked Effect's way.
 **A service error's `reason` is a union of tagged errors, one class per reason.**
 
 - Each reason is a `Schema.TaggedError` with `cause: Schema.Defect()` and whatever data that
-  reason alone needs.
+  reason alone needs. [0568](0568-error-cause-follows-effect.md) amends this: the cause is
+  required when every caller has one, else `Schema.optional(Schema.Defect())`.
 - The service's error holds `reason: Schema.Union([...])`. It stays one error per service (0055).
 - A caller recovers with `Effect.catchReason` or `Effect.catchReasons`, never by comparing
   `e.reason` to a string.
