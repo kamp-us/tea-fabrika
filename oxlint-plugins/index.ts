@@ -8,6 +8,7 @@ import { integrationTestName } from "./integration-test-name.ts";
 import { isolateBoundary } from "./isolate-boundary.ts";
 import { jsdocs } from "./jsdocs.ts";
 import { lawShape } from "./law-shape.ts";
+import { machineHasLaws } from "./machine-has-laws.ts";
 import { modules } from "./modules.ts";
 import { noBareDisable } from "./no-bare-disable.ts";
 import { noBareTell } from "./no-bare-tell.ts";
@@ -60,6 +61,7 @@ const plugin: Plugin = {
     "law-shape": lawShape,
     "isolate-boundary": isolateBoundary,
     jsdocs,
+    "machine-has-laws": machineHasLaws,
     modules,
     "no-bare-disable": noBareDisable,
     "no-bare-tell": noBareTell,
