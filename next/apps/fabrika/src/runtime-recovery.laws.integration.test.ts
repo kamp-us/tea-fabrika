@@ -41,6 +41,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
+// SAFETY: nothing is in the table until the world writes it, and every write here stores a
+// `built(...)` value, which is `{ hash, source }`.
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 vi.mock("./table.ts", () => table);
 // Only the platform base class is fake. The box methods run the real programBox.
@@ -491,6 +493,9 @@ const world = (
     db = new DatabaseSync(":memory:");
   const handles = storage(db);
   const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
+  // SAFETY: projectRuntime's Project reads `id.name`, `storage` (here the SQL wrapper that counts
+  // settings reads) and `exports.IsolateTail` for its tail, and this object has those three; only
+  // workerd can build a whole DurableObjectState.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles used by the real Project service
   const ctx = {
     id: { name: "project-test" },
@@ -593,6 +598,9 @@ const world = (
     await work();
     throw new Error("transport lost the Project's answer");
   };
+  // SAFETY: the brain's code calls each namespace's `getByName` and the loader's `get`, the members
+  // these doubles define; workerd's namespace and loader types are classes with RPC brands that a
+  // Node object literal cannot have.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but do not have workerd's nominal brands
   const env = {
     INSTANCE: JSON.stringify(
@@ -670,6 +678,8 @@ const world = (
               clearTimeout(entry.timer);
             },
           });
+          // SAFETY: processLogic in cloudflare/runtime.ts reads the object's `id.name`, its `storage` and,
+          // to bind a program's tail, `exports`; those are the three members given here.
           // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the SQL, descriptor, alarm and sync handles the real Process reads
           const processCtx = { id: { name }, storage: handles, exports: loopbacks } as unknown as DurableObjectState;
           const created: Entry = {
@@ -1039,6 +1049,8 @@ const world = (
       const client = await project.clientConnect(),
         nonce = await project.challenge(client);
       let attached: unknown = Attached.cases.new.make({ client, nonce });
+      // SAFETY: connection.ts calls four methods on a hibernating socket, deserializeAttachment,
+      // serializeAttachment, send and close, and this double defines exactly those.
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the hibernating socket methods the Connection service calls
       const socket = {
         deserializeAttachment: () => attached,
@@ -1050,6 +1062,9 @@ const world = (
         },
         close: () => {},
       } as unknown as WebSocket;
+      // SAFETY: of the state's members, connection.ts reads `id`, `storage`, `getWebSockets`, `getTags`,
+      // the two auto-response members, all given here, and `acceptWebSocket`, which only its fetch
+      // upgrade calls; this law hands frames to `door.message` and never sends a fetch.
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the storage and socket handles the real Connection service reads
       const doorCtx = {
         id: { name: "gateway-test" },
@@ -1708,7 +1723,12 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
         const exited = async (name: string) =>
           (await w.project.read(`processes/${name}`, 0, "audit"))
             .filter((row) => row._tag === "exited")
-            .map((row) => Object(row.body) as { process: string; reason: unknown })
+            .map(
+              (row) =>
+                // SAFETY: ProcessManager's exit appends each `exited` row to `processes/<name>` with the
+                // body ProcessEvent.cases.exited.make({ process, reason }), and the filter keeps only those.
+                Object(row.body) as { process: string; reason: unknown },
+            )
             .map(({ process, reason }) => [process, reason] as const);
 
         for (const cell of tape) {
@@ -1758,7 +1778,13 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
               const target = live[cell.pick % live.length]!;
               const before = await exited(target.name);
               const reply = await w.project
-                .processExit(target.process, cell.bad as ExitReason, FROM)
+                .processExit(
+                  target.process,
+                  // SAFETY: not an ExitReason on purpose: ProcessManager's exit decodes the reason before
+                  // its turn opens, and the law sends a bad one past the type to see that decode refuse it.
+                  cell.bad as ExitReason,
+                  FROM,
+                )
                 .catch((error: unknown) => ({ _tag: Object(error)._tag }));
               expect(reply, `invalid input is a typed refusal: ${JSON.stringify(cell.bad)}`).toMatchObject({
                 _tag: "ProcessError",

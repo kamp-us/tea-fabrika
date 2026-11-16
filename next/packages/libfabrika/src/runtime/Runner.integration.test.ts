@@ -486,6 +486,8 @@ const worldOn = async (
   const published = new Map<string, Update[]>();
   const alarms: Array<number | null> = [];
   const calls: Array<{ kind: string; id: string; parent: string | null }> = [];
+  // SAFETY: each `as` in this object only widens a starting literal (`""` or `"ok"`) to the union it
+  // is a member of, so a law can later set the field to any of the union's other faults.
   const fault = {
     append: "" as "" | "before" | "after" | "refused",
     answer: false,
@@ -536,6 +538,8 @@ const worldOn = async (
           (key: string) => Effect.succeed(key === "agent" ? writer("agent") : writer()),
           {
             input: (name: string) => name === "approve",
+            // SAFETY: a tag that is not one of `p.writes`' keys indexes to undefined, which the `?.`
+            // and `?? false` after it answer, so the key type claims nothing the read relies on.
             event: (tag: string) => p.writes[tag as keyof typeof p.writes]?.personOnly ?? false,
           },
         ),
