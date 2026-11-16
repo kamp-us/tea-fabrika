@@ -27,7 +27,9 @@ const Manifest = Schema.Struct({ scripts: Schema.optional(Schema.Record(Schema.S
 
 const readManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(Manifest));
 
-class GitFailed extends Schema.TaggedError<GitFailed, { readonly brand: unique symbol }>()("GitFailed", { code: Schema.Finite }) {}
+class GitFailed extends Schema.TaggedError<GitFailed, { readonly brand: unique symbol }>()("GitFailed", {
+  code: Schema.Finite,
+}) {}
 
 /** A property fast-check found false, with its counterexample in the cause. */
 class Falsified extends Schema.TaggedError<Falsified, { readonly brand: unique symbol }>()("Falsified", {

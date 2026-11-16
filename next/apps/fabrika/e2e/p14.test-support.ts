@@ -55,7 +55,9 @@ class DevFailed extends Schema.TaggedError<DevFailed, { readonly brand: unique s
   output: Schema.String,
 }) {}
 
-class KeygenFailed extends Schema.TaggedError<KeygenFailed, { readonly brand: unique symbol }>()("KeygenFailed", { exitCode: Schema.Finite }) {}
+class KeygenFailed extends Schema.TaggedError<KeygenFailed, { readonly brand: unique symbol }>()("KeygenFailed", {
+  exitCode: Schema.Finite,
+}) {}
 
 const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
 
