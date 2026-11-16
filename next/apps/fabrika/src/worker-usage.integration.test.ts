@@ -271,7 +271,9 @@ const lifecycle = Schema.Array(
   }),
 );
 
-class World extends Context.Service<World, Effect.Success<typeof world>>()("@kampus/fabrika/worker-usage.test.World") {}
+class World extends Context.Service<World, Effect.Success<typeof world>>()(
+  "@kampus/fabrika/worker-usage.integration.test/World",
+) {}
 
 const start = (world: World["Service"], name: string, program: string) =>
   invoke(
@@ -348,7 +350,7 @@ const spinSample = Effect.gen(function* () {
 });
 
 class SpinSample extends Context.Service<SpinSample, Effect.Success<typeof spinSample>>()(
-  "@kampus/fabrika/worker-usage.test.SpinSample",
+  "@kampus/fabrika/worker-usage.integration.test/SpinSample",
 ) {}
 
 it.layer(
