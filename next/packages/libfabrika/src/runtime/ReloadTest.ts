@@ -131,7 +131,7 @@ const upgradesFor = (spec: Spec) =>
     .map((from) => ({
       name: `${spec.shape}_${from}`,
       from,
-      run: (m: unknown): unknown =>
+      run: <M>(m: M): M | (M & { readonly step: number }) =>
         spec.shape === "field" && Predicate.isObjectOrArray(m) && !("step" in m) ? { ...m, step: 1 } : m,
     }));
 

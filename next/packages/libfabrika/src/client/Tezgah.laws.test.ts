@@ -115,8 +115,8 @@ const PatchStep = Schema.Struct({
 const both = (m: TezgahClient, msg: TezgahMsg) => applyCell(tezgahMachine, m, msg);
 
 /** A view as the wire carries it, JSON. */
-const onWire = (view: TezgahView): unknown =>
-  Schema.decodeSync(Json)(Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(view)));
+const onWire = (view: TezgahView): Schema.Json =>
+  Schema.decodeSync(Schema.fromJsonString(Schema.Json))(Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(view)));
 
 const text = (state: TezgahView | null) =>
   state === null ? "null" : Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(state));

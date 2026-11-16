@@ -76,12 +76,21 @@ const same = (a: Path, b: Path) => a.length === b.length && a.every((s, i) => s 
 
 const record = (v: unknown): v is Tree => Predicate.isObject(v);
 
-const frozen = (value: unknown): unknown =>
-  Array.isArray(value)
-    ? Object.freeze(value.map(frozen))
-    : record(value)
-      ? Object.freeze(Object.fromEntries(Object.entries(value).map(([k, v]) => [k, frozen(v)])))
-      : value;
+/** Freezes `value` and every array and table inside it, in place. */
+const freezeAll = (value: unknown): void => {
+  if (Array.isArray(value) || record(value)) {
+    Object.values(value).forEach(freezeAll);
+    Object.freeze(value);
+  }
+};
+
+/** A deep copy of `value` with every array and table inside it frozen. */
+const frozen = <A>(value: A): A => {
+  const copy = structuredClone(value);
+  freezeAll(copy);
+
+  return copy;
+};
 
 const throwingRecord = (cause: Error) =>
   Object.defineProperty({}, "member", {

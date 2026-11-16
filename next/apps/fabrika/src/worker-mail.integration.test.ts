@@ -179,7 +179,7 @@ const mailDiagnostics = () => {
   const note = (event: string, value: object | null = null) => events.push({ ...stamp(), event, value });
   note("start");
 
-  const read = async (label: string, call: () => Promise<unknown>) => {
+  const read = async <A>(label: string, call: () => Promise<A>) => {
     const start = stamp();
     let value: unknown = null;
 

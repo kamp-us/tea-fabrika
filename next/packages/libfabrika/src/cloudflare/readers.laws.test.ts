@@ -353,7 +353,7 @@ const world = () => {
     setWebSocketAutoResponse: vi.fn(),
   } as unknown as DurableObjectState;
 
-  const route = vi.fn(async (): Promise<unknown> => ({ _tag: "parked", stream: "stream", after: 0 }));
+  const route = vi.fn(async (): Promise<object> => ({ _tag: "parked", stream: "stream", after: 0 }));
 
   // SAFETY: these readers reach INSTANCE, PROJECT's settings and session calls, and RECORD's `write`, all doubled here.
   // oxlint-disable-next-line fabrika/no-type-assertions -- in-memory platform stubs supply just the RPCs these readers reach

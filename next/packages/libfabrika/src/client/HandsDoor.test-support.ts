@@ -250,7 +250,7 @@ export const brain = () => {
     /** Every task, for a law that reads what the brain ended with. */
     all: () => [...tasks.values()],
     /** An `assigned` answer for `id` naming the executor `key`, as a take for another key would get it. */
-    assignedTo: (id: string, key: string): unknown => {
+    assignedTo: (id: string, key: string): typeof TakeReply.Type | null => {
       const s = tasks.get(id);
 
       return s === undefined

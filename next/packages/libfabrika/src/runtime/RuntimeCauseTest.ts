@@ -627,7 +627,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
       );
     };
 
-    const delivery = (traceId: unknown): unknown => ({
+    const delivery = (traceId: unknown) => ({
       id: "letter-1",
       envelope: {
         id: "in-process_0000000000e008000000000000-1",

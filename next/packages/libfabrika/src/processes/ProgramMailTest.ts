@@ -143,7 +143,7 @@ type World = {
 };
 
 /** Values Schema.Json refuses: a function, a bigint, a symbol, `undefined`. */
-const BAD: ReadonlyArray<() => unknown> = [
+const BAD: ReadonlyArray<() => object | undefined> = [
   () => ({ type: "request", f: () => 1 }),
   () => [1n],
   () => undefined,

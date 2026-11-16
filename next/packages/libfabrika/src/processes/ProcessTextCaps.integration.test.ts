@@ -101,7 +101,7 @@ describe("P33 rule 1, the text caps live in the schema", () => {
   const cases: ReadonlyArray<{
     readonly name: string;
     readonly schema: Schema.Top;
-    readonly value: (text: string) => unknown;
+    readonly value: (text: string) => object;
   }> = [
     {
       name: "Start first id",

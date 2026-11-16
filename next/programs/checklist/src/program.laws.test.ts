@@ -266,12 +266,12 @@ const folded = (machine: ChecklistMachine, msgs: ReadonlyArray<Msg>) => {
 /** One saved item made wrong in one field: a name off the 1 to 80 wall, an unknown state, a `since`
  *  that is no integer, a note that is no string. */
 const Broken = fc.constantFrom(
-  (i: Item): unknown => ({ ...i, name: "" }),
-  (i: Item): unknown => ({ ...i, name: "x".repeat(81) }),
-  (i: Item): unknown => ({ ...i, state: { _tag: "gone" } }),
-  (i: Item): unknown => ({ ...i, state: { _tag: "open", since: 1.5 } }),
-  (i: Item): unknown => ({ ...i, state: { _tag: "checked", note: 7 } }),
-  (i: Item): unknown => ({ name: i.name }),
+  (i: Item): object => ({ ...i, name: "" }),
+  (i: Item): object => ({ ...i, name: "x".repeat(81) }),
+  (i: Item): object => ({ ...i, state: { _tag: "gone" } }),
+  (i: Item): object => ({ ...i, state: { _tag: "open", since: 1.5 } }),
+  (i: Item): object => ({ ...i, state: { _tag: "checked", note: 7 } }),
+  (i: Item): object => ({ name: i.name }),
 );
 
 /** A Msg one field outside the plan's shape, on an otherwise good `check` or `rename`. */

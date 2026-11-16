@@ -19,6 +19,7 @@ import * as PlatformError from "effect/PlatformError";
 import * as Tracer from "effect/Tracer";
 import * as Predicate from "effect/Predicate";
 import * as Match from "effect/Match";
+import type * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import type { RolldownOutput, RolldownOptions, OutputOptions } from "rolldown";
@@ -73,7 +74,7 @@ const cssRules = (css: string) => {
 };
 
 // Source locations change when the printer normalizes whitespace and escapes.
-const meaning = (rules: readonly Rule[]): unknown =>
+const meaning = (rules: readonly Rule[]): Schema.Json =>
   JSON.parse(JSON.stringify(rules, (key, value) => (key === "loc" ? undefined : value)));
 
 const names = fc.integer({ min: 0, max: 10000 }).map((n) => `View${n}`);

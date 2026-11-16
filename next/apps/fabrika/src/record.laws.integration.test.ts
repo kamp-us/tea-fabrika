@@ -126,7 +126,7 @@ const WireLive = Layer.effect(
         return yield* Effect.die(new Error("record binding is missing a method"));
       }
 
-      const call = <A>(schema: Schema.Codec<A>, invoke: () => Promise<unknown>) =>
+      const call = <A, B>(schema: Schema.Codec<A>, invoke: () => Promise<B>) =>
         recordCall(invoke).pipe(
           Effect.flatMap((value) => Schema.decodeUnknownEffect(schema)(value).pipe(Effect.orDie)),
         );

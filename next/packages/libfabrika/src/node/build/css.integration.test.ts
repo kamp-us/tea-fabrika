@@ -13,6 +13,7 @@ import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import * as Tracer from "effect/Tracer";
 import * as Match from "effect/Match";
+import type * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { bundle, bundleAsync, type Rule, transform } from "lightningcss";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -77,7 +78,7 @@ const cssRules = (css: string) => {
   return rules;
 };
 
-const meaning = (rules: readonly Rule[]): unknown =>
+const meaning = (rules: readonly Rule[]): Schema.Json =>
   JSON.parse(JSON.stringify(rules, (key, value) => (key === "loc" ? undefined : value)));
 
 const fixture = (id: number) => {

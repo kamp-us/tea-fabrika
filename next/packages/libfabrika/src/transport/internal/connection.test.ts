@@ -38,7 +38,7 @@ const bytes = (value: Saved) => new TextEncoder().encode(JSON.stringify(value)).
 const same = (a: W, b: W) => a.id === b.id && a.stream === b.stream && a.after === b.after;
 
 /** The named state an attachment stands for: busy lives only in the tag. */
-const expected = (saved: Saved | null): unknown => {
+const expected = (saved: Saved | null): object => {
   if (saved === null) {
     return { _tag: "unloaded" };
   }

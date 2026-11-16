@@ -311,11 +311,12 @@ const brainFrom = (): From => ({
 
 const decodeModel = Schema.decodeUnknownOption(Model);
 
-/** A value's case, read without naming the key in a literal. */
-const tagged = (value: unknown): unknown => (Predicate.hasProperty(value, "_tag") ? value._tag : undefined);
+/** A value's case, read without naming the key in a literal; every caller compares it with a string. */
+const tagged = (value: unknown): string | undefined =>
+  Predicate.hasProperty(value, "_tag") && Predicate.isString(value._tag) ? value._tag : undefined;
 
 /** A raw value under `tag`, never made by a schema, so it can hold a shape its schema refuses. */
-const raw = (tag: string, fields: object = {}): unknown =>
+const raw = (tag: string, fields: object = {}): object =>
   // oxlint-disable-next-line fabrika/no-hand-tag -- invalid on purpose: no schema maker writes a shape its schema refuses
   ({ ...fields, _tag: tag });
 
@@ -699,7 +700,7 @@ type Move =
 const STOPS: ReadonlySet<Move> = new Set(["stopper_start", "stop_own", "stop_other", "stop_ended"]);
 
 /** A forged operand for each extra field a program might add beside its Cmd. */
-const forged = (field: string, world: World): unknown => {
+const forged = (field: string, world: World): typeof Recipient.Type | typeof Owner.Type | string => {
   const sender = world.names.get("sender:1")?.pid ?? DOOR;
 
   return field === "requester"

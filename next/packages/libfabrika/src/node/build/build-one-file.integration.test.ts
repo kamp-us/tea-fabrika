@@ -584,7 +584,7 @@ const utf8 = (s: string) => Buffer.byteLength(s, "utf8");
  *  or Node's `getBuiltinModule`, as Effect's async-hooks probe names one. A minified `{node:n}` key is not. */
 const NODE_NAME = /(?:\b(?:from|import|require|getBuiltinModule)\s*\(?\s*|\?\.\s*\(\s*)["'`]node:/;
 
-const parsedRules = (css: string): unknown => {
+const parsedRules = (css: string): Schema.Json => {
   let rules: Rule[] = [];
   transform({
     filename: "law.css",
@@ -600,7 +600,7 @@ const parsedRules = (css: string): unknown => {
 };
 
 /** The rules of every `<style>` in the page, in document order, as one list. */
-const pageRules = (page: string): unknown =>
+const pageRules = (page: string): Schema.Json =>
   parsedRules([...page.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n"));
 
 const count = (text: string, pattern: RegExp) => [...text.matchAll(pattern)].length;

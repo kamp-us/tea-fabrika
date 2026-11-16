@@ -165,7 +165,7 @@ export const fcBadReason = (reason: ExitReason): fc.Arbitrary<unknown> =>
   );
 
 /** A raw client value under `tag`, never made by a schema, so it can hold a shape its schema refuses. */
-const raw = (tag: string, fields: object = {}): unknown =>
+const raw = (tag: string, fields: object = {}): object =>
   // oxlint-disable-next-line fabrika/no-hand-tag -- invalid on purpose: no schema maker writes a shape its schema refuses
   ({ ...fields, _tag: tag });
 

@@ -7,19 +7,20 @@ import { applyCell, type Cmd, type Machine, type Sub } from "@demlik/tea";
 import * as Result from "effect/Result";
 import type * as Schema from "effect/Schema";
 
-type Options<S, M> = {
+/** `E` is the model as `encode` writes it, which goes through JSON text. */
+type Options<S, M, E> = {
   readonly msgs: ReadonlyArray<M>;
-  readonly encode: (model: S) => unknown;
+  readonly encode: (model: S) => E;
   readonly decode: (raw: Schema.Json) => S;
   readonly equals: <A>(a: A, b: A) => boolean;
   readonly seed: number;
 };
 
 /** Checks every cut, the first and the last included. Never runs a Cmd. */
-export const syncTest = <S, M extends { readonly type: string }, C extends Cmd, U extends Sub, Ctx>(
+export const syncTest = <S, M extends { readonly type: string }, C extends Cmd, U extends Sub, Ctx, E>(
   machine: Machine<S, M, C, U, Ctx>,
   ctx: Ctx,
-  { msgs, encode, decode, equals, seed }: Options<S, M>,
+  { msgs, encode, decode, equals, seed }: Options<S, M, E>,
 ): void => {
   const [first] = machine.init(null, ctx);
   const models: Array<S> = [first];

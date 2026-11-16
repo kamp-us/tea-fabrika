@@ -72,8 +72,8 @@ type Stale = { readonly _tag: "zero"; readonly line: WarnLine } | { readonly _ta
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => Predicate.isObject(value);
 
-/** A rule's level: the setting itself, or the first item of `[level, ...options]`. */
-const level = (setting: unknown): unknown => (Array.isArray(setting) ? setting[0] : setting);
+/** Whether a rule's level is warn: the setting itself, or the first item of `[level, ...options]`. */
+const warns = (setting: unknown): boolean => (Array.isArray(setting) ? setting[0] : setting) === "warn";
 
 /** The warn lines for the six, read from `oxlint --print-config`, oxlint's own reading of the config. */
 export const warnLines = (printed: unknown): ReadonlyArray<WarnLine> => {
@@ -91,7 +91,7 @@ export const warnLines = (printed: unknown): ReadonlyArray<WarnLine> => {
     return Object.entries(override.rules).flatMap(([key, setting]) => {
       const rule = CODES.get(key);
 
-      return rule !== undefined && level(setting) === "warn" ? globs.map((glob) => ({ rule, glob })) : [];
+      return rule !== undefined && warns(setting) ? globs.map((glob) => ({ rule, glob })) : [];
     });
   });
 };

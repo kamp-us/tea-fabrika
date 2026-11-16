@@ -302,7 +302,7 @@ const layer = (sql: Sql, next: Effect.Effect<string>, gate?: Gate, seen?: Seen) 
 const noSenders = Layer.succeed(Senders, { sender: () => Effect.succeedNone });
 
 /** A raw value under `tag`, never made by a schema, so it can hold a shape its schema refuses. */
-const raw = (tag: string, fields: object): unknown =>
+const raw = (tag: string, fields: object): object =>
   // oxlint-disable-next-line fabrika/no-hand-tag -- invalid on purpose: no schema maker writes a shape its schema refuses
   ({ ...fields, _tag: tag });
 
@@ -318,7 +318,7 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
 };
 
 /** A copy with every object's keys in reverse order: equal values, another key order. */
-const reorder = (value: unknown): unknown =>
+const reorder = (value: Schema.Json): Schema.Json =>
   Array.isArray(value)
     ? value.map(reorder)
     : Predicate.isObjectOrArray(value)
@@ -329,19 +329,14 @@ const reorder = (value: unknown): unknown =>
         )
       : value;
 
-/** Equal JSON values, whatever their key order: the model's own comparison. */
-const sorted = (value: unknown): unknown =>
-  Array.isArray(value)
-    ? value.map(sorted)
-    : Predicate.isObjectOrArray(value)
-      ? Object.fromEntries(
-          Object.entries(value)
-            .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-            .map(([k, v]) => [k, sorted(v)]),
-        )
-      : value;
+/** JSON.stringify's replacer that writes every object's keys in sorted order. */
+const sortedKeys = (_key: string, value: unknown) =>
+  Predicate.isObject(value)
+    ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+    : value;
 
-const sameJson = (a: unknown, b: unknown) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
+/** Equal JSON values, whatever their key order: the model's own comparison. */
+const sameJson = (a: unknown, b: unknown) => JSON.stringify(a, sortedKeys) === JSON.stringify(b, sortedKeys);
 
 // SAFETY: `fc.jsonValue` makes only JSON values, and a JSON round trip of one gives back a JSON value.
 const Json = fc.jsonValue({ maxDepth: 2 }).map((m) => copied({ v: m }).v as Schema.Json);

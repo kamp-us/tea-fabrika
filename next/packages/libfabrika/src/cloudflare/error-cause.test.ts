@@ -59,7 +59,9 @@ const rejecting = <A>(failure: unknown): A =>
 const fake = <A>(value: object): A => value as A;
 
 /** Every client the shared callback serves, built on a rejecting platform object. */
-const clients = (failure: unknown): Record<string, Record<string, (...args: Array<never>) => unknown>> => ({
+const clients = (
+  failure: unknown,
+): Record<string, Record<string, (...args: Array<never>) => Effect.Effect<unknown, unknown>>> => ({
   project: ProjectClient.make(rejecting(failure)),
   process: ProcessClient.make(rejecting(failure)),
   gateway: GatewayClient.make(rejecting(failure)),
@@ -129,7 +131,7 @@ describe("T695, the platform clients keep what the platform rejected with", () =
 });
 
 /** A Worker Loader whose program's `describe` answers `describe()`. */
-const loader = (describe: () => Promise<unknown>): WorkerLoader =>
+const loader = <A>(describe: () => Promise<A>): WorkerLoader =>
   fake({ get: () => ({ getEntrypoint: () => ({ describe }) }) });
 
 const programs = {
@@ -210,7 +212,7 @@ const objectState = (name: unknown, saved: unknown = undefined): DurableObjectSt
     storage: {
       get: () => Promise.resolve(saved),
       sql: { exec: () => ({ toArray: () => [], raw: () => [] }) },
-      transactionSync: (step: () => unknown) => step(),
+      transactionSync: <A>(step: () => A) => step(),
     },
   });
 

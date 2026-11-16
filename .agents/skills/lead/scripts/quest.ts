@@ -15,7 +15,7 @@ type Json = null | boolean | number | string | ReadonlyArray<Json> | { readonly 
  * a JSON object is given back as it is, for the reader's own schema to refuse.
  */
 export const questKeyed = (saved: Json): Json => {
-  if (!Predicate.isObjectOrArray(saved) || !("lane" in saved)) {
+  if (!Predicate.isObjectOrArray(saved) || Array.isArray(saved) || !("lane" in saved)) {
     return saved;
   }
 

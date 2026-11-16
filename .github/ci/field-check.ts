@@ -31,7 +31,10 @@ export const selectAdded = (base: string, head: string): { line: number; text: s
   });
 };
 
-const parse = (text: string): unknown => Result.getOrUndefined(Result.try((): unknown => JSON.parse(text)));
+/** A value as `JSON.parse` gives it back, the same type as Effect's `Schema.Json`. */
+type Json = null | boolean | number | string | ReadonlyArray<Json> | { readonly [key: string]: Json };
+
+const parse = (text: string): Json | undefined => Result.getOrUndefined(Result.try((): Json => JSON.parse(text)));
 
 // GitHub annotation escaping applies to property values as well as message text.
 const escape = (text: string) =>

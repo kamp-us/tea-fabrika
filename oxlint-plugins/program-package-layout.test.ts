@@ -36,7 +36,7 @@ const name = fc.integer({ min: 0, max: 100000 }).map((n) => `program${n}`);
 // The manifest a package is written with, from the fields the harness gives it, and symlinks:
 // each path in the package points to a path given from the package folder.
 type Package = {
-  readonly manifest?: (fields: Readonly<Record<string, unknown>>) => unknown;
+  readonly manifest?: (fields: Readonly<Record<string, unknown>>) => string | object;
   readonly links?: Readonly<Record<string, string>>;
 };
 

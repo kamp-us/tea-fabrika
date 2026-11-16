@@ -121,7 +121,7 @@ const plants: Plant[] = [
           w.jobs["ci-required"].needs.push("field");
         },
       ],
-    ] as [string, (w: Workflow) => unknown][]
+    ] as [string, (w: Workflow) => void][]
   ).map(([fault, mutate]): [string, (w: Workflow) => void] => [
     fault,
     (w) => {

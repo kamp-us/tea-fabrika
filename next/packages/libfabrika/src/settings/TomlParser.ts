@@ -45,7 +45,10 @@ const put = (table: object, path: Edit.Path, value: unknown): void => {
   }
 };
 
-const content = (node: AST.TOMLContentNode): unknown => {
+/** A value as the parser reads it: a string, number, boolean or date, an array, or a table. */
+type Parsed = AST.TOMLValue["value"] | ReadonlyArray<Parsed> | { readonly [name: string]: Parsed };
+
+const content = (node: AST.TOMLContentNode): Parsed => {
   if (node.type === "TOMLValue") {
     return node.value;
   }
@@ -54,7 +57,7 @@ const content = (node: AST.TOMLContentNode): unknown => {
     return node.elements.map(content);
   }
 
-  const value = {};
+  const value: { [name: string]: Parsed } = {};
 
   for (const assignment of node.body) {
     put(value, key(assignment.key), content(assignment.value));
@@ -170,8 +173,11 @@ const Scalar = Schema.Union([Schema.String, Schema.Boolean, Schema.Number.check(
 
 const scalar = Schema.decodeUnknownSync(Scalar);
 
+/** A value checked for the serializer: a scalar, an array or a plain table of them, with no date. */
+type Encoded = typeof Scalar.Type | ReadonlyArray<Encoded> | { readonly [name: string]: Encoded };
+
 // Validate before encoding: serializers can otherwise omit unsupported members or coerce values.
-const encoded = (value: unknown, ancestors: ReadonlySet<object> = new Set()): unknown => {
+const encoded = (value: unknown, ancestors: ReadonlySet<object> = new Set()): Encoded => {
   if (Predicate.isObjectOrArray(value)) {
     if (ancestors.has(value)) {
       throw new TypeError("A TOML value cannot contain a cycle.");
