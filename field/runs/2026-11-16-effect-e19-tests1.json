@@ -33,15 +33,13 @@
     "check": "unnecessaryFailYieldableError",
     "met": 9,
     "fixedByQuickFix": 0,
-    "handEdits": 3,
-    "left": 2,
+    "handEdits": 5,
+    "left": 0,
     "waitingOn1366": 4,
     "handEditFiles": [
       "next/packages/libfabrika/src/node/Nemesis.laws.integration.test.ts",
       "next/packages/libfabrika/src/node/build/build-assets.integration.test.ts",
-      "next/packages/libfabrika/src/runtime/EffectFunctions.test.ts"
-    ],
-    "leftFiles": [
+      "next/packages/libfabrika/src/runtime/EffectFunctions.test.ts",
       ".agents/skills/lead/scripts/chain.ts:1278",
       "next/packages/tuval/src/browser/key.ts:155"
     ],
