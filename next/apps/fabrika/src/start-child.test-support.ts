@@ -26,6 +26,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { programs } from "virtual:fabrika-built";
 import { build } from "./build.ts";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -116,25 +117,6 @@ const childSource = Arr.join(
   "\n",
 );
 
-/** Sets one env value for the scope; the release puts the old value back, or deletes it when unset. */
-const env = (key: string, value: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const old = process.env[key];
-      process.env[key] = value;
-
-      return old;
-    }),
-    (old) =>
-      Effect.sync(() => {
-        if (old === undefined) {
-          delete process.env[key];
-        } else {
-          process.env[key] = old;
-        }
-      }),
-  );
-
 /**
  * One home with both test programs built in and `starts` as its start grants, and a way to boot it.
  * The home and environment are acquired in the caller's scope. `boot` acquires a port and a real
@@ -145,10 +127,10 @@ export const childHome = Effect.fnUntraced(
   function* (starts: ReadonlyArray<{ readonly source: string; readonly to: string }>) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    yield* env("DO_NOT_TRACK", "1");
+    yield* Effect.sync(noTracking);
     // A short home: a socket path has a 103-byte limit.
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "p42w-" });
-    yield* env("FABRIKA_HOME", home);
+    yield* scopedEnv({ FABRIKA_HOME: home });
     yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
     yield* fs.writeFileString(path.join(home, "starter.ts"), starterSource);
     yield* fs.writeFileString(path.join(home, "child.ts"), childSource);

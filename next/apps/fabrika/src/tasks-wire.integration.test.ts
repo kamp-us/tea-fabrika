@@ -15,6 +15,7 @@ import * as Formatter from "effect/Formatter";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
+import { keptEnv } from "./env.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -233,16 +234,8 @@ it.live(
         files: [],
       });
 
-      const oldHome = process.env.ALCHEMY_HOME;
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          if (oldHome === undefined) {
-            delete process.env.ALCHEMY_HOME;
-          } else {
-            process.env.ALCHEMY_HOME = oldHome;
-          }
-        }),
-      );
+      // localInstance sets ALCHEMY_HOME; it goes back as it was when the scope closes.
+      yield* keptEnv(["ALCHEMY_HOME"]);
 
       const running = yield* localInstance(
         built,

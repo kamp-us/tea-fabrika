@@ -11,41 +11,23 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
-
-// Sets one env value for the scope; the release puts the old value back, or deletes it when it was unset.
-const env = (key: string, value: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const old = process.env[key];
-      process.env[key] = value;
-
-      return old;
-    }),
-    (old) =>
-      Effect.sync(() => {
-        if (old === undefined) {
-          delete process.env[key];
-        } else {
-          process.env[key] = old;
-        }
-      }),
-  );
 
 it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call lookup plant fails (A2, real workerd)", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const source = yield* fs.readFileString(path.join(import.meta.dirname, "sibling-objects.test-support.ts"));
-    yield* env("DO_NOT_TRACK", "1");
+    yield* Effect.sync(noTracking);
 
     for (const bare of [false, true]) {
       yield* Effect.scoped(
         Effect.gen(function* () {
           const home = yield* fs.makeTempDirectoryScoped({ prefix: "t502-s-" });
-          yield* env("ALCHEMY_HOME", path.join(home, "alchemy"));
+          yield* scopedEnv({ ALCHEMY_HOME: path.join(home, "alchemy") });
           const port = yield* Effect.acquireRelease(heldPort(), (p) => p.release);
-          yield* env("T502_PORT", String(port.port));
+          yield* scopedEnv({ T502_PORT: String(port.port) });
           yield* fs.symlink(resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
           yield* fs.writeFileString(path.join(home, "package.json"), Formatter.formatJson({ type: "module" }));
           const file = path.join(home, "objects.ts");

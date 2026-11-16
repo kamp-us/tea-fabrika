@@ -16,6 +16,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { describe, expect } from "vitest";
+import { changeEnv, noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
@@ -111,7 +112,7 @@ type Fixture = {
 };
 
 const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => Promise<void>) => {
-  process.env.DO_NOT_TRACK = "1";
+  noTracking();
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
@@ -120,8 +121,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
   const home = mkdtempSync(join(tmpdir(), "p34w-")),
     key = identity();
 
-  const previousHome = process.env.FABRIKA_HOME;
-  process.env.FABRIKA_HOME = home;
+  const restoreHome = Effect.runSync(changeEnv({ FABRIKA_HOME: home }));
 
   try {
     symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
@@ -190,12 +190,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
   } finally {
     // localInstance closed with its scope before its durable files go.
     rmSync(home, { recursive: true, force: true });
-
-    if (previousHome === undefined) {
-      delete process.env.FABRIKA_HOME;
-    } else {
-      process.env.FABRIKA_HOME = previousHome;
-    }
+    restoreHome();
   }
 };
 
@@ -339,23 +334,8 @@ const worldScoped = Effect.gen(function* () {
     (dir) => Effect.sync(() => rmSync(dir, { recursive: true, force: true })),
   );
 
-  yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const previous = process.env.FABRIKA_HOME;
-      process.env.FABRIKA_HOME = home;
-      process.env.DO_NOT_TRACK = "1";
-
-      return previous;
-    }),
-    (previous) =>
-      Effect.sync(() => {
-        if (previous === undefined) {
-          delete process.env.FABRIKA_HOME;
-        } else {
-          process.env.FABRIKA_HOME = previous;
-        }
-      }),
-  );
+  yield* scopedEnv({ FABRIKA_HOME: home });
+  yield* Effect.sync(noTracking);
   const { localState } = yield* Effect.promise(() => import("alchemy/State/LocalState"));
   const { build } = yield* Effect.promise(() => import("./build.ts"));
   const { localInstance } = yield* Effect.promise(() => import("./local-instance.ts"));

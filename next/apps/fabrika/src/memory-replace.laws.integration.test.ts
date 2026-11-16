@@ -21,6 +21,7 @@ import * as Predicate from "effect/Predicate";
 import { ChildProcess } from "effect/process";
 import * as Stream from "effect/Stream";
 import { describe, expect } from "vitest";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { rssStandIn } from "./rss.fixture.ts";
@@ -242,23 +243,8 @@ const world = (kib: (pid: number) => number | null) =>
       (dir) => Effect.sync(() => rmSync(dir, { recursive: true, force: true })),
     );
 
-    yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        const previous = process.env.FABRIKA_HOME;
-        process.env.FABRIKA_HOME = home;
-        process.env.DO_NOT_TRACK = "1";
-
-        return previous;
-      }),
-      (previous) =>
-        Effect.sync(() => {
-          if (previous === undefined) {
-            delete process.env.FABRIKA_HOME;
-          } else {
-            process.env.FABRIKA_HOME = previous;
-          }
-        }),
-    );
+    yield* scopedEnv({ FABRIKA_HOME: home });
+    yield* Effect.sync(noTracking);
     const { localState } = yield* Effect.promise(() => import("alchemy/State/LocalState"));
     const { build } = yield* Effect.promise(() => import("./build.ts"));
     const { localInstance } = yield* Effect.promise(() => import("./local-instance.ts"));

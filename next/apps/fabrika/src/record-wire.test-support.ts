@@ -6,6 +6,7 @@ import { SinkError } from "@kampus/libfabrika/telemetry/Sink";
 import { Effect, FileSystem, Path, Schema, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
+import { keptEnv } from "./env.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 
@@ -64,16 +65,8 @@ export const recordWire = Effect.fnUntraced(
     };
     const blob = Buffer.concat([field(Buffer.from("ssh-ed25519")), field(Buffer.from(raw, "base64url"))]);
     const built = yield* build({ out: path.join(home, "dist") });
-    const old = process.env.ALCHEMY_HOME;
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        if (old === undefined) {
-          delete process.env.ALCHEMY_HOME;
-        } else {
-          process.env.ALCHEMY_HOME = old;
-        }
-      }),
-    );
+    // localInstance sets ALCHEMY_HOME; it goes back as it was when the scope closes.
+    yield* keptEnv(["ALCHEMY_HOME"]);
     return yield* localInstance(
       built,
       startupFixture({

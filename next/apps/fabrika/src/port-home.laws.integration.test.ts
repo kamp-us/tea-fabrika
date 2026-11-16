@@ -46,6 +46,8 @@ import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Array as Arr, String as Str } from "effect";
 import * as Clock from "effect/Clock";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import { SecureRandom } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -57,6 +59,7 @@ import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { build } from "./build.ts";
+import { keptEnv } from "./env.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { machinePaths } from "./port-home.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -309,16 +312,8 @@ const open = Effect.fnUntraced(function* <A, E, R>(
 
   const built = yield* build({ out: dist, ...(programs === undefined ? {} : { programs: modules }) });
   const dists = [dist, yield* fs.realPath(dist)];
-  const old = process.env.ALCHEMY_HOME;
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => {
-      if (old === undefined) {
-        delete process.env.ALCHEMY_HOME;
-      } else {
-        process.env.ALCHEMY_HOME = old;
-      }
-    }),
-  );
+  // localInstance sets ALCHEMY_HOME; it goes back as it was when the scope closes.
+  yield* keptEnv(["ALCHEMY_HOME"]);
   const instance = yield* localInstance(built, startupFixture({ home, name: NAME, ...founding, port: at.port }));
 
   return yield* use(instance, dists, built);
@@ -939,9 +934,17 @@ const upgradedOnItsCode = Effect.gen(function* () {
 }).pipe(Effect.scoped);
 
 describe("T502 law 5, a saved home opens under this build, next/", () => {
+  // Whether this is the writer's run by hand, read through Config at collection as process.env was.
+  const writing =
+    Effect.runSync(
+      Config.String("T502_PORT_HOME")
+        .pipe(Config.withDefault(""))
+        .parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true })),
+    ) === "write";
+
   // vector: one home saved from a real run of the build before the slice, since only an older
   // build can write one (the plan's Laws table, law 5).
-  it.live.skipIf(process.env.T502_PORT_HOME === "write")(
+  it.live.skipIf(writing)(
     "vector: the home saved before the slice opens with the same process table and the same entries",
     () => reopened.pipe(Effect.provide(services)),
     { timeout: 240_000 },
@@ -949,7 +952,7 @@ describe("T502 law 5, a saved home opens under this build, next/", () => {
 
   // vector: one home saved by a build before the code store, since only such a build can write a
   // home whose descriptors name code it never kept (T833, the fix round's law 1; 0093's label).
-  it.live.skipIf(process.env.T502_PORT_HOME === "write")(
+  it.live.skipIf(writing)(
     "vector: a home saved before the code store opens each process on this build's code, with one code.loaded from open with was set, and every record it writes names that code",
     () => reopenedOnItsCode.pipe(Effect.provide(services)),
     { timeout: 240_000 },
@@ -957,7 +960,7 @@ describe("T502 law 5, a saved home opens under this build, next/", () => {
 
   // vector: one checkpoint saved by a build before the code store, at a lower state version than
   // this law's counter, since only an older build can write it (T833's upgrade case; 0093's label).
-  it.live.skipIf(process.env.T502_PORT_HOME === "write")(
+  it.live.skipIf(writing)(
     "vector: a checkpoint saved before the code store upgrades on this build's code, and state.upgraded and every line after it name that code",
     () => upgradedOnItsCode.pipe(Effect.provide(services)),
     { timeout: 240_000 },
@@ -966,7 +969,7 @@ describe("T502 law 5, a saved home opens under this build, next/", () => {
   // vector: the writer of that saved home, run by hand on the commit before a slice's product
   // code. It then opens what it saved from a copy in another folder, so a home that only opens
   // where it was written fails here and is never committed.
-  it.live.runIf(process.env.T502_PORT_HOME === "write")(
+  it.live.runIf(writing)(
     "vector: this build saves a home that opens again from another folder",
     () => written.pipe(Effect.andThen(reopened), Effect.provide(services)),
     { timeout: 480_000 },

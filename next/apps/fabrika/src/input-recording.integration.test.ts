@@ -15,6 +15,7 @@ import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { build } from "./build.ts";
+import { scopedEnv } from "./env.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -155,28 +156,8 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     `ssh-ed25519 ${Buffer.concat([field(Buffer.from("ssh-ed25519")), field(raw)]).toString("base64")}`,
   );
 
-  yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const previous = { fabrika: process.env.FABRIKA_HOME, alchemy: process.env.ALCHEMY_HOME };
-      process.env.FABRIKA_HOME = home;
-
-      return previous;
-    }),
-    (previous) =>
-      Effect.sync(() => {
-        if (previous.fabrika === undefined) {
-          delete process.env.FABRIKA_HOME;
-        } else {
-          process.env.FABRIKA_HOME = previous.fabrika;
-        }
-
-        if (previous.alchemy === undefined) {
-          delete process.env.ALCHEMY_HOME;
-        } else {
-          process.env.ALCHEMY_HOME = previous.alchemy;
-        }
-      }),
-  );
+  // localInstance sets ALCHEMY_HOME, so it goes back as it was too.
+  yield* scopedEnv({ FABRIKA_HOME: home }, ["ALCHEMY_HOME"]);
 
   const instance = yield* localInstance(
     built,

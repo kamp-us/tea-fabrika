@@ -38,6 +38,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vitest";
 import { build } from "./build.ts";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -192,34 +193,15 @@ const door = async (instance: Instance, key: Key, tab: string) => {
   return { call, close: () => socket.close() };
 };
 
-/** Sets one env value for the scope and puts the old one back. */
-const env = (name: string, value: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const old = process.env[name];
-      process.env[name] = value;
-
-      return old;
-    }),
-    (old) =>
-      Effect.sync(() => {
-        if (old === undefined) {
-          delete process.env[name];
-        } else {
-          process.env[name] = old;
-        }
-      }),
-  );
-
 /** One real local instance of the app's own build, with one founder whose window key is granted. */
 const startInstance = Effect.fnUntraced(
   function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    yield* env("DO_NOT_TRACK", "1");
+    yield* Effect.sync(noTracking);
     // A short home: a socket path has a 103-byte limit.
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "ds2a-" });
-    yield* env("FABRIKA_HOME", home);
+    yield* scopedEnv({ FABRIKA_HOME: home });
     yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
     const built = yield* build({ out: path.join(home, "dist") });
     const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);

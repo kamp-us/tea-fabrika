@@ -18,6 +18,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { expect } from "vitest";
 import { build } from "./build.ts";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -206,28 +207,9 @@ const world = Effect.fnUntraced(function* (mode: "writes" | "storage" | "reserve
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "q13-" });
-  yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const previous = { home: process.env.FABRIKA_HOME, alchemy: process.env.ALCHEMY_HOME };
-      process.env.FABRIKA_HOME = home;
-      process.env.DO_NOT_TRACK = "1";
-      return previous;
-    }),
-    (previous) =>
-      Effect.sync(() => {
-        if (previous.home === undefined) {
-          delete process.env.FABRIKA_HOME;
-        } else {
-          process.env.FABRIKA_HOME = previous.home;
-        }
-
-        if (previous.alchemy === undefined) {
-          delete process.env.ALCHEMY_HOME;
-        } else {
-          process.env.ALCHEMY_HOME = previous.alchemy;
-        }
-      }),
-  );
+  // localInstance sets ALCHEMY_HOME, so it goes back as it was too.
+  yield* scopedEnv({ FABRIKA_HOME: home }, ["ALCHEMY_HOME"]);
+  yield* Effect.sync(noTracking);
   yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
   const files: Record<string, string> = {};
 
