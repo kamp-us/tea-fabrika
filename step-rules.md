@@ -147,8 +147,11 @@ had a second root and 2,202 missing commits; in a full clone main and the stack 
 `6e9a51046`. That alarm was false.
 
 **Leak checks on the stack.** The stack lands by squash merge only. A branch built on the stack
-runs leakgrep twice: on the tree that lands (`git diff origin/main...HEAD > <scratch file>`, then
+runs leakgrep twice: on the lines that land, added lines only
+(`git diff -U0 origin/main...HEAD | grep '^+' | grep -v '^+++' > <scratch file>`, then
 `leakgrep.sh --text <scratch file>`), and on its own commits (`leakgrep.sh --commits <its base>..HEAD`).
+A plain `git diff` carries 3 context lines, and `--text` scans the whole file, so a moved blank line
+beside an old fixture drags that line in. The gate still fails closed on any hit in added lines.
 
 **Folds roll in batches.** Each sweep has one integrator branch. When 5 or more reviewed slices of
 a sweep sit unfolded, its integrator folds them (merge, never rebase), and the twin mails the head
