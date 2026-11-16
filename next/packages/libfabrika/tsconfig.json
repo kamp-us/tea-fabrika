@@ -53,6 +53,15 @@
               }
             }
           },
+          // These folders: mapMapErrorToMapBoth (E14).
+          {
+            "include": ["src/client/**/*.ts", "src/cloudflare/**/*.ts", "src/desktop/**/*.ts", "src/ledger/**/*.ts", "src/node/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "mapMapErrorToMapBoth": "error"
+              }
+            }
+          },
           // These folders: schemaStructWithTag (E11).
           {
             "include": ["src/client/**/*.ts", "src/node/**/*.ts", "src/processes/**/*.ts"],

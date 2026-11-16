@@ -49,12 +49,13 @@
               }
             }
           },
-          // These folders: instanceOfSchema (E10).
+          // These folders: instanceOfSchema (E10), mapMapErrorToMapBoth (E14).
           {
             "include": ["src/*.ts"],
             "options": {
               "diagnosticSeverity": {
-                "instanceOfSchema": "error"
+                "instanceOfSchema": "error",
+                "mapMapErrorToMapBoth": "error"
               }
             }
           },
