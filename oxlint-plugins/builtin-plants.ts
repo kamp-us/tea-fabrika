@@ -86,12 +86,54 @@ export const VI_METHODS: Plant = {
     ['export const i = "vi.spyOn(console)";', false],
     ["export const j = other.fn();", false],
     ["export const k = [describe, expect, it];", false],
-    // A documented miss, in oxlint 1.90.0 and 1.93.0 alike: a call chained onto the vi call is not
-    // refused, though the same call in parentheses is. L17's old spy had this shape, so the lock
-    // does not hold it yet (the app-e2e plan's L5); the review reads for it.
+    // The vitest rule's own miss, in oxlint 1.90.0 and 1.93.0 alike: a call chained onto the vi call
+    // is not refused, though the same call in parentheses is
+    // (https://github.com/oxc-project/oxc/issues/29656). These lines stay false under this rule's
+    // code; the lock still holds them, through its other half, VI_PROPERTIES.
     ['export const l = vi.spyOn(console, "warn").mockImplementation(() => undefined);', false],
     ["export const m = vi.fn().mockReturnValue(1);", false],
     ['export const n = (vi.spyOn(console, "warn")).mockImplementation(() => undefined);', true],
+  ],
+};
+
+/**
+ * The lock's other half (the app-e2e plan's amendment of 2026-11-16): oxlint's own
+ * `no-restricted-properties`, with an `object: "vi"` entry for each member the vitest rule bans, in
+ * every block that sets `vitest/no-restricted-vi-methods`. It matches the member access `vi.spyOn`
+ * itself, so it refuses a call with another call chained on, which the vitest rule misses
+ * (https://github.com/oxc-project/oxc/issues/29656). A line is held by the lock when this plant or
+ * VI_METHODS refuses it. Not in BUILTIN_PLANTS: no `vi` entry is on beside this file, a tooling path.
+ * Plant: drop a block's `vi` entries from `no-restricted-properties`, and the chained lines are not
+ * refused in that folder.
+ */
+export const VI_PROPERTIES: Plant = {
+  code: "eslint(no-restricted-properties)",
+  file: "planted.test.ts",
+  prelude: [TEST, 'import {vi as v} from "vitest";', "declare const other: {fn: () => unknown};"],
+  lines: [
+    // The chained calls the vitest rule misses.
+    ['export const a = vi.spyOn(console, "warn").mockImplementation(() => undefined);', true],
+    ["export const b = vi.fn().mockReturnValue(1);", true],
+    // L17's old spy, word for word (the app-e2e plan's L5).
+    ['export const c = vi.spyOn(console, "warn").mockImplementation(() => {});', true],
+    // One plain call of each banned member, and the forms the rule resolves.
+    ["export const d = vi.fn();", true],
+    ['vi.mock("./a.ts");', true],
+    ['vi.doMock("./b.ts");', true],
+    ['export const e = vi.spyOn(console, "warn");', true],
+    ['vi.stubEnv("A", "1");', true],
+    ['export const f = vi["spyOn"](console, "warn");', true],
+    ["export const g = vi?.fn();", true],
+    // 0555 leaves vi.hoisted open, and vi.waitFor is no mock.
+    ["export const h = vi.hoisted(() => 1);", false],
+    ["export const i = vi.waitFor(() => 1);", false],
+    // Not a member of vi: a comment, a string, another object's fn.
+    ["// vi.fn() in a comment", false],
+    ['export const j = "vi.spyOn(console)";', false],
+    ["export const k = other.fn();", false],
+    ["export const l = [describe, expect, it];", false],
+    // This rule's own miss: a renamed import is not followed. VI_METHODS refuses it.
+    ['export const m = v.spyOn(console, "warn");', false],
   ],
 };
 
