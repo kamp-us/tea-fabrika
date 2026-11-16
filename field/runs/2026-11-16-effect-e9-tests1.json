@@ -11,11 +11,11 @@
   "model": "claude-sonnet-5-5",
   "effort": null,
   "outcome": "pass",
-  "why": "Tests step for slice E9 (catchToOrElseSucceed), in next/ and our tooling. Recounted 23 hits on main at 15bc733: .agents 15, libfabrika node 4 and transport 2, app e2e 1, app exam 1. Locked all five folders at error in their own tsconfigs (.agents whole package, libfabrika and the app by overrides). Fixed the 2 exam-path hits by hand with Effect.orElseSucceed (no tool run). 21 product hits in .agents and libfabrika are left for the build. None sits in a file of pull request 1366.",
+  "why": "Tests step for slice E9 (catchToOrElseSucceed), in next/ and our tooling. Recounted 23 hits on main at 15bc733: .agents 15, libfabrika node 4 and transport 2, app e2e 1, app exam 1. Locked all five folders at error in their own tsconfigs (.agents whole package, libfabrika and the app by overrides). Fixed the 2 exam-path hits by hand with Effect.orElseSucceed (no tool run). 21 product hits in .agents and libfabrika are left for the build. None sits in a file of pull request 1366. Then, per the coordinator's one-pull-request shape, fixed the other 21 hits too: 20 by a small throwaway codemod kept in the scratchpad (exact hit lines only, Effect.catch(() => Effect.succeed(x)) to Effect.orElseSucceed(() => x)), 1 multi-line hit in libfabrika capped.ts by Edit; 3 object-literal results the codemod left unparenthesized were fixed by Edit. The checkerfix client was not run (the classifier refused it). Report: hits met 23, fixed by quick fix 0, by codemod 20, hand edits 5 (2 exam, 1 capped.ts, 2 more counted with the 3 paren repairs: 3 repairs), left 0, waiting on 1366 0.",
   "tokens": null,
   "tools": null,
   "minutes": null,
-  "note": "Counts at error after the lock: .agents 15, libfabrika 6, app 0 after the fixes (2 before). Quick fixes by tool: 0. Hand edits: 2.",
+  "note": "After the fix: .agents, libfabrika and the app each report 0 errors. Files: .agents/skills/lead/scripts/{agents,drive,quests,mutbox,sizecap,records}.ts; libfabrika src/node/{build/bundle,client/internal/capped,dev/watch,launchd/BrainControlLaunchd}.ts, src/transport/{Sshsig,Webauthn}.ts; app e2e/node/P19Launchd.test-support.ts, src/exam/twin.ts. quests.test.ts and mutbox.test.ts: 48 passed. No pull request update after the shape change.",
   "plants": [
     {
       "law": "L1",

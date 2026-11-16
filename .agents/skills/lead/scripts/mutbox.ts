@@ -616,7 +616,7 @@ const sh = Effect.fnUntraced(
     return { out, err, code: Number(code) };
   },
   Effect.scoped,
-  Effect.catch(() => Effect.succeed({ out: "", err: "the command could not start", code: 127 })),
+  Effect.orElseSucceed(() => ({ out: "", err: "the command could not start", code: 127 })),
 );
 
 /**
@@ -644,13 +644,13 @@ const tail = (s: string) => s.trim().split("\n").slice(-3).join(" | ").slice(-40
 const alive = (pid: number) =>
   Effect.try({ try: () => process.kill(pid, 0), catch: () => "gone" }).pipe(
     Effect.as(true),
-    Effect.catch(() => Effect.succeed(false)),
+    Effect.orElseSucceed(() => false),
   );
 
 /** Whether a live process holds the lock; a lock whose owner is dead is removed. */
 const heldBy = Effect.fnUntraced(function* (lock: string) {
   const fs = yield* FileSystem.FileSystem;
-  const owner = Number(yield* fs.readFileString(lock).pipe(Effect.catch(() => Effect.succeed(""))));
+  const owner = Number(yield* fs.readFileString(lock).pipe(Effect.orElseSucceed(() => "")));
 
   if (Number.isInteger(owner) && owner > 0 && (yield* alive(owner))) {
     return owner;
@@ -723,11 +723,11 @@ const readOut = Effect.fnUntraced(function* (box: string, name: string) {
   const path = yield* Path.Path;
   const file = path.join(box, name);
 
-  if (!(yield* fs.exists(file).pipe(Effect.catch(() => Effect.succeed(false))))) {
+  if (!(yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false)))) {
     return null;
   }
 
-  const real = yield* fs.realPath(file).pipe(Effect.catch(() => Effect.succeed("")));
+  const real = yield* fs.realPath(file).pipe(Effect.orElseSucceed(() => ""));
 
   if (real !== file) {
     return yield* new Stuck({
@@ -736,14 +736,14 @@ const readOut = Effect.fnUntraced(function* (box: string, name: string) {
     });
   }
 
-  return yield* fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed(null)));
+  return yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => null));
 });
 
 /** Decode one output file; text that does not fit is `null`, and never quoted anywhere. */
 const decoded = <S extends Schema.Top>(schema: S, raw: string | null) =>
   raw === null
     ? Effect.succeed(null)
-    : Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(raw).pipe(Effect.catch(() => Effect.succeed(null)));
+    : Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(raw).pipe(Effect.orElseSucceed(() => null));
 
 const readArm = Effect.fnUntraced(function* (box: string, name: "a" | "b", selected: number) {
   const fs = yield* FileSystem.FileSystem;
@@ -762,7 +762,7 @@ const readArm = Effect.fnUntraced(function* (box: string, name: "a" | "b", selec
   }
 
   const events = path.join(box, name, "events");
-  const names = (yield* fs.readDirectory(events).pipe(Effect.catch(() => Effect.succeed([])))).filter((n) =>
+  const names = (yield* fs.readDirectory(events).pipe(Effect.orElseSucceed(() => []))).filter((n) =>
     /^\d+-onMutantTested\.json$/.test(n),
   );
   const rows: Array<Row> = [];
@@ -859,7 +859,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   }
 
   yield* fs.makeDirectory(ask.out, { recursive: true }).pipe(Effect.ignore);
-  const out = yield* fs.realPath(ask.out).pipe(Effect.catch(() => Effect.succeed(ask.out)));
+  const out = yield* fs.realPath(ask.out).pipe(Effect.orElseSucceed(() => ask.out));
   const box = path.join(out, "box");
   const input = path.join(out, "in");
 

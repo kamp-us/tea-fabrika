@@ -171,7 +171,7 @@ const pnpmInstall: Install = (folder) =>
     return { code: Number(code), said: `${out}${err}`.trim().split("\n").slice(-5).join(" | ") };
   }).pipe(
     Effect.scoped,
-    Effect.catch(() => Effect.succeed({ code: 127, said: "pnpm could not start" })),
+    Effect.orElseSucceed(() => ({ code: 127, said: "pnpm could not start" })),
     Effect.provide(nodeServices),
   );
 
