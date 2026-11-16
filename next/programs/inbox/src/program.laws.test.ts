@@ -2,6 +2,7 @@
 import { applyCell } from "@demlik/tea";
 import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
+import { syncTest } from "@kampus/libfabrika/testing";
 import { Arbitrary, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { inboxMachine } from "./program.ts";
@@ -77,6 +78,40 @@ describe("ticket 884 the inbox program, slice 1", () => {
             return true;
           },
           { seed: SEED, numRuns: 1 },
+        );
+      }),
+    { arbitrary: { seed: SEED, runs: RUNS } },
+  );
+
+  // S2 (docs/direction/saved-state.md): the inbox saves through its program's state schema, and a
+  // load at any cut of I1's walk goes on as the run that never stopped. Plant, run once (0093):
+  // `init` ignores the loaded rows and starts empty: red.
+  it.effect.prop(
+    "S2: every save and load of a letter walk, repeats included, resumes to the same rows",
+    { moves: Moves },
+    ({ moves }) =>
+      Effect.gen(function* () {
+        const { inbox } = yield* Effect.promise(load);
+        let [model] = inbox.machine.init(null, {});
+        const msgs: Array<typeof Msg.Type> = [];
+
+        for (const { body, retry, pick } of moves) {
+          const known = model.rows[pick % Math.max(1, model.rows.length)];
+          const msg = retry && known !== undefined ? { ...body, id: known.id } : body;
+          msgs.push(msg);
+          [model] = applyCell(inbox.machine, model, msg);
+        }
+
+        syncTest(
+          inbox.machine,
+          {},
+          {
+            msgs,
+            encode: Schema.encodeSync(inbox.state.schema),
+            decode: Schema.decodeUnknownSync(inbox.state.schema),
+            equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+            seed: SEED,
+          },
         );
       }),
     { arbitrary: { seed: SEED, runs: RUNS } },

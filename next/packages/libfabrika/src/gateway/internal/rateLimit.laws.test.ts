@@ -4,6 +4,7 @@ import { propertyTrace } from "@demlik/tea/pbt";
 import { expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 import * as fc from "fast-check";
+import { syncTest } from "../../Testing.ts";
 import * as RateLimit from "../RateLimit.ts";
 import * as Rate from "./rateLimit.ts";
 
@@ -102,6 +103,30 @@ it.prop(
         return true;
       },
       { seed: 119120, numRuns: 1 },
+    );
+  },
+  { arbitrary: { seed: 119120, runs: 50 } },
+);
+
+// S2 (docs/direction/saved-state.md): the budget saves as JSON text through `Model`, its saved
+// schema, and a load at any cut goes on as the run that never stopped. Plant, run once (0093): `init`
+// ignores the loaded budget and starts fresh: red.
+const Saved = Schema.fromJsonString(Rate.Model);
+
+it.prop(
+  "S2: every save and load of a take walk resumes to the same budgets and reports (50 runs)",
+  { initial: Policy, picks: Tape },
+  ({ initial, picks }) => {
+    syncTest(
+      Rate.machine,
+      {},
+      {
+        msgs: trace(initial, picks),
+        encode: Schema.encodeSync(Saved),
+        decode: Schema.decodeUnknownSync(Saved),
+        equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+        seed: 119120,
+      },
     );
   },
   { arbitrary: { seed: 119120, runs: 50 } },

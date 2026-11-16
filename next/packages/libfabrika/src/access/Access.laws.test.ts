@@ -17,9 +17,10 @@
 // machine's own helpers.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Result } from "effect";
+import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
+import { syncTest } from "../Testing.ts";
 import { type Access, access, admitted, type Folded, type MemberEvent, members, type Reason } from "./Access.ts";
 import { allows, EMPTY, foldAccess } from "./AccessFold.ts";
 
@@ -789,6 +790,45 @@ describe("ticket 706, the access machine walked from init", () => {
       }
 
       expect(events).toEqual(copies);
+    });
+  });
+});
+
+/** JSON text a Map or a Set compares by: entries and members sorted, other keys sorted. */
+const sorted = (v: unknown): unknown => {
+  if (v instanceof Map) {
+    return [...v.entries()].toSorted(([a], [b]) => String(a).localeCompare(String(b)));
+  }
+
+  if (v instanceof Set) {
+    return [...v].toSorted();
+  }
+
+  return v !== null && typeof v === "object" && !Array.isArray(v)
+    ? Object.fromEntries(Object.entries(v).toSorted(([a], [b]) => a.localeCompare(b)))
+    : v;
+};
+
+const canon = (value: unknown): string => JSON.stringify(value, (_key, v: unknown) => sorted(v));
+
+describe("S2: the access fold passes the sync test", () => {
+  // S2 (docs/direction/saved-state.md): the Model saves as JSON text through its own schema's JSON
+  // codec, which writes the key map and the id set as JSON, and a load at any cut goes on as the
+  // run that never stopped. Plant, run once (0093): `init` ignores the loaded Model: red.
+  it("S2: every save and load of a membership walk resumes to the same Models and replies", () => {
+    const Saved = Schema.fromJsonString(Schema.toCodecJson(access.model));
+    walks((steps) => {
+      syncTest(
+        access,
+        {},
+        {
+          msgs: steps.map((s) => ({ type: "fold" as const, event: s.event })),
+          encode: Schema.encodeSync(Saved),
+          decode: Schema.decodeUnknownSync(Saved),
+          equals: (a, b) => canon(a) === canon(b),
+          seed: SEED,
+        },
+      );
     });
   });
 });

@@ -52,6 +52,7 @@ import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace, NoProc, Recipient, signalId } from "../processes/Process.ts";
 import { diff } from "../runtime/Patch.ts";
 import type { Binding } from "../runtime/Program.ts";
+import { syncTest } from "../Testing.ts";
 import * as Layout from "../tezgah/Layout.ts";
 import { type TezgahView, type Tile, type TileId, Workspace } from "../tezgah/Workspace.ts";
 import { ClientRecord } from "../transport/ClientRows.ts";
@@ -563,6 +564,57 @@ const walk = <W extends World, C extends Choice>(
 };
 
 const writes = (cmds: ReadonlyArray<Cmd>, tag: string) => cmds.filter(isWrite).filter((c) => c.call._tag === tag);
+
+/** JSON text with sorted keys: a decoded copy may order its fields differently. */
+const canon = (value: unknown): string =>
+  JSON.stringify(value, (_key, v: unknown) =>
+    v !== null && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).toSorted(([a], [b]) => a.localeCompare(b)))
+      : v,
+  );
+
+/**
+ * A window with its status burst left out. A load ends the burst on purpose (`loadedInto` hushes
+ * `said`: "the burst is over: the next status message starts a new line"), so the line's messages are
+ * the one part of the window a save does not carry; its `id` is kept, and is compared.
+ */
+const unsaid = (value: unknown): unknown =>
+  Schema.is(Schema.Struct({ said: Schema.Struct({ id: Schema.Number }) }))(value)
+    ? { ...value, said: { id: value.said.id } }
+    : value;
+
+describe("S2: the window parent passes the sync test", () => {
+  // S2 (docs/direction/saved-state.md): the window saves as JSON text through its Model's own schema,
+  // its tiles' own Models, link, handshake and client inside it, and a load at any cut of slice 1's
+  // walk goes on as the run that never stopped, every Cmd included, but for the status burst a load
+  // ends by design (`unsaid`). Plant, run once (0093): `init` ignores the loaded window and starts
+  // fresh: red.
+  it("S2: every save and load of a window walk resumes to the same window and Cmds", () => {
+    const Saved = Schema.fromJsonString(Schema.toType(machine.model));
+    fc.assert(
+      fc.property(walks, (list) => {
+        const msgs: Array<WindowMsg> = [];
+        let first = true;
+        fold(list.slice(0, 80), ({ m }) => {
+          // The fold's first call is its start, not a Msg the window took.
+          if (!first) {
+            msgs.push(m);
+          }
+
+          first = false;
+        });
+        syncTest(machine, ctx, {
+          msgs,
+          encode: Schema.encodeSync(Saved),
+          decode: Schema.decodeUnknownSync(Saved),
+          equals: (a, b) => canon(unsaid(a)) === canon(unsaid(b)),
+          seed: SEED,
+        });
+      }),
+      { seed: SEED, numRuns: 30 },
+    );
+  });
+});
 
 describe("L8: the window parent's connection", () => {
   // P18 slice 2 amended this law's one clause (the plan's mapping row): after a DOWN a tile must read

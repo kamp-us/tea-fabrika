@@ -6,6 +6,7 @@ import { Commit, Tree } from "@kampus/libfabrika/codehost/CodeHost";
 import { Started } from "@kampus/libfabrika/processes/Children";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { StartRefusal } from "@kampus/libfabrika/runtime/StartChild";
+import { syncTest } from "@kampus/libfabrika/testing";
 import { ConfigProvider, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Mail from "./Mail.ts";
@@ -529,6 +530,43 @@ for (const [law, reached] of [
     }
   });
 }
+
+// S2 (docs/direction/saved-state.md): the queue saves through its program's state schema, and a load
+// at any cut of a guided walk (enqueues, drops, resumes and the answers to the starts it asked for)
+// goes on as the run that never stopped, every Cmd included. Plant, run once (0093): `init` ignores
+// the loaded line and starts idle: red.
+it("S2: every save and load of a queue walk resumes to the same lines and Cmds", () => {
+  fc.assert(
+    fc.property(
+      world.chain((drawn) => {
+        const p = program({ ...drawn, enabled: true });
+        return arbGuidedSequence(
+          p.machine,
+          ctx,
+          {
+            outside: {
+              enqueue: draw.map((cell) => enqueue(cell, (cell.pick % 10) + 1)),
+              resume: fc.constant(Mail.Resume.make({ type: "resume" })),
+              drop: fc.integer({ min: 1, max: 10 }).map((change) => Mail.Drop.make({ type: "drop", change })),
+            },
+            answers: { start_child: { draw, make: (cmd: Start, cell: Cell) => startAnswer(p, cmd, cell) } },
+          },
+          { maxLength: 100, size: "max" },
+        ).map((msgs) => ({ p, msgs }));
+      }),
+      ({ p, msgs }) => {
+        syncTest(p.machine, ctx, {
+          msgs,
+          encode: Schema.encodeSync(p.state.schema),
+          decode: Schema.decodeUnknownSync(p.state.schema),
+          equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+          seed: 119120,
+        });
+      },
+    ),
+    { seed: 119120, numRuns: 100 },
+  );
+});
 
 // pinned: Q8 is a compile-time contract. CI checks the deliberately invalid assignments.
 const invalidModels = (idle: Extract<Model, { _tag: "idle" }>, entry: Entry) => {

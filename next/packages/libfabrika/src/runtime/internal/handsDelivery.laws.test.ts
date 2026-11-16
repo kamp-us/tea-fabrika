@@ -18,6 +18,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 import * as fc from "fast-check";
 import { fcResult } from "../../tasks/TasksTest.ts";
+import { syncTest } from "../../Testing.ts";
 import { Reply } from "../HandsTasks.ts";
 import { handsDelivery, State } from "./handsDelivery.ts";
 
@@ -134,6 +135,26 @@ describe("P39 slice 3: one hands Cmd's delivery", () => {
         "result+replied:refused:no_hands",
         "result+replied:refused:id_reused",
       ].sort(),
+    );
+  });
+
+  // S2 (docs/direction/saved-state.md): the runner saves `pending` or `waiting` on the dispatched
+  // Cmd, as JSON through `State`, and a load at any cut goes on as the run that never stopped. A
+  // saved `result` is checked too, though the runner never saves one. Plant, run once (0093):
+  // `init` ignores the loaded state and starts pending: red.
+  it("S2: every save and load of a reply walk resumes to the same states", () => {
+    const Saved = Schema.fromJsonString(State);
+    fc.assert(
+      fc.property(lists, (msgs) => {
+        syncTest(handsDelivery, ctx, {
+          msgs,
+          encode: Schema.encodeSync(Saved),
+          decode: Schema.decodeUnknownSync(Saved),
+          equals: same,
+          seed: RUNS.seed,
+        });
+      }),
+      RUNS,
     );
   });
 });

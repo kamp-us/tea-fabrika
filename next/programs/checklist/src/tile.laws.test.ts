@@ -11,6 +11,11 @@
 //
 // The walk starts at the real init, folds the real update, and picks each next move from the folded
 // draft: a typed text (empty, short, at the cap or past it), or a submit of what is there now.
+//
+// sync test left out: the tile is never booted from a save. Its draft belongs to the tab: the window
+// parent keeps the tile's Model inside its own as the tile's `own`, starts each tile with
+// `init(null)`, and a load restores the window, not the tile, so the tile's `init` takes no saved
+// model (S2, docs/direction/saved-state.md); the window's own sync test carries the draft.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Schema } from "effect";

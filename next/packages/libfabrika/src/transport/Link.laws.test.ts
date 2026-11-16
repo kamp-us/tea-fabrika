@@ -20,6 +20,7 @@ import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Schema } from "effect";
 import * as fc from "fast-check";
+import { syncTest } from "../Testing.ts";
 import { backoff, CAP, Link, linkMachine, type LinkMsg, linkTimer } from "./Link.ts";
 
 const SEED = 119120;
@@ -299,5 +300,32 @@ describe("L1: the link machine", () => {
       opts,
     );
     expect([...reached].sort()).toEqual(["blocked", "dialing", "online", "removed", "retrying", "waiting_grant"]);
+  });
+
+  // S2 (docs/direction/saved-state.md): the link saves as JSON text through `Link`, and a load at
+  // any cut goes on as the run that never stopped, its Cmds included. Plant, run once (0093): `init`
+  // ignores the loaded link and starts dialing on dial 1: red.
+  it("S2: every save and load of a link walk resumes to the same states and Cmds", () => {
+    const Saved = Schema.fromJsonString(Link);
+    fc.assert(
+      fc.property(walks, (list) => {
+        const msgs: Array<LinkMsg> = [];
+        fold(list, (_prev, m) => {
+          msgs.push(m);
+        });
+        syncTest(
+          linkMachine,
+          {},
+          {
+            msgs,
+            encode: Schema.encodeSync(Saved),
+            decode: Schema.decodeUnknownSync(Saved),
+            equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+            seed: SEED,
+          },
+        );
+      }),
+      opts,
+    );
   });
 });

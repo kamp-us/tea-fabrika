@@ -42,6 +42,7 @@
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { type Stepper, stepper } from "@kampus/libfabrika";
+import { syncTest } from "@kampus/libfabrika/testing";
 import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 
@@ -172,6 +173,8 @@ type World = {
   stops: Array<Cmd>;
   next: number;
   at: number;
+  /** Every letter and answer the stepper stepped, in order, for S2's sync test. */
+  taken: Array<unknown>;
 };
 
 /** One fold of the walk, with what it was, what it became and what it asked for. */
@@ -203,6 +206,7 @@ const begin = (p: Stepper): World => {
     stops: [],
     next: 1,
     at: 1,
+    taken: [],
   };
 };
 
@@ -212,6 +216,7 @@ const take = (p: Stepper, w: World, msg: unknown, saved: boolean) => {
   const before = w.view;
 
   if (s._tag === "stepped") {
+    w.taken.push(msg);
     w.model = s.model;
     // L11's program half: every view decodes as a client reads it, `child` and all.
     w.view = Schema.decodeUnknownSync(View)(s.view);
@@ -442,9 +447,17 @@ const tape = (kinds: ReadonlyArray<Kind>, most: number) =>
     { maxCommands: most, size: "max" },
   );
 
-/** Runs one tape from the real init, with workspace 1 attached first, and hands every event to `each`. */
-const walk = (p: Stepper, cmds: Iterable<fc.Command<{ events: Array<Event> }, { p: Stepper; w: World }>>) => {
+/**
+ * Runs one tape from the real init, with workspace 1 attached first, and hands every event to `each`.
+ * With `taken`, it also keeps every Msg the stepper stepped, in order.
+ */
+const walk = (
+  p: Stepper,
+  cmds: Iterable<fc.Command<{ events: Array<Event> }, { p: Stepper; w: World }>>,
+  taken?: Array<unknown>,
+) => {
   const w = begin(p);
+  w.taken = taken ?? w.taken;
   const events: Array<Event> = [];
   const first = move(p, w, "attach", 0);
   const opened = move(p, w, "answer", 0);
@@ -1111,6 +1124,41 @@ describe("Desk S3: focus moves at the program", () => {
           expect(shuffled.views, "L27: the clocks a letter carries change no view").toEqual(ascending.views);
           expect(descending.views, "L27: moves whose clocks run backward are still taken in arrival order").toEqual(
             ascending.views,
+          );
+        },
+      ),
+      { seed: SEED, numRuns: 200 },
+    );
+  });
+});
+
+// S2 (docs/direction/saved-state.md): tezgah saves through its program's state schema, and a load at
+// any cut of a walk (attaches, splits, closes, the answers to the starts it asked for, and refused
+// letters, which the stepper never steps) goes on as the run that never stopped, every Cmd
+// included. Plant, run once (0093): `init` ignores the loaded desk and starts with no workspace: red.
+describe("S2: tezgah passes the sync test", () => {
+  it("S2: every save and load of a desk walk resumes to the same desk and Cmds", async () => {
+    const p = await loaded();
+    const { tezgah } = await load();
+    fc.assert(
+      fc.property(
+        tape(
+          ["split_right", "split_down", "answer", "refuse", "attach", "reattach", "close", "close_waiting", "stop"],
+          40,
+        ),
+        (cmds) => {
+          const taken: Array<unknown> = [];
+          walk(p, cmds, taken);
+          syncTest(
+            tezgah.machine,
+            {},
+            {
+              msgs: taken as never,
+              encode: Schema.encodeSync(tezgah.state.schema),
+              decode: Schema.decodeUnknownSync(tezgah.state.schema),
+              equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+              seed: SEED,
+            },
           );
         },
       ),

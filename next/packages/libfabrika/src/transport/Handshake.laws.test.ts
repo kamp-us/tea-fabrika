@@ -24,7 +24,8 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Schema } from "effect";
-import { handshakeMachine } from "./Handshake.ts";
+import { syncTest } from "../Testing.ts";
+import { Handshake, handshakeMachine } from "./Handshake.ts";
 
 const SEED = 119120;
 
@@ -302,5 +303,39 @@ describe("P18 L2: the handshake answers only its own request", () => {
       return true;
     },
     { arbitrary: { seed: SEED, runs: 3, size: 120 } },
+  );
+});
+
+/** JSON text with sorted keys: a decoded copy may order its fields differently. */
+const canon = (value: unknown): string =>
+  JSON.stringify(value, (_key, v: unknown) =>
+    v !== null && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).toSorted(([a], [b]) => a.localeCompare(b)))
+      : v,
+  );
+
+describe("S2: the handshake passes the sync test", () => {
+  // S2 (docs/direction/saved-state.md): the handshake saves as JSON text through `Handshake`, and a
+  // load at any cut goes on as the run that never stopped, its hello and knock Cmds included. Plant,
+  // run once (0093): `init` ignores the loaded handshake and starts opened on dial 0: red.
+  it.prop(
+    "S2: every save and load of a handshake walk resumes to the same states and Cmds",
+    { list: Arbitrary.schema(Picks) },
+    ({ list }) => {
+      const Saved = Schema.fromJsonString(Handshake);
+      const msgs: Array<Msg> = [{ type: "opened", dial: 1, at: 0 }];
+      fold(list, ({ m }) => {
+        msgs.push(m);
+      });
+      syncTest(handshakeMachine, {} as never, {
+        msgs: msgs as never,
+        encode: Schema.encodeSync(Saved),
+        decode: Schema.decodeUnknownSync(Saved),
+        equals: (a, b) => canon(a) === canon(b),
+        seed: SEED,
+      });
+      return true;
+    },
+    runs,
   );
 });

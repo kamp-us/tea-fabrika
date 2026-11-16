@@ -8,6 +8,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
+import { syncTest } from "../../Testing.ts";
 import { Attached, Wait } from "../Wire.ts";
 import { connection } from "./connection.ts";
 
@@ -489,5 +490,37 @@ describe("T703 connection machine laws", () => {
     for (const tag of ["new", "waiting", "idle", "busy"]) {
       expect(restored, tag).toContain(tag);
     }
+  });
+
+  // S2 (docs/direction/saved-state.md): the Model itself saves as JSON text through its own schema,
+  // and `init(loaded)` at any cut goes on as the run that never stopped. Plant, run once (0093):
+  // `init` ignores the saved model and starts unloaded: red.
+  it("S2: every save and load of a walk, through the Model's schema, resumes to the same states", () => {
+    const SavedModel = Schema.fromJsonString(Schema.toType(connection.model));
+    const reached = new Set<string>();
+    fc.assert(
+      fc.property(Walk, (choices) => {
+        const msgs: Array<Msg> = [];
+        walk(choices, ({ msg, after }) => {
+          msgs.push(msg);
+          reached.add(after._tag);
+        });
+        syncTest(
+          connection,
+          {},
+          {
+            msgs,
+            encode: Schema.encodeSync(SavedModel),
+            decode: Schema.decodeUnknownSync(SavedModel),
+            equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+            seed: SEED,
+          },
+        );
+      }),
+      options,
+    );
+    expect([...reached].toSorted(), "S2: the walks save every loaded state").toEqual(
+      expect.arrayContaining(["busy", "idle", "new", "waiting"]),
+    );
   });
 });

@@ -36,10 +36,11 @@ import { describe, expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import type { Binding } from "../runtime/Program.ts";
+import { syncTest } from "../Testing.ts";
 import * as Layout from "../tezgah/Layout.ts";
 import { type Dir, type TezgahView, type Tile, type TileId, Workspace } from "../tezgah/Workspace.ts";
 import * as Keys from "./Keys.ts";
-import { Prefix } from "./Prefix.ts";
+import { Prefix, prefixMachine } from "./Prefix.ts";
 import { type WindowModel, type WindowMsg, windowMachineFor } from "./WindowMachine.ts";
 
 const SEED = 119120;
@@ -791,5 +792,77 @@ describe("Desk S4 L32: a split's letter never carries a fold", () => {
     );
     expect(seen.splits, "L32: the walks send splits").toBeGreaterThan(0);
     expect(seen.folded, "L32: the walks send splits from a window that folds some of its tiles").toBeGreaterThan(0);
+  });
+});
+
+/** JSON text with sorted keys: a decoded copy may order its fields differently. */
+const canon = (value: unknown): string =>
+  JSON.stringify(value, (_key, v: unknown) =>
+    v !== null && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).toSorted(([a], [b]) => a.localeCompare(b)))
+      : v,
+  );
+
+// S2 (docs/direction/saved-state.md): the prefix's Model saves as JSON text through its own schema.
+const SavedPrefix = Schema.fromJsonString(Schema.toType(prefixMachine.model));
+
+type PrefixMsg = Parameters<typeof prefixMachine.update>[1];
+
+describe("S2: the prefix machine passes the sync test", () => {
+  // Plant, run once (0093): `init` ignores the loaded prefix and starts idle: red, "init(loaded) is
+  // not the model that was saved".
+  it("S2: every save and load of a prefix walk resumes to the same models and Cmds", () => {
+    const reached = new Set<string>();
+    fc.assert(
+      fc.property(
+        fc.array(fc.record({ pick: fc.nat(), tile: fc.nat({ max: 50 }), at: fc.nat({ max: 1e6 }) }), {
+          minLength: 1,
+          maxLength: 30,
+        }),
+        (tape) => {
+          let [model] = prefixMachine.init(null, undefined);
+          const msgs: Array<PrefixMsg> = [];
+
+          // Each move is one the prefix's state takes next: idle arms, armed asks, any key ends it.
+          for (const { pick, tile, at } of tape) {
+            const moves =
+              model._tag === "idle"
+                ? (["arm", "done"] as const)
+                : model._tag === "armed"
+                  ? (["question", "done", "arm"] as const)
+                  : (["done", "arm", "question"] as const);
+            const move = moves[pick % moves.length] ?? "done";
+            const msg: PrefixMsg =
+              move === "arm"
+                ? { type: "arm", at }
+                : move === "question"
+                  ? { type: "question", tile: typeId("tile", tile + 1) as TileId, at }
+                  : { type: "done" };
+            reached.add(`${model._tag}:${move}`);
+            msgs.push(msg);
+            [model] = applyCell(prefixMachine, model, msg);
+          }
+
+          syncTest(prefixMachine, undefined, {
+            msgs,
+            encode: Schema.encodeSync(SavedPrefix),
+            decode: Schema.decodeUnknownSync(SavedPrefix),
+            equals: (a, b) => canon(a) === canon(b),
+            seed: SEED,
+          });
+        },
+      ),
+      { seed: SEED, numRuns: 100 },
+    );
+    expect([...reached].toSorted(), "S2: the walks reach every state and every move it takes").toEqual([
+      "armed:arm",
+      "armed:done",
+      "armed:question",
+      "asking:arm",
+      "asking:done",
+      "asking:question",
+      "idle:arm",
+      "idle:done",
+    ]);
   });
 });

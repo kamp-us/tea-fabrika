@@ -11,6 +11,7 @@ import { Option, Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import * as Access from "../../access/Access.ts";
+import { syncTest } from "../../Testing.ts";
 import * as Waiting from "./waiting.ts";
 
 type Model = typeof Waiting.machine.model.Type;
@@ -375,6 +376,28 @@ describe("ticket 707: the waiting machine walks", () => {
             expect(s).toEqual(later.after);
           }
         }
+      }),
+      runs,
+    );
+  });
+
+  // S2 (docs/direction/saved-state.md): the same walk through the library's one sync test, from the
+  // first cut, before any Msg, to the last. Plant, run once (0093): `init` ignores the loaded rows
+  // and starts empty: red.
+  it("S2: every save and load of a walk, through the stored shape, resumes to the same models and Cmds", () => {
+    fc.assert(
+      fc.property(Walk, (walk) => {
+        syncTest(
+          Waiting.machine,
+          { most: walk.most, ttl: walk.ttl },
+          {
+            msgs: fold(walk).steps.map((s) => s.msg),
+            encode: Schema.encodeSync(json()),
+            decode: Schema.decodeUnknownSync(json()),
+            equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+            seed: runs.seed,
+          },
+        );
       }),
       runs,
     );

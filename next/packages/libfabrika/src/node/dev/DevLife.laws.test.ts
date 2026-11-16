@@ -2,6 +2,11 @@
 // The walk reads the folded state before it picks each move (0093), and an independent reference
 // written from the plan's transition table checks each step. The memory restart plan
 // (docs/plan/quests/memory-restart-PLAN.md) adds `replacing` and its laws L1 to L4.
+//
+// sync test left out: the life is one run of the local runtime and is never saved. A new run starts
+// in `starting` from the last start an earlier run saved (`ctx.last`, DevLife.ts's "Details"), and
+// the processes and listeners a state names do not outlive their run, so `init` ignores a saved
+// model (S2, docs/direction/saved-state.md).
 import { applyCell } from "@demlik/tea";
 import { Predicate, Schema } from "effect";
 import * as fc from "fast-check";

@@ -206,7 +206,7 @@
     {
       "name": "next-runtime",
       "layer": 6,
-      "paths": ["next/packages/libfabrika/src/runtime", "next/packages/libfabrika/src/Testing.ts"],
+      "paths": ["next/packages/libfabrika/src/runtime"],
       "imports": [
         "next-runtime-coordination",
         "next-access",
@@ -400,6 +400,7 @@
         "next/packages/libfabrika/src/SpanTag.ts",
         "next/packages/libfabrika/src/Sql.ts",
         "next/packages/libfabrika/src/Rev.ts",
+        "next/packages/libfabrika/src/Testing.ts",
         "next/packages/libfabrika/src/Testing.test-support.ts"
       ],
       "imports": []

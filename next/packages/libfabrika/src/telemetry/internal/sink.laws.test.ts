@@ -2,6 +2,10 @@
 // before the machine. Each law walks the real machine from its real `init` (0093): a move is picked
 // from the Model folded so far, so a shrunk walk picks its moves again. The expected answer is a
 // history of what was offered, what committed and what flush saw, never the machine's own table.
+//
+// sync test left out: the sink is memory only by design (sink.ts: "a new sink starts clean and
+// unchecked"), so its `init` takes no saved model and nothing saves one, and its unchecked hour is
+// -Infinity, which JSON text cannot hold (S2, docs/direction/saved-state.md).
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Arbitrary, Schema } from "effect";

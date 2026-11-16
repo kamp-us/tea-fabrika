@@ -6,6 +6,7 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Change, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { Saved } from "@kampus/libfabrika/runtime/State";
+import { syncTest } from "@kampus/libfabrika/testing";
 import { Arbitrary, ConfigProvider, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import * as ChangeKind from "./Change.ts";
@@ -629,6 +630,28 @@ describe("the merger, next/", () => {
       expect(reached, `${law} reached its deciding event`).toBeGreaterThan(0);
     });
   }
+
+  // S2 (docs/direction/saved-state.md): the merger saves through its program's state schema, and a
+  // load at any cut of a generated world's walk goes on as the run that never stopped, every Cmd
+  // included. Plant, run once (0093): `init` ignores the loaded job and starts idle: red.
+  it("S2: every save and load of a merger walk resumes to the same jobs and Cmds", () => {
+    const walks = world.chain((w) => {
+      const p = merger(settingsFor(w));
+      return guided(p, w).map((msgs) => ({ p, msgs }));
+    });
+    fc.assert(
+      fc.property(walks, ({ p, msgs }) => {
+        syncTest(p.machine, ctx, {
+          msgs,
+          encode: Schema.encodeSync(p.state.schema),
+          decode: Schema.decodeUnknownSync(p.state.schema),
+          equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+          seed: 119120,
+        });
+      }),
+      { seed: 119120, numRuns: 100 },
+    );
+  });
 
   it("L14: refusal, old answers and send receipts preserve the job and its alarm", () => {
     fc.assert(

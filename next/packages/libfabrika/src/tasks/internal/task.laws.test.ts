@@ -10,7 +10,9 @@
 // another process collect.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import { Schema } from "effect";
 import * as fc from "fast-check";
+import { syncTest } from "../../Testing.ts";
 import { type Executor, type Request, Result, State } from "../Task.ts";
 import {
   CAPABILITIES,
@@ -279,7 +281,11 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
 /** A move, or a move in the one phase it must have been played in. */
 type Done = Move | `${Move}@${Phase}`;
 
-const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<Done>) =>
+// S2 (docs/direction/saved-state.md): the task's Model saves as JSON text through its own schema.
+const Saved = Schema.fromJsonString(Schema.toType(task.model));
+
+/** With `sync`, the law also runs the library's sync test on every walk it made. */
+const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<Done>, sync = false) =>
   it(name, () => {
     const done = new Set<Done>();
     fc.assert(
@@ -287,6 +293,7 @@ const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<D
         let model = init();
         let world: World = { phase: "absent" };
         const accepted: Array<Msg> = [];
+        const all: Array<Msg> = [];
         expect(model.state, "a task starts absent").toEqual(State.cases.absent.make({}));
 
         for (const cell of tape.cells) {
@@ -300,6 +307,7 @@ const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<D
           const [msg, next, answer] = play(world, tape, cell, move);
           const before = model.state;
           model = step(model, msg);
+          all.push(msg);
           done.add(move).add(`${move}@${world.phase}`);
 
           expect(model.answer._tag, `${move}: the answer`).toBe(answer.answer);
@@ -319,6 +327,16 @@ const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<D
           // L7 on every prefix: folding only the committed events from a fresh init is the same task.
           const replayed = accepted.reduce(step, init());
           expect(replayed.state, `${move}: the committed events fold back to the same task`).toEqual(model.state);
+        }
+
+        if (sync) {
+          syncTest(task, undefined, {
+            msgs: all,
+            encode: Schema.encodeSync(Saved),
+            decode: Schema.decodeUnknownSync(Saved),
+            equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+            seed: RUNS.seed,
+          });
         }
       }),
       RUNS,
@@ -390,6 +408,13 @@ describe("P39 slice 1: the task machine", () => {
       "finish_other",
     ],
     ["request_new", "take_ok", "start_ok", "finish_ok", "take_again", "finish_equal"],
+  );
+  // Plant, run once (0093): `init` ignores the loaded task and starts absent: red.
+  law(
+    "S2: every save and load of a task walk, collect included, resumes to the same tasks and answers",
+    [...LIFE, ...COLLECT, "request_equal", "request_changed", "take_again", "start_wrong", "finish_equal"],
+    ["request_new", "take_ok", "start_ok", "finish_ok", "collect_ok", "request_changed", "finish_equal"],
+    true,
   );
   law(
     "J1: collect is legal only in finished, once, by the requesting process, and collected never leads back to execution",

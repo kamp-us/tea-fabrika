@@ -27,8 +27,9 @@ import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { ProcessId } from "../ProcessId.ts";
+import { syncTest } from "../Testing.ts";
 import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";
-import { clientMachineFor, foldName, resolveName, sendable } from "./Client.ts";
+import { Client as ClientModel, clientMachineFor, foldName, resolveName, sendable } from "./Client.ts";
 import { apply, diff } from "./Patch.ts";
 
 const SEED = 119120;
@@ -350,6 +351,34 @@ describe("L4: client letters (p1)", () => {
             expect(next.pending).toEqual(prev.c.pending);
           }
         });
+      }),
+      opts,
+    );
+  });
+
+  // S2 (docs/direction/saved-state.md): the client saves as JSON text through `Client`, and a load
+  // at any cut of a letter walk (presses, dates, replies, reads and notices) goes on as the run that
+  // never stopped, its asks included. Plant, run once (0093): `init` ignores the loaded client and
+  // starts empty: red.
+  it("S2: every save and load of a letter walk resumes to the same client and Cmds", () => {
+    const Saved = Schema.fromJsonString(ClientModel);
+    fc.assert(
+      fc.property(letterWalks, (list) => {
+        const msgs: Array<Msg> = [];
+        letterWalk(list, (_prev, m) => {
+          msgs.push(m);
+        });
+        syncTest(
+          machineWith(LETTER_KINDS, []),
+          {},
+          {
+            msgs,
+            encode: Schema.encodeSync(Saved),
+            decode: Schema.decodeUnknownSync(Saved),
+            equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+            seed: SEED,
+          },
+        );
       }),
       opts,
     );

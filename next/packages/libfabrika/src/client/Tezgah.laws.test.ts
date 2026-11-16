@@ -15,14 +15,22 @@
 import { applyCell } from "@demlik/tea";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Arbitrary, Result, Schema } from "effect";
+import { Arbitrary, Effect, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
 import type { Binding } from "../runtime/Program.ts";
+import { syncTest } from "../Testing.ts";
 import * as Layout from "../tezgah/Layout.ts";
-import { type Tile, type TileId, TezgahView, Workspace } from "../tezgah/Workspace.ts";
+import { type Tile, type TileId, TileId as TileIdSchema, TezgahView, Workspace } from "../tezgah/Workspace.ts";
 import * as Keys from "./Keys.ts";
-import { optimisticState, type PendingMutation, type TezgahClient, tezgahMachine } from "./Tezgah.ts";
+import {
+  optimisticState,
+  type PendingMutation,
+  type TezgahClient,
+  TezgahClient as TezgahClientSchema,
+  type TezgahMsg,
+  tezgahMachine,
+} from "./Tezgah.ts";
 import {
   type Handling,
   handle,
@@ -1451,5 +1459,103 @@ describe("Ticket 1043: a burst of presses is judged as the same presses one step
       counts.raced,
       "1043: the walks reach a prefix move followed at once by a prefix split, judged while the move waits unread",
     ).toBeGreaterThan(0);
+  });
+});
+
+// S2 (docs/direction/saved-state.md): the window's tezgah child saves as JSON text through
+// `TezgahClient`, and a load at any cut goes on as the run that never stopped, its asks and its
+// settled rows included. The walk folds the child itself from its real init: each step reads the
+// child it reached and sends a whole view, the next patch or a gap, a focus move between the shown
+// tiles, the letter id for a move still waiting, or tezgah's answer to a sent move, or to a letter
+// it never sent. Plant, run once (0093): `init` ignores the loaded child and starts with no server
+// state: red.
+/** One view from TezgahView's own Arbitrary, drawn by a fast-check seed so the walk can be fast-check's. */
+const views = fc
+  .nat()
+  .map((seed) => Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(TezgahView), { seed, count: 1 }))[0]!);
+
+// Unbiased picks: fast-check leans small numbers toward the first move otherwise.
+const SyncStep = fc.record({
+  move: fc.noBias(fc.nat()),
+  pick: fc.noBias(fc.nat()),
+  to: fc.nat(3),
+  ms: fc.nat(5_000),
+  cursor: fc.option(fc.string({ maxLength: 8 }), { nil: null }),
+});
+
+const SPARE = [typeId("tile", 901), typeId("tile", 902)].map((id) => Schema.decodeUnknownSync(TileIdSchema)(id));
+
+describe("S2: the window's tezgah child passes the sync test", () => {
+  it("S2: every save and load of a view, patch and focus-move walk resumes to the same child and Cmds", () => {
+    const Saved = Schema.fromJsonString(TezgahClientSchema);
+    const reached = new Set<string>();
+    fc.assert(
+      fc.property(views, fc.array(SyncStep, { minLength: 4, maxLength: 40 }), (first, steps) => {
+        const wires = [
+          first,
+          { workspaces: first.workspaces.slice(1), tiles: first.tiles.slice(1) },
+          { workspaces: [], tiles: [] },
+        ].map(onWire);
+        let [m] = tezgahMachine.init(null, { workspace: 1 });
+        let n = 0;
+        const msgs: Array<TezgahMsg> = [];
+
+        for (const s of steps) {
+          const target = wires[s.to % wires.length];
+          const shown = m.serverState === null ? null : onWire(m.serverState);
+          // The shown tiles, and two the view may not hold: a move names tiles, shown or not.
+          const tiles = [...(m.serverState?.tiles.map((t) => t.id) ?? []), ...SPARE];
+          const waiting = m.pendingMutations.flatMap((p) => (p.state._tag === "waiting" ? [p.state.n] : []));
+          const sent = m.pendingMutations.flatMap((p) => (p.state._tag === "sent" ? [p.state.letter] : []));
+          const options: Array<TezgahMsg> = [
+            { type: "server", rev: m.rev + 1, view: target },
+            { type: "patch", base: m.rev, rev: m.rev + 1 + (s.pick % 2), patch: diff(shown, target) },
+            { type: "accepted", letter: `letter_never_${s.pick}`, pos: s.pick, ms: s.ms },
+          ];
+
+          const from = tiles[s.pick % tiles.length]!;
+          const to = tiles[(s.pick + 1) % tiles.length]!;
+          options.push({ type: "move", n: ++n, from, to, cursor: s.cursor });
+
+          if (waiting.length > 0) {
+            options.push({ type: "dated", n: waiting[s.pick % waiting.length]!, letter: `letter_${s.pick}_${n}` });
+          }
+
+          if (sent.length > 0) {
+            const letter = sent[s.pick % sent.length]!;
+            options.push(
+              { type: "accepted", letter, pos: m.rev + (s.pick % 3), ms: s.ms },
+              { type: "refused", letter, ms: s.ms },
+            );
+          }
+
+          const msg = options[s.move % options.length]!;
+          reached.add(msg.type);
+          msgs.push(msg);
+          [m] = applyCell(tezgahMachine, m, msg);
+        }
+
+        syncTest(
+          tezgahMachine,
+          { workspace: 1 },
+          {
+            msgs,
+            encode: Schema.encodeSync(Saved),
+            decode: Schema.decodeUnknownSync(Saved),
+            equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+            seed: SEED,
+          },
+        );
+      }),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect([...reached].toSorted(), "S2: the walks send every Msg the child takes").toEqual([
+      "accepted",
+      "dated",
+      "move",
+      "patch",
+      "refused",
+      "server",
+    ]);
   });
 });

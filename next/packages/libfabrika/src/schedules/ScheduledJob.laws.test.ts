@@ -4,6 +4,7 @@ import { arbGuidedSequence, propertyTrace, stubCtxThrowingProxy } from "@demlik/
 import { Result, Schema } from "effect";
 import fc from "fast-check";
 import { expect, it } from "vitest";
+import { syncTest } from "../Testing.ts";
 import * as ScheduledJob from "./ScheduledJob.ts";
 
 const write = Cmd.make("write", {
@@ -186,6 +187,27 @@ it("L4: only positive whole millisecond periods succeed", () => {
       }
 
       expect(Result.isSuccess(make(good))).toBe(true);
+    }),
+    options,
+  );
+});
+
+// S2 (docs/direction/saved-state.md): the job's state saves as JSON text through `Model`, and a load
+// at any cut goes on as the run that never stopped, its work Cmds included. Plant, run once (0093):
+// `init` ignores the loaded state and starts idle at 0: red.
+const Saved = Schema.fromJsonString(ScheduledJob.Model);
+
+it("S2: every save and load of a job walk resumes to the same states and work", () => {
+  fc.assert(
+    fc.property(walks, ({ ms, messages }) => {
+      const { machine } = Result.getOrThrow(make(ms));
+      syncTest(machine, ctx, {
+        msgs: messages,
+        encode: Schema.encodeSync(Saved),
+        decode: Schema.decodeUnknownSync(Saved),
+        equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+        seed: options.seed,
+      });
     }),
     options,
   );

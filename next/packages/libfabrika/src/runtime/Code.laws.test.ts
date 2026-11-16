@@ -25,6 +25,7 @@ import { Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import type { ProgramName } from "../packs/ProgramName.ts";
+import { syncTest } from "../Testing.ts";
 import * as Code from "./Code.ts";
 
 const SEED = 119120;
@@ -278,5 +279,31 @@ describe("P15 slice 1: the brain's code per program", () => {
     for (const name of ["same", "first", "was", "loaded", "checked_repeat", "checked_earlier", "checked_selected"]) {
       expect(seen.has(name), `the walk reaches ${name}`).toBe(true);
     }
+  });
+
+  // S2 (docs/direction/saved-state.md): the selection saves as JSON text through `Selected`, and
+  // `init(saved)` at any cut goes on as the run that never stopped, appends and swaps included.
+  // Plant, run once (0093): `init` ignores the saved selection and starts empty: red.
+  it("S2: every save and load of a code walk resumes to the same selections, appends and swaps", () => {
+    fc.assert(
+      fc.property(tapes, ([programs, tape]) => {
+        const msgs: Array<Msg> = [];
+        walk(programs, tape, (_before, move) => {
+          msgs.push(move.msg);
+        });
+        syncTest(
+          Code.code,
+          {},
+          {
+            msgs,
+            encode: Schema.encodeSync(Stored),
+            decode: Schema.decodeUnknownSync(Stored),
+            equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+            seed: SEED,
+          },
+        );
+      }),
+      { seed: SEED, numRuns: RUNS },
+    );
   });
 });

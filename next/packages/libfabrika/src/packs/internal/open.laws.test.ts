@@ -1,5 +1,9 @@
 // T878, next/, L4 and L6. Every cell chooses from the real pending work in the folded prefix.
 // After build plants: drop selection/request matching; enter ready on answer; treat a failure as saved.
+//
+// sync test left out: the opening is one client's session held in memory (packs/Open.ts keeps it in
+// a Ref and never saves it), rebuilt from the saved trust history through `history`, so its `init`
+// takes no saved model (S2, docs/direction/saved-state.md).
 import { applyCell } from "@demlik/tea";
 import { propertyInvariant } from "@demlik/tea/pbt";
 import { expect, it } from "@effect/vitest";

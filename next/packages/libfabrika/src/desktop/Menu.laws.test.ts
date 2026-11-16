@@ -1,4 +1,9 @@
 // next/, ticket 887, P21 slice 1. Each plant named here runs after Menu.ts exists.
+//
+// sync test left out: the menu's model is never loaded by design (Menu.ts, `machine`: "every start
+// is idle and connecting, with no rows, no clients and no check in flight"); its rows, clients and
+// link are read again from the brain after each start, so `init` ignores a saved model (S2,
+// docs/direction/saved-state.md).
 import { arbGuidedSequence, foldEvents, propertyInvariant, propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Schema } from "effect";

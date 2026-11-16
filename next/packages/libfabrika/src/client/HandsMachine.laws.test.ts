@@ -37,6 +37,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
 import * as fc from "fast-check";
 import { fcTypeId } from "../tasks/TasksTest.ts";
+import { syncTest } from "../Testing.ts";
 import {
   admitted,
   answerText,
@@ -179,7 +180,8 @@ type Option = { readonly label: string; readonly weight: number; readonly run: (
 
 const rpc = (body: object) => JSON.stringify({ jsonrpc: "2.0", ...body });
 
-const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
+/** With `sent`, the walk also keeps every Msg it sent the machine, in order (S2's input). */
+const walk = (tape: Tape, moves: Moves, done: Set<string>, sent?: Array<Sent>) => {
   const [s0, cmds0] = boot();
   const w: World = {
     s: s0,
@@ -309,6 +311,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
   const apply = (m: Sent) => {
     const prev = w.s;
     const [next, cmds] = step(prev, m);
+    sent?.push(m);
     check(next, cmds);
 
     // A refusal for good is kept for the link it came on: a link that left online, by a close or by
@@ -860,4 +863,32 @@ describe("P39 slice 4a: the hands machine", () => {
     ],
     100,
   );
+
+  // S2 (docs/direction/saved-state.md): the hands client saves as JSON text through its Model's own
+  // schema, and a load at any cut of a walk with no restart goes on as the run that never stopped,
+  // every Cmd included. Plant, run once (0093): `init` ignores the loaded model and boots on dial 1:
+  // red.
+  it("S2: every save and load of a hands walk resumes to the same models and Cmds", () => {
+    const Saved = Schema.fromJsonString(Schema.toType(handsMachine.model));
+    const done = new Set<string>();
+    fc.assert(
+      fc.property(Tape, (tape) => {
+        const sent: Array<Sent> = [];
+        walk(tape, { forge: true, finish: ["ok"], restart: false }, done, sent);
+        syncTest(
+          handsMachine,
+          {},
+          {
+            msgs: sent as never,
+            encode: Schema.encodeSync(Saved),
+            decode: Schema.decodeUnknownSync(Saved),
+            equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+            seed: SEED,
+          },
+        );
+      }),
+      { seed: SEED, numRuns: 100, includeErrorInReport: true },
+    );
+    expect([...done], "the walks execute and report").toEqual(expect.arrayContaining(["execute", "finish_sent"]));
+  });
 });

@@ -2,6 +2,10 @@
 // (0093): each choice is read against the state folded so far, so it names a process, watch or
 // name the fold has reached, or one it has not, on purpose. The expected state is this file's own
 // reading of the plan's transition table, never the machine or its driver.
+//
+// sync test left out: the table is disposable and never saved. `ProcessTable` (Process.ts) folds it
+// again from the ledger's entries, "nothing about a process is kept outside the ledger", so its
+// `init` takes no saved model (S2, docs/direction/saved-state.md).
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Option, Result, Schema } from "effect";

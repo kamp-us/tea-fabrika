@@ -94,7 +94,7 @@ refusal in the type, and fast-check can then state laws over every refusal.
 
 ## Holds it
 
-- Laws: refusals are properties over the `Result` (`access/AccessMachine.laws.test.ts:773-775`
+- Laws: refusals are properties over the `Result` (`access/Access.laws.test.ts:774-776`
   checks a step's success and failure against the model).
 - Lint, on: `fabrika/no-throw-in-effect-gen` refuses a throw inside `Effect.gen`. No rule finds a
   throw in plain domain code; review holds it.

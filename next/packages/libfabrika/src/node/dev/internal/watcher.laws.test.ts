@@ -4,6 +4,7 @@ import { arbGuidedSequence, propertyTrace } from "@demlik/tea/pbt";
 import { expect, expectTypeOf, it } from "@effect/vitest";
 import { Schema } from "effect";
 import * as fc from "fast-check";
+import { syncTest } from "../../../Testing.ts";
 
 it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attempt advances boot to watch", async () => {
   const { watcher } = await import("./watcher.ts");
@@ -58,6 +59,19 @@ it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attemp
       }
 
       expect(final._tag).toBe(attemptedCount === 0 ? "booting" : "watching");
+      // S2 (docs/direction/saved-state.md): a save at any cut, loaded through `init`, goes on as the
+      // run that never stopped. Plant, run once (0093): `init` ignores the loaded model: red.
+      syncTest(
+        watcher,
+        {},
+        {
+          msgs: steps.map((step) => step.msg),
+          encode: Schema.encodeSync(json),
+          decode: Schema.decodeUnknownSync(json),
+          equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+          seed: 119120,
+        },
+      );
       return true;
     },
     { seed: 119120, numRuns: 100, failOnNeverActed: true },
