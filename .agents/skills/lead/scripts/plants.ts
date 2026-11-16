@@ -5,7 +5,7 @@
 // existed, and the quest looped (acpcancel and sjob1, 2026-11-11). The chain writes this section
 // into a review's brief instead.
 
-import { Schema } from "effect";
+import { Array as Arr, Option, Schema } from "effect";
 
 /**
  * One plant as the state file keeps it, read loosely as the host step reads its entries: the
@@ -44,11 +44,13 @@ export type LawRecord = {
 const MAX_CELL = 300;
 
 const rowCells = (line: string) =>
-  line
-    .trim()
-    .replace(/^\||\|$/g, "")
-    .split("|")
-    .map((c) => c.trim());
+  Arr.map(
+    line
+      .trim()
+      .replace(/^\||\|$/g, "")
+      .split("|"),
+    (c) => c.trim(),
+  );
 
 const bare = (cell: string) => cell.replace(/^[`*]+|[`*]+$/g, "").trim();
 
@@ -69,11 +71,11 @@ export const failuresIn = (report: string, law: string): string[] => {
     const cells = rowCells(line);
 
     if (header === null) {
-      header = cells.map((c) => bare(c).toLowerCase());
+      header = Arr.map(cells, (c) => bare(c).toLowerCase());
       continue;
     }
 
-    const plantTable = header[0] === "law" && header.some((h) => h.includes("plant"));
+    const plantTable = header[0] === "law" && Arr.some(header, (h) => h.includes("plant"));
 
     if (plantTable && cells.length > 1 && bare(cells[0] ?? "") === law) {
       found.push((cells.at(-1) ?? "").slice(0, MAX_CELL));
@@ -88,25 +90,28 @@ export const failuresIn = (report: string, law: string): string[] => {
  * report's text, `null` when the file is gone.
  */
 export const records = (steps: ReadonlyArray<unknown>, read: (path: string) => string | null): LawRecord[] => {
-  const lastBuild = steps.findLastIndex(Schema.is(BuildEntry));
-  const buildHead = lastBuild === -1 ? null : (steps[lastBuild] as typeof BuildEntry.Type).head;
+  const lastBuild = Arr.findLastIndex(steps, Schema.is(BuildEntry));
+  const buildHead = Option.match(lastBuild, {
+    onNone: () => null,
+    onSome: (at) => (steps[at] as typeof BuildEntry.Type).head,
+  });
   const byLaw = new Map<string, LawRecord>();
 
-  steps.forEach((step, at) => {
+  Arr.forEach(steps, (step, at) => {
     if (!Schema.is(TestsEntry)(step)) {
       return;
     }
 
     const report = step.report === undefined || step.report === null ? null : read(step.report);
-    const older = at < lastBuild && step.head !== buildHead;
+    const older = Option.exists(lastBuild, (last) => at < last) && step.head !== buildHead;
 
-    for (const law of new Set(step.plants.map((p) => p.law))) {
+    for (const law of new Set(Arr.map(step.plants, (p) => p.law))) {
       // A later answer that names the law replaces the earlier one whole.
       byLaw.delete(law);
       byLaw.set(law, {
         law,
         head: step.head,
-        plants: step.plants.filter((p) => p.law === law),
+        plants: Arr.filter(step.plants, (p) => p.law === law),
         failures: report === null ? [] : failuresIn(report, law),
         older,
       });
@@ -133,9 +138,9 @@ export const section = (records: ReadonlyArray<LawRecord>, build: string | null)
 
   for (const r of records) {
     lines.push(`- ${r.law}, at ${short(r.head)}${r.older ? ", older than the last build" : ""}:`);
-    lines.push(...r.plants.map((p) => `  - ${p.result}: ${p.plant}`));
-    lines.push(...r.failures.map((f) => `  - the report's failure: ${f}`));
+    lines.push(...Arr.map(r.plants, (p) => `  - ${p.result}: ${p.plant}`));
+    lines.push(...Arr.map(r.failures, (f) => `  - the report's failure: ${f}`));
   }
 
-  return lines.join("\n");
+  return Arr.join(lines, "\n");
 };

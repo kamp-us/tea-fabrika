@@ -1,7 +1,7 @@
 // PullRequestsGh.layer: the PullRequests service on `gh`, the one way the lead tooling reaches
 // GitHub. `gh pr edit` fails here with a classic Projects error (AGENTS.md), so an edit goes
 // through `gh api -X PATCH`. Every call names the repo, so the checkout it runs in does not pick it.
-import { Effect, Layer, Option, Schema } from "effect";
+import { Array as Arr, Effect, Layer, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { lastLine, run } from "./command.ts";
 import { type Detail, type PullRequest, PullRequests, PullRequestsError, type Text } from "./PullRequests.ts";
@@ -87,7 +87,7 @@ export const layer = (
 
           if (ran.code !== 0) {
             return yield* new PullRequestsError({
-              reason: `gh ${args.slice(0, 2).join(" ")} exited ${ran.code}: ${lastLine(ran)}`,
+              reason: `gh ${Arr.join(args.slice(0, 2), " ")} exited ${ran.code}: ${lastLine(ran)}`,
             });
           }
 
@@ -104,7 +104,7 @@ export const layer = (
         const rows = yield* Schema.decodeUnknownEffect(Listed)(out.trim() || "[]").pipe(
           Effect.mapError(() => new PullRequestsError({ reason: "gh pr list answered a shape we do not read" })),
         );
-        return rows.map((r): PullRequest => ({
+        return Arr.map(rows, (r): PullRequest => ({
           number: r.number,
           head: r.headRefName,
           oid: r.headRefOid,
@@ -115,7 +115,7 @@ export const layer = (
 
       const openOn = (branch: string) =>
         Effect.map(list(["--head", branch, "--state", "open"]), (prs) =>
-          Option.fromNullishOr(prs.find((pr) => pr.head === branch)),
+          Arr.findFirst(prs, (pr) => pr.head === branch),
         );
 
       const all = Effect.flatMap(list(["--state", "all", "--limit", String(LIMIT)]), (prs) =>
@@ -175,7 +175,7 @@ export const layer = (
       // REST, paged: `gh pr view --json files` stops at 100 files.
       const files = Effect.fn("PullRequestsGh.files")(function* (number: number) {
         const out = yield* gh(["api", "--paginate", `repos/${repo}/pulls/${number}/files`, "--jq", ".[].filename"]);
-        return out.split("\n").filter((path) => path !== "");
+        return Arr.filter(out.split("\n"), (path) => path !== "");
       });
 
       const arm = Effect.fn("PullRequestsGh.arm")(function* (number: number, oid: string) {

@@ -25,7 +25,7 @@
 // Node it finds before a step starts: `holdsPin` reads the answer.
 
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
-import { Effect, FileSystem, Option, Schema } from "effect";
+import { Array as Arr, Effect, FileSystem, Option, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 /** The repo's Node: the root package.json's `volta.node`, else its `engines.node`; `null` when neither. */
@@ -46,9 +46,9 @@ const Pins = Schema.Struct({
 
 /** `path` with `dirs` first, in their order, and each of them gone from the rest. */
 export const firstOnPath = (path: string, dirs: readonly string[]): string => {
-  const front = [...new Set(dirs.filter((dir) => dir !== ""))];
-  const rest = path.split(":").filter((dir) => dir !== "" && !front.includes(dir));
-  return [...front, ...rest].join(":");
+  const front = [...new Set(Arr.filter(dirs, (dir) => dir !== ""))];
+  const rest = Arr.filter(path.split(":"), (dir) => dir !== "" && !front.includes(dir));
+  return Arr.join([...front, ...rest], ":");
 };
 
 /** The folder above a program's absolute path, or `null` for a path that is not one. */
@@ -82,7 +82,7 @@ export const NODE_PROBE = "node -v; pnpm exec node -v";
 /** Whether `NODE_PROBE` printed the pin on both lines, and nothing else: no line, no Node. */
 export const holdsPin = (said: string, pin: string): boolean => {
   const lines = said.trim().split("\n");
-  return lines.length === 2 && lines.every((line) => line.trim() === `v${pin}`);
+  return lines.length === 2 && Arr.every(lines, (line) => line.trim() === `v${pin}`);
 };
 
 type Env = Readonly<Record<string, string | undefined>>;

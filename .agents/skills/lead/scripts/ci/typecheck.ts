@@ -14,7 +14,7 @@
 // The wait polls that one job's check run at the head, every `every` seconds, within `minutes`. A
 // red `check` job (lint, build) is not this file's business: ci-required holds the merge for it.
 
-import { Duration, Effect, Option, Path, Ref, Schedule, Schema } from "effect";
+import { Array as Arr, Duration, Effect, Option, Path, Ref, Schedule, Schema, pipe } from "effect";
 import { exec } from "../flow/host.ts";
 import { Checks, type Job } from "./Checks.ts";
 
@@ -67,10 +67,11 @@ const COLOR = /\u001B\[[0-9;]*m/g;
 
 /** A job's log as the command printed it: no time, no `##[error]` mark, no color. */
 export const logText = (log: string): string =>
-  log
-    .split("\n")
-    .map((line) => line.replace(/\r$/, "").replace(STAMP, "").replaceAll(COLOR, ""))
-    .join("\n");
+  pipe(
+    log.split("\n"),
+    Arr.map((line) => line.replace(/\r$/, "").replace(STAMP, "").replaceAll(COLOR, "")),
+    Arr.join("\n"),
+  );
 
 // The checkout's own folder in a line: an absolute path that ends `work/<name>/<name>/`, the way an
 // Actions runner lays out a repo's workspace. Read from the line itself, so no runner's home is
@@ -94,7 +95,7 @@ const joined = (dir: string, file: string): string => {
     }
   }
 
-  return parts.join("/");
+  return Arr.join(parts, "/");
 };
 
 /**
@@ -162,9 +163,12 @@ export const verdict = (ended: Ended, errors: ReadonlyArray<Found>, exam: Readon
     return notRun(`CI's ${JOB} job failed with no error line: ${last}`);
   }
 
-  const to = errors.every((e) => exam.has(e.path)) ? "tests" : "build";
+  const to = Arr.every(errors, (e) => exam.has(e.path)) ? "tests" : "build";
   const cut = (line: string) => (line.length > WIDTH ? `${line.slice(0, WIDTH - 3)}...` : line);
-  const all = errors.flatMap((e) => e.text.split("\n")).map(cut);
+  const all = Arr.map(
+    Arr.flatMap(errors, (e) => e.text.split("\n")),
+    cut,
+  );
   const more = `... and ${all.length - LINES + 1} more lines`;
   const lines = all.length > LINES ? [...all.slice(0, LINES - 1), more] : all;
   return Verdict.cases.red.make({ to, lines });
@@ -190,8 +194,8 @@ const examIn = Effect.fn("typecheck.examIn")(function* (main: string, paths: Rea
   const list = path.join(main, "exam-paths.json");
   const ran = yield* exec(main, "python3", ["-I", script, list, ...paths]);
   // 0 is no exam path and 1 lists them; anything else read no list, so no error counts as exam.
-  const listed = ran.code === 1 ? ran.output.split("\n").filter(Boolean) : [];
-  return new Set(listed.map((l) => l.split("\t")[0] ?? l));
+  const listed = ran.code === 1 ? Arr.filter(ran.output.split("\n"), Boolean) : [];
+  return new Set(Arr.map(listed, (l) => l.split("\t")[0] ?? l));
 });
 
 /** The job has not ended, or GitHub did not answer: the poll tries again. */
@@ -231,7 +235,7 @@ export const wait = Effect.fn("typecheck.wait")(
     const job = ended.value;
     const output = job.conclusion === "failure" ? logText(yield* checks.log(job.id)) : "";
     const errors = errorsIn(output);
-    const paths = [...new Set(errors.map((e) => e.path))];
+    const paths = [...new Set(Arr.map(errors, (e) => e.path))];
     const exam = paths.length === 0 ? new Set<string>() : yield* examIn(a.main, paths);
     return verdict({ conclusion: job.conclusion, output }, errors, exam);
   },
