@@ -920,18 +920,22 @@ A call counts only through the module its name came from, in any spelling (`{ sp
 
 | Starts | Calls |
 |---|---|
-| a spawned process | `spawn`, `spawnSync`, `exec`, `execSync`, `execFile`, `execFileSync`, `fork` from `node:child_process`; `ChildProcess.make` from `effect/process` or any `.spawn(…)`, with Node's layer |
-| a socket | `createServer`, `createSecureServer`, `connect`, `createConnection` from `node:net`, `http`, `https`, `http2` |
+| a spawned process | `spawn`, `spawnSync`, `exec`, `execSync`, `execFile`, `execFileSync`, `fork` from `node:child_process`; `ChildProcess.make` from `effect/process`, or `spawn` on the `ChildProcessSpawner` service, with Node's layer |
+| a socket | `createServer`, `createConnection`, `connect` and `new Server()` from `node:net`; `createServer`, `request` and `get` from `node:http` and `node:https`; `createServer`, `createSecureServer` and `connect` from `node:http2`; `createServer` and `connect` from `node:tls`; `createSocket` from `node:dgram` |
 | a browser or Electron | `launch`, `launchPersistentContext` or `launchServer` on `chromium`, `firefox`, `webkit` or `_electron` from Playwright |
 | the local instance or workerd | `localInstance(…)`; `killWorkerd(…)` from `workerd.test-support.ts` |
 | a signal | `process.kill(…)` |
-| the network | `fetch(…)` whose literal URL names a host other than this machine |
-| local disk | `new DatabaseSync(path)` from `node:sqlite` unless the path is `":memory:"`; `mkdtemp` and `mkdtempSync` from `node:fs`; `tmpdir` from `node:os`; `makeTempDirectory`, `makeTempFile` and their `Scoped` forms, with Node's layer |
+| the network | `fetch(…)` or `new WebSocket(…)` whose literal URL names a host other than this machine, unless the file stubs `fetch` with `vi.stubGlobal("fetch", …)`; a socket's client call (`https.get`, `request`, `connect`) to such a URL |
+| local disk | `new DatabaseSync(path)` from `node:sqlite` unless the path is `":memory:"`; `mkdtemp` and `mkdtempSync` from `node:fs`, `fs.promises` or `node:fs/promises`; `makeTempDirectory`, `makeTempFile` and their `Scoped` forms on the `FileSystem` service, with Node's layer |
 
 "With Node's layer" means the call is real only on `NodeServices` (or `NodeChildProcessSpawner` for
 a process, `NodeFileSystem` for disk) from `@effect/platform-node`. In one file's own code it counts
 when that file imports the layer; across imports, `test-kind.ts` counts it wherever the layer comes
-from. A spy, a fake with the same method names, `ChildProcessSpawner.make`, `FileSystem.layerNoop`,
+from. A service method counts only on the service itself: a name bound by
+`yield* ChildProcessSpawner.ChildProcessSpawner` or `yield* FileSystem.FileSystem`, or that
+`yield*` written in place. `tmpdir()` does not count: it only names a folder, and the `mkdtemp`
+that writes there does. A spy, a fake with the same method names (even in a file that provides
+Node's layer), a `fetch` the file stubs, `readFileSync`, `chromium.name()`, `ChildProcessSpawner.make`, `FileSystem.layerNoop`,
 `MemoryFiles.test-support.ts`, SQLite on `:memory:`, a `fetch` to `localhost` and Rolldown in memory
 never count: reading the repository's own files in the process is plain (0584).
 
@@ -945,6 +949,10 @@ never count: reading the repository's own files in the process is plain (0584).
   repository files and runs Rolldown in memory: 0 false alarms. It was renamed to plain.
 - After the renames, and again after merging main at `235a24582`, both are at zero, with 18
   `advice:` lines, so both block from the start (0523).
+- Again after the review's fix round (the port, network and `fs.promises` starters added; a
+  method counted only on its service; a stubbed `fetch` and `tmpdir()` no longer counted), on the
+  branch merged with main at `2a1f1b91e`: the rule fires on 0 of 198 plain files, `test-kind.ts`
+  fails 0 of 153 `.integration.` files, and the advice lines stay at 18.
 
 **What code cannot tell,** so the review names it:
 
@@ -959,6 +967,12 @@ never count: reading the repository's own files in the process is plain (0584).
   while the law runs that module on a stand-in. `build/error-cause.integration.test.ts` imported
   `build.ts`, which makes a temp folder, but gives it a FileSystem of generated failures. It was
   renamed to plain by reading.
+- A service reached another way than a `const` bound by `yield*` or that `yield*` in place:
+  a callback's parameter (`Effect.flatMap(ChildProcessSpawner.ChildProcessSpawner, (s) => s.spawn(…))`)
+  or a destructured method. The rule misses it; none is in `next/` today.
+- A write into `tmpdir()` with no `mkdtemp`, such as `writeFileSync(join(tmpdir(), "x"), …)`:
+  telling it from a `tmpdir()` that only names a path takes following the value into the write,
+  which a per-call reader does not do. Type information would not help, since both are strings.
 - A real thing started inside a dependency (`secret-types.integration.test.ts` reaches TypeScript's
   sync API, which spawns the compiler), a command or URL built from a string at run time, and a spy
   that stands in for a starter by its own name. Direction 2 errs toward passing, so these cost a
@@ -966,7 +980,8 @@ never count: reading the repository's own files in the process is plain (0584).
 
 `integration-test-name.test.ts` holds the rule's laws: K1, a property over every starter, each
 import spelling, three folders and both extensions, that fires on a plain name at the call's line and
-never under either named one; K2, that every stand-in above never fires; one real oxlint run over a
+never under either named one; each starter runs on its own and the error must name what it drives and the `.integration.test.ts`
+name; K2, that every stand-in above never fires, each on its own; one real oxlint run over a
 planted folder with the repo's config; and one over the real `next/` tree, which must be at zero.
 `test-kind.test.ts` holds K3, on `judge` in memory and through the real command and code-graph on
 planted trees, and K4, that advice never changes the exit. Their plants are named in their headers.

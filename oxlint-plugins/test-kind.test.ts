@@ -39,8 +39,8 @@ const sourceOf = (end: End): string => {
     case "opens":
       return SOURCE[end.tag];
     case "needs_layer":
-      // A temp folder that is real only on Node's layer, which the module that runs it provides.
-      return "export const go = (fs: { makeTempDirectory: () => string }) => fs.makeTempDirectory();\n";
+      // A FileSystem service's temp folder, real only on Node's layer, which the module that runs it provides.
+      return 'import { Effect, FileSystem } from "effect";\nexport const go = Effect.gen(function* () {\n  const fs = yield* FileSystem.FileSystem;\n  return yield* fs.makeTempDirectory();\n});\n';
     case "type_only":
       return 'import type { spawnSync } from "node:child_process";\nexport type Go = typeof spawnSync;\n';
     case "nothing":

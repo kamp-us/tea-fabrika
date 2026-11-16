@@ -10,7 +10,14 @@
 // on Node's own platform layer: `ChildProcess.make` or a spawner's `spawn` runs a process on
 // `NodeServices` (or `NodeChildProcessSpawner`), and `makeTempDirectory` or `makeTempFile` writes
 // disk on `NodeServices` (or `NodeFileSystem`). In a module's own code they count when that module
-// imports the layer's module itself; across modules, wherever the layer comes from.
+// imports the layer's module itself; across modules, wherever the layer comes from. A method counts
+// only on the service itself: a name bound by `yield* ChildProcessSpawner.ChildProcessSpawner` or
+// `yield* FileSystem.FileSystem`, or that `yield*` written in place, so a fake object's `spawn`
+// does not, even in a file that provides the layer.
+//
+// Two globals: `fetch` and `new WebSocket` reach the network when their literal URL names another
+// machine, unless the file stubs `fetch` with `vi.stubGlobal("fetch", …)`. `tmpdir()` is not a
+// starter: it only names a folder, and the `mkdtemp` that writes there is.
 //
 // `reader` takes facts, not syntax: oxlint's tree and oxc-parser's have the same shape but types
 // that do not assign to each other, so each has a small adapter that reads the facts out. This file
@@ -45,11 +52,12 @@ export const DRIVES: Readonly<Record<Tag, string>> = {
   disk: "local disk",
 };
 
-/** What a name from a module is: a call that opens, SQLite's constructor, or a Node layer. */
+/** What a name from a module is: a call that opens, SQLite's constructor, a Node layer, or a service whose methods need one. */
 type Role =
   | { readonly _tag: "call"; readonly tag: Tag; readonly needs: Layer | null }
   | { readonly _tag: "sqlite" }
-  | { readonly _tag: "layer"; readonly gives: ReadonlyArray<Layer> };
+  | { readonly _tag: "layer"; readonly gives: ReadonlyArray<Layer> }
+  | { readonly _tag: "service"; readonly needs: Layer };
 
 const call = (tag: Tag, needs: Layer | null = null): Role => ({ _tag: "call", tag, needs });
 const each = (names: ReadonlyArray<string>, role: Role) => Object.fromEntries(names.map((name) => [name, role]));
@@ -70,12 +78,14 @@ const MODULES: ReadonlyArray<{ readonly module: RegExp; readonly names: Readonly
     module: /^(?:node:)?child_process$/,
     names: each(["spawn", "spawnSync", "exec", "execSync", "execFile", "execFileSync", "fork"], call("process")),
   },
-  {
-    module: /^(?:node:)?(?:net|http|https|http2)$/,
-    names: each(["createServer", "createSecureServer", "connect", "createConnection"], call("port")),
-  },
-  { module: /^(?:node:)?fs(?:\/promises)?$/, names: each(["mkdtemp", "mkdtempSync"], call("disk")) },
-  { module: /^(?:node:)?os$/, names: { tmpdir: call("disk") } },
+  // A client call (`request`, `get`, `connect`) whose literal URL names another machine counts as the network.
+  { module: /^(?:node:)?net$/, names: each(["createServer", "createConnection", "connect", "Server"], call("port")) },
+  { module: /^(?:node:)?https?$/, names: each(["createServer", "request", "get"], call("port")) },
+  { module: /^(?:node:)?http2$/, names: each(["createServer", "createSecureServer", "connect"], call("port")) },
+  { module: /^(?:node:)?tls$/, names: each(["createServer", "connect"], call("port")) },
+  { module: /^(?:node:)?dgram$/, names: { createSocket: call("port") } },
+  { module: /^(?:node:)?fs$/, names: each(["mkdtemp", "mkdtempSync", "promises.mkdtemp"], call("disk")) },
+  { module: /^(?:node:)?fs\/promises$/, names: { mkdtemp: call("disk") } },
   { module: /^(?:node:)?sqlite$/, names: { DatabaseSync: { _tag: "sqlite" } } },
   {
     module: /^(?:playwright|playwright-core|@playwright\/test)$/,
@@ -83,7 +93,15 @@ const MODULES: ReadonlyArray<{ readonly module: RegExp; readonly names: Readonly
   },
   { module: /(?:^|\/)local-instance(?:\.ts)?$/, names: { localInstance: call("instance") } },
   { module: /(?:^|\/)workerd\.test-support(?:\.ts)?$/, names: { killWorkerd: call("instance") } },
-  { module: /^effect\/(?:unstable\/)?process$/, names: { "ChildProcess.make": call("process", "process") } },
+  {
+    module: /^effect\/(?:unstable\/)?process$/,
+    names: {
+      "ChildProcess.make": call("process", "process"),
+      "ChildProcessSpawner.ChildProcessSpawner": { _tag: "service", needs: "process" },
+    },
+  },
+  { module: /^effect$/, names: { "FileSystem.FileSystem": { _tag: "service", needs: "disk" } } },
+  { module: /^effect\/FileSystem$/, names: { FileSystem: { _tag: "service", needs: "disk" } } },
   {
     module: /^@effect\/platform-node$/,
     names: { NodeServices: services, NodeFileSystem: files, NodeChildProcessSpawner: spawner },
@@ -93,15 +111,23 @@ const MODULES: ReadonlyArray<{ readonly module: RegExp; readonly names: Readonly
   { module: /^@effect\/platform-node\/NodeChildProcessSpawner$/, names: { layer: spawner } },
 ];
 
-/** Effect's FileSystem methods that make a temp folder or file. */
-const TEMP = new Set(["makeTempDirectory", "makeTempDirectoryScoped", "makeTempFile", "makeTempFileScoped"]);
+/** The service methods that open a real thing on Node's layer: a spawner's `spawn`, a FileSystem's temp folder or file. */
+const METHODS: Readonly<Record<Layer, ReadonlySet<string>>> = {
+  process: new Set(["spawn"]),
+  disk: new Set(["makeTempDirectory", "makeTempDirectoryScoped", "makeTempFile", "makeTempFileScoped"]),
+};
+
+/** What a method is called on: a name as written, or a service written in place, `(yield* S).spawn`. */
+export type Receiver =
+  | { readonly _tag: "name"; readonly written: string }
+  | { readonly _tag: "yield"; readonly written: string };
 
 /** A host a test may reach without the network. */
 const LOCAL = /^(?:localhost|127(?:\.\d+){3}|\[::1\]|0\.0\.0\.0)$/;
 
-/** A `fetch` target outside this machine, from the literal start of its first argument. */
+/** A URL outside this machine, from the literal start of a call's first argument. */
 const remote = (first: string | null): boolean => {
-  const host = /^https?:\/\/([^/:?#]+|\[[^\]]+\])/.exec(first ?? "")?.[1];
+  const host = /^(?:https?|wss?):\/\/([^/:?#]+|\[[^\]]+\])/.exec(first ?? "")?.[1];
   return host !== undefined && !LOCAL.test(host);
 };
 
@@ -109,18 +135,24 @@ const remote = (first: string | null): boolean => {
 type Bound = { readonly imported: string | null; readonly local: string };
 
 /**
- * What one module's own code opens. Its adapter feeds it each value import, `new` and call, with
- * the callee as written (`cp.spawn`, or `null` for a shape like `f()()`), the method's own name, and
- * the literal start of the first argument. `opens("alone")` keeps only what is real in this module by
- * itself: a call that needs Node's layer counts when this module imports it.
+ * What one module's own code opens. Its adapter feeds it each value import, each `const x = yield* S`,
+ * and each `new` and call, with the callee as written (`cp.spawn`, or `null` for a shape like `f()()`),
+ * the method's own name and what it is called on, and the literal start of the first argument.
+ * `opens("alone")` keeps only what is real in this module by itself: a call that needs Node's layer
+ * counts when this module imports it.
  */
 export const reader = <N>() => {
   // Each name this module can write, as written (`run`, `cp.spawn`, `PN.NodeServices`), by role.
   const bound = new Map<string, Role>();
+  // Each local bound to a service, by the layer its methods need.
+  const served = new Map<string, Layer>();
   const provided = new Set<Layer>();
   const found: Array<Open<N>> = [];
-  const open = (node: N, written: string, tag: Tag, needs: Layer | null = null) =>
-    found.push({ _tag: tag, call: `${written}(…)`, node, needs });
+  // A global `fetch` to another machine, kept apart: a file that stubs `fetch` reaches nothing.
+  const fetched: Array<Open<N>> = [];
+  let stubbed = false;
+  const open = (node: N, shown: string, tag: Tag, needs: Layer | null = null) =>
+    found.push({ _tag: tag, call: shown, node, needs });
   const bind = (written: string, role: Role) => {
     bound.set(written, role);
 
@@ -130,6 +162,12 @@ export const reader = <N>() => {
       }
     }
   };
+  const service = (written: string): Layer | null => {
+    const role = bound.get(written);
+    return role?._tag === "service" ? role.needs : null;
+  };
+  // A port's client call to a literal URL on another machine reaches the network.
+  const opened = (tag: Tag, first: string | null): Tag => (tag === "port" && remote(first) ? "network" : tag);
 
   return {
     imports: (source: string, names: ReadonlyArray<Bound>) => {
@@ -152,32 +190,48 @@ export const reader = <N>() => {
         }
       }
     },
-    constructs: (node: N, written: string | null, first: string | null) => {
-      if (written !== null && bound.get(written)?._tag === "sqlite" && first !== ":memory:") {
-        found.push({ _tag: "disk", call: `new ${written}(…)`, node, needs: null });
+    yields: (local: string, written: string | null) => {
+      const needs = written === null ? null : service(written);
+
+      if (needs !== null) {
+        served.set(local, needs);
       }
     },
-    // A method counts by its own name too, so `(yield* spawner).spawn(…)` is read like `real.spawn(…)`.
-    calls: (node: N, written: string | null, method: string | null, first: string | null) => {
+    constructs: (node: N, written: string | null, first: string | null) => {
       const role = written === null ? undefined : bound.get(written);
-      const shown = written ?? `….${method}`;
+      const shown = `new ${written}(…)`;
+
+      if (role?._tag === "sqlite" && first !== ":memory:") {
+        open(node, shown, "disk");
+      } else if (role?._tag === "call") {
+        open(node, shown, opened(role.tag, first), role.needs);
+      } else if (role === undefined && written === "WebSocket" && remote(first)) {
+        open(node, shown, "network");
+      }
+    },
+    calls: (node: N, written: string | null, method: string | null, on: Receiver | null, first: string | null) => {
+      const role = written === null ? undefined : bound.get(written);
+      const shown = `${written ?? `….${method}`}(…)`;
+      const needs = on === null ? null : on._tag === "yield" ? service(on.written) : (served.get(on.written) ?? null);
 
       if (role !== undefined) {
         if (role._tag === "call") {
-          open(node, shown, role.tag, role.needs);
+          open(node, shown, opened(role.tag, first), role.needs);
         }
       } else if (written === "process.kill") {
         open(node, shown, "signal");
       } else if (written === "fetch" && remote(first)) {
-        open(node, shown, "network");
-      } else if (method === "spawn") {
-        open(node, shown, "process", "process");
-      } else if (method !== null && TEMP.has(method)) {
-        open(node, shown, "disk", "disk");
+        fetched.push({ _tag: "network", call: shown, node, needs: null });
+      } else if (written === "vi.stubGlobal" && first === "fetch") {
+        stubbed = true;
+      } else if (needs !== null && method !== null && METHODS[needs].has(method)) {
+        open(node, shown, needs, needs);
       }
     },
-    opens: (scope: "alone" | "any"): ReadonlyArray<Open<N>> =>
-      scope === "any" ? found : found.filter((one) => one.needs === null || provided.has(one.needs)),
+    opens: (scope: "alone" | "any"): ReadonlyArray<Open<N>> => {
+      const all = stubbed ? found : [...found, ...fetched];
+      return scope === "any" ? all : all.filter((one) => one.needs === null || provided.has(one.needs));
+    },
   };
 };
 
@@ -190,6 +244,21 @@ const literal = (node: Node | undefined): string | null =>
     : node?.type === "TemplateLiteral"
       ? (node.quasis[0]?.value.cooked ?? null)
       : null;
+
+/** The service a `yield*` hands over, as written: `ChildProcessSpawner.ChildProcessSpawner`. */
+const yielded = (node: Node | null | undefined): string | null =>
+  node?.type === "YieldExpression" && node.delegate && node.argument !== null ? dotted(node.argument) : null;
+
+/** What a method is called on, or `null` for a call that is not a method's. */
+const receiver = (callee: Node): Receiver | null => {
+  if (callee.type !== "MemberExpression") {
+    return null;
+  }
+
+  const service = yielded(callee.object);
+  const written = dotted(callee.object);
+  return service !== null ? { _tag: "yield", written: service } : written === null ? null : { _tag: "name", written };
+};
 
 /** The adapter for oxlint's tree: a visitor that feeds `read`. */
 export const visitor = (read: ReturnType<typeof reader<Node>>): Visitor => ({
@@ -217,6 +286,11 @@ export const visitor = (read: ReturnType<typeof reader<Node>>): Visitor => ({
       ),
     );
   },
+  VariableDeclarator(node) {
+    if (node.id.type === "Identifier") {
+      read.yields(node.id.name, yielded(node.init));
+    }
+  },
   NewExpression(node) {
     read.constructs(node, dotted(node.callee), literal(node.arguments[0]));
   },
@@ -226,6 +300,6 @@ export const visitor = (read: ReturnType<typeof reader<Node>>): Visitor => ({
       callee.type === "MemberExpression" && !callee.computed && callee.property.type === "Identifier"
         ? callee.property.name
         : null;
-    read.calls(node, dotted(callee), method, literal(node.arguments[0]));
+    read.calls(node, dotted(callee), method, receiver(callee), literal(node.arguments[0]));
   },
 });

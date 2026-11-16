@@ -22,7 +22,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Option, Schema } from "effect";
 import { type Argument, type Expression, parseSync, Visitor } from "oxc-parser";
-import { DRIVES, reader, type Open } from "./starters.ts";
+import { DRIVES, reader, type Open, type Receiver } from "./starters.ts";
 
 /** The folders whose test files this check holds. Each tooling slice of ticket 1073 adds its own. */
 const SCOPE = ["next"];
@@ -61,6 +61,30 @@ const written = (node: Expression): string | null => {
   return object === null || node.computed ? null : `${object}.${node.property.name}`;
 };
 
+/** An expression without the parentheses oxc-parser keeps around it. */
+const bare = (node: Expression): Expression => (node.type === "ParenthesizedExpression" ? bare(node.expression) : node);
+
+/** The service a `yield*` hands over, as written: `ChildProcessSpawner.ChildProcessSpawner`. */
+const yielded = (node: Expression | null): string | null => {
+  const at = node === null ? null : bare(node);
+  return at?.type === "YieldExpression" && at.delegate && at.argument !== null ? written(at.argument) : null;
+};
+
+/** What a method is called on, or `null` for a call that is not a method's. */
+const receiver = (callee: Expression): Receiver | null => {
+  if (callee.type !== "MemberExpression") {
+    return null;
+  }
+
+  const service = yielded(callee.object);
+  const name = written(bare(callee.object));
+  return service !== null
+    ? { _tag: "yield", written: service }
+    : name === null
+      ? null
+      : { _tag: "name", written: name };
+};
+
 /** A string literal, or a template's text before its first placeholder. */
 const literal = (node: Argument | undefined): string | null =>
   node?.type === "Literal" && typeof node.value === "string"
@@ -97,6 +121,11 @@ const read = (file: string, source: string) => {
         ),
       );
     },
+    VariableDeclarator(node) {
+      if (node.id.type === "Identifier") {
+        each.yields(node.id.name, yielded(node.init));
+      }
+    },
     NewExpression(node) {
       each.constructs(null, written(node.callee), literal(node.arguments[0]));
     },
@@ -106,7 +135,7 @@ const read = (file: string, source: string) => {
         callee.type === "MemberExpression" && !callee.computed && callee.property.type === "Identifier"
           ? callee.property.name
           : null;
-      each.calls(null, written(callee), method, literal(node.arguments[0]));
+      each.calls(null, written(callee), method, receiver(callee), literal(node.arguments[0]));
     },
   }).visit(parseSync(file, source).program);
   return { alone: each.opens("alone"), any: each.opens("any") };
