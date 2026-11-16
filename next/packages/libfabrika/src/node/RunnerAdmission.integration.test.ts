@@ -8,7 +8,7 @@ import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Envelope } from "../access/SessionManager.ts";
-import { ProcessObjects, RecordObjects } from "../cloudflare/Objects.ts";
+import { ProcessObjects, RecordObjects } from "../cloudflare/ObjectCalls.ts";
 import * as ProjectAuditTest from "../cloudflare/ProjectAuditTest.ts";
 import type { Env, ProjectDoorOptions } from "../cloudflare/runtime.ts";
 import { Gateway } from "../gateway/Gateway.ts";

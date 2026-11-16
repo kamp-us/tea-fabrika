@@ -16,7 +16,7 @@ import * as StartsTest from "../settings/StartsTest.ts";
 import type { Sql } from "../Sql.ts";
 import { KeyLine, writeSshsig } from "../transport/Sshsig.ts";
 import { programBox } from "./box.ts";
-import type { ProcessObjects, RecordObjects } from "./Objects.ts";
+import type { ProcessObjects, RecordObjects } from "./ObjectCalls.ts";
 import { ProjectService, type projectLayer, projectLayerWithoutObjects, type ProjectOptions } from "./runtime.ts";
 import { Props, receive } from "./tail.ts";
 
