@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-max-ternary-depth-1-review",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-16T00:04:08-08:00",
+  "ended": "2026-11-16T00:38:29-08:00",
+  "parent": "2026-11-15-antislop-max-ternary-depth-1-tests-3",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send",
+  "why": "Review of anti-slop judgment slice AS-max-ternary-depth-1 at e65ec3f88, in next/ and our tooling, the whole diff from the merge base d69321fd9 (101 files): changes 1, findings 2, sent to tests and build. Blocking: decision 0558's binding constraint 'no if chain that asks the same questions in the same order' and 'no one-use arrow function only to restart the count' (and its Decision line 'never a longer if chain pasted in its place'). 29 sites turn a too-deep ternary into early-return ifs ahead of the same remaining ternary, which the rule cannot see. Build: .agents/skills/lead/scripts/chain.ts:1620, pr/Queue.ts:86. Tests: next/apps/fabrika/e2e/one-file.visual.test.ts:304, e2e/p14.test-support.ts:141, e2e/tezgah.test-support.ts:425, next/apps/fabrika/src/runtime-quotas.laws.test.ts:309, libfabrika ci/CiTest.ts:189 and :211, client/HandsDoor.test-support.ts:84, client/Prefix.laws.test.ts:388, client/WindowMachine.laws.test.ts:390, :2577, :2911 (one-use arrow expected) and :4271, gateway/TasksTest.ts:1129, node/client/HandsSecrets.laws.test.ts:83, processes/ChildrenTest.ts:474, processes/MonitorsTest.ts:459, processes/internal/processTable.laws.test.ts:476 and :496, settings/TomlEdit.test.ts:240, tasks/TasksTest.ts:395 (one-use arrow stateFor), tezgah/Fold.laws.test.ts:111, next/programs/pipeline/src/Change.test.ts:55, Merger.laws.test.ts:694 (one-use arrow refusal), oxlint-plugins/program-package-layout.ts:64, :79 and :182, oxlint-plugins/runs-from-depth.ts:74. Each needs a lookup, a named decision function or a Match, as Fold.ts's beside already does for the four copies of the same fold. Everything else holds: every other fix keeps what the code answers (lazy branches and yield* stay lazy; Match.exhaustive only where the type is closed, orElse where the old last branch was a catch-all; mixed-condition order kept), the Result.try rewrites keep the raw thrown value (effect 4.1.3 Result.try fails with the caught value), no assertion is deleted or narrowed, no comment is lost, and there is no disable line, lock line, .oxlintrc.json or tsconfig change. Fold.ts beside and Remove.ts escaped count as named functions under 0558 (about 75% and 90%).",
+  "tokens": null,
+  "tools": null,
+  "minutes": 34,
+  "note": "Read-only apart from this row. Recount: anti-slop/max-ternary-depth from vendor/anti-slop at error maxDepth 2, in a scratch config outside the repo, over next/, .agents, oxlint-plugins and .github/ci: 0 at e65ec3f88, 155 at the merge base in 96 files (125 + 20 + 9 + 1 across the four step rows, so the rows' counts match); a planted 3-deep ternary in a scratch file fires. loosening.sh on d69321fd9..HEAD: 80 'unrecognized change' hits, one per changed exam-path file, each at an added Match or Result import or a rewritten ternary; read line by line, none loosens a law. Tests, one file each under nice -n 15 vitest --maxWorkers=3, at e65ec3f88: 95 files, 1,524 laws passed, the touched tests plus the readers of the touched suites (Ci, Children, Monitors, Reload, Replies, RunnerAdmission, Watchers, the three StartChild integration files, settings Start, cloudflare SettingsStarts, gateway Tasks, TasksLedger, HandsStart, WindowStart, tuval Layout, words and spoken, pipeline handlers, Settings and the runner and queue integration laws); the 0178 guard allowed every .integration. file. Git.integration.test.ts skips its one law by its own runIf (real git only), so its change was judged by reading. Not run: one-file.visual.test.ts and the e2e test-support files (Electron). One pnpm typecheck: exit 0.",
+  "step": "review"
+}
