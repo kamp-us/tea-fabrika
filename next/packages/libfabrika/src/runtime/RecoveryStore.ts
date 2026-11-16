@@ -6,7 +6,7 @@
  */
 import { Context, Effect, Layer, Schema } from "effect";
 import { QuotasError, type Accounting } from "../processes/Quotas.ts";
-import { type Sql } from "../Sql.ts";
+import { type Sql, type SqlValue } from "../Sql.ts";
 import { changes, JournalState, Receipt, Work } from "./internal/recovery.ts";
 
 /**
@@ -73,7 +73,7 @@ type Store<S extends Kept> = {
 
 const decodeReceipt = Schema.decodeUnknownSync(Schema.fromJsonString(Receipt));
 
-const receiptFor = (value: unknown, letter: unknown) => {
+const receiptFor = (value: SqlValue | undefined, letter: SqlValue | undefined) => {
   const saved = decodeReceipt(value);
 
   if (saved.letter !== letter) {
@@ -98,10 +98,10 @@ const JOURNAL =
 const bytes = (text: string) => new TextEncoder().encode(text).length;
 
 /** A row's text column, or null when there is no row. */
-const textIn = (value: unknown): string | null => (typeof value === "string" ? value : null);
+const textIn = (value: SqlValue | undefined): string | null => (typeof value === "string" ? value : null);
 
 /** A row's generation, or null when there is no row or no save has counted one yet. */
-const generationIn = (value: unknown): number | null => (typeof value === "number" ? value : null);
+const generationIn = (value: SqlValue | undefined): number | null => (typeof value === "number" ? value : null);
 
 /**
  * Makes the store for one name's saved journal in `sql`, checked whole against its caller's schema
@@ -129,7 +129,7 @@ export const recoveryStore = <S extends Kept>(
   // The journal row keeps its receipts apart, so it is checked whole only once they are merged back.
   const Row = Schema.fromJsonString(Schema.Struct(options.schema.fields));
   const decodeRow = Schema.decodeUnknownSync(Row);
-  const decode = (text: unknown) => {
+  const decode = (text: SqlValue | undefined) => {
     const row = decodeRow(text);
     return { ...row, ...kept(row) };
   };
@@ -141,11 +141,11 @@ export const recoveryStore = <S extends Kept>(
     }
   };
   // The store's own error, thrown in the step, passes through; anything else is kept under a reason.
-  const failed = (error: unknown) =>
-    Schema.is(RecoveryStoreError)(error)
-      ? error
+  const failed = (cause: unknown) =>
+    Schema.is(RecoveryStoreError)(cause)
+      ? cause
       : new RecoveryStoreError({
-          reason: Schema.isSchemaError(error) ? new BadRow({ cause: error }) : new Storage({ cause: error }),
+          reason: Schema.isSchemaError(cause) ? new BadRow({ cause }) : new Storage({ cause }),
         });
   // A read changes no row, so it is charged nothing and fails only with the store's own error.
   const read = <A>(f: () => A) =>

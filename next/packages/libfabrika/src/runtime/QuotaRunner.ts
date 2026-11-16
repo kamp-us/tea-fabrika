@@ -29,18 +29,18 @@ export class QuotaWaiting extends Schema.TaggedError<QuotaWaiting>()("QuotaWaiti
  * @stability unstable
  * @category getters
  */
-export const reserveFault = (error: unknown): RecoveryReserveExhausted | undefined => {
-  if (error instanceof QuotasError) {
-    return error.reason._tag === "RecoveryReserveExhausted" ? error.reason : undefined;
+export const reserveFault = (cause: unknown): RecoveryReserveExhausted | undefined => {
+  if (cause instanceof QuotasError) {
+    return cause.reason._tag === "RecoveryReserveExhausted" ? cause.reason : undefined;
   }
 
-  if (typeof error !== "object" || error === null) {
+  if (typeof cause !== "object" || cause === null) {
     return undefined;
   }
 
   // An error with a reason keeps the fault from below under that reason, as the recovery store does.
-  const below = "cause" in error ? reserveFault(error.cause) : undefined;
-  return below ?? ("reason" in error ? reserveFault(error.reason) : undefined);
+  const below = "cause" in cause ? reserveFault(cause.cause) : undefined;
+  return below ?? ("reason" in cause ? reserveFault(cause.reason) : undefined);
 };
 
 /**

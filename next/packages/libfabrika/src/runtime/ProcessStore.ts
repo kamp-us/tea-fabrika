@@ -160,7 +160,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
       /** The object's storage calls, wrapped in Effect by its platform edge. Node uses SQL. */
       readonly storage?:
         | {
-            readonly put: (key: string, value: unknown) => Effect.Effect<void, LedgerError | QuotasError>;
+            readonly put: (key: string, value: typeof Activity.Type) => Effect.Effect<void, LedgerError | QuotasError>;
             readonly sync: () => Effect.Effect<void, LedgerError | QuotasError>;
             readonly get?: (key: string) => Effect.Effect<unknown, LedgerError>;
           }
@@ -182,12 +182,12 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
 
           ready = true;
         };
-        const failed = (error: unknown) =>
-          error instanceof LedgerError
-            ? error
+        const failed = (cause: unknown) =>
+          cause instanceof LedgerError
+            ? cause
             : new LedgerError({
-                reason: Schema.isSchemaError(error) ? "bad_row" : "storage",
-                cause: error,
+                reason: Schema.isSchemaError(cause) ? "bad_row" : "storage",
+                cause,
               });
         // A read changes no row, so it is charged nothing and fails only as the ledger does.
         const read = Effect.fnUntraced(function* <A>(step: () => A) {

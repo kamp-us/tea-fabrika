@@ -284,54 +284,58 @@ const behind = (cmds: ReadonlyArray<Dispatched>, job: Dispatched): boolean => {
   );
 };
 
+/** A JSON value that is an object, not an array or a leaf. */
+const isJsonObject = (json: Schema.Json): json is { readonly [key: string]: Schema.Json } =>
+  typeof json === "object" && json !== null && !Array.isArray(json);
+
 /**
  * A Cmd's operands, without the `type` its maker adds, when its input schema names every one. The
  * names are checked before the strict decode, since an empty struct takes any field.
  */
-const operands = (cmd: unknown, fields: object): Option.Option<Record<string, unknown>> => {
-  if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd)) {
+const operands = (cmd: Schema.Json, fields: object): Option.Option<Record<string, unknown>> => {
+  if (!isJsonObject(cmd)) {
     return Option.none();
   }
 
-  const { type: _type, ...rest } = cmd as Record<string, unknown>;
+  const { type: _type, ...rest } = cmd;
   return Object.keys(rest).every((key) => Object.hasOwn(fields, key)) ? Option.some(rest) : Option.none();
 };
 
 const strictStartChild = Schema.decodeUnknownOption(StartChildInput, { onExcessProperty: "error" });
 const strictExit = Schema.decodeUnknownOption(ExitInput, { onExcessProperty: "error" });
 const strictStopChild = Schema.decodeUnknownOption(StopChildInput, { onExcessProperty: "error" });
-const decodeStartChild = (cmd: unknown) => Option.flatMap(operands(cmd, StartChildInput.fields), strictStartChild);
-const decodeExit = (cmd: unknown) => Option.flatMap(operands(cmd, ExitInput.fields), strictExit);
-const decodeStopChild = (cmd: unknown) => Option.flatMap(operands(cmd, StopChildInput.fields), strictStopChild);
+const decodeStartChild = (cmd: Schema.Json) => Option.flatMap(operands(cmd, StartChildInput.fields), strictStartChild);
+const decodeExit = (cmd: Schema.Json) => Option.flatMap(operands(cmd, ExitInput.fields), strictExit);
+const decodeStopChild = (cmd: Schema.Json) => Option.flatMap(operands(cmd, StopChildInput.fields), strictStopChild);
 const strictHands = Schema.decodeUnknownOption(HandsInput, { onExcessProperty: "error" });
-const decodeHands = (cmd: unknown) => Option.flatMap(operands(cmd, HandsInput.fields), strictHands);
+const decodeHands = (cmd: Schema.Json) => Option.flatMap(operands(cmd, HandsInput.fields), strictHands);
 const strictMonitor = Schema.decodeUnknownOption(MonitorInput, { onExcessProperty: "error" });
-const decodeMonitor = (cmd: unknown) => Option.flatMap(operands(cmd, MonitorInput.fields), strictMonitor);
+const decodeMonitor = (cmd: Schema.Json) => Option.flatMap(operands(cmd, MonitorInput.fields), strictMonitor);
 const strictDemonitor = Schema.decodeUnknownOption(DemonitorInput, { onExcessProperty: "error" });
-const decodeDemonitor = (cmd: unknown) => Option.flatMap(operands(cmd, DemonitorInput.fields), strictDemonitor);
+const decodeDemonitor = (cmd: Schema.Json) => Option.flatMap(operands(cmd, DemonitorInput.fields), strictDemonitor);
 const encodeResult = Schema.encodeSync(TaskResult);
 const isName = Schema.is(ProcessName);
 const encoder = new TextEncoder();
 
 /** A start_child's operands without its input: what every `ok` answer echoes, so no row holds the
  *  first letter twice. */
-const withoutInput = (cmd: unknown): unknown => {
-  if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd) || !Object.hasOwn(cmd, "input")) {
+const withoutInput = (cmd: Schema.Json): Schema.Json => {
+  if (!isJsonObject(cmd) || !Object.hasOwn(cmd, "input")) {
     return cmd;
   }
 
-  const { input: _input, ...rest } = cmd as Record<string, unknown>;
+  const { input: _input, ...rest } = cmd;
   return rest;
 };
 
 const fitsText = (value: string): boolean => value.length <= 256;
-const bytes = (value: unknown): number => encoder.encode(JSON.stringify(value) ?? "").length;
+const bytes = (value: Schema.Json | undefined): number => encoder.encode(JSON.stringify(value) ?? "").length;
 const decodeAddress = Schema.decodeUnknownOption(Schema.Struct({ to: Schema.String, as: Schema.String }));
 
 /** A send_chunks's operands without its items: what every answer echoes, `{type, to, as}`, so the
  *  answer's row stays small however close to the input cap the items came. A `to` or `as` that is
  *  not short text stays out too, as an oversize start_child's long name does. */
-const withoutItems = (cmd: unknown): { readonly type: string; readonly to?: string; readonly as?: string } => {
+const withoutItems = (cmd: Schema.Json): { readonly type: string; readonly to?: string; readonly as?: string } => {
   const address = Option.getOrUndefined(decodeAddress(cmd));
   return {
     type: SEND_CHUNKS,
@@ -345,7 +349,7 @@ const decodeKept = Schema.decodeUnknownOption(Schema.Struct({ program: Schema.St
 /** Keeps oversized invalid operands out of the checkpoint and answer. A valid first letter stays
  *  whole in the split checkpoint and reaches the ledger's row check. Refusals keep a start's own
  *  order: `no_program`, then `bad_name`, then `bad_input`. */
-const oversized = (cmd: unknown): Option.Option<Pick<Dispatched, "cmd" | "oversize">> => {
+const oversized = (cmd: Schema.Json): Option.Option<Pick<Dispatched, "cmd" | "oversize">> => {
   const type = Option.getOrUndefined(Option.map(decodeTyped(cmd), (c) => c.type));
 
   if ((type !== START_CHILD && type !== EXIT && type !== SEND_CHUNKS) || bytes(cmd) <= INPUT_BYTES) {
@@ -1342,7 +1346,7 @@ export class ProgramRunner extends Context.Service<
           return { live: woke, dirty: upgraded || saved.turn !== null };
         });
 
-        const checkpoint = (state: Live, turn: unknown) => ({
+        const checkpoint = (state: Live, turn: typeof Turn.Type | null) => ({
           saved: { v: state.v, build: process.build, model: state.model, after: state.after },
           turn,
           cmds: state.cmds,
