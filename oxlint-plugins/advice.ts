@@ -4,6 +4,7 @@
 // moment its folder reaches zero: `stale` names it, and a whole `pnpm lint` run fails until it is
 // deleted.
 import { matchesGlob } from "node:path";
+import { Data } from "effect";
 
 /** One fire as oxlint reports it, its filename from the top of the repo. */
 export interface Fire {
@@ -69,6 +70,9 @@ export interface WarnLine {
 /** What a whole run says about a warn line: its folder has no fire left, or it names a file. */
 type Stale = { readonly _tag: "zero"; readonly line: WarnLine } | { readonly _tag: "file"; readonly line: WarnLine };
 
+/** The makers of a `Stale`, one per case. */
+export const Stale = Data.taggedEnum<Stale>();
+
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -97,11 +101,11 @@ export const warnLines = (printed: unknown): ReadonlyArray<WarnLine> => {
 export const stale = (lines: ReadonlyArray<WarnLine>, advice: ReadonlyArray<Fire>): ReadonlyArray<Stale> =>
   lines.flatMap((line): ReadonlyArray<Stale> => {
     if (!(line.glob.split("/").at(-1) ?? "").includes("*")) {
-      return [{ _tag: "file", line }];
+      return [Stale.file({ line })];
     }
 
     const held = advice.some(
       (fire) => fire.code === line.rule && fire.filename !== undefined && matchesGlob(fire.filename, line.glob),
     );
-    return held ? [] : [{ _tag: "zero", line }];
+    return held ? [] : [Stale.zero({ line })];
   });

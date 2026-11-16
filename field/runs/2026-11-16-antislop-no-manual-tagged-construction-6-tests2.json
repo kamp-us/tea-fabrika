@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-manual-tagged-construction-6-tests2",
+  "ticket": "kamp-us/tea-fabrika#1057",
+  "pr": null,
+  "started": "2026-11-16T00:30:39-08:00",
+  "ended": "2026-11-16T00:41:33-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "pipeline, tracker ticket 1057, test_writer, second round: slice AS-no-manual-tagged-construction-6, anti-slop-effect/no-manual-tagged-construction in our tooling (oxlint-plugins/), no lock line and no .oxlintrc.json change, no pull request (owner ruling). The build round made the fix for all 38 remaining hits but could not commit it, because exam-paths.json lists all of oxlint-plugins/** as an exam path. This round applied the build's saved diff unchanged to the branch at d6337304b (six files: advice.ts, advice.test.ts, effect-jsdocs.ts, parallel.ts, starters.ts, test-kind.ts), read every line as the owner of these paths, and commits it. All 38 hits are hand edits by the build, no quick fix and no codemod. Each hand-written union type stays as it is, and Data.taggedEnum makers sit beside it, as ChildrenLedger.ts does; the installed Effect documents that its makers produce plain objects, so what each function answers is unchanged. Judged and accepted, both flagged by the build at about 80% sure: starters.ts builds Open<N>'s makers once per reader with Data.taggedEnum over Record<Tag, Omit<Open<N>, \"_tag\">>, because Open<N> holds its tag in one field of type Tag and its declaration belongs to the no-manual-tagged-type slice; each case is assignable to Open<N> and the typecheck passes. test-kind.ts makes tree's answer with Data.taggedEnum<ReturnType<typeof tree>>; tree's return type is written out on the function, so the type is not circular and the makers match it exactly. Also read: advice.test.ts's expected values now use advice.ts's exported Stale makers, the oracle's own logic is unchanged and its toEqual is the same; test-kind.ts copies an Open's two fields with Struct.pick, the same object as before; effect-jsdocs.ts's copied-file header names the change. No assertion was deleted or narrowed, no disable line, no lock, ledger or .oxlintrc.json change, and no law was added or changed, so no plant ran. Recount with the rule forced to error in a scratch config outside the repo: 0 hits in oxlint-plugins/ (the same config still fires in next/programs, so it is live). Left 0, waiting on 1366 0.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "note": "Run in a cloud box with no step keys (stepcommit --commit-only). Checks on the working tree with the fix, on d6337304b: pnpm format changed nothing; NODE_OPTIONS=--max-old-space-size=6144 pnpm lint fails only on the zero lock asking to add seven folders now at zero to the rule's block (oxlint-plugins/**, libfabrika src/*, presence, settings, programs/checklist, counter, tezgah), left to the later lock pull request; every other part passed, lint:kind (the changed test-kind.ts) and lint:dead included. Tests, one file at a time under nice -n 15 --maxWorkers=3, all green: oxlint-plugins advice (16), jsdocs (17), parallel (7), test-kind (2), integration-test-name (4), plants (253), decode-guards (4), law-shape (6), prefer-schema-arbitrary (7). No .integration. law is reached. One pnpm typecheck exits 0, oxlint-plugins included. The list ratchet exits 0.",
+  "step": "tests"
+}

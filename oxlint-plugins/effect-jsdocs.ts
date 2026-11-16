@@ -21,6 +21,8 @@
 // - Twenty reads by index that our `noUncheckedIndexedAccess` cannot prove in range read `?? ""`:
 //   `lines[index]` (14), `lines[headingIndex]` (3) and a regex group, `match[1]` (3). Each index is
 //   in range where Effect reads it, so the value is the same at runtime.
+// - Each `Result` is made by `Data.taggedEnum`'s makers, `Result.Success` and `Result.Failure`, where
+//   Effect writes the `_tag` by hand (0562). They make the same plain object.
 // `@since` stays as Effect asks it: `jsdocs.ts` drops that one ask while libfabrika has no release
 // (0118). On an Effect bump, diff these lines again.
 //
@@ -46,9 +48,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+import { Data } from "effect";
+
 export type DocScope = "module" | "declaration" | "namespace" | "namespace-declaration" | "member";
 
 type Result<A, E> = { readonly _tag: "Success"; readonly value: A } | { readonly _tag: "Failure"; readonly error: E };
+
+/** `Result` with its two type parameters, for its makers. */
+interface ResultDefinition extends Data.TaggedEnum.WithGenerics<2> {
+  readonly taggedEnum: Result<this["A"], this["B"]>;
+}
+
+/** The makers of a `Result`: `Result.Success({ value })` and `Result.Failure({ error })`. */
+const Result = Data.taggedEnum<ResultDefinition>();
 
 export interface JSDocDiagnostic {
   readonly code: string;
@@ -290,17 +302,16 @@ function parseCoreJSDoc(lines: Array<string>, tags: Array<JSDocTag>): Result<Par
   diagnostics.push(...parsedContent.diagnostics);
 
   if (diagnostics.length > 0 || parsedContent.value === undefined) {
-    return { _tag: "Failure", error: { diagnostics: uniqueDiagnostics(diagnostics) } };
+    return Result.Failure({ error: { diagnostics: uniqueDiagnostics(diagnostics) } });
   }
 
-  return {
-    _tag: "Success",
+  return Result.Success({
     value: {
       description: parsedContent.value.description,
       examples: parsedContent.value.examples,
       tags,
     },
-  };
+  });
 }
 
 function uniqueDiagnostics(diagnostics: ReadonlyArray<JSDocDiagnostic>): ReadonlyArray<JSDocDiagnostic> {
@@ -905,13 +916,12 @@ export function buildTags(
     }
 
     if (diagnostics.length > 0 || category === null || since === null) {
-      return { _tag: "Failure", error: { diagnostics } };
+      return Result.Failure({ error: { diagnostics } });
     }
 
-    return {
-      _tag: "Success",
+    return Result.Success({
       value: { category, since, stability: resolvedStability, deprecated, see: see.map(parseSeeTag) },
-    };
+    });
   }
 
   if (scope === "member") {
@@ -922,21 +932,20 @@ export function buildTags(
     }
 
     if (diagnostics.length > 0) {
-      return { _tag: "Failure", error: { diagnostics } };
+      return Result.Failure({ error: { diagnostics } });
     }
 
-    return {
-      _tag: "Success",
+    return Result.Success({
       value: { since, stability: resolvedStability, default: defaultValue, deprecated, see: see.map(parseSeeTag) },
-    };
+    });
   }
 
   if (scope === "module") {
     if (diagnostics.length > 0 || since === null) {
-      return { _tag: "Failure", error: { diagnostics } };
+      return Result.Failure({ error: { diagnostics } });
     }
 
-    return { _tag: "Success", value: { since, stability: resolvedStability, deprecated, see: see.map(parseSeeTag) } };
+    return Result.Success({ value: { since, stability: resolvedStability, deprecated, see: see.map(parseSeeTag) } });
   }
 
   const category = values.get("category")?.[0] ?? null;
@@ -946,11 +955,10 @@ export function buildTags(
   }
 
   if (diagnostics.length > 0 || since === null) {
-    return { _tag: "Failure", error: { diagnostics } };
+    return Result.Failure({ error: { diagnostics } });
   }
 
-  return {
-    _tag: "Success",
+  return Result.Success({
     value: { category, since, stability: resolvedStability, deprecated, see: see.map(parseSeeTag) },
-  };
+  });
 }

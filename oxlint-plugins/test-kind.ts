@@ -20,9 +20,9 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Option, Schema } from "effect";
+import { Data, Option, Schema, Struct } from "effect";
 import { type Argument, type Expression, parseSync, Visitor } from "oxc-parser";
-import { DRIVES, reader, type Open, type Receiver } from "./starters.ts";
+import { DRIVES, reader, type Open, Receiver } from "./starters.ts";
 
 /** The folders whose test files this check holds. Each tooling slice of ticket 1073 adds its own. */
 const SCOPE = ["next"];
@@ -42,6 +42,9 @@ type Finding =
       readonly via: ReadonlyArray<string>;
       readonly opens: Pick<Open<null>, "_tag" | "call">;
     };
+
+/** The makers of a `Finding`, one per case. */
+const Finding = Data.taggedEnum<Finding>();
 
 const INTEGRATION = /\.integration\.test\.tsx?$/;
 const TEST = /\.test\.tsx?$/;
@@ -79,10 +82,10 @@ const receiver = (callee: Expression): Receiver | null => {
   const service = yielded(callee.object);
   const name = written(bare(callee.object));
   return service !== null
-    ? { _tag: "yield", written: service }
+    ? Receiver.yield({ written: service })
     : name === null
       ? null
-      : { _tag: "name", written: name };
+      : Receiver.name({ written: name });
 };
 
 /** A string literal, or a template's text before its first placeholder. */
@@ -192,7 +195,7 @@ export const judge = (modules: ReadonlyMap<string, Module>): ReadonlyArray<Findi
   const tests = [...modules.keys()].filter((file) => TEST.test(file)).sort();
   const failures = tests
     .filter((file) => INTEGRATION.test(file) && reach(modules, file, (at) => read(at).any) === null)
-    .map((file): Finding => ({ _tag: "integration_opens_nothing", file }));
+    .map((file): Finding => Finding.integration_opens_nothing({ file }));
   // A plain test whose own code opens something is the per-file rule's; this names the rest.
   const advice = tests
     .filter((file) => !NAMED.test(file) && read(file).alone.length === 0)
@@ -200,7 +203,7 @@ export const judge = (modules: ReadonlyMap<string, Module>): ReadonlyArray<Findi
       const found = reach(modules, file, (at) => (at === file ? [] : read(at).alone));
       return found === null
         ? []
-        : [{ _tag: "plain_opens", file, via: found.via, opens: { _tag: found.open._tag, call: found.open.call } }];
+        : [Finding.plain_opens({ file, via: found.via, opens: Struct.pick(found.open, ["_tag", "call"]) })];
     });
   return [...failures, ...advice];
 };
@@ -220,6 +223,9 @@ const CODE_GRAPH = join(import.meta.dirname, "..", "node_modules/.bin/code-graph
 
 const readGraph = Schema.decodeUnknownOption(Schema.fromJsonString(Graph));
 
+/** The makers of what `tree` answers: `Tree.read({ modules })` and `Tree.unread({ why })`. */
+const Tree = Data.taggedEnum<ReturnType<typeof tree>>();
+
 /** The modules of one scope folder, by path from the top of `root`, or why code-graph could not say. */
 const tree = (
   root: string,
@@ -236,7 +242,7 @@ const tree = (
   const read = graph.status === 0 ? readGraph(graph.stdout) : Option.none();
 
   if (Option.isNone(read)) {
-    return { _tag: "unread", why: `code-graph ${scope} gave no graph (exit ${graph.status}):\n${graph.stderr}` };
+    return Tree.unread({ why: `code-graph ${scope} gave no graph (exit ${graph.status}):\n${graph.stderr}` });
   }
 
   const modules = read.value.modules.map(({ file, importEdges }): readonly [string, Module] => [
@@ -249,7 +255,7 @@ const tree = (
       })),
     },
   ]);
-  return { _tag: "read", modules };
+  return Tree.read({ modules });
 };
 
 const line = (finding: Finding): string =>

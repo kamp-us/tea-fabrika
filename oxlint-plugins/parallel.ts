@@ -16,7 +16,7 @@
 // (`.oxfmtrc.json`).
 import { constants } from "node:os";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Duration, Effect, Fiber, Result, Schema, Stdio, Stream } from "effect";
+import { Console, Data, Duration, Effect, Fiber, Result, Schema, Stdio, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** A piece of a part's output, and the stream it went to. */
@@ -31,6 +31,9 @@ type End =
   | { readonly _tag: "killed"; readonly signal: string; readonly code: number }
   | { readonly _tag: "unstarted"; readonly reason: string }
   | { readonly _tag: "unread"; readonly reason: string };
+
+/** The makers of an `End`, one per case. */
+const End = Data.taggedEnum<End>();
 
 /** What one part left: its command, its output in the order it came, how it ended and its time. */
 type Ran = {
@@ -48,7 +51,7 @@ const passed = (end: End) => end._tag === "exited" && end.code === 0;
 /** A shell's exit code over 128 is 128 + the number of the signal that killed what it ran. */
 const ended = (code: number): End => {
   const signal = Object.entries(constants.signals).find(([, n]) => code > 128 && n === code - 128)?.[0];
-  return signal === undefined ? { _tag: "exited", code } : { _tag: "killed", signal, code };
+  return signal === undefined ? End.exited({ code }) : End.killed({ signal, code });
 };
 
 /** How a part ended, in the words its header and the summary print. */
@@ -79,13 +82,13 @@ const tagged = (to: Piece["to"]) => Stream.map((bytes: Uint8Array): Piece => ({ 
 const run = (command: string) =>
   Effect.gen(function* () {
     const handle = yield* ChildProcess.make("sh", ["-c", WAITED, "sh", command], { stdin: "ignore" }).pipe(
-      Effect.mapError((error): End => ({ _tag: "unstarted", reason: error.message })),
+      Effect.mapError((error): End => End.unstarted({ reason: error.message })),
     );
     const [output, code] = yield* Effect.all(
       [
         Stream.runCollect(
           Stream.merge(handle.stdout.pipe(tagged("stdout")), handle.stderr.pipe(tagged("stderr"))),
-        ).pipe(Effect.mapError((error): End => ({ _tag: "unread", reason: `output unread: ${error.message}` }))),
+        ).pipe(Effect.mapError((error): End => End.unread({ reason: `output unread: ${error.message}` }))),
         // A result, never a failure: a failure here would interrupt the output beside it.
         Effect.result(handle.exitCode),
       ],
@@ -93,7 +96,7 @@ const run = (command: string) =>
     );
     const end = Result.match(code, {
       onSuccess: (exited) => ended(Number(exited)),
-      onFailure: (error): End => ({ _tag: "unread", reason: error.message }),
+      onFailure: (error): End => End.unread({ reason: error.message }),
     });
     return { output, end };
   }).pipe(

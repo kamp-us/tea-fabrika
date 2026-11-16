@@ -23,6 +23,7 @@
 // that do not assign to each other, so each has a small adapter that reads the facts out. This file
 // holds oxlint's (`visitor`); test-kind.ts holds oxc-parser's.
 import type { ESTree, Visitor } from "@oxlint/plugins";
+import { Data } from "effect";
 import { dotted } from "./match.ts";
 
 /** The real things 0584 names, by what a call opens. */
@@ -59,7 +60,10 @@ type Role =
   | { readonly _tag: "layer"; readonly gives: ReadonlyArray<Layer> }
   | { readonly _tag: "service"; readonly needs: Layer };
 
-const call = (tag: Tag, needs: Layer | null = null): Role => ({ _tag: "call", tag, needs });
+/** The makers of a `Role`, one per case. */
+const Role = Data.taggedEnum<Role>();
+
+const call = (tag: Tag, needs: Layer | null = null): Role => Role.call({ tag, needs });
 const each = (names: ReadonlyArray<string>, role: Role) => Object.fromEntries(names.map((name) => [name, role]));
 
 const launchers = (browser: string) =>
@@ -68,9 +72,9 @@ const launchers = (browser: string) =>
     call("browser"),
   );
 
-const services: Role = { _tag: "layer", gives: ["process", "disk"] };
-const files: Role = { _tag: "layer", gives: ["disk"] };
-const spawner: Role = { _tag: "layer", gives: ["process"] };
+const services: Role = Role.layer({ gives: ["process", "disk"] });
+const files: Role = Role.layer({ gives: ["disk"] });
+const spawner: Role = Role.layer({ gives: ["process"] });
 
 /** Each module whose names open a real thing, by the dotted path of the name inside the module. */
 const MODULES: ReadonlyArray<{ readonly module: RegExp; readonly names: Readonly<Record<string, Role>> }> = [
@@ -86,7 +90,7 @@ const MODULES: ReadonlyArray<{ readonly module: RegExp; readonly names: Readonly
   { module: /^(?:node:)?dgram$/, names: { createSocket: call("port") } },
   { module: /^(?:node:)?fs$/, names: each(["mkdtemp", "mkdtempSync", "promises.mkdtemp"], call("disk")) },
   { module: /^(?:node:)?fs\/promises$/, names: { mkdtemp: call("disk") } },
-  { module: /^(?:node:)?sqlite$/, names: { DatabaseSync: { _tag: "sqlite" } } },
+  { module: /^(?:node:)?sqlite$/, names: { DatabaseSync: Role.sqlite() } },
   {
     module: /^(?:playwright|playwright-core|@playwright\/test)$/,
     names: { ...launchers("chromium"), ...launchers("firefox"), ...launchers("webkit"), ...launchers("_electron") },
@@ -97,11 +101,11 @@ const MODULES: ReadonlyArray<{ readonly module: RegExp; readonly names: Readonly
     module: /^effect\/(?:unstable\/)?process$/,
     names: {
       "ChildProcess.make": call("process", "process"),
-      "ChildProcessSpawner.ChildProcessSpawner": { _tag: "service", needs: "process" },
+      "ChildProcessSpawner.ChildProcessSpawner": Role.service({ needs: "process" }),
     },
   },
-  { module: /^effect$/, names: { "FileSystem.FileSystem": { _tag: "service", needs: "disk" } } },
-  { module: /^effect\/FileSystem$/, names: { FileSystem: { _tag: "service", needs: "disk" } } },
+  { module: /^effect$/, names: { "FileSystem.FileSystem": Role.service({ needs: "disk" }) } },
+  { module: /^effect\/FileSystem$/, names: { FileSystem: Role.service({ needs: "disk" }) } },
   {
     module: /^@effect\/platform-node$/,
     names: { NodeServices: services, NodeFileSystem: files, NodeChildProcessSpawner: spawner },
@@ -121,6 +125,9 @@ const METHODS: Readonly<Record<Layer, ReadonlySet<string>>> = {
 export type Receiver =
   | { readonly _tag: "name"; readonly written: string }
   | { readonly _tag: "yield"; readonly written: string };
+
+/** The makers of a `Receiver`, one per case, for both adapters. */
+export const Receiver = Data.taggedEnum<Receiver>();
 
 /** A host a test may reach without the network. */
 const LOCAL = /^(?:localhost|127(?:\.\d+){3}|\[::1\]|0\.0\.0\.0)$/;
@@ -142,6 +149,8 @@ type Bound = { readonly imported: string | null; readonly local: string };
  * counts when this module imports it.
  */
 export const reader = <N>() => {
+  // An `Open`'s makers, one per tag: `Open` holds its tag in one field, so this names each tag a case.
+  const Opened = Data.taggedEnum<Data.TaggedEnum<Record<Tag, Omit<Open<N>, "_tag">>>>();
   // Each name this module can write, as written (`run`, `cp.spawn`, `PN.NodeServices`), by role.
   const bound = new Map<string, Role>();
   // Each local bound to a service, by the layer its methods need.
@@ -152,7 +161,7 @@ export const reader = <N>() => {
   const fetched: Array<Open<N>> = [];
   let stubbed = false;
   const open = (node: N, shown: string, tag: Tag, needs: Layer | null = null) =>
-    found.push({ _tag: tag, call: shown, node, needs });
+    found.push(Opened[tag]({ call: shown, node, needs }));
   const bind = (written: string, role: Role) => {
     bound.set(written, role);
 
@@ -221,7 +230,7 @@ export const reader = <N>() => {
       } else if (written === "process.kill") {
         open(node, shown, "signal");
       } else if (written === "fetch" && remote(first)) {
-        fetched.push({ _tag: "network", call: shown, node, needs: null });
+        fetched.push(Opened.network({ call: shown, node, needs: null }));
       } else if (written === "vi.stubGlobal" && first === "fetch") {
         stubbed = true;
       } else if (needs !== null && method !== null && METHODS[needs].has(method)) {
@@ -257,7 +266,7 @@ const receiver = (callee: Node): Receiver | null => {
 
   const service = yielded(callee.object);
   const written = dotted(callee.object);
-  return service !== null ? { _tag: "yield", written: service } : written === null ? null : { _tag: "name", written };
+  return service !== null ? Receiver.yield({ written: service }) : written === null ? null : Receiver.name({ written });
 };
 
 /** The adapter for oxlint's tree: a visitor that feeds `read`. */

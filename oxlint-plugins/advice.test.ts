@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, matchesGlob } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { advises, type Fire, stale, type WarnLine, warnLines } from "./advice.ts";
+import { advises, type Fire, Stale, stale, type WarnLine, warnLines } from "./advice.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");
@@ -153,11 +153,11 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
                   ? `next/${folder}/sub/b.ts`
                   : `next/${folder}x/b.ts`,
           }));
-          const want = lines.flatMap(({ folder, kind, rule }, i) => {
+          const want = lines.flatMap(({ folder, kind, rule }, i): ReturnType<typeof stale> => {
             const line = warn[i]!;
 
             if (kind === "file") {
-              return [{ _tag: "file", line }];
+              return [Stale.file({ line })];
             }
 
             const held = fires.some(
@@ -166,7 +166,7 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
                 f.folder === folder &&
                 (f.place === "direct" || (f.place === "deep" && kind === "tree")),
             );
-            return held ? [] : [{ _tag: "zero", line }];
+            return held ? [] : [Stale.zero({ line })];
           });
           expect(stale(warn, advice)).toEqual(want);
         },
