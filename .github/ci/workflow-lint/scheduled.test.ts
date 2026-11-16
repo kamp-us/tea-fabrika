@@ -231,6 +231,18 @@ const plants: [string, (w: Workflow) => void][] = [
     (w) => (gate(w).steps.find((s) => s["id"] === "decide")!["continue-on-error"] = true),
   ],
   ["SC14: the gate job continues on error", (w) => (gate(w)["continue-on-error"] = true)],
+  // SC14, the recheck of pull request 1404: a skipped gate step ends the job `success` with no
+  // `start`, which the report reads as stopped. Plant, run once on scheduled.ts and restored: the
+  // step `if` check dropped (red on all three).
+  ["SC14: the gate's step never runs", (w) => (gate(w).steps.find((s) => s["id"] === "decide")!["if"] = false)],
+  [
+    "SC14: the gate's step runs only on a push",
+    (w) => (gate(w).steps.find((s) => s["id"] === "decide")!["if"] = `\${{ github.event_name == 'push' }}`),
+  ],
+  [
+    "SC14: the gate's checkout never runs",
+    (w) => (gate(w).steps.find((s) => typeof s["uses"] === "string")!["if"] = false),
+  ],
   // SC15: the tests start only on the gate's `true`.
   ["SC15: the tests run whatever the gate said", (w) => Reflect.deleteProperty(w.jobs["tests"]!, "if")],
   ["SC15: the tests run when the gate passed", (w) => (w.jobs["tests"]!["if"] = "needs.gate.result == 'success'")],

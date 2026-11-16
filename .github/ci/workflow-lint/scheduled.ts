@@ -280,18 +280,18 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // the job's own limit is a backstop past their sum, since a job that hits its own limit ends
   // `cancelled`, which the report reads as a run a person stopped (the review of pull request 1404).
   // No `continue-on-error` on the job or a step, which would turn a failed read into a success with
-  // an empty `start`.
+  // an empty `start`, and no `if` on a step, since a skipped step ends the job `success` with no
+  // `start` too (the recheck of pull request 1404).
   const gateLimits = steps(gateJob).map((s) => s["timeout-minutes"]);
   const gateLimit = gateJob["timeout-minutes"];
   require(gateLimits.length > 0 &&
     gateLimits.every((limit) => typeof limit === "number" && Number.isInteger(limit) && limit > 0) &&
     typeof gateLimit === "number" &&
-    (gateLimits as number[]).reduce((sum, limit) => sum + limit, 0) <
-      gateLimit, `SC14: each step of the ${GATE_JOB} job has its own whole timeout-minutes, and the job's own limit is past their sum`);
-  require(!("continue-on-error" in gateJob) &&
+    (gateLimits as number[]).reduce((sum, limit) => sum + limit, 0) < gateLimit &&
+    !("continue-on-error" in gateJob) &&
     steps(gateJob).every(
-      (s) => !("continue-on-error" in s),
-    ), `SC14: neither the ${GATE_JOB} job nor any of its steps continues on error, so a gate that gives no start fails`);
+      (s) => !("if" in s) && !("continue-on-error" in s),
+    ), `SC14: every step of the ${GATE_JOB} job runs on every run, with a whole timeout-minutes of its own inside the job's, and neither the job nor a step continues on error, so a gate that gives no start fails`);
 
   // SC15. The tests run only when the gate said `true`: a gate that said `false` or failed starts
   // none.
