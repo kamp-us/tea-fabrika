@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e63-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T23:15:58-08:00",
+  "ended": "2026-11-16T00:56:14-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Effect sweep slice E63, check preferTypedSchemaDecoder (mechanical), on branch fabrikalfa/effect-e63. Recount on main with only this check at error: 210 hits in next/packages/libfabrika (plan said 136 across five folders; main moved). All 210 were fixed by a small codemod from the checker's own offsets (decodeUnknownX becomes decodeX, the checker's own suggestion), 99 files, no behavior change since the two decoders differ only in the input type. The branch then merged the mechanical sweep branch (891075e7a) by order of the coordinator: three conflicts (Id.ts, LaunchdStatus.ts, transport/Webauthn.ts) resolved by keeping the sweep branch's lines, which already carried the decodeX rename. Recount after the merge: 7 hits left, all in oxlint-plugins (anti-slop.ts x3, anti-slop.test.ts x2, vendored.ts x1, vendored.test.ts x1), fixed the same way. Zero in every tsconfig with the check at error. Proof of zero by tsc (check put at error through a temporary local edit of tsconfig.base.json, reverted, never committed): next/packages/libfabrika, next/apps/fabrika, tuval, vitest and the six programs, plus .agents and oxlint-plugins, 0 errors; .github/ci counted 0 by the checker. A plant of one decodeUnknownSync in libfabrika/src/Id.test.ts made the package typecheck fail with the check's error, then was restored. Folders that had a hit, for the lock: next/packages/libfabrika/src (client, access, cloudflare, codehost, desktop, gateway, gateway/internal, ledger, node, node/build, node/client, node/dev, node/dev/internal, node/launchd, node/repositories, packs, processes, processes/internal, runtime, runtime/internal, settings, tezgah, transport, and the src root), oxlint-plugins. On main before the merge, hits also sat in .agents (18), next/apps/fabrika (66), next/programs/pipeline (28), chaos (6), checklist (5), tuval (4), counter (2), inbox (2): all gone after the sweep branch merge. packages/fabrika (today's version) still has about ten hits outside this slice's tsconfigs (host/host.ts, host/traces.ts, agents/agent/core.ts, tests). No lock entry added, as the coordinator ruled. Tests at head after merge: 47 plain test files (418 tests) and the 12 touched libfabrika integration files (274 passed, 1 skipped) all green; none refused by the 0178 guard. pnpm format, lint (lint:dead and lint:promise-types pass alone; they fail only when run in the parallel lint under load) and the exam ratchet exit 0.",
+  "plants": [
+    {
+      "law": "typecheck at error for preferTypedSchemaDecoder (libfabrika)",
+      "plant": "one decodeUnknownSync put back in next/packages/libfabrika/src/Id.test.ts",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 100,
+  "note": "A first --changed origin/main run from the repo root pulled in next/apps/fabrika integration laws that hit 60 s timeouts on real workerd under load; it was stopped. The files this change touched were then run on their own and are green.",
+  "step": "tests"
+}
