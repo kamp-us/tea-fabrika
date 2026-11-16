@@ -36,21 +36,24 @@ export class Commits extends Context.Service<Commits, {
 
 ## Doubts, read these first
 
-- **Where the five checks land (75%).** [0585](../../../.decisions/0585-kalfa-is-six-domain-packages.md)
-  (2026-11-15) puts leakgrep, loosening, governance, skillscheck and redact into `@kalfa/ci/checks`,
-  and says a shell or Python check "becomes TypeScript and Effect as it moves". 0113 (2026-11-11)
-  says port now. The `@kalfa/ci` build waits for the sev0's tail, so this plan ports them in place,
-  under `.agents/`, in the shape a `@kalfa/ci/checks` subpath takes (an `effect/cli` command per
-  check, its services in their own files), so the later move is a `git mv`. Open question 1.
-- **0585 says the step runner (`box`, `mutbox`, `chain`, `drive`) gets fixes only (80%).** 0113
-  names `box.sh` itself as the first port, and its binding constraint covers every tracked script.
-  A port that keeps every command line and law is read here as allowed. Open question 1 asks too.
+- **Settled by rules in force, read by the lead (2026-11-16).** The three questions this draft
+  first put to the owner are answered by decisions already in force, so none is open:
+  1. **All fifteen port now, the five checks and the step runner included.** The owner ordered
+     every port (0113). leakgrep, loosening, governance, skillscheck and redact are written in the
+     shape a `@kalfa/ci/checks` subpath takes (an `effect/cli` command per check, its services in
+     their own files), so [0585](../../../.decisions/0585-kalfa-is-six-domain-packages.md)'s later
+     move is a plain `git mv`. `box` and `mutbox` port too: a port that keeps every command line
+     and law counts as the fix 0585 allows the step runner.
+  2. **The mutation container's entry is TypeScript on Node's built-ins, each use marked as an
+     edge.** 0113 allows shell only where Node does not exist yet, and Node exists in the
+     container. See S16.
+  3. **`loosening.ts` reads test files with `oxc-parser`.** 0040: an existing tool before a
+     hand-written one, and oxc is already our lint stack. See S13.
 - **The exam-path matcher (75%).** `exam.py` and `next/apps/fabrika/src/exam/commits.ts` read the
   same `exam-paths.json` with two hand-written glob translators that differ in two cases (see
   Findings). The lean is one matcher, the exam's: `exam.ts` imports `examMatcher` from `commits.ts`,
   so the step tools and CI's commits check can never disagree. Both differences make more paths
   exam paths, never fewer, so no law loosens. What would settle it: the lead's yes at approval.
-- **The mutation container's entry runs before `pnpm install` (70%).** Open question 2.
 
 ## What changes, in one paragraph
 
@@ -118,8 +121,9 @@ checks), not the entry script. The branch `fabrikalfa/port-typecheck` is not on 
   ports reuse that, as one `Lock` service. `proper-lockfile` on npm does the same with a folder and
   a heartbeat; not fetched for this plan, and not needed while the repo's own one works.
 - **A TypeScript lexer.** `loosening.sh` hand-lexes TypeScript in Python. `oxc-parser` is installed
-  (0.157.0, used by `oxlint-plugins/script-reads.mjs`) and gives the real tree and comments. Open
-  question 3.
+  (0.157.0, used by `oxlint-plugins/script-reads.mjs`) and gives the real tree and comments. S13
+  uses it (0040), so `loosening.ts` finds `it`, `expect` and `numRuns` in the tree, not by a
+  hand lexer.
 - **A check that refuses file types.** ls-lint (https://ls-lint.org) checks file names per folder;
   not fetched, read from memory: it reads the work tree, not git's tracked files, so a person's
   untracked scratch `.sh` would fail their lint, and it adds a Go binary. oxlint reads only
@@ -384,9 +388,12 @@ tools check to `plancheck.sh`); if it has not merged when S10 starts, S10 ports 
 |---|---|---|---|
 | S14 | `box.sh` `new`, `run`, `fetch`, and `env.sh` | `Git`, `Env`, `Lock`, `Redact`, `PullRequests`, `Signer` (ssh-keygen verify, `pnpm commits sign`), `run` | `drive.ts` (`node box.ts`), `gcloop.ts` (`node gc.ts`), `flow/host.ts`, `boxrm.test-support.ts`, lead and step-commit skills, two direction notes, `script-reads.mjs`'s comment |
 | S15 | `mutation/scripts/run.sh` | `run` (process group), `FileSystem`, `Clock` (the 300 s cap) | `mutbox-entry`, `scripts/caps.test.ts` (imports the config builder in place of reading text), mutation skill, `mutation.yaml`'s comment |
-| S16 | `mutbox-entry.sh` | see open question 2 | `mutbox.Dockerfile`, `mutbox.ts`, `mutbox.test.ts`, `.agents/raw.d.ts` (deleted with its last `?raw` reader) |
+| S16 | `mutbox-entry.sh` | `node:child_process` and `node:fs`, each use one marked `edge:` line (0250), before the install; then `run.ts` from the commit under test | `mutbox.Dockerfile`, `mutbox.ts`, `mutbox.test.ts`, `.agents/raw.d.ts` (deleted with its last `?raw` reader) |
 
-S14 deletes `env.sh` with `box.sh`, its last reader. When S14 lands and the typecheck port has too,
+S16's entry runs before `pnpm install`, so it cannot import Effect: `mutbox-entry.ts` does the
+checkout and the offline install on Node's built-ins, each use one marked `edge:` line (0250), then
+runs the arms by importing `.agents/skills/mutation/scripts/run.ts` from the commit under test, and
+falls back to `run.sh` for a commit from before S15. S14 deletes `env.sh` with `box.sh`, its last reader. When S14 lands and the typecheck port has too,
 whichever lands last deletes `NOT_YET_PORTED` and the code that reads it.
 
 ## Laws
@@ -423,11 +430,14 @@ table (`Removed`, `Replacement`) with every title, which `loosening.sh` reads.
 | `plan` is a known step: `--commit-only plan` commits the named paths, and a signed `plan` commit refuses with its own line and exit 2, leaving the index as it was | S12 | test | fc.constantFrom: each step name, known and unknown, 30 runs | `plan` refused as unknown |
 | A refused commit leaves the index as it was | S12 | test | fc.constantFrom: each refusal, 30 runs | `unstage` skipped on a format refusal |
 | Every old law of `loosening.test.ts` holds, exit codes 0, 1 and 2 included | S13 | test | scenario: the old file's own cases | a removed `expect` passes |
+| A test file `oxc-parser` cannot parse, at either ref, fails closed with exit 2 | S13 | test | fc.string: generated broken TypeScript, 50 runs | a parse error read as no change |
 | Every old law of `box.test.ts` holds on `BoxTest` layers, and its process laws on the real layer | S14 | test | scenario: the old file's own cases | the slot limit 8 becomes 9 |
 | `box.ts new` prints the `phase <name> <ms>` lines drive reads, in order | S14 | test | scenario: one start on `TestClock` | a phase dropped |
 | The Stryker config `run.ts` writes equals the one `run.sh` emitted, and `caps.test.ts` reads it as a value | S15 | test | fc.record: generated `RELATED`, `SINCE`, `FINAL`, `IN_PLACE`, `BASELINE`, 100 runs | `concurrency` 2 |
 | A run past 300 s exits 124 and leaves no `vitest.mutation.config.ts` | S15 | test | scenario: `TestClock` past the cap | the config file kept |
 | Every old law of `mutbox.test.ts` that reads the entry holds on the new entry | S16 | test | scenario: the old file's own cases | exit 71 for a failed install |
+| The entry imports nothing but `node:` built-ins, each on a marked `edge:` line | S16 | lint | lint | an `effect` import in the entry |
+| A commit under test from before S15 still runs its arms through `run.sh` | S16 | test | scenario: a base commit that has `run.sh` and no `run.ts` | the fallback dropped |
 | No tracked `.sh` or `.py` file is left but `apt.sh` (and `typecheck.sh` until its port) | S14 | lint | lint | `env.sh` left behind |
 
 No host-only law: nothing here needs launchd, the real Electron app or a signal on the owner's
@@ -589,8 +599,8 @@ writes today (`redacted N`, the `.box` facts, the field row, the `phase` lines).
 - Each integrator pull request lists, per slice, the mapping table of laws, the tests run at which
   head, and the review's verdict.
 - `docs/plan/README.md`'s "where we are" names ticket 766's state after each integrator lands.
-- No decision file: this plan builds decided notes. If the owner answers open question 1 or 2 with
-  a new rule, that answer is recorded with `/adr` in its own docs pull request.
+- No decision file: this plan builds decided notes, and the three calls in "Doubts" come from
+  rules already in force (0113, 0040, 0585, 0250).
 
 ## Size
 
@@ -636,27 +646,7 @@ Estimate: 57 steps, $100
 
 ## Open questions
 
-1. **Do the five checks 0585 sends to `@kalfa/ci/checks` (leakgrep, loosening, governance,
-   skillscheck, redact) port now in place under `.agents/`, and does the step runner (`box.sh`,
-   `mutbox-entry.sh`, `run.sh`) port although 0585 says it gets fixes only?** 0113 says now, and
-   0585 says a check becomes TypeScript as it moves, at the sev0's tail. Lean: port all fifteen now,
-   in the shape of a `@kalfa/ci/checks` subpath, so the move is a `git mv` (75%). If the owner
-   says the checks wait, S2, S5, S8, S11 and S13 leave this plan and the lint list keeps them
-   until the `@kalfa/ci` build.
-2. **The mutation container's entry: one TypeScript file on Node built-ins as marked edges, or a
-   third edge in shell?** It runs before `pnpm install`, so it cannot import Effect. Lean: a
-   `mutbox-entry.ts` that does the checkout and the offline install with `node:child_process` and
-   `node:fs` as one marked `edge:` line each (0250), then runs the arms by importing
-   `.agents/skills/mutation/scripts/run.ts` from the commit under test, falling back to `run.sh`
-   for a commit from before S15 (70%). The other road keeps `mutbox-entry.sh` as a second marked
-   edge beside `apt.sh`, which 0113 allows only for a script that runs before Node exists; Node does
-   exist in the container, so the lean is the TypeScript file.
-3. **Does `loosening.ts` read test files with `oxc-parser`'s tree, or keep `loosening.sh`'s own
-   lexer, ported line for line?** The tree finds `it`, `expect` and `numRuns` exactly, but every law
-   was written against the lexer, and a parse error must still fail closed (exit 2). Lean: the
-   tree, with the old lexer's 30 laws unchanged and a law that a file `oxc-parser` cannot parse
-   exits 2 (65%). What would settle it: the tests step running the old laws against a tree-based
-   draft in S13's box before the build.
+None.
 
 ## Findings
 
