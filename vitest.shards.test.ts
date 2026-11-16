@@ -121,8 +121,6 @@ const nextSamples = {
   // A job 132637025443, B job 132638385672, C job 132639432685.
   // Measured at its old path, next/apps/fabrika/src/exam/compiler.test.ts; 0591 moved it.
   "next/packages/libfabrika/src/node/build/compiler.test.ts": [0.0, 0.0, 0.0],
-  // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/apps/fabrika/src/exam/node-kinds.test.ts": [0.1, 0.1, 0.1],
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/apps/fabrika/src/exam/ratchet.test.ts": [0.1, 0.1, 0.1],
   // A job 132637025443, B job 132638385672, C job 132639432685.

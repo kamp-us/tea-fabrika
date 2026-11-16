@@ -114,7 +114,6 @@
   "next/apps/fabrika/src/exam/deps.integration.test.ts": 4.1,
   "next/apps/fabrika/src/exam/edges.integration.test.ts": 2.9,
   "next/apps/fabrika/src/exam/laws-scan.integration.test.ts": 0,
-  "next/apps/fabrika/src/exam/node-kinds.test.ts": 0.1,
   "next/apps/fabrika/src/exam/ratchet.test.ts": 0.1,
   "next/apps/fabrika/src/exam/runner-contract-replay.test.ts": 40.5,
   "next/apps/fabrika/src/exam/runner-contract.test.ts": 43.3,
