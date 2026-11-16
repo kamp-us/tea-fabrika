@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-supervisor-writes-uncharged-build",
+  "ticket": "supervisor-writes-uncharged",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1514",
+  "started": "2026-11-16T00:50:04-08:00",
+  "ended": "2026-11-16T02:02:38-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Build step for the supervisor-writes-uncharged plan (decision 0593), in next/. Laws L1 to L6 are green with product code only. Accounting.change now takes a required Charge (program, recovery or supervisor); each name's own store keeps a supervisor tally beside its local account, counted and never limited, and Accounting.status reads it. RecoveryStore.save charges recovery when the journal is in or leaves a recovery state (0147, unchanged), the supervisor when the save writes no receipt row and changes only the supervisor's own fields or is a first save with no receipts, and the program otherwise. One departure from the plan's file list: the field-name list lives in runtime/internal/recovery.ts as supervisorFields, and supervisor.ts exports it as bookkeeping with the satisfies tie, because RecoveryStore.ts importing supervisor.ts would close an import cycle (supervisor.ts imports ProcessStore.ts, which imports RecoveryStore.ts), and recovery.ts is where the store already reads journal shapes without the supervisor's schema. The brief also asked to update the resetAfterMs guard of PR 1515's hour-crossing law; that edit was written and ran green (15 of 15), but stepcommit.sh refused it ('a build may not commit exam paths; answer send to tests'), so it was undone and goes back to the tests step as a proposed diff in the build report. The law as committed is green and still catches its plant, since its whole-status comparison now holds the supervisor tally too. The OTP and Kubernetes follows tables and the glossary gained their rows.",
+  "laws": [
+    {
+      "law": "next/packages/libfabrika/src/runtime/QuotaRunnerTest.ts: L1 the healthy mark after an idle gap is the supervisor's save: the program's local account is unchanged",
+      "red": "green after the build"
+    },
+    {
+      "law": "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts: L2 the healthy mark after the journal's reset window is the supervisor's write, not the program's",
+      "red": "green after the build, also at FABRIKA_TEST_DEPTH=full"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/QuotaRunnerTest.ts: L3 a bookkeeping save charges only the supervisor, and a program or mixed save charges the program exactly",
+      "red": "green after the build"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/QuotaRunnerTest.ts: L4 a crash and its restart leave the supervisor tally, grow recovery, and cost the program no more than a letter",
+      "red": "green before and after the build"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/RecoveryStore.types.test.ts: type: L5 Accounting.change takes its charge, so four arguments or the old flag do not compile",
+      "red": "green in pnpm typecheck after the build"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/RecoveryStore.types.test.ts: type: L6 every bookkeeping name is a field of Supervision, and the program's own fields are not",
+      "red": "green in pnpm typecheck after the build"
+    }
+  ],
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 73,
+  "note": "Ran in the box with no override and TYPESAFE_API_KEY unset, under nice -n 15 vitest --maxWorkers=3, on 6bea67060 plus this step's edits: QuotaRunner.test.ts and RecoveryStore.types.test.ts 12 of 12; runtime-recovery.laws.integration.test.ts 15 of 15 three times (twice with the undone guard edit, once as committed), and L2 with the hour-crossing law at full depth 2 of 2; RecoveryStore.integration, RecoveryStoreReads.integration, Quotas, supervisor.laws and ProcessStore.integration 32 of 32; RunnerSupervision.integration, runtime-quotas.laws and cloudflare/supervision.laws.integration 68 of 68; worker-quotas.integration (real workerd) 3 of 3; start-child.laws.integration 23 of 23. --changed origin/main: 164 of 166 files, 1579 tests passed, 2 failed, both 'Test timed out in 60000ms' while the run kept three workers busy: T753 L16 in runtime-recovery.laws.integration.test.ts (seen in both --changed runs) and L11 in start-child.laws.integration.test.ts; each file passed whole when run alone afterwards. The 0178 guard refused nothing. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144), the list ratchet and one pnpm typecheck pass. The first --changed run was stopped by a 10 minute background limit and was run again whole.",
+  "step": "build"
+}
