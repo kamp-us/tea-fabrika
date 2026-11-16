@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-watch-review2",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1341",
+  "started": "2026-11-15T16:00:40-08:00",
+  "ended": "2026-11-15T16:07:25-08:00",
+  "parent": "2026-11-15-watch-review1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Watch quest recheck of 8a1d28feb, in next/: sent to tests, one blocking class, one finding row. Both classes review1 sent back are fixed in product code: the Project wakes each watching process after an exit and after a child stop (cloudflare/runtime.ts wakeWatchers), and M13 now crosses the RPC for a refusal and a demonitor. M16 sees the DOWN with no call into the watcher: CI run 43772292846 had it red at 4889d9da2 (no DOWN pushed in 25 s) and run 43775124405 green at 8a1d28feb. The one class left: no law reaches the wake after a child stop; deleting it leaves M13 and M16 green.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "note": "Read-only apart from this row. Read both full runs job by job: 43772292846 failed only M16 (job 132995647220), the other cancels were the run's own stop; 43775124405 failed only L11 in start-child.laws (job 132999601962, 60 s timeout, 32.9 s in the run before), M13 and M16 passed in job 132999601908. Planted by reading only. git merge-tree with origin/main a16c31d54: no conflict. Not run by the reviewer: any .integration. file, workerd, pnpm typecheck, any unit file (the fix touched none).",
+  "step": "review"
+}

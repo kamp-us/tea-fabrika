@@ -114,6 +114,14 @@ export { Started } from "./processes/Children.ts";
 /**
  * @stability unstable
  */
+export * as Monitor from "./runtime/Monitor.ts";
+/**
+ * @stability unstable
+ */
+export * as Monitors from "./processes/Monitors.ts";
+/**
+ * @stability unstable
+ */
 export * as Setting from "./settings/Setting.ts";
 // tezgah's wire contract: its view's shapes and the layout's geometry, pure and browser-safe. A
 // program's box reaches them here; a window may also take each by its own subpath.

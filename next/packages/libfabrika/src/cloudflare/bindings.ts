@@ -11,8 +11,9 @@ import { Appended, Line } from "../ledger/Log.ts";
 import type { Connections } from "../presence/Connections.ts";
 import { type Child, ChildrenError, type ChildStop, Started } from "../processes/Children.ts";
 import type { From, Letter } from "../processes/Mailbox.ts";
+import { MonitorsError, type Unwatch, type Watch, Watched } from "../processes/Monitors.ts";
 import { ProcessError, State, type Activity, type Start } from "../processes/Process.ts";
-import type { ProcessManager } from "../processes/ProcessManager.ts";
+import type { ProcessCalls } from "../processes/ProcessManager.ts";
 import { type Delivery, MailRefusal } from "../processes/ProgramMail.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import type { BuiltProgram } from "../runtime/Built.ts";
@@ -145,6 +146,18 @@ export const StopReplies = Schema.TaggedUnion({
 });
 
 /**
+ * Schema for a program's watch answer over Project RPC: `Watched`, or its `MonitorsError` refusal
+ * as data. A storage failure fails the call itself.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const MonitorReplies = Schema.TaggedUnion({
+  ok: { value: Watched },
+  MonitorsError: { reason: MonitorsError.fields.reason },
+});
+
+/**
  * The door's calls on the Project, as Effects: connecting a client, its hello, routing its calls,
  * knocks and grants, and the signing and appends a process asks for.
  *
@@ -203,7 +216,8 @@ type RemoteCall<F> = F extends (...args: infer A) => infer B ? (...args: A) => P
 
 type Remote<S> = { [K in keyof S]: RemoteCall<S[K]> };
 type DoorService = GatewayCalls;
-type Processes = (typeof ProcessManager)["Service"];
+/** The manager's calls an object may make over RPC: no guard, and no trusted watcher. */
+type Processes = ProcessCalls;
 type Gateways = (typeof Connections)["Service"];
 type Runner = (typeof ProgramRunner)["Service"];
 
@@ -281,6 +295,8 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
     processReceive: ProcessCall<(process: string, after: number) => Effect.Effect<ReadonlyArray<Letter>, ProcessError>>;
     processChild: RemoteCall<(child: Child, from: From) => Effect.Effect<typeof ChildReplies.Encoded>>;
     processStop: RemoteCall<(stop: ChildStop, from: From) => Effect.Effect<typeof StopReplies.Encoded>>;
+    programMonitor: RemoteCall<(watch: Watch, from: From) => Effect.Effect<typeof MonitorReplies.Encoded>>;
+    programDemonitor: RemoteCall<(unwatch: Unwatch, from: From) => Effect.Effect<void>>;
   };
 
 /**
