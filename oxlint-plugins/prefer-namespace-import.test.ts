@@ -149,7 +149,7 @@ describe("law 4: a name that is no module of Effect is reported and given no fix
         fc.array(fc.constantFrom(...MODULES.filter((m) => m.source === "effect").map((m) => m.name)), { maxLength: 3 }),
         fc.nat(),
         (fn, modules, at) => {
-          const names = [...new Set(modules)];
+          const names: string[] = [...new Set(modules)];
 
           names.splice(at % (names.length + 1), 0, fn);
 
@@ -198,7 +198,7 @@ describe("law 5: with the real config the rule fires in the folders the tsconfig
   // run takes every path, in a generated order, so no folder can be missed by the draw.
   it("fires on the import line in each locked folder, tests and internal/ included", () => {
     fc.assert(
-      fc.property(fc.shuffledSubarray(IN_SCOPE, { minLength: IN_SCOPE.length }), (paths) => {
+      fc.property(fc.shuffledSubarray([...IN_SCOPE], { minLength: IN_SCOPE.length }), (paths) => {
         for (const path of paths) {
           expect(linted(CODE, path), path).toEqual([1]);
         }
@@ -209,7 +209,7 @@ describe("law 5: with the real config the rule fires in the folders the tsconfig
 
   it("stays silent in the folders still to come and outside the libraries", () => {
     fc.assert(
-      fc.property(fc.shuffledSubarray(OUTSIDE, { minLength: OUTSIDE.length }), (paths) => {
+      fc.property(fc.shuffledSubarray([...OUTSIDE], { minLength: OUTSIDE.length }), (paths) => {
         for (const path of paths) {
           expect(linted(CODE, path), path).toEqual([]);
         }

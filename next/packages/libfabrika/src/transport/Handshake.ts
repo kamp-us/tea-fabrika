@@ -13,7 +13,8 @@
  * Msg (`transport/Link.ts`).
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Option, Schema } from "effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { ErrorClass } from "./ClientRows.ts";
 
 const Dial = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));

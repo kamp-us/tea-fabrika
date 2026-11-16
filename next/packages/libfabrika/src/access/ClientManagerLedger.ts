@@ -7,7 +7,11 @@
  * log says now. Entries whose tag is not a membership event are skipped, and an entry that does
  * not decode fails the call with a `LedgerError` of reason `bad_row`.
  */
-import { Effect, Layer, Result, Schema, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { type Entry, fromHere, lineFor, valueFor } from "../ledger/Log.ts";
 import type { From } from "../processes/Mailbox.ts";
@@ -46,7 +50,7 @@ const row = Effect.fnUntraced(function* (entry: Entry) {
   const event = decodeEvent(valueFor(entry));
 
   if (Result.isFailure(event)) {
-    return yield* new LedgerError({ reason: "bad_row", cause: event.failure });
+    return yield* LedgerError.make({ reason: "bad_row", cause: event.failure });
   }
 
   return { entry, event: event.success } satisfies Row;
@@ -150,7 +154,7 @@ export const layer = (
         const placed = yield* ledger.append(MEMBERS, "founded", lineFor(from, founding));
 
         if (placed._tag === "refused" && placed.reason !== "id_reused") {
-          return yield* new LedgerError({
+          return yield* LedgerError.make({
             reason: "refused",
             message: `founded refused: ${placed.reason}`,
           });

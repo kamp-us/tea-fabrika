@@ -2,8 +2,10 @@
  * The durable task service: record, take, start, finish and read one task. This file is the contract
  * only (0095); `TasksLedger.layer` keeps each task as its own ledger stream.
  */
-import { Context, Schema } from "effect";
-import type { Effect, Stream } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import type * as Stream from "effect/Stream";
 import type { ProcessId } from "../ProcessId.ts";
 import type { Rev } from "../Rev.ts";
 import type { Collection, Executor, Task, Recorded, Request, Result } from "./Task.ts";

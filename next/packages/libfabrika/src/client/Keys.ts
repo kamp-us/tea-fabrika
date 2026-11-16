@@ -12,7 +12,8 @@
  * row writes `mod` for the backend's command key (Cmd on a Mac, Ctrl elsewhere) and `<prefix>` for
  * a key pressed after the prefix.
  */
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import type { Binding } from "../runtime/Program.ts";
 import type { Hello } from "../transport/Wire.ts";
 import type { Prefix } from "./Prefix.ts";

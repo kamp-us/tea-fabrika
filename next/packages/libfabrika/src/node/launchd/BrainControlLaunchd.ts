@@ -40,16 +40,16 @@ const Job = Schema.Struct({
   AbandonProcessGroup: Schema.Literal(false),
 });
 
-const storage = (cause: unknown) => new BrainControlError({ reason: new Storage({ cause: Redacted.make(cause) }) });
-const conflict = (cause: unknown) => new BrainControlError({ reason: new Conflict({ cause: Redacted.make(cause) }) });
+const storage = (cause: unknown) => BrainControlError.make({ reason: Storage.make({ cause: Redacted.make(cause) }) });
+const conflict = (cause: unknown) => BrainControlError.make({ reason: Conflict.make({ cause: Redacted.make(cause) }) });
 
 const commandError = (cause: unknown, code?: number) =>
-  new BrainControlError({
-    reason: new Command({ ...(code === undefined ? {} : { code }), cause: Redacted.make(cause) }),
+  BrainControlError.make({
+    reason: Command.make({ ...(code === undefined ? {} : { code }), cause: Redacted.make(cause) }),
   });
 
 const unsupported = (cause: unknown) =>
-  new BrainControlError({ reason: new Unsupported({ cause: Redacted.make(cause) }) });
+  BrainControlError.make({ reason: Unsupported.make({ cause: Redacted.make(cause) }) });
 
 const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Snapshot) {
   const fs = yield* FileSystem.FileSystem;
@@ -103,8 +103,8 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
                 ? /^Process interrupted due to receipt of signal: '(SIG[A-Z0-9]+)'$/u.exec(native.success.message)?.[1]
                 : undefined,
             );
-            return new BrainControlError({
-              reason: new Command({
+            return BrainControlError.make({
+              reason: Command.make({
                 ...(Result.isSuccess(signal) ? { signal: signal.success } : {}),
                 cause: Redacted.make(cause),
               }),

@@ -17,7 +17,8 @@
  * superseded is kept. Moves dropped together are taken one at a time, oldest first.
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { apply } from "../runtime/Patch.ts";
 import { focus } from "../tezgah/Layout.ts";
 import { CursorKey, TezgahView, TileId } from "../tezgah/Workspace.ts";

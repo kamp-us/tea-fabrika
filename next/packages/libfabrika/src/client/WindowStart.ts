@@ -5,8 +5,13 @@
  * The same start runs in a browser tab and in a program with no DOM.
  */
 import { run } from "@demlik/tea/effect";
-import { Clock, DateTime, Deferred, Effect, Schema, type Stream } from "effect";
-import { Socket } from "effect/socket";
+import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Socket from "effect/socket/Socket";
+import type * as Stream from "effect/Stream";
 import * as Id from "../Id.ts";
 import { TileId } from "../tezgah/Workspace.ts";
 import { ClientKey, type Identity } from "../transport/ClientKey.ts";

@@ -4,18 +4,16 @@
  * it, the signal it sends, and the durable outbox for its lifecycle events.
  */
 import { applyCell } from "@demlik/tea";
-import {
-  type Duration,
-  Effect,
-  FileSystem,
-  Option,
-  Path,
-  Result,
-  Schema,
-  Semaphore,
-  Stream,
-  SubscriptionRef,
-} from "effect";
+import type * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { devLife, type DevState } from "./DevLife.ts";
 
@@ -140,7 +138,7 @@ export const signal = (pid: number, name: Signal): Effect.Effect<void> =>
     try: () => {
       process.kill(pid, name);
     },
-    catch: (cause) => new SignalError({ reason: isMissing(cause) ? "missing" : "refused", cause }),
+    catch: (cause) => SignalError.make({ reason: isMissing(cause) ? "missing" : "refused", cause }),
   }).pipe(
     Effect.catchIf(
       (error) => error.reason === "missing",
@@ -255,7 +253,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
       (row) => Schema.decodeUnknownEffect(Schema.fromJsonString(PendingEvent))(row),
       { concurrency: 1 },
     );
-  }).pipe(Effect.mapError((cause) => new BrainError({ reason: "bad_row", cause })));
+  }).pipe(Effect.mapError((cause) => BrainError.make({ reason: "bad_row", cause })));
   const durableWrite = Effect.fnUntraced(
     function* (target: string, text: string) {
       yield* fs.makeDirectory(home, { recursive: true });
@@ -276,7 +274,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
         }),
       );
     },
-    Effect.mapError((cause) => new BrainError({ reason: "storage", cause })),
+    Effect.mapError((cause) => BrainError.make({ reason: "storage", cause })),
   );
   const write = (rows: ReadonlyArray<typeof BrainEvent.Type>) =>
     durableWrite(file, rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""));
@@ -295,7 +293,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
       return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.NonEmptyString))(
         yield* fs.readFileString(lastFile),
       );
-    }).pipe(Effect.mapError((cause) => new BrainError({ reason: "bad_row", cause })));
+    }).pipe(Effect.mapError((cause) => BrainError.make({ reason: "bad_row", cause })));
   });
   const saveLast = Effect.fnUntraced(function* () {
     const start = yield* last();
@@ -312,14 +310,14 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
     add: Effect.fn("brain.pending")(function* (raw: unknown) {
       yield* Effect.gen(function* () {
         const event = yield* Schema.decodeUnknownEffect(PendingEvent)(raw).pipe(
-          Effect.mapError((cause) => new BrainError({ reason: "bad_row", cause })),
+          Effect.mapError((cause) => BrainError.make({ reason: "bad_row", cause })),
         );
         const rows = yield* read;
         const old = rows.find((row) => row.id === event.id);
 
         if (old !== undefined) {
           if (JSON.stringify(old) !== JSON.stringify(event)) {
-            return yield* new BrainError({ reason: "id_reused" });
+            return yield* BrainError.make({ reason: "id_reused" });
           }
 
           return;

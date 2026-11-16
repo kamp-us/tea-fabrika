@@ -2,7 +2,7 @@
  * A task: work a program asks one selected set of hands to do. Its request, the executor that takes
  * it, the checked result and each writer's record, as values only (0095).
  */
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { TraceId } from "../ledger/Log.ts";
 import { ProcessId } from "../ProcessId.ts";
 import { ParentText, Rev } from "../Rev.ts";

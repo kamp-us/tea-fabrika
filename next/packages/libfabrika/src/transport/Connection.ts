@@ -3,7 +3,13 @@
  * state around each JSON-RPC frame, tracks parked waits and answers them when a stream advances.
  */
 import { applyCell } from "@demlik/tea";
-import { Effect, Exit, Option, Predicate, Result, Schema, Semaphore } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import { REFUSED } from "../SpanTag.ts";
 import * as State from "./internal/connection.ts";
 import { Answer, type Attached, RateCountFailure, RateRefusal, Wait } from "./Wire.ts";

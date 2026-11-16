@@ -2,8 +2,11 @@
  * A fixture for the local brain driver's tests: the memory sample's command, answered without
  * starting an OS process.
  */
-import { Effect, Layer, Sink, Stream } from "effect";
-import { ChildProcessSpawner } from "effect/process";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
 
 /**
  * Layer that provides a `ChildProcessSpawner` whose every command exits with 0 at once and prints

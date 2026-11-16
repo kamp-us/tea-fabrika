@@ -33,13 +33,12 @@ export const layer = <E, R>(
     Effect.gen(function* () {
       const path = yield* Path.Path;
       const recording = yield* devRecording(path.join(spec.home, "records", "desktop"), "desktop", forward).pipe(
-        Effect.mapError(
-          (cause) =>
-            new BrainServiceError({ reason: new Operation({ action: "install", cause: Redacted.make(cause) }) }),
+        Effect.mapError((cause) =>
+          BrainServiceError.make({ reason: Operation.make({ action: "install", cause: Redacted.make(cause) }) }),
         ),
         Effect.catchDefect((cause) =>
           Effect.fail(
-            new BrainServiceError({ reason: new Operation({ action: "install", cause: Redacted.make(cause) }) }),
+            BrainServiceError.make({ reason: Operation.make({ action: "install", cause: Redacted.make(cause) }) }),
           ),
         ),
       );

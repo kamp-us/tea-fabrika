@@ -29,7 +29,7 @@ const scalar = Schema.is(Scalar);
  */
 export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) {
   const failed = (cause: unknown) =>
-    new BrainControlError({ reason: new Unsupported({ cause: Redacted.make(cause) }) });
+    BrainControlError.make({ reason: Unsupported.make({ cause: Redacted.make(cause) }) });
   const response = yield* Schema.decodeUnknownEffect(Response)(input).pipe(Effect.mapError(failed));
   // oxlint-disable-next-line fabrika/no-redacted-value -- edge: parse protected native output; return checked job fields and keep failures protected
   const out = Redacted.value(response.stdout);
@@ -45,8 +45,8 @@ export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) 
       return Status.cases.absent.make({});
     }
 
-    return yield* new BrainControlError({
-      reason: new Command({ code: response.code, cause: Redacted.make(response) }),
+    return yield* BrainControlError.make({
+      reason: Command.make({ code: response.code, cause: Redacted.make(response) }),
     });
   }
 

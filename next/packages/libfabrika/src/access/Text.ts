@@ -6,7 +6,7 @@
  * Each text is schema-ordered JSON for the tagged change, followed by one line feed, so an omitted
  * tag or field, or a reordered field, changes the signed bytes. Nothing here signs or verifies.
  */
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { Add, Grant, Revoke } from "./Access.ts";
 
 /**

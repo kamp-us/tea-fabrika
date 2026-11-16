@@ -14,7 +14,11 @@
  * are per permission, the store fails typed, `Denied` carries who, what and which object, and a
  * proof carries the object it checked.
  */
-import { Context, Effect, Option, Result, Schema } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { type Declared, evaluate } from "./internal/evaluate.ts";
 import { mint, type Proof, sealed } from "./internal/proof.ts";
 import type { Tuples } from "./Relation.ts";
@@ -175,7 +179,7 @@ export const Permission =
       const holds = (rows: Tuples) => evaluate(model.declared, rows, subject, permission, object);
       return holds(tuples)
         ? Result.succeed(mint<Self>(sender, permission, object, key, holds))
-        : Result.fail(new Denied({ subject, permission, object }));
+        : Result.fail(Denied.make({ subject, permission, object }));
     };
     return Object.assign(key, { within });
   };

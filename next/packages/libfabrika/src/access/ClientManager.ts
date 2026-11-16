@@ -1,7 +1,9 @@
 /**
  * The service that reads who belongs and writes membership events to the ledger.
  */
-import { Context, Schema, type Effect } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { Appended } from "../ledger/Log.ts";
 import type { From } from "../processes/Mailbox.ts";

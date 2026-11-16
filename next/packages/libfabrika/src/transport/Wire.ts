@@ -2,7 +2,7 @@
  * The wire schemas of the gateway transport: the client hello, who is connected, what an answer
  * to a request can be, and the attachment saved for each connection.
  */
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 
 export {
   /**

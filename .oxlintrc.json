@@ -2492,7 +2492,8 @@
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/tezgah/**",
         "next/packages/libfabrika/src/transport/**",
-        "next/packages/tuval/**"
+        "next/packages/tuval/**",
+        "next/packages/vitest/**"
       ],
       "rules": { "fabrika/prefer-namespace-import": "error" }
     },

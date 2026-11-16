@@ -1,7 +1,11 @@
 /**
  * Turns one incoming JSON-RPC text frame into the text to send back and the attachment to keep.
  */
-import { Effect, Exit, Option, Result, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { REFUSED } from "../SpanTag.ts";
 import type { Admission, Who } from "./Wire.ts";
 import { Answer, Attached, RateCountFailure } from "./Wire.ts";

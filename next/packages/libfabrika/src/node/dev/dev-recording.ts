@@ -2,7 +2,11 @@
  * The local brain driver's span recording on Node: a durable span queue in its own SQLite file.
  */
 import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for P37's durable span queue
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import { Archive } from "../../telemetry/Archive.ts";
 import { RecordManager } from "../../telemetry/Records.ts";

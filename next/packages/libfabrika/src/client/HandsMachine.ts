@@ -11,7 +11,8 @@
  */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Option, Schema } from "effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Command, Task, Result } from "../tasks/Task.ts";

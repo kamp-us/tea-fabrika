@@ -3,8 +3,9 @@
  * so a crash never runs a command twice. This file is the contract only (0095); `JournalStore.layer`
  * keeps it on Effect's own `KeyValueStore`.
  */
-import { Context, Schema } from "effect";
-import type { Effect } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { Rev } from "../Rev.ts";
 import { Result } from "../tasks/Task.ts";
 

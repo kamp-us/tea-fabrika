@@ -17,7 +17,7 @@
  * The one way out of a finding is `"use no memo"` in the function plus a row the owner adds, in a
  * change of its own. The ledger starts empty and only shrinks. There is no setting to loosen it.
  */
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { parseSync } from "oxc-parser";
 import { type OxcError, transformSync } from "oxc-transform-react";
 

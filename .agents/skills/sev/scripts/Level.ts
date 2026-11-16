@@ -152,7 +152,7 @@ export const log = Effect.fn("Level.log")(function* (home: string) {
     lines,
     (line, index) =>
       Schema.decodeUnknownEffect(EntryJson)(line).pipe(
-        Effect.mapError(() => new Refused({ reason: `line ${index + 1} of ${at} is not one this script wrote` })),
+        Effect.mapError(() => Refused.make({ reason: `line ${index + 1} of ${at} is not one this script wrote` })),
       ),
     { concurrency: "unbounded" },
   );
@@ -164,7 +164,7 @@ export const read = Effect.fn("Level.read")(function* (home: string) {
   const sev0 = fold(entries);
 
   if (Result.isFailure(sev0)) {
-    return yield* new Refused({ reason: sev0.failure });
+    return yield* Refused.make({ reason: sev0.failure });
   }
 
   return { entries, sev0: sev0.success };
@@ -180,7 +180,7 @@ export const write = Effect.fn("Level.write")(function* (home: string, entry: En
   const next = step(sev0, entry, entries.length);
 
   if (Result.isFailure(next)) {
-    return yield* new Refused({ reason: next.failure });
+    return yield* Refused.make({ reason: next.failure });
   }
 
   yield* fs.makeDirectory(home, { recursive: true });

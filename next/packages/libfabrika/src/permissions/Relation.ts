@@ -2,7 +2,7 @@
  * Relation rows: every permission fact as one ledger row `(subject, relation, object)`, on
  * Zanzibar's model (0526).
  */
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import type { TuplesTypeId } from "./internal/relationsTable.ts";
 
 /**

@@ -5,8 +5,12 @@
  * current and what runs next. Nothing here names a platform, so a browser tab could run it.
  */
 import { run } from "@demlik/tea/effect";
-import { DateTime, Effect, Predicate, Schema, Stream } from "effect";
-import { Socket } from "effect/socket";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
 import * as Id from "../Id.ts";
 import { ClientKey } from "../transport/ClientKey.ts";
 import { ErrorClass } from "../transport/ClientRows.ts";

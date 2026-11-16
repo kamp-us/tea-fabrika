@@ -2,8 +2,11 @@
  * The client hello: the text a client signs, version negotiation, the origin check and the full
  * check of a hello message.
  */
-import { Effect, Result, Schema } from "effect";
-import { Base64, Base64Url } from "effect/encoding";
+import * as Effect from "effect/Effect";
+import * as Base64 from "effect/encoding/Base64";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { subtle } from "./internal/binary.ts";
 import { checkSshsig } from "./Sshsig.ts";
 import type { Admission } from "./Wire.ts";

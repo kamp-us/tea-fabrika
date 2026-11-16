@@ -14,8 +14,10 @@
  * The code is pure but for WebCrypto, so a browser tab runs it as Node does. Base64 goes through
  * Effect's encoding, never Node's `Buffer`.
  */
-import { Effect, Option, Schema } from "effect";
-import { Base64 } from "effect/encoding";
+import * as Effect from "effect/Effect";
+import * as Base64 from "effect/encoding/Base64";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { armor, type Bytes, field, holds, join, reader, same, subtle, u32, utf8 } from "./internal/binary.ts";
 import { checkPasskey, passkeyBlob } from "./Webauthn.ts";
 

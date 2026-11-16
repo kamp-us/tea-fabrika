@@ -2,7 +2,10 @@
  * Source folders for an opened repository: a path from a settings file, resolved to the commit or
  * to disk.
  */
-import { Effect, FileSystem, Path, Redacted } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import type { ObjectId } from "../../repositories/Repositories.ts";
 import {
   MissingPath,
@@ -15,14 +18,14 @@ import {
 type Entry = { readonly mode: string; readonly type: string; readonly id: string };
 
 const failed = (cause: unknown) =>
-  new RepositoriesError({
-    reason: new ReadFailed({ cause: Redacted.make(cause) }),
+  RepositoriesError.make({
+    reason: ReadFailed.make({ cause: Redacted.make(cause) }),
     message: "Selected repository: source read failed.",
   });
 
 const missing = (cause: unknown) =>
-  new RepositoriesError({
-    reason: new MissingPath({ cause: Redacted.make(cause) }),
+  RepositoriesError.make({
+    reason: MissingPath.make({ cause: Redacted.make(cause) }),
     message: "Selected repository: source folder is missing.",
   });
 

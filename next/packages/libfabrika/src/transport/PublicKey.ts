@@ -2,8 +2,9 @@
  * The public names of a raw Ed25519 key: its OpenSSH fingerprint and its SSH key line, the same
  * math the door's hello check does.
  */
-import { Effect, Schema } from "effect";
-import { Base64 } from "effect/encoding";
+import * as Effect from "effect/Effect";
+import * as Base64 from "effect/encoding/Base64";
+import * as Schema from "effect/Schema";
 import { field, join, subtle } from "./internal/binary.ts";
 import { KeyLine } from "./Sshsig.ts";
 

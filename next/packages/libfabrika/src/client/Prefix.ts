@@ -8,7 +8,7 @@
  * close of `tile` waiting for y or n, asked at `since`.
  */
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { TileId } from "../tezgah/Workspace.ts";
 
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));

@@ -41,7 +41,7 @@ export const world = (prs: ReadonlyArray<PullRequest> = []): World => ({
 export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests> => {
   const fails = (name: keyof Failing) => {
     const reason = failing[name];
-    return reason === undefined ? Effect.void : Effect.fail(new PullRequestsError({ reason }));
+    return reason === undefined ? Effect.void : Effect.fail(PullRequestsError.make({ reason }));
   };
 
   return Layer.succeed(
@@ -78,7 +78,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
         Effect.flatMap(fails("view"), () => {
           const pr = w.prs.find((p) => p.number === number);
           return pr === undefined
-            ? Effect.fail(new PullRequestsError({ reason: `no pull request ${number}` }))
+            ? Effect.fail(PullRequestsError.make({ reason: `no pull request ${number}` }))
             : Effect.succeed({
                 ...pr,
                 base: "main",

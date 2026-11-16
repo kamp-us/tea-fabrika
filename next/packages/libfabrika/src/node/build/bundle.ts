@@ -1,8 +1,11 @@
 /**
  * One Rolldown bundle as an Effect, and the program bundles built on it.
  */
-import { Cause, Effect, Exit, Path } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import effectPackage from "effect/package.json" with { type: "json" };
+import * as Path from "effect/Path";
 import {
   rolldown,
   VERSION,
@@ -102,7 +105,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
     "rolldown.version": VERSION,
     "effect.version": effectPackage.version,
   });
-  const fail = (error: unknown) => new BuildError({ reason: "bundle", message: String(error), cause: error });
+  const fail = (error: unknown) => BuildError.make({ reason: "bundle", message: String(error), cause: error });
   const config = {
     input,
     plugins,

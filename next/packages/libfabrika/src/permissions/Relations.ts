@@ -3,8 +3,10 @@
  * change them. `RelationsLedger.layer(...)` keeps it on the ledger, `RelationsMemory.layer(...)` in
  * memory for tests.
  */
-import { Context, Schema } from "effect";
-import type { Effect, Result } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import type * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import type { LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import type { Line } from "../ledger/Log.ts";
 import type { Change, Tuples } from "./Relation.ts";

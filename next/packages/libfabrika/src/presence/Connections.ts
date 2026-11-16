@@ -1,7 +1,10 @@
 /**
  * Which clients of a key are connected now, kept in the project's Sql.
  */
-import { Context, Effect, Layer, Schema } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { ProcessId } from "../ProcessId.ts";
 import type { Sql } from "../Sql.ts";
@@ -69,7 +72,7 @@ export class Connections extends Context.Service<
                 return step();
               }),
             catch: (error) =>
-              new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", cause: error }),
+              LedgerError.make({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", cause: error }),
           });
         });
         const probe = Effect.fn("connections.probe")(function* (connection: Connection) {

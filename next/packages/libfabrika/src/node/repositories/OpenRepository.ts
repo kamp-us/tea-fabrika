@@ -2,7 +2,10 @@
  * Opening a selected repository on Node: read and check it before the instance starts, then record
  * the selection and the person's trust answer once there is a ledger.
  */
-import { DateTime, Effect, Redacted, Schema } from "effect";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import * as Id from "../../Id.ts";
 import * as Log from "../../ledger/Log.ts";
 import * as Open from "../../packs/Open.ts";
@@ -22,8 +25,8 @@ class OpenRepositoryError extends Schema.TaggedError<OpenRepositoryError>()("Ope
 }) {}
 
 const failed = (reason: "storage" | "document" | "read", cause: unknown, message?: string) =>
-  new OpenRepositoryError({
-    reason: new (reason === "storage" ? Storage : reason === "document" ? InvalidDocument : ReadFailed)({
+  OpenRepositoryError.make({
+    reason: (reason === "storage" ? Storage : reason === "document" ? InvalidDocument : ReadFailed).make({
       cause: Redacted.make(cause),
     }),
     message:

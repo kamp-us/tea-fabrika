@@ -13,7 +13,8 @@
  * stored and `Access` is a projection of it, so a later rule re-judges old events.
  */
 import { Machine } from "@demlik/tea/effect";
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
 /**
  * Schema for what the person saw when they let a client in.

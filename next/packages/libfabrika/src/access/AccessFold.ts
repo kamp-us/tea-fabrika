@@ -7,7 +7,7 @@
  * Model itself.
  */
 import { applyCell } from "@demlik/tea";
-import { Result } from "effect";
+import * as Result from "effect/Result";
 import type { Access, Folded, MemberEvent, Reason } from "./Access.ts";
 import { access, members } from "./Access.ts";
 

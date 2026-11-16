@@ -3,8 +3,15 @@
  * each save and hands the checked build to the brain.
  */
 import { run } from "@demlik/tea/effect";
-import type { Scope } from "effect";
-import { Clock, Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import { watch, type RolldownWatcherEvent } from "rolldown";
 import * as Id from "../../Id.ts";
 import { hash } from "../../runtime/Built.ts";
@@ -93,9 +100,10 @@ export const watchPrograms = (options: {
       const events = yield* Queue.unbounded<RolldownWatcherEvent>();
       // Results are owned as soon as the callback receives them, including during interruption.
       const results = new Set<Extract<RolldownWatcherEvent, { code: "BUNDLE_END" | "ERROR" }>["result"]>();
+      const failed = () => ControlError.make({ reason: "watch_close" });
       const close = (result: Extract<RolldownWatcherEvent, { code: "BUNDLE_END" | "ERROR" }>["result"]) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown result cleanup returns a Promise
-        Effect.tryPromise({ try: () => result.close(), catch: () => new ControlError({ reason: "watch_close" }) }).pipe(
+        Effect.tryPromise({ try: () => result.close(), catch: failed }).pipe(
           Effect.orDie,
           Effect.tap(() => Effect.sync(() => results.delete(result))),
         );
@@ -150,7 +158,6 @@ export const watchPrograms = (options: {
         }),
         (watcher) =>
           Effect.gen(function* () {
-            const failed = () => new ControlError({ reason: "watch_close" });
             // oxlint-disable-next-line fabrika/no-promises -- edge: closing Rolldown stops its event callbacks
             yield* Effect.tryPromise({ try: () => watcher.close(), catch: failed }).pipe(Effect.orDie);
 

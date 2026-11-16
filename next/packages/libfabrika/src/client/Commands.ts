@@ -2,8 +2,8 @@
  * What the hands client can run: the contract only (0095). A layer that runs real commands comes
  * with the hands launcher; until then only tests give one.
  */
-import { Context } from "effect";
-import type { Effect } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
 import type { Command, Result } from "../tasks/Task.ts";
 
 /**

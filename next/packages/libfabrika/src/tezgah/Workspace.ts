@@ -6,7 +6,7 @@
  * A layout is a tile, or a container that runs in one of two directions and holds its parts in
  * order, each with its own `percent` of the container (0277, from AeroSpace's tree in 0505).
  */
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as Id from "../Id.ts";
 import { ProcessName } from "../processes/Process.ts";
 

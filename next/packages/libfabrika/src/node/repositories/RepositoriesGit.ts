@@ -1,9 +1,18 @@
 /**
  * `Repositories` on Node, through the `git` command.
  */
-import { Effect, Fiber, FileSystem, Layer, Path, Redacted, Schema, Stream } from "effect";
-import { Digest } from "effect/crypto";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import {
   Branch,
   DefaultUnknown,
@@ -17,11 +26,11 @@ import {
 import * as Sources from "./Sources.ts";
 
 const failure = (operation: string, cause: unknown, unknown = false) =>
-  new RepositoriesError({
+  RepositoriesError.make({
     message: `Selected repository: ${operation} failed.`,
     reason: unknown
-      ? new DefaultUnknown({ cause: Redacted.make(cause) })
-      : new ReadFailed({ cause: Redacted.make(cause) }),
+      ? DefaultUnknown.make({ cause: Redacted.make(cause) })
+      : ReadFailed.make({ cause: Redacted.make(cause) }),
   });
 
 const safeConfig = [
@@ -278,8 +287,8 @@ export const layer = (options: { readonly person: string }) =>
             const old = yield* entry("fabrika.toml");
 
             if (old !== null) {
-              return yield* new RepositoriesError({
-                reason: new ReadFailed({ cause: Redacted.make("legacy root settings file") }),
+              return yield* RepositoriesError.make({
+                reason: ReadFailed.make({ cause: Redacted.make("legacy root settings file") }),
                 message: "fabrika.toml moved to .fabrika/fabrika.toml: move it there",
               });
             }
@@ -287,8 +296,8 @@ export const layer = (options: { readonly person: string }) =>
             const document = yield* entry(file);
 
             if (document === null && (yield* entry(".fabrika.jsonc")) !== null) {
-              return yield* new RepositoriesError({
-                reason: new ReadFailed({ cause: Redacted.make("legacy-only settings file") }),
+              return yield* RepositoriesError.make({
+                reason: ReadFailed.make({ cause: Redacted.make("legacy-only settings file") }),
                 message: ".fabrika.jsonc moved to [review] in .fabrika/fabrika.toml: move it there",
               });
             }

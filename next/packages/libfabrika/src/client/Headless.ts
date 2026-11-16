@@ -2,8 +2,8 @@
  * The window client for a program with no DOM: the same window parent and the same start as a
  * browser tab, on the platform's own global `WebSocket`.
  */
-import { Effect } from "effect";
-import { Socket } from "effect/socket";
+import * as Effect from "effect/Effect";
+import * as Socket from "effect/socket/Socket";
 import * as WindowStart from "./WindowStart.ts";
 
 /** A headless client's facts, as its hello and its knock state them. */

@@ -2,8 +2,12 @@
  * The hands' real `Commands` on a laptop: each closed command is one child process with a pinned
  * environment and an output cap, run through Effect's `ChildProcessSpawner`.
  */
-import { Config, Effect, FileSystem, Layer, Path } from "effect";
-import { ChildProcessSpawner } from "effect/process";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { Commands } from "../../client/Commands.ts";
 import type { Command } from "../../tasks/Task.ts";
 import { capped } from "./internal/capped.ts";

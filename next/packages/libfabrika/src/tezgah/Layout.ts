@@ -7,7 +7,8 @@
  * a container of one part gives way to its part, and a container left inside one of its own
  * direction merges into it (AeroSpace's normalization, read through 0505 and 0277).
  */
-import { Predicate, Schema } from "effect";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import { type Container, Dir, type Layout, type Part, type TileId, type Workspace } from "./Workspace.ts";
 
 /** How far a container's percents may drift from 100 by float rounding before it is untidy. */

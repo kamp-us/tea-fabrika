@@ -4,8 +4,13 @@
  * person's file, the declared environment names and the declared flags. The whole report is built
  * before anything prints, and it writes nothing and starts nothing.
  */
-import { Config, Console, Effect, Path } from "effect";
-import { Command, Flag } from "effect/cli";
+
+import * as Command from "effect/cli/Command";
+import * as Flag from "effect/cli/Flag";
+import * as Config from "effect/Config";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
 import * as Declarations from "../../settings/Declarations.ts";
 import * as Print from "../../settings/Print.ts";
 import * as Reference from "../../settings/Reference.ts";

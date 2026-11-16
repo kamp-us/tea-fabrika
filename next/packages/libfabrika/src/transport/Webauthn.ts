@@ -8,8 +8,11 @@
  * The signature type is `webauthn-sk-ecdsa-sha2-nistp256@openssh.com`. Only WebCrypto is used, so
  * a browser tab runs it as Node does.
  */
-import { Effect, Option, Schema } from "effect";
-import { Base64, Base64Url } from "effect/encoding";
+import * as Effect from "effect/Effect";
+import * as Base64 from "effect/encoding/Base64";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { armor, type Bytes, field, holds, join, reader, same, subtle, u32, utf8 } from "./internal/binary.ts";
 
 const KEY = "sk-ecdsa-sha2-nistp256@openssh.com";
@@ -249,18 +252,18 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
   });
 
   if (Option.isNone(parsed)) {
-    return yield* new BadAssertion({});
+    return yield* BadAssertion.make({});
   }
 
   const { blob, key, ints } = parsed.value;
   const decoded = yield* Effect.try({
     try: () => Schema.decodeUnknownSync(Client)(text(client)),
-    catch: (cause) => new BadAssertion({ cause }),
+    catch: (cause) => BadAssertion.make({ cause }),
   });
   const rpHash = new Uint8Array(yield* subtle("digest", "SHA-256", key.rp));
 
   if (!same(rpHash, auth.slice(0, 32))) {
-    return yield* new BadAssertion({});
+    return yield* BadAssertion.make({});
   }
 
   const signature = join(
@@ -279,7 +282,7 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
   });
 
   if (checked === null) {
-    return yield* new BadAssertion({});
+    return yield* BadAssertion.make({});
   }
 
   return armor(

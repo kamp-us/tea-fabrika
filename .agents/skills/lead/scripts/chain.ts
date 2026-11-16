@@ -1275,7 +1275,7 @@ const handlers = (s: Setup) => {
             if (check !== null) {
               note(`drive refused ${cmd.step} (${check}); trying again in ${minutes} minutes`);
               s.beats.enter("wait", null);
-              return yield* Effect.fail(new SlotRefused({ check, reason: prepared.reason }));
+              return yield* Effect.fail(SlotRefused.make({ check, reason: prepared.reason }));
             }
 
             return {
@@ -1314,7 +1314,7 @@ const handlers = (s: Setup) => {
           Effect.retry({ schedule: slotSchedule(minutes), times }),
           Effect.catchTag("SlotRefused", (e) =>
             Effect.fail(
-              new RetriesExhausted({
+              RetriesExhausted.make({
                 schedule: `slotSchedule(${minutes} minutes)`,
                 times: times + 1,
                 reason: `${e.check}: ${e.reason}`,

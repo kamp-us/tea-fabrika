@@ -2,8 +2,8 @@
  * Git in memory, for laws: the `git` command answered from an in-memory object store, so a law over
  * a repository runs without starting git (0535).
  */
-import { Layer } from "effect";
-import { ChildProcessSpawner } from "effect/process";
+import * as Layer from "effect/Layer";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as gitMemory from "./internal/gitMemory.ts";
 
 /**

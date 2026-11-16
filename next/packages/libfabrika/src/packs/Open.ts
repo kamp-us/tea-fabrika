@@ -2,7 +2,8 @@
  * One client's repository opening, held as the state of the opening machine.
  */
 import { applyCell } from "@demlik/tea";
-import { Effect, Ref } from "effect";
+import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
 import { machine } from "./internal/open.ts";
 
 /**

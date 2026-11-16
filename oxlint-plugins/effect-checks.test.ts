@@ -13,6 +13,7 @@
 //
 // Plants, run once each (field/runs/2026-11-15-effect-e0-tests.json): one glob dropped from E0's
 // entry, one level there set to `warning`, and a later override that sets one `off`: each is red.
+// The fold of E0 to E3 (ticket 1075) planted one glob dropped from each of E1's, E2's and E3's lists: red.
 import { existsSync, globSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, join, matchesGlob, relative, resolve } from "node:path";
 import { type Expression, parseSync } from "oxc-parser";
@@ -128,11 +129,84 @@ const ZERO = [
 // none is taken out, since narrowing a lock waits on the owner (0014).
 const LOCKED: Readonly<Record<string, ReadonlyArray<string>>> = {
   ...Object.fromEntries(ZERO.map((check) => [check, SCOPE])),
-  // B3.0 (ticket 912), then E0: vitest is a library at zero (0577).
+  // B3.0 (ticket 912), then E0: vitest is a library at zero (0577). E2 (0577): libfabrika's folders at
+  // zero, and all of tuval.
   preferNamespaceImport: [
+    "next/packages/libfabrika/src/*.ts",
+    "next/packages/libfabrika/src/access/**/*.ts",
+    "next/packages/libfabrika/src/ci/**/*.ts",
+    "next/packages/libfabrika/src/client/**/*.ts",
+    "next/packages/libfabrika/src/codehost/**/*.ts",
+    "next/packages/libfabrika/src/desktop/**/*.ts",
+    "next/packages/libfabrika/src/node/**/*.ts",
+    "next/packages/libfabrika/src/packs/**/*.ts",
+    "next/packages/libfabrika/src/permissions/**/*.ts",
+    "next/packages/libfabrika/src/presence/**/*.ts",
+    "next/packages/libfabrika/src/repositories/**/*.ts",
+    "next/packages/libfabrika/src/schedules/**/*.ts",
+    "next/packages/libfabrika/src/tasks/**/*.ts",
+    "next/packages/libfabrika/src/tezgah/**/*.ts",
+    "next/packages/libfabrika/src/transport/**/*.ts",
+    "next/packages/tuval/**/*.ts",
+    "next/packages/tuval/**/*.tsx",
+    "next/packages/vitest/**/*.ts",
+  ],
+  // E1 (0574): the folders where only the named unstable parts of Effect are used.
+  unstableApiUsage: [
+    ".agents/**/*.ts",
+    ".github/ci/**/*.ts",
+    ".github/ci/**/*.mjs",
+    "next/apps/fabrika/src/entry/**/*.ts",
+    "next/apps/fabrika/src/entry/**/*.tsx",
+    "next/packages/libfabrika/src/*.ts",
     "next/packages/libfabrika/src/ci/**/*.ts",
     "next/packages/libfabrika/src/codehost/**/*.ts",
+    "next/packages/libfabrika/src/presence/**/*.ts",
+    "next/packages/libfabrika/src/repositories/**/*.ts",
+    "next/packages/libfabrika/src/schedules/**/*.ts",
+    "next/packages/libfabrika/src/tezgah/**/*.ts",
+    "next/packages/libfabrika/src/transport/**/*.ts",
+    "next/packages/tuval/**/*.ts",
+    "next/packages/tuval/**/*.tsx",
     "next/packages/vitest/**/*.ts",
+    "next/programs/tezgah/**/*.ts",
+    "oxlint-plugins/**/*.ts",
+    "oxlint-plugins/**/*.mjs",
+  ],
+  // E3 (ticket 1075): a Schema class is built with `.make`, never `new`, in every folder at zero.
+  newSchemaClass: [
+    ".agents/**/*.ts",
+    ".github/ci/**/*.ts",
+    ".github/ci/**/*.mjs",
+    "oxlint-plugins/**/*.ts",
+    "oxlint-plugins/**/*.mjs",
+    "next/packages/tuval/**/*.ts",
+    "next/packages/tuval/**/*.tsx",
+    "next/packages/vitest/**/*.ts",
+    "next/programs/**/*.ts",
+    "next/programs/**/*.tsx",
+    "next/apps/fabrika/*.ts",
+    "next/apps/fabrika/e2e/**/*.ts",
+    "next/apps/fabrika/src/exam/**/*.ts",
+    "next/apps/fabrika/src/entry/**/*.ts",
+    "next/apps/fabrika/src/entry/**/*.tsx",
+    "fixtures/next/**/*.ts",
+    "next/packages/libfabrika/src/*.ts",
+    "next/packages/libfabrika/src/access/**/*.ts",
+    "next/packages/libfabrika/src/ci/**/*.ts",
+    "next/packages/libfabrika/src/client/**/*.ts",
+    "next/packages/libfabrika/src/codehost/**/*.ts",
+    "next/packages/libfabrika/src/coordination/**/*.ts",
+    "next/packages/libfabrika/src/desktop/**/*.ts",
+    "next/packages/libfabrika/src/node/**/*.ts",
+    "next/packages/libfabrika/src/packs/**/*.ts",
+    "next/packages/libfabrika/src/permissions/**/*.ts",
+    "next/packages/libfabrika/src/presence/**/*.ts",
+    "next/packages/libfabrika/src/repositories/**/*.ts",
+    "next/packages/libfabrika/src/schedules/**/*.ts",
+    "next/packages/libfabrika/src/tasks/**/*.ts",
+    "next/packages/libfabrika/src/tezgah/**/*.ts",
+    "next/packages/libfabrika/src/transport/**/*.ts",
   ],
   // E0: every program, and our tooling, whose scripts are programs too (call 2 of the plan).
   preferBarrelImport: [

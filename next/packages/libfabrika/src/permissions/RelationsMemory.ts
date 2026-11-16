@@ -1,7 +1,10 @@
 /**
  * The relation store in memory, for tests: the same fold as the ledger's, over the changes it holds.
  */
-import { Effect, Equal, Layer, Result } from "effect";
+import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 import { fold } from "./internal/relationsTable.ts";
 import type { Change } from "./Relation.ts";
 import { Relations, RelationsError } from "./Relations.ts";
@@ -33,7 +36,7 @@ export const layer = (changes: ReadonlyArray<Change>): Layer.Layer<Relations> =>
             next.set(change.id, change);
           } else if (!Equal.equals(first.row, change.row)) {
             return Result.fail(
-              new RelationsError({ reason: "storage", cause: `the id ${change.id} holds another row` }),
+              RelationsError.make({ reason: "storage", cause: `the id ${change.id} holds another row` }),
             );
           }
         }

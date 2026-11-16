@@ -3,7 +3,7 @@
  * reports and reads the state back; nothing here does input or output.
  */
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 
 // Zero is how the local runtime says it has no control socket, so a known port is never zero.
 const Port = Schema.Int.check(Schema.makeFilter((port: number) => port !== 0));

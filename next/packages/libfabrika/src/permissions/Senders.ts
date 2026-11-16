@@ -3,8 +3,10 @@
  * (0095): the gateway's one signing service answers it (0262), through
  * `access/SessionSenders.ts`.
  */
-import { Context, Schema } from "effect";
-import type { Effect, Option } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import type * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
 /**
  * Schema for the sender of an input, both its ids kept (0261): a person's window, or an agent let

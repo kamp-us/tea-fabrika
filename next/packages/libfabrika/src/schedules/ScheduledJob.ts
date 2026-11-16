@@ -3,7 +3,10 @@
  */
 import type { AnyCmdDef, CmdOf, Reducer, Settled } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
-import { Duration, Option, Result, Schema } from "effect";
+import * as Duration from "effect/Duration";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
 /**
  * Schema for the job's state: `idle` with the next due time, or `running` with the time of the
@@ -65,7 +68,7 @@ export const make = <C extends AnyCmdDef>(config: {
   readonly work: (due: number, period: number) => CmdOf<C>;
 }) => {
   if (typeof config.period === "number" && !Number.isSafeInteger(config.period)) {
-    return Result.fail(new ScheduledJobError({ reason: "bad_period" }));
+    return Result.fail(ScheduledJobError.make({ reason: "bad_period" }));
   }
 
   const duration = Duration.fromInput(config.period);
@@ -74,7 +77,7 @@ export const make = <C extends AnyCmdDef>(config: {
   const nanos = Option.flatMap(duration, Duration.toNanos);
 
   if (!Number.isSafeInteger(period) || period <= 0 || Option.isNone(nanos) || nanos.value % 1_000_000n !== 0n) {
-    return Result.fail(new ScheduledJobError({ reason: "bad_period" }));
+    return Result.fail(ScheduledJobError.make({ reason: "bad_period" }));
   }
 
   const settle = (s: Model, m: { readonly at: number }): readonly [Model, readonly CmdOf<C>[]] =>
