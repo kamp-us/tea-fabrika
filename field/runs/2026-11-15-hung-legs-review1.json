@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-hung-legs-review1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1374",
+  "started": "2026-11-15T16:00:40-08:00",
+  "ended": "2026-11-15T16:07:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Sev1 fix for the red scheduled run, review of 1250d8a8d, in today's CI tooling and one next/ test file: merge-ready, two finding rows. All 330 rows of vitest.shards.full.json were recomputed from the three named runs' results-next-1 to -5 reports, and every one matches. The scheduled vitest step sets FABRIKA_TEST_DEPTH full, so Shards reads the full rows there and the merge line keeps vitest.shards.json. One scheduled file, reload.test-support.integration.test.ts (added after the three runs), has no row in either table, counts 0.4 s and starts last: the gap the builder names, already live. endOnFailure only drops the shrink, so no case that failed before passes now: not a loosening. L18, L19 and the two-new-files scenario are no weaker. The workspace link makes only this pull request's own check run everything: a later change to @kampus/vitest selects 76 of 322 files, not all. L11 of start-child is its own fault.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "note": "Ran alone with the pinned Node: vitest.shards.test.ts at fast and full depth (34 passed each), shard-rows.test.ts (7 passed). Plants in a scratch copy, never the branch: Shards.rows fixed to the merge-line rows (green at fast, red at full in L18 only); rowsAt answering the merge-line rows (F1 and F2 red); no watched full table (L20 red for the full table); main ignoring its table name (L4 red). loosening.sh: seven unrecognized-change hits, none a loosening; vitest.shards.test.ts is not an exam path, so its renamed L20 was checked by hand. git merge-tree with origin/main: no conflicts. Not run: any integration or visual file, pnpm typecheck, a scheduled run.",
+  "step": "review"
+}

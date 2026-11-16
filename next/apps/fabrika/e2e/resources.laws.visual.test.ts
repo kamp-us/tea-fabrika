@@ -236,6 +236,14 @@ const run = (fault: Fault | undefined, signal: NodeJS.Signals, target: Target = 
     }),
   );
 
+/** How a red walk ends: at its first failing run, with that run's steps, and no shrinking. A shrink
+ *  runs the child again for each smaller walk it tries, 15 s or more each and up to 240 s when the
+ *  child does not exit, so the shrink of one failed run outlasts CI's job, which is then canceled
+ *  at its limit with no test named and nothing printed. Leg e2e-1 of scheduled runs 43723335863
+ *  and 43771306886 ended that way; neither log can say which run of the child failed first. The
+ *  seed and the run counts stay as they are. As first-window's and page-runtime's own `RED`. */
+const RED = { endOnFailure: true } as const;
+
 /** The fault walk over one child suite: a plain run first, then faults only at what it reached. */
 const walk = async (target: Target, context: TestContext) => {
   const reached = await scopedSuite(run(undefined, "SIGTERM", target), context);
@@ -274,7 +282,7 @@ const walk = async (target: Target, context: TestContext) => {
         }
       },
     ),
-    { seed: 119120, numRuns: target === FIRST_WINDOW ? 10 : 3 },
+    { seed: 119120, numRuns: target === FIRST_WINDOW ? 10 : 3, ...RED },
   );
   expect([...kinds].sort(), "the walks reached every kind of fault").toEqual([...available].sort());
 };
