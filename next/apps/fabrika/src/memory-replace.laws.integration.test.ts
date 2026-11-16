@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Layer, Predicate, Stream } from "effect";
+import { Duration, Effect, Layer, Predicate, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import { describe, expect } from "vitest";
@@ -96,7 +96,7 @@ type Key = ReturnType<typeof identity>;
 
 type Instance = any;
 
-const pause = (ms = POLL) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = POLL) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /** A real WebSocket at the door, its hello answered: the founder's tab, held open by the caller. */
 const wire = async (instance: Instance, key: Key, tab: string) => {

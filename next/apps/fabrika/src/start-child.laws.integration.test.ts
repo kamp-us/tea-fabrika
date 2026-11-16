@@ -12,7 +12,7 @@ import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
+import { Clock, Duration, Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
@@ -55,7 +55,7 @@ type Fixture = Effect.Success<ReturnType<typeof childInstance>>;
 // The instance's private local capability, read call by call as ticket 402's test reads it.
 type Instance = Fixture["instance"] & Record<string, any>;
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /**
  * A real 5 ms pause on Effect's live clock, whatever clock the law runs on: the test clock under

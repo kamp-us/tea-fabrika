@@ -15,7 +15,7 @@ import { NodeServices } from "@effect/platform-node";
 import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
-import { Effect, Schema, Scope } from "effect";
+import { Duration, Effect, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -164,7 +164,7 @@ export const program = Program.make({name: "m13/parent", machine, state: {v: 1, 
 // The instance's private local capability, read call by call as worker-mail's test reads it.
 type Instance = any;
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(message: string, look: () => Promise<A>, done: (value: A) => boolean): Promise<A> => {

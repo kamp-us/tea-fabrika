@@ -7,7 +7,7 @@
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
 import { ProjectService } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Exit, Schema, Scope } from "effect";
+import { Duration, Effect, Exit, Schema, Scope } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { childHome, childProject, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
 
@@ -33,7 +33,7 @@ vi.mock("virtual:fabrika-built", () => ({
 /** Bounded waits tied to observable facts. */
 const WAIT = 25_000;
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) => boolean): Promise<A> => {

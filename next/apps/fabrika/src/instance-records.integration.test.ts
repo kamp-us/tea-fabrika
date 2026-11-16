@@ -17,7 +17,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { CommitReply, SigningReply } from "@kampus/libfabrika/workers/bindings";
-import { Effect, Layer, Schema, Stream } from "effect";
+import { Duration, Effect, Layer, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { describe, expect, it } from "vitest";
@@ -397,7 +397,7 @@ export class Control extends Brain.Control {
   }
 };
 
-const pause = (ms = 20) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 20) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /** Looks until `done` says yes, for at most `wait` ms. The platform's alarm retry sets the bound. */
 const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) => boolean, wait = 25_000) => {

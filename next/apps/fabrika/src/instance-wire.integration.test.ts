@@ -14,7 +14,7 @@ import { Id } from "@kampus/libfabrika";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Clock, Deferred, Effect, Fiber, Schema } from "effect";
+import { Clock, Deferred, Duration, Effect, Fiber, Schema } from "effect";
 import { afterEach, describe, expect } from "vitest";
 import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
@@ -132,7 +132,7 @@ const identity = () => {
   };
 };
 
-const pause = (ms = 20) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 20) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 // Node's fetch drops a custom Host header (a forbidden header in the Fetch spec), so the
 // wrong-host check sends its request with node:http, which sends the header as given.

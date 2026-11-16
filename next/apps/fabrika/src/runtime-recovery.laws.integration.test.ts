@@ -34,7 +34,7 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { Duration, Effect, Exit, Fiber, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -464,9 +464,16 @@ type Entry = {
   readonly db: DatabaseSync;
   readonly ctx: DurableObjectState;
   readonly values: Map<string, unknown>;
-  timer: ReturnType<typeof setTimeout> | undefined;
+  timer: Fiber.Fiber<void> | undefined;
   alarm: number | null;
   held?: boolean;
+};
+
+/** Cancels a pending alarm the way clearTimeout did: the interrupt lands before this returns. */
+const cancel = (timer: Fiber.Fiber<void> | undefined) => {
+  if (timer !== undefined) {
+    Effect.runFork(Fiber.interrupt(timer));
+  }
 };
 
 type Lost = { readonly at: number; readonly side: "before" | "after" } | null;
@@ -540,24 +547,27 @@ const world = (
     stepFault: "none" | "rpc" | "decode" = "none",
     closed = false;
   const schedule = (entry: Entry) => {
-    clearTimeout(entry.timer);
+    cancel(entry.timer);
 
     if (entry.alarm === null || entry.held || closed) {
       return;
     }
 
     const fire = (tries: number) => {
-      entry.timer = setTimeout(
-        () => {
-          entry.alarm = null;
-          entry.object.alarm().catch(() => {
-            // workerd retries a failed alarm handler; so does this platform stand-in.
-            if (!closed && tries < 5 && entry.alarm === null) {
-              fire(tries + 1);
-            }
-          });
-        },
-        tries === 0 ? Math.max(0, (entry.alarm ?? 0) - Date.now()) : 100,
+      entry.timer = Effect.runFork(
+        Effect.sleep(Duration.millis(tries === 0 ? Math.max(0, (entry.alarm ?? 0) - Date.now()) : 100)).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              entry.alarm = null;
+              entry.object.alarm().catch(() => {
+                // workerd retries a failed alarm handler; so does this platform stand-in.
+                if (!closed && tries < 5 && entry.alarm === null) {
+                  fire(tries + 1);
+                }
+              });
+            }),
+          ),
+        ),
       );
     };
     fire(0);
@@ -669,7 +679,7 @@ const world = (
               }
 
               entry.alarm = null;
-              clearTimeout(entry.timer);
+              cancel(entry.timer);
             },
           });
           // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the SQL, descriptor, alarm and sync handles the real Process reads
@@ -840,7 +850,7 @@ const world = (
     interrupted.resolve();
 
     for (const { object, db: processDb, timer } of processes.values()) {
-      clearTimeout(timer);
+      cancel(timer);
       await object.runtime.dispose();
       processDb.close();
     }
@@ -927,7 +937,7 @@ const world = (
     /** Platform restart: every object's runtime ends; storage and saved alarms survive. */
     reopenAll: async () => {
       for (const entry of processes.values()) {
-        clearTimeout(entry.timer);
+        cancel(entry.timer);
         await entry.object.runtime.dispose();
       }
 
@@ -955,7 +965,7 @@ const world = (
     },
     reopenProcess: async (pid: string) => {
       const entry = processFor(pid);
-      clearTimeout(entry.timer);
+      cancel(entry.timer);
       await entry.object.runtime.dispose();
       entry.object = processObject(entry.ctx, env);
       schedule(entry);
@@ -1439,7 +1449,7 @@ const until = async <A>(message: string, look: () => Promise<A>, done: (value: A
       last = { error: String(error) };
     }
 
-    await new Promise((done) => setTimeout(done, 20));
+    await Effect.runPromise(Effect.sleep("20 millis"));
   }
 
   throw new Error(`${message}: no answer in ${FLOW_WAIT} ms; last observed ${JSON.stringify(last)}`);

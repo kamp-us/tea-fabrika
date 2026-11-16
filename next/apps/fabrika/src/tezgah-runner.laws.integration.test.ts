@@ -28,7 +28,7 @@ import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey
 import { ClientRows } from "@kampus/libfabrika/transport/ClientRows";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
 import * as RunnerTest from "@kampus/tezgah/RunnerTest";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Duration, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect, it } from "vitest";
 import { build } from "./build.ts";
@@ -115,7 +115,7 @@ type Key = ReturnType<typeof identity>;
 // The instance's private local capability, read call by call as ticket 402's test reads it.
 type Instance = Record<string, any>;
 
-const pause = (ms = 100) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 100) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /** Polls an observable fact; a timeout fails with the last observed value. */
 const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) => boolean): Promise<A> => {

@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, Layer, Schema } from "effect";
+import { Duration, Effect, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -191,7 +191,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
   }
 };
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(

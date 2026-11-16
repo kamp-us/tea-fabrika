@@ -558,7 +558,7 @@ class Client {
         throw Error("wire closed");
       }
 
-      await new Promise((done) => setTimeout(done, 10));
+      await Effect.runPromise(Effect.sleep("10 millis"));
     }
   }
 
@@ -722,6 +722,7 @@ describe("P16 copied-file real instance, serial", () => {
                           port: brainPort,
                         }),
                       );
+                      const services = yield* Effect.context<never>();
 
                       yield* Effect.tryPromise({
                         try: async () => {
@@ -755,7 +756,7 @@ describe("P16 copied-file real instance, serial", () => {
 
                             // Read until the program's own fetch settles. The test time limit bounds the wait.
                             while (model.outbound === "pending") {
-                              await new Promise((done) => setTimeout(done, 10));
+                              await Effect.runPromiseWith(services)(Effect.sleep("10 millis"));
                               model = (await turn(SealedTurn, program, "step", [model, { type: "read" }])).model;
                             }
 
