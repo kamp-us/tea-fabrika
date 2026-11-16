@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-manual-tagged-construction-6-tests3",
+  "ticket": "kamp-us/tea-fabrika#1057",
+  "pr": null,
+  "started": "2026-11-16T00:54:32-08:00",
+  "ended": "2026-11-16T01:01:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "pipeline, tracker ticket 1057, test_writer, fix round after the review sent back slice AS-no-manual-tagged-construction-6 (anti-slop-effect/no-manual-tagged-construction), no lock line, no .oxlintrc.json change, no pull request (owner ruling). The one fault: next/packages/libfabrika/src/Testing.test.ts defined a local Schema.TaggedUnion named Writer (cases person and agent, each with key and for) that copied Sender in next/packages/libfabrika/src/permissions/Senders.ts, in the same package. Decisions 0562 and 0040 say to use the existing schema. The fix, one hand edit: Testing.test.ts imports Sender from ./permissions/Senders.ts, builds its owner, person and agent writers with Sender.cases.agent.make and Sender.cases.person.make, and Writer is deleted. Every value is non-empty, so Sender's NonEmptyString accepts it. The layer check allows the import: Testing.ts sits in the next-runtime row of layer-rules.json, which lists next-permissions among its imports, and pnpm lint:layers names no Testing site. No assertion was deleted or narrowed, no disable line, no lock, ledger or .oxlintrc.json change, and no law was added or changed, so no plant ran. Recount with the rule forced to error in a scratch config outside the repo: 0 hits in Testing.test.ts and oxlint-plugins/ (the same config still fires in next/programs, so it is live). Hits met 1 (the review's), hand edits 1, left 0, waiting on 1366 0.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "note": "Run in a cloud box with no step keys (stepcommit --commit-only). Checks on the working tree with the fix, on c13e74e5f: pnpm format changed nothing beyond the edit; NODE_OPTIONS=--max-old-space-size=6144 pnpm lint fails only on the known zero lock asking to add seven folders now at zero to the rule's block (oxlint-plugins/**, libfabrika src/*, presence, settings, programs/checklist, counter, tezgah), left to the later lock pull request; every other part passed, lint:layers and lint:dead included. Test under nice -n 15 --maxWorkers=3: next/packages/libfabrika/src/Testing.test.ts, 11 of 11 green. No .integration. law is reached. One pnpm typecheck exits 0. The list ratchet exits 0.",
+  "step": "tests"
+}

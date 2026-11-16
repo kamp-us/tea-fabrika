@@ -5,6 +5,7 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
+import { Sender } from "./permissions/Senders.ts";
 
 const SEED = 119120;
 const Model = Schema.Struct({ count: Schema.Int, carry: Schema.Int });
@@ -122,13 +123,9 @@ describe("S2 syncTest catches its plants", () => {
 
 describe("p69 senderTest catches its plants", () => {
   // A write's writer as the runtime records it: a person's window, or an agent let in for a person.
-  const Writer = Schema.TaggedUnion({
-    person: { key: Schema.String, for: Schema.String },
-    agent: { key: Schema.String, for: Schema.String },
-  });
-  const owner = Writer.cases.agent.make({ key: "owner", for: "person" });
-  const person = Writer.cases.person.make({ key: "window", for: "person" });
-  const agent = Writer.cases.agent.make({ key: "agent", for: "person" });
+  const owner = Sender.cases.agent.make({ key: "owner", for: "person" });
+  const person = Sender.cases.person.make({ key: "window", for: "person" });
+  const agent = Sender.cases.agent.make({ key: "agent", for: "person" });
   const inputs = [
     { parent: "pa", by: person },
     { parent: "pb", by: agent },
