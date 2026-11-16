@@ -1,7 +1,7 @@
 ---
 id: 0536
 title: Pull requests and the merge queue test only against our interfaces' in-memory layers, and every test that needs a real resource runs only on the 3-hour schedule
-status: accepted
+status: amended-in-part by [0581](0581-main-full-run-starts-on-push-and-hourly.md)
 date: 2026-11-14
 tags: [ci, tests, schedule, integration, memory-layer, merge-queue]
 ---
@@ -72,6 +72,12 @@ test that needs a real resource runs only on the 3-hour schedule.**
   The classification names any such test, and each one comes to the owner.
 
 ## Amendments
+
+- 2026-11-15: every "3-hour schedule" here now means the full run on main, which starts on a push
+  to main (at most one an hour) and on an hourly catch-up cron
+  ([0581](0581-main-full-run-starts-on-push-and-hourly.md)). This file's rule stands: a real-resource
+  law stays off the pull request and the merge line. 0581 adds that every law that can run on a
+  stand-in runs on every pull request.
 
 - 2026-11-14: the owner ruled on the first security case the classification named. The law that
   the commit check refuses a forged step signature (`exam/commits-git-signatures.test.ts`, real git
