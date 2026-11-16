@@ -392,6 +392,11 @@
       "imports": ["next-shared"]
     },
     {
+      "name": "next-crypto-test-support",
+      "paths": ["next/packages/libfabrika/src/crypto.test-support.ts"],
+      "imports": ["next-vitest"]
+    },
+    {
       "name": "next-shared",
       "layer": 0,
       "paths": [

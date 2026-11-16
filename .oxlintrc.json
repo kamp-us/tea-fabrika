@@ -1329,8 +1329,8 @@
               "tezgah"
             ],
             "folders": ["node", "cloudflare", "coordination"],
-            "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev", "SpanTag"],
-            "values": ["ProcessId", "Sql", "Rev", "SpanTag"]
+            "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev", "SpanTag", "crypto"],
+            "values": ["ProcessId", "Sql", "Rev", "SpanTag", "crypto"]
           }
         ],
         "eslint/no-restricted-imports": [
@@ -2421,6 +2421,23 @@
             "object": "globalThis",
             "property": "Reflect",
             "message": "Name Reflect directly, so lint can read the call (0554)."
+          }
+        ]
+      }
+    },
+    {
+      // Decisions 0555 and 0579: no vi mock in a law. The block lists the folders at zero; a folder
+      // joins the day its own slice brings it to zero, and none is taken off (0524).
+      "files": ["next/packages/libfabrika/src/gateway/**", "next/packages/libfabrika/src/telemetry/**"],
+      "rules": {
+        "vitest/no-restricted-vi-methods": [
+          "error",
+          {
+            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
+            "mock": "Give the code a service and provide a test layer (0555).",
+            "doMock": "Give the code a service and provide a test layer (0555).",
+            "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
+            "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
           }
         ]
       }

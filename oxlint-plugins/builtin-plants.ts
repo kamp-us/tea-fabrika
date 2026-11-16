@@ -54,6 +54,42 @@ export const REFLECT: Plant = {
   ],
 };
 
+const VI_CODE = "vitest(no-restricted-vi-methods)";
+
+/** The lines every `vi` import form must answer the same way: the five mocks refused, the rest taken. */
+const viLines = (vi: string): readonly (readonly [string, boolean])[] => [
+  [`export const a = ${vi}.fn();`, true],
+  [`${vi}.mock("./a.ts");`, true],
+  [`${vi}.doMock("./a.ts");`, true],
+  [`export const b = ${vi}.spyOn(console, "log");`, true],
+  [`${vi}.stubEnv("A", "b");`, true],
+  // 0555 and 0579 do not decide the rest of vi: a fake clock or a wait is not a mock.
+  [`${vi}.useFakeTimers();`, false],
+  [`export const c = ${vi}.waitFor(() => 1);`, false],
+  // Not a call of vi: a comment, a string, another object's member of the same name.
+  [`// ${vi}.fn() in a comment`, false],
+  [`export const d = "${vi}.spyOn(x)";`, false],
+  ["other.fn();", false],
+];
+
+/**
+ * M1 of the mock sweep (decisions 0555 and 0579): `vi.fn`, `vi.mock`, `vi.doMock`, `vi.spyOn` and
+ * `vi.stubEnv` are refused, with `vi` imported from `vitest`, from `@effect/vitest`, and under a
+ * name of its own (oxlint 1.90.0 follows the import, as the gateway and telemetry slice's run found),
+ * and `vi.useFakeTimers` passes. plants.test.ts runs these files in every folder a block of the
+ * config lists for the rule.
+ * Plant: delete one folder from the block of `.oxlintrc.json`, and that folder's lines are not refused.
+ */
+export const VI_METHODS: readonly Plant[] = [
+  { from: 'import { vi } from "vitest";', vi: "vi" },
+  { from: 'import { vi } from "@effect/vitest";', vi: "vi" },
+  { from: 'import { vi as v } from "vitest";', vi: "v" },
+].map(({ from, vi }) => ({
+  code: VI_CODE,
+  prelude: [from, "declare const other: { fn: () => void };"],
+  lines: viLines(vi),
+}));
+
 const eslint: readonly Plant[] = [
   REFLECT,
   {
