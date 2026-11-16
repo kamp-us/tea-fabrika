@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-b-review2",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-16T02:10:21-08:00",
+  "ended": "2026-11-16T02:20:00-08:00",
+  "parent": "2026-11-16-591-b-review",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The recheck (0177) of slice B of the exam-to-lint plan (0591, docs/plan/quests/exam-to-lint-PLAN.md) after its fix round, on fabrikalfa/exam-to-lint-b at 0cc2d9d. It reads the one fix commit since 84de9c6. The answer is merge-ready, findings 0 new. Fault 1 is fixed. The reading-imports law in oxlint-plugins/package-deps.test.ts:43 now gives every form a spec that fires: an unlisted package for the static, type, re-export, export-all, type import() and import = require lines, and ../../style.css, which leaves the package, for the bare import. Its expected list names fires on lines 1 to 7, 11 and 12, and the comment lines (13 to 16) stay silent. Fault 2 is fixed. The exports law draws exactly 10 cases per run (minLength 10). It counts the cases it judges and fails below 60, so each of its 6 runs judges 10 generated cases plus the pinned one, 66 in all, which covers the old law's 60 generated cases. The new comment says what the law draws. The fix row's new_names list sources ten of its twelve names. The two without a page, nodeKindProblems and nextPackages, are plain words; nextPackages kept the exam file's own name. I hold that as enough, and no name needs changing. The three finding rows from the first review are in field/findings/ unchanged.",
+  "plants": [
+    {
+      "law": "oxlint-plugins/package-deps.test.ts, reading imports",
+      "plant": "run in a scratch copy: drop the TSImportType visitor in package-deps.ts",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/package-deps.test.ts, reading imports",
+      "plant": "run in a scratch copy: skip an ImportDeclaration whose importKind is type",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/package-deps.test.ts, front files and internal/ (reach)",
+      "plant": "by reading: minLength 1 gives 36 generated cases at seed 119120 (my first review's count), 42 with the pinned one each run, below the law's 60",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "Run here at 0cc2d9d, nice -n 19, --maxWorkers=1: oxlint-plugins/package-deps.test.ts, 7 of 7 green. oxlint on that file: 0 blocking. Format check exit 0. The fix commit changes only that test file and adds field rows, so the rest of the first review's runs at 1ae9fa9 still stand: 43 files and 502 tests, pnpm lint by parts and one pnpm typecheck, all green. No new typecheck was run here, since the fix row records one at this head. Not run: .github/ci/changes.test.ts and the three .github/ci lint parts, because their paths hold a word the box's command check refuses.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "review"
+}

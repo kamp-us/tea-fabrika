@@ -70,6 +70,8 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
     yield* fs.writeFileString(full, text);
   }
 
+  // A planted file oxlint does not lint (a `package.json` a rule reads) is written and not passed.
+  const linted = Object.keys(files).filter((file) => /\.[cm]?[jt]sx?$/.test(file));
   const ran = yield* ChildProcess.make(
     path.join(ROOT, "node_modules", ".bin", "oxlint"),
     [
@@ -77,7 +79,7 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
       "--disable-nested-config",
       "--no-ignore",
       "--format=json",
-      ...Object.keys(files),
+      ...linted,
     ],
     { cwd: at },
   );
@@ -91,7 +93,7 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
   );
   const report = readReport(out);
 
-  if (report.number_of_files !== Object.keys(files).length) {
+  if (report.number_of_files !== linted.length) {
     return yield* Effect.die(new Error(`oxlint read ${report.number_of_files} files: ${err}`));
   }
 

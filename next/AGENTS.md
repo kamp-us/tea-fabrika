@@ -49,6 +49,8 @@ libfabrika
 | A module imports only from lower layers | `pnpm lint:layers`, from `layer-rules.json` |
 | A part imports only the parts its row lists, and every library and tuval file has a row | `pnpm lint:layers`: a row's `imports`, and `roots` |
 | A part imports only the names of our packages its table allows, and no file of the library, tests included, names another of ours | `fabrika/package-imports` |
+| A file sits in a package and imports only what its `package.json` lists, through each package's `exports`, never by a relative path out of it; in an app only `src/entry/electron-main.ts` imports `electron` (p65) | `fabrika/package-deps` |
+| A secret read enters `Redacted` at its source, and every TypeScript file of a package is in the program its `typecheck` checks | `pnpm lint:promise-types`: `fabrika(secret-types)`, `fabrika(tsconfig-scope)` |
 | A test that drives a real resource is named `*.integration.test.ts`, or `*.visual.test.ts` for a browser or Electron, so pull requests leave it to the schedule (0536) | `fabrika/integration-test-name` |
 | No `Reflect.get`, `Reflect.set` or `Reflect.has`, and no `globalThis.Reflect`: decode with Schema, narrow with `Predicate.hasProperty`, or assign through the type ([0554](../.decisions/0554-no-reflect-get-set-has.md)). It is on for every folder at zero, each folder joining when its slice reaches zero | `eslint/no-restricted-properties` |
 | The anti-slop plugin, vendored whole and pinned: eight of its rules, each on folder by folder where it has no hit ([0563](../.decisions/0563-anti-slop-plugin-as-it-ships.md)); see [the section in the plugins README](../oxlint-plugins/README.md#the-anti-slop-plugin-taken-as-it-ships) | `anti-slop/*`, `anti-slop-effect/*` |

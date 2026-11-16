@@ -1,10 +1,10 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { NodePath } from "@effect/platform-node";
+import { NodePath, NodeServices } from "@effect/platform-node";
 import { Effect, Path } from "effect";
 import * as fc from "fast-check";
-import { API } from "typescript/unstable/sync";
+import { API, type Snapshot } from "typescript/unstable/sync";
 // `pnpm lint:promise-types` (`promise-types.ts`), the typed half of `no-promises` (exam item 1): a call,
 // return or parameter that carries a Promise outside one marked edge line is refused, through Effect's
 // bridges, aliases and inferred types. An edge comment covers only the next physical line. These laws
@@ -14,7 +14,7 @@ import { API } from "typescript/unstable/sync";
 // Plant: let a marker cover the whole statement under it, not only the next line, and the wrapped-edge
 // laws fail.
 import { describe, expect, it } from "vitest";
-import { checkPromiseTypes } from "./promise-types.ts";
+import { checkPromiseTypes, checkSecretTypes, nextPackages, scopeGaps, typedProjects } from "./promise-types.ts";
 
 const paths = Effect.runSync(Path.Path.pipe(Effect.provide(NodePath.layer)));
 
@@ -380,6 +380,252 @@ describe("promise-types", () => {
         expect(findings.filter((f) => f.file !== file)).toEqual([]);
       }),
       { seed: 119120, numRuns: 20 },
+    );
+  });
+});
+
+// P12, the command's `fabrika(secret-types)` check. This was the exam's
+// next/apps/fabrika/src/exam/secret-types.integration.test.ts until 0591 made it part of this command;
+// its real-tree law is the command's run in `pnpm lint`. Generated plants prove the checker sees the
+// secret read through a renamed import and a renamed wrapper. Plant: drop the `~effect/Redacted` test,
+// and the three wrapped reads fire too.
+describe("secret reads enter Redacted at their source", () => {
+  it("[secrets] source type plants catch plain entropy, Authorization and binding reads, including renamed wrappers", () => {
+    fc.assert(
+      fc.property(fc.stringMatching(/^[a-z][a-z0-9]{0,10}$/), (suffix) => {
+        const folder = realpathSync(mkdtempSync(join(tmpdir(), "p12-sec-types-")));
+        const api = new API({ cwd: folder });
+
+        try {
+          const file = "next/source.ts",
+            path = join(folder, file),
+            config = join(folder, "tsconfig.json");
+          mkdirSync(dirname(path), { recursive: true });
+          writeFileSync(
+            join(folder, "crypto.d.ts"),
+            'declare module "node:crypto" {export function randomBytes(n: number): {toString(encoding: string): string};}',
+          );
+          const prelude = `import {randomBytes as bytes${suffix}} from "node:crypto";\ninterface Redacted {readonly "~effect/Redacted": never}\ndeclare function wrap${suffix}(value: unknown): Redacted;\ndeclare const request: {headers: {get(name: string): string | null}};\ndeclare const ctx: {props: {token: string}};\n`;
+          const lines = [
+            `export const entropy = bytes${suffix}(32).toString("base64url");`,
+            'export const header = request.headers.get("authorization");',
+            "export const binding = ctx.props.token;",
+            `export const safeEntropy = wrap${suffix}(bytes${suffix}(32).toString("base64url"));`,
+            `export const safeHeader = wrap${suffix}(request.headers.get("authorization"));`,
+            `export const safeBinding = wrap${suffix}(ctx.props.token);`,
+          ];
+          writeFileSync(path, prelude + lines.join("\n"));
+          writeFileSync(
+            config,
+            JSON.stringify({ compilerOptions: { strict: true, target: "ES2023", types: [] }, include: ["**/*.ts"] }),
+          );
+          const snapshot = api.updateSnapshot({ openProjects: [config] });
+
+          try {
+            const project = snapshot.getProject(config)!;
+            expect(project.program.getSemanticDiagnostics()).toEqual([]);
+            expect(checkSecretTypes(project, folder, paths).map((f) => f.line)).toEqual([6, 7, 8]);
+          } finally {
+            snapshot.dispose();
+          }
+        } finally {
+          api.close();
+          rmSync(folder, { recursive: true, force: true });
+        }
+      }),
+      // The exam's full-run count: this folder's tests run only in the full run (0590).
+      { seed: 119120, numRuns: 5 },
+    );
+  });
+});
+
+// e2e typecheck, the command's `fabrika(tsconfig-scope)` check: every TypeScript file of a next/
+// package is in the program its `typecheck` script checks. The app's tsconfig once named its files
+// by hand, and `e2e/` and `e2e.ts` were never on the list, so 19 type errors stood there unseen from
+// 2026-11-06 (0524: no list lets broken code pass). This was the exam's
+// next/apps/fabrika/src/exam/tsconfig-scope.integration.test.ts until 0591 made it part of this
+// command; its real-tree law is the command's run in `pnpm lint`. Each law plants a tree in a temp
+// folder and opens the projects the command opens there. Plant: open one package fewer, and every
+// planted file is reported.
+describe("every TypeScript file of a next/ package is in its program", () => {
+  const TYPECHECK = "tsc --noEmit -p .";
+  const APP = "next/apps/fabrika";
+  const ROOT = realpathSync(join(import.meta.dirname, ".."));
+  const word = fc.stringMatching(/^[a-z][a-z0-9]{0,8}$/);
+
+  /** Plants `files` in a temp folder, opens the command's projects there, and answers `use`'s value. */
+  const scoped = <A>(
+    files: Readonly<Record<string, string>>,
+    links: Readonly<Record<string, string>>,
+    use: (at: string, snapshot: Snapshot, gaps: (tracked: ReadonlyArray<string>) => ReadonlyArray<string>) => A,
+  ): Promise<A> =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const at = realpathSync(mkdtempSync(join(tmpdir(), "tsconfig-scope-")));
+
+        try {
+          for (const [file, text] of Object.entries(files)) {
+            mkdirSync(dirname(join(at, file)), { recursive: true });
+            writeFileSync(join(at, file), text);
+          }
+
+          for (const [file, target] of Object.entries(links)) {
+            mkdirSync(dirname(join(at, file)), { recursive: true });
+            symlinkSync(target, join(at, file));
+          }
+
+          const configs = yield* typedProjects(at);
+          const packages = yield* nextPackages(at);
+          const api = new API({ cwd: at });
+
+          try {
+            const snapshot = api.updateSnapshot({ openProjects: [...configs] });
+
+            try {
+              return use(at, snapshot, (tracked) =>
+                scopeGaps(snapshot, at, packages, tracked, paths).map((g) => `${g.file} ${g.reason}`),
+              );
+            } finally {
+              snapshot.dispose();
+            }
+          } finally {
+            api.close();
+          }
+        } finally {
+          rmSync(at, { recursive: true, force: true });
+        }
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+  const Planted = fc.record({
+    folder: fc.oneof(
+      fc.constantFrom("e2e", "e2e/node", ""),
+      word.map((w) => `e2e/${w}`),
+    ),
+    name: word,
+    // 0536's names too: the e2e files are `*.integration.test.ts` and `*.visual.test.ts` now.
+    suffix: fc.constantFrom(
+      ".test.ts",
+      ".test-support.ts",
+      ".laws.test.ts",
+      ".integration.test.ts",
+      ".visual.test.ts",
+      ".laws.visual.test.ts",
+      ".ts",
+    ),
+    word,
+  });
+
+  it("pinned: e2e typecheck gap, a planted type error in any new TypeScript file of next/apps/fabrika is in the program the command checks", async () => {
+    // The app's real tsconfig, base config and manifest, at their repo paths, with the root's and the
+    // app's node_modules linked, so types and Effect's plugin resolve as on the tree.
+    await fc.assert(
+      fc.asyncProperty(Planted, async (planted) => {
+        const file = `${APP}/${planted.folder === "" ? "" : `${planted.folder}/`}${planted.name}${planted.suffix}`;
+        const text = `export const planted: number = "${planted.word}";\n`;
+        const { gaps, diagnostics } = await scoped(
+          {
+            "tsconfig.base.json": readFileSync(join(ROOT, "tsconfig.base.json"), "utf8"),
+            [`${APP}/tsconfig.json`]: readFileSync(join(ROOT, APP, "tsconfig.json"), "utf8"),
+            [`${APP}/package.json`]: readFileSync(join(ROOT, APP, "package.json"), "utf8"),
+            [file]: text,
+          },
+          { node_modules: join(ROOT, "node_modules"), [`${APP}/node_modules`]: join(ROOT, APP, "node_modules") },
+          (at, snapshot, gapsOf) => {
+            const program = snapshot.getProject(join(at, APP, "tsconfig.json"))?.program;
+            const full = join(at, file);
+            return {
+              gaps: gapsOf([file]),
+              diagnostics: [...(program?.getSyntacticDiagnostics() ?? []), ...(program?.getSemanticDiagnostics() ?? [])]
+                .filter((d) => d.fileName === full)
+                .map((d) => ({ code: d.code, line: text.slice(0, d.pos).split("\n").length })),
+            };
+          },
+        );
+        expect(gaps).toEqual([]);
+        expect(diagnostics).toEqual([{ code: 2322, line: 1 }]);
+      }),
+      {
+        seed: 119120,
+        numRuns: 5,
+        // The bug's file: e2e/node/P19Launchd.test-support.ts sent SIGTERM unseen until this law.
+        examples: [[{ folder: "e2e/node", name: "P19Launchd", suffix: ".test-support.ts", word: "milk" }]],
+      },
+    );
+  });
+
+  const segment = /^[a-z][a-z0-9]{0,6}$/;
+
+  const Scoped = fc.record({
+    name: fc.stringMatching(segment),
+    files: fc.uniqueArray(
+      fc
+        .record({
+          under: fc.boolean(),
+          dirs: fc.array(fc.stringMatching(segment), { maxLength: 2 }),
+          name: fc.stringMatching(segment),
+          ext: fc.constantFrom(".ts", ".tsx"),
+        })
+        .map(({ under, dirs, name, ext }) => [...(under ? ["src"] : []), ...dirs, `${name}${ext}`].join("/")),
+      { minLength: 1, maxLength: 12 },
+    ),
+  });
+
+  it("names each generated file left out of a package's include, and none it holds", async () => {
+    await fc.assert(
+      fc.asyncProperty(Scoped, async ({ name, files }) => {
+        const pkg = `next/programs/${name}`;
+        const tracked = files.map((f) => `${pkg}/${f}`);
+        const gaps = await scoped(
+          {
+            [`${pkg}/package.json`]: JSON.stringify({ scripts: { typecheck: TYPECHECK } }),
+            [`${pkg}/tsconfig.json`]: JSON.stringify({
+              compilerOptions: { strict: true, types: [] },
+              include: ["src"],
+            }),
+            ...Object.fromEntries(tracked.map((f) => [f, "export {};\n"])),
+          },
+          {},
+          (_at, _snapshot, gapsOf) => gapsOf(tracked),
+        );
+        expect([...gaps].sort()).toEqual(
+          tracked
+            .filter((f) => !f.startsWith(`${pkg}/src/`))
+            .map((f) => `${f} outside`)
+            .sort(),
+        );
+      }),
+      { seed: 119120, numRuns: 10 },
+    );
+  });
+
+  it("refuses a package whose typecheck is not the one script, and a file in no package", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.constantFrom(TYPECHECK, "tsc --noEmit", "tsgo --noEmit -p .", undefined),
+        word,
+        async (script, stray) => {
+          const pkg = "next/packages/held";
+          const tracked = [`${pkg}/src/index.ts`, `next/${stray}.ts`];
+          const gaps = await scoped(
+            {
+              [`${pkg}/package.json`]: JSON.stringify(script === undefined ? {} : { scripts: { typecheck: script } }),
+              [`${pkg}/tsconfig.json`]: JSON.stringify({
+                compilerOptions: { strict: true, types: [] },
+                include: ["src"],
+              }),
+              [`${pkg}/src/index.ts`]: "export {};\n",
+              [`next/${stray}.ts`]: "export {};\n",
+            },
+            {},
+            (_at, _snapshot, gapsOf) => gapsOf(tracked),
+          );
+          expect([...gaps].sort()).toEqual(
+            [...(script === TYPECHECK ? [] : [`${pkg}/package.json script`]), `next/${stray}.ts stray`].sort(),
+          );
+        },
+      ),
+      { seed: 119120, numRuns: 8 },
     );
   });
 });

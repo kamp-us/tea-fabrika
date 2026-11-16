@@ -579,6 +579,27 @@ restructured the code to keep each Promise on its marked line. `pnpm lint:promis
 reports 0 findings on the P12 tree at `97245dc7` with the narrowed rule below, with 0
 false alarms. The check runs in `pnpm lint`. Unknown types still need the regular typecheck.
 
+The same command holds two more typed checks since 0591 moved them out of the exam, in the one
+snapshot it opens. `fabrika(secret-types)` (P12) refuses a `randomBytes` call, an Authorization
+header read or a control binding's `props.token` whose type, or the type of an expression around it
+in its statement, does not carry `~effect/Redacted`. `fabrika(tsconfig-scope)` refuses a `next/`
+package whose `typecheck` is not `tsc --noEmit -p .`, a TypeScript file git tracks under `next/` in
+no package, and one its package's own `tsconfig.json` program does not hold. Both were the exam's
+`secret-types.integration.test.ts` and `tsconfig-scope.integration.test.ts`; their planted laws are
+in `promise-types.test.ts`. On 2026-11-16, opening every `next/` project rather than the old two,
+the command reported 0 findings on the tree, the same as the old tests.
+
+Three more pieces left the exam the same day (0591). `pnpm lint:node-kinds` (`node-kinds.ts`)
+checks that every name in `node-kinds.json` is exported by a file its glob matches and bound by that
+string elsewhere in `next/`. `pnpm lint:manifests` (`next-manifests.ts`) checks that each `next/`
+package is private at 0.0.0, with no side effects, a typecheck script and nothing of today's.
+`fabrika/package-deps`, on for `next/**` and its `.agents/` twin, refuses an import a `next/` file's
+package does not list, a subpath outside our package's `exports` map (read by Node's longest-pattern
+rule), a relative path out of the package, `electron` in an app outside `src/entry/electron-main.ts`,
+and a file in no package. It judges `next/` paths only. Each has its own `<name>.test.ts` here with
+the exam's plants; each reported 0 findings on the tree on 2026-11-16. The bundle laws stay in
+`next/apps/fabrika/src/exam/deps.integration.test.ts`.
+
 An untyped or `never` call needs an edge marker only inside an input to Effect's own
 `tryPromise` or `promise`. The checker follows the declaration's symbol, including imported
 aliases, parentheses, non-null assertions, `satisfies`, `as`, const aliases and their chains,

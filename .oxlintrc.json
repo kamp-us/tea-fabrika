@@ -664,6 +664,8 @@
         "fabrika/one-store-hook": "error",
         "fabrika/one-machine-per-file": "error",
         "fabrika/no-stage-word": "error",
+        // p65: each import of a next/ file stays inside what its package lists and exports (0591).
+        "fabrika/package-deps": "error",
         "eslint/no-restricted-imports": [
           "error",
           {
@@ -981,6 +983,8 @@
         "fabrika/one-store-hook": "error",
         "fabrika/one-machine-per-file": "error",
         "fabrika/no-stage-word": "error",
+        // p65: each import of a next/ file stays inside what its package lists and exports (0591).
+        "fabrika/package-deps": "error",
         "eslint/no-restricted-imports": [
           "error",
           {

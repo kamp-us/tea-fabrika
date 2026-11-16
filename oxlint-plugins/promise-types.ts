@@ -1,7 +1,20 @@
-// The typed half of no-promises. Oxlint's JS plugins have no type checker. This lint
-// command uses the installed TypeScript 7.0.2 API, without emitting code or type diagnostics.
+// `pnpm lint:promise-types`, the typed lint command. Oxlint's JS plugins have no type checker and
+// `oxlint-tsgolint` is refused, so the checks that need types run here, on the installed TypeScript
+// 7.0.2 API, in one snapshot that opens every `next/` project, without emitting code or type
+// diagnostics. It holds three checks:
+//
+//   fabrika(no-promises)     the typed half of no-promises: a Promise outside one marked edge line.
+//   fabrika(secret-types)    P12: a secret read (entropy, an Authorization header, a control binding's
+//                            token) enters `Redacted` at its source.
+//   fabrika(tsconfig-scope)  every TypeScript file of a `next/` package is in the program its
+//                            `typecheck` script checks (0524: no list lets broken code pass).
+//
+// The secret and scope checks were the exam's (`secret-types.integration.test.ts` and
+// `tsconfig-scope.integration.test.ts`) until 0591 made them part of this command; their planted
+// laws are in `promise-types.test.ts`.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path } from "effect";
+import { Effect, FileSystem, Path, Schema, Stream } from "effect";
+import { ChildProcess } from "effect/process";
 import * as ts from "typescript/unstable/ast";
 import {
   API,
@@ -9,6 +22,7 @@ import {
   SymbolFlags,
   TypeFlags,
   type Project,
+  type Snapshot,
   type Symbol,
   type Type,
 } from "typescript/unstable/sync";
@@ -289,36 +303,278 @@ export const checkPromiseTypes = (
   return [...found.values()].sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
 };
 
-const main = Effect.gen(function* () {
-  const path = yield* Path.Path;
-  const fs = yield* FileSystem.FileSystem;
-  const root = path.resolve(import.meta.dirname, "..");
-  const api = new API({ cwd: root });
+/** A secret read outside `Redacted`, as the checker sees its type. */
+interface SecretFinding {
+  readonly file: string;
+  readonly line: number;
+  readonly reason: string;
+}
 
-  try {
-    const configs = (yield* fs.glob("next/**/tsconfig.json", {
-      root,
-      exclude: ["**/node_modules/**"],
-    }))
-      .filter((file) => !file.includes("node_modules/"))
-      .map((file) => path.join(root, file));
-    const snapshot = api.updateSnapshot({ openProjects: configs });
+/**
+ * P12's type proof at the three secret sources the whole-change sweep found: a `randomBytes` call,
+ * an Authorization header read and a control binding's `props.token`. A read passes when it, or an
+ * expression around it inside its statement, has a type that carries `~effect/Redacted`. This reads
+ * types, not spellings of `Redacted.make` or a particular helper's name.
+ */
+export const checkSecretTypes = (project: Project, root: string, pathService: Path.Path): readonly SecretFinding[] => {
+  const { program, checker } = project;
+  const findings: Array<SecretFinding> = [];
 
-    try {
-      const findings = new Map<string, PromiseFinding>();
+  for (const path of program.getSourceFileNames()) {
+    const file = pathService.relative(root, path).replaceAll("\\", "/");
 
-      for (const project of snapshot.getProjects()) {
-        for (const f of checkPromiseTypes(project, root, path)) {
-          findings.set(`${f.file}:${f.line}`, f);
+    if (!file.startsWith("next/") || /\/(?:exam|e2e)\//.test(file) || /\.(?:test|test-support|d)\.tsx?$/.test(file)) {
+      continue;
+    }
+
+    const source = program.getSourceFile(path);
+
+    if (!source) {
+      continue;
+    }
+
+    const entropy = new Set<string>();
+
+    for (const statement of source.statements) {
+      if (
+        !ts.isImportDeclaration(statement) ||
+        !ts.isStringLiteral(statement.moduleSpecifier) ||
+        !["node:crypto", "crypto"].includes(statement.moduleSpecifier.text)
+      ) {
+        continue;
+      }
+
+      const bindings = statement.importClause?.namedBindings;
+
+      if (bindings && ts.isNamedImports(bindings)) {
+        for (const spec of bindings.elements) {
+          if ((spec.propertyName ?? spec.name).text === "randomBytes") {
+            entropy.add(spec.name.text);
+          }
+        }
+      }
+    }
+
+    const reads: Array<{ node: ts.Node; reason: string; ancestors: Array<ts.Node> }> = [];
+    const visit = (node: ts.Node): void => {
+      let reason: string | undefined;
+
+      if (ts.isCallExpression(node)) {
+        const argument = node.arguments[0];
+
+        if (ts.isIdentifier(node.expression) && entropy.has(node.expression.text)) {
+          reason = "random secret";
+        }
+
+        if (
+          ts.isPropertyAccessExpression(node.expression) &&
+          node.expression.name.text === "get" &&
+          argument !== undefined &&
+          ts.isStringLiteral(argument) &&
+          argument.text.toLowerCase() === "authorization"
+        ) {
+          reason = "Authorization read";
         }
       }
 
-      for (const f of findings.values()) {
-        console.error(`${f.file}:${f.line} fabrika(no-promises): ${f.reason}`);
+      if (
+        ts.isPropertyAccessExpression(node) &&
+        node.name.text === "token" &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.name.text === "props"
+      ) {
+        reason = "control binding read";
       }
 
-      console.info(`lint:promise-types: ${findings.size} findings`);
-      process.exitCode = findings.size === 0 ? 0 : 1;
+      if (reason) {
+        const ancestors: Array<ts.Node> = [];
+
+        for (let parent: ts.Node = node; !ts.isStatement(parent); parent = parent.parent) {
+          ancestors.push(ts.isVariableDeclaration(parent) ? parent.name : parent);
+
+          if (parent === source) {
+            break;
+          }
+        }
+
+        reads.push({ node, reason, ancestors });
+      }
+
+      node.forEachChild(visit);
+    };
+    visit(source);
+    const nodes = reads.flatMap((read) => read.ancestors);
+    const types = checker.getTypeAtLocation(nodes);
+    let index = 0;
+
+    for (const read of reads) {
+      const protectedRead = read.ancestors
+        .map(() => types[index++])
+        .some((type) => type !== undefined && checker.getPropertyOfType(type, "~effect/Redacted") !== undefined);
+
+      if (!protectedRead) {
+        findings.push({
+          file,
+          line: source.getLineAndCharacterOfPosition(read.node.getStart(source)).line + 1,
+          reason: `${read.reason} must enter Redacted at its source`,
+        });
+      }
+    }
+  }
+
+  return findings;
+};
+
+/** The one script each `next/` package's `typecheck` runs, so the tsconfig opened here is the one checked. */
+const TYPECHECK = "tsc --noEmit -p .";
+
+const TYPESCRIPT = /\.(?:ts|tsx|mts|cts)$/;
+
+/** A `next/<group>/<name>` folder that holds a package manifest, with its `typecheck` script. */
+interface NextPackage {
+  readonly dir: string;
+  readonly typecheck: string | undefined;
+}
+
+const Manifest = Schema.Struct({ scripts: Schema.optional(Schema.Record(Schema.String, Schema.String)) });
+
+const readManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(Manifest));
+
+/** Every `next/**` `tsconfig.json` under `root`, as absolute paths: the projects this command opens. */
+export const typedProjects = Effect.fnUntraced(function* (root: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  return (yield* fs.glob("next/**/tsconfig.json", { root, exclude: ["**/node_modules/**"] }))
+    .filter((file) => !file.includes("node_modules/"))
+    .sort()
+    .map((file) => path.join(root, file));
+});
+
+/** Every `next/<group>/<name>` folder under `root` that holds a package manifest. */
+export const nextPackages = Effect.fnUntraced(function* (root: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const found: Array<NextPackage> = [];
+
+  for (const group of (yield* fs.readDirectory(path.join(root, "next"))).sort()) {
+    const groupDir = path.join(root, "next", group);
+
+    if ((yield* fs.stat(groupDir)).type !== "Directory") {
+      continue;
+    }
+
+    for (const name of (yield* fs.readDirectory(groupDir)).sort()) {
+      const manifest = path.join(groupDir, name, "package.json");
+
+      if (!(yield* fs.exists(manifest))) {
+        continue;
+      }
+
+      const { scripts } = yield* readManifest(yield* fs.readFileString(manifest));
+      found.push({ dir: `next/${group}/${name}`, typecheck: scripts?.["typecheck"] });
+    }
+  }
+
+  return found;
+});
+
+/** What is wrong with a file of the tsconfig scope, as the command prints it. */
+const SCOPE_REASONS = {
+  script: `its typecheck script is not "${TYPECHECK}"`,
+  stray: "the file sits in no next/ package, so no typecheck checks it",
+  outside: "the file is not in the program its package's tsconfig.json checks",
+} as const;
+
+/** A tsconfig-scope fault: the file, and which of the three it is. */
+interface ScopeFinding {
+  readonly file: string;
+  readonly reason: keyof typeof SCOPE_REASONS;
+}
+
+/**
+ * Every fault of the tsconfig scope under `root`: a package whose `typecheck` is not the one script,
+ * a tracked TypeScript file (repo-relative, from `tracked`) in no package, and one its package's own
+ * `tsconfig.json` program does not hold. A package whose project the snapshot did not open reports
+ * every file it has, never none.
+ */
+export const scopeGaps = (
+  snapshot: Snapshot,
+  root: string,
+  packages: ReadonlyArray<NextPackage>,
+  tracked: ReadonlyArray<string>,
+  pathService: Path.Path,
+): readonly ScopeFinding[] => [
+  ...packages
+    .filter((p) => p.typecheck !== TYPECHECK)
+    .map((p) => ({ file: `${p.dir}/package.json`, reason: "script" as const })),
+  ...tracked
+    .filter((f) => !packages.some((p) => f.startsWith(`${p.dir}/`)))
+    .map((file) => ({ file, reason: "stray" as const })),
+  ...packages.flatMap((p) => {
+    const project = snapshot.getProject(pathService.join(root, p.dir, "tsconfig.json"));
+    const held = new Set(project?.program.getSourceFileNames().map((f) => pathService.relative(root, f)) ?? []);
+    return tracked
+      .filter((f) => f.startsWith(`${p.dir}/`) && !held.has(f))
+      .map((file) => ({ file, reason: "outside" as const }));
+  }),
+];
+
+class GitFailed extends Schema.TaggedError<GitFailed>()("GitFailed", { code: Schema.Number }) {}
+
+/** Every TypeScript file git tracks under `next/`, or would track: untracked files not ignored count too. */
+const trackedTypeScript = Effect.fnUntraced(function* (root: string) {
+  const run = yield* ChildProcess.make(
+    "git",
+    ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "next/"],
+    { cwd: root },
+  );
+  const [out, code] = yield* Effect.all([run.stdout.pipe(Stream.decodeText(), Stream.mkString), run.exitCode], {
+    concurrency: 2,
+  });
+
+  if (code !== 0) {
+    return yield* new GitFailed({ code });
+  }
+
+  return out.split("\0").filter((f) => TYPESCRIPT.test(f));
+}, Effect.scoped);
+
+const main = Effect.gen(function* () {
+  const path = yield* Path.Path;
+  const fs = yield* FileSystem.FileSystem;
+  // The real path, so a linked checkout compares equal to the program's file names.
+  const root = yield* fs.realPath(path.resolve(import.meta.dirname, ".."));
+  const configs = yield* typedProjects(root);
+  const packages = yield* nextPackages(root);
+  const tracked = yield* trackedTypeScript(root);
+  const api = new API({ cwd: root });
+
+  try {
+    const snapshot = api.updateSnapshot({ openProjects: configs });
+
+    try {
+      const lines = new Map<string, string>();
+
+      for (const project of snapshot.getProjects()) {
+        for (const f of checkPromiseTypes(project, root, path)) {
+          lines.set(`${f.file}:${f.line} no-promises`, `${f.file}:${f.line} fabrika(no-promises): ${f.reason}`);
+        }
+
+        for (const f of checkSecretTypes(project, root, path)) {
+          lines.set(`${f.file}:${f.line} secret-types`, `${f.file}:${f.line} fabrika(secret-types): ${f.reason}`);
+        }
+      }
+
+      for (const f of scopeGaps(snapshot, root, packages, tracked, path)) {
+        lines.set(`${f.file} tsconfig-scope`, `${f.file} fabrika(tsconfig-scope): ${SCOPE_REASONS[f.reason]}`);
+      }
+
+      for (const line of lines.values()) {
+        console.error(line);
+      }
+
+      console.info(`lint:promise-types: ${lines.size} findings`);
+      process.exitCode = lines.size === 0 ? 0 : 1;
     } finally {
       snapshot.dispose();
     }
