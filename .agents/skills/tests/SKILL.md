@@ -57,7 +57,9 @@ this skill for the law. The reviewer reads that law on its recheck.
    - A test on a real resource (a real SQLite file, a real process, a real socket) is a
      `*.integration.test.ts` file ([0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md));
      `fabrika/integration-test-name` holds the name. Open a real SQLite file only through
-     `TestDatabase` in `@kampus/vitest`.
+     `TestDatabase` in `@kampus/vitest`. A law that can run on a stand-in runs on every pull
+     request, and the plan names why a new `.integration.` law has no stand-in
+     ([0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md)).
    - **A plant is run once, not kept.** Break the product code to prove each new law fails, run the
      law, record the plant and its result, then undo the plant. Commit no plant test. A plant
      may break any product file its law covers, whoever owns that file in the plan: it is never
