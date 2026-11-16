@@ -26,6 +26,7 @@ import {
   SchemaAST,
   SchemaRepresentation,
 } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
@@ -84,7 +85,7 @@ const doc = fc
       maxLength: 8,
     },
   )
-  .map((words) => words.join(" "));
+  .map((words) => Arr.join(words, " "));
 
 const declared = pool.chain((schemas) =>
   fc.tuple(
@@ -100,7 +101,7 @@ type Declared = typeof declared extends fc.Arbitrary<infer D> ? D : never;
 
 /** The declarations, each schema made once and shared by every declaration that picks it. */
 const build = ([schemas, ds]: Declared) => {
-  const made = schemas.map((s) =>
+  const made = Arr.map(schemas, (s) =>
     KINDS[s.kind].make().annotate({
       ...(s.identifier === undefined ? {} : { identifier: s.identifier }),
       title: s.title,
@@ -116,7 +117,7 @@ const groupWith = (input: Declared, defaults: ReadonlyArray<unknown>) => {
   const { made } = build(input);
   return Setting.group(
     Object.fromEntries(
-      ds.map((d, n) => [
+      Arr.map(ds, (d, n) => [
         `s${n}`,
         Setting.make(`${d.table}.${d.key}`, {
           schema: made[d.schema] as Schema.Codec<unknown, unknown>,
@@ -134,7 +135,7 @@ const groupWith = (input: Declared, defaults: ReadonlyArray<unknown>) => {
 const withDefaults = declared.chain((input) =>
   fc.tuple(
     fc.constant(input),
-    fc.tuple(...input[1].map((_, n) => build(input).values(n).valid as fc.Arbitrary<unknown>)),
+    fc.tuple(...Arr.map(input[1], (_, n) => build(input).values(n).valid as fc.Arbitrary<unknown>)),
   ),
 );
 
@@ -154,25 +155,26 @@ const target = (document: Json, ref: string) => {
 const resolve = (document: Json, node: Json): Json => {
   const { $ref, allOf, ...own } = node;
   const below = typeof $ref === "string" ? resolve(document, target(document, $ref)) : {};
-  const parts = Array.isArray(allOf) ? allOf.map((part: Json) => resolve(document, part)) : [];
+  const parts =
+    Arr.isArray(allOf) && Arr.every(allOf, Predicate.isObject) ? Arr.map(allOf, (part) => resolve(document, part)) : [];
   return Object.assign({}, below, ...parts, own);
 };
 
 /** The leaf a dotted path names in a generated document, followed through its references. */
 const leaf = (document: Json, segments: ReadonlyArray<string>) =>
-  segments.reduce<Json | undefined>((node, key) => {
+  Arr.reduce<string, Json | undefined>(segments, document, (node, key) => {
     const properties = node === undefined ? undefined : resolve(document, node).properties;
     return Predicate.isObject(properties) && Object.hasOwn(properties, key)
       ? resolve(document, (properties as Json)[key] as Json)
       : undefined;
-  }, document);
+  });
 
 /** Every `$ref` anywhere in a JSON value. */
 const refs = (value: unknown): Array<string> =>
-  Array.isArray(value)
-    ? value.flatMap(refs)
+  Arr.isArray(value)
+    ? Arr.flatMap(value, refs)
     : Predicate.isObject(value)
-      ? Object.entries(value).flatMap(([key, v]) => (key === "$ref" && typeof v === "string" ? [v] : refs(v)))
+      ? Arr.flatMap(Object.entries(value), ([key, v]) => (key === "$ref" && typeof v === "string" ? [v] : refs(v)))
       : [];
 
 /** The generated document read back by Effect's own JSON Schema reader. */
@@ -187,7 +189,7 @@ const contents = (input: Declared) =>
   fc.record({
     file: fc.constantFrom<Setting.File>("person", "repo"),
     values: fc.tuple(
-      ...input[1].map((_, n) =>
+      ...Arr.map(input[1], (_, n) =>
         fc.oneof(
           fc.constant({ _tag: "absent" as const }),
           (build(input).values(n).valid as fc.Arbitrary<unknown>).map((value) => ({ _tag: "valid" as const, value })),
@@ -200,7 +202,7 @@ const contents = (input: Declared) =>
     empty: fc.boolean(),
     stray: fc.option(
       fc.record({
-        table: fc.option(fc.constantFrom(...input[1].map((d) => d.table)), { nil: undefined }),
+        table: fc.option(fc.constantFrom(...Arr.map(input[1], (d) => d.table)), { nil: undefined }),
         key: segment,
       }),
       { nil: undefined },
@@ -211,7 +213,7 @@ type Contents = typeof contents extends (i: Declared) => fc.Arbitrary<infer C> ?
 
 const tree = ([, ds]: Declared, c: Contents) => {
   const out: Record<string, Record<string, unknown>> = {};
-  ds.forEach((d, n) => {
+  Arr.forEach(ds, (d, n) => {
     const v = c.values[n]!;
 
     if (v._tag !== "absent") {
@@ -220,7 +222,7 @@ const tree = ([, ds]: Declared, c: Contents) => {
   });
 
   if (c.empty) {
-    for (const d of ds.filter((d) => d.scope.includes(c.file))) {
+    for (const d of Arr.filter(ds, (d) => d.scope.includes(c.file))) {
       out[d.table] ??= {};
     }
   }
@@ -228,11 +230,11 @@ const tree = ([, ds]: Declared, c: Contents) => {
   const stray = c.stray;
 
   if (stray !== undefined) {
-    if (stray.table === undefined && ds.every((d) => d.table !== stray.key)) {
+    if (stray.table === undefined && Arr.every(ds, (d) => d.table !== stray.key)) {
       (out as Json)[stray.key] = 1;
     }
 
-    if (stray.table !== undefined && ds.every((d) => d.table !== stray.table || d.key !== stray.key)) {
+    if (stray.table !== undefined && Arr.every(ds, (d) => d.table !== stray.table || d.key !== stray.key)) {
       out[stray.table] = { ...out[stray.table], [stray.key]: 1 };
     }
   }
@@ -320,7 +322,7 @@ describe("L3, every allowed declaration keeps its own words and encoded default 
 
         for (const file of ["person", "repo"] as const) {
           const document = JsonSchema.make(Files.schema(group, file)) as Json;
-          group.declarations.forEach((d, n) => {
+          Arr.forEach(group.declarations, (d, n) => {
             const node = leaf(document, d.segments);
             // Scope: a key is offered in exactly the files that may set it.
             expect(node !== undefined, `${file}: ${d.path}`).toBe(d.scope.includes(file));
@@ -389,7 +391,10 @@ describe("L4, generated local references resolve, with every definition present"
           const document = JsonSchema.make(Files.schema(group, c.file)) as Json;
           expect(document.$schema).toBe(DIALECT);
           // Effect names a definition only for a named schema, so a named one in scope gives a $ref.
-          const named = input[1].some((d) => d.scope.includes(c.file) && input[0][d.schema]!.identifier !== undefined);
+          const named = Arr.some(
+            input[1],
+            (d) => d.scope.includes(c.file) && input[0][d.schema]!.identifier !== undefined,
+          );
           expect(refs(document).length > 0).toBe(named);
 
           for (const ref of refs(document)) {
@@ -400,7 +405,7 @@ describe("L4, generated local references resolve, with every definition present"
           const editor = imported(document);
           const valid: Record<string, Record<string, unknown>> = {};
           let broken: Record<string, Record<string, unknown>> | undefined;
-          input[1].forEach((d, n) => {
+          Arr.forEach(input[1], (d, n) => {
             const v = c.values[n]!;
 
             if (!d.scope.includes(c.file)) {

@@ -10,7 +10,9 @@
 //   its default and its doc. `all` changes which rows show, never what a shown row says.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { Digest } from "effect/crypto";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import * as Print from "./Print.ts";
 import * as Reference from "./Reference.ts";
@@ -35,7 +37,7 @@ const doc = fc
     fc.oneof(fc.stringMatching(/^[a-z]{1,8}$/), fc.constantFrom("|", "*", "_", "`", "#", "<b>", "\\", "\n", "\t", '"')),
     { minLength: 1, maxLength: 8 },
   )
-  .map((words) => words.join(" "));
+  .map((words) => Arr.join(words, " "));
 
 const SOURCES = ["flag", "env", "repo", "person"] as const;
 type Slot = (typeof SOURCES)[number];
@@ -51,7 +53,7 @@ const declared = port.chain((shared) =>
       scope: fc.constantFrom<Setting.Scope>(["person"], ["repo", "person"]),
       supplied: fc.record(
         Object.fromEntries(
-          SOURCES.map((s) => [s, fc.oneof(fc.constant("default" as const), fc.constant(shared), port)]),
+          Arr.map(SOURCES, (s) => [s, fc.oneof(fc.constant("default" as const), fc.constant(shared), port)]),
         ) as Record<Slot, fc.Arbitrary<number | "default">>,
         { requiredKeys: [] },
       ),
@@ -70,7 +72,7 @@ const fileText = (entries: ReadonlyArray<readonly [string, string, number]>) => 
     tables.set(table, [...(tables.get(table) ?? []), `${key} = ${value}`]);
   }
 
-  return `${["# generated", ...[...tables].flatMap(([table, lines]) => ["", `[${table}]`, ...lines])].join("\n")}\n`;
+  return `${Arr.join(["# generated", ...Arr.flatMap([...tables], ([table, lines]) => ["", `[${table}]`, ...lines])], "\n")}\n`;
 };
 
 /** The rows of one real load: generated sources resolved, snapshotted and joined to their declarations. */
@@ -78,7 +80,7 @@ const loadRows = (ds: Declared) =>
   Effect.gen(function* () {
     const group = Setting.group(
       Object.fromEntries(
-        ds.map((d, n) => [
+        Arr.map(ds, (d, n) => [
           `s${n}`,
           Setting.make(`${d.table}.${d.key}`, {
             schema: Port,
@@ -99,9 +101,9 @@ const loadRows = (ds: Declared) =>
     const flags: Record<string, string> = {};
     const env: Record<string, string> = {};
     const files: Record<"repo" | "person", Array<readonly [string, string, number]>> = { repo: [], person: [] };
-    ds.forEach((d, n) => {
+    Arr.forEach(ds, (d, n) => {
       const s = group.declarations[n]!;
-      const [f, e, r, p] = SOURCES.map((slot) => value(d, slot));
+      const [f, e, r, p] = Arr.map(SOURCES, (slot) => value(d, slot));
 
       if (f !== undefined) {
         flags[s.path] = String(f);
@@ -141,7 +143,7 @@ const blocks = (report: string, paths: ReadonlyArray<string>) => {
   const out: Array<{ path: string; text: string }> = [];
 
   for (const line of report.split("\n")) {
-    const path = paths.find((p) => starts(line, p));
+    const path = Option.getOrUndefined(Arr.findFirst(paths, (p) => starts(line, p)));
 
     if (path !== undefined) {
       out.push({ path, text: line });
@@ -160,7 +162,7 @@ describe("L5, the printed report says what the snapshot holds, and --all adds on
     await fc.assert(
       fc.asyncProperty(declared, async (ds) => {
         const { snapshot, rows } = await loadRows(ds);
-        const paths = rows.map((r) => r.path);
+        const paths = Arr.map(rows, (r) => r.path);
         const plain = Print.report(rows, { all: false });
         const all = Print.report(rows, { all: true });
 
@@ -170,14 +172,17 @@ describe("L5, the printed report says what the snapshot holds, and --all adds on
         ] as const) {
           const shown = blocks(report, paths);
           // Visibility by origin alone: an explicit value equal to its default still shows.
-          const want = rows.filter((r) => every || r.origin._tag !== "default").map((r) => r.path);
+          const want = Arr.map(
+            Arr.filter(rows, (r) => every || r.origin._tag !== "default"),
+            (r) => r.path,
+          );
           expect(
-            shown.map((b) => b.path),
+            Arr.map(shown, (b) => b.path),
             report,
           ).toEqual(want);
 
           for (const block of shown) {
-            const row = rows.find((r) => r.path === block.path)!;
+            const row = Option.getOrThrow(Arr.findFirst(rows, (r) => r.path === block.path));
             const origin = snapshot.origins[row.path]!;
             expect(row.value).toEqual(snapshot.values[row.path]);
             expect(block.text).toContain(String(row.value));
@@ -198,10 +203,13 @@ describe("L5, the printed report says what the snapshot holds, and --all adds on
         // --all changes visibility only: an explicit row reads the same in both reports. The last
         // row's lines run to the end, so a closing line after it may differ.
         const explicit = (report: string) =>
-          blocks(report, paths).filter((b) => rows.find((r) => r.path === b.path)!.origin._tag !== "default");
+          Arr.filter(
+            blocks(report, paths),
+            (b) => Option.getOrThrow(Arr.findFirst(rows, (r) => r.path === b.path)).origin._tag !== "default",
+          );
         const [a, b] = [explicit(all), explicit(plain)];
-        expect(a.map((x) => x.path)).toEqual(b.map((x) => x.path));
-        a.forEach((x, n) => {
+        expect(Arr.map(a, (x) => x.path)).toEqual(Arr.map(b, (x) => x.path));
+        Arr.forEach(a, (x, n) => {
           const [long, short] = [x.text.trimEnd(), b[n]!.text.trimEnd()].sort((p, q) => q.length - p.length);
           expect(long!.startsWith(short!), `${long}\n---\n${short}`).toBe(true);
         });

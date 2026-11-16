@@ -8,6 +8,8 @@
 //   `all`, scope `["repo"]`, reload on restart.
 import { describe, expect, it } from "@effect/vitest";
 import { ByteSize, Effect, Exit, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import { property } from "../Testing.test-support.ts";
 import * as Declarations from "./Declarations.ts";
@@ -93,7 +95,7 @@ describe("T1041: the inbox cap and the chunk size are repo settings", () => {
               expect(Exit.isFailure(answer), `${setting.path} = ${text} from ${source} is out of range`).toBe(true);
 
               if (Exit.isFailure(answer)) {
-                const failure = answer.cause.reasons.find((r) => r._tag === "Fail");
+                const failure = Option.getOrUndefined(Arr.findFirst(answer.cause.reasons, (r) => r._tag === "Fail"));
                 expect(failure?._tag === "Fail" && failure.error, "the refusal is a settings error").toBeInstanceOf(
                   Files.SettingsError,
                 );

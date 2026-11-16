@@ -2,7 +2,9 @@
 // plan (docs/plan/quests/memory-restart-PLAN.md) adds L9: the memory limit and the grace.
 import { expect, it } from "@effect/vitest";
 import { ByteSize, ConfigProvider, Effect, Exit, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { Digest } from "effect/crypto";
+import * as Option from "effect/Option";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
 import * as Snapshot from "./Snapshot.ts";
@@ -27,7 +29,7 @@ const slots = (flags: Record<string, string>) => ({
 });
 
 const declaration = (path: string) => {
-  const value = Declarations.all.declarations.find((d) => d.path === path);
+  const value = Option.getOrUndefined(Arr.findFirst(Declarations.all.declarations, (d) => d.path === path));
   expect(value, `${path} is declared`).toBeDefined();
   return value!;
 };
@@ -37,7 +39,7 @@ it.effect.prop(
   [Schema.Tuple([Positive, Positive, Positive, Positive])],
   ([values]) =>
     Effect.gen(function* () {
-      const flags = Object.fromEntries(paths.map((path, i) => [path, String(values[i])]));
+      const flags = Object.fromEntries(Arr.map(paths, (path, i) => [path, String(values[i])]));
       const resolved = yield* Sources.resolve(Declarations.all, slots(flags));
       const saved = yield* Snapshot.make(Declarations.all, resolved);
       const checked = yield* Snapshot.read(Declarations.all, saved);
@@ -86,7 +88,8 @@ it.effect.prop(
 );
 
 // The group's own name for a declared path, so a law reads the decoded value it resolved.
-const named = (path: string) => Object.entries(Declarations.all.settings).find(([, d]) => d.path === path)?.[0];
+const named = (path: string) =>
+  Option.getOrUndefined(Arr.findFirst(Object.entries(Declarations.all.settings), ([, d]) => d.path === path))?.[0];
 
 // L9. Plant: default the limit to 50 MB, or leave the grace out of `all`: L9 fails.
 it.effect.prop(

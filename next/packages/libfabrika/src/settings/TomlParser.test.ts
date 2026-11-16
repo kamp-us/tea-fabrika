@@ -10,6 +10,8 @@
 // - Broken TOML fails with `TomlError`, carrying the parser's `line` and its `cause`.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import { Toml, TomlError } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
@@ -47,7 +49,14 @@ it.effect.prop(
       const toml = yield* Toml;
       const eol = crlf ? "\r\n" : "\n";
       const broken = ['bad = "never closed', "bad = ]", "bad = 1 2"][Math.abs(variant) % 3]!;
-      const text = Array.from({ length: padding }, (_, i) => `# prefix-${i}`).join(eol) + eol + broken + eol;
+      const text =
+        Arr.join(
+          Array.from({ length: padding }, (_, i) => `# prefix-${i}`),
+          eol,
+        ) +
+        eol +
+        broken +
+        eol;
 
       const operations: ReadonlyArray<Effect.Effect<unknown, TomlError>> = [
         toml.parse(text),
@@ -63,7 +72,7 @@ it.effect.prop(
           return yield* Effect.die(new Error("Invalid TOML succeeded"));
         }
 
-        const failure = exit.cause.reasons.find((r) => r._tag === "Fail");
+        const failure = Option.getOrUndefined(Arr.findFirst(exit.cause.reasons, (r) => r._tag === "Fail"));
         expect(failure?._tag).toBe("Fail");
 
         if (failure?._tag !== "Fail") {
@@ -120,8 +129,8 @@ const write = (d: Doc) => {
   };
 
   // TOML puts top-level keys before the first header, so headers come last.
-  const top = d.tables.filter((t) => t.spelling !== "table" && t.spelling !== "quoted-table");
-  const headed = d.tables.filter((t) => t.spelling === "table" || t.spelling === "quoted-table");
+  const top = Arr.filter(d.tables, (t) => t.spelling !== "table" && t.spelling !== "quoted-table");
+  const headed = Arr.filter(d.tables, (t) => t.spelling === "table" || t.spelling === "quoted-table");
   const first = d.tables[0]!;
 
   if (d.literal !== undefined) {
@@ -135,13 +144,18 @@ const write = (d: Doc) => {
     value[t.name] = inner;
 
     if (t.spelling === "inline") {
-      const line = put(`${t.name} = { ${t.keys.map((k, n) => `${k} = ${t.values[n]}`).join(", ")} }`);
-      t.keys.forEach((k, n) => {
+      const line = put(
+        `${t.name} = { ${Arr.join(
+          Arr.map(t.keys, (k, n) => `${k} = ${t.values[n]}`),
+          ", ",
+        )} }`,
+      );
+      Arr.forEach(t.keys, (k, n) => {
         inner[k] = t.values[n];
         leaves.push({ path: [t.name, k], line });
       });
     } else {
-      t.keys.forEach((k, n) => {
+      Arr.forEach(t.keys, (k, n) => {
         const key = t.spelling === "dotted" ? `${t.name}.${k}` : `"${t.name}".'${k}'`;
         inner[k] = t.values[n];
         leaves.push({ path: [t.name, k], line: put(`${key} = ${t.values[n]}`) });
@@ -153,17 +167,17 @@ const write = (d: Doc) => {
     const inner: Record<string, unknown> = {};
     value[t.name] = inner;
     headers.push({ path: [t.name], line: put(t.spelling === "table" ? `[${t.name}]` : `[ "${t.name}" ]`) });
-    t.keys.forEach((k, n) => {
+    Arr.forEach(t.keys, (k, n) => {
       inner[k] = t.values[n];
       leaves.push({ path: [t.name, k], line: put(`${k} = ${t.values[n]}`) });
     });
   }
 
-  return { text: lines.join(d.crlf ? "\r\n" : "\n") + (d.crlf ? "\r\n" : "\n"), value, leaves, headers };
+  return { text: Arr.join(lines, d.crlf ? "\r\n" : "\n") + (d.crlf ? "\r\n" : "\n"), value, leaves, headers };
 };
 
 const same = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
-  a.length === b.length && a.every((s, n) => s === b[n]);
+  a.length === b.length && Arr.every(a, (s, n) => s === b[n]);
 
 describe("L9, TOML paths and lines stay right for every spelling", () => {
   it("values, and one span per leaf and header with its segments and line", async () => {
@@ -177,9 +191,9 @@ describe("L9, TOML paths and lines stay right for every spelling", () => {
           expect(exit.value.value).toEqual(w.value);
 
           for (const want of [...w.leaves, ...w.headers]) {
-            const found = exit.value.spans.filter((s) => same(s.path, want.path));
+            const found = Arr.filter(exit.value.spans, (s) => same(s.path, want.path));
             expect(
-              found.map((s) => s.line),
+              Arr.map(found, (s) => s.line),
               `${JSON.stringify(want.path)} in\n${w.text}`,
             ).toEqual([want.line]);
           }
@@ -200,11 +214,11 @@ describe("L9, TOML paths and lines stay right for every spelling", () => {
         const lines = [`fabrika-version = "9.9.9"`, ...w.text.split(eol).slice(0, -1)];
         const n = 1 + (at % lines.length);
         lines.splice(n, 0, line);
-        const exit = await parse(lines.join(eol) + eol);
+        const exit = await parse(Arr.join(lines, eol) + eol);
         expect(exit._tag).toBe("Failure");
 
         if (Exit.isFailure(exit)) {
-          const error = exit.cause.reasons.find((r) => r._tag === "Fail");
+          const error = Option.getOrUndefined(Arr.findFirst(exit.cause.reasons, (r) => r._tag === "Fail"));
           expect(error?._tag === "Fail" ? error.error._tag : "none").toBe("TomlError");
           expect(error?._tag === "Fail" ? error.error.line : 0).toBe(n + 1);
         }

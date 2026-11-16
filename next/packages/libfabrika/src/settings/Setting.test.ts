@@ -13,6 +13,7 @@
 //   option of `Setting.make` and a field of `Setting`. It is a release fact, not a setting.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Config, ConfigProvider, Effect, Exit, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Setting.ts";
@@ -81,7 +82,7 @@ const ports = fc.integer({ min: 1, max: 65535 });
 
 /** `value` placed at `path` in nested tables. */
 const nest = (path: ReadonlyArray<string>, value: unknown): unknown =>
-  path.reduceRight<unknown>((inner, key) => ({ [key]: inner }), value);
+  Arr.reduceRight(path, value, (inner, key) => ({ [key]: inner }));
 
 /** What a provider holds at the setting's path: nothing, a valid port, or a value that must fail. */
 const supplied = fc.oneof(
@@ -115,7 +116,7 @@ describe("L1, a Setting remains a Config", () => {
   it("yield* under a provided ConfigProvider and parse(provider) agree, for every path and source", async () => {
     await fc.assert(
       fc.asyncProperty(segments, supplied, async (path, value) => {
-        const setting = declare(path.join("."));
+        const setting = declare(Arr.join(path, "."));
         expect(Config.isConfig(setting)).toBe(true);
         const provider = ConfigProvider.fromUnknown(value._tag === "absent" ? {} : nest(path, value.value));
         const parsed = await run(setting.parse(provider));
@@ -200,7 +201,7 @@ describe("L3, absence gives the default, and an invalid present value never does
   it("missing files and omitted keys give the declared default; a present invalid value fails", async () => {
     await fc.assert(
       fc.asyncProperty(segments, supplied, fc.boolean(), async (path, value, emptyFile) => {
-        const setting = declare(path.join("."));
+        const setting = declare(Arr.join(path, "."));
         const root = value._tag === "absent" ? (emptyFile ? {} : nest(path.slice(0, -1), {})) : nest(path, value.value);
         // An explicit empty string is supplied, not absent: it must fail, never become the default.
         const exit = await run(setting.parse(ConfigProvider.fromUnknown(root, { preserveEmptyStrings: true })));
@@ -218,10 +219,10 @@ describe("L3, absence gives the default, and an invalid present value never does
     expect(Exit.isSuccess(exit)).toBe(true);
 
     if (Exit.isSuccess(exit)) {
-      expect(Object.values(exit.value)).toEqual(Declarations.all.declarations.map((d) => d.default));
+      expect(Object.values(exit.value)).toEqual(Arr.map(Declarations.all.declarations, (d) => d.default));
     }
 
-    expect(Declarations.all.declarations.map((d) => d.path)).toContain("instance.port");
+    expect(Arr.map(Declarations.all.declarations, (d) => d.path)).toContain("instance.port");
   });
 });
 
@@ -230,7 +231,7 @@ describe("L4, a dotted declaration path reaches the nested value exactly once", 
     await fc.assert(
       fc.asyncProperty(segments, ports, ports, async (path, nested, literal) => {
         fc.pre(nested !== literal && nested !== DEFAULT && literal !== DEFAULT);
-        const dotted = path.join(".");
+        const dotted = Arr.join(path, ".");
         const setting = declare(dotted);
         expect(setting.path).toBe(dotted);
         // Both spellings at once: the nested tables and one key whose own name holds the dots. A
@@ -254,13 +255,13 @@ describe("L4, a dotted declaration path reaches the nested value exactly once", 
         fc.uniqueArray(segments, { minLength: 1, maxLength: 4, selector: (p) => p[0] }),
         ports,
         async (paths, base) => {
-          const settings = Object.fromEntries(paths.map((p, n) => [`s${n}`, declare(p.join("."))]));
+          const settings = Object.fromEntries(Arr.map(paths, (p, n) => [`s${n}`, declare(Arr.join(p, "."))]));
           const group = Setting.group(settings);
-          expect(group.declarations.map((d) => d.path)).toEqual(paths.map((p) => p.join(".")));
-          const root = Object.assign({}, ...paths.map((p, n) => nest(p, ((base + n) % 65535) + 1)));
+          expect(Arr.map(group.declarations, (d) => d.path)).toEqual(Arr.map(paths, (p) => Arr.join(p, ".")));
+          const root = Object.assign({}, ...Arr.map(paths, (p, n) => nest(p, ((base + n) % 65535) + 1)));
           const exit = await run(group.parse(ConfigProvider.fromUnknown(root)));
           expect(exit).toEqual(
-            Exit.succeed(Object.fromEntries(paths.map((_, n) => [`s${n}`, ((base + n) % 65535) + 1]))),
+            Exit.succeed(Object.fromEntries(Arr.map(paths, (_, n) => [`s${n}`, ((base + n) % 65535) + 1]))),
           );
         },
       ),

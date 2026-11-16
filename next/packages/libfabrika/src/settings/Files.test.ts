@@ -18,7 +18,9 @@
 //   declaration refuses every key: Effect's empty `Schema.Struct({})` would accept any object.
 import { describe, expect, it } from "@effect/vitest";
 import { ByteSize, Effect, Exit, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { Digest } from "effect/crypto";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
@@ -52,7 +54,7 @@ const failure = (exit: Exit.Exit<unknown, unknown>) => {
     return undefined;
   }
 
-  const reason = exit.cause.reasons.find((r) => r._tag === "Fail");
+  const reason = Option.getOrUndefined(Arr.findFirst(exit.cause.reasons, (r) => r._tag === "Fail"));
   return reason?._tag === "Fail" && reason.error instanceof Files.SettingsError ? reason.error : "not a SettingsError";
 };
 
@@ -91,7 +93,7 @@ const text = (entries: ReadonlyArray<Entry>) => {
     } else if ((e._tag === "port" || e._tag === "bad-port") && !port) {
       port = true;
       instance.push(`port = ${e._tag === "port" ? e.port : e.raw}`);
-    } else if (e._tag === "sibling" && !instance.some((l) => l.startsWith(`${e.key} =`))) {
+    } else if (e._tag === "sibling" && !Arr.some(instance, (l) => l.startsWith(`${e.key} =`))) {
       instance.push(`${e.key} = ${e.raw}`);
     } else if (e._tag === "table" && !tables.includes(`[${e.name}]`)) {
       tables.push(`[${e.name}]`, ...(e.empty ? [] : ["key = 1"]));
@@ -99,13 +101,13 @@ const text = (entries: ReadonlyArray<Entry>) => {
   }
 
   const lines = [...top, ...(instance.length > 0 ? ["[instance]", ...instance] : []), ...tables];
-  return `${lines.join("\n")}\n`;
+  return `${Arr.join(lines, "\n")}\n`;
 };
 
 /** The plan's scope table: what a file may hold. Repeated keys keep only their first in `text`. */
 const allowed = (entries: ReadonlyArray<Entry>, file: "repo" | "person") => {
-  const firstPort = entries.find((e) => e._tag === "port" || e._tag === "bad-port");
-  return entries.every((e) => {
+  const firstPort = Option.getOrUndefined(Arr.findFirst(entries, (e) => e._tag === "port" || e._tag === "bad-port"));
+  return Arr.every(entries, (e) => {
     if (e._tag === "version") {
       return file === "repo";
     }
@@ -119,7 +121,7 @@ const allowed = (entries: ReadonlyArray<Entry>, file: "repo" | "person") => {
 };
 
 const scopeOnly = (entries: ReadonlyArray<Entry>, file: "repo" | "person") =>
-  entries.length > 0 && entries.every((e) => (file === "repo" ? e._tag === "port" : e._tag === "version"));
+  entries.length > 0 && Arr.every(entries, (e) => (file === "repo" ? e._tag === "port" : e._tag === "version"));
 
 describe("L7, every file is strict and whole, and a key outside its file's scope fails", () => {
   it("both files pass only when every key in each is declared, valid and in scope", async () => {
@@ -251,12 +253,12 @@ describe("L8, the version refusal comes first, and a supported version goes on",
         ),
         companion,
         async (running, wanted, other) => {
-          const newer = wanted.some((part, n) => part !== running[n])
-            ? wanted[wanted.findIndex((part, n) => part !== running[n])]! >
-              running[wanted.findIndex((part, n) => part !== running[n])]!
-            : false;
-          const repo = `fabrika-version = "${wanted.join(".")}"\n${COMPANION[other]!.repo}`;
-          const exit = await validate(repo, COMPANION[other]!.person, running.join("."));
+          const newer = Option.match(
+            Arr.findFirstIndex(wanted, (part, n) => part !== running[n]),
+            { onNone: () => false, onSome: (n) => wanted[n]! > running[n]! },
+          );
+          const repo = `fabrika-version = "${Arr.join(Arr.map(wanted, String), ".")}"\n${COMPANION[other]!.repo}`;
+          const exit = await validate(repo, COMPANION[other]!.person, Arr.join(Arr.map(running, String), "."));
 
           const error = failure(exit);
           const got = error === undefined ? "started" : error instanceof Files.SettingsError ? error.reason : error;
@@ -280,7 +282,7 @@ describe("L10, the three S5 messages, word for word", () => {
   // The person's file of settings.md "The design", cut to the keys slice 1 declares, so line 5 is
   // the port's line.
   const person = (line: string) =>
-    ["# ~/.fabrika/fabrika.toml, the person's", "#:schema ./person.json", "", "[instance]", line, ""].join("\n");
+    Arr.join(["# ~/.fabrika/fabrika.toml, the person's", "#:schema ./person.json", "", "[instance]", line, ""], "\n");
 
   it("format: a port out of range names the file, line, key, value and the rule, and stops", async () => {
     // format: settings.md S5 gives these words, and a person reads them at start.
@@ -378,7 +380,7 @@ type Declared = typeof declared extends fc.Arbitrary<infer D> ? D : never;
 const grouped = (ds: Declared) =>
   Setting.group(
     Object.fromEntries(
-      ds.map((d, n) => [
+      Arr.map(ds, (d, n) => [
         `s${n}`,
         Setting.make(`${d.table}.${d.key}`, {
           schema: KINDS[d.kind].schema as Schema.Codec<unknown, unknown>,
@@ -397,7 +399,7 @@ const document = (ds: Declared) =>
   fc.record({
     file: fc.constantFrom<Setting.File>("person", "repo"),
     values: fc.tuple(
-      ...ds.map((d) =>
+      ...Arr.map(ds, (d) =>
         fc.oneof(
           fc.constant({ _tag: "absent" as const }),
           KINDS[d.kind].valid.map((value: unknown) => ({ _tag: "valid" as const, value })),
@@ -408,7 +410,10 @@ const document = (ds: Declared) =>
     // Write an empty table for each of the file's tables that holds no value.
     empty: fc.boolean(),
     stray: fc.option(
-      fc.record({ table: fc.option(fc.constantFrom(...ds.map((d) => d.table)), { nil: undefined }), key: segment }),
+      fc.record({
+        table: fc.option(fc.constantFrom(...Arr.map(ds, (d) => d.table)), { nil: undefined }),
+        key: segment,
+      }),
       { nil: undefined },
     ),
   });
@@ -421,7 +426,7 @@ describe("T730 L2, a file's schema keeps omitted tables and empty files valid, a
         ([ds, doc]) => {
           const tree: Record<string, Record<string, unknown>> = {};
           let ok = true;
-          ds.forEach((d, n) => {
+          Arr.forEach(ds, (d, n) => {
             const v = doc.values[n]!;
 
             if (v._tag !== "absent") {
@@ -431,7 +436,7 @@ describe("T730 L2, a file's schema keeps omitted tables and empty files valid, a
           });
 
           if (doc.empty) {
-            for (const d of ds.filter((d) => d.scope.includes(doc.file))) {
+            for (const d of Arr.filter(ds, (d) => d.scope.includes(doc.file))) {
               tree[d.table] ??= {};
             }
           }
@@ -442,8 +447,8 @@ describe("T730 L2, a file's schema keeps omitted tables and empty files valid, a
             stray === undefined
               ? true
               : stray.table === undefined
-                ? ds.some((d) => d.table === stray.key)
-                : ds.some((d) => d.table === stray.table && d.key === stray.key);
+                ? Arr.some(ds, (d) => d.table === stray.key)
+                : Arr.some(ds, (d) => d.table === stray.table && d.key === stray.key);
 
           if (stray !== undefined && !taken) {
             if (stray.table === undefined) {
@@ -457,7 +462,7 @@ describe("T730 L2, a file's schema keeps omitted tables and empty files valid, a
 
           // A table that holds only the other file's keys is unknown to this file, even empty.
           for (const table of Object.keys(tree)) {
-            if (ds.every((d) => d.table !== table || !d.scope.includes(doc.file))) {
+            if (Arr.every(ds, (d) => d.table !== table || !d.scope.includes(doc.file))) {
               ok = false;
             }
           }

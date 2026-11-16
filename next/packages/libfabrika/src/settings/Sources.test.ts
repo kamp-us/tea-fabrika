@@ -11,6 +11,8 @@
 //   A source that fails to read, or a winning value that fails its schema, fails the whole resolve.
 import { describe, expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Exit, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import * as Setting from "./Setting.ts";
 import * as Sources from "./Sources.ts";
@@ -59,10 +61,10 @@ const fileText = (values: ReadonlyArray<readonly [ReadonlyArray<string>, string]
 
   for (const [path, raw] of values) {
     lines.push("", `[${path[0]}]`, `${path[1]} = ${raw}`);
-    at[path.join(".")] = lines.length;
+    at[Arr.join(path, ".")] = lines.length;
   }
 
-  return { text: `${lines.join("\n")}\n`, at };
+  return { text: `${Arr.join(lines, "\n")}\n`, at };
 };
 
 type Choice = Partial<Record<Slot, string>>;
@@ -73,11 +75,11 @@ const build = (choices: ReadonlyArray<Choice>, noise: Readonly<Record<string, st
     const env: Record<string, string> = { ...noise };
     const repo: Array<readonly [ReadonlyArray<string>, string]> = [];
     const person: Array<readonly [ReadonlyArray<string>, string]> = [];
-    KEYS.forEach((key, n) => {
+    Arr.forEach(KEYS, (key, n) => {
       const c = choices[n]!;
 
       if (c.flag !== undefined) {
-        flags[key.path.join(".")] = c.flag;
+        flags[Arr.join(key.path, ".")] = c.flag;
       }
 
       if (c.env !== undefined) {
@@ -126,8 +128,8 @@ describe("L5, the highest present source wins per key, and so does its origin", 
         ports.chain((shared) => fc.tuple(choice(shared), choice(shared))),
         noise,
         async (picked, extra) => {
-          const choices: Array<Choice> = picked.map((c) =>
-            Object.fromEntries(Object.entries(c).map(([slot, v]) => [slot, String(v)])),
+          const choices: Array<Choice> = Arr.map(picked, (c) =>
+            Object.fromEntries(Arr.map(Object.entries(c), ([slot, v]) => [slot, String(v)])),
           );
           const { resolved, lines } = await Effect.runPromise(
             Effect.gen(function* () {
@@ -136,10 +138,10 @@ describe("L5, the highest present source wins per key, and so does its origin", 
               return { resolved, lines };
             }),
           );
-          KEYS.forEach((key, n) => {
+          Arr.forEach(KEYS, (key, n) => {
             const c = choices[n]!;
-            const winner = ORDER.find((slot) => c[slot] !== undefined);
-            const dotted = key.path.join(".");
+            const winner = Option.getOrUndefined(Arr.findFirst(ORDER, (slot) => c[slot] !== undefined));
+            const dotted = Arr.join(key.path, ".");
             expect(resolved.values[key.name]).toBe(winner === undefined ? DEFAULT : Number(c[winner]));
             const want =
               winner === "repo" || winner === "person"
@@ -170,7 +172,7 @@ describe("L6, a failed source or an invalid winner never falls through", () => {
         // Every source above the failing one is absent, and every one below holds a valid value.
         const lower = ORDER.slice(ORDER.indexOf(failing) + 1);
         const choices: Array<Choice> = [
-          Object.fromEntries(lower.map((slot) => [slot, String(below)])),
+          Object.fromEntries(Arr.map(lower, (slot) => [slot, String(below)])),
           { person: String(other) },
         ];
         const exit = await Effect.runPromiseExit(
@@ -183,7 +185,7 @@ describe("L6, a failed source or an invalid winner never falls through", () => {
         expect(Exit.isFailure(exit)).toBe(true);
 
         if (Exit.isFailure(exit)) {
-          expect(exit.cause.reasons.some((r) => r._tag === "Fail")).toBe(true);
+          expect(Arr.some(exit.cause.reasons, (r) => r._tag === "Fail")).toBe(true);
         }
       }),
       check,
@@ -203,7 +205,7 @@ describe("L6, a failed source or an invalid winner never falls through", () => {
         // A flag or the environment holds text; a file holds TOML.
         const text = winning === "flag" || winning === "env" ? (raw.startsWith('"') ? raw.slice(1, -1) : raw) : raw;
         const choices: Array<Choice> = [
-          { [winning]: text, ...Object.fromEntries(lower.map((slot) => [slot, String(below)])) },
+          { [winning]: text, ...Object.fromEntries(Arr.map(lower, (slot) => [slot, String(below)])) },
           {},
         ];
         const exit = await Effect.runPromiseExit(

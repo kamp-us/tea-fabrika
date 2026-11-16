@@ -16,7 +16,9 @@
 //   keeps the doc's meaning whatever punctuation it holds.
 import { describe, expect, it } from "@effect/vitest";
 import { ByteSize, Effect, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { Digest } from "effect/crypto";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import * as Print from "./Print.ts";
 import * as Reference from "./Reference.ts";
@@ -82,7 +84,7 @@ it("T753 L7–L8 byte references distinguish file input from recorded values and
 
 // Release triples near 9 and 10, where text order and number order part.
 const part = fc.oneof(fc.integer({ min: 0, max: 12 }), fc.integer({ min: 90, max: 110 }));
-const release = fc.tuple(part, part, part).map((t) => t.join("."));
+const release = fc.tuple(part, part, part).map((t) => Arr.join(Arr.map(t, String), "."));
 
 const segment = fc.stringMatching(/^[a-z][a-z0-9]{0,5}$/);
 const scopes = fc.constantFrom<Setting.Scope>(["person"], ["repo"], ["person", "repo"], ["repo", "person"]);
@@ -96,7 +98,7 @@ const doc = fc
     ),
     { minLength: 1, maxLength: 8 },
   )
-  .map((words) => words.join(" "));
+  .map((words) => Arr.join(words, " "));
 
 const port = fc.integer({ min: 1, max: 65535 });
 
@@ -122,7 +124,7 @@ type Declared = typeof declared extends fc.Arbitrary<infer D> ? D : never;
 const grouped = (ds: Declared) =>
   Setting.group(
     Object.fromEntries(
-      ds.map((d, n) => [
+      Arr.map(ds, (d, n) => [
         `s${n}`,
         Setting.make(`${d.table}.${d.key}`, {
           schema: Port,
@@ -142,7 +144,7 @@ const loaded = async (ds: Declared) => {
   const flags: Record<string, string> = {};
   const env: Record<string, string> = {};
   const person: Record<string, Record<string, number>> = {};
-  ds.forEach((d, n) => {
+  Arr.forEach(ds, (d, n) => {
     const s = group.declarations[n]!;
 
     if (d.source === "flag") {
@@ -171,13 +173,15 @@ const loaded = async (ds: Declared) => {
   return { group, snapshot };
 };
 
-const triple = (version: string) => version.split(".").map(Number);
+const triple = (version: string) => Arr.map(version.split("."), Number);
 
 /** Whether release `a` is newer than `b`, by whole numbers. */
 const newer = (a: string, b: string) => {
   const [x, y] = [triple(a), triple(b)];
-  const n = x.findIndex((p, i) => p !== y[i]);
-  return n >= 0 && x[n]! > y[n]!;
+  return Option.match(
+    Arr.findFirstIndex(x, (p, i) => p !== y[i]),
+    { onNone: () => false, onSome: (n) => x[n]! > y[n]! },
+  );
 };
 
 describe("L5, rows carry the snapshot's values and origins, and only declared keys", () => {
@@ -186,22 +190,22 @@ describe("L5, rows carry the snapshot's values and origins, and only declared ke
       fc.asyncProperty(declared, fc.dictionary(segment, port, { maxKeys: 2 }), async (ds, stray) => {
         const { group, snapshot } = await loaded(ds);
         // Keys no declaration names, such as a field a later release dropped, stay out of the rows.
-        const extra = Object.fromEntries(Object.entries(stray).map(([k, v]) => [`zz-${k}.stray`, v]));
+        const extra = Object.fromEntries(Arr.map(Object.entries(stray), ([k, v]) => [`zz-${k}.stray`, v]));
         const widened: Snapshot.Snapshot = {
           ...snapshot,
           values: { ...snapshot.values, ...extra },
           origins: {
             ...snapshot.origins,
-            ...Object.fromEntries(Object.keys(extra).map((k) => [k, { _tag: "flag" as const, name: `--${k}` }])),
+            ...Object.fromEntries(Arr.map(Object.keys(extra), (k) => [k, { _tag: "flag" as const, name: `--${k}` }])),
           },
         };
         const rows = Reference.rows(group, widened);
-        const paths = group.declarations.map((d) => d.path).sort();
-        expect(rows.map((r) => r.path)).toEqual(paths);
+        const paths = Arr.map(group.declarations, (d) => d.path).sort();
+        expect(Arr.map(rows, (r) => r.path)).toEqual(paths);
 
         for (const row of rows) {
           expect(Schema.is(Reference.Row)(row)).toBe(true);
-          const d = group.declarations.find((d) => d.path === row.path)!;
+          const d = Option.getOrThrow(Arr.findFirst(group.declarations, (d) => d.path === row.path));
           expect(row.value).toEqual(snapshot.values[d.path]);
           expect(row.origin).toEqual(snapshot.origins[d.path]);
           expect(row.default).toEqual(Schema.encodeSync(Schema.toCodecJson(d.schema))(d.default));
@@ -223,10 +227,11 @@ describe("L6, a warning names exactly the explicit keys newer than the repo's mi
       fc.asyncProperty(declared, release, async (ds, minimum) => {
         const { group, snapshot } = await loaded(ds);
         const rows = Reference.rows(group, snapshot);
-        const want = rows
-          .filter((r) => r.origin._tag !== "default" && newer(r.since, minimum))
-          .map((r) => ({ path: r.path, since: r.since, minimum }));
-        const got = Reference.warnings(rows, minimum).map((w) => ({
+        const want = Arr.map(
+          Arr.filter(rows, (r) => r.origin._tag !== "default" && newer(r.since, minimum)),
+          (r) => ({ path: r.path, since: r.since, minimum }),
+        );
+        const got = Arr.map(Reference.warnings(rows, minimum), (w) => ({
           path: w.path,
           since: w.since,
           minimum: w.minimum,

@@ -9,7 +9,9 @@
 // - `Snapshot.Snapshot` is its Schema: what a process start saves, and what a replay reads back.
 import { describe, expect, it } from "@effect/vitest";
 import { ByteSize, Cause, Effect, Exit, Formatter, Layer, Logger, References, Schema, Tracer } from "effect";
+import * as Arr from "effect/Array";
 import { Digest } from "effect/crypto";
+import * as Option from "effect/Option";
 import { TestConsole } from "effect/testing";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
@@ -50,7 +52,7 @@ StartsTest.law(
       const input = yield* StartsTest.input(recipe);
       const files = [`${word}/fabrika.toml`, `~/${word}/fabrika.toml`, `$FABRIKA_HOME/${word}/fabrika.toml`];
       const origins = Object.fromEntries(
-        Declarations.all.declarations.map((declaration, index) => {
+        Arr.map(Declarations.all.declarations, (declaration, index) => {
           const source = (choice + index) % 4;
           return [
             declaration.path,
@@ -118,7 +120,7 @@ const save = (v: SavedFlow) => {
   const group = Setting.group(settings);
   const values = { record: ByteSize.bytes(v.count), port: v.port, word: v.word };
   const origins = Object.fromEntries(
-    group.declarations.map((d) => [
+    Arr.map(group.declarations, (d) => [
       d.path,
       v.source === "file"
         ? Sources.Origin.cases.file.make({ file: REPO, line: 2 })
@@ -150,7 +152,7 @@ const objectFlow = fc
       .chain((entries) =>
         fc
           .tuple(
-            ...entries.map(([key, inner]) =>
+            ...Arr.map(entries, ([key, inner]) =>
               fc
                 .shuffledSubarray(Object.entries(inner), {
                   minLength: Object.keys(inner).length,
@@ -191,7 +193,7 @@ describe("T753 complete checked snapshots", () => {
           const { group } = save(v);
           return fc.tuple(
             fc.constant(v),
-            fc.constantFrom(...group.declarations.map((d) => d.path)),
+            fc.constantFrom(...Arr.map(group.declarations, (d) => d.path)),
             fc.constantFrom("values", "origins"),
             fc.constantFrom("delete", "add", "rename"),
             fc.boolean(),
@@ -237,10 +239,10 @@ describe("T753 complete checked snapshots", () => {
         const flow = save(v);
         const made = await digest(Snapshot.make(flow.group, flow));
         const reversed = Setting.group(
-          Object.fromEntries(v.order.map((name) => [name, flow.settings[name as keyof typeof flow.settings]])),
+          Object.fromEntries(Arr.map(v.order, (name) => [name, flow.settings[name as keyof typeof flow.settings]])),
         );
         const origins = Object.fromEntries(
-          flow.group.declarations.map((d) => [d.path, Sources.Origin.cases.flag.make({ name: `--${d.path}` })]),
+          Arr.map(flow.group.declarations, (d) => [d.path, Sources.Origin.cases.flag.make({ name: `--${d.path}` })]),
         );
         const other = await digest(Snapshot.make(reversed, { values: flow.values, origins }));
         expect(other.hash).toBe(made.hash);
@@ -341,7 +343,7 @@ const declared = fc
 const portGroup = (paths: ReadonlyArray<readonly [string, string]>) =>
   Setting.group(
     Object.fromEntries(
-      paths.map(([a, b], n) => [
+      Arr.map(paths, ([a, b], n) => [
         `s${n}`,
         Setting.make(`${a}.${b}`, {
           schema: Port,
@@ -359,15 +361,15 @@ describe("the snapshot: encoded values by path, and a hash of the values alone",
   it("equal values give one hash, whatever source and declaration order; other values another", async () => {
     await fc.assert(
       fc.asyncProperty(declared, fc.integer({ min: 0, max: 2 }), async ([paths, values], changed) => {
-        const flags = Object.fromEntries(paths.map(([a, b], n) => [`${a}.${b}`, String(values[n])]));
+        const flags = Object.fromEntries(Arr.map(paths, ([a, b], n) => [`${a}.${b}`, String(values[n])]));
         const env = Object.fromEntries(
-          paths.map(([a, b], n) => [`FABRIKA_${a.toUpperCase()}_${b.toUpperCase()}`, String(values[n])]),
+          Arr.map(paths, ([a, b], n) => [`FABRIKA_${a.toUpperCase()}_${b.toUpperCase()}`, String(values[n])]),
         );
         const fromFlags = await snapshot(portGroup(paths), sources({ flags: Sources.flags(flags) }));
         const fromEnv = await snapshot(portGroup([...paths].reverse()), sources({ env: Sources.env(env) }));
-        expect(fromFlags.values).toEqual(Object.fromEntries(paths.map(([a, b], n) => [`${a}.${b}`, values[n]])));
+        expect(fromFlags.values).toEqual(Object.fromEntries(Arr.map(paths, ([a, b], n) => [`${a}.${b}`, values[n]])));
         expect(fromEnv.hash).toBe(fromFlags.hash);
-        expect(Object.values(fromEnv.origins).map((o) => o._tag)).toEqual(paths.map(() => "env"));
+        expect(Arr.map(Object.values(fromEnv.origins), (o) => o._tag)).toEqual(Arr.map(paths, () => "env"));
 
         const at = changed % paths.length;
         const other = { ...flags, [`${paths[at]![0]}.${paths[at]![1]}`]: String((values[at]! % 65535) + 1) };
@@ -408,11 +410,12 @@ const spans = () => {
     },
   });
   const text = () =>
-    ended
-      .map((span) =>
+    Arr.join(
+      Arr.map(ended, (span) =>
         printed({ name: span.name, attributes: [...span.attributes], events: span.events, status: span.status }),
-      )
-      .join("\n");
+      ),
+      "\n",
+    );
   return { tracer, text };
 };
 
@@ -473,7 +476,7 @@ describe("L14 [secrets], only declared settings reach values, errors and spans",
             expect(exit.value.made.values["instance.port"]).toBe(port);
           } else {
             expect(place.named).toBeDefined();
-            const error = exit.cause.reasons.find((r) => r._tag === "Fail");
+            const error = Option.getOrUndefined(Arr.findFirst(exit.cause.reasons, (r) => r._tag === "Fail"));
             expect(error?._tag === "Fail" ? error.error : undefined).toBeInstanceOf(Files.SettingsError);
             outputs.push(String(exit.cause), printed(error?._tag === "Fail" ? error.error : null));
             // The key is named; the value found there is not.
@@ -541,8 +544,8 @@ it("T753 L9 [secrets] malformed snapshots keep rejected values out of public dia
         expect(Exit.isFailure(ran.exit)).toBe(true);
         expect(traced.text()).not.toBe("");
         const outputs = [
-          ...ran.stdout.flatMap((value) => [String(value), Formatter.formatJson(value)]),
-          ...ran.stderr.flatMap((value) => [String(value), Formatter.formatJson(value)]),
+          ...Arr.flatMap(ran.stdout, (value) => [String(value), Formatter.formatJson(value)]),
+          ...Arr.flatMap(ran.stderr, (value) => [String(value), Formatter.formatJson(value)]),
           ...entries,
           traced.text(),
           Exit.isFailure(ran.exit) ? Cause.pretty(ran.exit.cause) : "",
