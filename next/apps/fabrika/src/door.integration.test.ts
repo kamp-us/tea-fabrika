@@ -49,7 +49,7 @@ import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
+import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Predicate, Result, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -5809,7 +5809,11 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
           const rang = w.rings.length;
           yield* ProcessManager.use((p) => p.exit(counter, CRASHED, brainFrom)).pipe(Effect.provide(brain));
           const exited = yield* inboxRows(tab);
-          const letter = (row: (typeof exited)[number]) => [row.id, row.by, Reflect.get(Object(row.body), "m")];
+          const letter = (row: (typeof exited)[number]) => [
+            row.id,
+            row.by,
+            Predicate.hasProperty(row.body, "m") ? row.body.m : undefined,
+          ];
           expect(exited.map(letter), "the exit's DOWN in the window's own inbox").toEqual([
             [signalId(to, "w9", 1), BRAIN_KEY, Down.make({ ref: "w9", process: counter, reason: CRASHED, to })],
           ]);
@@ -5832,7 +5836,9 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
               Down.make({ ref: "w10", process: counter, reason: { _tag: "noproc" }, to }),
             ],
           ]);
-          expect((yield* monitoredRows()).map((row) => Reflect.get(Object(row.body), "ref"))).toEqual(["w9", "w10"]);
+          expect(
+            (yield* monitoredRows()).map((row) => (Predicate.hasProperty(row.body, "ref") ? row.body.ref : undefined)),
+          ).toEqual(["w9", "w10"]);
           expect(w.rings.slice(before), "the noproc DOWN rang the parked wait").toContain(inbox);
           expect(
             yield* d.route(client, "ledger.wait", { stream: inbox, after }),

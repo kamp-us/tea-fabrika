@@ -225,7 +225,7 @@ it.live(
       // seeded task names `wire:1`, so the world starts it: a finish wakes that name (P39 slice 3).
       const requester = yield* Effect.tryPromise({
         try: () =>
-          Reflect.get(running.project("tasks-wire"), "start")(
+          running.project("tasks-wire").start(
             {
               _tag: "first",
               id: "start-wire",

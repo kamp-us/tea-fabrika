@@ -2322,8 +2322,7 @@
     {
       // L5 of the Reflect ban (0554): no ignore comment lets a Reflect call through
       // no-restricted-properties outside the plan's 6 named lines, a has and a get in each of the
-      // three hostile Proxies. Runtime's two are in; transport's (slice 4) and the app's (slice 14)
-      // are counted here before they land. Every other folder, cloudflare/ and e2e/ included, may
+      // three hostile Proxies: runtime's, transport's (slice 4) and the app's (slice 14). Every other folder, cloudflare/ and e2e/ included, may
       // hold none. The JSON.parse oracles' ignore comments cover no Reflect line, so they are not
       // counted (reflect-disables.ts says how).
       "files": ["next/**", ".agents/**", ".github/**", "oxlint-plugins/**"],
@@ -2417,6 +2416,7 @@
       // `pnpm lint`, though a plain oxlint run in an editor shows it as a warning. A folder leaves
       // this list for the one above when its JSON.parse line goes.
       "files": [
+        "next/apps/fabrika/src/*",
         "next/apps/fabrika/src/exam/**",
         "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/cloudflare/**",
