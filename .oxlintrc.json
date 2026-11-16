@@ -2781,40 +2781,35 @@
     {
       // 0561: every type cast carries a `SAFETY:` comment that says the fact the compiler cannot see.
       "files": [
+        ".agents/**",
+        "next/apps/fabrika/**",
+        "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/cloudflare/**",
         "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/node/**",
         "next/packages/libfabrika/src/packs/**",
         "next/packages/libfabrika/src/permissions/**",
         "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/runtime/**",
+        "next/packages/libfabrika/src/tasks/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
         "next/programs/checklist/**",
-        "next/programs/inbox/**"
+        "next/programs/inbox/**",
+        "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop/require-safety-comment-for-type-assertion": ["error", { "markers": ["SAFETY"] }] }
     },
     {
       // 0563: no `unknown` parameter but a `cause` or a type guard's subject.
       "files": [
-        "next/packages/libfabrika/src/ci/**",
-        "next/packages/libfabrika/src/codehost/**",
-        "next/packages/libfabrika/src/coordination/**",
-        "next/packages/libfabrika/src/packs/**",
-        "next/packages/libfabrika/src/permissions/**",
-        "next/packages/libfabrika/src/presence/**",
-        "next/packages/libfabrika/src/repositories/**",
-        "next/packages/libfabrika/src/schedules/**",
-        "next/packages/libfabrika/src/tasks/**",
-        "next/packages/vitest/**",
-        "next/programs/inbox/**"
-      ],
-      "rules": { "anti-slop/no-unknown-parameters": "error" }
-    },
-    {
-      // 0563: no function returns `unknown`.
-      "files": [
+        "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/ci/**",
         "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
@@ -2824,11 +2819,37 @@
         "next/packages/libfabrika/src/presence/**",
         "next/packages/libfabrika/src/repositories/**",
         "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/vitest/**",
+        "next/programs/checklist/**",
+        "next/programs/inbox/**",
+        "next/programs/pipeline/**"
+      ],
+      "rules": { "anti-slop/no-unknown-parameters": "error" }
+    },
+    {
+      // 0563: no function returns `unknown`.
+      "files": [
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/tezgah/**",
         "next/packages/tuval/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
+        "next/programs/checklist/**",
         "next/programs/inbox/**",
+        "next/programs/pipeline/**",
         "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop/no-unknown-returns": "error" }
@@ -2836,18 +2857,33 @@
     {
       // 0563: no runtime `typeof` check but a probe for a binding that may not exist.
       "files": [
+        ".agents/**",
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
         "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
         "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/packs/**",
         "next/packages/libfabrika/src/permissions/**",
         "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/settings/**",
         "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/tuval/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
-        "next/programs/inbox/**"
+        "next/programs/checklist/**",
+        "next/programs/counter/**",
+        "next/programs/inbox/**",
+        "next/programs/pipeline/**",
+        "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop/no-runtime-typeof": "error" }
     },
@@ -2902,18 +2938,38 @@
     {
       // 0567: a ternary chain over one value's literals is a Match.
       "files": [
+        ".github/ci/**",
+        "next/apps/fabrika/**",
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/cloudflare/**",
         "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/packs/**",
         "next/packages/libfabrika/src/permissions/**",
         "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/settings/**",
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/libfabrika/src/transport/**",
         "next/packages/tuval/**",
         "next/packages/vitest/**",
+        "next/programs/chaos/**",
+        "next/programs/checklist/**",
+        "next/programs/counter/**",
         "next/programs/inbox/**",
+        "next/programs/pipeline/**",
         "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop-effect/prefer-effect-match": "error" }
