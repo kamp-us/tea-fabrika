@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1067-review3",
+  "ticket": "1067",
+  "pr": "kamp-us/tea-fabrika#1401",
+  "started": "2026-11-15T19:39:20-08:00",
+  "ended": "2026-11-15T19:41:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of ticket 1067's third fix round (next/ and our tooling, the Recorder in @kampus/vitest) at 791a26c94, build cf556418d: merge-ready, findings 0. The fails gap is closed for the call laws write: the inline Shelf impl with its symbol member, the two-symbol service and a spread of data with fails on a left-out method are each refused. A misspelled impl key is refused, impl's lambdas stay typed from the service, and a three-overload service is still refused (R16). Two calls still compile, and each is the impl's own type saying a key may be there: an impl with a computed key of type string, and an impl held in a variable typed Layer.PartialEffectful<S>. Shown in a scratch file, removed. The five changed test files pass one at a time, one pnpm typecheck passed, and the pr tooling folder shows only its older errors in Queue.test.ts's settle laws. The plan's table now holds R14 to R18.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 2.2,
+  "note": null,
+  "costUsd": null,
+  "billed": null,
+  "step": "review"
+}

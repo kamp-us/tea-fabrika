@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-start-child-l11-runs-near-its-limit",
+  "date": "2026-11-15",
+  "by": "full-run-hung-legs",
+  "model": "claude-fable-5-2",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/src/start-child.laws.integration.test.ts",
+    "line": 747
+  },
+  "says": "In next/, law L11 (every storage read and write in the child and lifecycle flows keeps error text and metadata out of outputs) takes 28 to 54 s on the schedule against the 60 s test limit, so it times out when its leg is busy.",
+  "proof": "Its printed times in scheduled runs on main: 28340, 34357, 35350, 47025, 47268, 50381, 53908 ms (runs 43717773862, 43765797242, 43726565395, 43734956911, 43683627393, 43771306886, 43723335863). In job 132999601962 of run 43775124405 it failed as a timeout at 60 s, followed by 88 RuntimeDiscardedError lines.",
+  "cost": "A full run goes red on a branch or on main with no fault in the change.",
+  "head": "98bcdfa226f92fb702ae4a42ea19aa1a0592ad01",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1374"
+}

@@ -40,7 +40,7 @@ export type Sender = typeof Sender.Type;
  */
 export class SendersError extends Schema.TaggedError<SendersError>()("SendersError", {
   reason: Schema.Literals(["removed", "ended", "storage"]),
-  cause: Schema.optionalKey(Schema.Defect()),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 /**
