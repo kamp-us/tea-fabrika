@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-tezgah-focus-r4-types-before-tile-ready",
+  "date": "2026-11-16",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/e2e/tezgah-focus.visual.test.ts",
+    "line": 193
+  },
+  "says": "In next/, R4 types 'q' after C-b % before it waits for the new tile's field, so the key can land before the new tile takes focus and the check at line 195 reads ''.",
+  "proof": "Line 193 runs page.keyboard.type(\"q\") and only line 194 then runs typed.field.waitFor(...); the build step's vitest --changed run on 03bd7d67f failed at line 195 with expected 'q', got '' (field/runs/2026-11-16-antislop-no-manual-tag-comparison-2-build1.json), and no file that diff touched is on that path.",
+  "cost": "A red visual run with no code cause, on any branch whose changed set pulls in tezgah, until fixed (0036).",
+  "head": "03bd7d67fd12b203e39aec44d3c4883a649167c6",
+  "ticket": null,
+  "pr": null
+}
