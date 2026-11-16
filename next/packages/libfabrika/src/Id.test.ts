@@ -96,11 +96,9 @@ const validPrefix = (type: string): boolean =>
   /^[a-z]$/.test(type.at(-1)!) &&
   [...type].every((char) => "abcdefghijklmnopqrstuvwxyz_".includes(char));
 
-const accepts = (input: unknown, type?: string): boolean => {
-  if (typeof input !== "string") {
-    return false;
-  }
-
+/** The oracle: `input` is a well-formed ID, of `type` when one is given. A caller with a value that
+ *  may be no string at all checks `typeof` first, since no other value is an ID. */
+const accepts = (input: string, type?: string): boolean => {
   const [found, suffix] = split(input);
 
   if (!validPrefix(found) || (type !== undefined && found !== type)) {
@@ -126,12 +124,7 @@ const accepts = (input: unknown, type?: string): boolean => {
 const canonical = fc.tuple(prefix, uuid).map(([type, bytes]) => wire(type, bytes));
 const unknown = fc.oneof(fc.anything(), fc.string(), canonical);
 
-const expectDecoded = <A, E>(
-  exit: Exit.Exit<A, E>,
-  ok: boolean,
-  input: unknown,
-  error: (value: unknown) => boolean,
-) => {
+const expectDecoded = <A, E, I>(exit: Exit.Exit<A, E>, ok: boolean, input: I, error: (value: E) => boolean) => {
   expect(Exit.isSuccess(exit)).toBe(ok);
 
   if (Exit.isSuccess(exit)) {
@@ -243,7 +236,7 @@ describe("T518 Id format", () => {
           for (const schema of [builtin, Id.Input, Front.InputId]) {
             expectDecoded(
               Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(schema)(value))),
-              accepts(value, "input"),
+              typeof value === "string" && accepts(value, "input"),
               value,
               Schema.isSchemaError,
             );
@@ -450,13 +443,13 @@ describe("T518 Id format", () => {
       fc.property(unknown, prefix, (input, type) => {
         expectDecoded(
           Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(Id.Schema)(input))),
-          accepts(input),
+          typeof input === "string" && accepts(input),
           input,
           Schema.isSchemaError,
         );
         expectDecoded(
           Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(Id.make(type))(input))),
-          accepts(input, type),
+          typeof input === "string" && accepts(input, type),
           input,
           Schema.isSchemaError,
         );
@@ -471,8 +464,18 @@ describe("T518 Id format", () => {
         const common = Id.Schema.makeEffect(input);
         // @ts-expect-error Deliberately test runtime validation beyond the typed constructor input.
         const specific = Id.make(type).makeEffect(input);
-        expectDecoded(Effect.runSync(Effect.exit(common)), accepts(input), input, SchemaIssue.isIssue);
-        expectDecoded(Effect.runSync(Effect.exit(specific)), accepts(input, type), input, SchemaIssue.isIssue);
+        expectDecoded(
+          Effect.runSync(Effect.exit(common)),
+          typeof input === "string" && accepts(input),
+          input,
+          SchemaIssue.isIssue,
+        );
+        expectDecoded(
+          Effect.runSync(Effect.exit(specific)),
+          typeof input === "string" && accepts(input, type),
+          input,
+          SchemaIssue.isIssue,
+        );
       }),
       options,
     );
@@ -518,7 +521,7 @@ describe("T518 Id format", () => {
           wire("process", wrongVariant),
           wire("letter", bytes),
         ]) {
-          const ok = accepts(value, "process");
+          const ok = typeof value === "string" && accepts(value, "process");
           expectDecoded(
             Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(ProcessId)(value))),
             ok,

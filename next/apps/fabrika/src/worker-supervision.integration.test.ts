@@ -237,7 +237,7 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
 
     throw new Error(`no frame in ${WAIT} ms; last frames ${JSON.stringify(frames.slice(-3))}`);
   };
-  const call = async (method: string, params: unknown) => {
+  const call = async (method: string, params: Schema.Json) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
     return next((frame) => frame.id === id);
@@ -262,9 +262,9 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
     ).toBeUndefined();
   };
   // A socket whose hello fails is closed here: no caller holds it to close.
-  await hello().catch((error: unknown) => {
+  await hello().catch((cause: unknown) => {
     socket.close();
-    throw error;
+    throw cause;
   });
   return { call, close: () => socket.close() };
 };

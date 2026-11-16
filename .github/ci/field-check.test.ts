@@ -573,7 +573,7 @@ const Rated = Schema.Struct({
   ticket: Text,
 });
 
-const errorsOf = (row: unknown) => {
+const errorsOf = <R>(row: R) => {
   const report = checker.checkFile(fileOf("findings"), "", `${JSON.stringify(row)}\n`);
   return {
     exitCode: report.exitCode,

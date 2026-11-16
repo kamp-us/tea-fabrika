@@ -395,8 +395,7 @@ const secret = fc
  * A value as searchable text. JSON has no bigint, and a decoded byte size is one, so a bigint prints
  * as its digits and every other value as JSON does: the search still reads every value.
  */
-const printed = (value: unknown) =>
-  JSON.stringify(value, (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v));
+const printed = <A>(value: A) => JSON.stringify(value, (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v));
 
 const spans = () => {
   const ended: Array<Tracer.NativeSpan> = [];

@@ -112,7 +112,7 @@ export const tezgahView = (r: Reader, pid: string): Effect.Effect<TezgahView> =>
 
 /** Sends tezgah one letter as a client does, through the door: for a layout no key reaches yet (focus
  *  moves are the next slice), never for what a law presses. */
-export const tell = (r: Reader, pid: string, m: unknown, letter: string) =>
+export const tell = (r: Reader, pid: string, m: Schema.Json, letter: string) =>
   Effect.flatMap(r.call("process.send", { pid, letter, m, sentAt: new Date().toISOString(), seen: 0 }), (frame) =>
     frame.error === undefined ? Effect.void : Effect.die(new Error(`the door refused ${JSON.stringify(frame.error)}`)),
   );

@@ -137,7 +137,7 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
     waiting ??= Deferred.makeUnsafe<void>();
     return Deferred.await(waiting);
   });
-  const message = (frame: unknown) => {
+  const message = (frame: Schema.Json) => {
     if (asksHello(frame)) {
       owe(open!, 1);
     }
@@ -167,7 +167,7 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
     const frame = decoded.value;
 
     ids.set(frame.method, frame.id);
-    const result = (value: unknown) => message({ jsonrpc: "2.0", id: frame.id, result: value });
+    const result = (value: Schema.Json) => message({ jsonrpc: "2.0", id: frame.id, result: value });
 
     if (frame.method === "initialize") {
       owe(events, -1);
@@ -242,7 +242,7 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
     dials,
     resources,
     knocks: () => knocks,
-    message: (frame: unknown) => open !== null && message(frame),
+    message: (frame: Schema.Json) => open !== null && message(frame),
     /** The door closes the open socket with `code`. */
     drop: (code: number) => open?.drop(code),
     /** Moves TestClock once every hello the door asked for is sent, or its socket is gone. */
@@ -289,7 +289,7 @@ const identity = Effect.gen(function* () {
   };
 });
 
-const services = (socket: Layer.Layer<Socket.WebSocketConstructor>, rows: Array<unknown>) =>
+const services = (socket: Layer.Layer<Socket.WebSocketConstructor>, rows: Array<ClientRow>) =>
   Layer.mergeAll(
     socket,
     Layer.effect(
@@ -300,7 +300,7 @@ const services = (socket: Layer.Layer<Socket.WebSocketConstructor>, rows: Array<
         persist: Effect.succeed(true),
       })),
     ),
-    Layer.succeed(ClientRows, { put: (row: unknown) => Effect.sync(() => void rows.push(row)) }),
+    Layer.succeed(ClientRows, { put: (row) => Effect.sync(() => void rows.push(row)) }),
     Id.Generator.layer,
   );
 
@@ -429,7 +429,7 @@ describe("L10: real runtime progress", () => {
         const door = peer(script, () => {
           lastPong = clock.currentTimeMillisUnsafe();
         });
-        const rows: Array<unknown> = [];
+        const rows: Array<ClientRow> = [];
         const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
         const booting = yield* start({ tiles, window, build: BUILD, origin: ORIGIN, client: BROWSER }).pipe(
           Effect.provide(services(door.socket, rows)),
@@ -732,10 +732,10 @@ describe("L12: wire formats are refused as typed values", () => {
         expect(opened, "the page opened its tile").toBeDefined();
         const beforeMalformed = run.getState();
         // The open's answer arrives malformed: an empty struct, then a view of the wrong type.
-        door.message({ jsonrpc: "2.0", id: opened?.id, result: {} });
+        door.message({ jsonrpc: "2.0", id: opened?.id ?? null, result: {} });
         yield* door.tick(500);
         expect(run.getState().flight, "a malformed open answer settled a flight").toEqual(beforeMalformed.flight);
-        door.message({ jsonrpc: "2.0", id: opened?.id, result: { rev: 1, view: { items: "one", left: 1 } } });
+        door.message({ jsonrpc: "2.0", id: opened?.id ?? null, result: { rev: 1, view: { items: "one", left: 1 } } });
         yield* door.tick(500);
         expect(run.getState().client.views, "nothing malformed was installed").toEqual({});
         // The run still folds: a well-formed notice with its pid installs.

@@ -4,14 +4,14 @@ import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { Effect } from "effect";
+import { Effect, type Schema } from "effect";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
 import { heldPort } from "../src/port.test-support.ts";
 
 interface BrowserDriver {
   readonly frames: Array<any>;
-  readonly call: (method: string, params: unknown) => Promise<any>;
+  readonly call: (method: string, params: Schema.Json) => Promise<any>;
   readonly connections: () => number;
 }
 
@@ -195,7 +195,7 @@ const driver = async (page: Page, url: string, tab: string) => {
       const frames: Array<any> = [];
       let socket: WebSocket;
       const pending = new Map<number, (frame: any) => void>();
-      const call = (method: string, params: unknown) =>
+      const call = (method: string, params: Schema.Json) =>
         new Promise<any>((done) => {
           const id = ++serial;
           pending.set(id, done);
@@ -269,7 +269,7 @@ const driver = async (page: Page, url: string, tab: string) => {
 
 const state = (page: Page) => page.evaluate(() => window.p12.frames);
 
-const rpc = (page: Page, method: string, params: unknown) =>
+const rpc = (page: Page, method: string, params: Schema.Json) =>
   page.evaluate(async ({ method, params }) => window.p12.call(method, params), {
     method,
     params,

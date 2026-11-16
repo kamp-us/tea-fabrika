@@ -439,7 +439,7 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
                 name: Object.entries(counter.inputs).find(([name]) => name === input)![1].description,
               });
             const pressed = () => page.evaluate(() => globalThis.__p14?.pressed ?? []);
-            const render = (view: unknown) => page.evaluate((data) => globalThis.__p14?.render(data), view);
+            const render = <V>(view: V) => page.evaluate((data) => globalThis.__p14?.render(data), view);
 
             // Each walk starts at the program's real init; each step reads the folded model, picks an
             // input the program accepts from it, presses its button, then installs the stepped view.

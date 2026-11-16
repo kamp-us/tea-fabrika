@@ -80,7 +80,7 @@ const segments = fc.array(segment, { minLength: 1, maxLength: 4 });
 const ports = fc.integer({ min: 1, max: 65535 });
 
 /** `value` placed at `path` in nested tables. */
-const nest = (path: ReadonlyArray<string>, value: unknown): unknown =>
+const nest = <A>(path: ReadonlyArray<string>, value: A): unknown =>
   path.reduceRight<unknown>((inner, key) => ({ [key]: inner }), value);
 
 /** What a provider holds at the setting's path: nothing, a valid port, or a value that must fail. */

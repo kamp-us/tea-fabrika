@@ -40,7 +40,7 @@ const tool = (comment: Comment) =>
   (comment.type === "Block" && declares.test(comment.value));
 
 /** The tree as text with every position dropped. `raw` stays, so `16` and `0x10` differ. */
-const shape = (program: unknown) =>
+const shape = <P>(program: P) =>
   JSON.stringify(program, (key, value: unknown) =>
     key === "start" || key === "end" || key === "range" || key === "loc"
       ? undefined

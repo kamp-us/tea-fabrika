@@ -189,9 +189,9 @@ const watch = async <A>(look: () => Promise<A>, done: (value: A) => boolean, ms:
 type Outcome = "answered" | "offline" | "refused" | "other";
 
 // Every message and code down a failure's chain of causes.
-const chain = (value: unknown): string =>
-  `${String(value)} ${Predicate.hasProperty(value, "code") ? String(value.code) : ""} ${
-    Predicate.hasProperty(value, "cause") && value.cause !== value ? chain(value.cause) : ""
+const chain = (cause: unknown): string =>
+  `${String(cause)} ${Predicate.hasProperty(cause, "code") ? String(cause.code) : ""} ${
+    Predicate.hasProperty(cause, "cause") && cause.cause !== cause ? chain(cause.cause) : ""
   }`;
 
 const outcome = async (instance: Instance): Promise<Outcome> => {
@@ -260,7 +260,7 @@ const world = (kib: (pid: number) => number | null) =>
   });
 
 /** The facts of one start, in the order the brain wrote them. */
-const sequence = (facts: ReadonlyArray<Fact>, start: unknown) =>
+const sequence = (facts: ReadonlyArray<Fact>, start: Fact["body"]["start"]) =>
   facts.filter((fact) => fact.body.start === start && fact._tag !== "started").map((fact) => fact._tag);
 
 describe("the memory restart on real workerd, next/", () => {

@@ -400,7 +400,7 @@ const document = (ds: Declared) =>
       ...ds.map((d) =>
         fc.oneof(
           fc.constant({ _tag: "absent" as const }),
-          KINDS[d.kind].valid.map((value: unknown) => ({ _tag: "valid" as const, value })),
+          KINDS[d.kind].valid.map((value: number | string | boolean) => ({ _tag: "valid" as const, value })),
           KINDS[d.kind].invalid.map((value) => ({ _tag: "invalid" as const, value })),
         ),
       ),

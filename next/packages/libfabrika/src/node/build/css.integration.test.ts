@@ -613,7 +613,7 @@ describe("P16 CSS tokens", () => {
               ? `a { background: url(https://test.invalid/a ${id}); }`
               : `@import ("child${id}.css");`;
         const error = await failure(f.read(css));
-        const verify = (actual: unknown) => {
+        const verify = <A>(actual: A) => {
           expect(actual).toMatchObject({
             _tag: "BuildError",
             reason: "bundle",

@@ -213,7 +213,7 @@ const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket
 
     throw new Error(`no frame in ${WAIT} ms; last frames ${JSON.stringify(frames.slice(-3))}`);
   };
-  const call = async (method: string, params: unknown) => {
+  const call = async (method: string, params: Schema.Json) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
     return next((frame) => frame.id === id);
@@ -351,7 +351,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
 };
 
 /** One letter from the door's client to a process. */
-const letter = (pid: string, id: string, m: unknown) => ({ pid, letter: id, m, sentAt: SENT, seen: 0 });
+const letter = (pid: string, id: string, m: Schema.Json) => ({ pid, letter: id, m, sentAt: SENT, seen: 0 });
 
 /** Whether a pushed view update carries a log row of this type, however the update is cut. */
 const carries = (value: unknown, type: string): boolean =>
@@ -377,7 +377,7 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
     const writer = await fixture.start("writer:1");
     const client = await fixture.connect("watch");
     const log = async () => ((await client.call("view.open", { pid: reader })).result?.view?.log ?? []) as any[];
-    const send = async (pid: string, id: string, m: unknown) =>
+    const send = async (pid: string, id: string, m: Schema.Json) =>
       expect(await client.call("process.send", letter(pid, id, m))).toMatchObject({ result: { _tag: "accepted" } });
 
     // The refusal is reply data across the Project's RPC, and the reader folds it as the Cmd's error.
@@ -390,7 +390,7 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
     await send(reader, "watch-1", { type: "watch", name: "writer:1" });
     await send(reader, "watch-2", { type: "watch", name: "writer:1" });
     const answered = await until("the reader folds both monitor answers", log, (rows) => rows.length > 2);
-    const watched = (ref: unknown) => ({ type: "monitor_ok", ref, process: writer, name: "writer:1" });
+    const watched = <R>(ref: R) => ({ type: "monitor_ok", ref, process: writer, name: "writer:1" });
     expect(answered, "M13: each watch is answered monitor_ok, bound to the writer's life").toEqual([
       ...refused,
       watched(expect.stringMatching(new RegExp(`^${reader}/`))),
@@ -471,7 +471,7 @@ it("scenario: M16, a watcher that only waits folds one DOWN with shutdown when t
     const parent = await fixture.start("parent:1");
     const reader = await fixture.start("reader:1");
     const client = await fixture.connect("stopped");
-    const send = async (pid: string, id: string, m: unknown) => {
+    const send = async (pid: string, id: string, m: Schema.Json) => {
       const answer = await client.call("process.send", letter(pid, id, m));
       expect(Sent.guards.accepted(answer.result), `M16: ${id} is accepted, got ${JSON.stringify(answer)}`).toBe(true);
     };

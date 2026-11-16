@@ -22,7 +22,7 @@ import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
 import { type Tile, type TileId, TezgahView, Workspace } from "../tezgah/Workspace.ts";
 import * as Keys from "./Keys.ts";
-import { optimisticState, type PendingMutation, type TezgahClient, tezgahMachine } from "./Tezgah.ts";
+import { optimisticState, type PendingMutation, type TezgahClient, type TezgahMsg, tezgahMachine } from "./Tezgah.ts";
 import {
   type Handling,
   handle,
@@ -41,7 +41,7 @@ const Json = Schema.fromJsonString(Schema.Unknown);
 /** A tile's fields as every client reads them off the wire: none may be left out. */
 const FIELDS = ["id", "n", "shows", "program", "child", "keep", "cursor"] as const;
 
-const step = (m: unknown, msg: unknown) => applyCell(tezgahMachine as never, m as never, msg as never)[0] as never;
+const step = (m: TezgahClient, msg: TezgahMsg) => applyCell(tezgahMachine, m, msg)[0];
 
 describe("Desk S2a L11: tezgah's view in the window", () => {
   it.prop(
@@ -75,16 +75,14 @@ describe("Desk S2a L11: tezgah's view in the window", () => {
         rev: 0,
         pendingMutations: [],
       });
-      const after: { readonly serverState: unknown } = step(fresh, { type: "server", rev, view: wire });
+      const after = step(fresh, { type: "server", rev, view: wire });
       expect(after.serverState, "L11: the window's server state is tezgah's view").toEqual(same);
-      expect(optimisticState(after as never), "L11: with nothing pending, the drawn state is the server's").toEqual(
-        same,
-      );
+      expect(optimisticState(after), "L11: with nothing pending, the drawn state is the server's").toEqual(same);
 
       // A wire view that drops `child` from a tile is not tezgah's view: the window keeps what it had.
       if (tiles.length > 0) {
         const dropped = { ...(wire as object), tiles: tiles.map(({ child: _child, ...rest }) => rest) };
-        const kept: { readonly serverState: unknown } = step(after, { type: "server", rev: rev + 1, view: dropped });
+        const kept = step(after, { type: "server", rev: rev + 1, view: dropped });
         expect(kept.serverState, "L11: a view without child changes nothing").toEqual(same);
       }
     },
@@ -107,18 +105,14 @@ const PatchStep = Schema.Struct({
   to: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000 })),
 });
 
-const both = (
-  m: unknown,
-  msg: unknown,
-): readonly [{ readonly serverState: unknown; readonly rev: number }, ReadonlyArray<{ readonly type: string }>] =>
-  applyCell(tezgahMachine as never, m as never, msg as never) as never;
+const both = (m: TezgahClient, msg: TezgahMsg) => applyCell(tezgahMachine, m, msg);
 
 /** A view as the wire carries it, JSON. */
 const onWire = (view: typeof TezgahView.Type): unknown =>
   Schema.decodeSync(Json)(Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(view)));
 
-const text = (state: unknown) =>
-  state === null ? "null" : Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(state as never));
+const text = (state: TezgahView | null) =>
+  state === null ? "null" : Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(state));
 
 describe("Desk S2a L11: a tezgah view patch in the window", () => {
   it.prop(
@@ -157,7 +151,7 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
       for (const { kind, skew, to } of walk) {
         const target = wires[to % wires.length];
         const rev = m.rev;
-        const msg =
+        const msg: TezgahMsg =
           kind === "whole"
             ? { type: "server", rev: rev + skew, view: target }
             : kind === "next"

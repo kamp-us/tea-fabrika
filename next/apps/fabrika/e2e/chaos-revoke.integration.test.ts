@@ -87,7 +87,7 @@ const Frame = Schema.Struct({
 });
 
 /** Masked client frame, RFC 6455 section 5.2; the payload is a complete small JSON request. */
-const encode = (value: unknown) => {
+const encode = (value: Schema.Json) => {
   const payload = new TextEncoder().encode(JSON.stringify(value));
 
   if (payload.length > 65535) {
@@ -215,7 +215,7 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
   });
   // A JSON-RPC 2.0 id only has to be unique among this client's open requests.
   let calls = 0;
-  const call = Effect.fnUntraced(function* (method: string, params: unknown) {
+  const call = Effect.fnUntraced(function* (method: string, params: Schema.Json) {
     const id = `call-${++calls}`;
     socket.write(encode({ jsonrpc: "2.0", id, method, params }));
     return yield* next((value) => value.id === id);
@@ -434,7 +434,7 @@ it.live(
         const before = yield* old.call("process.send", input("old-before", "before"));
         expect(before.error).toBeUndefined();
         expect(before.result).toMatchObject({ _tag: "accepted" });
-        const hold = (method: string, params: unknown = {}) =>
+        const hold = (method: string, params: Schema.Json = {}) =>
           RevokeTest.invoke(project, "route", ["p90-control", method, params, "p90-control"]);
         yield* Effect.acquireRelease(hold("p90.arm", { process: pid }), () => hold("p90.release").pipe(Effect.orDie));
         const delayed = yield* Effect.forkScoped(

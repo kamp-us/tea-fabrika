@@ -182,7 +182,7 @@ const press = Effect.fnUntraced(function* (
     return yield* Effect.die("the signed client received no matching frame within 30 seconds");
   });
   let serial = 0;
-  const ask = Effect.fnUntraced(function* (method: string, params: unknown) {
+  const ask = Effect.fnUntraced(function* (method: string, params: Schema.Json) {
     const n = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id: n, method, params }));
     return yield* next((frame) => frame.id === n);

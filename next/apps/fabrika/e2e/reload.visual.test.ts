@@ -37,7 +37,7 @@ import {
 declare global {
   interface Window {
     readonly p15: {
-      readonly call: (method: string, params: unknown) => Promise<any>;
+      readonly call: (method: string, params: Schema.Json) => Promise<any>;
       readonly frames: Array<{ readonly method?: string }>;
     };
   }
@@ -116,7 +116,7 @@ const driver = (p: Page, url: string, tab: string) =>
         const frames: Array<unknown> = [];
         let socket: WebSocket;
         const pending = new Map<number, (frame: unknown) => void>();
-        const call = (method: string, params: unknown) =>
+        const call = (method: string, params: Schema.Json) =>
           new Promise<any>((done) => {
             const id = ++serial;
             pending.set(id, done);
@@ -169,7 +169,7 @@ const driver = (p: Page, url: string, tab: string) =>
   );
 
 /** One JSON-RPC call through the page's driver. */
-const rpc = (p: Page, method: string, params: unknown) =>
+const rpc = (p: Page, method: string, params: Schema.Json) =>
   browserCall(() => p.evaluate(async ({ method, params }) => window.p15.call(method, params), { method, params }));
 
 /** The page's key, granted by the founder through grant.ts, as a person does it. */
@@ -240,7 +240,7 @@ const session = (url: string, key: string) =>
     let letters = 0;
     return {
       pid,
-      call: (method: string, params: unknown) => rpc(p, method, params),
+      call: (method: string, params: Schema.Json) => rpc(p, method, params),
       press: (type: "inc" | "dec") =>
         rpc(p, "process.send", {
           pid,

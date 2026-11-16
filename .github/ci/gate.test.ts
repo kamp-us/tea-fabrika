@@ -68,7 +68,7 @@ const github = (
 ) => {
   const calls: Call[] = [];
   const asks: Ask[] = [];
-  const answer = (status: number, json: unknown) =>
+  const answer = <J>(status: number, json: J) =>
     Promise.resolve({ ok: status < 300, status, json: () => Promise.resolve(json) });
 
   const send = (url: string, init: Init = {}) => {
@@ -600,8 +600,8 @@ it("G4 property: [secrets] the token goes only in the authorization header, and 
         const result = await gate.main(env, io);
         const thrown = await gate.read(env, io).then(
           () => "",
-          (error: unknown) =>
-            error instanceof Error ? `${error.name} ${error.message} ${String(error.stack)}` : String(error),
+          (cause: unknown) =>
+            cause instanceof Error ? `${cause.name} ${cause.message} ${String(cause.stack)}` : String(cause),
         );
         const forms = [secret, encodeURIComponent(secret), encodeURI(secret)];
         const outputs = { output: result.output, summary: result.summary, line: result.line, thrown };

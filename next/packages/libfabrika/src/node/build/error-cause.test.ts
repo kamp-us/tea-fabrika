@@ -58,7 +58,7 @@ const steps = fc.constantFrom<Step>(
 );
 
 /** The build options and disk that make `step` fail with `failure` (a damaged file for a decode). */
-const world = (step: Step, failure: unknown, bad: string) => {
+const world = (step: Step, failure: object, bad: string) => {
   const fails = <A>() => Effect.fail(failure as never) as Effect.Effect<A, never>;
   const damaged = Effect.succeed(bad);
 
@@ -163,7 +163,7 @@ describe("T695, a stylesheet refusal keeps what lightningcss or the disk said", 
 });
 
 /** A Rolldown plugin whose `hook` throws `failure`, as a broken plugin does. */
-const throwingPlugin = (hook: "buildStart" | "resolveId", failure: unknown) => ({
+const throwingPlugin = (hook: "buildStart" | "resolveId", failure: object) => ({
   name: "cause-probe",
   [hook]: () => {
     throw failure;

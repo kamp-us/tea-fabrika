@@ -42,7 +42,7 @@ const runnerLayer: (
   },
 ) => ReturnType<typeof ProgramRunner.layer> = ProgramRunner.layer;
 
-const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveries = policy.maxDeliveries) => {
+const world = (cause: unknown, adapter: "node" | "worker" = "node", maxDeliveries = policy.maxDeliveries) => {
   const ledger = storage(),
     state = storage(),
     sink = storage();
@@ -65,7 +65,7 @@ const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveri
     init: (s) => [s ?? { count: 0 }, []],
     update: {
       poison: () => {
-        throw thrown;
+        throw cause;
       },
     },
   });

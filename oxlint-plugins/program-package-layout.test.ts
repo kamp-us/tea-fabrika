@@ -187,7 +187,7 @@ const lint = (plants: readonly Plant[]): Finding[][] => {
   return found;
 };
 
-const run = (name: string, exports: unknown, sources: Readonly<Record<string, string>>, setup: Package = {}) =>
+const run = <E>(name: string, exports: E, sources: Readonly<Record<string, string>>, setup: Package = {}) =>
   lint([{ name, exports, sources, package: setup }])[0] ?? [];
 
 /** A plant's findings as one oxlint run and RuleTester can both say them: its home's number aside. */
@@ -1183,7 +1183,7 @@ describe("fabrika/program-package-layout", () => {
                   : form === "conditions"
                     ? { [condition]: path, default: "./src/program.ts" }
                     : { [condition]: [path], default: ["./src/program.ts"] },
-            messages = (exports: unknown) =>
+            messages = <E>(exports: E) =>
               run(name, exports, files, { manifest: (fields) => ({ ...fields, ...declared }) })
                 .map((d) => d.message)
                 .sort();

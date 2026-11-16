@@ -650,7 +650,7 @@ describe("P12 Project authority", () => {
     });
     const pending = w.send(pid, "inc", letter).then(
       (answer) => ({ answer }),
-      (error: unknown) => ({ error }),
+      (cause: unknown) => ({ error: cause }),
     );
     await Effect.runPromise(Deferred.await(entered));
 

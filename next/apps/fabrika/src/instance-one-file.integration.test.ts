@@ -477,7 +477,7 @@ describe("P16 stack and sealed loader", () => {
           });
           expect(calls).toHaveLength(1);
           const config = calls[0]!.config;
-          const sealed = (value: unknown) => assert.deepEqual(value, config);
+          const sealed = <A>(value: A) => assert.deepEqual(value, config);
 
           for (const plant of [
             { ...Object(config), env: { PLANTED: source } },
@@ -528,7 +528,7 @@ class Client {
     }
   }
 
-  async call(method: string, params: unknown) {
+  async call(method: string, params: Schema.Json) {
     const id = ++this.serial;
     this.ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
     return this.next((x) => x.id === id);
@@ -713,8 +713,7 @@ describe("P16 copied-file real instance, serial", () => {
                               model = (await turn(SealedTurn, program, "step", [model, { type: "read" }])).model;
                             }
 
-                            const closed = (model: unknown) =>
-                              assert.deepEqual(model, { keys: [], outbound: "denied" });
+                            const closed = <M>(model: M) => assert.deepEqual(model, { keys: [], outbound: "denied" });
 
                             if (mode === "sealed") {
                               closed(model);

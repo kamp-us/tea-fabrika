@@ -127,7 +127,7 @@ const socketAt = (instance: Instance, key: Key, tab: string) => {
 
     throw new Error(`no frame in ${WAIT} ms; last frames ${JSON.stringify(frames.slice(-3))}`);
   };
-  const call = async (method: string, params: unknown) => {
+  const call = async (method: string, params: Schema.Json) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
     return next((frame) => frame.id === id);
@@ -1020,7 +1020,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       const otherView = await until(
         "the independent counter has a nonzero count",
-        () => client.call("view.open", { pid: other }),
+        () => client.call("view.open", { pid: other! }),
         (frame) => frame.result?.view?.count === 2,
       );
       expect(await client.call("process.send", letter(peer, "peer-inc", { type: "inc" }))).toMatchObject({
@@ -1092,7 +1092,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         "L10: the starter keeps its saved state after the child throws",
       ).toEqual(starterView.result.view);
       expect(
-        (await client.call("view.open", { pid: other })).result?.view,
+        (await client.call("view.open", { pid: other! })).result?.view,
         "L10: the independent program keeps its nonzero count after the child throws",
       ).toEqual(otherView.result.view);
       expect(

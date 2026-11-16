@@ -35,7 +35,8 @@ const Move = Schema.Union([
 const watched = () => {
   const events: Array<RecordPartSupport.Event> = [];
   const opened = () => events.flatMap((e) => (e.step === "opened" ? [e.db] : []));
-  const closes = (db: unknown) => events.filter((e) => e.step === "closed" && e.db === db).length;
+  const closes = (db: ReturnType<typeof opened>[number]) =>
+    events.filter((e) => e.step === "closed" && e.db === db).length;
   const folders = () => events.flatMap((e) => (e.step === "folder" ? [e.path] : []));
   const released = Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -144,7 +145,7 @@ describe("T641 record-part stores on node:sqlite", () => {
               const handles = watch.opened().slice(before);
               expect(handles).toHaveLength(1);
               expect(handles[0]!.isOpen).toBe(false);
-              expect(watch.closes(handles[0])).toBe(1);
+              expect(watch.closes(handles[0]!)).toBe(1);
             }
           }),
         );
