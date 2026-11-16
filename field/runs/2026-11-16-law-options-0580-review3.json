@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-law-options-0580-review3",
+  "ticket": "580",
+  "pr": "kamp-us/tea-fabrika#1497",
+  "started": "2026-11-16T00:17:27-08:00",
+  "ended": "2026-11-16T00:21:30-08:00",
+  "parent": "2026-11-16-law-options-0580-review2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send_back",
+  "why": "The second recheck (0177, an extra round under 0564) of slice 1 of docs/plan/quests/law-options-0580-PLAN.md, next/ and tooling, fix diff a6292f616..625dd21b1: the plant check no longer refuses the renamed file's old records and exits 0 as CI runs it, but the fix narrows too far. .github/ci/plant-check.ts:271 holds a record only when its file is in owned, the head law files on the package's it, and input.head holds only the files the pull request changes. So a record naming a law in a file on the package's it that exists at head but that the pull request does not change, a plant no changed law names, is now skipped where a6292f616 refused it as unclaimed, as the plan's unclaimed refusal asks. Shown with one input to check(): the record for next/a/Untouched.test.ts gives [] at 625dd21b1 and [\"unclaimed\"] at a6292f616. The model law in .github/ci/plant-check.test.ts never generates that case, so it stays green. Skipping a record for a file absent from head, or for a file on another it, is right. Fix for tests: readInputs also reads each record's file at head when it is outside the diff (absent, or on which it), check() skips only absent files and files not on the package's it, and the model law generates a record for an unchanged file on the package's it, expecting unclaimed, with its plant.",
+  "plants": [
+    {
+      "file": ".github/ci/plant-check.test.ts",
+      "law": "property: the check's refusals equal a model's: no plant, not recorded, green and unclaimed, and an untouched or moved-only law gives none",
+      "plant": "skip a record only when its file is a changed head file not on the package's it (the a6292f616 rule), in a scratch copy of plant-check.ts",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 4,
+  "note": "Read-only apart from this row; the plant ran in a scratch git worktree outside the repo, and the narrowing was shown by a scratch script calling check() from 625dd21b1 and from a6292f616 on the same input. Ran at 625dd21b1 on Node 26.13.0: plant-check.test.ts, Law.test.ts, Law.runner.test.ts and Plants.test.ts (50 passed); plant-check.ts with BASE origin/main, HEAD 625dd21b1, EVENT pull_request (exit 0, notices only); pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (18 parts passed); one pnpm typecheck (exit 0). loosening.sh a6292f616..625dd21b1: two unrecognized changes, plant-check.test.ts:85 (the new generated gone case) and plant-check.ts:271 (the owned set), and the second is the narrowing above."
+}
