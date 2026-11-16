@@ -32,7 +32,12 @@ const put = (table: object, path: Edit.Path, value: unknown): void => {
         });
       }
 
-      parent = Reflect.get(parent, segment);
+      const next =
+        Predicate.hasProperty(parent, segment) && Object.hasOwn(parent, segment) ? parent[segment] : undefined;
+
+      if (Predicate.isObject(next)) {
+        parent = next;
+      }
     }
   }
 };
