@@ -55,7 +55,6 @@ export const killWorkerd = Effect.fn("workerd.kill")(function* (parent: number) 
   return pid;
 });
 
-/** Where a kill landed for one name: inside a step, with its letter, or between steps. */
 /** Where a kill cut a process: `inside` a step, with its letter, or `between` steps. */
 export const Moment = Schema.TaggedUnion({ inside: { letter: Schema.String }, between: {} });
 

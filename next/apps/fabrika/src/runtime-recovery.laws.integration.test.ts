@@ -1091,20 +1091,20 @@ const world = (
             ? Wire.Answer.cases.ok.make({ result: answer.result })
             : Wire.Answer.cases.refused.make({ reason: answer.error.data.reason });
       };
-      expect(
-        await call("initialize", {
-          versions: [1],
-          has: ["seal"],
-          ping: "30s",
-          key: key.raw,
-          tab,
-          nonce,
-          platform: "headless",
-          os: "linux",
-          sentAt: SENT,
-          signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`),
-        }),
-      ).toSatisfy(Predicate.isTagged("ok"));
+      const opened = await call("initialize", {
+        versions: [1],
+        has: ["seal"],
+        ping: "30s",
+        key: key.raw,
+        tab,
+        nonce,
+        platform: "headless",
+        os: "linux",
+        sentAt: SENT,
+        signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`),
+      });
+      // `call` answers undefined when no frame came back, which fails here as a missing ok does.
+      expect(opened !== undefined && Wire.Answer.isAnyOf(["ok"])(opened)).toBe(true);
       return {
         db: doorDb,
         call,

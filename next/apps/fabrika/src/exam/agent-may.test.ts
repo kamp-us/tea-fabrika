@@ -4,7 +4,7 @@
 import { DatabaseSync } from "node:sqlite";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { expect, it } from "@effect/vitest";
-import { Gateway, Id, type Incoming } from "@kampus/libfabrika";
+import { Gateway, Id, type Incoming, Sent } from "@kampus/libfabrika";
 import { Adds } from "@kampus/libfabrika/access/Access";
 import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import { NotGranted, Writer } from "@kampus/libfabrika/access/SessionManager";
@@ -607,17 +607,17 @@ it.prop(
       methodAnswer(
         method,
         allowed.has(method) || method === "ledger.wait"
-          ? { _tag: "ok" }
+          ? Wire.Answer.cases.ok.make({ result: null })
           : Wire.Answer.cases.refused.make({ reason: "not_for_agents" }),
       );
     }
 
     for (const input of ["check", "uncheck", "left", "items"]) {
-      methodAnswer(`process.send:checklist:${input}`, { _tag: "ok" });
+      methodAnswer(`process.send:checklist:${input}`, Wire.Answer.cases.ok.make({ result: null }));
     }
 
     personRefusal(() => Wire.Answer.cases.refused.make({ reason: "not_for_agents" }));
-    methodAnswer("ledger.wait:parked", { _tag: "parked" });
+    methodAnswer("ledger.wait:parked", Wire.Answer.cases.parked.make({ stream: "inbox", after: 0 }));
 
     for (const as of ["window", "agent"]) {
       knockAnswer(
@@ -648,18 +648,18 @@ it.prop(
       "process.send:checklist:add",
       "process.send:checklist:undeclared",
     ]) {
-      expect(() => methodAnswer(method, { _tag: "ok" })).toThrow();
+      expect(() => methodAnswer(method, Wire.Answer.cases.ok.make({ result: null }))).toThrow();
     }
 
     personRefusal(() => Wire.Answer.cases.refused.make({ reason: "not_for_agents" }));
-    expect(() => personRefusal(() => ({ _tag: "ok" }))).toThrow();
+    expect(() => personRefusal(() => Wire.Answer.cases.ok.make({ result: null }))).toThrow();
 
     for (const reason of ["person_only", "not_allowed", "unknown_method"]) {
       expect(() => methodAnswer("spans.read", Wire.Answer.cases.refused.make({ reason }))).toThrow();
     }
 
-    expect(() => failure(Exit.succeed({ _tag: "accepted" }))).toThrow();
-    expect(() => methodAnswer("ledger.wait:parked", { _tag: "ok" })).toThrow();
+    expect(() => failure(Exit.succeed(Sent.cases.accepted.make({ rev: 1, pos: 1 })))).toThrow();
+    expect(() => methodAnswer("ledger.wait:parked", Wire.Answer.cases.ok.make({ result: null }))).toThrow();
     const knock = {
       answer: Wire.Answer.cases.ok.make({ result: { code: "123456", until: 1 } }),
       row: { as: "window" },
@@ -668,7 +668,7 @@ it.prop(
     };
 
     for (const bad of [
-      { ...knock, answer: { _tag: "refused" } },
+      { ...knock, answer: Wire.Answer.cases.refused.make({ reason: "not_for_agents" }) },
       { ...knock, admitted: true },
       { ...knock, writes: [unknown] },
       { ...knock, row: { as: "agent" } },
@@ -699,7 +699,7 @@ it.effect.prop(
         personCall: dispatch,
         call: () => Effect.succeed(Wire.Answer.cases.refused.make({ reason: "not_for_agents" })),
         checklistInputs: () => Effect.void,
-        parkedWait: Effect.succeed({ _tag: "parked" }),
+        parkedWait: Effect.succeed(Wire.Answer.cases.parked.make({ stream: "inbox", after: 0 })),
         knock: () => Effect.die("control only"),
       };
 
@@ -735,13 +735,13 @@ it.prop(
     }
 
     personRefusal(() => Wire.Answer.cases.refused.make({ reason: "not_for_agents" }));
-    expect(() => personRefusal(() => ({ _tag: "ok" }))).toThrow();
+    expect(() => personRefusal(() => Wire.Answer.cases.ok.make({ result: null }))).toThrow();
     const clean: PolicyDoor = {
       install: () => Effect.void,
-      personCall: () => Effect.succeed({ _tag: "ok" }),
-      call: () => Effect.succeed({ _tag: "ok" }),
+      personCall: () => Effect.succeed(Wire.Answer.cases.ok.make({ result: null })),
+      call: () => Effect.succeed(Wire.Answer.cases.ok.make({ result: null })),
       checklistInputs: () => Effect.void,
-      parkedWait: Effect.succeed({ _tag: "parked" }),
+      parkedWait: Effect.succeed(Wire.Answer.cases.parked.make({ stream: "inbox", after: 0 })),
       knock: () => Effect.die("control only"),
     };
     expect(presence(new Set(paths), () => clean)).toBe(clean);
