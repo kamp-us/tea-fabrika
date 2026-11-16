@@ -8,7 +8,8 @@ plus our lint config and its plant test. Today's app is not touched. It builds
 [0555](../../../.decisions/0555-no-vi-mock-or-domock.md) (no `vi.mock`, `vi.doMock`, `vi.spyOn` or
 `vi.stubEnv`, held by `vitest/no-restricted-vi-methods`) and
 [0579](../../../.decisions/0579-property-laws-use-it-prop.md) (a `Recorder` is the one way to watch
-calls), with the Recorder as it landed (`next/packages/vitest/src/Recorder.ts`) and the folder row of
+calls), and (amendment 2026-11-15) [0054](../../../.decisions/0054-read-upstream-before-patching-it.md)
+for its tea patch (demlik's decisions and patterns read first), with the Recorder as it landed (`next/packages/vitest/src/Recorder.ts`) and the folder row of
 [the Recorder plan's Size section](./recorder-PLAN.md#size): "`programs/pipeline`: 1 `spyOn` on
 `console`", plus the hand-written call log `CodeHostTest.Control.calls` its two runner suites read.
 

@@ -4,7 +4,7 @@
   "ticket": "1067",
   "pr": "https://github.com/kamp-us/tea-fabrika/pull/1491",
   "started": "2026-11-15T22:04:58-08:00",
-  "ended": null,
+  "ended": "2026-11-15T22:09:54-08:00",
   "parent": "2026-11-15-mock-plans-amend",
   "active": null,
   "role": "lead",
@@ -15,6 +15,6 @@
   "tokens": null,
   "tools": null,
   "minutes": null,
-  "note": "On main at 0683861 one line outside test files writes raw: next/packages/libfabrika/src/node/client/JournalSqlite.child.test-support.ts:37, a child's ready line its parent law reads; both plans list it as the one expected exception, with its reason. eslint/no-restricted-properties is already set by five override blocks that reach libfabrika paths, and oxlint keeps only the last matching block's options, so the plans add the two process entries to each of those blocks, and M13's plant (b) holds that no earlier entry is lost. The ended time is null: it was not read from the clock before the commit. plancheck, format and lint ran before the commit; no test ran.",
+  "note": "On main at 0683861 one line outside test files writes raw: next/packages/libfabrika/src/node/client/JournalSqlite.child.test-support.ts:37, a child's ready line its parent law reads; both plans list it as the one expected exception, with its reason. eslint/no-restricted-properties is already set by five override blocks that reach libfabrika paths, and oxlint keeps only the last matching block's options, so the plans add the two process entries to each of those blocks, and M13's plant (b) holds that no earlier entry is lost. The ended time is the commit time of 6de2b17, read with git log after the commit (2026-11-16T06:09:54Z). plancheck, format and lint ran before the commit; no test ran.",
   "step": "lead"
 }

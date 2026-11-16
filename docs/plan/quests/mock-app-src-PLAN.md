@@ -1,7 +1,7 @@
 
 Plancheck-Version: 3
 
-# Plan: the mock sweep in `next/apps/fabrika/src`, in next/: 5 `vi.fn`, 14 `toHaveBeenCalled*` and 23 `vi.spyOn` go, in four slices on the sweep's one pull request
+# Plan: the mock sweep in `next/apps/fabrika/src`, in next/: 5 `vi.fn`, 14 `toHaveBeenCalled*` and 23 `vi.spyOn` go, in five slices on the sweep's one pull request
 
 ```ts
 // next/apps/fabrika/src/door.integration.test.ts:3083, today: a vi.fn hidden in a hand wrap of the real service
@@ -26,15 +26,22 @@ the one Alchemy patch that some of its spies need first. Today's app is not touc
 (`next/packages/vitest/src/Recorder.ts`, the
 [pattern](../../../.patterns/a-law-watches-calls-with-a-recorder.md)). It covers `vi.fn`,
 `toHaveBeenCalled*` and `vi.spyOn` only. The folder's `vi.mock`, `vi.doMock` and `vi.stubEnv` are
-the other sweeps of 0555 and stay as they are here.
+the other sweeps of 0555 and stay as they are here. **Amended 2026-11-15 (the laptop lead's
+ruling):** it covers those too, in a slice 5, and also builds
+[0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) (no list lets broken code pass)
+and follows [0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md) (platform
+pieces go through Alchemy), with
+[0538](../../../.decisions/0538-kampus-vitest-holds-the-test-primitives.md) for where test layers
+live and [0054](../../../.decisions/0054-read-upstream-before-patching-it.md) for the Alchemy patch.
 
 ## Doubts, read these first
 
 **Amendment (2026-11-15, merge session rulings).** Both open questions were answered, and the
 first two doubts below are kept as they were written, each marked with its answer. Each slice lands
 on the sweep's one fold branch, not as a pull request of its own (ruling 1). The lock refuses all
-five methods with node's M1 as its law (ruling 2), which raises a new question for the merge
-session (open question 3).
+five methods with node's M1 as its law (ruling 2), which raised a new question for the merge
+session (open question 3); the laptop lead answered it the same day: no interim lock, the sweep
+fixes the folder's other `vi` hits it can, and the folder's lock stays out of this sweep.
 
 - **Open question 1 decides five laws (lean 60%).** (Answered 2026-11-15: a failed digest stays a
   typed `crypto` refusal, through Effect's `WebCrypto` reference, as the cloudflare and transport
@@ -48,12 +55,10 @@ session (open question 3).
   `inputs.name` in the gateway's settings is a plain function of our own API. Two approved rows
   disagree on what replaces a `vi.fn` on such a callback: the recorder plan's `transport/` row says
   "becomes a service", the oxlint-plugins plan says "a plain list the test owns". It is in slice 3.
-- **The lock's reach while files still hold `vi.mock`, `vi.doMock` or `vi.stubEnv` (open question
-  3, waiting on the merge session).** Ruling 2 puts all five methods in every block. Of the files
-  this plan locks, every one but `exam/alchemy-lifecycle.test.ts` keeps a `vi.mock`, `vi.doMock`
-  or `vi.stubEnv` for 0555's other sweeps (counted on main at `0683861`). A five-method block can
-  name only files at zero for all five, so the `fn` and `spyOn` hold this plan had on the files it lists
-  would shrink to one. That reads as a loosening of A6 and A8, so it is not applied.
+- **The lock stays out of this sweep (amendment 2026-11-15, the laptop lead's ruling; this closes
+  open question 3).** Slice 5 fixes 33 of the folder's 40 other `vi` hits, but seven stand in for
+  Alchemy or `cloudflare:workers` and wait on 0042's Alchemy work, so the folder cannot reach
+  zero, and no narrower interim lock is allowed (0524). See "The other `vi` hits 0555 bans".
 - **The Alchemy patch (70%).** Slice 2 patches `@alchemy.run/cloudflare-runtime`'s Node `Workerd`
   to spawn through Effect's `ChildProcessSpawner`, as the recorder plan's row says. That keeps
   workerd's fourth file descriptor, the control pipe the laws write `listen` events to. Effect's
@@ -144,6 +149,37 @@ other sites need first: `next/packages/libfabrika/src/gateway/Gateway.ts` and
   Call: 80%. The doubt is `Recorder.layer`'s `Single<S>` check: if `ClientManager` has an
   overloaded method, it does not compile (law R16). In that case the tests step reports it and
   stops, rather than adding a form.
+
+## The other `vi` hits 0555 bans (amendment 2026-11-15, laptop lead's ruling)
+
+The laptop lead ruled that `vi.mock`, `vi.doMock` and `vi.stubEnv` are 0555's own targets, so this
+sweep fixes those hits too, and that a folder's lock lands whole in the one fold pull request only
+once the folder is at zero. No interim narrower lock: that would be a list letting broken code pass
+([0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md)). Counted on main at `0683861`
+with `rg -o 'vi\.(mock|doMock|stubEnv)\('` over the folder: 25 `vi.mock` in 12 files, 2
+`vi.doMock` in 1 file, 13 `vi.stubEnv` in 3 files. Each row's way is 0555's own, from its
+"Consequences".
+
+| What it replaces | Calls | Where | In this sweep? |
+|---|---|---|---|
+| `virtual:fabrika-built` | 7 | `start-member`, `start-child`, `runtime.laws`, `runtime.decode`, `runtime-recovery`, `error-cause` laws | yes, slice 5: the built table is handed in by the entry file, which alone imports the virtual module, and each law hands in its own table |
+| our own modules: `./table.ts` 3, `./door.ts` 1, `./local-instance.ts` 1, `./exam/compiler.ts` 1, `@kampus/libfabrika/node/build` 1, `@kampus/libfabrika/workers/runtime` 1, `@kampus/libfabrika/workers/gateway` 1 | 9 | `runtime.laws`, `runtime-recovery`, `runtime.decode`, `file-services`, `checklist-instance` | yes, slice 5: each becomes a value handed in or a service with a test layer (`Layer.mock`), per call; the bundler one is the bundler service 0555 names |
+| `effect` | 1 | `runtime.laws` | yes, slice 3: it is there so Effect's `Layer` could be spied on, and that spy goes with the startup span change |
+| `@effect/platform-node` | 2 | `grant-readers`, `file-services` | yes, slice 5: each entry (`grant.ts`, `dev.ts`) exports its program as an Effect, and the law runs it with the layers it needs, so nothing stands in for `NodeRuntime.runMain` |
+| `rolldown` | 1 | `exam/bytes.integration` | yes, slice 5: the bundler service above; this law is not the wrapper's own, so 0555's exception does not apply |
+| `vi.stubEnv` of `FABRIKA_HOME` 8, `FABRIKA_INSTANCE_PORT` 2, `TYPESAFE_API_KEY` 1, `DO_NOT_TRACK` 1, and 1 by a name that is not a plain string | 13 | `file-services`, `instance-one-file`, `local-instance` laws | yes, slice 5: the readers move to `Config` (`dev.ts:94`, `hands.ts:62` read `process.env.FABRIKA_HOME` today), and each law provides `ConfigProvider.layer(ConfigProvider.fromUnknown({ ... }))`; `TYPESAFE_API_KEY` stays unset in every law, as the root map's money rule asks |
+| `alchemy/Deploy`, `../alchemy.run.ts`, and `vi.doMock` of `alchemy` and `@alchemy.run/cloudflare` | 4 | `local-instance`, `instance-one-file` laws | **no**: these stand in for Alchemy itself, which [0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md) makes the platform's one way in; how a law swaps Alchemy is that work's to say, and it has no plan yet |
+| `cloudflare:workers` | 3 | `runtime-recovery`, `door.integration`, `checklist-instance` laws | **no**: 0042's Alchemy work, as in the cloudflare plan |
+
+**So the folder cannot reach zero in this sweep, and its lock stays out.** The seven Alchemy and
+`cloudflare:workers` hits wait on 0042's Alchemy work, which has no plan; the cloudflare plan's
+finding row `2026-11-15-cloudflare-workers-mocks-have-no-slice` names it. The override in "The
+lock" is not landed by any slice; it lands, whole and with all five methods, for
+`next/apps/fabrika/src/**` on the day the folder is at zero. A6 and A8 wait with it. Slice 5 still
+lands in this sweep, after PR 1366, since `local-instance.integration.test.ts` and
+`runtime-recovery.laws.integration.test.ts` are in that diff. Confidence in slice 5's shape: 65%:
+each row's way is 0555's, but none was read call by call, and the tests step stops and reports any
+hit whose way needs a design call.
 
 ## The shape
 
@@ -357,9 +393,10 @@ shared `VI_METHODS` plant set, run in each path of every block that sets the rul
 this folder joins that five-method block the day it is at zero for all five, and the folder's glob
 joins when the folder is. The two-method override above is the first sketch. Read as written, the
 ruling leaves no lock on the files that still hold the other sweeps' calls, and on this plan's
-files that is all but one (see the doubts). Whether those files keep the two-method override
-meanwhile is open question 3, for the merge session; until it rules, the override above stays as
-it was planned, and nothing it holds is dropped.
+files that is all but one (see the doubts). The laptop lead ruled the same day (this closes open
+question 3): no file list and no narrower override in between (0524). The override above does not
+land in this sweep; the folder's lock lands whole, with all five methods, on the day the folder is
+at zero, after 0042's Alchemy work.
 
 - Probed in this session on the installed oxlint 1.90.0, in the scratchpad: the rule refuses
   `vi.fn()` and `vi.spyOn(...)`. It does not see `v.fn()` after `const v = vi`. The oxlint-plugins
@@ -400,9 +437,9 @@ plant is what the review runs once to see it red.
 | A3. Each grant mode sends exactly its GET and POST, and prints `Granted <key> to <for>` once on `applied` and nothing else | test | fc.constantFrom: the modes, as today, 3 runs (12 at full depth) | print the line on `refused` too, or print a second line: `logLines` differs | next/apps/fabrika/src/grant-readers.laws.test.ts |
 | A4. p27: a granted, revoked or added grant with a wrong `to` never calls `ClientManager.write` and founds nothing | test | Effect Arbitrary: Grant.fields.to | in `next/packages/libfabrika/src/gateway/Gateway.ts`, write the client before the ledger check (the plant is made on a scratch copy; that file is in PR 1366 and is not changed) | next/apps/fabrika/src/door.integration.test.ts |
 | A5. p33 loader: the loader records the real config and answers typed `no_program` for an unknown name | test | fc.string: the source, with fc.uuid for the process, as today, 3 runs | answer the bare short name: the `no_program` check is red | next/apps/fabrika/src/instance-one-file.integration.test.ts |
-| A6. The lock refuses `vi.fn` and `vi.spyOn` in the files at zero and nowhere else in the folder; a file at zero for all five is in the five-method block and refuses all five (amendment 2026-11-15, ruling 2) | test | scenario: the real oxlint over a planted `vi.fn()` in a locked file and in an unlocked file of the folder, through `plantIn` | delete the new override: the locked row stops firing | oxlint-plugins/plants.test.ts |
+| A6. The lock refuses `vi.fn` and `vi.spyOn` in the files at zero and nowhere else in the folder; a file at zero for all five is in the five-method block and refuses all five (amendment 2026-11-15, ruling 2). Amendment 2026-11-15 (the laptop lead's ruling): A6 does not land in this sweep; it lands with the folder's whole lock once the folder is at zero | test | scenario: the real oxlint over a planted `vi.fn()` in a locked file and in an unlocked file of the folder, through `plantIn` | delete the new override: the locked row stops firing | oxlint-plugins/plants.test.ts |
 | A7. Node's M1 (amendment 2026-11-15, ruling 2): the `VI_METHODS` lines are refused in every path of every block that sets the rule, `vi.fn()`, `vi.spyOn(console, "log")`, `vi.mock`, `vi.doMock` and `vi.stubEnv` among them, and `v.fn()` after `import { vi as v }` joins the set; a plain list is not refused | test | scenario: node's `VI_METHODS` set | drop `fn` from the rule's options: the `vi.fn()` line passes | oxlint-plugins/builtin-plants.ts |
-| A8. The locked files are at zero: `pnpm lint` passes with the lock an error, and no disable line names it | lint | lint | put back `const touched = vi.fn(() => Effect.never)`: `pnpm lint` exits 1 | next/apps/fabrika/src/file-services.laws.integration.test.ts |
+| A8. The locked files are at zero: `pnpm lint` passes with the lock an error, and no disable line names it. Amendment 2026-11-15 (the laptop lead's ruling): A8 waits with A6 | lint | lint | put back `const touched = vi.fn(() => Effect.never)`: `pnpm lint` exits 1 | next/apps/fabrika/src/file-services.laws.integration.test.ts |
 | B1. Alchemy's lifecycle reports spawn ids, replacement delays and the brake, and a closed scope cancels recovery, with workerd spawned through the law's `ChildProcessSpawner` | test | fc.string: the worker name, as today, 3 runs | in the patch, spawn with `node:child_process` again: the law's spawner sees no child and the start event is missing | next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts |
 | B2. The installed lifecycle patch matches its locked hash | test | format: the one registration line and its sha256 | edit the patch without `pnpm patch-commit`: the hash differs | next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts |
 | B3. A port is reused only after every child spawned on it has closed | test | pinned: the two instances on one held port, as today | resolve the wait before the handles' exits: the second instance's bind fails with address in use | next/apps/fabrika/src/instance-one-file.integration.test.ts |
@@ -442,7 +479,9 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
 2. **Build:** slices 1 and 2 have no product file for the build: slice 1 changes none, and slice
    2's patch and lockfile are exam paths, so the tests step writes them. There the build changes
    nothing, says so, and runs the checks green, or sends back. Slices 3 and 4 write the product
-   change.
+   change, and so does slice 5 (amendment 2026-11-15): the built table handed in by the entry, the
+   services or handed-in values for our own modules and the bundler, the entries' exported
+   programs, and the `FABRIKA_HOME` reads moved to `Config`.
 3. **Review:** the one review of the slice's whole diff against this plan, 0555 and 0579, with the
    loosening check on every rewritten law.
 
@@ -467,7 +506,7 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
 | next/packages/libfabrika/src/gateway/Gateway.ts | build | 24 | slice 3, after PR 1366: `SecureRandom`, the digests through the `WebCrypto` reference, and (amended 2026-11-15) the input's name through `InputNames` |
 | next/packages/libfabrika/src/gateway/InputNames.ts | build | 10 | slice 3, new (amended 2026-11-15): the contract only |
 | next/packages/libfabrika/src/cloudflare/runtime.ts | build | 25 | slice 3, after PR 1366: the digest through the `WebCrypto` reference, the startup span and the `Console` option |
-| next/apps/fabrika/src/runtime.ts | build | 5 | slice 3: provides `Mac.layerWebCrypto`, `SecureRandom.layerWebCrypto` and the program's `InputNames` (amended 2026-11-15; was the three `effect/crypto` layers) |
+| next/apps/fabrika/src/runtime.ts | build | 25 | slice 3: provides `Mac.layerWebCrypto`, `SecureRandom.layerWebCrypto` and the program's `InputNames` (amended 2026-11-15; was the three `effect/crypto` layers); slice 5 (amendment 2026-11-15): the built table handed in by the entry, not imported from `virtual:fabrika-built` |
 | next/packages/libfabrika/src/gateway/GatewayCauseTest.ts | tests | tests | slice 3: its C5 row on the shared WebCrypto callback moves to `Mac`'s error |
 | next/apps/fabrika/src/hands-client.test.ts | tests | tests | slice 3: provides the `Mac` and `SecureRandom` layers and an `InputNames` layer to `Gateway.layer` (amended 2026-11-15) |
 | next/apps/fabrika/src/door-spans.test.ts | tests | tests | slice 3: the same |
@@ -475,6 +514,16 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
 | next/apps/fabrika/src/runtime.laws.integration.test.ts | tests | tests | slice 3: C5, C6 |
 | next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts | tests | tests | slice 3, after PR 1366: C7 |
 | next/apps/fabrika/src/local-instance.integration.test.ts | tests | tests | slice 4, after PR 1366 and the `node/dev` slice: D1 |
+| next/apps/fabrika/src/start-member.laws.integration.test.ts | tests | tests | slice 5 (amendment 2026-11-15): the built table handed in |
+| next/apps/fabrika/src/start-child.laws.integration.test.ts | tests | tests | slice 5: the built table handed in |
+| next/apps/fabrika/src/runtime.decode.test.ts | tests | tests | slice 5: the built table and our own modules handed in |
+| next/apps/fabrika/src/error-cause.test.ts | tests | tests | slice 5: the built table handed in |
+| next/apps/fabrika/src/checklist-instance.laws.integration.test.ts | tests | tests | slice 5: `./table.ts` handed in; its `cloudflare:workers` mock stays (0042) |
+| next/apps/fabrika/src/exam/bytes.integration.test.ts | tests | tests | slice 5: the bundler service in place of `vi.mock("rolldown")` |
+| next/apps/fabrika/dev.ts | build | 12 | slice 5: `FABRIKA_HOME` read through `Config`; the program exported as an Effect for its law |
+| next/apps/fabrika/grant.ts | build | 6 | slice 5: the program exported as an Effect for its law |
+| next/apps/fabrika/hands.ts | build | 4 | slice 5: `FABRIKA_HOME` read through `Config` |
+| next/packages/libfabrika/src/node/build/Bundler.ts | build | 25 | slice 5, new: the bundler service 0555 names, the contract and its live layer |
 
 - Every test layer named stays beside its service (0538). The app's other test files that build
   `Gateway.layer` gain the `Mac` and `SecureRandom` layers and an `InputNames` layer in slice 3
@@ -489,7 +538,8 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
 
 ## Calls taken
 
-- **Four slices, ordered by what can land now,** 85%: slice 1 (no product change), slice 2
+- **Five slices, ordered by what can land now** (amended 2026-11-15: slice 5 added by the laptop
+  lead's ruling), 85%: slice 1 (no product change), slice 2
   (the patch), slice 3 (after PR 1366), slice 4 (after PR 1366 and the `node/dev` slice). Each
   lands whole on the sweep's one fold branch and locks the files it took to zero (amended
   2026-11-15, ruling 1: first written as four pull requests).
@@ -527,7 +577,7 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
 Confidence in the line counts: 70%. The doubts are the Alchemy patch and slice 3's span and
 `Console` options.
 
-All four slices land on `fabrikalfa/mock-fold`, the sweep's one fold branch, in its one pull
+All five slices land on `fabrikalfa/mock-fold`, the sweep's one fold branch, in its one pull
 request (amendment 2026-11-15, ruling 1).
 
 1. Slice 1, the four sites with no product change, the lock for two files, its plants and the
@@ -538,15 +588,21 @@ request (amendment 2026-11-15, ruling 1).
 3. Slice 3, after PR 1366: the gateway's and the runtime's crypto, `InputNames` (amended
    2026-11-15), the startup span and the `Console` option, with their laws: about 94 product
    lines, about 160 test lines. 94 lines.
-4. Slice 4, after PR 1366 and the `node/dev` slice: `local-instance`'s two spies, and the lock
-   becomes the folder's glob: about 0 product lines, about 30 test lines, 5 config lines. 0 lines.
+4. Slice 4, after PR 1366 and the `node/dev` slice: `local-instance`'s two spies: about 0 product
+   lines, about 30 test lines (amended 2026-11-15: the lock no longer lands here, nor in slices 1
+   and 2). 0 lines.
+5. Slice 5 (amendment 2026-11-15, the laptop lead's ruling), after PR 1366: 33 of the folder's 40
+   `vi.mock`, `vi.doMock` and `vi.stubEnv` hits, by the ways in "The other `vi` hits 0555 bans";
+   the seven that wait on 0042's Alchemy work stay. About 70 product lines, about 250 test lines.
+   Confidence 55%: no hit was read call by call. 70 lines.
 
 Priced from the rows in `field/runs/` for 2026-11-10 to 2026-11-15 at list price, as the recorder
 plan priced them: slice 1, tests $6, a build that only runs checks $3, review $3; slice 2, tests $5,
 build $6, review $3, one likely send-back $5; slice 3, tests $7, build $7, review $4, one likely
-send-back $5; slice 4, tests $4, build $2, review $2.
+send-back $5; slice 4, tests $4, build $2, review $2. Amendment 2026-11-15: slice 5, tests $9 (eleven
+law files), build $8, review $4, two likely send-backs $10, for the 55% shape.
 
-Estimate: 14 steps, $62
+Estimate: 19 steps, $93
 
 ## Records
 
@@ -576,7 +632,13 @@ Estimate: 14 steps, $62
 
 ## Open questions
 
-3. **For the merge session (amendment 2026-11-15): where do this folder's files keep their lock
+None.
+
+## Answered questions
+
+3. **(Answered 2026-11-15 by the laptop lead: no interim lock, 0524; slice 5 fixes the hits it
+   can, and the folder's lock stays out of this sweep, since seven hits wait on 0042's Alchemy
+   work. The lean was wrong.) For the merge session (amendment 2026-11-15): where do this folder's files keep their lock
    while they still hold `vi.mock`, `vi.doMock` or `vi.stubEnv`?** Ruling 2 gives every block all
    five methods. Read as written, a file with another sweep's call is in no block, so the `fn` and
    `spyOn` hold this plan had on the files it lists shrinks to `exam/alchemy-lifecycle.test.ts`. That
@@ -585,8 +647,6 @@ Estimate: 14 steps, $62
    moves to the five-method block the day the other sweeps take it to zero. The same question
    stands in the cloudflare and node-dev plans. The other way: no lock in this folder until 0555's
    other sweeps finish, and new `vi.fn` or `vi.spyOn` lines can land until then.
-
-## Answered questions
 
 **Amendment (2026-11-15, merge session rulings):** questions 1 and 2 were answered. Both leans
 were wrong. They are kept as they were asked.

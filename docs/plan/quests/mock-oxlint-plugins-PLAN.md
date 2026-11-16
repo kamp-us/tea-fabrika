@@ -39,11 +39,18 @@ expect(reports).toEqual(keys.map((key) => ({ node: key, message })));
 ```
 
 All of this is our tooling, the `oxlint-plugins/` folder. Today's app is not touched, and `next/`
-is not touched.
+is not touched. It builds [0555](../../../.decisions/0555-no-vi-mock-or-domock.md) (no `vi` mock,
+spy or env stub in a test), [0579](../../../.decisions/0579-property-laws-use-it-prop.md) (the
+Recorder replaces `vi.fn`) and [0557](../../../.decisions/0557-kalfa-vitest-is-the-test-toolbox.md)
+(a test gets its tools from our test package), on
+[0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) (no list lets broken code pass)
+and [0589](../../../.decisions/0589-agents-edit-files-with-any-tool.md) (one pull request per
+sweep). (Amendment 2026-11-15: the decisions named here.)
 
 ## The answer first
 
-- **One pull request, about 45 lines, no product code.** It rewrites the folder's one `vi.fn`, adds
+- **One slice on the sweep's one fold branch, `fabrikalfa/mock-fold`, about 45 lines, no product
+  code** (amended 2026-11-15; first "one pull request"). It rewrites the folder's one `vi.fn`, adds
   the lock rule for the folder, plants it, and notes it in the folder's README.
 - **The count, again on main at `f7169af`** with `nice -n 19 rg --hidden -g '!node_modules' -o`
   for `\bvi\.(fn|spyOn|mock|doMock|stubEnv)\(` and `toHaveBeenCalled\w*`: 1 `vi.fn(` call

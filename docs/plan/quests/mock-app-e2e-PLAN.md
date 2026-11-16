@@ -9,7 +9,10 @@ This is `next/` only. Today's app is not touched. It is one folder's slice of th
 [0555](../../../.decisions/0555-no-vi-mock-or-domock.md) (no `vi.mock`, `vi.doMock`, `vi.spyOn` or
 `vi.stubEnv`; a call the law watches goes through a service) and
 [0579](../../../.decisions/0579-property-laws-use-it-prop.md) (the Recorder is the one way to watch a
-service's calls; `console` needs a product change to a service first).
+service's calls; `console` needs a product change to a service first). Amendment 2026-11-15: its
+Effect patch follows [0054](../../../.decisions/0054-read-upstream-before-patching-it.md) (read the
+package's own answer before patching it; Effect's `TestConsole` was read, and it has no `warn`
+reader in 4.1.3).
 
 ```ts
 // The whole idea. A sketch, not compiled.

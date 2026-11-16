@@ -10,7 +10,12 @@ stand-in comes from the code's own design), [0579](../../../.decisions/0579-prop
 [0554](../../../.decisions/0554-no-reflect-get-set-has.md) and
 [0557](../../../.decisions/0557-kalfa-vitest-is-the-test-toolbox.md) (a fake of a Cloudflare
 object comes from the test package, never by hand), and the recorder plan's row for this folder
-([`recorder-PLAN.md`](./recorder-PLAN.md), "Size").
+([`recorder-PLAN.md`](./recorder-PLAN.md), "Size"). Amendment 2026-11-15: it also builds
+[0592](../../../.decisions/0592-libfabrika-writes-output-only-through-effects-console.md)
+(libfabrika writes output only through Effect's `Console`, law M13) and follows
+[0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) (no list lets broken code pass)
+and [0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md) (platform pieces go
+through Alchemy).
 
 ```ts
 // The whole idea, on one law of this folder. A sketch, not compiled.
@@ -47,14 +52,10 @@ expect(sent.map((text) => JSON.parse(text))).toContainEqual(/* ... */);
   disable line with a plain written reason. Slice 1 turns the ban on at zero (law M13), in the same
   fold pull request as the rest, never with a gap, and the two entry-flows spies go in slice 1.
   Open question 1 is closed (see "Answered questions").
-- **The lock's reach while the folder still holds `vi.mock` (open question 2, waiting on the merge
-  session).** The merge session's ruling 2 of 2026-11-15 gives every block all five methods, `mock`
-  included. On main at `0683861`, `rg -c 'vi\.mock\('` finds `vi.mock` lines in 11 of the folder's
-  files; slice 2 removes only `vi.mock("effect")`, and the rest wait on Alchemy and on the object
-  exports. A block that refuses `mock` can list only the files at zero for all five, so the
-  folder-wide hold of `fn`, `spyOn`, `doMock` and `stubEnv` that this plan had would shrink to the
-  few files with no `vi.mock` (`fetch.test.ts` and those with no `vi` call). That reads as a loosening of M11, so it is not
-  applied: see open question 2.
+- **The lock stays out of this sweep (amendment 2026-11-15, the laptop lead's ruling; this closes
+  open question 2).** The folder keeps 7 `cloudflare:workers` mocks that wait on 0042's Alchemy
+  work, so it cannot reach zero in this sweep, and no narrower interim lock is allowed (0524). See
+  "The other `vi` hits 0555 bans".
 - **The t863 span law reads its spans from the span sink's records (70%).** Today it wraps
   `ProjectClient.make` to catch the current span at each `route`. The lean reads the ended
   `runtime.rpc` spans that the connection's own recording writes, as `t864Delivered` in the same
@@ -82,8 +83,9 @@ lines Effect's `Console` gets. Slice 2 waits for pull request 1366 and reflect s
 three small product changes. The spied inner Effects become exported functions a law runs on their
 own. A Process object reads its span sink and its runner through two References. `checkedPut` hashes
 through Effect's `WebCrypto` reference. With those, the last 10 spies go, along with the
-`vi.mock("effect")` that existed only so `Effect.result` could be spied on. Slice 2 then turns on
-`vitest/no-restricted-vi-methods` and `vitest/no-restricted-matchers` for the folder.
+`vi.mock("effect")` that existed only so `Effect.result` could be spied on. Slice 2 first planned to turn on
+`vitest/no-restricted-vi-methods` and `vitest/no-restricted-matchers` for the folder; amended
+2026-11-15, that lock waits until the folder's `cloudflare:workers` mocks go, after this sweep.
 
 **Amendment (2026-11-15, merge session rulings):** the three `Effect.result` spies go a different
 way than first planned. They watched an inner call through the `effect` barrel, and they go blind
@@ -150,6 +152,27 @@ Counted on `origin/main` at `f7169af` with
   `./objects.ts` mocks wait on the object implementations being exported (0555, "Consequences").
   `WebSocketPair` is a platform global that `connection.ts` makes, so it goes with the Alchemy
   slice. None of these is counted by the recorder plan's row, and the lock does not name them.
+
+## The other `vi` hits 0555 bans (amendment 2026-11-15, laptop lead's ruling)
+
+The laptop lead ruled that `vi.mock`, `vi.doMock` and `vi.stubEnv` are 0555's own targets, so this
+sweep fixes those hits too, and that a folder's lock lands whole in the one fold pull request only
+once the folder is at zero. No interim narrower lock: that would be a list letting broken code pass,
+which [0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) forbids. Counted on main at
+`0683861` with `rg -o 'vi\.(mock|doMock|stubEnv)\('` over the folder: 12 `vi.mock`, 0 `vi.doMock`,
+0 `vi.stubEnv`.
+
+| What it mocks | Calls | Where | In this sweep? |
+|---|---|---|---|
+| `effect` | 1 | `readers.laws.test.ts` | yes, slice 2: it was there only so `Effect.result` could be spied on, and those spies go |
+| `./objects.ts` | 4 | `readers.laws.test.ts`, `entry-flows.laws.test.ts`, `alarm.laws.test.ts`, `ObjectService.test.ts` | yes, slice 2: the object implementations are exported from `objects.ts`, so each law imports the one it needs (0555, "Consequences"), about 8 product lines |
+| `cloudflare:workers` | 7 | `connection.test.ts`, `error-cause.test.ts`, `leave.laws.test.ts`, `reload.laws.test.ts`, `runner-reply.laws.test.ts`, `supervision.laws.integration.test.ts`, `ProjectAuditTest.ts` | **no**: [0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md) reaches the platform module through Alchemy, and 0555 names that move as its own work. It changes how the Worker's entry and every object reach the platform, which is past a mock sweep's slice and has no plan yet |
+
+**So the folder cannot reach zero in this sweep, and its lock stays out.** The block in "The lock"
+is the shape it lands with on the day the folder's last `cloudflare:workers` mock goes, whole, for
+`cloudflare/**`; it does not land in this sweep. M11 waits with it. M12 and M13 are not `vi` locks
+and land in slice 1 as planned. The seven `cloudflare:workers` mocks get a finding row with this
+plan's step, naming 0042's Alchemy work as their owner.
 
 ## The shape
 
@@ -294,14 +317,14 @@ const error = yield* Effect.flip(checkedPut(bucket, key, body, "00")).pipe(
 - **Is this a setting?** No, for each choice. The References, the exports and the fakes are how
   code and laws are put together. Nothing here is a value a person running fabrika picks (0069).
 
-The lock, in slice 2:
+The lock (amendment 2026-11-15: it does not land in this sweep, see "The other `vi` hits 0555
+bans"; this is the shape it lands with, whole, the day the folder is at zero):
 
 ```jsonc
-// .oxlintrc.json, a new override block, a sketch. Amendment 2026-11-15: with `mock` refused, a
-// file of the folder is listed once it is at zero for all five; the glob replaces the list when
-// the folder's last `vi.mock` goes (open question 2 says where the other files' lock is meanwhile).
+// .oxlintrc.json, a new override block, a sketch. Amendment 2026-11-15: the whole folder, on the
+// day it is at zero for all five; no file list in between (0524).
 {
-  "files": ["next/packages/libfabrika/src/cloudflare/fetch.test.ts" /* , each file at zero */],
+  "files": ["next/packages/libfabrika/src/cloudflare/**"],
   "rules": {
     "vitest/no-restricted-vi-methods": [
       "error",
@@ -332,8 +355,8 @@ The lock, in slice 2:
   the list, so the block refuses all five methods, as every block of the sweep does, and its law is
   node's M1 ([`mock-node-PLAN.md`](./mock-node-PLAN.md), "Laws"). The first sketch left `mock` out
   because 12 calls stay in the folder for the Alchemy and objects slices. With `mock` in, the
-  block's `files` can name only the files at zero for all five; which files the other ten keep
-  their lock under until their `vi.mock` goes is open question 2, waiting on the merge session.
+  block lands only when the whole folder is at zero, which is not in this sweep (the laptop lead's
+  ruling, 2026-11-15; no interim block, 0524).
   `stubGlobal` stays out of the list until its last call goes.
 - If another folder's sweep lands this rule first, slice 2 adds its paths to that block's `files`,
   and that block's messages hold.
@@ -378,7 +401,7 @@ it is, and only how it watches changes. The reviewer runs the loosening check.
 | M8. A1 and A2: supported alarm operations keep the logical wake and set or clear the platform alarm; a failing alarm dies, one that is done ran its saved wake once | test | fc.gen: the alarm moves, and fc.array: Delivery, default runs | make `processLogic` name `ProgramRunner.withLoader` again, past `RunnerLayer`: the law gets no `Alarm`, red at its timeout | next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts |
 | M9. Law 3 on the Process shell and the request slot keep their checks with the two References handed in | test | fc.record: the bad settings and requests, default runs | make `recordingLayer` name `SpanSink.layer` again, past `SinkLayer`: the fake SQL refuses the sink's tables, red | next/packages/libfabrika/src/cloudflare/ObjectService.test.ts |
 | M10. C1: a bucket put whose digest rejects fails `crypto` with the rejected value as its cause | test | fc.record: failure, body and key, default runs | make `checkedPut` call `globalThis.crypto.subtle.digest` again: the real digest answers, C1 red | next/packages/libfabrika/src/cloudflare/error-cause.test.ts |
-| M11. No file in the folder calls `vi.fn`, `vi.spyOn`, `vi.doMock` or `vi.stubEnv`, or uses a `toHaveBeenCalled*` matcher; each file at zero for all five also refuses `vi.mock`; this is node's M1 (amendment 2026-11-15, ruling 2): each `VI_METHODS` line is refused or taken exactly, in each path of every block that sets the rule. Where the files that still hold `vi.mock` keep their lock is open question 2 | lint | lint | delete `fn` from the block in `.oxlintrc.json`: `plants.test.ts`'s `VI_METHODS` scenario red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
+| M11. No file in the folder calls `vi.fn`, `vi.spyOn`, `vi.doMock` or `vi.stubEnv`, or uses a `toHaveBeenCalled*` matcher; each file at zero for all five also refuses `vi.mock`; this is node's M1 (amendment 2026-11-15, ruling 2): each `VI_METHODS` line is refused or taken exactly, in each path of every block that sets the rule. Amendment 2026-11-15 (the laptop lead's ruling): M11 does not land in this sweep; it lands with the lock, whole, once the folder's last `cloudflare:workers` mock goes | lint | lint | delete `fn` from the block in `.oxlintrc.json`: `plants.test.ts`'s `VI_METHODS` scenario red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
 | M12. No product file in `next/packages/libfabrika/src` calls `console`, held by oxlint's built-in `eslint/no-console` at error, not a rule of ours (amendment 2026-11-16, merge session ruling); its plant lines are refused in a libfabrika product path and taken in a test path | lint | lint | drop the libfabrika glob from the `no-console` block: the planted `console.log(secret)` in a product path is taken, the plant scenario red | .oxlintrc.json, oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
 | M13. No file under `next/packages/libfabrika/src` but a `*.test.ts` file reads `process.stdout` or `process.stderr`, held by oxlint's built-in `eslint/no-restricted-properties` at error (amendment 2026-11-15, owner ruling); its plant lines `process.stdout.write(secret)` and `process.stderr.write(secret)` are refused in a libfabrika product path and in a `*.test-support.ts` path, and taken in a `*.test.ts` path; every exception line is listed below with its reason, and no other disable line names the rule's `process` entries | lint | lint | (a) drop the two `process` entries from one of the five blocks that set the rule for a libfabrika path: the planted write in that block's paths is taken, red; (b) add a block for libfabrika after the others that lists only the two `process` entries: the `JSON.parse` plant in its paths is taken, red (an override replaces options); (c) add a `process.stdout.write(cause)` to `SettingsStartsLedger.ts`: `pnpm lint` red | .oxlintrc.json, oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
 
@@ -444,16 +467,17 @@ it is, and only how it watches changes. The reviewer runs the loosening check.
 | next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts | tests | tests | slice 2, after 1366: 4 spies go (M8) |
 | next/packages/libfabrika/src/cloudflare/ObjectService.test.ts | tests | tests | slice 2, after 1366: 2 spies go (M9) |
 | next/packages/libfabrika/src/cloudflare/error-cause.test.ts | tests | tests | slice 2: the `crypto.subtle` spy goes (M10) |
+| next/packages/libfabrika/src/cloudflare/objects.ts | build | 8 | slice 2, after 1366 (amendment 2026-11-15): the object implementations exported, so the four laws that mocked `./objects.ts` import them |
 | next/packages/libfabrika/src/cloudflare/control.ts | build | 4 | slice 2 (amendment 2026-11-15): `dispatch`'s body moves to `Dispatcher.layer`; `parserControl` yields `Dispatcher` |
 | next/packages/libfabrika/src/cloudflare/connection.ts | build | 4 | slice 2, after 1366 (amendment 2026-11-15): the ready decode moves to `Waits.layer`; `wait` yields `Waits` |
-| next/packages/libfabrika/src/cloudflare/fetch.test.ts | tests | tests | read only, not changed: slice 2 names it in the lock block, as the folder's one file at zero for all five (amendment 2026-11-15) |
+| next/packages/libfabrika/src/cloudflare/fetch.test.ts | tests | tests | read only, not changed: the folder's one file with no `vi.mock` today (amendment 2026-11-15; the lock no longer lists single files) |
 | next/packages/libfabrika/src/cloudflare/Dispatcher.ts | build | 18 | slice 2, new (amendment 2026-11-15): the contract and its live layer |
 | next/packages/libfabrika/src/cloudflare/Waits.ts | build | 14 | slice 2, new (amendment 2026-11-15): the contract and its live layer |
 | patches/effect@4.1.3.patch | tests | 12 | slice 1 (amendment 2026-11-15), only if no earlier slice of the sweep added them: `infoLines` and `debugLines` beside app-e2e's `warnLines`, with `pnpm patch` |
 | patches/effect | tests | tests | the patch's name as pnpm writes it; the one file above |
 | scripts/effect-testconsole.test.ts | tests | tests | slice 1, with the readers above: their law, beside app-e2e's L3 |
 | next/packages/libfabrika/src/cloudflare/runtime.ts | build | 26 | slice 2, after 1366: `SinkLayer` and `RunnerLayer` with doc blocks, read where `SpanSink.layer` and `ProgramRunner.withLoader` are named; the two digests read `WebCrypto.WebCrypto`; (amendment 2026-11-15) provides `Dispatcher.layer` and `Waits.layer` |
-| .oxlintrc.json | tests | 62 | slice 2: the lock block above, 30 lines; slice 1 (amendment 2026-11-16): an `eslint/no-console` block at error for `next/packages/libfabrika/src/**`, test files left out (M12), about 8 lines; slice 1 (amendment 2026-11-15): the two `process` entries in the five `no-restricted-properties` blocks that reach libfabrika, and a libfabrika copy of the `next/**/*` block (M13), about 24 lines |
+| .oxlintrc.json | tests | 32 | (amendment 2026-11-15) not the lock block, which waits for the folder to reach zero after this sweep; slice 1 (amendment 2026-11-16): an `eslint/no-console` block at error for `next/packages/libfabrika/src/**`, test files left out (M12), about 8 lines; slice 1 (amendment 2026-11-15): the two `process` entries in the five `no-restricted-properties` blocks that reach libfabrika, and a libfabrika copy of the `next/**/*` block (M13), about 24 lines |
 | oxlint-plugins/builtin-plants.ts | tests | tests | slice 2: M11's lines in node's `VI_METHODS` set (amended 2026-11-15; first `VI_BAN`); slice 1: the `no-console` plant lines (M12, amendment 2026-11-16) and the `process` write plant lines (M13, amendment 2026-11-15) |
 | oxlint-plugins/plants.test.ts | tests | tests | slice 2: node's M1 scenario (M11); slice 1: the `no-console` scenario (M12) and the `process` write scenario over every block that sets the rule (M13, amendment 2026-11-15) |
 | next/packages/libfabrika/src/node/client/JournalSqlite.child.test-support.ts | tests | tests | slice 1 (amendment 2026-11-15): the one exception line, a disable line with its written reason above `process.stdout.write("ready\n")` (M13) |
@@ -534,7 +558,8 @@ runs its own steps, one fresh agent each, in its own box, before it is folded:
 1. **Tests:** the slice's laws and plants, each plant run once and recorded in the run row.
 2. **Build:** slice 1 has no product file, so its build changes nothing, says so, and runs the
    slice's checks green at the tests step's head (or sends back). Slice 2 writes the services, the
-   References and the `WebCrypto` reads.
+   References, the `WebCrypto` reads and (amendment 2026-11-15) the object exports that let the
+   four `./objects.ts` mocks go.
 3. **Review:** the one review of the slice's diff, with the loosening check.
 
 ## Size
@@ -551,16 +576,18 @@ Both slices land on `fabrikalfa/mock-fold`, the sweep's one fold branch, in its 
    (amendment 2026-11-15, owner ruling) about 24 lines of `process` entries and one disable line,
    with their plants. 44 lines.
 2. Slice 2, after 1366 and reflect slice 10: the two services (amendment 2026-11-15), the two
-   References, the `WebCrypto` reads and the lock, about 90 product and config lines, about 160
-   test lines. 90 lines.
+   References, the `WebCrypto` reads, and (amendment 2026-11-15) the object exports for the four
+   `./objects.ts` mocks and the `vi.mock("effect")` removal; no lock, which waits for the
+   `cloudflare:workers` work. About 70 product lines, about 190 test lines. 70 lines.
 
 Priced from the rows in `field/runs/` for 2026-11-10 to 2026-11-15 at list price, as the recorder
 plan priced them. Slice 1 has a tests step (about $6), a build that only runs checks ($2,
 amendment 2026-11-15, ruling 5) and a review ($3). Slice 2 has tests ($7), a build ($6, two
 services more than first sized), a review ($3) and one likely fix round ($4), for the References
-doubt.
+doubt. Amendment 2026-11-15: the four `./objects.ts` mocks add about $2 to slice 2's tests and $1
+to its build, and the lock's 30 config lines leave it.
 
-Estimate: 7 steps, $31
+Estimate: 7 steps, $34
 
 ## Records
 
@@ -572,7 +599,8 @@ Estimate: 7 steps, $31
   names; if the build keeps them, slice 2 adds one row each (amendment 2026-11-15).
 - The merge session's rulings of 2026-11-15 are amendments here: one pull request for the sweep,
   one lock shape, the `Effect.result` spies through services, and coverage never lost (M6's five
-  readers). Its open question 2 is for the merge session.
+  readers). Its open question 2 was answered by the laptop lead the same day: no interim lock, and
+  the folder's lock stays out of this sweep.
 - `field/`: one run row per step, the same day.
 - The tracker ticket is 1067, the Recorder's, whose plan lists this folder as a later slice.
 
@@ -589,7 +617,14 @@ Estimate: 7 steps, $31
 
 ## Open questions
 
-2. **For the merge session (amendment 2026-11-15): where do the files that still hold `vi.mock`
+None.
+
+## Answered questions
+
+2. **(Answered 2026-11-15 by the laptop lead: no interim lock, 0524; the sweep fixes the folder's
+   `vi.mock` hits it can, and the folder's lock stays out of this sweep, since its seven
+   `cloudflare:workers` mocks wait on 0042's Alchemy work. The lean was wrong.) For the merge
+   session (amendment 2026-11-15): where do the files that still hold `vi.mock`
    keep their lock until their last call goes?** Ruling 2 puts all five methods in every block.
    Read as written, a file with a `vi.mock` that waits on Alchemy or the object exports cannot be
    in any block, so `fn`, `spyOn`, `doMock` and `stubEnv` are no longer refused there, which this
@@ -599,8 +634,6 @@ Estimate: 7 steps, $31
    `vi.mock` goes, and the interim block goes with the last one. The same question stands in the
    app-src and node-dev plans. The other way: the folder waits for its `vi.mock` sweep before any
    lock, and new `vi.fn` or `vi.spyOn` lines can land until then.
-
-## Answered questions
 
 **Amendment (2026-11-15, owner ruling, relayed by the merge session):** question 1 is answered
 whole. Its `console` half was ruled on 2026-11-16 (M12). Its `process.stdout` and `process.stderr`
@@ -631,4 +664,5 @@ as it was asked.
 
 ```json
 {"_tag": "finding", "id": "2026-11-15-control-reason-ternary-repeats-its-test", "date": "2026-11-15", "by": "plan", "model": null, "rule": "duplicate", "location": {"path": "next/packages/libfabrika/src/cloudflare/control.ts", "line": 169}, "says": "In next/, control.ts picks the HTTP error's reason with a ternary whose second branch repeats the first branch's test word for word, so the second branch never runs and the chain reads as if it checks two things.", "proof": "At f7169af, control.ts lines 169 and 171 are the same test, `typeof answer.failure === \"object\" && answer.failure !== null && \"reason\" in answer.failure`, in one chain that ends in `unreachable`.", "cost": "A reader looks for a second case that is not there; any later fix to one copy misses the other.", "head": "f7169afeed0c2f56b7ba6a6d0dce8eac669de149", "ticket": null, "pr": null}
+{"_tag": "finding", "id": "2026-11-15-cloudflare-workers-mocks-have-no-slice", "date": "2026-11-15", "by": "lead", "model": null, "rule": "rule_break", "location": {"path": "next/packages/libfabrika/src/cloudflare/connection.test.ts", "line": 1}, "says": "In next/, seven test files of libfabrika's cloudflare folder call vi.mock(\"cloudflare:workers\"), which 0555 bans, and the move 0042 names for them, reaching the platform module through Alchemy, has no plan, so the folder cannot reach zero and its vi lock cannot land.", "proof": "rg -n 'vi\\.mock\\(\"cloudflare:workers\"' next/packages/libfabrika/src/cloudflare on main at 0683861: connection.test.ts, error-cause.test.ts, leave.laws.test.ts, reload.laws.test.ts, runner-reply.laws.test.ts, supervision.laws.integration.test.ts and ProjectAuditTest.ts, one each.", "cost": "The cloudflare folder keeps no vi lock after the mock sweep, so a new vi.fn or vi.spyOn can land there until the Alchemy work is planned and built.", "head": "0683861", "ticket": null, "pr": null}
 ```
