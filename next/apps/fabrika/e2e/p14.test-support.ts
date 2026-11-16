@@ -17,7 +17,14 @@ import { revokeText } from "@kampus/libfabrika/access/Text";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Clock, DateTime, Effect, FileSystem, Schema, Stream, String as Str, pipe } from "effect";
+import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Option from "effect/Option";
+import { String as Str, pipe, Array as Arr } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { type Browser, type BrowserContext, chromium, type Page, type WebSocket as PageSocket } from "playwright";
@@ -65,7 +72,7 @@ const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
 
 /** Fails once this worker is told to stop, so a race against the suite closes its scope first. */
 export const stopped = Effect.callback<never, Stopped>((resume) => {
-  const stops = STOPS.map((reason) => {
+  const stops = Arr.map(STOPS, (reason) => {
     const stop = () => resume(Effect.fail(Stopped.make({ reason })));
     process.once(reason, stop);
 
@@ -207,9 +214,7 @@ export const homeWithCredential = (credential: string) =>
       dir,
       key,
       credential,
-      publicKey: Str.split(Str.trim(yield* fs.readFileString(`${key}.pub`)), /\s+/)
-        .slice(0, 2)
-        .join(" "),
+      publicKey: Arr.join(Str.split(Str.trim(yield* fs.readFileString(`${key}.pub`)), /\s+/).slice(0, 2), " "),
       grants: [] as Array<GrantSeen>,
     };
   }).pipe(Effect.provide(NodeServices.layer));
@@ -278,7 +283,7 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
     yield* Effect.gen(function* () {
       for (;;) {
         if (child.exitCode !== null) {
-          return yield* DevFailed.make({ output: out.join("") });
+          return yield* DevFailed.make({ output: Arr.join(out, "") });
         }
 
         // The readiness probe is one HTTP request. A refused connection is "not yet", never a failure.
@@ -297,7 +302,7 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
     }).pipe(Effect.timeout("180 seconds"));
 
     // A law that reads the whole home stops the instance first, within the 10 s its release gets.
-    return { url, port, output: () => out.join(""), stop: stop(child).pipe(Effect.timeout("10 seconds")) };
+    return { url, port, output: () => Arr.join(out, ""), stop: stop(child).pipe(Effect.timeout("10 seconds")) };
   });
 
 export type Dev = Effect.Success<ReturnType<typeof devServer>>;
@@ -455,13 +460,14 @@ export const grant = (h: Home, w: Waiting, key = h.key) =>
         ],
         { concurrency: 4 },
       );
-      const sent = Str.split(wire, "\n")
-        .filter((line) => line !== "")
-        .map((line) => Schema.decodeSync(Schema.fromJsonString(GrantWire))(line));
+      const sent = Arr.map(
+        Arr.filter(Str.split(wire, "\n"), (line) => line !== ""),
+        (line) => Schema.decodeSync(Schema.fromJsonString(GrantWire))(line),
+      );
 
       const seen: GrantSeen = {
-        urls: sent.map((row) => row.url),
-        signatures: sent.flatMap((row) => (row.signature === undefined ? [] : [row.signature])),
+        urls: Arr.map(sent, (row) => row.url),
+        signatures: Arr.flatMap(sent, (row) => (row.signature === undefined ? [] : [row.signature])),
         output: out + err,
       };
 
@@ -586,7 +592,7 @@ export const tile = (page: Page, name: string) => {
     // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's ariaSnapshot is a Promise
     shown: Effect.promise(() => region.ariaSnapshot()).pipe(
       Effect.map((yaml): ReadonlyArray<Row> =>
-        Str.split(yaml, "\n").flatMap((line) => {
+        Arr.flatMap(Str.split(yaml, "\n"), (line) => {
           const m = BOX.exec(line);
           const [, item = "", state = ""] = m ?? [];
           return m === null
@@ -722,9 +728,10 @@ export const reader = (h: Home, dev: Dev) =>
     const next = (test: (f: Frame) => boolean) =>
       Effect.gen(function* () {
         for (;;) {
-          const at = frames.findIndex(test);
-
-          const [frame] = at >= 0 ? frames.splice(at, 1) : [];
+          const [frame] = Option.match(Arr.findFirstIndex(frames, test), {
+            onNone: () => [],
+            onSome: (at) => frames.splice(at, 1),
+          });
 
           if (frame !== undefined) {
             return frame;

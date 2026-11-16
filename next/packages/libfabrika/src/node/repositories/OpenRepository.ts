@@ -6,6 +6,8 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import * as Id from "../../Id.ts";
 import * as Log from "../../ledger/Log.ts";
@@ -57,24 +59,27 @@ const documentFailed = (cause: Files.SettingsError) => {
     ".fabrika/fabrika.toml",
     "~/.fabrika/fabrika.toml",
     "$FABRIKA_HOME/fabrika.toml",
-    ...Declarations.all.declarations.flatMap((d) => [`--${d.path}`, d.env]),
+    ...Arr.flatMap(Declarations.all.declarations, (d) => [`--${d.path}`, d.env]),
   ];
-
-  const label = labels.find((name) =>
-    [":", ", line ", " could not be read."].some((suffix) => pipe(cause.message, Str.startsWith(`${name}${suffix}`))),
+  const label = Option.getOrUndefined(
+    Arr.findFirst(labels, (name) =>
+      Arr.some([":", ", line ", " could not be read."], (suffix) => pipe(cause.message, Str.startsWith(`${name}${suffix}`))),
+    ),
   );
   const line =
     label === undefined ? undefined : /^, line ([0-9]+):/.exec(pipe(cause.message, Str.slice(label.length)))?.[1];
   const location = label === undefined ? "Settings" : `${label}${line === undefined ? "" : `, line ${line}`}`;
   const detail = label === undefined ? "" : pipe(cause.message, Str.slice(location.length + 2));
-  const keys = Declarations.all.declarations.flatMap((d) =>
-    d.segments.map((_, n) => d.segments.slice(0, n + 1).join(".")),
+  const keys = Arr.flatMap(Declarations.all.declarations, (d) =>
+    Arr.map(d.segments, (_, n) => Arr.join(d.segments.slice(0, n + 1), ".")),
   );
 
   const key =
     cause.reason === "version"
       ? Declarations.version.path
-      : keys.find((name) => pipe(detail, Str.startsWith(`${name} =`)) || pipe(detail, Str.startsWith(`${name} is `)));
+      : Option.getOrUndefined(
+          Arr.findFirst(keys, (name) => pipe(detail, Str.startsWith(`${name} =`)) || pipe(detail, Str.startsWith(`${name} is `))),
+        );
   const explanation = {
     syntax: "Invalid TOML.",
     unknown: "Unknown setting. Run fabrika settings to list the allowed keys.",
@@ -107,19 +112,25 @@ export const prepare = Effect.fn("repositoryOpen.prepare")(function* (
   location: string,
   options: Omit<Parameters<typeof Load.load>[0], "repo">,
 ) {
-  const repository = yield* (yield* Repositories).open(location).pipe(
-    Effect.mapError((cause) =>
-      failed(
-        "read",
-        cause,
-        [
-          "fabrika.toml moved to .fabrika/fabrika.toml: move it there",
-          ".fabrika.jsonc moved to [review] in .fabrika/fabrika.toml: move it there",
-        ].find((message) => message === cause.message),
+  const repository = yield* (yield* Repositories)
+    .open(location)
+    .pipe(
+      Effect.mapError((cause) =>
+        failed(
+          "read",
+          cause,
+          Option.getOrUndefined(
+            Arr.findFirst(
+              [
+                "fabrika.toml moved to .fabrika/fabrika.toml: move it there",
+                ".fabrika.jsonc moved to [review] in .fabrika/fabrika.toml: move it there",
+              ],
+              (message) => message === cause.message,
+            ),
+          ),
+        ),
       ),
-    ),
-  );
-
+    );
   const loaded = yield* Load.load({
     ...options,
     repo: { name: repository.snapshot.file, text: repository.snapshot.text },
@@ -164,9 +175,7 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
   const history = yield* trust
     .history(prepared.snapshot.key, options.actor)
     .pipe(Effect.mapError((cause) => failed("storage", cause)));
-
-  const first = history.find((event) => event._tag === "selected");
-
+  const first = Option.getOrUndefined(Arr.findFirst(history, (event) => event._tag === "selected"));
   const repository =
     first?.repository ??
     (yield* Id.Generator.use((ids) => ids.next(RepositoryId)).pipe(

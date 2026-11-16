@@ -10,6 +10,7 @@ import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 
 type FileNode = { readonly type: "File"; bytes: Uint8Array; mode: number; mtime: Date };
@@ -40,7 +41,7 @@ const fail = (tag: PlatformError.SystemErrorTag, method: string, path: string) =
 
 /** A path as the disk keys it: no doubled or trailing slash, and `.` segments dropped. */
 export const normal = (path: string): string => {
-  const parts = Str.split(path, "/").filter((p) => p !== "" && p !== ".");
+  const parts = Arr.filter(Str.split(path, "/"), (p) => p !== "" && p !== ".");
   const kept: Array<string> = [];
 
   for (const part of parts) {
@@ -51,7 +52,7 @@ export const normal = (path: string): string => {
     }
   }
 
-  return `${pipe(path, Str.startsWith("/")) ? "/" : ""}${kept.join("/")}`;
+  return `${pipe(path, Str.startsWith("/")) ? "/" : ""}${Arr.join(kept, "/")}`;
 };
 
 const parent = (path: string): string => {
@@ -70,7 +71,7 @@ export const disk = (folders: ReadonlyArray<string> = []): Disk => {
   for (const folder of folders) {
     let at = "";
 
-    for (const part of Str.split(normal(folder), "/").filter((p) => p !== "")) {
+    for (const part of Arr.filter(Str.split(normal(folder), "/"), (p) => p !== "")) {
       at = `${at}/${part}`;
 
       if (!entries.has(at)) {
@@ -245,7 +246,7 @@ export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
         return options?.force === true ? Effect.void : fail("NotFound", "remove", path);
       }
 
-      const below = [...d.entries.keys()].filter((k) => pipe(k, Str.startsWith(`${path}/`)));
+      const below = Arr.filter([...d.entries.keys()], (k) => pipe(k, Str.startsWith(`${path}/`)));
 
       if (known.type === "Directory" && below.length > 0 && options?.recursive !== true) {
         return fail("Busy", "remove", path);
@@ -412,12 +413,14 @@ export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
         const prefix = path === "/" ? "/" : `${path}/`;
 
         return Effect.succeed(
-          [...d.entries.keys()]
-            .filter(
+          Arr.map(
+            Arr.filter(
+              [...d.entries.keys()],
               (k) =>
                 pipe(k, Str.startsWith(prefix)) && k !== path && !pipe(k, Str.slice(prefix.length), Str.includes("/")),
-            )
-            .map((k) => pipe(k, Str.slice(prefix.length))),
+            ),
+            (k) => pipe(k, Str.slice(prefix.length)),
+          ),
         );
       }),
     makeTempFile: (options) =>

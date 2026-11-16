@@ -5,7 +5,7 @@ import { Outcome } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Chaos, type Handler, type Incoming, Nemesis, type ProgramRunner, type Update } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Fiber, Schema, type Scope } from "effect";
+import { Arbitrary, Array as Arr, Deferred, Effect, Fiber, Option, Schema, type Scope } from "effect";
 import { chaos } from "./program.ts";
 
 const SEED = 119120;
@@ -182,8 +182,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 yield* runner.due(deadline);
                 const allowed = registered === chaos.name;
                 expect(calls).toHaveLength(allowed ? 1 : 0);
-
-                const answers = (yield* world.letters(NAME)).filter((letter) =>
+                const answers = Arr.filter(yield* world.letters(NAME), (letter) =>
                   Schema.is(Schema.Struct({ type: Schema.Literals(["fire_ok", "fire_err"]) }))(letter.m),
                 );
 
@@ -269,7 +268,9 @@ export const suite = (open: Open, checklist: unknown) =>
               Effect.gen(function* () {
                 const request = Schema.decodeUnknownSync(fireRequest)(raw);
                 const saved = yield* world.snapshot(NAME);
-                const installed = (yield* world.letters(NAME)).find((letter) => letter.rev === saved.after);
+                const installed = Option.getOrUndefined(
+                  Arr.findFirst(yield* world.letters(NAME), (letter) => letter.rev === saved.after),
+                );
                 observations.push({
                   request,
                   model: phase(saved.model),
@@ -368,13 +369,15 @@ export const suite = (open: Open, checklist: unknown) =>
                 expect(phase((yield* world.snapshot(NAME)).model)).toEqual(final);
               }),
             );
-            expect(calls.map((c) => [c.id, c.ordinal])).toEqual(
+            expect(Arr.map(calls, (c) => [c.id, c.ordinal])).toEqual(
               Array.from({ length: input.most }, (_, i) => [experimentId, i + 1]),
             );
             const letters = yield* world.letters(NAME);
-            const answers = letters.filter((l) => Schema.is(Schema.Struct({ type: Schema.Literal("fire_ok") }))(l.m));
+            const answers = Arr.filter(letters, (l) =>
+              Schema.is(Schema.Struct({ type: Schema.Literal("fire_ok") }))(l.m),
+            );
             expect(answers).toHaveLength(input.most);
-            const timers = letters.filter((l) => Schema.is(Schema.Struct({ type: Schema.Literal("timer") }))(l.m));
+            const timers = Arr.filter(letters, (l) => Schema.is(Schema.Struct({ type: Schema.Literal("timer") }))(l.m));
             expect(timers).toHaveLength(input.most);
 
             for (const [index, answer] of answers.entries()) {
@@ -384,7 +387,7 @@ export const suite = (open: Open, checklist: unknown) =>
               expect(answer.parent).toBe(timer?.parent);
             }
 
-            expect(new Set(answers.map((l) => l.id)).size).toBe(input.most);
+            expect(new Set(Arr.map(answers, (l) => l.id)).size).toBe(input.most);
           }),
         ),
       { arbitrary, timeout: 120_000 },
@@ -405,7 +408,7 @@ export const suite = (open: Open, checklist: unknown) =>
               Effect.gen(function* () {
                 const request = Schema.decodeUnknownSync(fireRequest)(raw);
                 calls.push(request.ordinal);
-                expect(calls.filter((ordinal) => ordinal === request.ordinal)).toHaveLength(1);
+                expect(Arr.filter(calls, (ordinal) => ordinal === request.ordinal)).toHaveLength(1);
 
                 if (request.ordinal !== input.ordinal) {
                   return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
@@ -502,17 +505,15 @@ export const suite = (open: Open, checklist: unknown) =>
               return yield* Effect.die(new Error("the experiment lost its history"));
             }
 
-            expect(final.phase.experiment.asked.map((a) => a.ordinal)).toEqual(calls);
-            expect(final.phase.experiment.answers.map((a) => a.ordinal).sort((a, b) => a - b)).toEqual(
-              calls.filter((ordinal) => !uncertain || ordinal !== input.ordinal),
+            expect(Arr.map(final.phase.experiment.asked, (a) => a.ordinal)).toEqual(calls);
+            expect(Arr.map(final.phase.experiment.answers, (a) => a.ordinal).sort((a, b) => a - b)).toEqual(
+              Arr.filter(calls, (ordinal) => !uncertain || ordinal !== input.ordinal),
             );
             const letters = yield* world.letters(NAME);
-
-            const result = letters
-              .map((l) => l.m)
-              .filter((m) =>
-                Schema.is(Schema.Struct({ cmd: Schema.Struct({ ordinal: Schema.Literal(input.ordinal) }) }))(m),
-              );
+            const result = Arr.filter(
+              Arr.map(letters, (l) => l.m),
+              (m) => Schema.is(Schema.Struct({ cmd: Schema.Struct({ ordinal: Schema.Literal(input.ordinal) }) }))(m),
+            );
 
             if (mode === "missing" || mode === "interrupted") {
               expect(result).toHaveLength(0);
@@ -566,7 +567,7 @@ export const suite = (open: Open, checklist: unknown) =>
               Effect.gen(function* () {
                 const request = Schema.decodeUnknownSync(fireRequest)(raw);
                 calls.push(request);
-                expect(calls.filter((c) => c.id === request.id && c.ordinal === request.ordinal)).toHaveLength(1);
+                expect(Arr.filter(calls, (c) => c.id === request.id && c.ordinal === request.ordinal)).toHaveLength(1);
 
                 if (request.id === experimentId && request.ordinal === input.ordinal) {
                   yield* Deferred.succeed(entered, undefined);
@@ -661,7 +662,7 @@ export const suite = (open: Open, checklist: unknown) =>
               }),
             );
             const before = phase((yield* world.snapshot(NAME)).model);
-            expect(calls.map((c) => c.ordinal)).toEqual(Array.from({ length: cut }, (_, n) => n + 1));
+            expect(Arr.map(calls, (c) => c.ordinal)).toEqual(Array.from({ length: cut }, (_, n) => n + 1));
 
             yield* Effect.scoped(
               Effect.gen(function* () {
@@ -712,7 +713,9 @@ export const suite = (open: Open, checklist: unknown) =>
                   expect(after.phase.experiment.asked).toEqual(current.phase.experiment.asked);
                   expect(after.phase.experiment.schedule).toEqual(current.phase.experiment.schedule);
                   expect(after.phase.experiment.answers).toHaveLength(current.phase.experiment.answers.length + 1);
-                  const answer = after.phase.experiment.answers.find((a) => a.ordinal === input.ordinal);
+                  const answer = Option.getOrUndefined(
+                    Arr.findFirst(after.phase.experiment.answers, (a) => a.ordinal === input.ordinal),
+                  );
                   expect(answer?.result._tag).toBe(outcome === "off" || outcome === "failed" ? "failed" : "answered");
                 }
 
@@ -733,14 +736,19 @@ export const suite = (open: Open, checklist: unknown) =>
                 : "incomplete",
             );
             expect(chaos.wake(final)).toBeNull();
-            expect(calls.filter((c) => c.id === experimentId).map((c) => c.ordinal)).toEqual(
-              Array.from({ length: delivery === "replaced" ? cut : input.most }, (_, n) => n + 1),
-            );
-            expect(calls.filter((c) => c.id === nextId).map((c) => c.ordinal)).toEqual(
-              Array.from({ length: delivery === "replaced" ? input.most : 0 }, (_, n) => n + 1),
-            );
-
-            const late = (yield* world.letters(NAME)).filter((letter) =>
+            expect(
+              Arr.map(
+                Arr.filter(calls, (c) => c.id === experimentId),
+                (c) => c.ordinal,
+              ),
+            ).toEqual(Array.from({ length: delivery === "replaced" ? cut : input.most }, (_, n) => n + 1));
+            expect(
+              Arr.map(
+                Arr.filter(calls, (c) => c.id === nextId),
+                (c) => c.ordinal,
+              ),
+            ).toEqual(Array.from({ length: delivery === "replaced" ? input.most : 0 }, (_, n) => n + 1));
+            const late = Arr.filter(yield* world.letters(NAME), (letter) =>
               Schema.is(
                 Schema.Struct({
                   cmd: Schema.Struct({ id: Schema.Literal(experimentId), ordinal: Schema.Literal(input.ordinal) }),
@@ -760,7 +768,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 expect(phase((yield* world.snapshot(NAME)).model)).toEqual(final);
               }),
             );
-            expect(new Set(calls.map((c) => `${c.id}/${c.ordinal}`)).size).toBe(calls.length);
+            expect(new Set(Arr.map(calls, (c) => `${c.id}/${c.ordinal}`)).size).toBe(calls.length);
           }),
         ),
       { arbitrary, timeout: 120_000 },
@@ -834,12 +842,10 @@ export const suite = (open: Open, checklist: unknown) =>
         ([input, text, mode]) =>
           Effect.scoped(
             Effect.gen(function* () {
-              const marker = `private-${Array.from(new TextEncoder().encode(text), (b) =>
-                b.toString(16).padStart(2, "0"),
-              )
-                .join("")
-                .slice(0, 80)}-end ?/+=%`;
-
+              const marker = `private-${Arr.join(
+                Array.from(new TextEncoder().encode(text), (b) => b.toString(16).padStart(2, "0")),
+                "",
+              ).slice(0, 80)}-end ?/+=%`;
               const world = yield* open;
               const binding = yield* startTarget(world, checklist);
               const body = yield* world.session(TARGET, "fabrika/checklist", checklist, {});
@@ -887,8 +893,8 @@ export const suite = (open: Open, checklist: unknown) =>
 
               yield* runner.due(deadline);
               const letters = yield* world.letters(NAME);
-
-              const answers = letters.filter(
+              const answers = Arr.filter(
+                letters,
                 (l) =>
                   Schema.is(Schema.Struct({ type: Schema.String }))(l.m) &&
                   /_(ok|err)$/.test(Schema.decodeSync(Schema.Struct({ type: Schema.String }))(l.m).type),
@@ -898,8 +904,8 @@ export const suite = (open: Open, checklist: unknown) =>
 
               const view = (yield* runner.open("shown")).view;
               const report = yield* world.check(binding);
-
-              const reasons = answers.map(
+              const reasons = Arr.map(
+                answers,
                 (a) =>
                   Schema.decodeUnknownSync(Schema.Struct({ reason: Schema.optional(Schema.String) }))(a.m).reason ??
                   "ok",
@@ -907,25 +913,25 @@ export const suite = (open: Open, checklist: unknown) =>
 
               expect(reasons).toHaveLength(answers.length);
               const { rows, health } = yield* recorded;
-              const commands = rows.filter((row) => row.name === "runner.cmd");
+              const commands = Arr.filter(rows, (row) => row.name === "runner.cmd");
               expect(commands.length, "real Cmd spans reached the stored job record").toBeGreaterThanOrEqual(3);
               expect(health.length, "ended spans reached stored health").toBeGreaterThan(0);
 
               const outputs = {
-                answers: answers.map((answer) => answer.m),
+                answers: Arr.map(answers, (answer) => answer.m),
                 view,
                 report,
                 reasons,
-                attributes: commands.map((row) => row.attributes),
-                events: commands.map((row) => row.events),
-                links: commands.map((row) => row.links),
+                attributes: Arr.map(commands, (row) => row.attributes),
+                events: Arr.map(commands, (row) => row.events),
+                links: Arr.map(commands, (row) => row.links),
                 health,
               };
 
               noLeak(outputs[output], marker, output);
 
               if (mode === "failed") {
-                expect(commands.some((row) => row.attributes["error.type"] === "URIError")).toBe(true);
+                expect(Arr.some(commands, (row) => row.attributes["error.type"] === "URIError")).toBe(true);
               }
 
               const saved = JSON.stringify(yield* world.letters(TARGET));

@@ -22,6 +22,8 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
@@ -113,8 +115,7 @@ const reason = (exit: Exit.Exit<unknown, unknown>) => {
     return "none";
   }
 
-  const fail = exit.cause.reasons.find((r) => r._tag === "Fail");
-
+  const fail = Option.getOrUndefined(Arr.findFirst(exit.cause.reasons, (r) => r._tag === "Fail"));
   return fail?._tag === "Fail" && Schema.is(SettingsError)(fail.error) ? fail.error.reason : "not a SettingsError";
 };
 
@@ -251,7 +252,7 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
             // A second read changes the value, proving the report uses the first snapshot.
             return Effect.succeed(
               v.personPresent
-                ? `[instance]\nport = ${touched.filter((p) => p === PERSON).length === 1 ? fileValue : (fileValue % 65535) + 1}\n`
+                ? `[instance]\nport = ${Arr.filter(touched, (p) => p === PERSON).length === 1 ? fileValue : (fileValue % 65535) + 1}\n`
                 : "",
             );
           },
@@ -283,7 +284,7 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
             expect(exit.value.values.port).toBe(wanted);
             expect(exit.value.snapshot.values["instance.port"]).toBe(wanted);
             const rows = Reference.rows(Declarations.all, exit.value.snapshot);
-            const row = rows.find((r) => r.path === Declarations.port.path)!;
+            const row = Option.getOrThrow(Arr.findFirst(rows, (r) => r.path === Declarations.port.path));
             expect(row.value).toBe(wanted);
             expect(row.origin._tag).toBe(v.override ? "flag" : v.personPresent ? "file" : "default");
             const report = Print.report(rows, { all: v.all });
@@ -302,8 +303,7 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
 // or an environment value for `fabrika-version` changes the resolved value, never that minimum.
 describe("T730, a load keeps the repo file's own minimum, and invents none without a repo", () => {
   const part = fc.oneof(fc.integer({ min: 0, max: 12 }), fc.integer({ min: 90, max: 110 }));
-  const release = fc.tuple(part, part, part).map((t) => t.join("."));
-
+  const release = fc.tuple(part, part, part).map((t) => Arr.join(Arr.map(t, String), "."));
   const repoFile = fc.oneof(
     fc.constant({ _tag: "none" as const }),
     fc.constant({ _tag: "missing" as const }),

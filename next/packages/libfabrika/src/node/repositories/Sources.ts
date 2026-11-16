@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import type { ObjectId } from "../../repositories/Repositories.ts";
 import {
@@ -78,7 +79,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
   ) {
     let location = path.isAbsolute(name) ? path.parse(name).root : base;
     let directory = true;
-    const pending = Str.split(name, path.sep).filter((part) => part !== "");
+    const pending = Arr.filter(Str.split(name, path.sep), (part) => part !== "");
 
     // A trailing separator requires a directory, just like a following dot segment.
     if (pipe(name, Str.endsWith(path.sep))) {
@@ -128,7 +129,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
 
         link = yield* fs.readLink(next).pipe(Effect.mapError(failed));
       } else {
-        const relative = Str.split(path.relative(options.root, next), path.sep).join("/");
+        const relative = Arr.join(Str.split(path.relative(options.root, next), path.sep), "/");
         const entry = yield* options.entry(relative);
 
         if (entry === null) {
@@ -179,7 +180,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
     }
 
     if (located.committed) {
-      const bytes = yield* options.read(Str.split(path.relative(options.root, located.location), path.sep).join("/"));
+      const bytes = yield* options.read(Arr.join(Str.split(path.relative(options.root, located.location), path.sep), "/"));
       return bytes === null ? null : { ...SourceMetadata.cases.committed.make({ commit: options.commit }), bytes };
     }
 
@@ -202,7 +203,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
     const located = yield* target(base, from, file === "repo");
 
     if (located.committed) {
-      const relative = Str.split(path.relative(options.root, located.location), path.sep).join("/");
+      const relative = Arr.join(Str.split(path.relative(options.root, located.location), path.sep), "/");
       const entry = relative === "" ? null : yield* options.entry(relative);
 
       if (relative !== "" && entry === null) {

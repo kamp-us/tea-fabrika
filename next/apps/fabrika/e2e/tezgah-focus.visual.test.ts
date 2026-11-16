@@ -1,4 +1,6 @@
-import { Effect, String as Str, pipe } from "effect";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { String as Str, pipe, Array as Arr } from "effect";
 // Desk S3, next/ (the desk program fabrika/tezgah, ticket named by its title): laws L28 and L30 of the
 // approved plan, and the slice's shots. Written before a tab moves focus. Starts the real `dev.ts` in
 // its own temp home on its own port and drives headless Chromium; every resource is acquired in one
@@ -88,8 +90,7 @@ const splitBelow = (view: View, above: string, under: string): boolean => {
       node.parts.length === 2 &&
       node.parts[0]!.inner === above &&
       node.parts[1]!.inner === under) ||
-      node.parts.some((p) => holds(p.inner)));
-
+      Arr.some(node.parts, (p) => holds(p.inner)));
   return holds(view.workspaces[0]!.layout);
 };
 
@@ -127,8 +128,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
 
           /** DOM focus is inside the region of tile `id` of `view`. */
           const domIn = (on: Page, view: View, id: string, label: string) => {
-            const t = view.tiles.find((x) => x.id === id)!;
-
+            const t = Option.getOrThrow(Arr.findFirst(view.tiles, (x) => x.id === id));
             return domSettles(on, (f) => f.region === regionName(t), `L30: DOM follows desk focus to ${label}`);
           };
 
@@ -136,9 +136,8 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
           const move = (on: Page, pressed: ReadonlyArray<string>, to: string, label: string) =>
             Effect.gen(function* () {
               yield* keys(on, ...pressed);
-              const view = yield* at(on, to, () => true, `${pressed.join(" ")} ${label}`);
-              yield* domIn(on, view, to, `${pressed.join(" ")} ${label}`);
-
+              const view = yield* at(on, to, () => true, `${Arr.join(pressed, " ")} ${label}`);
+              yield* domIn(on, view, to, `${Arr.join(pressed, " ")} ${label}`);
               return view;
             });
 
@@ -147,7 +146,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
             Effect.gen(function* () {
               const view = yield* tezgahView(r, pid);
               const tiles = shown(view);
-              const start = tiles.findIndex((t) => t.id === focused(view).id);
+              const start = Option.getOrThrow(Arr.findFirstIndex(tiles, (t) => t.id === focused(view).id));
 
               for (let k = 1; k <= tiles.length; k++) {
                 const next = tiles[(start + k) % tiles.length]!;
@@ -217,7 +216,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
           yield* domIn(page, side, t2.id, "the new tile, after the close ask is answered n");
           yield* shoot(page, `focus-t${t2.n}`, "side-by-side");
           expect(
-            side.tiles.find((t) => t.id === t1.id)?.cursor,
+            Option.getOrUndefined(Arr.findFirst(side.tiles, (t) => t.id === t1.id))?.cursor,
             "L28: tezgah keeps the cursor the split left t1 on",
           ).toBe("item:eggs");
           yield* move(page, ["Control+b", "h"], t1.id, "left to t1");
@@ -262,7 +261,10 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
                 n === 4 &&
                 typeof l !== "string" &&
                 l.dir === "column" &&
-                l.parts.every((p) => typeof p.inner !== "string" && p.inner.dir === "row" && p.inner.parts.length === 2)
+                Arr.every(
+                  l.parts,
+                  (p) => typeof p.inner !== "string" && p.inner.dir === "row" && p.inner.parts.length === 2,
+                )
               );
             },
             "a 2x2",
@@ -294,11 +296,15 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
             r,
             pid,
             (view) =>
-              view.tiles.find((t) => t.id === t1.id)?.cursor === "item:milk" ? [] : ["t1 keeps no cursor yet"],
+              Option.getOrUndefined(Arr.findFirst(view.tiles, (t) => t.id === t1.id))?.cursor === "item:milk"
+                ? []
+                : ["t1 keeps no cursor yet"],
             "L28: tezgah keeps the cursor t1 was left on",
           );
-
-          expect(kept.tiles.find((t) => t.id === t1.id)?.cursor, "L28: t1's cursor in tezgah's view").toBe("item:milk");
+          expect(
+            Option.getOrUndefined(Arr.findFirst(kept.tiles, (t) => t.id === t1.id))?.cursor,
+            "L28: t1's cursor in tezgah's view",
+          ).toBe("item:milk");
           yield* keys(page, "Control+b", ";");
           yield* at(page, t1.id, () => true, "C-b ; back to t1");
           yield* domSettles(
@@ -430,8 +436,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
             (f) => f.region !== null && f.region !== regionName(t1),
             "Tab leaves t1 for the next tile",
           );
-
-          const into = grid.tiles.find((t) => regionName(t) === entered.region)!;
+          const into = Option.getOrThrow(Arr.findFirst(grid.tiles, (t) => regionName(t) === entered.region));
           yield* at(page, into.id, () => true, `L30: Tab into ${entered.region} focuses it`);
 
           // A second tab on workspace 1 follows the first, and the first follows the second.
@@ -440,7 +445,8 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
           expect((yield* grant(h, yield* waiting(second))).ok, "the second tab is granted").toBe(true);
           yield* at(second, null, (n) => n === 4, "the second tab draws the 2x2");
           const order = shown(grid);
-          const after = order[(order.findIndex((t) => t.id === into.id) + 1) % order.length]!;
+          const after =
+            order[(Option.getOrThrow(Arr.findFirstIndex(order, (t) => t.id === into.id)) + 1) % order.length]!;
           yield* keys(page, "Control+b", "o");
           yield* at(second, after.id, () => true, "L30: the second tab mirrors a key move in the first");
           yield* at(page, after.id, () => true, "the first tab agrees");
@@ -474,8 +480,10 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
             Effect.gen(function* () {
               const before = yield* tezgahView(r, pid);
               yield* keys(page, ...pressed);
-              const under = (view: View) => shown(view).find((t) => !shown(before).some((b) => b.id === t.id));
-
+              const under = (view: View) =>
+                Option.getOrUndefined(
+                  Arr.findFirst(shown(view), (t) => !Arr.some(shown(before), (b) => b.id === t.id)),
+                );
               const view = yield* at(
                 page,
                 null,
@@ -484,11 +492,13 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
                   under(v) !== undefined &&
                   focused(v).id === under(v)!.id &&
                   splitBelow(v, above, under(v)!.id),
-                `${pressed.join(" ")} with no pause splits the tile the move landed on`,
+                `${Arr.join(pressed, " ")} with no pause splits the tile the move landed on`,
               );
 
               const bar = yield* statusBar(page);
-              expect(bar.text, `1043: the prefix is disarmed after ${pressed.join(" ")}`).not.toContain("Esc cancel");
+              expect(bar.text, `1043: the prefix is disarmed after ${Arr.join(pressed, " ")}`).not.toContain(
+                "Esc cancel",
+              );
               expect((yield* drawn(page)).polite, `1043: the polite region no longer says prefix`).not.toMatch(
                 /\bprefix\b/,
               );
@@ -496,7 +506,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
               for (const t of shown(view)) {
                 expect(
                   yield* promised(() => tile(page, regionName(t)).field.inputValue()),
-                  `1043: ${regionName(t)}'s field takes no key of ${pressed.join(" ")}`,
+                  `1043: ${regionName(t)}'s field takes no key of ${Arr.join(pressed, " ")}`,
                 ).toBe("");
               }
 

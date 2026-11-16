@@ -18,6 +18,7 @@
  * change of its own. The ledger starts empty and only shrinks. There is no setting to loosen it.
  */
 import * as Schema from "effect/Schema";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import { parseSync } from "oxc-parser";
 import { type OxcError, transformSync } from "oxc-transform-react";
@@ -127,7 +128,7 @@ const functions = (file: string, text: string): readonly Fn[] => {
       return;
     }
 
-    if (Array.isArray(node)) {
+    if (Arr.isArray(node)) {
       for (const n of node) {
         walk(n, bound, depth, inJsx);
       }
@@ -195,7 +196,7 @@ const utf16 = (text: string, byte: number) => Buffer.from(text).subarray(0, byte
 
 /** The outermost function holding an offset: the Compiler compiles top-level components and hooks. */
 const outermost = (fns: readonly Fn[], at: number) =>
-  fns.filter((f) => f.start <= at && at < f.end).sort((a, b) => a.start - b.start)[0] ?? null;
+  Arr.filter(fns, (f) => f.start <= at && at < f.end).sort((a, b) => a.start - b.start)[0] ?? null;
 
 /** What the check refuses in one file, given the ledger's rows for it. */
 const checkFile = (file: string, text: string, rows: readonly Row[]): readonly Finding[] => {
@@ -204,12 +205,12 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
   const source = functions(file, text);
 
   const compiled = new Set(
-    functions(pipe(file, Str.replace(/\.tsx$/, ".js")), out.code)
-      .filter((f) => f.cache)
-      .map((f) => f.name),
+    Arr.map(
+      Arr.filter(functions(pipe(file, Str.replace(/\.tsx$/, ".js")), out.code), (f) => f.cache),
+      (f) => f.name,
+    ),
   );
-
-  const named = (fn: string) => rows.some((r) => r.fn === fn);
+  const named = (fn: string) => Arr.some(rows, (r) => r.fn === fn);
   const said = new Set<string>();
 
   const diagnose = (e: OxcError) => {
@@ -254,7 +255,7 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
   }
 
   for (const row of rows) {
-    if (!source.some((fn) => fn.name === row.fn && fn.memoOff)) {
+    if (!Arr.some(source, (fn) => fn.name === row.fn && fn.memoOff)) {
       findings.push({
         file,
         fn: row.fn,
@@ -275,19 +276,20 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
  * @category checking
  */
 export const check = (files: ReadonlyMap<string, string>, ledger: readonly Row[]): readonly Finding[] => [
-  ...[...files].flatMap(([file, text]) =>
+  ...Arr.flatMap([...files], ([file, text]) =>
     checkFile(
       file,
       text,
-      ledger.filter((r) => r.file === file),
+      Arr.filter(ledger, (r) => r.file === file),
     ),
   ),
-  ...ledger
-    .filter((r) => !files.has(r.file))
-    .map((r) => ({
+  ...Arr.map(
+    Arr.filter(ledger, (r) => !files.has(r.file)),
+    (r) => ({
       file: r.file,
       fn: r.fn,
       line: 0,
       reason: "a stale row in compiler-ledger.json: its file is gone. Drop the row.",
-    })),
+    }),
+  ),
 ];

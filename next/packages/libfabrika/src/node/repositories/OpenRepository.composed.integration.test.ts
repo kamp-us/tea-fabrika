@@ -22,6 +22,8 @@ import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -161,7 +163,7 @@ describe("T878 composed repository opening", () => {
 
                 expect(Exit.isSuccess(result)).toBe(reasons[index] === null && !invalidPerson);
                 expect(personReads).toBe(index === 3 || index === 6 || index === 8 ? 0 : 1);
-                expect(parsed.filter((value) => value === body)).toHaveLength(body === null ? 0 : 1);
+                expect(Arr.filter(parsed, (value) => value === body)).toHaveLength(body === null ? 0 : 1);
 
                 if (Exit.isSuccess(result)) {
                   const saved = result.value.settings;
@@ -180,8 +182,8 @@ describe("T878 composed repository opening", () => {
                   expect(saved.hash).toBe(checked.snapshot.hash);
                   expect(result.value.snapshot.commit).toBe(repoSnapshot(body).commit);
                 } else {
-                  expect(result.cause.reasons.some((r) => r._tag === "Fail")).toBe(true);
-                  const failure = result.cause.reasons.find((r) => r._tag === "Fail");
+                  expect(Arr.some(result.cause.reasons, (r) => r._tag === "Fail")).toBe(true);
+                  const failure = Option.getOrUndefined(Arr.findFirst(result.cause.reasons, (r) => r._tag === "Fail"));
 
                   if (failure?._tag === "Fail") {
                     expect(failure.error.reason._tag).toBe("InvalidDocument");
@@ -560,7 +562,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
           ).pipe(Effect.provide([services, logger]), Effect.withTracer(tracer)),
         );
         outputs.spans.push(
-          ...spans.map((span) => ({
+          ...Arr.map(spans, (span) => ({
             name: span.name,
             attributes: [...span.attributes],
             events: span.events,
@@ -576,7 +578,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
               typeof value === "bigint" ? value.toString() : value,
             ) + inspect(values, { depth: null });
 
-          for (const spelling of [secret, folder, url].flatMap(forms)) {
+          for (const spelling of Arr.flatMap([secret, folder, url], forms)) {
             expect(output, name).not.toContain(spelling);
           }
         }

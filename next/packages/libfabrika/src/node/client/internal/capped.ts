@@ -4,6 +4,7 @@ import * as Option from "effect/Option";
 import * as ChildProcess from "effect/process/ChildProcess";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import { Result } from "../../../tasks/Task.ts";
 
@@ -20,13 +21,12 @@ const add = (printed: Printed, chunk: Chunk): Printed =>
     : { ...printed, errBytes: printed.errBytes + chunk.bytes.length };
 
 const joined = (chunks: ReadonlyArray<Uint8Array>): Uint8Array => {
-  const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
-  chunks.reduce((at, c) => {
+  const out = new Uint8Array(Arr.reduce(chunks, 0, (n, c) => n + c.length));
+  Arr.reduce(chunks, 0, (at, c) => {
     out.set(c, at);
 
     return at + c.length;
-  }, 0);
-
+  });
   return out;
 };
 

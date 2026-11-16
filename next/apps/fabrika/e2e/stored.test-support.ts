@@ -1,7 +1,12 @@
 // L17's scan of an instance's home (P14 slice 2, ticket 828), in a file of its own so its law in
 // `stored.test.ts` can run it on a folder that a writer changes under it.
 import { Row as LedgerRow } from "@kampus/libfabrika/ledger/Log";
-import { Effect, FileSystem, Path, type PlatformError, Schema, String as Str, pipe } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import type * as PlatformError from "effect/PlatformError";
+import * as Schema from "effect/Schema";
+import { String as Str, pipe, Array as Arr } from "effect";
 import { instanceDatabase } from "../src/instance-database.test-support.ts";
 
 /** An instance's home, and the stop that ends every process that writes in it. */
@@ -72,8 +77,8 @@ const scan = (
         }
       }
 
-      const raw = read.map(({ label, bytes }): readonly [string, string] => [label, bytes]);
-      const files = read.map(({ file }) => pipe(file, Str.slice(dir.length)));
+      const raw = Arr.map(read, ({ label, bytes }): readonly [string, string] => [label, bytes]);
+      const files = Arr.map(read, ({ file }) => pipe(file, Str.slice(dir.length)));
       const outputs: Array<readonly [string, string]> = [];
       const retained = new Map<string, Map<string, string>>();
 
@@ -93,11 +98,15 @@ const scan = (
 
         for (const { name } of tables) {
           const table = `"${pipe(name, Str.replaceAll('"', '""'))}"`;
-          const keys = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String, pk: Schema.Int })))(
-            db.prepare(`PRAGMA table_info(${table})`).all(),
-          )
-            .filter((column) => column.pk > 0)
-            .map((column) => column.name);
+          const keys = Arr.map(
+            Arr.filter(
+              Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String, pk: Schema.Int })))(
+                db.prepare(`PRAGMA table_info(${table})`).all(),
+              ),
+              (column) => column.pk > 0,
+            ),
+            (column) => column.name,
+          );
 
           const select = db.prepare(`SELECT * FROM ${table}`);
           // The runtime's own tables hold 64-bit integers, such as an alarm's time in nanoseconds.
@@ -106,15 +115,20 @@ const scan = (
           for (const [at, read] of select.all().entries()) {
             // An integer a JavaScript number holds exactly is read as one, as before; a larger one stays whole.
             const row = Object.fromEntries(
-              Object.entries(read).map(([column, value]) => [
+              Arr.map(Object.entries(read), ([column, value]) => [
                 column,
                 typeof value === "bigint" && value >= Number.MIN_SAFE_INTEGER && value <= Number.MAX_SAFE_INTEGER
                   ? Number(value)
                   : value,
               ]),
             );
-
-            const key = keys.length === 0 ? `row ${at}` : `key ${keys.map((column) => String(row[column])).join(" ")}`;
+            const key =
+              keys.length === 0
+                ? `row ${at}`
+                : `key ${Arr.join(
+                    Arr.map(keys, (column) => String(row[column])),
+                    " ",
+                  )}`;
             let cells = row;
 
             if (

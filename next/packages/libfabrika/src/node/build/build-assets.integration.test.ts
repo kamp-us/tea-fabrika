@@ -18,6 +18,7 @@ import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Tracer from "effect/Tracer";
 import * as Option from "effect/Option";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
@@ -109,8 +110,8 @@ const cssImport = (
   continuation: string,
 ) => {
   const quote = pipe(form, Str.startsWith("single")) ? "'" : form === "url" ? "" : '"';
-  const ref = [...path]
-    .map((char) => {
+  const ref = Arr.join(
+    Arr.map([...path], (char) => {
       const required = char === "\\" || (quote === "" ? /[\s'"()]/.test(char) : char === quote);
 
       if (!required && (escape === "literal" || !/[\s'"()]/.test(char))) {
@@ -118,8 +119,9 @@ const cssImport = (
       }
 
       return escape === "hex" ? `\\${pipe(char, Str.codePointAt(0), Option.getOrThrow).toString(16)} ` : `\\${char}`;
-    })
-    .join("");
+    }),
+    "",
+  );
 
   const target = `${quote}${quote && continuation ? `\\${continuation}` : ""}${ref}${quote}`;
   return `@${keyword} ${pipe(form, Str.endsWith("string")) ? target : `${url}(${target})`}${media ? ` ${media}` : ""};`;
@@ -267,9 +269,9 @@ describe("P16 assets and Compiler", () => {
 
           const worker = { serveAsset: await serving() };
           expect(
-            Object.values(built.assets).filter((a) => a.type === "text/javascript; charset=utf-8").length,
+            Arr.filter(Object.values(built.assets), (a) => a.type === "text/javascript; charset=utf-8").length,
           ).toBeGreaterThanOrEqual(2);
-          expect(Object.values(built.assets).some((a) => a.type === "text/css; charset=utf-8")).toBe(true);
+          expect(Arr.some(Object.values(built.assets), (a) => a.type === "text/css; charset=utf-8")).toBe(true);
 
           for (const [route, asset] of Object.entries(built.assets)) {
             expect(pipe(route, Str.startsWith("/"))).toBe(true);
@@ -317,7 +319,7 @@ describe("P16 assets and Compiler", () => {
 
                 return {
                   ...output,
-                  output: output.output.map((item) => {
+                  output: Arr.map(output.output, (item) => {
                     if (item.type !== "asset" || typeof item.source !== "string") {
                       return item;
                     }
@@ -387,7 +389,8 @@ describe("P16 assets and Compiler", () => {
                   continue;
                 }
 
-                const refs = [...pipe(asset.body, Str.matchAll(/(?:from\s*|import\s*\(?\s*)["']([^"']+)["']/g))].map(
+                const refs = Arr.map(
+                  [...pipe(asset.body, Str.matchAll(/(?:from\s*|import\s*\(?\s*)["']([^"']+)["']/g))],
                   (m) => m[1]!,
                 );
 
@@ -404,7 +407,9 @@ describe("P16 assets and Compiler", () => {
             };
 
             // Plant the exact old behavior in real output: retain a CSS import to an absent route.
-            const stylesheet = Object.entries(built.assets).find(([, a]) => pipe(a.type, Str.startsWith("text/css")));
+            const stylesheet = Option.getOrUndefined(
+              Arr.findFirst(Object.entries(built.assets), ([, a]) => pipe(a.type, Str.startsWith("text/css"))),
+            );
             assert(stylesheet, "window stylesheet must be emitted");
             await expect(
               verify({
@@ -414,10 +419,13 @@ describe("P16 assets and Compiler", () => {
             ).rejects.toThrow("local CSS import");
             await verify(built.assets);
 
-            const styles = Object.values(built.assets)
-              .filter((a) => pipe(a.type, Str.startsWith("text/css")))
-              .map((a) => a.body)
-              .join("\n");
+            const styles = Arr.join(
+              Arr.map(
+                Arr.filter(Object.values(built.assets), (a) => pipe(a.type, Str.startsWith("text/css"))),
+                (a) => a.body,
+              ),
+              "\n",
+            );
 
             expect(styles).toContain(`--theme: ${id}`);
             expect(styles).toContain(`--tokens: ${id}`);
@@ -469,7 +477,10 @@ describe("P16 assets and Compiler", () => {
             writeFileSync(join(pkg, "window.css"), `${remote}\n@import "./local${id}.css" ${condition};\n${last}`);
             const built = await run(f.options);
             const local = condition === "" ? body : `@media ${condition} {\n${body}\n}`;
-            const stylesheets = Object.values(built.assets).filter((asset) => asset.type === "text/css; charset=utf-8");
+            const stylesheets = Arr.filter(
+              Object.values(built.assets),
+              (asset) => asset.type === "text/css; charset=utf-8",
+            );
             expect(stylesheets).toHaveLength(1);
             const rules = cssRules(stylesheets[0]!.body);
 
@@ -604,8 +615,12 @@ describe("P16 cleanup and recording", () => {
 
           const { bundle } = await import("./bundle.ts");
           const output = await Effect.runPromise(bundle(entry, []).pipe(Effect.withTracer(tracer)));
-          expect(output.output.filter((item) => item.type === "chunk")).toHaveLength(1);
-          expect(spans.find((span) => span.name === "build.bundle")?.attributes.get("phase")).toBe("bundle");
+          expect(Arr.filter(output.output, (item) => item.type === "chunk")).toHaveLength(1);
+          expect(
+            Option.getOrUndefined(Arr.findFirst(spans, (span) => span.name === "build.bundle"))?.attributes.get(
+              "phase",
+            ),
+          ).toBe("bundle");
           const native = await vi.importActual<Roll>("rolldown");
           vi.doMock("rolldown", () => ({
             ...native,
@@ -946,7 +961,7 @@ describe("P16 cleanup and recording", () => {
 
           expect(fired, "plant must reach selected real build phase").toBe(true);
           expect(closed.length).toBeGreaterThan(0);
-          expect(closed.every(Boolean)).toBe(true);
+          expect(Arr.every(closed, Boolean)).toBe(true);
           expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(value);
           vi.doUnmock("rolldown");
           vi.resetModules();
@@ -977,7 +992,7 @@ describe("P16 cleanup and recording", () => {
                 ...handle,
                 generate: async (o: OutputOptions) => {
                   const out = await handle.generate(o);
-                  const css = out.output.find((f) => pipe(f.fileName, Str.endsWith(".css")));
+                  const css = Option.getOrUndefined(Arr.findFirst(out.output, (f) => pipe(f.fileName, Str.endsWith(".css")));
 
                   if (!css) {
                     return out;
@@ -1044,21 +1059,20 @@ describe("P16 cleanup and recording", () => {
             );
 
             expect(result._tag).toBe(fail ? "Failure" : "Success");
-            const phases = spans.filter((s) => ["build.bundle", "build.emit"].includes(s.name));
-            expect(phases.some((s) => s.name === "build.bundle")).toBe(true);
-
-            const data = phases.map((s) => ({
+            const phases = Arr.filter(spans, (s) => ["build.bundle", "build.emit"].includes(s.name));
+            expect(Arr.some(phases, (s) => s.name === "build.bundle")).toBe(true);
+            const data = Arr.map(phases, (s) => ({
               name: s.name,
               attributes: Object.fromEntries(s.attributes),
               status: s.status,
             }));
 
             const verifyPhases = (rows: typeof data) => {
-              const bundles = rows.filter((r) => r.name === "build.bundle");
+              const bundles = Arr.filter(rows, (r) => r.name === "build.bundle");
               const order = ["program", "window", "brain"];
               const expected = fail ? order.slice(0, order.indexOf(phase) + 1) : order;
               expect(
-                bundles.map((r) => r.attributes.phase),
+                Arr.map(bundles, (r) => r.attributes.phase),
                 "every attempted bundle keeps its phase",
               ).toEqual(expected);
 
@@ -1079,7 +1093,7 @@ describe("P16 cleanup and recording", () => {
             for (const key of ["rolldown.version", "effect.version"]) {
               expect(() =>
                 verifyPhases(
-                  data.map((row) => ({
+                  Arr.map(data, (row) => ({
                     ...row,
                     attributes: { ...row.attributes, [key]: `${String(row.attributes[key])}.0` },
                   })),
@@ -1093,10 +1107,11 @@ describe("P16 cleanup and recording", () => {
                 continue;
               }
 
-              const planted = data.map((row) => ({
+              const planted = Arr.map(data, (row) => ({
                 ...row,
                 attributes: Object.fromEntries(
-                  Object.entries(row.attributes).filter(
+                  Arr.filter(
+                    Object.entries(row.attributes),
                     ([key]) => key !== "phase" || (omit === "failed" && row.attributes.outcome !== "failure"),
                   ),
                 ),
@@ -1106,7 +1121,7 @@ describe("P16 cleanup and recording", () => {
             }
 
             if (fail) {
-              expect(() => verifyPhases(data.filter((row) => row.attributes.outcome !== "failure"))).toThrow(
+              expect(() => verifyPhases(Arr.filter(data, (row) => row.attributes.outcome !== "failure"))).toThrow(
                 "keeps its phase",
               );
             }
@@ -1118,11 +1133,13 @@ describe("P16 cleanup and recording", () => {
                 expect(row.status.endTime >= row.status.startTime).toBe(true);
               }
 
-              expect(Object.values(row.attributes).some((v) => v === "failure" || v === "success")).toBe(true);
+              expect(Arr.some(Object.values(row.attributes), (v) => v === "failure" || v === "success")).toBe(true);
             }
 
-            expect(data.some((row) => Object.values(row.attributes).includes(fail ? "failure" : "success"))).toBe(true);
-            const recorded = JSON.stringify(data.map(({ name, attributes }) => ({ name, attributes })));
+            expect(Arr.some(data, (row) => Object.values(row.attributes).includes(fail ? "failure" : "success"))).toBe(
+              true,
+            );
+            const recorded = JSON.stringify(Arr.map(data, ({ name, attributes }) => ({ name, attributes })));
 
             for (const marker of [ROOT, f.home, readFileSync(f.file, "utf8")]) {
               expect(recorded).not.toContain(marker);
@@ -1135,12 +1152,13 @@ describe("P16 cleanup and recording", () => {
             if (fail) {
               expect(recorded).toContain("error.type");
             } else {
-              expect(data.some((s) => s.name === "build.emit")).toBe(true);
+              expect(Arr.some(data, (s) => s.name === "build.emit")).toBe(true);
               expect(recorded).toMatch(/[a-f0-9]{64}/);
               expect(
-                data
-                  .flatMap((row) => Object.entries(row.attributes))
-                  .some(([key, value]) => /bytes|size/.test(key) && typeof value === "number" && value > 0),
+                Arr.some(
+                  Arr.flatMap(data, (row) => Object.entries(row.attributes)),
+                  ([key, value]) => /bytes|size/.test(key) && typeof value === "number" && value > 0,
+                ),
               ).toBe(true);
             }
           }
@@ -1234,17 +1252,17 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
   const check = Effect.fnUntraced(function* () {
     const built = yield* build({
       ...options,
-      programs: selected.map((p) => ({ name: p.name, package: `@p40/${p.module}`, export: "program" })),
+      programs: Arr.map(selected, (p) => ({ name: p.name, package: `@p40/${p.module}`, export: "program" })),
     });
 
     builds++;
-    const scripts = Object.entries(built.assets).filter(([, a]) => a.type === "text/javascript; charset=utf-8");
+    const scripts = Arr.filter(Object.entries(built.assets), ([, a]) => a.type === "text/javascript; charset=utf-8");
     const entries = new Map<string, string>();
 
     for (const p of selected) {
       const marker = markers.get(p.module)!;
       // A window's entry is the one script that names its view; its chunk names `-chunk` instead.
-      const own = scripts.filter(([, a]) => pipe(a.body, Str.includes(`${JSON.stringify(marker)}`)));
+      const own = Arr.filter(scripts, ([, a]) => pipe(a.body, Str.includes(`${JSON.stringify(marker)}`)));
       expect(own, `${p.name} has one window entry`).toHaveLength(1);
       const [route] = own[0]!;
       // Its route keeps the whole qualified name, so equal short names never meet on one route.
@@ -1285,7 +1303,7 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
   ];
 
   for (const n of tape) {
-    const possible = steps.filter((s) => s.possible());
+    const possible = Arr.filter(steps, (s) => s.possible());
     yield* possible[n % possible.length]!.run(Math.floor(n / possible.length));
   }
 

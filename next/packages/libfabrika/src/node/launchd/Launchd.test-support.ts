@@ -15,6 +15,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import { BrainControl } from "../../desktop/BrainControl.ts";
 import * as BrainFilesTest from "../../desktop/BrainFilesTest.ts";
@@ -97,7 +98,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
           return yield* failure("spawn");
         }
 
-        const args = command.args.map((arg) => String(arg));
+        const args = Arr.map(command.args, (arg) => String(arg));
         seen.push({ executable: command.command, args, options: command.options });
         const supplied = typeof answer === "function" ? yield* answer(args, spec) : answer;
 
@@ -148,7 +149,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
               _tag: "Unknown",
               module: "ChildProcess",
               method: "exitCode",
-              pathOrDescriptor: `${command.command} ${args.join(" ")}`,
+              pathOrDescriptor: `${command.command} ${Arr.join(args, " ")}`,
               // The installed platform-node 4.1.2 exposes termination signals only in this cause.
               cause: new Error(`Process interrupted due to receipt of signal: '${signal}'`),
             }),
@@ -248,7 +249,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
   const links = Effect.gen(function* () {
     const held: Array<ReadonlyArray<number>> = [];
 
-    for (const folder of (yield* fs.readDirectory(home)).filter((name) => pipe(name, Str.startsWith(".brain-")))) {
+    for (const folder of Arr.filter(yield* fs.readDirectory(home), (name) => pipe(name, Str.startsWith(".brain-")))) {
       for (const name of yield* fs.readDirectory(path.join(home, folder))) {
         const file = path.join(home, folder, name);
 
@@ -282,7 +283,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
       yield* Effect.sync(() => symlinkSync(Buffer.from(entry.target), staged));
 
       // A file system that refuses these bytes throws above. One that changes them stops here.
-      if ((yield* linkBytes(staged)).join() !== entry.target.join()) {
+      if (Arr.join(Arr.map(yield* linkBytes(staged), String), ",") !== Arr.join(Arr.map(entry.target, String), ",")) {
         return yield* Effect.die("this file system did not keep the link's target bytes");
       }
     } else if (entry._tag === "file" || entry._tag === "private" || entry._tag === "copy") {

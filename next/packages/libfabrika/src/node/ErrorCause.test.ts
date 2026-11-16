@@ -6,6 +6,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import * as GatewayCauseTest from "../gateway/GatewayCauseTest.ts";
@@ -137,10 +138,12 @@ const forms = (core: string, text: string) => [
 
 /** Every row of every table in `sql`, as JSON text. */
 const dump = (sql: Sql): string =>
-  sql
-    .exec("SELECT name FROM sqlite_master WHERE type='table'")
-    .map((table) => JSON.stringify(sql.exec(`SELECT * FROM "${String(table.name)}"`)))
-    .join("\n");
+  Arr.join(
+    Arr.map(sql.exec("SELECT name FROM sqlite_master WHERE type='table'"), (table) =>
+      JSON.stringify(sql.exec(`SELECT * FROM "${String(table.name)}"`)),
+    ),
+    "\n",
+  );
 
 type Flow = "ledger_rejects" | "ledger_decode" | "archive_rejects" | "store_throws";
 

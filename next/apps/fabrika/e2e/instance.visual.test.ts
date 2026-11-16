@@ -4,7 +4,9 @@ import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { Effect, String as Str } from "effect";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { String as Str, Array as Arr } from "effect";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
 import { heldPort } from "../src/port.test-support.ts";
@@ -336,7 +338,9 @@ describe("P12 real browser protocol", () => {
 
     for (const page of [a, b]) {
       await page.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "reinitialized"));
-      const reinitialized = (await state(page)).find((f: any) => f.method === "reinitialized");
+      const reinitialized = Option.getOrUndefined(
+        Arr.findFirst(await state(page), (f: any) => f.method === "reinitialized"),
+      );
       expect(reinitialized.result.error).toBeUndefined();
       expect(await page.evaluate(() => window.p12.connections())).toBe(1);
     }
@@ -363,7 +367,7 @@ describe("P12 real browser protocol", () => {
     expect((await waiting).result).toMatchObject({ rev: accepted.result.rev });
     // The original connection must receive the patch before a reload or another view.open.
     await a.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "view.patch"));
-    const idlePatch = (await state(a)).find((f: any) => f.method === "view.patch");
+    const idlePatch = Option.getOrUndefined(Arr.findFirst(await state(a), (f: any) => f.method === "view.patch"));
     expect(idlePatch.params).toMatchObject({ base: 0, rev: accepted.result.pos });
     expect(await a.evaluate(() => window.p12.connections())).toBe(1);
     const reloaded = await driver(a, s.url, "tab-a");

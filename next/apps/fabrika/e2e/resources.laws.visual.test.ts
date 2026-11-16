@@ -14,7 +14,9 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { connect } from "node:net";
 import { join, resolve } from "node:path";
-import { Effect, Schema, String as Str } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { String as Str, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, type TestContext } from "vitest";
 import { suite as scopedSuite } from "./p14.test-support.ts";
@@ -42,9 +44,10 @@ type Ended = { readonly code: number | null; readonly signal: NodeJS.Signals | n
 
 const rows = (file: string): ReadonlyArray<Row> =>
   existsSync(file)
-    ? Str.split(readFileSync(file, "utf8"), "\n")
-        .filter((line) => line !== "")
-        .map((line) => Schema.decodeSync(Schema.fromJsonString(Row))(line))
+    ? Arr.map(
+        Arr.filter(Str.split(readFileSync(file, "utf8"), "\n"), (line) => line !== ""),
+        (line) => Schema.decodeSync(Schema.fromJsonString(Row))(line),
+      )
     : [];
 
 /** A folder for one child's trace, given back by the scope. */
@@ -102,7 +105,7 @@ const suite = (trace: string, fault: Fault | undefined, target: Target) =>
     ({ child }) =>
       Effect.sync(() => {
         // Natural exit is checked first. This guard runs only after the observation.
-        for (const pid of [...rows(trace).flatMap((row) => (row.pid === undefined ? [] : [row.pid])), child.pid]) {
+        for (const pid of [...Arr.flatMap(rows(trace), (row) => (row.pid === undefined ? [] : [row.pid])), child.pid]) {
           if (pid !== undefined && alive(pid)) {
             process.kill(pid, "SIGKILL");
           }
@@ -152,10 +155,9 @@ const listening = (port: number) =>
 /** Wait up to 10 s for what the child owned to be gone: its processes, listeners and homes. */
 const leftBehind = (trace: ReadonlyArray<Row>) =>
   Effect.gen(function* () {
-    const pids = trace.flatMap((r) => (r.pid === undefined ? [] : [r.pid]));
-    const ports = trace.flatMap((r) => (r.port === undefined ? [] : [r.port]));
-    const homes = trace.flatMap((r) => (r.home === undefined ? [] : [r.home]));
-
+    const pids = Arr.flatMap(trace, (r) => (r.pid === undefined ? [] : [r.pid]));
+    const ports = Arr.flatMap(trace, (r) => (r.port === undefined ? [] : [r.port]));
+    const homes = Arr.flatMap(trace, (r) => (r.home === undefined ? [] : [r.home]));
     const look = Effect.gen(function* () {
       const open: Array<number> = [];
 
@@ -166,9 +168,9 @@ const leftBehind = (trace: ReadonlyArray<Row>) =>
       }
 
       return {
-        pids: pids.filter(alive),
+        pids: Arr.filter(pids, alive),
         ports: open,
-        homes: homes.filter((home) => existsSync(home)),
+        homes: Arr.filter(homes, (home) => existsSync(home)),
       };
     });
 
@@ -192,7 +194,7 @@ const leftBehind = (trace: ReadonlyArray<Row>) =>
  *  43798557082, a `fw.` home left behind). The fixture undoes what an exit leaves on that exit. */
 const interrupt = (child: ChildProcess, trace: string, signal: NodeJS.Signals) =>
   Effect.gen(function* () {
-    while (!rows(trace).some((r) => r.holding !== undefined)) {
+    while (!Arr.some(rows(trace), (r) => r.holding !== undefined)) {
       yield* Effect.sleep("10 millis");
     }
 
@@ -214,8 +216,8 @@ const run = (fault: Fault | undefined, signal: NodeJS.Signals, target: Target = 
       // The child must end by itself: a forced exit or the runner's own limit does not pass.
       const end = yield* ended.pipe(Effect.timeout("240 seconds"));
       const seen = rows(trace);
-      const acquired = seen.flatMap((r) => (r.acquired === undefined ? [] : [r.acquired]));
-      const released = seen.flatMap((r) => (r.released === undefined ? [] : [r.released]));
+      const acquired = Arr.flatMap(seen, (r) => (r.acquired === undefined ? [] : [r.acquired]));
+      const released = Arr.flatMap(seen, (r) => (r.released === undefined ? [] : [r.released]));
       const label = JSON.stringify(fault ?? "plain");
       expect(acquired.length, `${label}: the child reached its first acquisition`).toBeGreaterThan(0);
 
@@ -224,7 +226,7 @@ const run = (fault: Fault | undefined, signal: NodeJS.Signals, target: Target = 
 
         if (fault.kind === "hold" || fault.kind === "timeout") {
           expect(
-            seen.some((row) => row.holding === fault.at),
+            Arr.some(seen, (row) => row.holding === fault.at),
             `${label}: the fault actually held the scope`,
           ).toBe(true);
         }
@@ -276,7 +278,8 @@ const walk = async (target: Target, context: TestContext) => {
     ]),
   );
   const kinds = new Set<string>();
-  const available = target === FIRST_WINDOW ? KINDS : KINDS.filter((kind) => kind !== "timeout" && kind !== "trace");
+  const available =
+    target === FIRST_WINDOW ? KINDS : Arr.filter(KINDS, (kind) => kind !== "timeout" && kind !== "trace");
   await fc.assert(
     fc.asyncProperty(
       fc.array(
@@ -290,8 +293,7 @@ const walk = async (target: Target, context: TestContext) => {
       async (steps) => {
         for (const { pick, kind: pickKind, signal } of steps) {
           // A kind the walks have not reached yet comes first, so a short walk still meets all three.
-          const pending = available.filter((k) => !kinds.has(k));
-
+          const pending = Arr.filter(available, (k) => !kinds.has(k));
           const kind =
             pending.length > 0 ? pending[pickKind % pending.length]! : available[pickKind % available.length]!;
 

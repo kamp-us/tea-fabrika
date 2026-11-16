@@ -21,6 +21,7 @@ import * as Snapshot from "@kampus/libfabrika/settings/Snapshot";
 import * as Sources from "@kampus/libfabrika/settings/Sources";
 import { Written } from "@kampus/libfabrika/telemetry/Records";
 import {
+  Array as Arr,
   Clock,
   Context,
   Effect,
@@ -93,12 +94,10 @@ const processes = Effect.fn("P19Host.processes")(function* () {
   yield* checked(out.code === 0, "cannot-observe-processes");
 
   return yield* Schema.decodeUnknownEffect(Schema.Array(ProcessGroups.Row))(
-    Str.split(Str.trim(out.stdout), "\n")
-      .filter(Boolean)
-      .map((line) => {
-        const [pid, parent, group] = Str.split(Str.trim(line), /\s+/).map(Number);
-        return { pid, parent, group };
-      }),
+    Arr.map(Arr.filter(Str.split(Str.trim(out.stdout), "\n"), Boolean), (line) => {
+      const [pid, parent, group] = Arr.map(Str.split(Str.trim(line), /\s+/), Number);
+      return { pid, parent, group };
+    }),
   );
 });
 
@@ -569,8 +568,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
         const observed = yield* fs
           .readFileString(`${home}/groups.json`)
           .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(ProcessGroups.Saved))));
-
-        return expected.every((group) => observed.includes(group));
+        return Arr.every(expected, (group) => observed.includes(group));
       }),
       config.stopTimeout,
     );

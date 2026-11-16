@@ -12,6 +12,7 @@ import * as Fiber from "effect/Fiber";
 import * as Schema from "effect/Schema";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as TestClock from "effect/testing/TestClock";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import { vi } from "vitest";
 import { lifeCell, signal, terminate } from "./local-dev.ts";
@@ -107,7 +108,7 @@ describe("the memory restart's bounded stop, next/", () => {
 
         yield* TestClock.adjust(grace * 2 + 1);
         const ended = yield* Fiber.join(fiber);
-        const log = w.log.map(({ step, at, vouched }) => ({ step, at: at - began, vouched }));
+        const log = Arr.map(w.log, ({ step, at, vouched }) => ({ step, at: at - began, vouched }));
         const itself = ends !== null && ends < grace;
         // Each fact is recorded before its signal, so a log reads in the order things happened.
         expect({ ended: ended._tag, log }).toEqual(
@@ -155,7 +156,7 @@ describe("the memory restart's bounded stop, next/", () => {
         if (code === "ESRCH") {
           expect(exit).toEqual(Exit.void);
         } else {
-          expect(Exit.isFailure(exit) && exit.cause.reasons.every((reason) => reason._tag === "Die")).toBe(true);
+          expect(Exit.isFailure(exit) && Arr.every(exit.cause.reasons, (reason) => reason._tag === "Die")).toBe(true);
         }
       }).pipe(Effect.scoped),
     { arbitrary: { seed: SEED, runs: 50 } },
@@ -267,10 +268,9 @@ describe("the memory restart's bounded stop, next/", () => {
           ["replacing", "SIGTERM"],
           ["killed", "SIGKILL"],
         ];
-
-        expect(w.log.map(({ step }) => step)).toEqual(steps.slice(0, sent).flat());
+        expect(Arr.map(w.log, ({ step }) => step)).toEqual(steps.slice(0, sent).flat());
         // No signal went out on a pid the state had stopped vouching for.
-        expect(w.log.filter(({ vouched }) => !vouched)).toEqual([]);
+        expect(Arr.filter(w.log, ({ vouched }) => !vouched)).toEqual([]);
         expect(ended._tag).toBe(["refused", "itself", "killed"][sent]);
         // Whatever landed was folded in the end, so no replace of this pid is left.
         const last = yield* SubscriptionRef.get(w.life.state);

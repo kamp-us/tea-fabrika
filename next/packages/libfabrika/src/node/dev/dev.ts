@@ -22,6 +22,7 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
@@ -101,14 +102,10 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
   }
 
   const { sha256 } = yield* Schema.decodeUnknownEffect(Schema.Struct({ sha256: Schema.String }))(raw);
-
+  const pairs: ReadonlyArray<string> = Option.getOrElse(pipe(sha256, Str.match(/../g)), (): Array<string> => []);
   return {
     checksums: {
-      sha256: Uint8Array.from(
-        Option.getOrElse(pipe(sha256, Str.match(/../g)), (): Array<string> => []).map((byte) =>
-          Number.parseInt(byte, 16),
-        ),
-      ).buffer,
+      sha256: Uint8Array.from(Arr.map(pairs, (byte) => Number.parseInt(byte, 16))).buffer,
     },
   };
 });

@@ -14,6 +14,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import * as Arr from "effect/Array";
 import { String as Str } from "effect";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { devLife, type DevState } from "./DevLife.ts";
@@ -264,7 +265,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
     const text = yield* fs.readFileString(file);
 
     return yield* Effect.forEach(
-      Str.split(text, "\n").filter(Boolean),
+      Arr.filter(Str.split(text, "\n"), Boolean),
       (row) => Schema.decodeEffect(Schema.fromJsonString(PendingEvent))(row),
       { concurrency: 1 },
     );
@@ -294,13 +295,18 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
   );
 
   const write = (rows: ReadonlyArray<typeof BrainEvent.Type>) =>
-    durableWrite(file, rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""));
-
+    durableWrite(
+      file,
+      Arr.join(
+        Arr.map(rows, (row) => JSON.stringify(row)),
+        "\n",
+      ) + (rows.length ? "\n" : ""),
+    );
   const last = Effect.fnUntraced(function* () {
-    const pending = (yield* read).filter((event) => event._tag === "started").at(-1);
+    const pending = Arr.last(Arr.filter(yield* read, (event) => event._tag === "started"));
 
-    if (pending !== undefined) {
-      return pending.start;
+    if (Option.isSome(pending)) {
+      return pending.value.start;
     }
 
     return yield* Effect.gen(function* () {
@@ -334,10 +340,10 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
         );
 
         const rows = yield* read;
-        const old = rows.find((row) => row.id === event.id);
+        const old = Arr.findFirst(rows, (row) => row.id === event.id);
 
-        if (old !== undefined) {
-          if (JSON.stringify(old) !== JSON.stringify(event)) {
+        if (Option.isSome(old)) {
+          if (JSON.stringify(old.value) !== JSON.stringify(event)) {
             return yield* BrainError.make({ reason: "id_reused" });
           }
 

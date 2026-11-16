@@ -20,6 +20,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as TestClock from "effect/testing/TestClock";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
@@ -73,8 +74,11 @@ it("the control plugin returns a typed error for malformed platform port data", 
             Effect.scoped(
               startDev({ name: "port-test", port: 18787, build: "test", home, ...BRAIN }, (local) =>
                 Effect.suspend(() => {
-                  const plugin = [...local.mapUnsafe.values()].find(
-                    (value) => typeof value === "object" && value !== null && "sockets" in value,
+                  const plugin = Option.getOrUndefined(
+                    Arr.findFirst(
+                      [...local.mapUnsafe.values()],
+                      (value) => typeof value === "object" && value !== null && "sockets" in value,
+                    ),
                   ) as { start: (ports: Record<string, unknown>) => Effect.Effect<unknown> };
 
                   return plugin.start({ "fabrika-control": raw });
@@ -183,7 +187,7 @@ it("every observed exit is durable once across restart or brake, with its reason
                   for (;;) {
                     const rows = yield* outbox.pending;
 
-                    if (rows.some(ready)) {
+                    if (Arr.some(rows, ready)) {
                       return rows;
                     }
 
@@ -201,11 +205,11 @@ it("every observed exit is durable once across restart or brake, with its reason
 
               const assertExits = Effect.gen(function* () {
                 const rows = yield* outbox.pending;
-                const exits = rows.filter((event) => event._tag === "exited");
+                const exits = Arr.filter(rows, (event) => event._tag === "exited");
                 expect(exits).toHaveLength(expected.length);
-                expect(new Set(exits.map((event) => event.id)).size).toBe(expected.length);
+                expect(new Set(Arr.map(exits, (event) => event.id)).size).toBe(expected.length);
                 expect(
-                  exits.map(({ start, reason, exitCode, signal, bytes }) => ({
+                  Arr.map(exits, ({ start, reason, exitCode, signal, bytes }) => ({
                     start,
                     reason,
                     exitCode,
@@ -234,14 +238,15 @@ it("every observed exit is durable once across restart or brake, with its reason
                 if (item.rss !== null) {
                   // The replace records its fact before the SIGTERM goes out, so the signal may follow
                   // the sample by a file write. The enclosing test's abort signal bounds this wait.
-                  while (!kill.mock.calls.some(([pid, sent]) => pid === 27001 + index && sent === "SIGTERM")) {
+                  while (!Arr.some(kill.mock.calls, ([pid, sent]) => pid === 27001 + index && sent === "SIGTERM")) {
                     yield* TestClock.withLive(Effect.sleep("10 millis"));
                   }
                 }
 
                 const rows = yield* outbox.pending;
                 // Startup may already be acknowledged; last remains durable in either case.
-                const start = rows.filter((event) => event._tag === "started").at(-1)?.start ?? (yield* outbox.last)!;
+                const start =
+                  Arr.filter(rows, (event) => event._tag === "started").at(-1)?.start ?? (yield* outbox.last)!;
                 const exit = { exitCode: item.exitCode, signal: item.signal, stderr: "" };
                 expected.push({
                   start,
@@ -256,7 +261,12 @@ it("every observed exit is durable once across restart or brake, with its reason
                   observe({ type: "restart", worker: "life-test", exit, delay: item.delay });
                   yield* waitForEvent((event) => event._tag === "restarting" && event.start === start);
                   expect(
-                    (yield* outbox.pending).find((event) => event._tag === "restarting" && event.start === start),
+                    Option.getOrUndefined(
+                      Arr.findFirst(
+                        yield* outbox.pending,
+                        (event) => event._tag === "restarting" && event.start === start,
+                      ),
+                    ),
                   ).toMatchObject({ reason: item.rss === null ? "crash" : "memory" });
                   yield* assertExits;
                   observe({ type: "start", worker: "life-test", pid: 27002 + index });
@@ -264,12 +274,17 @@ it("every observed exit is durable once across restart or brake, with its reason
                   // The replacement listens, so calls that waited for it are answered.
                   yield* listen;
                   expect(
-                    (yield* outbox.pending).find((event) => event._tag === "started" && event.after === start),
+                    Option.getOrUndefined(
+                      Arr.findFirst(
+                        yield* outbox.pending,
+                        (event) => event._tag === "started" && event.after === start,
+                      ),
+                    ),
                   ).toMatchObject({ reason: item.rss === null ? "crash" : "memory" });
                 } else {
                   observe({ type: "stop", worker: "life-test", exit, reason });
                   const pending = yield* waitForEvent((event) => event._tag === "braked" && event.start === start);
-                  expect(pending.filter((event) => event._tag === "braked")).toMatchObject([
+                  expect(Arr.filter(pending, (event) => event._tag === "braked")).toMatchObject([
                     { start, reason, exitCode: exit.exitCode, signal: expected.at(-1)!.signal },
                   ]);
                   // Review 5: HEAD keeps braked but loses the final exited event and its RSS.
@@ -277,8 +292,8 @@ it("every observed exit is durable once across restart or brake, with its reason
                 }
               }
 
-              const memoryPids = [...restarts, final].flatMap((item, i) => (item.rss === null ? [] : [27001 + i]));
-              expect(kill.mock.calls).toEqual(memoryPids.map((pid) => [pid, "SIGTERM"]));
+              const memoryPids = Arr.flatMap([...restarts, final], (item, i) => (item.rss === null ? [] : [27001 + i]));
+              expect(kill.mock.calls).toEqual(Arr.map(memoryPids, (pid) => [pid, "SIGTERM"]));
             }),
           ).pipe(
             Effect.provide(fetchClient),
@@ -306,8 +321,7 @@ it("every observed exit is durable once across restart or brake, with its reason
             Effect.provide(NodeServices.layer),
           ),
         );
-
-        expect(pending.filter((event) => event._tag === "stopped")).toMatchObject([{ reason: "stop" }]);
+        expect(Arr.filter(pending, (event) => event._tag === "stopped")).toMatchObject([{ reason: "stop" }]);
         // A braked brain reaches no runtime, so what it could not send waits in this home for the next
         // start, which delivers it. The next start's own platform answers every call.
         fetch.mockImplementation(async (_url, options) => {
@@ -334,7 +348,7 @@ it("every observed exit is durable once across restart or brake, with its reason
           { signal },
         );
         // The memory sampler asks ps for one runtime's RSS, never another command.
-        const pids = new Set([...restarts, final].map((_, i) => String(27001 + i)));
+        const pids = new Set(Arr.map([...restarts, final], (_, i) => String(27001 + i)));
         expect(spawned.length).toBeGreaterThan(0);
 
         for (const { command, args } of spawned) {
@@ -345,7 +359,7 @@ it("every observed exit is durable once across restart or brake, with its reason
         }
 
         // Lifecycle events go to the project object's own brain method, with no name.
-        const brainCalls = calls.filter((call) => call.method === "brain");
+        const brainCalls = Arr.filter(calls, (call) => call.method === "brain");
         expect(brainCalls.length).toBeGreaterThan(0);
 
         for (const call of brainCalls) {
@@ -357,18 +371,17 @@ it("every observed exit is durable once across restart or brake, with its reason
         }
 
         // A stop while a replacement waits fails that replacement, and the failure is recorded.
-        const failed = calls
-          .filter((call) => call.target === "record" && call.method === "write")
-          .flatMap(
+        const writes = Arr.filter(calls, (call) => call.target === "record" && call.method === "write");
+        const failed = Arr.filter(
+          Arr.flatMap(
+            writes,
             (call) =>
               (call.args[2] as Array<{
                 span: { name: string; ok: boolean; attributes: Record<string, unknown> };
               }>) ?? [],
-          )
-          .filter(
-            ({ span }) => span.name === "brain.restart" && !span.ok && span.attributes["error.type"] === "ControlError",
-          );
-
+          ),
+          ({ span }) => span.name === "brain.restart" && !span.ok && span.attributes["error.type"] === "ControlError",
+        );
         expect(failed.length).toBeGreaterThan(0);
       } finally {
         fetch.mockRestore();
@@ -537,7 +550,7 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
     observe({ type: "restart", worker: REPLACE, exit, delay: 250 });
     observe({ type: "start", worker: REPLACE, pid: NEW.pid });
     yield* until("the replacement's started row", rows, (all) =>
-      all.some((row) => row._tag === "started" && row.after === first),
+      Arr.some(all, (row) => row._tag === "started" && row.after === first),
     );
   });
 
@@ -606,7 +619,7 @@ effectIt.effect.prop(
         }
 
         // Nothing but the first SIGTERM before the grace runs out.
-        expect(w.signals.map(({ signal }) => signal)).toEqual(["SIGTERM"]);
+        expect(Arr.map(w.signals, ({ signal }) => signal)).toEqual(["SIGTERM"]);
         yield* TestClock.setTime(sent.at + grace);
 
         if (!honors) {
@@ -636,14 +649,14 @@ effectIt.effect.prop(
               ],
         );
         const rows = yield* w.rows;
-        expect(rows.map((row) => row._tag)).toEqual(
+        expect(Arr.map(rows, (row) => row._tag)).toEqual(
           honors
             ? ["replacing", "exited", "restarting", "started"]
             : ["replacing", "killed", "exited", "restarting", "started"],
         );
-        expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length);
+        expect(new Set(Arr.map(rows, (row) => row.id)).size).toBe(rows.length);
         const bytes = kib * 1024;
-        expect(rows.find((row) => row._tag === "replacing")).toMatchObject({
+        expect(Option.getOrUndefined(Arr.findFirst(rows, (row) => row._tag === "replacing"))).toMatchObject({
           start: w.first,
           at: sent.at,
           reason: "memory",
@@ -652,16 +665,16 @@ effectIt.effect.prop(
           limit,
           grace,
         });
-        expect(rows.filter((row) => row._tag === "killed")).toEqual(
+        expect(Arr.filter(rows, (row) => row._tag === "killed")).toEqual(
           honors ? [] : [expect.objectContaining({ start: w.first, at: sent.at + grace, pid: OLD.pid })],
         );
-        expect(rows.find((row) => row._tag === "exited")).toMatchObject({
+        expect(Option.getOrUndefined(Arr.findFirst(rows, (row) => row._tag === "exited"))).toMatchObject({
           start: w.first,
           reason: "memory",
           bytes,
           signal: honors ? null : "SIGKILL",
         });
-        expect(rows.find((row) => row._tag === "started")).toMatchObject({
+        expect(Option.getOrUndefined(Arr.findFirst(rows, (row) => row._tag === "started"))).toMatchObject({
           after: w.first,
           pid: NEW.pid,
           reason: "memory",
@@ -702,13 +715,13 @@ effectIt.effect.prop(
         const share = (part: number) => Math.floor((part * heard) / 10_000);
         const ending = stop === null ? null : share(stop);
         // A call after the stop meets a stopped brain, which the stop law already covers.
-        const moments = calls.map(share).filter((at) => ending === null || at < ending);
+        const moments = Arr.filter(Arr.map(calls, share), (at) => ending === null || at < ending);
         const kills = ending === null || grace <= ending;
 
         type Move = { readonly at: number; readonly move: "call" | "kill" | "listen" | "stop" };
 
         const moves: Array<Move> = [
-          ...moments.map((at): Move => ({ at, move: "call" })),
+          ...Arr.map(moments, (at): Move => ({ at, move: "call" })),
           ...(kills ? [{ at: grace, move: "kill" } satisfies Move] : []),
           ...(ending === null
             ? [{ at: heard, move: "listen" } satisfies Move]
@@ -773,7 +786,7 @@ effectIt.effect.prop(
 
         yield* TestClock.withLive(Effect.sleep("10 millis"));
         // No control request reaches the old port once the replace began.
-        expect(w.requests.filter((r) => r.port === OLD.port && r.at >= sent.at)).toEqual([]);
+        expect(Arr.filter(w.requests, (r) => r.port === OLD.port && r.at >= sent.at)).toEqual([]);
 
         // An install that failed names how in its cause: the call's own ControlError.
         const offline = (exit: Exit.Exit<unknown, unknown>) => {
@@ -812,7 +825,7 @@ effectIt.effect.prop(
         }
 
         // A stop before the grace ends the replace without a SIGKILL.
-        expect(w.signals.filter((s) => s.signal === "SIGKILL")).toHaveLength(kills ? 1 : 0);
+        expect(Arr.filter(w.signals, (s) => s.signal === "SIGKILL")).toHaveLength(kills ? 1 : 0);
       }),
     ),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 20 }) } },
@@ -867,8 +880,7 @@ effectIt.effect.prop(
           });
           expect(kill).not.toHaveBeenCalled();
           const rows = yield* (yield* brainOutbox(home)).pending;
-          expect(rows.filter((row) => row._tag === "started")).toEqual([]);
-
+          expect(Arr.filter(rows, (row) => row._tag === "started")).toEqual([]);
           return;
         }
 
@@ -878,7 +890,7 @@ effectIt.effect.prop(
         w.observe({ type: "exit", worker: REPLACE, exit });
         w.observe({ type: "restart", worker: REPLACE, exit, delay: 250 });
         w.observe({ type: "start", worker: REPLACE, pid });
-        yield* until("the crash's exited row", w.rows, (all) => all.some((row) => row._tag === "exited"));
+        yield* until("the crash's exited row", w.rows, (all) => Arr.some(all, (row) => row._tag === "exited"));
 
         for (let n = 0; n < 5; n++) {
           yield* TestClock.adjust("1 second");
@@ -887,7 +899,7 @@ effectIt.effect.prop(
 
         expect(w.world.asked, "no sample of any process").toBe(0);
         expect(w.signals).toEqual([]);
-        expect((yield* w.rows).filter((row) => row._tag === "started" && row.after === w.first)).toEqual([]);
+        expect(Arr.filter(yield* w.rows, (row) => row._tag === "started" && row.after === w.first)).toEqual([]);
       }),
     ),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 40 }) } },

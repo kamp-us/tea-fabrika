@@ -12,6 +12,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { processId } from "../../Id.test-support.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
@@ -258,8 +259,10 @@ describe("P12 durable brain outbox", () => {
             ];
 
             const encoded = (rows: ReadonlyArray<typeof BrainEvent.Type>) =>
-              rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : "");
-
+              Arr.join(
+                Arr.map(rows, (row) => JSON.stringify(row)),
+                "\n",
+              ) + (rows.length ? "\n" : "");
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const outbox = yield* brainOutbox(folder);
@@ -276,7 +279,7 @@ describe("P12 durable brain outbox", () => {
                   expect(calls).toEqual(expected);
                 }
 
-                const latest = rows.filter((row) => row._tag === "started").at(-1);
+                const latest = Arr.filter(rows, (row) => row._tag === "started").at(-1);
                 const sent: Array<typeof BrainEvent.Type> = [];
                 yield* outbox.flush((row) =>
                   Effect.sync(() => {

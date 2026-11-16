@@ -20,7 +20,7 @@ import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { ClientKey } from "@kampus/libfabrika/transport/ClientKey";
 import type { Link } from "@kampus/libfabrika/transport/Link";
-import { Config, Effect, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
+import { Array as Arr, Config, Effect, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { Socket } from "effect/socket";
 
@@ -47,7 +47,7 @@ const OS: Partial<Record<NodeJS.Platform, "macos" | "linux" | "windows">> = {
 
 /** The entries that hold a value, as one record. */
 const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
-  Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => entry[1] !== undefined));
+  Object.fromEntries(Arr.filter(entries, (entry): entry is readonly [string, string] => entry[1] !== undefined));
 
 /** What a parent needs to know of the link: waiting for a grant, online, or neither. */
 const lineFor = (link: Link, fingerprint: string): Line =>
@@ -69,7 +69,7 @@ const hands = Effect.gen(function* () {
       name: `${process.env.FABRIKA_HOME === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
     },
     flags: {},
-    env: present(Declarations.all.declarations.map((d) => [d.env, process.env[d.env]])),
+    env: present(Arr.map(Declarations.all.declarations, (d) => [d.env, process.env[d.env]])),
     version: VERSION,
   }).pipe(Effect.provide([TomlParser.layer, Digest.layerWebCrypto]));
 

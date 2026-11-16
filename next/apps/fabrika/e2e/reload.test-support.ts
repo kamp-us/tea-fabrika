@@ -15,7 +15,7 @@ import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { String as Str, pipe } from "effect";
+import { String as Str, pipe, Array as Arr } from "effect";
 import { ChildProcess } from "effect/process";
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
@@ -73,7 +73,7 @@ export const fixtureBuild = Effect.fnUntraced(function* (
 ) {
   const counter = { name: PROGRAM, package: copy.file, export: "program" };
   const watch = { root: copy.home, entry: `${APP}/src/brain.ts`, programs: [counter] };
-  const programs = [...selected.filter((p) => p.name !== PROGRAM), counter];
+  const programs = [...Arr.filter(selected, (p) => p.name !== PROGRAM), counter];
   const built = yield* build({ ...watch, programs, out, files: [], ledger: [], chaos: false });
 
   return { ...built, watch };
@@ -256,10 +256,7 @@ export const spanOutputs = Effect.fnUntraced(function* (home: string) {
           // The real instance's persisted span output, which it owns: opened read-only, with nothing set.
           const db = yield* TestDatabase.open(`${home}/${file}`, { readOnly: true }).pipe(Effect.orDie);
           const tables = new Set(
-            db
-              .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-              .all()
-              .map((row) => row.name),
+            Arr.map(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all(), (row) => row.name),
           );
 
           for (const table of wanted) {

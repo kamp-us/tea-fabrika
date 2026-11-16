@@ -35,6 +35,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import * as References from "effect/References";
@@ -97,17 +98,20 @@ const text = (value: unknown): string =>
 const exitText = (exit: Exit.Exit<unknown, unknown>): string =>
   Exit.isSuccess(exit)
     ? text(exit.value)
-    : [text(exit), Cause.pretty(exit.cause), ...Cause.prettyErrors(exit.cause).map(text)].join("\n");
+    : Arr.join([text(exit), Cause.pretty(exit.cause), ...Arr.map(Cause.prettyErrors(exit.cause), text)], "\n");
 
 /** A span as every text a tracer exports of it: name, attributes, events, links and its exit. */
 const spanText = (span: Tracer.NativeSpan): string =>
-  [
-    span.name,
-    text([...span.attributes]),
-    text(span.events),
-    text(span.links.map((l) => l.attributes)),
-    span.status._tag === "Ended" ? exitText(span.status.exit) : "",
-  ].join("\n");
+  Arr.join(
+    [
+      span.name,
+      text([...span.attributes]),
+      text(span.events),
+      text(Arr.map(span.links, (l) => l.attributes)),
+      span.status._tag === "Ended" ? exitText(span.status.exit) : "",
+    ],
+    "\n",
+  );
 
 const bytes = (s: string) => new TextEncoder().encode(s);
 
@@ -286,7 +290,7 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
           // Ask again after a removal: the stored key's own fingerprint is replaced by a new key.
           const known = yield* current(null);
           const made = Exit.isSuccess(known) ? yield* current(known.value.fingerprint) : known;
-          out.errors.push(...[known, made].filter(Exit.isFailure).map(exitText));
+          out.errors.push(...Arr.map(Arr.filter([known, made], Exit.isFailure), exitText));
           done.add(`key:${Exit.isSuccess(made) ? made.value.found : "failed"}`);
           remember();
         } else if (c === "damage" && entry?.type === "File") {
@@ -311,9 +315,8 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
       yield* pass(0);
       const link = live === null ? null : live.run.getState().link._tag;
       done.add(`link:${link ?? "stopped"}`);
-      const open = b.all().filter((t) => t.phase !== "finished");
-      const free = f.processes.filter((p) => !open.some((t) => t.request.process === p));
-
+      const open = Arr.filter(b.all(), (t) => t.phase !== "finished");
+      const free = Arr.filter(f.processes, (p) => !Arr.some(open, (t) => t.request.process === p));
       const options: ReadonlyArray<string> =
         live === null
           ? ["restart"]
@@ -359,13 +362,13 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
     }
 
     // Quiet now: a live client works through what it was asked, then every span ends with its exit.
-    for (let i = 0; i < 200 && live !== null && b.all().some((t) => t.phase !== "finished"); i++) {
+    for (let i = 0; i < 200 && live !== null && Arr.some(b.all(), (t) => t.phase !== "finished"); i++) {
       yield* pass(i % 10 === 0 ? 30_000 : 1_000);
     }
 
     yield* pass(60_000);
     yield* stop;
-    out.frames.push(...d.state.sockets.flatMap((s) => [s.url, ...s.sent]));
+    out.frames.push(...Arr.flatMap(d.state.sockets, (s) => [s.url, ...s.sent]));
     const kv = Context.get(journal, KeyValueStore.KeyValueStore);
     const keys = yield* kv.keys.pipe(Effect.orDie);
     out.rows.push(
@@ -417,7 +420,7 @@ describe("P39 slice 4b: the hands key's private half stays in its file", () => {
               // own error sink included, is a log line too.
               yield* Effect.acquireRelease(
                 Effect.sync(() => [
-                  ...(["log", "info", "warn", "error", "debug"] as const).map((method) =>
+                  ...Arr.map(["log", "info", "warn", "error", "debug"] as const, (method) =>
                     vi.spyOn(console, method).mockImplementation((...args) => void out.logs.push(args)),
                   ),
                   vi.spyOn(process.stdout, "write").mockImplementation((chunk) => out.logs.push(String(chunk)) > 0),
@@ -439,11 +442,11 @@ describe("P39 slice 4b: the hands key's private half stays in its file", () => {
 
               const outputs: Record<string, ReadonlyArray<string>> = {
                 frames: out.frames,
-                spans: out.spans.map(spanText),
-                logs: out.logs.map(text),
+                spans: Arr.map(out.spans, spanText),
+                logs: Arr.map(out.logs, text),
                 errors: out.errors,
-                journal: out.rows.map(text),
-                states: out.states.map(text),
+                journal: Arr.map(out.rows, text),
+                states: Arr.map(out.states, text),
               };
 
               expect(secrets.size, "S2: the flow stored at least one key to look for").toBeGreaterThan(0);
@@ -451,17 +454,17 @@ describe("P39 slice 4b: the hands key's private half stays in its file", () => {
               for (const [name, texts] of Object.entries(outputs)) {
                 for (const secret of secrets) {
                   for (const form of forms(secret)) {
-                    const at = texts.findIndex((t) => pipe(t, Str.includes(form)));
+                    const leak = Arr.findFirst(texts, (t) => pipe(t, Str.includes(form)));
                     expect(
-                      at,
-                      `S2: [secrets] the private half is in no ${name}: ${at < 0 ? "" : pipe(texts[at] ?? "", Str.slice(0, 400))}`,
-                    ).toBe(-1);
+                      Option.isNone(leak),
+                      `S2: [secrets] the private half is in no ${name}: ${Option.match(leak, { onNone: () => "", onSome: (t) => pipe(t, Str.slice(0, 400)) })}`,
+                    ).toBe(true);
                   }
                 }
               }
 
-              done.add(out.spans.some((s) => s.name === "Commands.execute") ? "span:execute" : "span:none");
-              done.add(out.spans.some((s) => s.name === "Hands.hello") ? "span:hello" : "span:no-hello");
+              done.add(Arr.some(out.spans, (s) => s.name === "Commands.execute") ? "span:execute" : "span:none");
+              done.add(Arr.some(out.spans, (s) => s.name === "Hands.hello") ? "span:hello" : "span:no-hello");
             }),
           { numRuns: 100 },
         );

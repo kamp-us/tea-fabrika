@@ -8,6 +8,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
+import * as Arr from "effect/Array";
 import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -208,7 +209,7 @@ const recoverySpans = (w: ReturnType<typeof world>, process: string) =>
       const rows = yield* recorded(process);
 
       for (const name of ["runner.recover", "runner.restart"]) {
-        const row = rows.find((r) => r.name === name);
+        const row = Option.getOrUndefined(Arr.findFirst(rows, (r) => r.name === name));
         expect(row, name).toBeDefined();
         expect(row!.attributes).toMatchObject({
           "fab.process": process,
@@ -223,11 +224,14 @@ const recoverySpans = (w: ReturnType<typeof world>, process: string) =>
  *  writes for it, one origin and one nested origin, each naming its caller and a made-up folder. */
 const evaluated = (error: Error, id: string) =>
   Object.assign(error, {
-    stack: [
-      error.stack,
-      `    at eval (eval at caller (file:///made-up-${id}/origin.ts:3:7), <anonymous>:1:5)`,
-      `    at eval (eval at outer (eval at inner (/made-up-${id}/deep.ts:9:2), <anonymous>:2:1), <anonymous>:4:8)`,
-    ].join("\n"),
+    stack: Arr.join(
+      [
+        error.stack ?? "",
+        `    at eval (eval at caller (file:///made-up-${id}/origin.ts:3:7), <anonymous>:1:5)`,
+        `    at eval (eval at outer (eval at inner (/made-up-${id}/deep.ts:9:2), <anonymous>:2:1), <anonymous>:4:8)`,
+      ],
+      "\n",
+    ),
   });
 
 const failure = fc
@@ -283,7 +287,7 @@ const located = (location: string): { file: string; folder: boolean } => {
 };
 
 const frames = (text: string) =>
-  Str.split(text, "\n").flatMap((line) => {
+  Arr.flatMap(Str.split(text, "\n"), (line) => {
     const frame = /^\s*at (?:(.+?) \((.*)\)|(.*?))(?: \{)?$/.exec(line);
 
     if (frame === null) {
@@ -339,27 +343,25 @@ for (const adapter of ["node", "worker"] as const) {
               const contents = yield* Effect.forEach(rows, (row) => r.content(chain, row.spanId), {
                 concurrency: 1,
               });
-
-              const kept = contents.flatMap((c) => (Option.isSome(c) && c.value._tag === "kept" ? [c.value] : []));
+              const kept = Arr.flatMap(contents, (c) => (Option.isSome(c) && c.value._tag === "kept" ? [c.value] : []));
               expect(kept.length).toBeGreaterThan(0);
 
               // A-Sink stores each frame with its folders cut, so the law asks for the frames, not the raw stack.
               const thrown = sample.value instanceof Error ? frames(sample.value.stack ?? "") : [];
-
-              const lost = kept.map((c) => [
+              const lost = Arr.map(kept, (c) => [
                 ...(sample.message === null || pipe(c.message, Str.includes(sample.message)) ? [] : [sample.message]),
                 ...lostFrames(
-                  frames(c.message).map((stored) => stored.frame),
-                  thrown.map((raw) => raw.frame),
+                  Arr.map(frames(c.message), (stored) => stored.frame),
+                  Arr.map(thrown, (raw) => raw.frame),
                 ),
               ]);
 
               expect(
-                lost.some((none) => none.length === 0),
+                Arr.some(lost, (none) => none.length === 0),
                 `original message and every stack frame (name, file, line, column) must reach P37; lost: ${JSON.stringify(lost)}`,
               ).toBe(true);
 
-              for (const stored of kept.flatMap((c) => frames(c.message))) {
+              for (const stored of Arr.flatMap(kept, (c) => frames(c.message))) {
                 expect(stored.folder, `a stored frame names a folder: ${stored.frame}`).toBe(false);
               }
 
@@ -381,9 +383,13 @@ for (const adapter of ["node", "worker"] as const) {
                     : typeof sample.value;
 
               expect(receipt).toMatchObject({ errors: [name], tries: 1 });
-              expect(rows.find((row) => row.name === "runner.throw")?.attributes["error.type"]).toBe(name);
-              expect(measurements.filter((row) => row.piece === "runner.throw")).toMatchObject([{ error: name }]);
-              expect(dead.map((row) => row.body)).toEqual([expect.objectContaining({ errors: [name], tries: 1 })]);
+              expect(
+                Option.getOrUndefined(Arr.findFirst(rows, (row) => row.name === "runner.throw"))?.attributes[
+                  "error.type"
+                ],
+              ).toBe(name);
+              expect(Arr.filter(measurements, (row) => row.piece === "runner.throw")).toMatchObject([{ error: name }]);
+              expect(Arr.map(dead, (row) => row.body)).toEqual([expect.objectContaining({ errors: [name], tries: 1 })]);
 
               for (const text of sample.private) {
                 for (const permanent of [
@@ -452,7 +458,7 @@ describe("P34 supervision recording", () => {
           yield* w.boot;
           yield* Effect.gen(function* () {
             yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input)));
-            const throws = (yield* recorded(A)).filter((row) => row.name === "runner.throw");
+            const throws = Arr.filter(yield* recorded(A), (row) => row.name === "runner.throw");
             expect(throws).toHaveLength(1);
             expect(throws[0]!.attributes).toMatchObject({
               "fab.process": A,
@@ -490,18 +496,15 @@ describe("P34 supervision recording", () => {
                 (row) => r.content({ _tag: "job", process: A }, row.spanId),
                 { concurrency: 1 },
               );
-
-              const at = contents.findIndex((content) =>
+              const at = Arr.findFirstIndex(contents, (content) =>
                 Option.match(content, {
                   onNone: () => false,
                   onSome: (c) => c._tag === "kept" && pipe(c.message, Str.includes(secret)),
                 }),
               );
-
-              expect(
-                at,
-                "the original throw must reach deletable content before guards erase it",
-              ).toBeGreaterThanOrEqual(0);
+              expect(Option.isSome(at), "the original throw must reach deletable content before guards erase it").toBe(
+                true,
+              );
               expect(JSON.stringify(rows)).not.toContain(secret);
               expect(JSON.stringify(w.sink.sql.exec("SELECT * FROM measurements"))).not.toContain(secret);
               expect(JSON.stringify(yield* read(`processes/${NAME}`))).not.toContain(secret);
@@ -516,7 +519,7 @@ describe("P34 supervision recording", () => {
                 expect(JSON.stringify(output)).not.toContain(pipe(JSON.stringify(secret), Str.slice(1, -1)));
               }
 
-              const span = rows[at]!;
+              const span = rows[Option.getOrThrow(at)]!;
               yield* r.deleteContent({ _tag: "job", process: A }, span.spanId, {
                 by: owner.key,
                 reason: "test deletion",
@@ -524,7 +527,9 @@ describe("P34 supervision recording", () => {
               expect(Option.getOrNull(yield* r.content({ _tag: "job", process: A }, span.spanId))).toMatchObject({
                 _tag: "deleted",
               });
-              expect((yield* recorded(A)).find((row) => row.spanId === span.spanId)).toEqual(span);
+              expect(
+                Option.getOrUndefined(Arr.findFirst(yield* recorded(A), (row) => row.spanId === span.spanId)),
+              ).toEqual(span);
             }).pipe(Effect.provide(w.layer()));
           }),
         { discard: true },
@@ -543,10 +548,10 @@ describe("P34 supervision recording", () => {
           yield* Effect.gen(function* () {
             yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input)));
             const rows = yield* recorded(process);
-            expect(rows.filter((row) => row.name === "runner.throw")).toHaveLength(1);
+            expect(Arr.filter(rows, (row) => row.name === "runner.throw")).toHaveLength(1);
 
             if (n === 2) {
-              expect(rows.some((row) => row.name === "runner.dead")).toBe(true);
+              expect(Arr.some(rows, (row) => row.name === "runner.dead")).toBe(true);
             }
           }).pipe(Effect.provide(w.layer()));
 

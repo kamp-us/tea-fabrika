@@ -13,6 +13,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import {
   Branch,
@@ -105,7 +106,7 @@ export const layer = (options: { readonly person: string }) =>
             const bytes = yield* child.stdout.pipe(Stream.runCollect);
             const code = yield* child.exitCode;
             const stderr = yield* Fiber.join(errors);
-            const size = bytes.reduce((n, part) => n + part.length, 0);
+            const size = Arr.reduce(bytes, 0, (n, part) => n + part.length);
             const output = new Uint8Array(size);
             let offset = 0;
 
@@ -223,7 +224,8 @@ export const layer = (options: { readonly person: string }) =>
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
             const lines = Str.split(Str.trim(advertised), "\n");
-            const symbolic = lines.filter(
+            const symbolic = Arr.filter(
+              lines,
               (line) => pipe(line, Str.startsWith("ref: ")) && pipe(line, Str.endsWith("\tHEAD")),
             );
 
@@ -240,7 +242,8 @@ export const layer = (options: { readonly person: string }) =>
             const branch = yield* Schema.decodeEffect(Branch)(pipe(ref, Str.slice(11))).pipe(
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
-            const heads = lines.filter(
+            const heads = Arr.filter(
+              lines,
               (line) => !pipe(line, Str.startsWith("ref: ")) && pipe(line, Str.endsWith("\tHEAD")),
             );
 

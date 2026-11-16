@@ -17,7 +17,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Schema, String as Str, pipe } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { type Browser, type BrowserContext, chromium, type LaunchOptions, type Page } from "playwright";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -164,7 +166,7 @@ const tab = (context: BrowserContext, seen: Seen) =>
 const children = (page: Page) =>
   playwright("children", () => page.evaluate(() => document.getElementById("root")?.childElementCount ?? -1));
 
-const open = (seen: Seen) => seen.dials.filter((d) => !d.closed).length;
+const open = (seen: Seen) => Arr.filter(seen.dials, (d) => !d.closed).length;
 
 /** Waits until `check` holds or `within` ms pass, and answers whether it held. */
 const until = <E>(check: Effect.Effect<boolean, E>, within: number) =>
@@ -206,7 +208,7 @@ const pagehide = (page: Page, persisted: boolean) =>
     }, persisted),
   );
 
-const reported = (seen: Seen) => seen.lines.filter((line) => pipe(line, Str.includes("ERROR")));
+const reported = (seen: Seen) => Arr.filter(seen.lines, (line) => pipe(line, Str.includes("ERROR")));
 
 /** Runs in each page before its script: the page program's first DOM read throws `word`. */
 const failQuery = (word: string) => {
@@ -269,7 +271,7 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
                       if (stoppedAt !== null) {
                         yield* Effect.sleep(`${QUIET} millis`);
                         expect(
-                          seen.dials.filter((d) => d.at > stoppedAt!),
+                          Arr.filter(seen.dials, (d) => d.at > stoppedAt!),
                           "no socket is dialed after the stop",
                         ).toEqual([]);
                         expect(yield* isStopped(page, seen), "the page stays stopped").toBe(true);
@@ -342,7 +344,7 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
                       yield* playwright("goto /", () => page.goto(`${ORIGIN}/`));
                       expect(
                         yield* until(
-                          Effect.sync(() => reported(seen).some((line) => pipe(line, Str.includes(word)))),
+                          Effect.sync(() => Arr.some(reported(seen), (line) => pipe(line, Str.includes(word)))),
                           WITHIN,
                         ),
                         `a console line with ERROR and "${word}" within ${WITHIN} ms: ${JSON.stringify(seen.lines)}`,

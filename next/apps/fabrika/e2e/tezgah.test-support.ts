@@ -12,7 +12,10 @@ import {
   TezgahView as View,
   tezgahName,
 } from "@kampus/libfabrika/tezgah/Workspace";
-import { Effect, Schema, String as Str, pipe, Array as Arr } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
+import { String as Str, pipe, Array as Arr } from "effect";
 import type { Page } from "playwright";
 import { expect } from "vitest";
 import { PERSON, type reader } from "./p14.test-support.ts";
@@ -95,8 +98,7 @@ const Opened = Schema.Struct({ result: Schema.Struct({ rev: Schema.Int, view: Vi
 export const tezgahPid = (r: Reader) =>
   Effect.gen(function* () {
     const entries = yield* r.read(`processes/${tezgahName(PERSON)}`);
-
-    const started = entries.flatMap((e) => {
+    const started = Arr.flatMap(entries, (e) => {
       const decoded = Schema.decodeUnknownOption(Started)(e);
 
       return decoded._tag === "Some" ? [decoded.value.body.process] : [];
@@ -148,7 +150,7 @@ export const drawn = (page: Page): Effect.Effect<Drawn> =>
     const mains = yield* promised(() => page.getByRole("main").count());
     const main = page.getByRole("main").first();
     const snapshot = mains === 0 ? "" : yield* promised(() => main.ariaSnapshot());
-    const names = Str.split(snapshot, "\n").flatMap((line) => {
+    const names = Arr.flatMap(Str.split(snapshot, "\n"), (line) => {
       const m = REGION.exec(line);
       return m?.[1] === undefined ? [] : [pipe(m[1], Str.replace(/\\(.)/g, "$1"))];
     });
@@ -197,29 +199,27 @@ export const drawn = (page: Page): Effect.Effect<Drawn> =>
  *  order, each named by `tileName`'s words, `aria-current` on the focused tile alone, and each tile
  *  where tezgah's percents put it in the main. Empty when they agree. */
 export const differences = (view: TezgahView, d: Drawn): ReadonlyArray<string> => {
-  const space = view.workspaces.find((w) => w.n === WORKSPACE);
+  const space = Option.getOrUndefined(Arr.findFirst(view.workspaces, (w) => w.n === WORKSPACE));
 
   if (space === undefined) {
     return ["tezgah has no workspace 1"];
   }
 
-  const byId = new Map(view.tiles.map((t) => [t.id, t]));
-
+  const byId = new Map(Arr.map(view.tiles, (t) => [t.id, t]));
   const named = (id: TileId) => {
     const tile = byId.get(id);
 
     return tile === undefined ? `a tile tezgah does not list (${id})` : regionName(tile);
   };
-
-  const want = Layout.order(space.layout).map(named);
+  const want = Arr.map(Layout.order(space.layout), named);
   const out: Array<string> = [];
 
   if (d.mains !== 1) {
     out.push(`${d.mains} mains`);
   }
 
-  if (JSON.stringify(d.regions.map((r) => r.name)) !== JSON.stringify(want)) {
-    out.push(`regions ${JSON.stringify(d.regions.map((r) => r.name))}, tezgah ${JSON.stringify(want)}`);
+  if (JSON.stringify(Arr.map(d.regions, (r) => r.name)) !== JSON.stringify(want)) {
+    out.push(`regions ${JSON.stringify(Arr.map(d.regions, (r) => r.name))}, tezgah ${JSON.stringify(want)}`);
   }
 
   const focused = named(space.focus);
@@ -239,7 +239,7 @@ export const differences = (view: TezgahView, d: Drawn): ReadonlyArray<string> =
 
     for (const id of Layout.order(space.layout)) {
       const name = named(id);
-      const box = d.regions.find((r) => r.name === name)?.box ?? null;
+      const box = Option.getOrUndefined(Arr.findFirst(d.regions, (r) => r.name === name))?.box ?? null;
       const r = rects.get(id);
 
       if (box === null || r === undefined) {
@@ -254,7 +254,7 @@ export const differences = (view: TezgahView, d: Drawn): ReadonlyArray<string> =
         box.y + box.height - (r.y + r.height),
       ];
 
-      if (off.some((o) => Math.abs(o) > EDGE)) {
+      if (Arr.some(off, (o) => Math.abs(o) > EDGE)) {
         out.push(`${name} drawn at ${JSON.stringify(box)}, tezgah's ${JSON.stringify(r)} in ${JSON.stringify(d.main)}`);
       }
     }
@@ -288,15 +288,16 @@ export const settle = (
 
 /** The tiles of workspace 1 in reading order. */
 export const shown = (view: TezgahView): ReadonlyArray<Tile> => {
-  const space = view.workspaces.find((w) => w.n === WORKSPACE);
-
-  return space === undefined ? [] : Layout.order(space.layout).flatMap((id) => view.tiles.filter((t) => t.id === id));
+  const space = Option.getOrUndefined(Arr.findFirst(view.workspaces, (w) => w.n === WORKSPACE));
+  return space === undefined
+    ? []
+    : Arr.flatMap(Layout.order(space.layout), (id) => Arr.filter(view.tiles, (t) => t.id === id));
 };
 
 /** The focused tile of workspace 1. */
 export const focused = (view: TezgahView): Tile => {
-  const space = view.workspaces.find((w) => w.n === WORKSPACE);
-  const tile = view.tiles.find((t) => t.id === space?.focus);
+  const space = Option.getOrUndefined(Arr.findFirst(view.workspaces, (w) => w.n === WORKSPACE));
+  const tile = Option.getOrUndefined(Arr.findFirst(view.tiles, (t) => t.id === space?.focus));
   expect(tile, "tezgah's workspace 1 has a focused tile").toBeDefined();
 
   return tile as Tile;
@@ -326,8 +327,7 @@ export const shoot = (page: Page, state: string, layout: Shot) => {
 export const processId = (r: Reader, name: string) =>
   Effect.gen(function* () {
     const entries = yield* r.read(`processes/${name}`);
-
-    const started = entries.flatMap((e) => {
+    const started = Arr.flatMap(entries, (e) => {
       const decoded = Schema.decodeUnknownOption(Started)(e);
 
       return decoded._tag === "Some" ? [decoded.value.body.process] : [];
@@ -397,7 +397,7 @@ export const foldDrawn = (page: Page): Effect.Effect<FoldDrawn> =>
     const d = yield* drawn(page);
     const main = page.getByRole("main").first();
     const snapshot = d.mains === 0 ? "" : yield* promised(() => main.ariaSnapshot());
-    const names = Str.split(snapshot, "\n").flatMap((line) => {
+    const names = Arr.flatMap(Str.split(snapshot, "\n"), (line) => {
       const m = STRIP.exec(line);
       return m?.[1] === undefined ? [] : [pipe(m[1], Str.replace(/\\(.)/g, "$1"))];
     });
@@ -421,7 +421,7 @@ const STRIP_ACROSS = { row: 22, column: 20 } as const;
 type Space = TezgahView["workspaces"][number];
 
 const tilesIn = (node: Space["layout"]): ReadonlyArray<string> =>
-  typeof node === "string" ? [node] : node.parts.flatMap((p) => tilesIn(p.inner));
+  typeof node === "string" ? [node] : Arr.flatMap(node.parts, (p) => tilesIn(p.inner));
 
 /** What amendment 13's rule draws in `area` when `strips` are strips: each tile's box outside a band,
  *  and each band (a container whose tiles all fold) with its tiles. Written here from the
@@ -442,17 +442,23 @@ const foldRule = (space: Space, area: Box, strips: ReadonlySet<string>) => {
 
     const row = node.dir === "row";
     const left = (row ? box.width : box.height) - (node.parts.length - 1) * GAP;
-    const fixed = node.parts.map((p) => tilesIn(p.inner).every((t) => strips.has(t)));
-    const has = left - fixed.filter((f) => f).length * STRIP_ACROSS[node.dir];
-    const total = node.parts.reduce((sum, p, i) => (fixed[i] ? sum : sum + p.percent), 0);
-    const lead = node.parts.findIndex((p) => tilesIn(p.inner).includes(space.focus));
-    let shares = node.parts.map((p, i) => (fixed[i] ? STRIP_ACROSS[node.dir] : (has * p.percent) / total));
+    const fixed = Arr.map(node.parts, (p) => Arr.every(tilesIn(p.inner), (t) => strips.has(t)));
+    const has = left - Arr.filter(fixed, (f) => f).length * STRIP_ACROSS[node.dir];
+    const total = Arr.reduce(node.parts, 0, (sum, p, i) => (fixed[i] ? sum : sum + p.percent));
+    const lead = Arr.findFirstIndex(node.parts, (p) => tilesIn(p.inner).includes(space.focus));
+    let shares = Arr.map(node.parts, (p, i) => (fixed[i] ? STRIP_ACROSS[node.dir] : (has * p.percent) / total));
     const least = Math.min(row ? SMALLEST.width : SMALLEST.height, has);
 
-    if (lead >= 0 && (shares[lead] ?? 0) < least) {
-      const rest = total - (node.parts[lead]?.percent ?? 0);
-      shares = node.parts.map((p, i) =>
-        i === lead ? least : fixed[i] ? STRIP_ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
+    if (Option.isSome(lead) && (shares[lead.value] ?? 0) < least) {
+      const rest = total - (node.parts[lead.value]?.percent ?? 0);
+      shares = Arr.map(node.parts, (p, i) =>
+        i === lead.value
+          ? least
+          : fixed[i]
+            ? STRIP_ACROSS[node.dir]
+            : rest > 0
+              ? ((has - least) * p.percent) / rest
+              : 0,
       );
     }
 
@@ -491,7 +497,7 @@ const padded = (main: Box): Box => ({
  *  draws under 220x120 in the tab's own main folds, again, until nothing changes. Never read from the
  *  product's `fold`. */
 export const stripsHere = (view: TezgahView, main: Box): ReadonlyArray<Tile> => {
-  const space = view.workspaces.find((w) => w.n === WORKSPACE);
+  const space = Option.getOrUndefined(Arr.findFirst(view.workspaces, (w) => w.n === WORKSPACE));
 
   if (space === undefined) {
     return [];
@@ -501,16 +507,16 @@ export const stripsHere = (view: TezgahView, main: Box): ReadonlyArray<Tile> => 
 
   for (;;) {
     const { boxes } = foldRule(space, padded(main), strips);
-
-    const due = [...boxes].filter(
+    const due = Arr.filter(
+      [...boxes],
       ([t, r]) => !strips.has(t) && t !== space.focus && (r.width < SMALLEST.width || r.height < SMALLEST.height),
     );
 
     if (due.length === 0) {
-      return shown(view).filter((t) => strips.has(t.id));
+      return Arr.filter(shown(view), (t) => strips.has(t.id));
     }
 
-    strips = new Set([...strips, ...due.map(([t]) => t)]);
+    strips = new Set([...strips, ...Arr.map(due, ([t]) => t)]);
   }
 };
 
@@ -524,30 +530,30 @@ const off = (a: Box, b: Box) =>
  *  every strip outside a band is drawn where the rule puts it, within 1px, and the strips of a band lie
  *  inside it, apart. Empty when they agree. */
 export const foldDifferences = (view: TezgahView, d: FoldDrawn): ReadonlyArray<string> => {
-  const space = view.workspaces.find((w) => w.n === WORKSPACE);
+  const space = Option.getOrUndefined(Arr.findFirst(view.workspaces, (w) => w.n === WORKSPACE));
 
   if (space === undefined || d.main === null) {
     return [space === undefined ? "tezgah has no workspace 1" : "no main is drawn"];
   }
 
   const strips = stripsHere(view, d.main);
-  const open = shown(view).filter((t) => !strips.includes(t));
-  const focus = view.tiles.find((t) => t.id === space.focus);
+  const open = Arr.filter(shown(view), (t) => !strips.includes(t));
+  const focus = Option.getOrUndefined(Arr.findFirst(view.tiles, (t) => t.id === space.focus));
   const out: Array<string> = [];
 
   if (d.mains !== 1) {
     out.push(`${d.mains} mains`);
   }
 
-  const regions = d.regions.map((r) => r.name);
-  const want = open.map(regionName);
+  const regions = Arr.map(d.regions, (r) => r.name);
+  const want = Arr.map(open, regionName);
 
   if (JSON.stringify(regions) !== JSON.stringify(want)) {
     out.push(`regions ${JSON.stringify(regions)}, open tiles ${JSON.stringify(want)}`);
   }
 
-  const drawnStrips = d.strips.map((s) => s.name);
-  const wantStrips = strips.map(stripName);
+  const drawnStrips = Arr.map(d.strips, (s) => s.name);
+  const wantStrips = Arr.map(strips, stripName);
 
   if (JSON.stringify(drawnStrips) !== JSON.stringify(wantStrips)) {
     out.push(`strips ${JSON.stringify(drawnStrips)}, the fold's strips here ${JSON.stringify(wantStrips)}`);
@@ -561,7 +567,7 @@ export const foldDifferences = (view: TezgahView, d: FoldDrawn): ReadonlyArray<s
     out.push(`aria-current on ${JSON.stringify(d.current)}, tezgah's focus ${focus?.n}`);
   }
 
-  for (const r of d.regions.filter((x) => focus === undefined || x.name !== regionName(focus))) {
+  for (const r of Arr.filter(d.regions, (x) => focus === undefined || x.name !== regionName(focus))) {
     if (r.box === null || r.box.width < SMALLEST.width - EDGE || r.box.height < SMALLEST.height - EDGE) {
       out.push(`open ${r.name} is drawn at ${JSON.stringify(r.box)}, under 220x120`);
     }
@@ -571,16 +577,15 @@ export const foldDifferences = (view: TezgahView, d: FoldDrawn): ReadonlyArray<s
     return out;
   }
 
-  const rule = foldRule(space, padded(d.main), new Set(strips.map((t) => t.id)));
-  const banded = new Set(rule.bands.flatMap((b) => b.tiles));
-
+  const rule = foldRule(space, padded(d.main), new Set(Arr.map(strips, (t) => t.id)));
+  const banded = new Set(Arr.flatMap(rule.bands, (b) => b.tiles));
   const boxFor = (t: Tile) =>
     (strips.includes(t)
-      ? d.strips.find((s) => s.name === stripName(t))
-      : d.regions.find((r) => r.name === regionName(t))
+      ? Option.getOrUndefined(Arr.findFirst(d.strips, (s) => s.name === stripName(t)))
+      : Option.getOrUndefined(Arr.findFirst(d.regions, (r) => r.name === regionName(t)))
     )?.box ?? null;
 
-  for (const t of shown(view).filter((t) => !banded.has(t.id))) {
+  for (const t of Arr.filter(shown(view), (t) => !banded.has(t.id))) {
     const box = boxFor(t);
     const r = rule.boxes.get(t.id);
 
@@ -592,8 +597,8 @@ export const foldDifferences = (view: TezgahView, d: FoldDrawn): ReadonlyArray<s
   }
 
   for (const band of rule.bands) {
-    const inBand = shown(view).filter((t) => band.tiles.includes(t.id));
-    const boxes = inBand.map(boxFor);
+    const inBand = Arr.filter(shown(view), (t) => band.tiles.includes(t.id));
+    const boxes = Arr.map(inBand, boxFor);
 
     for (const [i, b] of boxes.entries()) {
       const tile = inBand[i];

@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as ScopedRef from "effect/ScopedRef";
+import * as Arr from "effect/Array";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
@@ -67,7 +68,7 @@ const decodeRow = Schema.decodeUnknownSync(Row);
 const rows = (sql: Sql): ReadonlyArray<RecoveryJournalTest.Row> =>
   sql.exec("SELECT name FROM sqlite_master WHERE name='entries'").length === 0
     ? []
-    : sql.exec("SELECT * FROM entries ORDER BY rev").map((raw) => {
+    : Arr.map(sql.exec("SELECT * FROM entries ORDER BY rev"), (raw) => {
         const row = decodeRow(raw);
 
         return { stream: row.stream, id: row.id, event: row._tag, body: row.body };

@@ -1,6 +1,6 @@
 // P19 L13, next/. No native work occurs without explicit host opt-in.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path } from "effect";
+import { Array as Arr, Effect, FileSystem, Path } from "effect";
 import { Digest } from "effect/crypto";
 import { expect, it } from "vitest";
 import * as Host from "./node/P19Launchd.test-support.ts";
@@ -62,7 +62,7 @@ it("pinned: L13 bundles keep native dependencies resolvable outside root node_mo
           if (name === "brain") {
             // The brain Electron starts carries the local instance, never the host check's bundler.
             expect(text).toContain("brain.localInstance");
-            expect(linked.filter((file) => /rolldown/.test(file))).toEqual([]);
+            expect(Arr.filter(linked, (file) => /rolldown/.test(file))).toEqual([]);
           }
         }
       }),

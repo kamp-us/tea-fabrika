@@ -12,6 +12,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { String as Str, pipe } from "effect";
 import * as Outside from "../../desktop/BrainControl.test-support.ts";
 import { BrainControl } from "../../desktop/BrainControl.ts";
@@ -91,21 +93,24 @@ it.effect.prop(
           return {
             code: 0,
             stderr: "",
-            stdout: [
-              `${args.at(-1)} = {`,
-              "\tstate = running",
-              `\tprogram = ${spec.executable}`,
-              "\targuments = {",
-              ...[spec.executable, ...spec.args].map((arg) => `\t\t${arg}`),
-              "\t}",
-              "\tenvironment = {",
-              "\t\tELECTRON_RUN_AS_NODE => 1",
-              `\t\tFABRIKA_HOME => ${spec.home}`,
-              `\t\tFABRIKA_BUILD => ${spec.build}`,
-              "\t}",
-              "\tpid = 81",
-              "}",
-            ].join("\n"),
+            stdout: Arr.join(
+              [
+                `${args.at(-1)} = {`,
+                "\tstate = running",
+                `\tprogram = ${spec.executable}`,
+                "\targuments = {",
+                ...Arr.map([spec.executable, ...spec.args], (arg) => `\t\t${arg}`),
+                "\t}",
+                "\tenvironment = {",
+                "\t\tELECTRON_RUN_AS_NODE => 1",
+                `\t\tFABRIKA_HOME => ${spec.home}`,
+                `\t\tFABRIKA_BUILD => ${spec.build}`,
+                "\t}",
+                "\tpid = 81",
+                "}",
+              ],
+              "\n",
+            ),
           };
         }),
       );
@@ -170,15 +175,17 @@ it.effect.prop(
       });
       expect(removalObservations).toEqual([null]);
       expect(yield* disk.read).toBe(original);
-      expect(disk.seen.filter((call) => call.args.includes("bootout"))).toHaveLength(initiallyLoaded ? 1 : 0);
+      expect(Arr.filter(disk.seen, (call) => call.args.includes("bootout"))).toHaveLength(initiallyLoaded ? 1 : 0);
       const from = disk.seen.length;
       expect(Exit.isSuccess(yield* brain.stop.pipe(Effect.exit))).toBe(true);
-      expect(disk.seen.slice(from).find((call) => pipe(call.executable, Str.endsWith("launchctl")))?.args[0]).toBe(
-        "print",
-      );
+      expect(
+        Option.getOrUndefined(
+          Arr.findFirst(disk.seen.slice(from), (call) => pipe(call.executable, Str.endsWith("launchctl"))),
+        )?.args[0],
+      ).toBe("print");
       expect(removalObservations).toEqual([null, null]);
       expect(yield* disk.read).toBeNull();
-      expect(disk.seen.filter((call) => call.args.includes("bootout"))).toHaveLength(initiallyLoaded ? 1 : 0);
+      expect(Arr.filter(disk.seen, (call) => call.args.includes("bootout"))).toHaveLength(initiallyLoaded ? 1 : 0);
     }).pipe(Effect.provide(NodeServices.layer)),
   options,
 );
@@ -228,21 +235,24 @@ it.effect.prop(
                 ? {
                     code: 0,
                     stderr: "",
-                    stdout: [
-                      `${args.at(-1)} = {`,
-                      "\tstate = running",
-                      `\tprogram = ${spec.executable}`,
-                      "\targuments = {",
-                      ...[spec.executable, ...spec.args].map((arg) => `\t\t${arg}`),
-                      "\t}",
-                      "\tenvironment = {",
-                      "\t\tELECTRON_RUN_AS_NODE => 1",
-                      `\t\tFABRIKA_HOME => ${spec.home}`,
-                      `\t\tFABRIKA_BUILD => ${spec.build}`,
-                      "\t}",
-                      "\tpid = 81",
-                      "}",
-                    ].join("\n"),
+                    stdout: Arr.join(
+                      [
+                        `${args.at(-1)} = {`,
+                        "\tstate = running",
+                        `\tprogram = ${spec.executable}`,
+                        "\targuments = {",
+                        ...Arr.map([spec.executable, ...spec.args], (arg) => `\t\t${arg}`),
+                        "\t}",
+                        "\tenvironment = {",
+                        "\t\tELECTRON_RUN_AS_NODE => 1",
+                        `\t\tFABRIKA_HOME => ${spec.home}`,
+                        `\t\tFABRIKA_BUILD => ${spec.build}`,
+                        "\t}",
+                        "\tpid = 81",
+                        "}",
+                      ],
+                      "\n",
+                    ),
                   }
                 : {
                     code: 113,
@@ -300,7 +310,7 @@ it.effect.prop(
         const total = clean.disk.seen.length - clean.from;
         expect(total).toBeGreaterThan(0);
         const { disk, brain, from } = yield* attempt(pick % total);
-        const count = (event: string) => disk.events.filter((seen) => seen === event).length;
+        const count = (event: string) => Arr.filter(disk.events, (seen) => seen === event).length;
         const running = yield* Effect.forkScoped(brain[action]);
         yield* Deferred.await(stuck);
         const retry = yield* Effect.forkScoped(brain[action]);
@@ -363,11 +373,11 @@ it.effect.prop(
         FABRIKA_HOME: disk.spec.home,
         FABRIKA_BUILD: disk.spec.build,
       });
-      expect(disk.seen.some((call) => /(?:sh|bash|zsh)$/.test(call.executable))).toBe(false);
-      const compile = disk.seen.find((call) => pipe(call.executable, Str.endsWith("plutil")));
+      expect(Arr.some(disk.seen, (call) => /(?:sh|bash|zsh)$/.test(call.executable))).toBe(false);
+      const compile = Option.getOrUndefined(Arr.findFirst(disk.seen, (call) => pipe(call.executable, Str.endsWith("plutil")));
       expect(compile?.args).toContain("xml1");
       expect(compile?.options.shell).not.toBe(true);
-      expect(disk.seen.every((call) => call.options.extendEnv === false)).toBe(true);
+      expect(Arr.every(disk.seen, (call) => call.options.extendEnv === false)).toBe(true);
     }).pipe(Effect.provide(NodeServices.layer)),
   options,
 );
@@ -428,7 +438,7 @@ it.effect.prop(
         yield* disk.control.install;
         expect((yield* Schema.decodeUnknownEffect(Job)(disk.jobs.at(-1))).Label).toBe(first.Label);
         yield* disk.control.start;
-        const start = disk.seen.find((call) => call.args.includes("bootstrap"));
+        const start = Option.getOrUndefined(Arr.findFirst(disk.seen, (call) => call.args.includes("bootstrap")));
         expect(start?.args).toEqual(["bootstrap", "gui/501", `${disk.home}/brain.plist`]);
       }
 
@@ -505,23 +515,25 @@ it.effect.prop(
             expect(Exit.isSuccess(yield* Effect.scoped(reopen("stop")))).toBe(signal === null);
 
             for (const [id, row] of refused) {
-              expect(delivered.filter(({ span }) => span.spanId === id)).toEqual([row]);
+              expect(Arr.filter(delivered, ({ span }) => span.spanId === id)).toEqual([row]);
             }
 
             expect(delivered.length).toBeGreaterThanOrEqual(attempts);
-            const actions = delivered.filter(({ span }) => pipe(span.name, Str.startsWith("BrainService.")));
+            const actions = Arr.filter(delivered, ({ span }) => pipe(span.name, Str.startsWith("BrainService.")));
             expect(actions.length).toBeGreaterThanOrEqual(attempts);
-            expect(actions.some(({ span }) => span.attributes["fab.result"] === "delivery_failed")).toBe(true);
+            expect(Arr.some(actions, ({ span }) => span.attributes["fab.result"] === "delivery_failed")).toBe(true);
 
             if (signal === null) {
               expect(
-                actions.some(
+                Arr.some(
+                  actions,
                   ({ span }) =>
                     span.attributes["fab.action"] === "stop" && span.attributes["fab.confirmation"] === "removed",
                 ),
               ).toBe(true);
             } else {
-              const commands = delivered.filter(
+              const commands = Arr.filter(
+                delivered,
                 ({ span }) => span.name === "BrainService.command" && span.attributes["fab.result"] === "Command",
               );
 
@@ -674,7 +686,7 @@ it.effect.prop(
 
       for (const disk of opened) {
         expect(yield* disk.read).toBeNull();
-        expect(disk.seen.some((call) => call.args.includes("bootstrap"))).toBe(false);
+        expect(Arr.some(disk.seen, (call) => call.args.includes("bootstrap"))).toBe(false);
       }
     }).pipe(Effect.provide(NodeServices.layer)),
   options,

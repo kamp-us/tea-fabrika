@@ -13,6 +13,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import * as Arr from "effect/Array";
 
 /** One child as a script: what it prints, in order, on which stream, how it ends, and whether it starts. */
 export type Child = {
@@ -56,8 +57,12 @@ export const spawner = (child: Child, seen: Seen) =>
         const tail = child.endless ? Stream.never : Stream.empty;
 
         const on = (to: "out" | "err") =>
-          Stream.fromIterable(child.chunks.filter((c) => c.to === to).map((c) => c.bytes)).pipe(Stream.concat(tail));
-
+          Stream.fromIterable(
+            Arr.map(
+              Arr.filter(child.chunks, (c) => c.to === to),
+              (c) => c.bytes,
+            ),
+          ).pipe(Stream.concat(tail));
         return yield* Effect.acquireRelease(
           Effect.sync(() => {
             seen.spawns++;
@@ -72,7 +77,7 @@ export const spawner = (child: Child, seen: Seen) =>
               stdin: Sink.drain,
               stdout: on("out"),
               stderr: on("err"),
-              all: Stream.fromIterable(child.chunks.map((c) => c.bytes)).pipe(Stream.concat(tail)),
+              all: Stream.fromIterable(Arr.map(child.chunks, (c) => c.bytes)).pipe(Stream.concat(tail)),
               getInputFd: () => Sink.drain,
               getOutputFd: () => Stream.empty,
               unref: Effect.succeed(Effect.void),

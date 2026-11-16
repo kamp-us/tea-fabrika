@@ -5,7 +5,7 @@ import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
-import { Clock, Effect, Fiber, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
+import { Array as Arr, Clock, Effect, Fiber, FileSystem, Layer, Option, Path, Queue, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
@@ -497,8 +497,7 @@ it.live(
           ),
         ).toMatchObject({ result: { _tag: "held", process: pid } });
         // Nothing has been written yet. The real request has already passed online membership.
-        expect((yield* rows("gateway/inputs")).filter((row) => row.by === oldKey.fingerprint)).toHaveLength(1);
-
+        expect(Arr.filter(yield* rows("gateway/inputs"), (row) => row.by === oldKey.fingerprint)).toHaveLength(1);
         const binding = Chaos.Target.make({
           program: "fabrika/checklist",
           name: TARGET,
@@ -596,7 +595,9 @@ it.live(
         );
         const final = Schema.decodeSync(chaos.state.schema)((yield* world.snapshot(NAME)).model);
         expect(final.phase._tag).toBe("done");
-        const revoked = (yield* rows("gateway/access")).find((row) => row._tag === "revoked");
+        const revoked = Option.getOrUndefined(
+          Arr.findFirst(yield* rows("gateway/access"), (row) => row._tag === "revoked"),
+        );
         expect(revoked).toBeDefined();
 
         if (revoked === undefined) {
@@ -628,18 +629,22 @@ it.live(
         expect(live.result).toMatchObject({ _tag: "accepted" });
 
         const inbox = yield* RevokeTest.until(rows(`${TARGET}/inbox`), (entries) =>
-          entries.some((entry) => entry.id === "other-after"),
+          Arr.some(entries, (entry) => entry.id === "other-after"),
         );
-
-        const sends = inbox.filter((row) => row._tag === "send");
+        const sends = Arr.filter(inbox, (row) => row._tag === "send");
         const clientKeys = new Set([oldKey.fingerprint, otherKey.fingerprint]);
-        expect(sends.filter((row) => clientKeys.has(row.by)).map((row) => ({ id: row.id, by: row.by }))).toEqual([
+        expect(
+          Arr.map(
+            Arr.filter(sends, (row) => clientKeys.has(row.by)),
+            (row) => ({ id: row.id, by: row.by }),
+          ),
+        ).toEqual([
           { id: "old-before", by: oldKey.fingerprint },
           { id: "other-after", by: otherKey.fingerprint },
         ]);
 
         // The checklist runner stamps its own timer letters with the program owner's key.
-        for (const row of sends.filter((entry) => !clientKeys.has(entry.by))) {
+        for (const row of Arr.filter(sends, (entry) => !clientKeys.has(entry.by))) {
           const { m } = Schema.decodeUnknownSync(
             Schema.Struct({
               m: Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int, arrivedAt: Schema.Int }),
@@ -652,16 +657,23 @@ it.live(
           expect(row.body).toEqual({ m });
         }
 
-        const surviving = inbox.find((row) => row.id === "other-after");
+        const surviving = Option.getOrUndefined(Arr.findFirst(inbox, (row) => row.id === "other-after"));
         expect(surviving?.rev).toBeGreaterThan(revoked.rev);
         expect(surviving?.arrivedAt).toBeGreaterThanOrEqual(revoked.arrivedAt);
         const gateway = yield* rows("gateway/inputs");
         const process = yield* rows(pid);
-        const after = [...gateway, ...inbox, ...process].filter((row) => row.rev > revoked.rev);
-        expect(after.filter((row) => row.by === oldKey.fingerprint)).toEqual([]);
-        const oldInputs = new Set(gateway.filter((row) => row.by === oldKey.fingerprint).map((row) => row.id));
-        expect(after.filter((row) => row.parent !== null && oldInputs.has(row.parent))).toEqual([]);
-        expect(inbox.find((row) => row.id === "old-before")?.rev).toBeLessThan(revoked.rev);
+        const after = Arr.filter([...gateway, ...inbox, ...process], (row) => row.rev > revoked.rev);
+        expect(Arr.filter(after, (row) => row.by === oldKey.fingerprint)).toEqual([]);
+        const oldInputs = new Set(
+          Arr.map(
+            Arr.filter(gateway, (row) => row.by === oldKey.fingerprint),
+            (row) => row.id,
+          ),
+        );
+        expect(Arr.filter(after, (row) => row.parent !== null && oldInputs.has(row.parent))).toEqual([]);
+        expect(Option.getOrUndefined(Arr.findFirst(inbox, (row) => row.id === "old-before"))?.rev).toBeLessThan(
+          revoked.rev,
+        );
         const viewed = yield* other.call("view.open", { pid });
         expect(viewed.error).toBeUndefined();
         expect(viewed.result).toMatchObject({
@@ -678,7 +690,7 @@ it.live(
             expect(Schema.decodeSync(chaos.state.schema)((yield* world.snapshot(NAME)).model)).toEqual(final);
           }),
         );
-        expect((yield* rows("gateway/access")).filter((row) => row._tag === "revoked")).toHaveLength(1);
+        expect(Arr.filter(yield* rows("gateway/access"), (row) => row._tag === "revoked")).toHaveLength(1);
         // Compact reproducible facts only. Signing keys, proofs and item text never enter this record.
         yield* Effect.logInfo("p17b-revoke", {
           seed: SEED,

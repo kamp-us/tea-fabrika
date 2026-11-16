@@ -12,6 +12,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Option from "effect/Option";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import { bundleAsync, transform } from "lightningcss";
 import { BuildError } from "../../runtime/Built.ts";
@@ -118,7 +119,7 @@ const check = Effect.fn("build.css.check")(function* (file: string, text: string
   });
 
   for (const start of imports) {
-    const end = Math.min(text.length, ...starts.filter((next) => next > start));
+    const end = Math.min(text.length, ...Arr.filter(starts, (next) => next > start));
     const bare = yield* Effect.try({ try: () => bareLayer(pipe(text, Str.slice(start, end))), catch: refusal });
 
     if (bare) {
@@ -148,14 +149,13 @@ const cyclic = (edges: ReadonlyMap<string, ReadonlySet<string>>) => {
     }
 
     open.add(file);
-    const found = [...(edges.get(file) ?? [])].some(visit);
+    const found = Arr.some([...(edges.get(file) ?? [])], visit);
     open.delete(file);
     done.add(file);
 
     return found;
   };
-
-  return [...edges.keys()].some(visit);
+  return Arr.some([...edges.keys()], visit);
 };
 
 /**

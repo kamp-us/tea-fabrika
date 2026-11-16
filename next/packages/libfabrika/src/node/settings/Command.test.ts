@@ -31,6 +31,7 @@ import * as References from "effect/References";
 import * as Sink from "effect/Sink";
 import * as TestConsole from "effect/testing/TestConsole";
 import * as Tracer from "effect/Tracer";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
@@ -134,9 +135,18 @@ const counted = (at: string, sunk: ReadonlyArray<string>) =>
     const reads = yield* Recorder.calls(FileSystem.FileSystem, "readFileString");
 
     return {
-      touched: all.filter((call) => !WRITES.has(call.method)).map((call) => call.args[0]),
-      reads: reads.filter(([path]) => path === at).length,
-      writes: [...all.filter((call) => WRITES.has(call.method)).map((call) => call.method), ...sunk.map(() => "sink")],
+      touched: Arr.map(
+        Arr.filter(all, (call) => !WRITES.has(call.method)),
+        (call) => call.args[0],
+      ),
+      reads: Arr.filter(reads, ([path]) => path === at).length,
+      writes: [
+        ...Arr.map(
+          Arr.filter(all, (call) => WRITES.has(call.method)),
+          (call) => call.method,
+        ),
+        ...Arr.map(sunk, () => "sink"),
+      ],
     } satisfies Counts;
   });
 
@@ -154,15 +164,15 @@ const spans = () => {
   });
 
   const text = () =>
-    ended
-      .map((span) =>
+    Arr.join(
+      Arr.map(ended, (span) =>
         JSON.stringify(
           { name: span.name, attributes: [...span.attributes], events: span.events, status: span.status },
           (_key, value: unknown) => (typeof value === "bigint" ? String(value) : value),
         ),
-      )
-      .join("\n");
-
+      ),
+      "\n",
+    );
   return { tracer, text };
 };
 
@@ -208,9 +218,8 @@ const run = (input: Input) => {
       Effect.withTracer(traced.tracer),
       Effect.exit,
     );
-
-    const stdout = (yield* TestConsole.logLines).map(String);
-    const stderr = (yield* TestConsole.errorLines).map(String);
+    const stdout = Arr.map(yield* TestConsole.logLines, String);
+    const stderr = Arr.map(yield* TestConsole.errorLines, String);
     const counts = yield* counted(at, sunk);
 
     return { exit, stdout, stderr, counts, spans: traced.text(), logs: logged.entries };
@@ -236,7 +245,9 @@ const expected = (input: Input, flags: Readonly<Record<string, string>>, all: bo
   const at = place(input.env);
 
   const env = Object.fromEntries(
-    Declarations.all.declarations.flatMap((d) => (input.env[d.env] === undefined ? [] : [[d.env, input.env[d.env]!]])),
+    Arr.flatMap(Declarations.all.declarations, (d) =>
+      input.env[d.env] === undefined ? [] : [[d.env, input.env[d.env]!]],
+    ),
   );
 
   return Load.load({ person: at, flags, env, version: VERSION }).pipe(
@@ -294,8 +305,8 @@ it("T753 L8 explicit values equal to defaults remain visible without all", async
 
       expect(Exit.isSuccess(ran.exit)).toBe(true);
       expect(ran.counts.reads).toBe(1);
-      expect(ran.stdout.join("\n")).toContain(`${d.path} = ${JSON.stringify(d.default)}`);
-      expect(ran.stdout.join("\n")).toContain(v.viaEnv ? d.env : `--${d.path}`);
+      expect(Arr.join(ran.stdout, "\n")).toContain(`${d.path} = ${JSON.stringify(d.default)}`);
+      expect(Arr.join(ran.stdout, "\n")).toContain(v.viaEnv ? d.env : `--${d.path}`);
       expect(ran.counts.writes).toEqual([]);
     }),
     check,
@@ -316,16 +327,14 @@ const shape = (g: Generated) => {
     ...(g.envPort === undefined ? {} : { [Declarations.port.env]: g.envPort }),
     ...(g.envVersion === undefined ? {} : { [Declarations.version.env]: g.envVersion }),
   };
-
-  const args = [...(g.all ? ["--all"] : []), ...Object.entries(flags).map(([path, v]) => `--${path}=${v}`)];
-
+  const args = [...(g.all ? ["--all"] : []), ...Arr.map(Object.entries(flags), ([path, v]) => `--${path}=${v}`)];
   return { input: { args, env, person: g.person }, flags };
 };
 
 /** Whether a line of output is a report row: it starts with a declared path. */
 const row = (line: string) =>
-  Str.split(line, "\n").some((l) =>
-    Declarations.all.declarations.some((d) => pipe(l, Str.trimStart, Str.startsWith(d.path))),
+  Arr.some(Str.split(line, "\n"), (l) =>
+    Arr.some(Declarations.all.declarations, (d) => pipe(l, Str.trimStart, Str.startsWith(d.path))),
   );
 
 describe("L7, the command loads once, prints only after success, selects no repo and writes nothing", () => {
@@ -340,17 +349,20 @@ describe("L7, the command loads once, prints only after success, selects no repo
         // One load, of the person's file alone: never the current folder's repo file.
         expect(ran.counts.reads, JSON.stringify(input)).toBe(1);
         expect(
-          ran.counts.touched.every((p) => p === at),
-          ran.counts.touched.join(", "),
+          Arr.every(ran.counts.touched, (p) => p === at),
+          Arr.join(
+            Arr.map(ran.counts.touched, (p) => (p === undefined ? "" : String(p))),
+            ", ",
+          ),
         ).toBe(true);
         expect(ran.counts.writes).toEqual([]);
         expect(Exit.isSuccess(ran.exit), JSON.stringify(input)).toBe(Exit.isSuccess(oracle));
 
         if (Exit.isSuccess(oracle)) {
-          expect(ran.stdout.join("\n")).toContain(Str.trimEnd(oracle.value));
+          expect(Arr.join(ran.stdout, "\n")).toContain(Str.trimEnd(oracle.value));
         } else {
           // A failed load prints no row, not even a valid flag's.
-          expect(ran.stdout.some(row), ran.stdout.join("\n")).toBe(false);
+          expect(Arr.some(ran.stdout, row), Arr.join(ran.stdout, "\n")).toBe(false);
         }
       }),
       check,
@@ -401,7 +413,7 @@ describe("L8 [secrets], unrelated environment values and refused file values nev
         async ([word, text], fields, envPort, all) => {
           const env: Record<string, string> = {
             HOME,
-            ...Object.fromEntries(fields.map((f) => [f, word])),
+            ...Object.fromEntries(Arr.map(fields, (f) => [f, word])),
             ...(envPort === undefined ? {} : { [Declarations.port.env]: String(envPort) }),
           };
 

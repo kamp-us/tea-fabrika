@@ -9,6 +9,7 @@ import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
@@ -94,7 +95,7 @@ const session = (
       ) {
         const { code, out } = yield* git(cwd, args);
         transcript.push(
-          `git ${pipe(args.join(" "), Str.replaceAll(root, "<root>"))} => ${code}${data === undefined ? "" : ` ${data === "commits" ? named(out) : out}`}`,
+          `git ${pipe(Arr.join(args, " "), Str.replaceAll(root, "<root>"))} => ${code}${data === undefined ? "" : ` ${data === "commits" ? named(out) : out}`}`,
         );
 
         return out;
