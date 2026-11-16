@@ -7,7 +7,7 @@
  *
  * @stability unstable
  */
-import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
+import { Context, Effect, Function, Layer, Option, Schema, Stream } from "effect";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { Appended, type Entry, Line, lineFor } from "../ledger/Log.ts";
 import type { Rev } from "../Rev.ts";
@@ -99,6 +99,8 @@ const decodeSent = Schema.decodeUnknownOption(Sent);
  */
 export const inbox = (name: string): string => `${name}/inbox`;
 
+const letterLineBody = (from: From, m: Schema.Json) => lineFor(from, Send.make({ m }));
+
 /**
  * Makes a letter's ledger line, as `send` writes it, for a writer that appends it inside its own
  * ledger turn.
@@ -106,7 +108,10 @@ export const inbox = (name: string): string => `${name}/inbox`;
  * @stability unstable
  * @category constructors
  */
-export const letterLine = (from: From, m: Schema.Json) => lineFor(from, Send.make({ m }));
+export const letterLine: {
+  (m: Schema.Json): (from: From) => ReturnType<typeof letterLineBody>;
+  (from: From, m: Schema.Json): ReturnType<typeof letterLineBody>;
+} = Function.dual(2, letterLineBody);
 
 /**
  * Decodes a message as a letter's JSON, and answers none when it is not JSON.

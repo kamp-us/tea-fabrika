@@ -3,10 +3,11 @@
  *
  * @stability unstable
  */
-import { Effect, Layer, Option } from "effect";
+import { Effect, Function, Layer, Option, Predicate } from "effect";
 import type { Sql } from "../Sql.ts";
 import { committedEntries, headPlace, ledgerStore, policyFor } from "./internal/ledgerStore.ts";
 import { Doorbell } from "./Ledger.ts";
+import type { Entry } from "./Log.ts";
 import { Referee, Selection } from "./Referee.ts";
 import { WritePolicy } from "./WritePolicy.ts";
 
@@ -18,8 +19,14 @@ import { WritePolicy } from "./WritePolicy.ts";
  * @stability unstable
  * @category getters
  */
-export const accountingEntries = (sql: Sql, selection: Selection = Selection.cases.all.make({ after: 0 })) =>
-  committedEntries(sql, selection);
+export const accountingEntries: {
+  (selection?: Selection): (sql: Sql) => ReadonlyArray<Entry>;
+  (sql: Sql, selection?: Selection): ReadonlyArray<Entry>;
+} = Function.dual(
+  // A direct call starts with the store; a piped one with the selection, or with nothing.
+  (args) => Predicate.hasProperty(args[0], "exec"),
+  (sql: Sql, selection: Selection = Selection.cases.all.make({ after: 0 })) => committedEntries(sql, selection),
+);
 
 /**
  * Returns the place the next entry appended to `stream` would get at the referee's time `now`: its
@@ -29,7 +36,17 @@ export const accountingEntries = (sql: Sql, selection: Selection = Selection.cas
  * @stability unstable
  * @category getters
  */
-export const nextPlace = (sql: Sql, stream: string, now: number) => headPlace(sql, stream, now);
+export const nextPlace: {
+  (
+    stream: string,
+    now: number,
+  ): (sql: Sql) => { readonly rev: number; readonly pos: number; readonly arrivedAt: number };
+  (sql: Sql, stream: string, now: number): { readonly rev: number; readonly pos: number; readonly arrivedAt: number };
+} = Function.dual(
+  3,
+  (sql: Sql, stream: string, now: number): { readonly rev: number; readonly pos: number; readonly arrivedAt: number } =>
+    headPlace(sql, stream, now),
+);
 
 /**
  * Layer that provides `Referee` on the given `Sql`. An append is decided and written in one SQL

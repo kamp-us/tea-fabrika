@@ -10,6 +10,7 @@ import {
 } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
 import * as Schema from "effect/Schema";
 import { causeClass } from "../telemetry/Trace.ts";
 import { isolateUsage, ProcessClient, rejected } from "./platform.ts";
@@ -63,8 +64,25 @@ export const tail = Effect.fnUntraced(function* (
  * @stability unstable
  * @category combinators
  */
-export const receive = (env: Pick<Env, "PROCESS">, props: unknown, items: Parameters<typeof tail>[2]) =>
-  Schema.decodeUnknownEffect(Props)(props).pipe(Effect.flatMap((checked) => tail(env, checked, items)));
+export const receive: {
+  (
+    props: unknown,
+    items: Parameters<typeof tail>[2],
+  ): (env: Pick<Env, "PROCESS">) => Effect.Effect<void, Schema.SchemaError>;
+  (
+    env: Pick<Env, "PROCESS">,
+    props: unknown,
+    items: Parameters<typeof tail>[2],
+  ): Effect.Effect<void, Schema.SchemaError>;
+} = Function.dual(
+  3,
+  (
+    env: Pick<Env, "PROCESS">,
+    props: unknown,
+    items: Parameters<typeof tail>[2],
+  ): Effect.Effect<void, Schema.SchemaError> =>
+    Schema.decodeUnknownEffect(Props)(props).pipe(Effect.flatMap((checked) => tail(env, checked, items))),
+);
 
 /**
  * Reads each tail invocation's props and bindings from Alchemy's live services.

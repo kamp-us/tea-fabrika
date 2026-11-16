@@ -3,6 +3,7 @@
  *
  * @stability unstable
  */
+import * as Function from "effect/Function";
 import * as Schema from "effect/Schema";
 import { uniformInt } from "pure-rand/distribution/uniformInt";
 import { xoroshiro128plus, xoroshiro128plusFromState } from "pure-rand/generator/xoroshiro128plus";
@@ -58,14 +59,19 @@ const select = (choice: number, start: typeof Chaos.Start.Type): Chaos.Fault => 
   }
 };
 
+const drawBody = (schedule: typeof Schedule.Type, start: typeof Chaos.Start.Type) => {
+  const random = xoroshiro128plusFromState(schedule.words);
+  const choice = uniformInt(random, 0, 9);
+  return { fault: select(choice, start), schedule: Schedule.make({ version: 1, words: words(random.getState()) }) };
+};
+
 /**
  * Draws exactly one fault and returns the state for the following draw.
  *
  * @stability unstable
  * @category scheduling
  */
-export const draw = (schedule: typeof Schedule.Type, start: typeof Chaos.Start.Type) => {
-  const random = xoroshiro128plusFromState(schedule.words);
-  const choice = uniformInt(random, 0, 9);
-  return { fault: select(choice, start), schedule: Schedule.make({ version: 1, words: words(random.getState()) }) };
-};
+export const draw: {
+  (start: typeof Chaos.Start.Type): (schedule: typeof Schedule.Type) => ReturnType<typeof drawBody>;
+  (schedule: typeof Schedule.Type, start: typeof Chaos.Start.Type): ReturnType<typeof drawBody>;
+} = Function.dual(2, drawBody);

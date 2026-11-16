@@ -5,7 +5,7 @@
  * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import { Effect, Layer, Result, Schema, SchemaIssue } from "effect";
+import { Effect, Function, Layer, Result, Schema, SchemaIssue } from "effect";
 import type { Accounting } from "../processes/Quotas.ts";
 import type { Sql } from "../Sql.ts";
 import { Model, Reply, reply as machine } from "./internal/reply.ts";
@@ -99,24 +99,27 @@ const stored = <A>(f: () => A) =>
  * @stability unstable
  * @category layers
  */
-export const layer = (
-  sql: Sql,
-  limits: { readonly capacity: number; readonly accounting?: Accounting },
-): Layer.Layer<Replies> =>
-  Layer.succeed(Replies, {
-    reply: Effect.fn("replies.reply")(function* (name: string, id: string) {
-      const model = yield* stored(() => load(sql, name, id));
-      return model._tag === "remembered" ? model.reply : null;
+export const layer: {
+  (limits: { readonly capacity: number; readonly accounting?: Accounting }): (sql: Sql) => Layer.Layer<Replies>;
+  (sql: Sql, limits: { readonly capacity: number; readonly accounting?: Accounting }): Layer.Layer<Replies>;
+} = Function.dual(
+  2,
+  (sql: Sql, limits: { readonly capacity: number; readonly accounting?: Accounting }): Layer.Layer<Replies> =>
+    Layer.succeed(Replies, {
+      reply: Effect.fn("replies.reply")(function* (name: string, id: string) {
+        const model = yield* stored(() => load(sql, name, id));
+        return model._tag === "remembered" ? model.reply : null;
+      }),
+      rememberReply: Effect.fn("replies.remember")(function* (reply: typeof Reply.Type) {
+        return yield* Effect.clockWith((clock) =>
+          stored(() => {
+            const save = () =>
+              sql.transaction(() =>
+                remember(sql, limits.capacity, reply, limits.accounting, clock.currentTimeMillisUnsafe()),
+              );
+            return limits.accounting === undefined ? save() : limits.accounting.protect(save);
+          }),
+        );
+      }),
     }),
-    rememberReply: Effect.fn("replies.remember")(function* (reply: typeof Reply.Type) {
-      return yield* Effect.clockWith((clock) =>
-        stored(() => {
-          const save = () =>
-            sql.transaction(() =>
-              remember(sql, limits.capacity, reply, limits.accounting, clock.currentTimeMillisUnsafe()),
-            );
-          return limits.accounting === undefined ? save() : limits.accounting.protect(save);
-        }),
-      );
-    }),
-  });
+);

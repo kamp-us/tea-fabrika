@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { Schema } from "effect";
+import { Function, Schema } from "effect";
 
 /** A captured failure's class, such as `TypeError`: the same 256-character bound as other brain text. */
 const ErrorClass = Schema.NonEmptyString.check(Schema.isMaxLength(256));
@@ -40,7 +40,10 @@ export type ExitReason = typeof ExitReason.Type;
  * @stability unstable
  * @category guards
  */
-export const sameReason = Schema.toEquivalence(ExitReason);
+export const sameReason: {
+  (that: ExitReason): (self: ExitReason) => boolean;
+  (self: ExitReason, that: ExitReason): boolean;
+} = Function.dual(2, Schema.toEquivalence(ExitReason));
 
 /**
  * Decodes untrusted input to one exit reason, as a `Result`. A string, an unknown tag or an extra

@@ -14,8 +14,10 @@ import {
   Equal,
   Exit,
   Fiber,
+  Function,
   Layer,
   Option,
+  Predicate,
   Result,
   Schema,
   Semaphore,
@@ -215,23 +217,27 @@ type CheckedSettings = Effect.Success<ReturnType<typeof settings>>;
  * @stability unstable
  * @category layers
  */
-export function recordedLayer(env: Env): Layer.Layer<RecordedStart, Starts.StartsError>;
-export function recordedLayer(
-  env: Env,
-  input: Effect.Effect<CheckedSettings, LedgerError>,
-): Layer.Layer<RecordedStart, LedgerError | Starts.StartsError>;
-export function recordedLayer(
-  env: Env,
-  input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError> = checkedSettings(env),
-) {
-  return Layer.unwrap(
-    input.pipe(
-      Effect.map(({ input }) =>
-        SettingsRecorded.layer(input).pipe(Layer.provide(SettingsStartsRemote.layer(projectStub(env, input.name)))),
+export const recordedLayer: {
+  (
+    input: Effect.Effect<CheckedSettings, LedgerError>,
+  ): (env: Env) => Layer.Layer<RecordedStart, LedgerError | Starts.StartsError>;
+  (env: Env): Layer.Layer<RecordedStart, Starts.StartsError>;
+  (
+    env: Env,
+    input: Effect.Effect<CheckedSettings, LedgerError>,
+  ): Layer.Layer<RecordedStart, LedgerError | Starts.StartsError>;
+} = Function.dual(
+  // A direct call starts with the bindings; a piped one with the checked settings, an Effect.
+  (args) => !Effect.isEffect(args[0]),
+  (env: Env, input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError> = checkedSettings(env)) =>
+    Layer.unwrap(
+      input.pipe(
+        Effect.map(({ input }) =>
+          SettingsRecorded.layer(input).pipe(Layer.provide(SettingsStartsRemote.layer(projectStub(env, input.name)))),
+        ),
       ),
     ),
-  );
-}
+);
 
 export {
   /**
@@ -408,7 +414,10 @@ export interface ProjectOptions {
  * @stability unstable
  * @category constructors
  */
-export const projectStub = (env: Env, name: string) => env.PROJECT.getByName(name);
+export const projectStub: {
+  (name: string): (env: Env) => DurableObjectStub<ProjectBinding>;
+  (env: Env, name: string): DurableObjectStub<ProjectBinding>;
+} = Function.dual(2, (env: Env, name: string): DurableObjectStub<ProjectBinding> => env.PROJECT.getByName(name));
 
 /**
  * Returns the stub of the Process object for a registered name in a project. One object holds
@@ -417,8 +426,12 @@ export const projectStub = (env: Env, name: string) => env.PROJECT.getByName(nam
  * @stability unstable
  * @category constructors
  */
-export const processStub = (env: Pick<Env, "PROCESS">, project: string, name: string) =>
-  env.PROCESS.getByName(JSON.stringify([project, name]));
+export const processStub: {
+  (project: string, name: string): (env: Pick<Env, "PROCESS">) => DurableObjectStub<ProcessBinding>;
+  (env: Pick<Env, "PROCESS">, project: string, name: string): DurableObjectStub<ProcessBinding>;
+} = Function.dual(3, (env: Pick<Env, "PROCESS">, project: string, name: string): DurableObjectStub<ProcessBinding> =>
+  env.PROCESS.getByName(JSON.stringify([project, name])),
+);
 
 /**
  * Returns the RPC stub of the Record object for a name in a project; a `SinkError` crosses it typed.
@@ -426,8 +439,12 @@ export const processStub = (env: Pick<Env, "PROCESS">, project: string, name: st
  * @stability unstable
  * @category constructors
  */
-export const recordStub = (env: Env, project: string, name: string) =>
-  makeRpcStub<RecordShape>(env.RECORD.getByName(JSON.stringify([project, name])), { errors: [SinkError] });
+export const recordStub: {
+  (project: string, name: string): (env: Env) => RecordShape;
+  (env: Env, project: string, name: string): RecordShape;
+} = Function.dual(3, (env: Env, project: string, name: string): RecordShape =>
+  makeRpcStub<RecordShape>(env.RECORD.getByName(JSON.stringify([project, name])), { errors: [SinkError] }),
+);
 
 // Bindings have already entered Effect before the caller adds its RPC span.
 /**
@@ -780,29 +797,49 @@ export const complete = Effect.fn(function* <A, E, R>(
  * @stability unstable
  * @category layers
  */
-export const recordingLayer = (sql: Sql, env: Env, project: string, object: string) =>
-  Layer.effectContext(
-    Effect.gen(function* () {
-      const start = yield* RecordedStart;
-      const services = yield* Layer.build(
-        Layer.mergeAll(recordLayer(env, project), archiveLayer(env), SpanSink.layer(sql, { object })),
-      );
-      const tracer = yield* Tracer.Tracer.pipe(Effect.provideContext(services));
-      return Context.add(
-        services,
-        Tracer.Tracer,
-        Tracer.make({
-          context: tracer.context,
-          span: (options) => {
-            const span = tracer.span(options);
-            span.attribute("fab.settings", start.snapshot.hash);
-            span.attribute("fab.build", start.input.build);
-            return span;
-          },
-        }),
-      );
-    }),
-  );
+export const recordingLayer: {
+  (
+    env: Env,
+    project: string,
+    object: string,
+  ): (sql: Sql) => Layer.Layer<Archive | RecordManager | SpanSink, never, RecordedStart>;
+  (
+    sql: Sql,
+    env: Env,
+    project: string,
+    object: string,
+  ): Layer.Layer<Archive | RecordManager | SpanSink, never, RecordedStart>;
+} = Function.dual(
+  4,
+  (
+    sql: Sql,
+    env: Env,
+    project: string,
+    object: string,
+  ): Layer.Layer<Archive | RecordManager | SpanSink, never, RecordedStart> =>
+    Layer.effectContext(
+      Effect.gen(function* () {
+        const start = yield* RecordedStart;
+        const services = yield* Layer.build(
+          Layer.mergeAll(recordLayer(env, project), archiveLayer(env), SpanSink.layer(sql, { object })),
+        );
+        const tracer = yield* Tracer.Tracer.pipe(Effect.provideContext(services));
+        return Context.add(
+          services,
+          Tracer.Tracer,
+          Tracer.make({
+            context: tracer.context,
+            span: (options) => {
+              const span = tracer.span(options);
+              span.attribute("fab.settings", start.snapshot.hash);
+              span.attribute("fab.build", start.input.build);
+              return span;
+            },
+          }),
+        );
+      }),
+    ),
+);
 
 const fingerprint = Effect.fnUntraced(function* (value: string) {
   const ssh = value.startsWith("ssh-");
@@ -2156,14 +2193,7 @@ export class ProjectService extends Context.Service<
   }
 >()("@kampus/libfabrika/cloudflare/runtime.ProjectService") {}
 
-/**
- * Layer that provides `ProjectService` for one Project object, after its start's input is decoded and
- * recorded in its own ledger.
- *
- * @stability unstable
- * @category layers
- */
-export const projectLayer = (
+const projectLayerBody = (
   ctx: DurableObjectState,
   env: Env,
   options: ProjectOptions,
@@ -2198,13 +2228,31 @@ export const projectLayer = (
 };
 
 /**
- * Creates the Project object's runtime: the full `ProjectService`, plus `settingsStart` and
- * `settingsRead`, which run on a smaller runtime of its ledger and starts alone.
+ * Layer that provides `ProjectService` for one Project object, after its start's input is decoded and
+ * recorded in its own ledger.
  *
  * @stability unstable
- * @category constructors
+ * @category layers
  */
-export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) => {
+export const projectLayer: {
+  (
+    env: Env,
+    options: ProjectOptions,
+    local?: ReturnType<typeof projectLedger>,
+  ): (ctx: DurableObjectState) => ReturnType<typeof projectLayerBody>;
+  (
+    ctx: DurableObjectState,
+    env: Env,
+    options: ProjectOptions,
+    local?: ReturnType<typeof projectLedger>,
+  ): ReturnType<typeof projectLayerBody>;
+} = Function.dual(
+  // A direct call starts with the object's state; a piped one with the bindings.
+  (args) => Predicate.hasProperty(args[0], "storage"),
+  projectLayerBody,
+);
+
+const projectRuntimeBody = (ctx: DurableObjectState, env: Env, options: ProjectOptions) => {
   const local = projectLedger(
     ctx,
     env,
@@ -2245,13 +2293,28 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env, options: Proje
 };
 
 /**
+ * Creates the Project object's runtime: the full `ProjectService`, plus `settingsStart` and
+ * `settingsRead`, which run on a smaller runtime of its ledger and starts alone.
+ *
+ * @stability unstable
+ * @category constructors
+ */
+export const projectRuntime: {
+  (env: Env, options: ProjectOptions): (ctx: DurableObjectState) => ReturnType<typeof projectRuntimeBody>;
+  (ctx: DurableObjectState, env: Env, options: ProjectOptions): ReturnType<typeof projectRuntimeBody>;
+} = Function.dual(3, projectRuntimeBody);
+
+/**
  * Layer that provides durable task storage on the Project's own database, for trusted startup code.
  * A task's doorbell rings the Connection object it names.
  *
  * @stability unstable
  * @category layers
  */
-export const projectTasksLayer = (ctx: DurableObjectState, env: Env) =>
+export const projectTasksLayer: {
+  (env: Env): (ctx: DurableObjectState) => Layer.Layer<Tasks>;
+  (ctx: DurableObjectState, env: Env): Layer.Layer<Tasks>;
+} = Function.dual(2, (ctx: DurableObjectState, env: Env): Layer.Layer<Tasks> =>
   TasksLedger.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -2265,7 +2328,8 @@ export const projectTasksLayer = (ctx: DurableObjectState, env: Env) =>
       }),
     ),
     Layer.provide(Id.Generator.layer),
-  );
+  ),
+);
 
 // The trace a delivered letter carries from the door, as P11's Incoming names it.
 const Delivered = Schema.Struct({
@@ -2524,6 +2588,16 @@ export class ProcessService extends Context.Service<
   }
 >()("@kampus/libfabrika/cloudflare/runtime.ProcessService") {}
 
+const processLayerBody = (
+  ctx: DurableObjectState,
+  env: Env,
+  programs: Readonly<Record<string, ProgramSource>>,
+  input?: ProjectOptions["input"],
+) =>
+  Layer.effect(ProcessService, processLogic(ctx, env, programs)).pipe(
+    Layer.provide(input === undefined ? recordedLayer(env) : recordedLayer(env, input)),
+  );
+
 /**
  * Layer that provides one Process object's `ProcessService`, its start recorded with the Project.
  *
@@ -2535,15 +2609,26 @@ export class ProcessService extends Context.Service<
  * @stability unstable
  * @category layers
  */
-export const processLayer = (
-  ctx: DurableObjectState,
-  env: Env,
-  programs: Readonly<Record<string, ProgramSource>>,
-  input?: ProjectOptions["input"],
-) =>
-  Layer.effect(ProcessService, processLogic(ctx, env, programs)).pipe(
-    Layer.provide(input === undefined ? recordedLayer(env) : recordedLayer(env, input)),
-  );
+export const processLayer: {
+  (
+    env: Env,
+    programs: Readonly<Record<string, ProgramSource>>,
+    input?: ProjectOptions["input"],
+  ): (ctx: DurableObjectState) => ReturnType<typeof processLayerBody>;
+  (
+    ctx: DurableObjectState,
+    env: Env,
+    programs: Readonly<Record<string, ProgramSource>>,
+    input?: ProjectOptions["input"],
+  ): ReturnType<typeof processLayerBody>;
+} = Function.dual(
+  // A direct call starts with the object's state; a piped one with the bindings.
+  (args) => Predicate.hasProperty(args[0], "storage"),
+  processLayerBody,
+);
+
+const processRuntimeBody = (ctx: DurableObjectState, env: Env, programs: Readonly<Record<string, ProgramSource>>) =>
+  SettingsRuntime.runtime(processLayer(ctx, env, programs));
 
 /**
  * Creates a Process object's runtime: `ProcessService` over its built-in programs, with the start
@@ -2552,5 +2637,14 @@ export const processLayer = (
  * @stability unstable
  * @category constructors
  */
-export const processRuntime = (ctx: DurableObjectState, env: Env, programs: Readonly<Record<string, ProgramSource>>) =>
-  SettingsRuntime.runtime(processLayer(ctx, env, programs));
+export const processRuntime: {
+  (
+    env: Env,
+    programs: Readonly<Record<string, ProgramSource>>,
+  ): (ctx: DurableObjectState) => ReturnType<typeof processRuntimeBody>;
+  (
+    ctx: DurableObjectState,
+    env: Env,
+    programs: Readonly<Record<string, ProgramSource>>,
+  ): ReturnType<typeof processRuntimeBody>;
+} = Function.dual(3, processRuntimeBody);

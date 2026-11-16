@@ -1,5 +1,5 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { Effect } from "effect";
+import { Effect, Function } from "effect";
 import * as Audit from "../runtime/Audit.ts";
 import { Declaration, type Execution, executionFailure, nodeExecution, Reply } from "../runtime/Execution.ts";
 import { ProgramDown, stepper } from "../runtime/Program.ts";
@@ -22,7 +22,7 @@ const reply = Effect.fnUntraced(function* (execution: Pick<Execution, "reply">, 
   );
 });
 
-export const programBox = (declared: unknown, build: string) => {
+const programBoxBody = (declared: unknown, build: string) => {
   const program = nodeExecution(declared, build);
   const execution = {
     ...program,
@@ -112,3 +112,8 @@ export const programBox = (declared: unknown, build: string) => {
     }
   };
 };
+
+export const programBox: {
+  (build: string): (declared: unknown) => ReturnType<typeof programBoxBody>;
+  (declared: unknown, build: string): ReturnType<typeof programBoxBody>;
+} = Function.dual(2, programBoxBody);

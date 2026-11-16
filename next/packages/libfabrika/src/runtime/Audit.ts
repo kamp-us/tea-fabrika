@@ -5,6 +5,7 @@
  *
  * @stability unstable
  */
+import * as Function from "effect/Function";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -108,7 +109,10 @@ type Declaration = {
  * @stability unstable
  * @category combinators
  */
-export const select = (program: Declaration, raw: unknown): Result.Result<Schema.Json, AuditError> => {
+export const select: {
+  (raw: unknown): (program: Declaration) => Result.Result<Schema.Json, AuditError>;
+  (program: Declaration, raw: unknown): Result.Result<Schema.Json, AuditError>;
+} = Function.dual(2, (program: Declaration, raw: unknown): Result.Result<Schema.Json, AuditError> => {
   const decoded = Result.try({
     try: () => Schema.decodeUnknownResult(program.msg)(raw),
     catch: (cause) => new AuditError({ reason: new Input({ cause: Redacted.make(cause) }) }),
@@ -131,4 +135,4 @@ export const select = (program: Declaration, raw: unknown): Result.Result<Schema
       }),
     );
   });
-};
+});

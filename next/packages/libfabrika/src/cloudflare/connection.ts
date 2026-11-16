@@ -1,4 +1,4 @@
-import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { Cause, Clock, Context, Effect, Function, Layer, Option, Predicate, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
@@ -329,7 +329,7 @@ export class ConnectionService extends Context.Service<
   }
 >()("@kampus/libfabrika/cloudflare/connection.ConnectionService") {}
 
-export const connectionLayer = (
+const connectionLayerBody = (
   ctx: DurableObjectState,
   env: Env,
   _config?: BrainOptions,
@@ -340,9 +340,45 @@ export const connectionLayer = (
     Layer.provide(input === undefined ? recordedLayer(env) : recordedLayer(env, input)),
   );
 
-export const connectionRuntime = (
+export const connectionLayer: {
+  (
+    env: Env,
+    config?: BrainOptions,
+    input?: ProjectOptions["input"],
+  ): (ctx: DurableObjectState) => ReturnType<typeof connectionLayerBody>;
+  (
+    ctx: DurableObjectState,
+    env: Env,
+    config?: BrainOptions,
+    input?: ProjectOptions["input"],
+  ): ReturnType<typeof connectionLayerBody>;
+} = Function.dual(
+  // A direct call starts with the object's state; a piped one with the bindings.
+  (args) => Predicate.hasProperty(args[0], "storage"),
+  connectionLayerBody,
+);
+
+const connectionRuntimeBody = (
   ctx: DurableObjectState,
   env: Env,
   config?: BrainOptions,
   input?: ProjectOptions["input"],
 ) => SettingsRuntime.runtime(connectionLayer(ctx, env, config, input));
+
+export const connectionRuntime: {
+  (
+    env: Env,
+    config?: BrainOptions,
+    input?: ProjectOptions["input"],
+  ): (ctx: DurableObjectState) => ReturnType<typeof connectionRuntimeBody>;
+  (
+    ctx: DurableObjectState,
+    env: Env,
+    config?: BrainOptions,
+    input?: ProjectOptions["input"],
+  ): ReturnType<typeof connectionRuntimeBody>;
+} = Function.dual(
+  // A direct call starts with the object's state; a piped one with the bindings.
+  (args) => Predicate.hasProperty(args[0], "storage"),
+  connectionRuntimeBody,
+);

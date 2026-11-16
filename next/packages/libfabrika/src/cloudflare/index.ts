@@ -5,7 +5,7 @@
  *
  * @stability unstable
  */
-import { Effect, Option, Schema } from "effect";
+import { Effect, Function, Option, Predicate, Schema } from "effect";
 import { BuiltProgram } from "../runtime/Built.ts";
 import { Declaration, workerExecution, type ExecutionCalls, type ProgramSource } from "../runtime/Execution.ts";
 import { ProgramDown } from "../runtime/Program.ts";
@@ -71,21 +71,7 @@ type Loader = Omit<WorkerLoader, "get"> & {
   ): ReturnType<WorkerLoader["get"]>;
 };
 
-/**
- * Returns a loader that runs a program's compiled code in its own Worker Loader isolate.
- *
- * **Details**
- *
- * `load(name, process, tail?, hash?)` picks the built-in program by `name`, or, given a `hash`, the
- * built-in program with that hash and else the one `lookup` finds. The code is decoded with its hash
- * checked, loaded as the isolate `<hash>/<process>`, and asked for its declaration. It answers the
- * isolate's execution, the declaration and the hash. No code fails with `ProgramDown` reason
- * `no_program`; a failed lookup, decode or describe fails with reason `load`.
- *
- * @stability unstable
- * @category constructors
- */
-export const workerLoader = (
+const workerLoaderBody = (
   loader: Loader,
   programs: Readonly<Record<string, ProgramSource>>,
   lookup?: (hash: string) => Effect.Effect<ProgramSource | null, unknown>,
@@ -145,3 +131,33 @@ export const workerLoader = (
     };
   }),
 });
+
+/**
+ * Returns a loader that runs a program's compiled code in its own Worker Loader isolate.
+ *
+ * **Details**
+ *
+ * `load(name, process, tail?, hash?)` picks the built-in program by `name`, or, given a `hash`, the
+ * built-in program with that hash and else the one `lookup` finds. The code is decoded with its hash
+ * checked, loaded as the isolate `<hash>/<process>`, and asked for its declaration. It answers the
+ * isolate's execution, the declaration and the hash. No code fails with `ProgramDown` reason
+ * `no_program`; a failed lookup, decode or describe fails with reason `load`.
+ *
+ * @stability unstable
+ * @category constructors
+ */
+export const workerLoader: {
+  (
+    programs: Readonly<Record<string, ProgramSource>>,
+    lookup?: (hash: string) => Effect.Effect<ProgramSource | null, unknown>,
+  ): (loader: Loader) => ReturnType<typeof workerLoaderBody>;
+  (
+    loader: Loader,
+    programs: Readonly<Record<string, ProgramSource>>,
+    lookup?: (hash: string) => Effect.Effect<ProgramSource | null, unknown>,
+  ): ReturnType<typeof workerLoaderBody>;
+} = Function.dual(
+  // A direct call starts with the platform's loader, which has `get`; a piped one with the programs.
+  (args) => Predicate.hasProperty(args[0], "get") && Predicate.isFunction(args[0].get),
+  workerLoaderBody,
+);

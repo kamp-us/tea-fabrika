@@ -1,5 +1,5 @@
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import { Function, Schema } from "effect";
 import { LedgerError } from "../../ledger/Ledger.ts";
 import { Entry, valueFor } from "../../ledger/Log.ts";
 import { Sender } from "../../permissions/Senders.ts";
@@ -98,15 +98,22 @@ const canonical = (to: To): To =>
  *
  * @internal
  */
-export const watchKey = (to: To, ref: string): string => JSON.stringify([canonical(to), ref]);
+export const watchKey: {
+  (ref: string): (to: To) => string;
+  (to: To, ref: string): string;
+} = Function.dual(2, (to: To, ref: string): string => JSON.stringify([canonical(to), ref]));
 
 /**
  * The one id a DOWN for (recipient, ref) in that watch's `round` is written under.
  *
  * @internal
  */
-export const signalId = (to: To, ref: string, round: number): string =>
-  JSON.stringify(["DOWN", canonical(to), ref, round]);
+export const signalId: {
+  (ref: string, round: number): (to: To) => string;
+  (to: To, ref: string, round: number): string;
+} = Function.dual(3, (to: To, ref: string, round: number): string =>
+  JSON.stringify(["DOWN", canonical(to), ref, round]),
+);
 
 const watched = { ref: Text, process: ProcessId, to: Recipient, round: Count, name: Schema.optionalKey(Text) };
 

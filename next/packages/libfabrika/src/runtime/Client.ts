@@ -17,7 +17,7 @@
  * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Option, Result, Schema } from "effect";
+import { Function, Option, Result, Schema } from "effect";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { apply } from "./Patch.ts";
 import { Sent } from "./Runner.ts";
@@ -379,12 +379,14 @@ const foldEntry = (fold: NameFold, raw: unknown, name: string, by: (writer: stri
  * @stability unstable
  * @category getters
  */
-export const foldName = (
-  fold: NameFold,
-  entries: ReadonlyArray<unknown>,
-  name: string,
-  by: (writer: string) => boolean,
-): NameFold => entries.reduce<NameFold>((acc, raw) => foldEntry(acc, raw, name, by), fold);
+export const foldName: {
+  (entries: ReadonlyArray<unknown>, name: string, by: (writer: string) => boolean): (fold: NameFold) => NameFold;
+  (fold: NameFold, entries: ReadonlyArray<unknown>, name: string, by: (writer: string) => boolean): NameFold;
+} = Function.dual(
+  4,
+  (fold: NameFold, entries: ReadonlyArray<unknown>, name: string, by: (writer: string) => boolean): NameFold =>
+    entries.reduce<NameFold>((acc, raw) => foldEntry(acc, raw, name, by), fold),
+);
 
 /**
  * Returns the live process a registered name points at, from its `processes/<name>` entries as read:
@@ -394,8 +396,11 @@ export const foldName = (
  * @stability unstable
  * @category getters
  */
-export const resolveName = (
-  entries: ReadonlyArray<unknown>,
-  name: string,
-  by: (writer: string) => boolean,
-): string | null => foldName(emptyFold, entries, name, by).live;
+export const resolveName: {
+  (name: string, by: (writer: string) => boolean): (entries: ReadonlyArray<unknown>) => string | null;
+  (entries: ReadonlyArray<unknown>, name: string, by: (writer: string) => boolean): string | null;
+} = Function.dual(
+  3,
+  (entries: ReadonlyArray<unknown>, name: string, by: (writer: string) => boolean): string | null =>
+    foldName(emptyFold, entries, name, by).live,
+);

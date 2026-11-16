@@ -7,7 +7,7 @@
  *
  * @stability unstable
  */
-import { Effect, Order, Predicate, Schema, SchemaAST, SchemaIssue } from "effect";
+import { Effect, Function, Order, Predicate, Schema, SchemaAST, SchemaIssue } from "effect";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
 import type * as Setting from "./Setting.ts";
@@ -92,14 +92,17 @@ const located = (place: Place, path: Path) => {
  * @stability unstable
  * @category errors
  */
-export const refused = (location: string, d: Declaration, shown: string) => {
+export const refused: {
+  (d: Declaration, shown: string): (location: string) => SettingsError;
+  (location: string, d: Declaration, shown: string): SettingsError;
+} = Function.dual(3, (location: string, d: Declaration, shown: string): SettingsError => {
   const expected = SchemaAST.resolveTitle(d.schema.ast) ?? "a valid value";
   const rule = SchemaAST.resolveDescription(d.schema.ast) ?? "fabrika settings lists every setting.";
   return new SettingsError({
     reason: "invalid",
     message: `${location}: ${d.path} = ${shown} is not ${expected}.\n  ${rule} ${STOP}`,
   });
-};
+});
 
 /** Edits from one key to another, a swap of two letters counting as one. */
 const distance = (a: string, b: string) => {
@@ -143,10 +146,13 @@ const struct = (declarations: ReadonlyArray<Declaration>, depth: number): Schema
  * @stability unstable
  * @category constructors
  */
-export const schema = <A>(group: Setting.Group<A>, file: Setting.File): Schema.Codec<unknown, unknown> => {
+export const schema: {
+  <A>(file: Setting.File): (group: Setting.Group<A>) => Schema.Codec<unknown, unknown>;
+  <A>(group: Setting.Group<A>, file: Setting.File): Schema.Codec<unknown, unknown>;
+} = Function.dual(2, <A>(group: Setting.Group<A>, file: Setting.File): Schema.Codec<unknown, unknown> => {
   const own = group.declarations.filter((d) => d.scope.includes(file)).sort((a, b) => (a.path < b.path ? -1 : 1));
   return own.length === 0 ? Schema.Record(Schema.String, Schema.Never) : struct(own, 0);
-};
+});
 
 /** The one message for the first issue in `file`. Unknown keys are named; their values never are. */
 const explain = (
@@ -211,7 +217,10 @@ const greater = Order.isGreaterThan(Order.Tuple([Order.Number, Order.Number, Ord
  * @stability unstable
  * @category combinators
  */
-export const newer = (a: string, b: string) => greater(triple(a), triple(b));
+export const newer: {
+  (b: string): (a: string) => boolean;
+  (a: string, b: string): boolean;
+} = Function.dual(2, (a: string, b: string): boolean => greater(triple(a), triple(b)));
 
 /**
  * Fails when the repo's file states a minimum fabrika version that is newer than the running one.

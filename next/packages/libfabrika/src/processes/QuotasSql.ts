@@ -8,6 +8,7 @@
 import { applyCell } from "@demlik/tea";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
@@ -121,10 +122,25 @@ const use = (model: Quota.Model): Use => ({
  * @stability unstable
  * @category layers
  */
-export const layer = (sql: Sql, options: { readonly brain: string; readonly limits: Limits }) =>
-  Layer.unwrap(
-    Effect.flatMap(Clock.Clock, (clock) => Effect.try({ try: () => make(sql, options, clock), catch: failed })),
-  );
+export const layer: {
+  (options: {
+    readonly brain: string;
+    readonly limits: Limits;
+  }): (sql: Sql) => Layer.Layer<Quotas | WritePolicy, QuotasError>;
+  (
+    sql: Sql,
+    options: { readonly brain: string; readonly limits: Limits },
+  ): Layer.Layer<Quotas | WritePolicy, QuotasError>;
+} = Function.dual(
+  2,
+  (
+    sql: Sql,
+    options: { readonly brain: string; readonly limits: Limits },
+  ): Layer.Layer<Quotas | WritePolicy, QuotasError> =>
+    Layer.unwrap(
+      Effect.flatMap(Clock.Clock, (clock) => Effect.try({ try: () => make(sql, options, clock), catch: failed })),
+    ),
+);
 
 const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limits }, clock: Clock.Clock) => {
   // The authority a synchronous step runs under, set by `within` around it and nowhere else.
@@ -528,7 +544,10 @@ class Stopped extends Schema.TaggedError<Stopped>()("Stopped", { pending: Pendin
  * @stability unstable
  * @category constructors
  */
-export const accounting = (sql: Sql, options: { readonly name: string; readonly limits: Allowance }): Accounting => {
+export const accounting: {
+  (options: { readonly name: string; readonly limits: Allowance }): (sql: Sql) => Accounting;
+  (sql: Sql, options: { readonly name: string; readonly limits: Allowance }): Accounting;
+} = Function.dual(2, (sql: Sql, options: { readonly name: string; readonly limits: Allowance }): Accounting => {
   const local = Quota.Account.cases.local.make({ name: options.name });
   const recovery = Quota.Account.cases.recovery.make({ name: options.name, location: "process" });
   const machine = (account: Quota.Account) => Quota.make({ account, limits: options.limits });
@@ -679,4 +698,4 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
       }),
     ),
   };
-};
+});

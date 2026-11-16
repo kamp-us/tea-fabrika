@@ -6,7 +6,7 @@
  *
  * @stability unstable
  */
-import { Context, Effect, Layer, Option, Result, Schema, Stream } from "effect";
+import { Context, Effect, Function, Layer, Option, Result, Schema, Stream } from "effect";
 import { type Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { lineFor } from "../ledger/Log.ts";
@@ -652,7 +652,10 @@ export type ProcessCalls = Omit<
  * @stability unstable
  * @category layers
  */
-export const remoteProcessManager = (calls: ProcessCalls, by: string): Layer.Layer<ProcessManager> =>
+export const remoteProcessManager: {
+  (by: string): (calls: ProcessCalls) => Layer.Layer<ProcessManager>;
+  (calls: ProcessCalls, by: string): Layer.Layer<ProcessManager>;
+} = Function.dual(2, (calls: ProcessCalls, by: string): Layer.Layer<ProcessManager> =>
   Layer.succeed(ProcessManager, {
     ...calls,
     start: (request, from, first, guard) =>
@@ -666,7 +669,8 @@ export const remoteProcessManager = (calls: ProcessCalls, by: string): Layer.Lay
     ackedPos: (turn, name) => ackedPos(turn, name, by),
     receive: (process, after) =>
       Stream.unwrap(Effect.map(calls.receive(process, after), (letters) => Stream.fromIterable(letters))),
-  });
+  }),
+);
 
 /**
  * Layer that provides `Mailbox` and `ProcessManager` together, over one ledger.
@@ -679,8 +683,19 @@ export const remoteProcessManager = (calls: ProcessCalls, by: string): Layer.Lay
  * @stability unstable
  * @category layers
  */
-export const CoordinationLayer = (
-  caller: Wiring,
-  nextId: Effect.Effect<string>,
-): Layer.Layer<Mailbox | ProcessManager, never, Ledger | LedgerTransaction> =>
-  Layer.mergeAll(Mailbox.layer, ProcessManager.layer(caller, nextId));
+export const CoordinationLayer: {
+  (
+    nextId: Effect.Effect<string>,
+  ): (caller: Wiring) => Layer.Layer<Mailbox | ProcessManager, never, Ledger | LedgerTransaction>;
+  (
+    caller: Wiring,
+    nextId: Effect.Effect<string>,
+  ): Layer.Layer<Mailbox | ProcessManager, never, Ledger | LedgerTransaction>;
+} = Function.dual(
+  2,
+  (
+    caller: Wiring,
+    nextId: Effect.Effect<string>,
+  ): Layer.Layer<Mailbox | ProcessManager, never, Ledger | LedgerTransaction> =>
+    Layer.mergeAll(Mailbox.layer, ProcessManager.layer(caller, nextId)),
+);

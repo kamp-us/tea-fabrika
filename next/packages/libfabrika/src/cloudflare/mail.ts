@@ -1,4 +1,4 @@
-import { Effect, Layer, Option, Schema } from "effect";
+import { Effect, Function, Layer, Option, Schema } from "effect";
 import { ProgramMail, ProgramMailError } from "../processes/ProgramMail.ts";
 import type { MailDelivery } from "../runtime/MailDelivery.ts";
 import * as MailDeliveryLive from "../runtime/MailDeliveryLive.ts";
@@ -26,7 +26,10 @@ const fromMailReply = Effect.fnUntraced(function* (reply: unknown) {
 });
 
 /** Save mail through the Project, then await the target object's saved alarm. */
-export const mailLayer = (env: Env, project: string): Layer.Layer<MailDelivery> =>
+export const mailLayer: {
+  (project: string): (env: Env) => Layer.Layer<MailDelivery>;
+  (env: Env, project: string): Layer.Layer<MailDelivery>;
+} = Function.dual(2, (env: Env, project: string): Layer.Layer<MailDelivery> =>
   MailDeliveryLive.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -48,7 +51,8 @@ export const mailLayer = (env: Env, project: string): Layer.Layer<MailDelivery> 
         wakeups(env, project),
       ),
     ),
-  );
+  ),
+);
 
 /**
  * Layer that wakes a registered name: its Process object saves the alarm that reads its inbox. Mail
@@ -63,7 +67,10 @@ export const mailLayer = (env: Env, project: string): Layer.Layer<MailDelivery> 
  * @stability unstable
  * @category layers
  */
-export const wakeups = (env: Pick<Env, "PROCESS">, project: string): Layer.Layer<MailWakeups> =>
+export const wakeups: {
+  (project: string): (env: Pick<Env, "PROCESS">) => Layer.Layer<MailWakeups>;
+  (env: Pick<Env, "PROCESS">, project: string): Layer.Layer<MailWakeups>;
+} = Function.dual(2, (env: Pick<Env, "PROCESS">, project: string): Layer.Layer<MailWakeups> =>
   Layer.succeed(MailWakeups, {
     wake: Effect.fnUntraced(function* (name) {
       const span = yield* Effect.option(Effect.currentSpan);
@@ -73,4 +80,5 @@ export const wakeups = (env: Pick<Env, "PROCESS">, project: string): Layer.Layer
           .pipe(Effect.mapError(() => new MailWakeupsError({ reason: "unavailable" }))),
       );
     }),
-  });
+  }),
+);

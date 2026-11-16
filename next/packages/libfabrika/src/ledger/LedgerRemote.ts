@@ -3,7 +3,7 @@
  *
  * @stability unstable
  */
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Function, Layer, Schema } from "effect";
 import { short } from "../telemetry/Trace.ts";
 import { pages } from "./internal/ledgerPages.ts";
 import { STREAM, tag } from "./internal/ledgerTrace.ts";
@@ -23,7 +23,10 @@ import { Appended, Entry, Waited } from "./Log.ts";
  * @stability unstable
  * @category layers
  */
-export const layer = (stub: LedgerCalls, caller: { readonly reader: string }): Layer.Layer<Ledger> => {
+export const layer: {
+  (caller: { readonly reader: string }): (stub: LedgerCalls) => Layer.Layer<Ledger>;
+  (stub: LedgerCalls, caller: { readonly reader: string }): Layer.Layer<Ledger>;
+} = Function.dual(2, (stub: LedgerCalls, caller: { readonly reader: string }): Layer.Layer<Ledger> => {
   const call = Effect.fn("ledger.call")(function* <A, M extends keyof LedgerCalls>(
     name: M,
     stream: string,
@@ -52,4 +55,4 @@ export const layer = (stub: LedgerCalls, caller: { readonly reader: string }): L
     read: (stream, after) => pages(after, (from) => call("read", stream, page, stream, from, caller.reader)),
     wait: (stream, after) => call("wait", stream, Waited, stream, after, caller.reader),
   });
-};
+});

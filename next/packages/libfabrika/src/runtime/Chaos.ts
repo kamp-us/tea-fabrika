@@ -2,6 +2,7 @@
  * Fault requests and bounded history checks, without outside effects.
  * @stability unstable
  */
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Id from "../Id.ts";
@@ -259,7 +260,10 @@ export const restarts = (entries: ReadonlyArray<RestartEntry>): ReadonlyArray<ty
  * @stability unstable
  * @category checking
  */
-export const recovery = (hit: Hit | null, entries: ReadonlyArray<RestartEntry>): typeof Recovery.Type | null => {
+export const recovery: {
+  (entries: ReadonlyArray<RestartEntry>): (hit: Hit | null) => typeof Recovery.Type | null;
+  (hit: Hit | null, entries: ReadonlyArray<RestartEntry>): typeof Recovery.Type | null;
+} = Function.dual(2, (hit: Hit | null, entries: ReadonlyArray<RestartEntry>): typeof Recovery.Type | null => {
   if (hit === null) {
     return null;
   }
@@ -270,4 +274,4 @@ export const recovery = (hit: Hit | null, entries: ReadonlyArray<RestartEntry>):
   return first === undefined
     ? null
     : { ref: first.ref, rev: first.rev, arrivedAt: first.arrivedAt, process: first.process };
-};
+});

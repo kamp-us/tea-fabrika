@@ -5,6 +5,7 @@
  * @stability unstable
  */
 import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
 import * as Schema from "effect/Schema";
 import { NotGranted, type Writer } from "../access/SessionManager.ts";
 import { QuotasError, type Accounting, type RecoveryReserveExhausted } from "../processes/Quotas.ts";
@@ -56,7 +57,10 @@ export const reserveFault = (error: unknown): RecoveryReserveExhausted | undefin
  * @stability unstable
  * @category combinators
  */
-export const guard = (runner: ProgramRunner["Service"], accounting: Accounting): ProgramRunner["Service"] => {
+export const guard: {
+  (accounting: Accounting): (runner: ProgramRunner["Service"]) => ProgramRunner["Service"];
+  (runner: ProgramRunner["Service"], accounting: Accounting): ProgramRunner["Service"];
+} = Function.dual(2, (runner: ProgramRunner["Service"], accounting: Accounting): ProgramRunner["Service"] => {
   const checked = <A, E>(work: Effect.Effect<A, E>) =>
     Effect.andThen(accounting.check, work).pipe(
       Effect.catch((error): Effect.Effect<never, E | QuotasError> => {
@@ -80,7 +84,7 @@ export const guard = (runner: ProgramRunner["Service"], accounting: Accounting):
     restart: (request) => checked(runner.restart(request)),
     swap: (request) => checked(runner.swap(request)),
   };
-};
+});
 
 /**
  * Restarts a stopped name for a person: clears its saved reserve fault once the pending charge
@@ -99,14 +103,7 @@ export const personRestart = Effect.fn("quota_runner.restart")(function* (
   return yield* runner.restart({ id: request.id, build: request.build });
 });
 
-/**
- * Restarts a stopped name for the checked writer `by`, as `personRestart` does for a person. Any
- * other writer fails with `NotGranted`.
- *
- * @stability unstable
- * @category combinators
- */
-export const restart = (
+const restartBody = (
   runner: ProgramRunner["Service"],
   accounting: Accounting,
   request: { readonly id: string; readonly build: string; readonly by: Writer },
@@ -114,3 +111,22 @@ export const restart = (
   request.by._tag === "person"
     ? personRestart(runner, accounting, { id: request.id, build: request.build })
     : Effect.fail(new NotGranted({}));
+
+/**
+ * Restarts a stopped name for the checked writer `by`, as `personRestart` does for a person. Any
+ * other writer fails with `NotGranted`.
+ *
+ * @stability unstable
+ * @category combinators
+ */
+export const restart: {
+  (
+    accounting: Accounting,
+    request: { readonly id: string; readonly build: string; readonly by: Writer },
+  ): (runner: ProgramRunner["Service"]) => ReturnType<typeof restartBody>;
+  (
+    runner: ProgramRunner["Service"],
+    accounting: Accounting,
+    request: { readonly id: string; readonly build: string; readonly by: Writer },
+  ): ReturnType<typeof restartBody>;
+} = Function.dual(3, restartBody);
