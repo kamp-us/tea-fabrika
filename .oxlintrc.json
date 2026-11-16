@@ -2392,7 +2392,8 @@
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/processes/**",
-        "next/packages/libfabrika/src/telemetry/**"
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/transport/**"
       ],
       "rules": {
         "eslint/no-restricted-properties": [
