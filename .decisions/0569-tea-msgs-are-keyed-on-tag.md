@@ -77,3 +77,6 @@ const next = Msg.match(msg, { tick: () => model, land: ({ pr }) => landed(model,
   value, and `Transitions`' lookup of a state's `type` to `_tag`. Semantic events stay on `type`,
   not ruled. Machines that compare a state's `_tag` by hand may move to `Transitions` later; that is
   not part of the patch.
+
+- 2026-11-15, later (owner): [0578](0578-tea-cell-answers-a-step.md) adds one change to this
+  patch, a pipeable `Step` for a cell's answer in place of the tuple. The rest of this file holds.
