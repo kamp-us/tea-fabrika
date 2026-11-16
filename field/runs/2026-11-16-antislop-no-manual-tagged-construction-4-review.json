@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-manual-tagged-construction-4-review",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-16T01:24:37-08:00",
+  "ended": "2026-11-16T01:43:40-08:00",
+  "parent": "2026-11-16-antislop-no-manual-tagged-construction-4-tests-2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The one review of anti-slop judgment slice AS-no-manual-tagged-construction-4 (ticket 1057, decisions 0562 and 0563 with its amendment), our tooling and next/, at f158dd3f0 against origin/main 5c94f12f4: merge-ready; findings: 2. Every line of the 53 files was read. Each fix keeps what the code answers: an expected value or input of a known union is made by its own maker; a partial toMatchObject that named a tag reads the tag apart (toBe, toBeInstanceOf, Result.isFailure, Option.isSome) and keeps every other field, several now toEqual, which is stronger; an input that must break a schema is a made value with one field set or taken away. No assertion is deleted or narrowed and no law is loosened. The 2 ignore lines are allowed by 0562's one exception with real reasons: .agents/skills/lead/scripts/clauderow.test.ts:123 (Effect 4.1.2's PlatformError.systemError takes the error kind as _tag, node_modules/effect/src/PlatformError.ts:230, and has no maker) and next/packages/libfabrika/src/processes/ProcessStreams.integration.test.ts:344 (a junk-body schema whose key is _tag of any JSON). No lock line, no .oxlintrc.json or tsconfig.base.json change. agents-ledger.json loses exactly the one chain.ts fabrika(no-hand-tag) entry. The build's 3 product fixes (chain.ts RetriesExhaustedRecord, codexexec.ts Ended and Said) give the same plain records. Findings, not blocking: the doc comments over raw() in ChildrenTest.ts:274 and Process.test-support.ts:149 still say 'never made by a schema' above a line that makes it with Schema.TaggedStruct; commits.test-support.ts restates next/apps/fabrika/src/exam/commits.ts's exported Answer more loosely and unpinned.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 19,
+  "note": "Read-only apart from this row. Node 26.13.0, one file at a time with nice -n 19 and --maxWorkers=1, at f158dd3f0: 22 .agents test files (box 47, chain 63, codexexec 17, drive 65 and the rest) and 14 libfabrika plain test files, all green; integration laws ProcessLifecycle 31, ProcessManager 8, ProcessManagerMemo 2, ProcessMonitors 29, ProcessStreams 13, ProcessTextCaps 31, ProcessWindow 15, node/Children 8, apps/fabrika inbox-runner.laws 1, all green, none refused by the 0178 guard; runtime-recovery.laws alone 14 of 14 in 85 s (T753 L16 has wall-clock waitFor limits of 2 to 5 s; its load failure is already in field/findings/2026-11-14-t753-l16-times-out-on-a-loaded-ci-machine.json and 2026-11-16-t753-l16-at-its-timeout-in-the-cloud-box.json, and the diff does not change what it reaches). tsc --noEmit: .agents/tsconfig.json, next/packages/libfabrika and next/programs/inbox exit 0; the 15 touched .agents files outside that tsconfig, checked with a scratch tsconfig, have errors only on unchanged lines. Count: the rule forced to error in a scratch config outside the repo over .agents, processes, transport, schedules and programs/inbox gives 0 hits, and both ignore lines are used there; the diff removes 318 _tag keys, 6 of them type members, which fits the tests row's 313. node oxlint-plugins/lint.ts is red only for the 5 folders to lock and the 2 ignore lines unused until then, as both step rows say. loosening.sh from the merge base: exit 1, every hit an import, a helper or an expect rewritten as above; no law loosened. git merge-tree with origin/main: clean. Plants by reading: ProcessWindow p80 with until optional in down (noRetry decodes, red), ExitReason L7 with phase optional (phaseless decodes, red), Hello bad_signature refusal carrying a fingerprint (toEqual now red, was green before), quest.test held filter with stale_link and no step (red).",
+  "step": "review"
+}
