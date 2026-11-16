@@ -11,11 +11,11 @@
   "model": "claude-sonnet-5-5",
   "effort": null,
   "outcome": "pass",
-  "why": "Tests step for slice E10 of the Effect-check sweep (instanceOfSchema), in next/ and our tooling. Recount on origin/main: 53 hits over the 13 tsconfigs, 17 in this slice's folders (libfabrika src/*.ts, access, node, settings; the app's src/*.ts; .agents), none in a file of pull request 1366. Wrote the lock as an overrides entry in three tsconfigs: libfabrika's, the app's and .agents/. Typecheck was red with 17 errors (11, 5, 1). Fixed the 15 hits in exam paths by hand with the editor, each `x instanceof C` made `Schema.is(C)(x)`, one hit at a time (no tool edited a file). Left 2 product hits for the build: next/packages/libfabrika/src/Id.ts:200 and .agents/skills/lead/scripts/flow/landing.ts:103. The LOCKED row waits for E0 (pull request 1417), as the rules say.",
+  "why": "Slice E10 of the Effect-check sweep (instanceOfSchema), in next/ and our tooling, on one branch for the integrator. Recount on origin/main: 53 hits over the 13 tsconfigs, 17 in this slice's folders (libfabrika src/*.ts, access, node, settings; the app's src/*.ts; .agents), none in a file of pull request 1366; the other 36 are lib:cloudflare, processes, runtime, ledger (slice E66, after 1366). Lock: an overrides entry in libfabrika's, the app's and .agents/ tsconfig. Report: hits met 53 (17 in the slice), fixed by quick fix 0, fixed by hand with the Edit tool 17 (15 in exam paths, 2 in product files), left 0, waiting on 1366 0. Files: next/packages/libfabrika/src/Id.ts, src/access/SessionSenderTest.ts, src/node/settings/Load.integration.test.ts, src/settings/Files.test.ts, src/settings/Snapshot.test.ts, next/apps/fabrika/src/door.integration.test.ts, src/tasks-wire.integration.test.ts, .agents/skills/lead/scripts/flow/landing.ts. Each fix is x instanceof C made Schema.is(C)(x). The three tsconfigs show 0 errors. The LOCKED row waits for E0. Pull request 1448 was opened before the shape changed and is left as it is.",
   "tokens": null,
   "tools": null,
   "minutes": 60,
-  "note": "pnpm lint passed 16 of 17 parts; lint:dead was killed with SIGABRT in this box (not caused by this change, no export was added or removed).",
+  "note": "Tests run, narrow, --maxWorkers=1: settings Files.test and Snapshot.test, node/settings Load.integration.test, node/access SessionSender.integration.test, app tasks-wire.integration.test and door.integration.test, Id.test, landing.test. pnpm lint passed 16 of 17 parts; lint:dead was killed with SIGABRT in this box. No full typecheck.",
   "plants": [
     {
       "law": "L1",
