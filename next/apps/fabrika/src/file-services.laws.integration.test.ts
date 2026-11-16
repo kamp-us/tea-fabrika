@@ -91,6 +91,7 @@ it("dev refuses every invalid parent with reason parent_gone before touching set
               const files = yield* Layer.build(
                 Recorder.layer(FileSystem.FileSystem, FileSystem.makeNoop({ makeDirectory: () => Effect.never })),
               );
+
               cli.layer = Layer.merge(Layer.succeedContext(files), Path.layer);
               vi.resetModules();
               yield* Effect.promise(() => import("../dev.ts"));

@@ -41,10 +41,13 @@ type Sent = readonly [url: string, options: RequestInit | undefined];
  */
 const fetches = (answer: (url: string, options: RequestInit | undefined) => Promise<Response>) => {
   const sent: Array<Sent> = [];
+
   const fetch: typeof globalThis.fetch = (url, options) => {
     sent.push([String(url), options]);
+
     return answer(String(url), options);
   };
+
   return { sent, fetch };
 };
 
@@ -60,6 +63,7 @@ const run = (fetch: typeof globalThis.fetch) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const exit = yield* Effect.exit(cli.work!);
+
       return { exit, logged: yield* TestConsole.logLines };
     }).pipe(Effect.provideService(FetchHttpClient.Fetch, fetch), Effect.provide(TestConsole.layer)),
   );
@@ -229,6 +233,7 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
             }),
           ),
         );
+
         const { sent: calls, fetch } = fetches(async (_url, options) => {
           if (options?.method === "POST") {
             if (mode === "post") {

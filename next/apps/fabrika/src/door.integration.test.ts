@@ -3278,6 +3278,7 @@ describe("P10 signed membership changes", () => {
           (value) =>
             Effect.gen(function* () {
               const w = yield* world();
+
               // The real ClientManager, recorded: every method still runs the real code.
               const clients = Layer.unwrap(
                 ClientManager.pipe(Effect.map((real) => Recorder.layer(ClientManager, real))),
