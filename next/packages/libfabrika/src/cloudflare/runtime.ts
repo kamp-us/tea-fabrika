@@ -1611,7 +1611,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     return answers;
   });
   /** A candidate that passed its checks: the Code machine's `checked`, with its Cmds run here. */
-  const accept = Effect.fn("code.checked")(function* (input: typeof Install.Type) {
+  const accept = Effect.fn("code.checked")(function* (input: Install) {
     const [, cmds] = applyCell<
       typeof selected,
       Parameters<typeof codeMachine.update.checked>[1],
@@ -1661,7 +1661,7 @@ const projectLogic = Effect.fn("project.init")(function* (
 
     return swaps;
   });
-  const inspect = Effect.fn("code.inspect")(function* (input: typeof Install.Type) {
+  const inspect = Effect.fn("code.inspect")(function* (input: Install) {
     const built = yield* Schema.decodeUnknownEffect(BuiltProgram)(input).pipe(
       Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );

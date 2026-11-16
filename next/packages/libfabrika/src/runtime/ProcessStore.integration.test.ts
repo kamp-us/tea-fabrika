@@ -107,7 +107,7 @@ const from: From = {
   build: "build-a",
 };
 
-const checkpoint: typeof CheckpointSchema.Type = {
+const checkpoint: CheckpointSchema = {
   saved: { v: 1, build: "build-a", model: { count: 2 }, after: 4 },
   turn: null,
   cmds: [],
@@ -133,7 +133,7 @@ const checkpointArb = Arbitrary.all({
   cmds: Arbitrary.array(unboundedJson, { maxLength: 5 }),
 }).pipe(
   // JSON storage canonicalizes -0 to 0.
-  Arbitrary.map((value): typeof CheckpointSchema.Type => JSON.parse(JSON.stringify(value))),
+  Arbitrary.map((value): CheckpointSchema => JSON.parse(JSON.stringify(value))),
 );
 
 const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }), size: 12 } };
@@ -171,7 +171,7 @@ describe("P11 process storage", () => {
   it.effect.prop(
     "malformed checkpoints fail as bad_row without replacing the saved state",
     [checkpointArb],
-    examples([[checkpoint]], (checkpoint: typeof CheckpointSchema.Type) =>
+    examples([[checkpoint]], (checkpoint: CheckpointSchema) =>
       Effect.gen(function* () {
         const disk = yield* database;
         yield* Effect.gen(function* () {
@@ -228,7 +228,7 @@ describe("P11 process storage", () => {
   it.effect.prop(
     "plant, keep state in memory: reopen retains version, build, cursor, turn and Cmd dispatch",
     [checkpointArb],
-    examples([[checkpoint]], (checkpoint: typeof CheckpointSchema.Type) =>
+    examples([[checkpoint]], (checkpoint: CheckpointSchema) =>
       Effect.gen(function* () {
         const disk = yield* database;
         const pending = {
@@ -263,7 +263,7 @@ describe("P11 process storage", () => {
   it.effect.prop(
     "plant, save partial checkpoint: a failed transaction retains all original state",
     [checkpointArb],
-    examples([[checkpoint]], (checkpoint: typeof CheckpointSchema.Type) =>
+    examples([[checkpoint]], (checkpoint: CheckpointSchema) =>
       Effect.gen(function* () {
         const disk = yield* database;
         yield* Effect.gen(function* () {

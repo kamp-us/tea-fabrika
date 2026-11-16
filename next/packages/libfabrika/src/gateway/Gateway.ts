@@ -96,7 +96,7 @@ const refuseRate = Effect.fn("gateway.route")(function* (retryAfter: number) {
   return RateRefusal.make({ reason: "rate_limited", retryAfter });
 });
 
-const ok = (result: typeof Schema.Json.Type) => Answer.cases.ok.make({ result });
+const ok = (result: Schema.Json) => Answer.cases.ok.make({ result });
 
 // A dead letter stops the sender's outbox. Other program refusals keep their full reply.
 const deliveryAnswer = (result: Schema.Json) =>
@@ -1475,7 +1475,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         return { binding: kept, held };
       }
 
-      let safe: typeof Schema.Json.Type | undefined;
+      let safe: Schema.Json | undefined;
 
       if (refusal === null && message !== null && typeof name === "string" && !options.inputs.raw.includes(name)) {
         const audit = options.audit;

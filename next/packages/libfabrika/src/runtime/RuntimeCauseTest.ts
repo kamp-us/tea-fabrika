@@ -324,7 +324,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
 
   describe("T921, SessionManager keeps the fault from below", () => {
     /** The manager on `sql`. `membership` may fail with any error of the layer below (0043 rule 12). */
-    const sessions = <E>(sql: Sql, membership: (key: string) => Effect.Effect<typeof Writer.Type, E>) =>
+    const sessions = <E>(sql: Sql, membership: (key: string) => Effect.Effect<Writer, E>) =>
       SessionManager.layer(sql, membership, sessionPolicy);
     const member = () => Effect.succeed(recorded.by);
 

@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e67-tests",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:16:41-08:00",
+  "ended": "2026-11-16T01:33:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E67 (unnecessaryTypeofType, mechanical, after PR 1366 merged), in next/ and our tooling, on fabrikalfa/effect-e67 made from fabrikalfa/effect-mechanical at 891075e7a. Recounted with effect-tsgo diagnostics and an --lspconfig at error: 10 hits, all in next/packages/libfabrika/src (folders with a hit: cloudflare 2, gateway 2, runtime 6), none anywhere else (the app, tuval, vitest, the six programs, .agents and oxlint-plugins read 0; the CI tooling folder could not be run alone here and was covered by the typecheck). Fixed all 10 by hand with Edit, replacing typeof X.Type with the type name the check names (Install, Schema.Json, CheckpointSchema, Writer). Report: hits met 10, fixed by quick fix 0, hand edits 10, left 0, waiting on 1366 0. No lock entry added (per the brief); the existing E7 override in libfabrika/tsconfig.json still lists src/runtime/ProcessStore.integration.test.ts and src/runtime/RuntimeCauseTest.ts in its exclude, and does not include src/cloudflare or src/gateway, so the integrator removes that exclude and adds the two folders.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Proof: pnpm typecheck exit 0 with unnecessaryTypeofType temporarily at error in the top-level diagnosticSeverity of all 13 plugin tsconfigs; those edits were reverted and the diff of every tsconfig is empty. Files: next/packages/libfabrika/src/cloudflare/runtime.ts, src/gateway/Gateway.ts, src/runtime/ProcessStore.integration.test.ts, src/runtime/RuntimeCauseTest.ts. Tests run at the base head 891075e7a plus these edits: ProcessStore.integration (7), ErrorCause, Gateway.types, TaskAccess, GatewayRevocation.integration (49 in four files), IsolateUsage.integration and RunnerAdmission.integration (18), all passed; none refused by the 0178 guard. pnpm lint: 17 of 18 parts passed; lint:promise-types died in the full run and passed alone with 0 findings.",
+  "plants": [],
+  "step": "tests"
+}
