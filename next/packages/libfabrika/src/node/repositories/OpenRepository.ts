@@ -147,8 +147,8 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
   const first = history.find((event) => event._tag === "selected");
   const repository =
     first?.repository ??
-    (yield* Id.Generator.use((ids) => ids.next(RepositoryId)).pipe(
-      Effect.provide(Id.Generator.layer),
+    (yield* Id.Generator.make.pipe(
+      Effect.flatMap((ids) => ids.next(RepositoryId)),
       Effect.mapError((cause) => failed("storage", cause)),
     ));
   const snapshot: Open.CheckedSelection = {

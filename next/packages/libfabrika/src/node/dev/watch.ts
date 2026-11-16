@@ -163,7 +163,7 @@ export const watchPrograms = (options: {
           }),
       );
       const root = yield* fs.realPath(options.root).pipe(Effect.orElseSucceed(() => options.root));
-      const ids = yield* Id.Generator.pipe(Effect.provide(Id.Generator.layer));
+      const ids = yield* Id.Generator.make;
       const handle = yield* run(watcher, { ctx: {} });
       const phase = yield* handle.ready.pipe(Effect.orDie);
       const failure = Effect.fn("watch.failed")(function* (reason: Failed["reason"], cause: unknown) {

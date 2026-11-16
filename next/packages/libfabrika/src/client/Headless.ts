@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { Socket } from "effect/socket";
 import * as WindowStart from "./WindowStart.ts";
 
@@ -23,13 +23,13 @@ const HEADLESS: typeof WindowStart.ClientInfo.Type = {
  *
  * It is `WindowStart.start` with the headless client's facts and the global `WebSocket` constructor
  * (Node has one). The caller provides `ClientKey`, `ClientRows`, `Id.Generator` and the `Scope`
- * that owns the run: it invents no key store and no disk path.
+ * that owns the run: it invents no key store and no disk path. The constructor's layer is built in
+ * that same `Scope`, so it lives exactly as long as the run.
  *
  * @stability unstable
  * @category constructors
  */
 export const start = Effect.fn("Headless.start")(function* (options: Omit<WindowStart.StartOptions, "client">) {
-  return yield* WindowStart.start({ ...options, client: HEADLESS }).pipe(
-    Effect.provide(Socket.layerWebSocketConstructorGlobal),
-  );
+  const sockets = yield* Layer.build(Socket.layerWebSocketConstructorGlobal);
+  return yield* WindowStart.start({ ...options, client: HEADLESS }).pipe(Effect.provideContext(sockets));
 });

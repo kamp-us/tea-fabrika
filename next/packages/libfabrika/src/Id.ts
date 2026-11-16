@@ -150,57 +150,60 @@ export class Generator extends Context.Service<
     readonly next: <P extends string>(schema: IdSchema<P>) => Effect.Effect<IdValue<P>, IdError>;
   }
 >()("@kampus/libfabrika/Id.Generator") {
-  static readonly layer = Layer.effect(
-    Generator,
-    Effect.sync(() => {
-      let at = -1,
-        random = 0n;
-      // Keep allocation and validation synchronous so fibers observe IDs in allocation order.
-      const allocate = <P extends string>(schema: IdSchema<P>, prefix: string, now: number) => {
-        if (!Number.isSafeInteger(now) || now < 0 || now > maxTime) {
-          throw new IdError({ reason: "clock" });
+  /**
+   * A new generator with its own clock and random state, as a plain value: for code that needs IDs
+   * and is handed no `Generator`. It builds no layer and owns no scope.
+   */
+  static readonly make = Effect.sync(() => {
+    let at = -1,
+      random = 0n;
+    // Keep allocation and validation synchronous so fibers observe IDs in allocation order.
+    const allocate = <P extends string>(schema: IdSchema<P>, prefix: string, now: number) => {
+      if (!Number.isSafeInteger(now) || now < 0 || now > maxTime) {
+        throw new IdError({ reason: "clock" });
+      }
+
+      let nextAt = at,
+        nextRandom = random;
+
+      if (now > at) {
+        nextAt = now;
+        nextRandom = entropy();
+      } else if (random === maxRandom) {
+        if (at === maxTime) {
+          throw new IdError({ reason: "exhausted" });
         }
 
-        let nextAt = at,
-          nextRandom = random;
+        nextAt++;
+        nextRandom = 0n;
+      } else {
+        nextRandom++;
+      }
 
-        if (now > at) {
-          nextAt = now;
-          nextRandom = entropy();
-        } else if (random === maxRandom) {
-          if (at === maxTime) {
-            throw new IdError({ reason: "exhausted" });
-          }
+      at = nextAt;
+      random = nextRandom;
+      return Result.getOrThrowWith(
+        S.decodeUnknownResult(schema)(`${prefix}_${encode(at, random)}`),
+        (cause) => new IdError({ reason: "prefix", cause }),
+      );
+    };
+    return {
+      next: Effect.fn("id.next")(function* <P extends string>(schema: IdSchema<P>) {
+        const prefix = prefixes.get(schema);
 
-          nextAt++;
-          nextRandom = 0n;
-        } else {
-          nextRandom++;
+        if (prefix === undefined) {
+          return yield* new IdError({ reason: "prefix" });
         }
 
-        at = nextAt;
-        random = nextRandom;
-        return Result.getOrThrowWith(
-          S.decodeUnknownResult(schema)(`${prefix}_${encode(at, random)}`),
-          (cause) => new IdError({ reason: "prefix", cause }),
-        );
-      };
-      return {
-        next: Effect.fn("id.next")(function* <P extends string>(schema: IdSchema<P>) {
-          const prefix = prefixes.get(schema);
+        yield* Effect.annotateCurrentSpan({ type: prefix });
+        const now = yield* Clock.currentTimeMillis;
+        return yield* Effect.try({
+          try: () => allocate(schema, prefix, now),
+          catch: (error) => (error instanceof IdError ? error : new IdError({ reason: "entropy", cause: error })),
+        });
+      }),
+    };
+  });
 
-          if (prefix === undefined) {
-            return yield* new IdError({ reason: "prefix" });
-          }
-
-          yield* Effect.annotateCurrentSpan({ type: prefix });
-          const now = yield* Clock.currentTimeMillis;
-          return yield* Effect.try({
-            try: () => allocate(schema, prefix, now),
-            catch: (error) => (error instanceof IdError ? error : new IdError({ reason: "entropy", cause: error })),
-          });
-        }),
-      };
-    }),
-  );
+  static readonly layer = Layer.effect(Generator, Generator.make);
 }
