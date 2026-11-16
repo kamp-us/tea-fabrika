@@ -124,6 +124,7 @@ const claim = (page: Page) =>
  *  strings as hex, so the law can say no private material is stored. */
 const stored = (page: Page) =>
   Effect.promise(() =>
+    // @effect-diagnostics-next-line asyncFunction:off -- runs inside the browser page, where no Effect runtime is loaded (0565)
     page.evaluate(async () => {
       const out: Array<{ kind: string; extractable?: boolean; exported?: boolean; hex?: string }> = [];
       const hex = (b: ArrayBufferLike | ArrayBufferView) =>

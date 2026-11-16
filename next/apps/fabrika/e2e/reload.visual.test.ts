@@ -69,6 +69,7 @@ const page = (url: string) =>
 const driver = (p: Page, url: string, tab: string) =>
   browserCall(() =>
     p.evaluate(
+      // @effect-diagnostics-next-line asyncFunction:off -- runs inside the browser page, where no Effect runtime is loaded (0565)
       async ({ url, tab }) => {
         const bytes = (s: string) => new TextEncoder().encode(s);
         const concat = (...parts: Array<Uint8Array>) => {
@@ -139,6 +140,7 @@ const driver = (p: Page, url: string, tab: string) =>
         const first = await new Promise<any>((done, fail) => {
           socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(fingerprint)}/${tab}`);
           socket.onerror = () => fail(new Error("WebSocket failed"));
+          // @effect-diagnostics-next-line asyncFunction:off -- runs inside the browser page, where no Effect runtime is loaded (0565)
           socket.onmessage = async ({ data }) => {
             if (data === "pong") {
               return;
@@ -171,6 +173,7 @@ const driver = (p: Page, url: string, tab: string) =>
 
 /** One JSON-RPC call through the page's driver. */
 const rpc = (p: Page, method: string, params: unknown) =>
+  // @effect-diagnostics-next-line asyncFunction:off -- runs inside the browser page, where no Effect runtime is loaded (0565)
   browserCall(() => p.evaluate(async ({ method, params }) => window.p15.call(method, params), { method, params }));
 
 /** The page's key, granted by the founder through grant.ts, as a person does it. */

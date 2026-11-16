@@ -3,7 +3,7 @@ import { basename, join, relative } from "node:path";
 import { it, beforeAll } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import { afterAll, describe, expect } from "vitest";
+import { describe, expect } from "vitest";
 import { createVitest, type Vitest, type TestSpecification } from "vitest/node";
 import { parse } from "yaml";
 import { measured } from "../../vitest.shards.ts";
@@ -77,15 +77,18 @@ const markdown = files.filter((path) => path.endsWith(".md") && !path.includes("
 const options = { seed: 119120, numRuns: 20 };
 let vitest: Vitest;
 
+/** A vitest made for the laws, closed when the file's scope closes, after its last test. */
+const made = (options: Parameters<typeof createVitest>[1]) =>
+  Effect.acquireRelease(
+    promised(() => createVitest("test", options)),
+    (context) => promised(() => context.close()).pipe(Effect.orDie),
+  );
+
 beforeAll(() =>
   Effect.gen(function* () {
-    vitest = yield* promised(() => createVitest("test", { root, watch: false, maxWorkers: 1 }));
+    vitest = yield* made({ root, watch: false, maxWorkers: 1 });
   }),
 );
-
-afterAll(async () => {
-  await vitest?.close();
-});
 
 const affected = async (paths: string[]) => {
   vitest.config.related = paths.map((path) => join(root, path));
@@ -172,31 +175,17 @@ describe("next workflow coverage", () => {
   };
   beforeAll(() =>
     Effect.gen(function* () {
-      const baseline = yield* promised(() => createVitest("test", { root, watch: false, maxWorkers: 1 }));
+      const baseline = yield* made({ root, watch: false, maxWorkers: 1 });
       contexts.push(baseline);
       nextSpecs = (yield* promised(() => baseline.globTestSpecifications())).filter((spec) =>
         repoPath(spec).startsWith("next/"),
       );
 
       for (const index of indices) {
-        contexts.push(
-          yield* promised(() =>
-            createVitest("test", {
-              root,
-              watch: false,
-              maxWorkers: 1,
-              shard: `${index}/${denominator}`,
-            }),
-          ),
-        );
+        contexts.push(yield* made({ root, watch: false, maxWorkers: 1, shard: `${index}/${denominator}` }));
       }
     }),
   );
-  afterAll(async () => {
-    for (const context of contexts) {
-      await context.close();
-    }
-  });
 
   it.live("scenario: workflow shards partition every config-discovered next file exactly once", () =>
     Effect.gen(function* () {

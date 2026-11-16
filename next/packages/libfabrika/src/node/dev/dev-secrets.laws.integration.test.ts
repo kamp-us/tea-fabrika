@@ -160,6 +160,7 @@ const flow = async (sample: Flow) => {
     const store = recordPart(nodeSql(part(name)), chain, at, 1_000_000_000);
     return Effect.runPromise(store.write(rows));
   };
+  // @effect-diagnostics-next-line asyncFunction:off -- a stand-in for the global fetch, whose contract is a Promise the code under test awaits
   const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
     const call = Schema.decodeUnknownSync(
       Schema.fromJsonString(
@@ -276,7 +277,8 @@ const flow = async (sample: Flow) => {
     INSTANCE: JSON.stringify(connectionInput),
     PROJECT: {
       getByName: () => ({
-        settingsStart: async () => StartsTest.reply(connectionInput),
+        settingsStart: () => Promise.resolve(StartsTest.reply(connectionInput)),
+        // @effect-diagnostics-next-line asyncFunction:off -- a stand-in for a platform RPC stub, whose methods return Promises the code under test awaits
         route: async () => {
           if (mode === "rpc") {
             throw new Error(`${bearer} ${rawFrame}`);
@@ -288,9 +290,9 @@ const flow = async (sample: Flow) => {
 
           return { _tag: "ok", result: { accepted: true } };
         },
-        info: async () => [],
-        leave: async () => {},
-        disconnect: async () => {},
+        info: () => Promise.resolve([]),
+        leave: () => Promise.resolve(),
+        disconnect: () => Promise.resolve(),
       }),
     },
     RECORD: {

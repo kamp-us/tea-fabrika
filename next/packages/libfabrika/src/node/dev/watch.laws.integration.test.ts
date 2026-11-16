@@ -39,6 +39,7 @@ const opened = vi.hoisted(() => ({
   results: [] as Array<{ code: string; closed: boolean }>,
 }));
 
+// @effect-diagnostics-next-line asyncFunction:off -- Vitest's module factory, whose contract is an async function
 vi.mock("rolldown", async (original) => {
   const actual = await original<typeof import("rolldown")>();
   return {
@@ -71,7 +72,7 @@ vi.mock("rolldown", async (original) => {
                 get(target, key) {
                   if (key === "close") {
                     // Replay owns no new Rolldown result to close.
-                    return async () => undefined;
+                    return () => Promise.resolve(undefined);
                   }
 
                   return Reflect.get(target, key);
@@ -88,9 +89,7 @@ vi.mock("rolldown", async (original) => {
               completed,
               (notification) =>
                 Effect.tryPromise({
-                  try: async () => {
-                    await listener(notification);
-                  },
+                  try: () => Promise.resolve(listener(notification)),
                   catch: (cause: unknown): Error => new Error("the repeated Rolldown notification failed", { cause }),
                 }).pipe(Effect.orDie),
               { discard: true, concurrency: 1 },

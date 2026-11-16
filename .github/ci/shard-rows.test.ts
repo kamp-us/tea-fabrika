@@ -19,6 +19,13 @@ class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cau
 const promised = <A>(run: () => PromiseLike<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
+/** A scratch folder under the temp folder, removed when the test's scope closes. */
+const scratch = (prefix: string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => mkdtempSync(join(tmpdir(), prefix))),
+    (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
+  );
+
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const options = { seed: 119120, numRuns: 100 };
 
@@ -97,88 +104,87 @@ it("L2: stale rows are exactly next/ rows whose file Vitest does not select, sor
 // app's end-to-end files are found (red).
 // 0536: the vitest legs' files are the `next` and `next-integration` projects; a visual file, which
 // the end-to-end legs run, is never one, and an integration file in the e2e folder is.
-it("scenario: L3 the real config finds TSX and integration tests and excludes visual, plain e2e, node_modules and dist", async () => {
-  // This law is about the file set selected by today's real Vitest config. No .tsx test is left
-  // under next/ in the repo, so the scratch folder's view.test.tsx holds that case.
-  const files = await nextFiles(root);
-  expect(files.length).toBeGreaterThan(0);
-  expect(files.every((path) => !/(?:^|\/)(?:node_modules|dist)\//.test(path))).toBe(true);
-  expect(files.filter((path) => /\.visual\.test\.tsx?$/.test(path))).toEqual([]);
-  expect(files.filter((path) => path.includes("/e2e/") && !/\.integration\.test\.tsx?$/.test(path))).toEqual([]);
-  const folder = mkdtempSync(join(tmpdir(), "t890-files-"));
-  const selected = [
-    "next/apps/toy/e2e/stored.integration.test.ts",
-    "next/apps/toy/src/db.integration.test.ts",
-    "next/apps/toy/src/plain.test.ts",
-    "next/apps/toy/src/view.test.tsx",
-  ];
-  const excluded = [
-    "next/apps/toy/e2e/wire.test.ts",
-    "next/apps/toy/e2e/window.visual.test.ts",
-    "next/apps/toy/src/page.visual.test.tsx",
-    "next/apps/toy/src/node_modules/dependency.test.ts",
-    "next/apps/toy/src/dist/generated.test.ts",
-  ];
+it.live(
+  "scenario: L3 the real config finds TSX and integration tests and excludes visual, plain e2e, node_modules and dist",
+  () =>
+    Effect.gen(function* () {
+      // This law is about the file set selected by today's real Vitest config. No .tsx test is left
+      // under next/ in the repo, so the scratch folder's view.test.tsx holds that case.
+      const files = yield* promised(() => nextFiles(root));
+      expect(files.length).toBeGreaterThan(0);
+      expect(files.every((path) => !/(?:^|\/)(?:node_modules|dist)\//.test(path))).toBe(true);
+      expect(files.filter((path) => /\.visual\.test\.tsx?$/.test(path))).toEqual([]);
+      expect(files.filter((path) => path.includes("/e2e/") && !/\.integration\.test\.tsx?$/.test(path))).toEqual([]);
+      const folder = yield* scratch("t890-files-");
+      const selected = [
+        "next/apps/toy/e2e/stored.integration.test.ts",
+        "next/apps/toy/src/db.integration.test.ts",
+        "next/apps/toy/src/plain.test.ts",
+        "next/apps/toy/src/view.test.tsx",
+      ];
+      const excluded = [
+        "next/apps/toy/e2e/wire.test.ts",
+        "next/apps/toy/e2e/window.visual.test.ts",
+        "next/apps/toy/src/page.visual.test.tsx",
+        "next/apps/toy/src/node_modules/dependency.test.ts",
+        "next/apps/toy/src/dist/generated.test.ts",
+      ];
 
-  try {
-    for (const path of [...selected, ...excluded]) {
-      mkdirSync(dirname(join(folder, path)), { recursive: true });
-      writeFileSync(join(folder, path), "");
-    }
+      for (const path of [...selected, ...excluded]) {
+        mkdirSync(dirname(join(folder, path)), { recursive: true });
+        writeFileSync(join(folder, path), "");
+      }
 
-    const actual = await selectedBy(folder, ["next", "next-integration"]);
-    expect(await nextFiles(folder)).toEqual(actual);
-    expect(actual).toEqual(selected);
+      const actual = yield* promised(() => selectedBy(folder, ["next", "next-integration"]));
+      expect(yield* promised(() => nextFiles(folder))).toEqual(actual);
+      expect(actual).toEqual(selected);
 
-    // New next/ globs in the config must be read on every call.
-    const added = "next/extra/fresh.test.tsx";
-    mkdirSync(dirname(join(folder, added)), { recursive: true });
-    writeFileSync(join(folder, added), "");
-    globsOf("next").include.push("next/extra/*.test.tsx");
-
-    try {
-      expect(await nextFiles(folder)).toEqual([...selected, added].toSorted());
-    } finally {
-      globsOf("next").include.pop();
-    }
-  } finally {
-    rmSync(folder, { recursive: true, force: true });
-  }
-});
+      // New next/ globs in the config must be read on every call.
+      const added = "next/extra/fresh.test.tsx";
+      mkdirSync(dirname(join(folder, added)), { recursive: true });
+      writeFileSync(join(folder, added), "");
+      yield* Effect.acquireUseRelease(
+        Effect.sync(() => globsOf("next").include.push("next/extra/*.test.tsx")),
+        () =>
+          Effect.gen(function* () {
+            expect(yield* promised(() => nextFiles(folder))).toEqual([...selected, added].toSorted());
+          }),
+        () => Effect.sync(() => globsOf("next").include.pop()),
+      );
+    }),
+);
 
 // T967, E8, today's CI about next/. The end-to-end selection is the `next-visual` project as
 // Vitest reads it: every `*.visual.test.ts(x)` under next/, at any depth, beside the module it
 // tests (0536), and no other file, whatever its folder.
-it("scenario: E8 the end-to-end files are next/'s visual tests and nothing else, on a scratch tree", async () => {
-  // A scratch tree, as L3's. Plant, run once on vitest.config.ts and restored: make the visual glob
-  // `next/apps/fabrika/e2e/*.visual.test.ts` (red: tuval's key laws and e2e/node/b lost).
-  const folder = mkdtempSync(join(tmpdir(), "t967-e2e-"));
-  const selected = [
-    "next/apps/fabrika/e2e/a.visual.test.ts",
-    "next/apps/fabrika/e2e/node/b.visual.test.ts",
-    "next/apps/other/e2e/e.visual.test.tsx",
-    "next/packages/tuval/src/browser/key.laws.visual.test.ts",
-  ].toSorted();
-  const left = [
-    "next/apps/fabrika/e2e/stored.integration.test.ts",
-    "next/apps/fabrika/e2e/d.test.ts",
-    "next/apps/fabrika/src/c.test.ts",
-    "next/packages/tuval/src/browser/other.laws.test.ts",
-    "next/packages/tuval/dist/key.visual.test.ts",
-    "apps/fabrika/src/today.visual.test.ts",
-  ];
+it.live("scenario: E8 the end-to-end files are next/'s visual tests and nothing else, on a scratch tree", () =>
+  Effect.gen(function* () {
+    // A scratch tree, as L3's. Plant, run once on vitest.config.ts and restored: make the visual glob
+    // `next/apps/fabrika/e2e/*.visual.test.ts` (red: tuval's key laws and e2e/node/b lost).
+    const folder = yield* scratch("t967-e2e-");
+    const selected = [
+      "next/apps/fabrika/e2e/a.visual.test.ts",
+      "next/apps/fabrika/e2e/node/b.visual.test.ts",
+      "next/apps/other/e2e/e.visual.test.tsx",
+      "next/packages/tuval/src/browser/key.laws.visual.test.ts",
+    ].toSorted();
+    const left = [
+      "next/apps/fabrika/e2e/stored.integration.test.ts",
+      "next/apps/fabrika/e2e/d.test.ts",
+      "next/apps/fabrika/src/c.test.ts",
+      "next/packages/tuval/src/browser/other.laws.test.ts",
+      "next/packages/tuval/dist/key.visual.test.ts",
+      "apps/fabrika/src/today.visual.test.ts",
+    ];
 
-  try {
     for (const path of [...selected, ...left]) {
       mkdirSync(dirname(join(folder, path)), { recursive: true });
       writeFileSync(join(folder, path), "");
     }
 
-    expect(await visualFiles(folder)).toEqual(selected);
-  } finally {
-    rmSync(folder, { recursive: true, force: true });
-  }
-});
+    expect(yield* promised(() => visualFiles(folder))).toEqual(selected);
+  }),
+);
 
 // Generated paths under the three next/ include roots. A folder or file name may start with a dot
 // or end in `.git`, and a folder may be one the config or Vitest's defaults exclude, so the dot

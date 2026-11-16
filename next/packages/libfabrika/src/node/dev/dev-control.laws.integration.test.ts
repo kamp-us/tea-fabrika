@@ -283,6 +283,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 
   yield* Effect.acquireRelease(
     Effect.sync(() =>
+      // @effect-diagnostics-next-line asyncFunction:off -- a stand-in for the global fetch, whose contract is a Promise the code under test awaits
       vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
         const body = JSON.parse(bodyText(options)) as Call["body"];
         // The address as `fetch` parses it, given as a string or as the client's URL object.

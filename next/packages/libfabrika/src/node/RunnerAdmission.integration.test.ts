@@ -120,8 +120,9 @@ const environment: ProjectAuditTest.Harness["environment"] = (
     },
     PROCESS: namespace(
       vi.fn().mockImplementation((object: string) => ({
-        configure: async () => undefined,
-        usage: async (rows: Parameters<typeof usage>[1]) => usage(object, rows),
+        configure: () => Promise.resolve(undefined),
+        usage: (rows: Parameters<typeof usage>[1]) => Promise.resolve(usage(object, rows)),
+        // @effect-diagnostics-next-line asyncFunction:off -- a stand-in for a platform RPC stub, whose methods return Promises the code under test awaits
         msg: async (input: Incoming) => {
           const message = input.envelope.input;
           const stamped = Predicate.isObject(message) ? { ...message, parent: input.envelope.id } : message;
@@ -135,7 +136,7 @@ const environment: ProjectAuditTest.Harness["environment"] = (
         },
       })),
     ),
-    RECORD: namespace(vi.fn().mockReturnValue({ write: async () => Written.cases.written.make({}) })),
+    RECORD: namespace(vi.fn().mockReturnValue({ write: () => Promise.resolve(Written.cases.written.make({})) })),
     MEASUREMENTS: {
       head: unused,
       get: unused,

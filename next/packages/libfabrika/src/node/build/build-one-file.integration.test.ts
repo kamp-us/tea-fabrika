@@ -293,10 +293,12 @@ const observe = async () => {
   }>("rolldown");
   vi.doMock("rolldown", () => ({
     ...native,
+    // @effect-diagnostics-next-line asyncFunction:off -- wraps Rolldown's own Promise API, which the build under test awaits
     rolldown: async (options: RolldownOptions) => {
       const handle = await native.rolldown(options);
       return {
         ...handle,
+        // @effect-diagnostics-next-line asyncFunction:off -- wraps Rolldown's own Promise API, which the build under test awaits
         generate: async (o: OutputOptions) => {
           const out = await handle.generate(o);
 
@@ -583,10 +585,12 @@ const observeCalls = async () => {
   }>("rolldown");
   vi.doMock("rolldown", () => ({
     ...native,
+    // @effect-diagnostics-next-line asyncFunction:off -- wraps Rolldown's own Promise API, which the build under test awaits
     rolldown: async (options: RolldownOptions) => {
       const handle = await native.rolldown(options);
       return {
         ...handle,
+        // @effect-diagnostics-next-line asyncFunction:off -- wraps Rolldown's own Promise API, which the build under test awaits
         generate: async (o: OutputOptions) => {
           const out = await handle.generate(o);
           calls.push({
@@ -1169,7 +1173,9 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
                   (algorithm, data) =>
                     createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
                 );
-                const binding = { getByName: () => ({ settingsStart: async () => StartsTest.reply(config) }) };
+                const binding = {
+                  getByName: () => ({ settingsStart: () => Promise.resolve(StartsTest.reply(config)) }),
+                };
                 // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only what file routes touch
                 const env = {
                   INSTANCE: JSON.stringify(config),

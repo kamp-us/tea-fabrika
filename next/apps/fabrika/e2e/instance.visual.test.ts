@@ -121,6 +121,7 @@ const start = async () => {
 const driver = async (page: Page, url: string, tab: string) => {
   await page.goto(url);
   return page.evaluate(
+    // @effect-diagnostics-next-line asyncFunction:off -- runs inside the browser page, where no Effect runtime is loaded (0565)
     async ({ url, tab }) => {
       const bytes = (s: string) => new TextEncoder().encode(s);
       const concat = (...parts: Array<Uint8Array>) => {
@@ -227,6 +228,7 @@ const driver = async (page: Page, url: string, tab: string) => {
 
             pending.clear();
           };
+          // @effect-diagnostics-next-line asyncFunction:off -- runs inside the browser page, where no Effect runtime is loaded (0565)
           socket.onmessage = async ({ data }) => {
             if (data === "pong") {
               frames.push("pong");
@@ -271,6 +273,7 @@ const driver = async (page: Page, url: string, tab: string) => {
 const state = (page: Page) => page.evaluate(() => window.p12.frames);
 
 const rpc = (page: Page, method: string, params: unknown) =>
+  // @effect-diagnostics-next-line asyncFunction:off -- runs inside the browser page, where no Effect runtime is loaded (0565)
   page.evaluate(async ({ method, params }) => window.p12.call(method, params), {
     method,
     params,

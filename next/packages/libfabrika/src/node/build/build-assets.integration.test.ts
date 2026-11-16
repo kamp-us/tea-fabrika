@@ -272,10 +272,12 @@ describe("P16 assets and Compiler", () => {
         writeFileSync(join(dirname(f.file), "window.css"), `b { --value: ${JSON.stringify(`${value}雪🫖`)}; }`);
         vi.doMock("rolldown", () => ({
           ...native,
+          // @effect-diagnostics-next-line asyncFunction:off -- wraps Rolldown's own Promise API, which the build under test awaits
           rolldown: async (options: RolldownOptions) => {
             const handle = await native.rolldown(options);
             return {
               ...handle,
+              // @effect-diagnostics-next-line asyncFunction:off -- wraps Rolldown's own Promise API, which the build under test awaits
               generate: async (options: OutputOptions) => {
                 const output = await handle.generate(options);
                 return {
@@ -748,6 +750,7 @@ describe("P16 cleanup and recording", () => {
             const entered = Effect.runSync(Deferred.make<void>());
             vi.doMock("rolldown", () => ({
               ...native,
+              // @effect-diagnostics-next-line asyncFunction:off -- wraps Rolldown's own Promise API, which the build under test awaits
               rolldown: async (options: RolldownOptions) => {
                 const handle = await native.rolldown(options);
                 opened = true;
@@ -759,6 +762,7 @@ describe("P16 cleanup and recording", () => {
                       ? new Promise<RolldownOutput>(() => {})
                       : Promise.reject(Error("planted generate failure"));
                   },
+                  // @effect-diagnostics-next-line asyncFunction:off -- wraps Rolldown's own Promise API, which the build under test awaits
                   close: async () => {
                     await handle.close();
                     closed = true;
@@ -809,6 +813,7 @@ describe("P16 cleanup and recording", () => {
           let fired = false;
           vi.doMock("rolldown", () => ({
             ...native,
+            // @effect-diagnostics-next-line asyncFunction:off -- wraps Rolldown's own Promise API, which the build under test awaits
             rolldown: async (options: RolldownOptions) => {
               const handle = await native.rolldown(options),
                 index = closed.push(false) - 1;
@@ -825,6 +830,7 @@ describe("P16 cleanup and recording", () => {
                     ? new Promise<RolldownOutput>(() => {})
                     : Promise.reject(new Error("planted private failure"));
                 },
+                // @effect-diagnostics-next-line asyncFunction:off -- wraps Rolldown's own Promise API, which the build under test awaits
                 close: async () => {
                   await handle.close();
                   closed[index] = true;
@@ -875,10 +881,12 @@ describe("P16 cleanup and recording", () => {
           let fired = false;
           vi.doMock("rolldown", () => ({
             ...native,
+            // @effect-diagnostics-next-line asyncFunction:off -- wraps Rolldown's own Promise API, which the build under test awaits
             rolldown: async (options: RolldownOptions) => {
               const handle = await native.rolldown(options);
               return {
                 ...handle,
+                // @effect-diagnostics-next-line asyncFunction:off -- wraps Rolldown's own Promise API, which the build under test awaits
                 generate: async (o: OutputOptions) => {
                   const out = await handle.generate(o);
                   const css = out.output.find((f) => f.fileName.endsWith(".css"));

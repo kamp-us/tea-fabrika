@@ -61,6 +61,7 @@ it("L7: module reports keep every id on its own line below 4096 characters", () 
 });
 
 // This wrapper calls the actual Rolldown API. The only clean-build option change is the observer.
+// @effect-diagnostics-next-line asyncFunction:off -- Vitest's module factory, whose contract is an async function
 vi.mock("rolldown", async (original) => {
   const real = await original<typeof import("rolldown")>();
   return {

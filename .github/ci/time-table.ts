@@ -257,20 +257,21 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const api = env["GITHUB_API_URL"] ?? "https://api.github.com";
   const io: Io = {
     job: (id) =>
-      Effect.tryPromise({
-        try: async (signal) => {
-          const answer = await fetch(`${api}/repos/${env["GITHUB_REPOSITORY"]}/actions/jobs/${id}`, {
-            headers: { authorization: `Bearer ${env["GITHUB_TOKEN"] ?? ""}`, accept: "application/vnd.github+json" },
-            signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
-          });
+      Effect.gen(function* () {
+        const answer = yield* Effect.tryPromise({
+          try: (signal) =>
+            fetch(`${api}/repos/${env["GITHUB_REPOSITORY"]}/actions/jobs/${id}`, {
+              headers: { authorization: `Bearer ${env["GITHUB_TOKEN"] ?? ""}`, accept: "application/vnd.github+json" },
+              signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+            }),
+          catch: (cause) => new Unread({ cause }),
+        });
 
-          if (!answer.ok) {
-            throw new Error(`GitHub answered ${answer.status}`);
-          }
+        if (!answer.ok) {
+          return yield* new Unread({ cause: new Error(`GitHub answered ${answer.status}`) });
+        }
 
-          return answer.json();
-        },
-        catch: (cause) => new Unread({ cause }),
+        return yield* Effect.tryPromise({ try: () => answer.json(), catch: (cause) => new Unread({ cause }) });
       }),
     read: (path) => Effect.try({ try: () => readFileSync(path, "utf8"), catch: (cause) => new Unread({ cause }) }),
   };
