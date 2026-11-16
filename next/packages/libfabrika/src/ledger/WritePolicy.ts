@@ -49,7 +49,7 @@ export type Writer = typeof Writer.Type;
  * @category services
  */
 export class TrustedWriter extends Context.Service<TrustedWriter, Writer>()(
-  "@kampus/libfabrika/ledger/WritePolicy.TrustedWriter",
+  "@kampus/libfabrika/ledger/WritePolicy/TrustedWriter",
 ) {}
 
 /**

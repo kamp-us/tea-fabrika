@@ -149,7 +149,7 @@ export class Generator extends Context.Service<
   {
     readonly next: <P extends string>(schema: IdSchema<P>) => Effect.Effect<IdValue<P>, IdError>;
   }
->()("@kampus/libfabrika/Id.Generator") {
+>()("@kampus/libfabrika/Id/Generator") {
   static readonly layer = Layer.effect(
     Generator,
     Effect.sync(() => {

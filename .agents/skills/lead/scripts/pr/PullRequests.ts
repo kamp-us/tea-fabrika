@@ -81,4 +81,4 @@ export class PullRequests extends Context.Service<
      */
     readonly admin: (number: number, oid: string) => Effect.Effect<void, PullRequestsError>;
   }
->()("lead/pr/PullRequests") {}
+>()("@tea-fabrika/agents/skills/lead/scripts/pr/PullRequests") {}

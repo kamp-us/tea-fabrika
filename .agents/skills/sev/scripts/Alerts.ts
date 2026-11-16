@@ -18,4 +18,4 @@ export class Alerts extends Context.Service<
     /** Every open issue that carries the `ci-scheduled` label, oldest first. */
     readonly open: Effect.Effect<ReadonlyArray<Alert>, AlertsError>;
   }
->()("sev/Alerts") {}
+>()("@tea-fabrika/agents/skills/sev/scripts/Alerts") {}

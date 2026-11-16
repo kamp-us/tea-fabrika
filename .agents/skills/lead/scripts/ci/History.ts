@@ -19,7 +19,7 @@ export class History extends Context.Service<
     /** The pull requests merged at or after `since`, an ISO time. */
     readonly merged: (since: string) => Effect.Effect<ReadonlyArray<Pull>, HistoryError>;
   }
->()("lead/ci/History") {}
+>()("@tea-fabrika/agents/skills/lead/scripts/ci/History") {}
 
 export class Issues extends Context.Service<
   Issues,
@@ -31,4 +31,4 @@ export class Issues extends Context.Service<
     readonly comment: (number: number, body: string) => Effect.Effect<void, HistoryError>;
     readonly close: (number: number) => Effect.Effect<void, HistoryError>;
   }
->()("lead/ci/Issues") {}
+>()("@tea-fabrika/agents/skills/lead/scripts/ci/History/Issues") {}

@@ -33,4 +33,4 @@ export class BoxGit extends Context.Service<
     /** Every object `rev-list --objects` reaches from these tips in MAIN, annotated tags included. */
     readonly reachable: (tips: ReadonlyArray<string>) => Effect.Effect<ReadonlySet<string>, BoxGitError>;
   }
->()("lead/box/BoxGit") {}
+>()("@tea-fabrika/agents/skills/lead/scripts/box/BoxGit") {}

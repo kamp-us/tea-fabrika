@@ -328,11 +328,15 @@ Before:
 >()("@kampus/libfabrika/ProgramRunner") {
 ```
 
-After, the id the rule itself asks for in today's run:
+After, the id the rule asked for then, in the dot form:
 
 ```ts
 >()("@kampus/libfabrika/runtime/Runner.ProgramRunner") {
 ```
+
+*Changed 2026-11-16: [0575](../../.decisions/0575-deterministic-keys-is-the-service-id-form.md)
+deleted `service-id`. The Effect checker's `deterministicKeys` sets the form now, at `error`, and
+the id is `@kampus/libfabrika/runtime/Runner/ProgramRunner`: a slash before the class name.*
 
 The promotion needs a fresh replay with about 0% false alarms (`oxlint-plugins/README.md`, "Decode
 and service-ID advice"). Today's replay, `node oxlint-plugins/lint.ts next/packages/libfabrika/src`:

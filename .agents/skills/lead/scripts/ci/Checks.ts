@@ -27,4 +27,4 @@ export class Checks extends Context.Service<
     /** The whole log of the job with this id, as GitHub serves it. */
     readonly log: (id: number) => Effect.Effect<string, ChecksError>;
   }
->()("lead/ci/Checks") {}
+>()("@tea-fabrika/agents/skills/lead/scripts/ci/Checks") {}

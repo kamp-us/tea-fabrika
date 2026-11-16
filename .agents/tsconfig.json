@@ -4,6 +4,23 @@
   // workspace package: its imports resolve from the root's own dependencies. The other skill
   // scripts (the plan and mutation scripts) still hold type errors and join with ticket 486.
   "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A service's key is the checker's own form, `<package>/<path>/<Class>` (0575), which took
+        // over from our lint rule `service-id`. Here the package is this folder's own,
+        // `@tea-fabrika/agents`, so a key reads `@tea-fabrika/agents/skills/<skill>/scripts/<path>`.
+        // The globs read from this folder.
+        "overrides": [
+          {
+            "include": ["skills/**/*.ts"],
+            "options": { "diagnosticSeverity": { "deterministicKeys": "error" } }
+          }
+        ]
+      }
+    ]
+  },
   "include": [
     "raw.d.ts",
     "skills/lead/scripts/agents.ts",

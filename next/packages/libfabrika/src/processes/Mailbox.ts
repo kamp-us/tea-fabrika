@@ -27,7 +27,7 @@ import { brainOnly, inRunnerSpace } from "./Process.ts";
  * @category services
  */
 export class RunnerMail extends Context.Service<RunnerMail, { readonly process: string; readonly name: string }>()(
-  "@kampus/libfabrika/processes/Mailbox.RunnerMail",
+  "@kampus/libfabrika/processes/Mailbox/RunnerMail",
 ) {}
 
 /**

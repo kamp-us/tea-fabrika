@@ -830,7 +830,7 @@ const projectLedger = (
   const sql = cloudflareSql(ctx.storage);
   const turn = Semaphore.makeUnsafe(1);
   const notifications = Context.Reference<Array<Effect.Effect<void, LedgerError>> | null>(
-    "@kampus/libfabrika/cloudflare/runtime.WriteNotifications",
+    "@kampus/libfabrika/cloudflare/runtime/WriteNotifications",
     { defaultValue: () => null },
   );
   const write = Effect.fnUntraced(function* <A, E, R>(work: Effect.Effect<A, E, R>) {

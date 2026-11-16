@@ -42,7 +42,7 @@ export class ProgramRunner extends Context.Service<ProgramRunner, {
   readonly msg: (input: unknown) => Effect.Effect<Sent, RunnerFailure>;
   readonly due: (at: number) => Effect.Effect<void, RunnerFailure>;
   readonly restart: (request: Restart) => Effect.Effect<void, RunnerFailure>;
-}>()("@kampus/libfabrika/runtime/ProgramRunner") {}
+}>()("@kampus/libfabrika/runtime/Runner/ProgramRunner") {}
 
 // runtime/RunnerLive.ts: a `make`, a shelf of named pieces (E3), and a one-line layer (E5).
 import * as Effect from "effect/Effect";
@@ -318,7 +318,7 @@ a **pattern** that exists (`effect-services-and-layers.md`).
 Before, `runtime/Runner.ts:188-200` and `:218-221`:
 
 ```ts
->()("@kampus/libfabrika/runtime/Runner.ProgramRunner") {
+>()("@kampus/libfabrika/runtime/Runner/ProgramRunner") {
   // the layer lives on the service class
   static readonly layer = (initial: Descriptor, options: RunnerOptions): Layer.Layer</* ... */> =>
     Layer.unwrap(Effect.map(ProgramLoader, (loader) => ProgramRunner.withLoader(initial, loader, options)));
@@ -434,6 +434,7 @@ import {
   // ...ten more
 } from "effect";
 
+// the dot form our rule service-id held, before 0575 deleted it
 >()("@kampus/libfabrika/runtime/Runner.ProgramRunner") {
 ```
 
@@ -444,18 +445,23 @@ import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 
->()("@kampus/libfabrika/runtime/ProgramRunner") {}
+// the checker's own form: package, folder, file, then the class when it differs from the file
+>()("@kampus/libfabrika/runtime/Runner/ProgramRunner") {}
 ```
 
 - **Why.** Effect's guide asks for "the package name and the subdirectory path" in the id
   (`AGENTS.md:142`), as `"effect/cluster/Snowflake/Generator"`.
 - **Elm or OTP.** No answer: names follow the host library.
 - **What holds it.** Shipped `preferNamespaceImport`, scoped to `next/packages/**` (441 hits), and
-  `deterministicKeys` (40 hits). Each after its sweep, then `error`.
+  `deterministicKeys` (40 hits). Each after its sweep, then `error`. `deterministicKeys` is at
+  `error` in libfabrika, the app and `.agents/` since
+  [0575](../../.decisions/0575-deterministic-keys-is-the-service-id-form.md), which deleted our
+  rule `service-id` and its dot form.
 - **The doubt.** Whether `deterministicKeys` would rename an error identifier that is saved or
-  sent. Check before the sweep.
+  sent. Check before the sweep. The service-ID sweep checked it: no ID it renamed is stored, sent
+  or read by another program.
 - **Cost.** About 170 import lines and 40 ids, mechanical.
-- **Today's example.** `Runner.ts` breaks it at `:7-20` and `:188`.
+- **Today's example.** `Runner.ts` breaks it at `:11-26`, its imports; its id is fixed.
 
 ### E8: where we differ from Effect, the file says why
 

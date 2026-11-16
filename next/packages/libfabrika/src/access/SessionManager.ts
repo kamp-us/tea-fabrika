@@ -161,7 +161,7 @@ const storageFault = (cause: unknown) =>
  * @category services
  */
 export class SignRequest extends Context.Service<SignRequest, { readonly id: string }>()(
-  "@kampus/libfabrika/access/SessionManager.SignRequest",
+  "@kampus/libfabrika/access/SessionManager/SignRequest",
 ) {}
 
 const InputRecord = Schema.Struct({

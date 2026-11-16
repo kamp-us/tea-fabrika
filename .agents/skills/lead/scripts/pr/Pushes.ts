@@ -27,4 +27,4 @@ export class Pushes extends Context.Service<
     /** Pushes `head` to `branch` on origin, with the step notes, from the checkout `dir`. */
     readonly push: (dir: string, branch: string, head: string) => Effect.Effect<void, PushRefused>;
   }
->()("lead/pr/Pushes") {}
+>()("@tea-fabrika/agents/skills/lead/scripts/pr/Pushes") {}

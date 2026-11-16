@@ -13,4 +13,4 @@ export class Runs extends Context.Service<
     /** Move `folder`'s runs/ into MAIN. `kept: false` means the folder must stay. Never fails. */
     readonly keep: (folder: string) => Effect.Effect<Kept>;
   }
->()("lead/box/Runs") {}
+>()("@tea-fabrika/agents/skills/lead/scripts/box/Runs") {}

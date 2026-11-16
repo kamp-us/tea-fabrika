@@ -52,7 +52,7 @@ export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError"
 export class Doorbell extends Context.Service<
   Doorbell,
   { readonly ring: (to: string, stream: string, rev: Rev) => Effect.Effect<void, LedgerError> }
->()("@kampus/libfabrika/ledger/Ledger.Doorbell") {}
+>()("@kampus/libfabrika/ledger/Ledger/Doorbell") {}
 
 /**
  * The ledger's three calls as the project object answers them across an object call: plain

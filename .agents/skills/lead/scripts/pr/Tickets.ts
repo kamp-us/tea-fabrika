@@ -18,4 +18,4 @@ export class Tickets extends Context.Service<
     /** Closes ticket `number`. */
     readonly close: (number: number) => Effect.Effect<void, TicketsError>;
   }
->()("lead/pr/Tickets") {}
+>()("@tea-fabrika/agents/skills/lead/scripts/pr/Tickets") {}

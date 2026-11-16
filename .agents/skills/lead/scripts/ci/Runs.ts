@@ -46,4 +46,4 @@ export class Runs extends Context.Service<
     /** The jobs of run `id`, of its latest attempt. */
     readonly jobs: (id: number) => Effect.Effect<ReadonlyArray<Job>, RunsError>;
   }
->()("lead/ci/Runs") {}
+>()("@tea-fabrika/agents/skills/lead/scripts/ci/Runs") {}

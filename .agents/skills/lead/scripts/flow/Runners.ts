@@ -20,7 +20,7 @@ export class Runners extends Context.Service<
     readonly names: ReadonlySet<string>;
     readonly run: (step: Step) => Effect.Effect<Answer, StepFailed>;
   }
->()("lead/flow/Runners") {}
+>()("@tea-fabrika/agents/skills/lead/scripts/flow/Runners") {}
 
 /** Runners from a table of name to runner; the runners' own services come from the layer's. */
 export const layer = <R>(table: Readonly<Record<string, Runner<R>>>): Layer.Layer<Runners, never, R> =>

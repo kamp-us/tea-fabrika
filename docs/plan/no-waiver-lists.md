@@ -149,8 +149,9 @@ adds it.
   the 13 hook rows, `next-ledger.json` is then empty.
 - **The advice set** empties through decision 0523 (https://github.com/kamp-us/tea-fabrika/pull/1194)
   and its quest: the five advice rules block folder by folder at zero, and the docs rule turns on the
-  same way. `fabrika/service-id` blocks since
-  https://github.com/kamp-us/tea-fabrika/pull/1186, so it is not in the set. When the last folder
+  same way. `fabrika/service-id` blocked from
+  https://github.com/kamp-us/tea-fabrika/pull/1186 until decision 0575 deleted it, so it is not in
+  the set. When the last folder
   reaches zero, `ADVICE` is empty and no `"warn"` level is left. Slice 13 then deletes the set and
   turns on its guard.
 - Note: 0523 keeps a dirty folder printing as advice until its fill lands. That is a per-folder

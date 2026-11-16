@@ -84,13 +84,16 @@ held at `next/apps/fabrika/src/brain.ts:28`); on Node, `NodeRuntime.runMain`
 Rules:
 
 - **Define with `Context.Service`.** Never `Context.Tag` or `GenericTag` (`fabrika/no-context-tag`).
-  The key is the package, the source file's path without its extension, then `.Name` when the
+  The key is the package, the source file's path without its extension, then `/Name` when the
   service is named otherwise than its file: `@kampus/libfabrika/ledger/Ledger`,
-  `@kampus/libfabrika/ledger/Ledger.Doorbell`, `@kampus/libfabrika/Id.Generator` (Effect's own
+  `@kampus/libfabrika/ledger/Ledger/Doorbell`, `@kampus/libfabrika/Id/Generator` (Effect's own
   advice, `node_modules/effect/AGENTS.md`, "Context.Service", which
   [0023](../.decisions/0023-next-follows-effects-code-style.md) has `next/` follow). Moving the file
-  changes the key. `fabrika/service-id` advises on a key that does not fit
-  (`oxlint-plugins/service-id.ts`).
+  changes the key. The Effect checker's `deterministicKeys` holds the form, at `error` in each
+  package's `tsconfig.json`, so `pnpm typecheck` refuses a key that does not fit
+  ([0575](../.decisions/0575-deterministic-keys-is-the-service-id-form.md)). A `Context.Reference`
+  takes the same form, as `@kampus/libfabrika/cloudflare/runtime/WriteNotifications`, though the
+  checker does not read it.
 - **Write the service's type out.** The contract is the type, so it is never inferred from an
   implementation: no `make` option and no `Effect.Success<ReturnType<...>>` shape.
 - **No static member on a service class.** Not a layer, not a `make`, not a helper: the class body

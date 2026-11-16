@@ -35,4 +35,4 @@ export class Branches extends Context.Service<
      */
     readonly landsEmpty: (tip: string) => Effect.Effect<boolean, BranchesError>;
   }
->()("lead/pr/Branches") {}
+>()("@tea-fabrika/agents/skills/lead/scripts/pr/Branches") {}

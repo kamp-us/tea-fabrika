@@ -42,4 +42,4 @@ export class WorkflowRuns extends Context.Service<
     /** Asks GitHub to cancel run `id`. */
     readonly cancel: (id: number) => Effect.Effect<void, WorkflowRunsError>;
   }
->()("sev/WorkflowRuns") {}
+>()("@tea-fabrika/agents/skills/sev/scripts/WorkflowRuns") {}

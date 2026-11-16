@@ -13,4 +13,4 @@ export class Sweeps extends Context.Service<
     /** Starts one sweep in the background, marked as started by a merge, and returns at once. */
     readonly kick: Effect.Effect<void, SweepsError>;
   }
->()("lead/pr/Sweeps") {}
+>()("@tea-fabrika/agents/skills/lead/scripts/pr/Sweeps") {}

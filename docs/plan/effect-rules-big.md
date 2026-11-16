@@ -131,7 +131,8 @@ Edge cases, each with a test:
 1. `static readonly layer = ...`, `static layer = ...`, a static method, a static getter and a
    `static {}` block all fire.
 2. A class whose `extends` is `Context.Service<...>()(...)` is a service class, through a named, a
-   namespace or a renamed import of `Context`. `match.ts` resolves these for `service-id` already.
+   namespace or a renamed import of `Context`. `match.ts` resolves these, as it did for
+   `service-id` before 0575 deleted that rule.
 3. A class that extends `Schema.TaggedError`, `Schema.Opaque` or nothing passes:
    `processes/Process.ts:204`, `:205`, `:221` and `runtime/State.ts:32` stay.
 4. An instance member passes. So does a `declare` field with no value.
@@ -146,7 +147,7 @@ Edge cases, each with a test:
 Before, `next/packages/libfabrika/src/telemetry/Sink.ts:242-251`:
 
 ```ts
->()("@kampus/libfabrika/telemetry/Sink.SpanSink") {
+>()("@kampus/libfabrika/telemetry/Sink/SpanSink") {
   /** Provides `Tracer.Tracer` and `SpanSink` over this object's `Sql`. Building it touches nothing:
    *  the tables come with the first span. */
   static readonly layer = (sql: Sql, options: { readonly object: string }): Layer.Layer<SpanSink> =>
