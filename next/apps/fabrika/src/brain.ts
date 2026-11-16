@@ -66,14 +66,14 @@ export class Project extends DurableObject<Env> implements ProjectBinding {
 
   initialize(
     client: ConnectionId,
-    input: unknown,
+    input: Schema.Json | undefined,
     trusted: { url: string; tab: string; name: string; session?: string },
   ) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.initialize(client, input, trusted)));
   }
 
-  route(client: ConnectionId, method: string, params: unknown, reader?: string) {
+  route(client: ConnectionId, method: string, params: Schema.Json | undefined, reader?: string) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.route(client, method, params, reader)));
   }
