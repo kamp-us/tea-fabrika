@@ -61,6 +61,7 @@ it.effect(
   "C1: a lost, failed or undecodable Project reply is unavailable, never a refusal; a good reply decodes strictly",
   () =>
     Effect.gen(function* () {
+      const context = yield* Effect.context<never>();
       const reached = new Set<string>();
       const check = Effect.fnUntraced(function* (choice: Case) {
         const sent: Array<unknown> = [];
@@ -109,7 +110,7 @@ it.effect(
           expect(answer.failure.reason, `${choice.shape}: the Cmd stays dispatched for its retry`).toBe("unavailable");
         }
       });
-      const property = fc.asyncProperty(Case, (choice) => Effect.runPromise(check(choice)));
+      const property = fc.asyncProperty(Case, (choice) => Effect.runPromiseWith(context)(check(choice)));
       yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 60 }));
       // An empty run cannot pass: every case was answered at least once.
       expect([...reached].sort()).toEqual(

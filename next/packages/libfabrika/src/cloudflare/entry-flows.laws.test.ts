@@ -204,6 +204,7 @@ SettingsTest.suite((recipe, secret) =>
         }),
     );
     const open: SettingsTest.Driver["open"] = Effect.fnUntraced(function* (path, corrupt) {
+      const context = yield* Effect.context<never>();
       const config = { ...input, ...input.founding, port: Number(input.settings.values["instance.port"]) };
       const db = path === "Project" ? local : yield* database;
       const sql = path === "Project" ? settingsSql : nodeSql(db);
@@ -289,7 +290,7 @@ SettingsTest.suite((recipe, secret) =>
         UNRELATED_PASSWORD: secret,
         PROJECT: {
           getByName: () => ({
-            settingsStart: (wire: unknown) => Effect.runPromise(gate(wire)),
+            settingsStart: (wire: unknown) => Effect.runPromiseWith(context)(gate(wire)),
             route: async () => ({ _tag: "ok", result: {} }),
           }),
         },

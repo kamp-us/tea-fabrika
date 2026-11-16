@@ -621,6 +621,7 @@ describe("P17a, revoke stops writes at the final door", () => {
         async (target, revokeFirst, token) => {
           await Effect.runPromise(
             Effect.gen(function* () {
+              const context = yield* Effect.context<never>();
               const w = yield* world(),
                 d = yield* setup(w);
               const entered = yield* Deferred.make<void>(),
@@ -635,7 +636,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 
                 if (!paused && new TextDecoder().decode(bytes).includes(marker)) {
                   paused = true;
-                  return Effect.runPromise(
+                  return Effect.runPromiseWith(context)(
                     Deferred.succeed(entered, undefined).pipe(
                       Effect.andThen(Deferred.await(release)),
                       Effect.andThen(web(() => digest(algorithm, data))),
@@ -682,6 +683,7 @@ describe("P17a, revoke stops writes at the final door", () => {
         async (target, revokeFirst, token, text) => {
           await Effect.runPromise(
             Effect.gen(function* () {
+              const context = yield* Effect.context<never>();
               const w = yield* world(),
                 d = yield* setup(w);
               w.controls.deliver = Effect.fnUntraced(function* (incoming: Incoming) {
@@ -710,7 +712,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 
                 if (!paused && new TextDecoder().decode(bytes).includes(marker)) {
                   paused = true;
-                  return Effect.runPromise(
+                  return Effect.runPromiseWith(context)(
                     Deferred.succeed(entered, undefined).pipe(
                       Effect.andThen(Deferred.await(release)),
                       Effect.andThen(web(() => digest(algorithm, data))),
@@ -987,6 +989,7 @@ describe("P17a, revoke stops writes at the final door", () => {
         async (target, revokeFirst, reopen, text) => {
           await Effect.runPromise(
             Effect.gen(function* () {
+              const context = yield* Effect.context<never>();
               const w = yield* world(),
                 d = yield* setup(w);
               yield* send(d.a, d.old, w, target, "cause", text);
@@ -1015,7 +1018,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 
                 if (!paused && new TextDecoder().decode(bytes).includes(encodedMarker)) {
                   paused = true;
-                  return Effect.runPromise(
+                  return Effect.runPromiseWith(context)(
                     Deferred.succeed(entered, undefined).pipe(
                       Effect.andThen(Deferred.await(release)),
                       Effect.andThen(web(() => digest(algorithm, data))),

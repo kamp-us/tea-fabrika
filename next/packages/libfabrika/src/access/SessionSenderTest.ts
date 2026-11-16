@@ -205,10 +205,11 @@ export const suite = (open: Open) =>
     // Plant: implement `sender` by calling `signer` with a fixed kind (SessionManager.ts).
     it.effect("L9: sender answers the writer signer would sign for, refuses alike, and writes no receipt", () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const law = walk(open);
         const tapes = fc.array(Cell, { minLength: 1, maxLength: 30 });
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
-        const property = fc.asyncProperty(tapes, (cells) => Effect.runPromise(Effect.scoped(law(cells))));
+        const property = fc.asyncProperty(tapes, (cells) => Effect.runPromiseWith(context)(Effect.scoped(law(cells))));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 100, endOnFailure: true }));
       }),

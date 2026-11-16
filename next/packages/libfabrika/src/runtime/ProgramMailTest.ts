@@ -1207,10 +1207,12 @@ const prop = (
   runs: Runs = { fast: 10, full: 40 },
   examples: ReadonlyArray<ReadonlyArray<Cell>> = [],
 ) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const done = new Set<Move>();
         const law = walk(name, open, pairs, moves, done);
         const once = Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>) {
@@ -1221,7 +1223,7 @@ const prop = (
           expect(probe.late(), "L12: no alarm task set an alarm after its scope closed").toBe(0);
         });
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(once(tape)));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(once(tape)));
         const options = {
           seed: SEED,
           numRuns: runsFor(runs),
@@ -1238,12 +1240,14 @@ const prop = (
   );
 
 const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boolean) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     stopped
       ? "M3: mailed neither starts a stopped name nor keeps its mail alarm alive"
       : "M2: one alarm keeps the earliest timer, mail wake and owed Send",
     () =>
       Effect.gen(function* () {
+        const services = yield* Effect.context<never>();
         const visited = new Set<string>();
         const once = Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>) {
           const store = yield* open;
@@ -1432,7 +1436,7 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
         });
         const scoped = (tape: ReadonlyArray<Cell>) => Effect.scoped(once(tape)).pipe(Effect.provide(TestClock.layer()));
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(scoped(tape)));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(services)(scoped(tape)));
         const checks = { seed: SEED, numRuns: runsFor({ fast: 20, full: 100 }), includeErrorInReport: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check reports its result as a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
@@ -1452,10 +1456,12 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
  * the mail wake never leaves a write behind with no alarm.
  */
 const noteLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     "M6: a write made from mail read during a send runs, or its alarm stays until it does",
     () =>
       Effect.gen(function* () {
+        const services = yield* Effect.context<never>();
         const visited = new Set<string>();
         const once = Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>) {
           const store = yield* open;
@@ -1569,7 +1575,7 @@ const noteLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         });
         const scoped = (tape: ReadonlyArray<Cell>) => Effect.scoped(once(tape)).pipe(Effect.provide(TestClock.layer()));
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(scoped(tape)));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(services)(scoped(tape)));
         // Each run starts four real runners. Shrinking a failure runs hundreds more, which would hide
         // its failing check behind the test's limit, so the first failing tape is reported as found.
         const options = { seed: SEED, numRuns: 40, includeErrorInReport: true, endOnFailure: true };
@@ -1879,8 +1885,9 @@ const pipeProperty = <A>(
   runs: Runs,
 ) =>
   Effect.gen(function* () {
+    const context = yield* Effect.context<never>();
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated walk
-    const property = fc.asyncProperty(arbitrary, (value) => Effect.runPromise(Effect.scoped(law(value))));
+    const property = fc.asyncProperty(arbitrary, (value) => Effect.runPromiseWith(context)(Effect.scoped(law(value))));
     // Each run starts two real runners. Shrinking would run hundreds more, so the first failing case is reported.
     const options = { seed: SEED, numRuns: runsFor(runs), includeErrorInReport: true, endOnFailure: true };
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
@@ -1914,7 +1921,8 @@ const PipeTape = fc.array(PipeCell, { minLength: 10, maxLength: 28, size: "max" 
  * inbox, the writer's next send lands.
  */
 const fullLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     "T1041 L9: through real runners, the ack never runs ahead of the reader's saved place, a plain send to a full inbox folds full and lands nothing, and once the reader drains the next send lands",
     () =>
       Effect.gen(function* () {
@@ -1999,7 +2007,8 @@ const fullLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
  * wakes the reader; the reader's turn acks again, and the send after lands.
  */
 const repairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     "T1041 L10: a lost ack is repaired: a full answer wakes the reader, which acks again, and the next send lands",
     () =>
       Effect.gen(function* () {
@@ -2123,7 +2132,8 @@ const chunkChecks = Effect.fnUntraced(function* (view: PipeView, sent: ReadonlyM
  * send was cut with; letters arrive in the writer's Cmd order.
  */
 const chunkLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     "T1041 L11: send_chunks delivers its parts in seq order once each, answers queued with its count after the last, waits owed while full, keeps its cut size across a restart, and keeps the writer's Cmd order",
     () =>
       Effect.gen(function* () {
@@ -2257,7 +2267,8 @@ const nearCap = (n: number, delta: number) => {
  * the Cmd's answer, and what landed holds no last part, so the reader's join says the send is cut.
  */
 const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     "T1041 L12: send_chunks answers too_big with no part saved for an item too big alone or operands over the row limit, and a final refusal on a later part is its answer with the send left cut",
     () =>
       Effect.gen(function* () {
@@ -2384,7 +2395,8 @@ const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
  * target, so its `too_big` comes after the earlier send's `queued` and echoes `{to, as}`.
  */
 const pairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     "T1041 L11: a send_chunks waiting on a full inbox holds back the writer's later mail to that name only, and a letter to another name lands at once",
     () =>
       Effect.gen(function* () {
@@ -2486,10 +2498,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     refuseLaw(open);
 
     for (const trace of [false, true]) {
-      it.effect(
+      // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+      it.live(
         trace ? "T1a: receipt traces join each saved wake" : "T1a [secrets]: records hold no mail",
         () =>
           Effect.gen(function* () {
+            // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+            const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
             const done = new Set<Move>();
             let sends = 0;
             const once = Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>, seed: number) {
@@ -2524,7 +2539,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               sends += observed.spans.filter((s) => s.name === "mail_delivery.send").length;
             });
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits the state-aware tape
-            const property = fc.asyncProperty(Tape, fc.nat(), (tape, seed) => Effect.runPromise(once(tape, seed)));
+            const property = fc.asyncProperty(Tape, fc.nat(), (tape, seed) => runPromise(once(tape, seed)));
             // Each run walks two real runners. Shrinking a failure runs hundreds more of them, so one
             // failed run became a 150 s timeout that hid its failing check (merge-group run
             // 43600068403). The first failing tape is reported as found.

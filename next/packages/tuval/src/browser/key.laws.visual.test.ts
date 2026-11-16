@@ -205,6 +205,7 @@ describe("L3: the browser key store", () => {
     () =>
       Effect.scoped(
         Effect.gen(function* () {
+          const services = yield* Effect.context<never>();
           const b = yield* browser;
           const script = yield* bundled;
           const seen = { created: 0, adopted: 0, failed: 0, claimed: 0 };
@@ -214,7 +215,7 @@ describe("L3: the browser key store", () => {
                 fc.integer({ min: 1, max: 3 }),
                 fc.array(move, { minLength: 1, maxLength: 10 }),
                 (tabs, moves) =>
-                  Effect.runPromise(
+                  Effect.runPromiseWith(services)(
                     Effect.scoped(
                       Effect.gen(function* () {
                         const context = yield* profile(b, script);

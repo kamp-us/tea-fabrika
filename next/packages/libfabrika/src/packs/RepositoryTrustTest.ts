@@ -70,6 +70,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
   describe("T878 repository trust history", () => {
     it.effect("L5: reopening preserves exact location/person consent; another clone or destination gets none", () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const property = fc.asyncProperty(
           repository,
           person,
@@ -81,7 +82,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check requires an asynchronous property callback
           async (repoId, operator, selection, request, key, traceId, cells) => {
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each real store operation
-            return Effect.runPromise(
+            return Effect.runPromiseWith(context)(
               run((store, trust) =>
                 Effect.gen(function* () {
                   const snapshot = yield* settings;
@@ -197,6 +198,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
       "L6: retry and lost acknowledgment keep one decision/opening, and preserve stored parents and trace",
       () =>
         Effect.gen(function* () {
+          const context = yield* Effect.context<never>();
           const property = fc.asyncProperty(
             repository,
             person,
@@ -209,7 +211,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
             // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check requires an asynchronous property callback
             async (repoId, operator, selection, answer, opening, key, traceId, cells) => {
               // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each real store operation
-              return Effect.runPromise(
+              return Effect.runPromiseWith(context)(
                 run((store, trust, ledger) =>
                   Effect.gen(function* () {
                     const snapshot = yield* settings;
@@ -311,6 +313,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
 
     it.effect("L6: failed/refused writes and corrupt known history fail explicitly", () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const property = fc.asyncProperty(
           repository,
           person,
@@ -321,7 +324,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check requires an asynchronous property callback
           async (repoId, operator, selection, key, traceId, cells) => {
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each real store operation
-            return Effect.runPromise(
+            return Effect.runPromiseWith(context)(
               run((_store, trust, ledger) =>
                 Effect.gen(function* () {
                   const snapshot = yield* settings;

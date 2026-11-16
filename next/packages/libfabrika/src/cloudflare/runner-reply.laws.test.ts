@@ -158,6 +158,7 @@ const replyCase = (
   adapter: "node" | "worker" = "worker",
 ) =>
   Effect.gen(function* () {
+    const services = yield* Effect.context<never>();
     const inputId = yield* Id.Generator.use((ids) => ids.next(Id.Input)).pipe(Effect.provide(Id.Generator.layer));
     const db = new DatabaseSync(":memory:");
     // Ticket 402: the brain's process table lives in its own ledger.
@@ -204,7 +205,7 @@ const replyCase = (
           replyCalls++;
 
           if (mode === "rpc" && replyCalls === 1) {
-            return Effect.runPromise(Effect.fail(new Error("reply RPC lost")));
+            return Effect.runPromiseWith(services)(Effect.fail(new Error("reply RPC lost")));
           }
 
           if (mode === "decode" && replyCalls === 1) {

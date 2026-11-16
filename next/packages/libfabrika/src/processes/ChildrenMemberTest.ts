@@ -583,8 +583,9 @@ const prop = <A>(
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
-        const property = fc.asyncProperty(arbitrary, (c) => Effect.runPromise(Effect.scoped(law(c))));
+        const property = fc.asyncProperty(arbitrary, (c) => Effect.runPromiseWith(context)(Effect.scoped(law(c))));
         const checks = { seed: SEED, numRuns, endOnFailure: true, examples: [...examples] };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
