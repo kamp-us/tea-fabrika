@@ -26,6 +26,7 @@ import {
   Result,
   Schema,
   Stream,
+  type StandardSchema,
 } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -49,7 +50,7 @@ import { type SpanRow } from "../telemetry/Trace.ts";
 import { type Update as WatcherUpdate } from "./Entry.ts";
 import type { Execution } from "./Execution.ts";
 import { ProcessStore } from "./ProcessStore.ts";
-import { Input, Program, ProgramDown } from "./Program.ts";
+import { Input, Program, ProgramDown, type State } from "./Program.ts";
 import type { RecoveryStoreError } from "./RecoveryStore.ts";
 import type { WatchersError } from "./Watchers.ts";
 
@@ -378,11 +379,7 @@ const failure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 // Experiment 231's storage edge, supplied as ProcessStore.layer(sql, {process, storage}).
 // put is buffered; only a completed sync survives an abort. No runner behavior lives here.
-type ActivityStorage = {
-  readonly get: (key: string) => Effect.Effect<unknown, LedgerError>;
-  readonly put: (key: string, value: unknown) => Effect.Effect<void, LedgerError>;
-  readonly sync: () => Effect.Effect<void, LedgerError>;
-};
+type ActivityStorage = NonNullable<Parameters<typeof ProcessStore.layer>[1]["storage"]>;
 
 const activityStorage = () => {
   let durable: unknown = Activity.cases.idle.make({ process: PROCESS });
@@ -588,9 +585,9 @@ const worldOn = async (
         const actual = yield* ProcessStore;
         return {
           ...actual,
-          record: (id: string, event: unknown, from: From) =>
+          record: (id, event, from) =>
             actual.record(id, event, from).pipe(
-              Effect.flatMap((answer: unknown) => {
+              Effect.flatMap((answer) => {
                 if (fault.record) {
                   fault.record = false;
                   return Effect.fail(new LedgerError({ reason: "unreachable" }));
@@ -599,7 +596,7 @@ const worldOn = async (
                 return Effect.succeed(answer);
               }),
             ),
-        };
+        } satisfies ProcessStore["Service"];
       }),
     ).pipe(Layer.provide(ProcessStore.layer(store.sql, storageOptions)));
   const input = (n: number, m: unknown, as: "person" | "agent" = "person"): Incoming => ({
@@ -3009,7 +3006,9 @@ describe("P11 recovery gaps and durable installation", () => {
                     schema: {
                       ...work.schema,
                       ok: {
-                        "~standard": { validate: (value: unknown) => Promise.resolve({ value }) },
+                        "~standard": {
+                          validate: (value) => Promise.resolve({ value }),
+                        } satisfies Pick<StandardSchema.StandardSchemaV1["~standard"], "validate">,
                       },
                     },
                   },
@@ -3109,16 +3108,16 @@ describe("P11 recovery gaps and durable installation", () => {
         const w = await world({ build: "new-build" });
         const Legacy = Schema.Struct({ n: Schema.Int });
         const Middle = Schema.Struct({ count: Schema.Int });
-        const upgrades = [
+        const upgrades: State["upgrades"] = [
           {
             name: "n_to_count",
             from: 1,
-            run: (raw: unknown) => ({ count: Schema.decodeUnknownSync(Legacy)(raw).n }),
+            run: (raw) => ({ count: Schema.decodeUnknownSync(Legacy)(raw).n }),
           },
           {
             name: "add_runtime",
             from: 2,
-            run: (raw: unknown) => ({ ...initial, count: Schema.decodeUnknownSync(Middle)(raw).count }),
+            run: (raw) => ({ ...initial, count: Schema.decodeUnknownSync(Middle)(raw).count }),
           },
         ];
         Object.assign(w.p, Program.make({ ...authoring(w.p.name), state: { v: 3, upgrades } }));

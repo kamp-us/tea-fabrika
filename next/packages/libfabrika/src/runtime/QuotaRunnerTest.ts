@@ -53,8 +53,8 @@ export interface Local {
 
 export interface World {
   readonly runner: (name: string) => Effect.Effect<ProgramRunner["Service"], unknown>;
-  readonly input: (name: string, id: string, m: unknown) => Effect.Effect<unknown, unknown>;
-  readonly msg: (name: string, id: string, m: unknown) => Effect.Effect<unknown, unknown>;
+  readonly input: (name: string, id: string, m: Schema.Json) => Effect.Effect<unknown, unknown>;
+  readonly msg: (name: string, id: string, m: Schema.Json) => Effect.Effect<unknown, unknown>;
   readonly watch: (source: string, target: string, ref: string) => Effect.Effect<void, unknown>;
   readonly alarm: (name: string) => Effect.Effect<number | null>;
   readonly program: (name: string) => Effect.Effect<Use, unknown>;

@@ -279,10 +279,10 @@ describe("T695, a declaration that does not load keeps why", () => {
 
 const row1 = { v: 1, build: "b-1", model: { count: 1 }, after: 0 };
 
-/** A step, upgrade or load that fails at a site this ticket gave a cause, and the call it makes. */
 /** A value no site accepts, as C7 generates it: a boolean or a failure object. */
 type Bad = boolean | object;
 
+/** A step, upgrade or load that fails at a site this ticket gave a cause, and the call it makes. */
 const causedAt = {
   saved_model: (bad: Bad) => nodeExecution(program({})).init({ count: bad }),
   step_model: (bad: Bad) => nodeExecution(program({ model: { count: bad } })).step({ count: 1 }, { type: "inc" }),

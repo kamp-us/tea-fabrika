@@ -56,15 +56,15 @@ const reasons = fc.constantFrom("unreachable", "bad_row", "storage", "refused", 
 /** Runs one property: generated input, each case an Effect on the real code. The runner gives it. */
 export type Law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown>) => void;
 
-/** The same `Sql`, but each query throws `failure` once armed. */
-const throwing = (sql: Sql, failure: unknown): { readonly sql: Sql; readonly arm: () => void } => {
+/** The same `Sql`, but each query throws `cause` once armed. */
+const throwing = (sql: Sql, cause: unknown): { readonly sql: Sql; readonly arm: () => void } => {
   let armed = false;
   return {
     sql: {
       ...sql,
       exec: (query, ...params) => {
         if (armed) {
-          throw failure;
+          throw cause;
         }
 
         return sql.exec(query, ...params);
@@ -592,7 +592,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
       );
     };
 
-    const delivery = (traceId: unknown): unknown => ({
+    const delivery = (traceId: string | number | boolean | null): unknown => ({
       id: "letter-1",
       envelope: {
         id: "in-process_0000000000e008000000000000-1",

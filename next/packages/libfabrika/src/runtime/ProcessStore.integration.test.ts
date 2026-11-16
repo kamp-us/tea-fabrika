@@ -164,7 +164,7 @@ type Checkpoint = {
 type Store = {
   readonly load: Effect.Effect<Checkpoint | null, LedgerError>;
   readonly save: (value: Checkpoint) => Effect.Effect<void, LedgerError | QuotasError>;
-  readonly record: (id: string, event: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
+  readonly record: ProcessStore["Service"]["record"];
 };
 
 describe("P11 process storage", () => {
@@ -378,9 +378,9 @@ describe("P11 process storage", () => {
     ],
     ([value, placed, activity]) => {
       const values = new Map<string, unknown>();
-      const storage = {
-        get: (key: string) => Effect.sync(() => values.get(key)),
-        put: (key: string, value: unknown) =>
+      const storage: NonNullable<Parameters<typeof ProcessStore.layer>[1]["storage"]> = {
+        get: (key) => Effect.sync(() => values.get(key)),
+        put: (key, value) =>
           Effect.sync(() => {
             values.set(key, value);
           }),

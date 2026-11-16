@@ -108,7 +108,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
               expect(["descriptor", "wake"]).toContain(key);
               return values.get(key);
             },
-            put: async (key: string, value: unknown) => {
+            put: async <T>(key: string, value: T) => {
               expect(key).toBe("wake");
               values.set(key, value);
             },

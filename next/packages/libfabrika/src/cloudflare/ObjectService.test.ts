@@ -268,7 +268,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         const values = new Map<string, unknown>([["descriptor", descriptor]]);
         const storage = {
           get: (key: string) => Promise.resolve(values.get(key)),
-          put: (key: string, value: unknown) => {
+          put: <T>(key: string, value: T) => {
             values.set(key, value);
             return Promise.resolve();
           },
