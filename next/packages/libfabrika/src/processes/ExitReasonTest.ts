@@ -97,7 +97,7 @@ const INSERT = /^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+entries\b/i;
 
 /** The store's Sql, with a cut that refuses the `after`-th insert of the next call. */
 const cutting = (sql: Sql) => {
-  // SAFETY: `after` starts empty and the cut only ever sets a count there.
+  // SAFETY: `after` is widened from `null` so the cut can hold a count of inserts; `null` means no cut is armed.
   const fault = { after: null as number | null };
   const wrapped: Sql = {
     exec: (query, ...params) => {

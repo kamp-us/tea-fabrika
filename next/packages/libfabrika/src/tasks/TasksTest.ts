@@ -110,7 +110,7 @@ export const fcRecorded = fc.record({
 export type Said = Omit<Recorded, "seen">;
 
 /** A value as it comes back from JSON: equal in every field, never the same object. */
-// SAFETY: `value` round-trips through JSON, and every value this suite copies is plain data, so it comes back the same type.
+// SAFETY: its callers copy plain JSON data (exit reasons, task records, `fc.jsonValue`), which JSON gives back field for field as the same type.
 export const copied = <A>(value: A): A => JSON.parse(JSON.stringify(value)) as A;
 
 /** The item a tape number picks; never called on an empty list. */
@@ -170,7 +170,7 @@ export const broken = (value: object, pick: number, bad: ReadonlyArray<readonly 
   const [key, replacement] = choose(bad, pick);
 
   if (replacement === MISSING) {
-    // SAFETY: every value `broken` is given is one of the task records, which are plain objects keyed by string.
+    // SAFETY: `value` is an object, and this only drops the field `key` names and keeps the rest by their string keys.
     const { [key]: _gone, ...rest } = value as Record<string, unknown>;
     return rest;
   }
@@ -321,7 +321,7 @@ const INSERT = /^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+entries\b/i;
 
 /** The store's Sql with one planted fault: refuse the next entry insert, or the statement after it. */
 const cutting = (sql: Sql) => {
-  // SAFETY: `at` starts empty and is only ever set to "before" or "after" when the fault is armed.
+  // SAFETY: `at` is widened from `null` to name the planted cut's place, "before" or "after" an append; `null` means no cut.
   const fault = { at: null as "before" | "after" | null, armed: false };
   const wrapped: Sql = {
     exec: (query, ...params) => {

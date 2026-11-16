@@ -20,6 +20,7 @@ import { processRuntime, settings } from "./runtime.ts";
 
 type State = Parameters<typeof processRuntime>[0];
 type Environment = Parameters<typeof processRuntime>[1];
+// SAFETY: each call gives `platform` what processRuntime and the Process object read in its law: the id, the storage calls, the bindings, the (empty) runtime context, or the implementation `Process.make` was handed.
 const platform = <A>(value: object): A => value as A;
 
 // Ticket 502 slice S2: keep only what the Process object's Layer hands to Alchemy's `make`, so law

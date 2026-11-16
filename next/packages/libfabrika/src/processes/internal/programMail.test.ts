@@ -99,6 +99,7 @@ describe("P41 slice 1: program mail rules", () => {
             _tag: "ProgramMailError",
             reason: reason === "full" ? { _tag: reason, unread } : { _tag: reason },
           });
+          // SAFETY: ProgramMailError is a tagged struct (ProgramMail.ts), so its encoded form is an object with `_tag` and `reason`.
           expect(Object.keys(encoded as object)).not.toContain("kind");
           expect(Schema.decodeUnknownSync(ProgramMailError)(encoded), "it decodes back to the same error").toEqual(
             error,
