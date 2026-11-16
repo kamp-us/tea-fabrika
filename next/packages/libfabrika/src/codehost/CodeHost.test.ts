@@ -1,6 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as CodeHost from "./CodeHost.ts";
 import * as CodeHostTest from "./CodeHostTest.ts";
@@ -11,7 +12,7 @@ it("L1: Path refuses a whole dot or parent segment at any position", () => {
   // Custom fast-check data builds invalid inputs that the accepted Path schema cannot generate.
   const segments = fc
     .array(fc.constantFrom("a b", "dir/[x]", ".dot"))
-    .map((paths) => paths.flatMap((path) => path.split("/")));
+    .map((paths) => paths.flatMap((path) => Str.split(path, "/")));
   const dotPaths = segments.chain((parts) =>
     fc.integer({ min: 0, max: parts.length }).map((index) => ({
       dot: [...parts.slice(0, index), ".", ...parts.slice(index)].join("/"),

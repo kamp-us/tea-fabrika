@@ -19,7 +19,7 @@
 // reasons, other words, free text or none.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Schema, String as Str, pipe, Option } from "effect";
 import * as fc from "fast-check";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -37,16 +37,18 @@ type View = ReturnType<typeof checklist.view.select>;
 const WORDS = { new: "Open", open: "Open", late: "Late", checked: "Done" } as const;
 
 const unescape = (text: string) =>
-  text
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;/g, "'")
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, "&");
+  pipe(
+    text,
+    Str.replace(/&lt;/g, "<"),
+    Str.replace(/&gt;/g, ">"),
+    Str.replace(/&quot;/g, '"'),
+    Str.replace(/&#x27;/g, "'"),
+    Str.replace(/&#39;/g, "'"),
+    Str.replace(/&amp;/g, "&"),
+  );
 
 /** The text a person reads: the markup without its tags. */
-const text = (html: string) => unescape(html.replace(/<[^>]*>/g, " "));
+const text = (html: string) => unescape(Str.replace(/<[^>]*>/g, " ")(html));
 
 const attr = (tag: string, name: string) => {
   const m = new RegExp(`\\s${name}="([^"]*)"`).exec(tag);
@@ -55,14 +57,15 @@ const attr = (tag: string, name: string) => {
 
 /** The text of the element whose id is `id`, up to its own closing tag. */
 const byId = (html: string, id: string): string | null => {
-  const open = new RegExp(`<([a-z]+)[^>]*\\sid="${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]*>`).exec(html);
+  const open = new RegExp(`<([a-z]+)[^>]*\\sid="${Str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")(id)}"[^>]*>`).exec(html);
 
   if (open === null) {
     return null;
   }
 
-  const end = html.indexOf(`</${open[1]}>`, open.index + open[0].length);
-  return text(html.slice(open.index + open[0].length, end < 0 ? undefined : end)).trim();
+  const rest = Str.slice(open.index + open[0].length)(html);
+  const end = Str.indexOf(`</${open[1]}>`)(rest);
+  return Str.trim(text(Option.match(end, { onNone: () => rest, onSome: (at) => Str.slice(0, at)(rest) })));
 };
 
 /** A control's accessible name in this markup: its aria-label, its labelledby text or its `for` label. */
@@ -76,23 +79,23 @@ const named = (html: string, tag: string): string | null => {
   const by = attr(tag, "aria-labelledby");
 
   if (by !== null) {
-    return by
-      .split(/\s+/)
-      .map((id) => byId(html, id) ?? "")
-      .join(" ")
-      .trim();
+    return Str.trim(
+      Str.split(by, /\s+/)
+        .map((id) => byId(html, id) ?? "")
+        .join(" "),
+    );
   }
 
   const id = attr(tag, "id");
   const forLabel = id === null ? null : new RegExp(`<label[^>]*\\sfor="${id}"[^>]*>([\\s\\S]*?)</label>`).exec(html);
-  return forLabel === null ? null : text(forLabel[1]!).trim();
+  return forLabel === null ? null : Str.trim(text(forLabel[1]!));
 };
 
-const tags = (html: string, pattern: RegExp) => [...html.matchAll(pattern)].map((m) => m[0]);
+const tags = (html: string, pattern: RegExp) => [...Str.matchAll(pattern)(html)].map((m) => m[0]);
 
 const name = fc.oneof(
-  fc.stringMatching(/^[a-z][a-z &<>"']{0,20}$/).map((s) => s.trimEnd()),
-  fc.constant("a".repeat(80)),
+  fc.stringMatching(/^[a-z][a-z &<>"']{0,20}$/).map((s) => Str.trimEnd(s)),
+  fc.constant(Str.repeat(80)("a")),
 );
 
 const choice = fc.record({ move: fc.nat(), pick: fc.nat(), name, later: fc.integer({ min: 0, max: 2 * DAY }) });
@@ -176,11 +179,17 @@ describe("L24: the checklist window's markup", () => {
 
           for (const word of new Set(Object.values(WORDS))) {
             const count = view.items.filter((i) => WORDS[i.state] === word).length;
-            expect(read.match(new RegExp(`\\b${word}\\b`, "g"))?.length ?? 0, `${word} words`).toBe(count);
+            expect(
+              Option.match(Str.match(new RegExp(`\\b${word}\\b`, "g"))(read), {
+                onNone: () => 0,
+                onSome: (found) => found.length,
+              }),
+              `${word} words`,
+            ).toBe(count);
           }
 
           const buttons = tags(html, /<button[^>]*>[\s\S]*?<\/button>/g).map(
-            (b) => attr(b, "aria-label") ?? text(b).trim(),
+            (b) => attr(b, "aria-label") ?? Str.trim(text(b)),
           );
 
           for (const item of view.items) {
@@ -188,9 +197,10 @@ describe("L24: the checklist window's markup", () => {
           }
 
           expect(read).toContain(`${view.left} left`);
-          expect(read.includes("Nothing on the list yet."), "the empty line shows exactly when there is none").toBe(
-            view.items.length === 0,
-          );
+          expect(
+            Str.includes("Nothing on the list yet.")(read),
+            "the empty line shows exactly when there is none",
+          ).toBe(view.items.length === 0);
           seen.empty += view.items.length === 0 ? 1 : 0;
           seen.checked += view.items.some((i) => i.state === "checked") ? 1 : 0;
           seen.late += view.items.some((i) => i.state === "late") ? 1 : 0;
@@ -215,12 +225,12 @@ describe("L24: the checklist window's markup", () => {
         expect(named(html, field)).toBe(checklist.inputs.add.description);
         expect(attr(field, "maxLength") ?? attr(field, "maxlength")).toBe("80");
         expect(attr(field, "value") ?? "").toBe(draft);
-        const described = (attr(field, "aria-describedby") ?? "")
-          .split(/\s+/)
-          .filter((id) => id !== "")
-          .map((id) => byId(html, id) ?? "")
-          .join(" ")
-          .trim();
+        const described = Str.trim(
+          Str.split(attr(field, "aria-describedby") ?? "", /\s+/)
+            .filter((id) => id !== "")
+            .map((id) => byId(html, id) ?? "")
+            .join(" "),
+        );
 
         if (words === null) {
           expect(described, "no refusal, no description words").toBe("");
@@ -247,8 +257,8 @@ describe("L24: the checklist window's markup", () => {
 
         for (const r of [a, b].filter((r) => r !== "taken" && r !== "missing")) {
           const said = refused({ type: "remove", name: item }, r);
-          expect(said.includes(`"${item}"`), `${r} named the item`).toBe(false);
-          expect(said.includes(r), `${r}'s words`).toBe(word(r));
+          expect(Str.includes(`"${item}"`)(said), `${r} named the item`).toBe(false);
+          expect(Str.includes(r)(said), `${r}'s words`).toBe(word(r));
         }
 
         const free = [a, b].filter((r) => !word(r));

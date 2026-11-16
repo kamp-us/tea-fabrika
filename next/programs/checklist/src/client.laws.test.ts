@@ -16,7 +16,7 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { clientMachineFor, diff } from "@kampus/libfabrika";
-import { Exit, Schema } from "effect";
+import { Exit, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import { checklist, checklistMachine, checklistView } from "./program.ts";
 import { checklistWindow } from "./window.tsx";
@@ -44,7 +44,7 @@ const decode = Schema.decodeUnknownSync(checklistWindow.data);
 const client = clientMachineFor({ decode: () => decode });
 type ClientModel = ReturnType<typeof client.init>[0];
 
-const POOL = ["milk", "bread", "eggs", "tea", "a".repeat(80)] as const;
+const POOL = ["milk", "bread", "eggs", "tea", Str.repeat(80)("a")] as const;
 
 const choice = fc.record({
   move: fc.nat(),

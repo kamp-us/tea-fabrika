@@ -4,7 +4,7 @@
 // slot keeps the reason (0502). The page draws `bodyWord` in place of the view whenever it is not null.
 import { describe, expect, it } from "@effect/vitest";
 import { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
-import { Arbitrary, Schema } from "effect";
+import { Arbitrary, Schema, String as Str } from "effect";
 import { bodyWord, stateWord } from "./words.ts";
 
 const SEED = 119120;
@@ -29,7 +29,7 @@ describe("an ended tile shows one word where its view was", () => {
         true,
       );
       expect(
-        reach._tag !== "ended" || link._tag !== "online" || stateWord(link, reach).includes(reach.reason._tag),
+        reach._tag !== "ended" || link._tag !== "online" || Str.includes(reach.reason._tag)(stateWord(link, reach)),
         "the online state slot of an ended tile names the reason",
       ).toBe(true);
       expect(reach._tag !== "open" || !drawn || word === null, "an open tile's view was hidden").toBe(true);

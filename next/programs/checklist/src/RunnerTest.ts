@@ -8,7 +8,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import type { ProgramRunner } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, DateTime, Effect, Schema, type Scope } from "effect";
+import { Arbitrary, DateTime, Effect, Schema, type Scope, String as Str } from "effect";
 import { TestClock } from "effect/testing";
 import { checklist } from "./program.ts";
 
@@ -85,7 +85,7 @@ const shown = (view: unknown) => {
 };
 
 /** Only the letters this suite sent: the runner's own timers are not a writer's. */
-const sent = (letters: ReadonlyArray<Saved>) => letters.filter((l) => l.id.startsWith("checklist-"));
+const sent = (letters: ReadonlyArray<Saved>) => letters.filter((l) => Str.startsWith("checklist-")(l.id));
 
 const NAMES = ["git", "node", "pnpm", "volta"] as const;
 const INPUTS = ["add", "rename", "remove", "check", "uncheck"] as const;
@@ -93,7 +93,7 @@ const INPUTS = ["add", "rename", "remove", "check", "uncheck"] as const;
 const PERSON_ONLY: ReadonlySet<string> = new Set(["add", "rename", "remove"]);
 
 /** A `check`'s note: none, 1 character, exactly `MOST`, or one past it, which no writer may send. */
-const NOTES = { none: undefined, one: "n", most: "m".repeat(MOST), over: "o".repeat(MOST + 1) } as const;
+const NOTES = { none: undefined, one: "n", most: Str.repeat(MOST)("m"), over: Str.repeat(MOST + 1)("o") } as const;
 
 /** One move's entropy: which input, whose, which item, and a `check`'s note. What it names is read
  *  off the record. */
@@ -175,7 +175,7 @@ const Retried = Arbitrary.array(
 /** L17's note: any text of 1 to `MOST` characters, or `MOST` characters of four UTF-8 bytes each. */
 const AnyNote = Arbitrary.flatMap(Arbitrary.schema(Schema.Literals(["any", "any", "wide"])), (kind) =>
   kind === "wide"
-    ? Arbitrary.Constant("\u{1F642}".repeat(MOST / 2))
+    ? Arbitrary.Constant(Str.repeat(MOST / 2)("\u{1F642}"))
     : Arbitrary.schema(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(MOST))),
 );
 
@@ -335,7 +335,7 @@ export const suite = (open: Open, fresh: Fresh) =>
             yield* r.due(0);
             expect(yield* view, "the referee's time stamps it, not the writer's").toEqual(one("open", null));
             expect(alarms.at(-1), "since is the timer's arrivedAt").toBe(1000 + DAY);
-            expect((yield* letters).find((l) => !l.id.startsWith("checklist-"))?.m).toEqual({
+            expect((yield* letters).find((l) => !Str.startsWith("checklist-")(l.id))?.m).toEqual({
               type: "timer",
               at: 0,
               arrivedAt: 1000,

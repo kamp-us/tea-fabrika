@@ -6,7 +6,7 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Change, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { Saved } from "@kampus/libfabrika/runtime/State";
-import { Arbitrary, ConfigProvider, Effect, Schema } from "effect";
+import { Arbitrary, ConfigProvider, Effect, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import * as ChangeKind from "./Change.ts";
 import * as Mail from "./Mail.ts";
@@ -68,8 +68,8 @@ const settingsFor = (w: World) =>
     ),
   );
 
-const id = (w: World, char: string) => Schema.decodeUnknownSync(Commit)(char.repeat(w.size));
-const tree = (w: World, char: string) => Schema.decodeUnknownSync(Tree)(char.repeat(w.size));
+const id = (w: World, char: string) => Schema.decodeUnknownSync(Commit)(Str.repeat(w.size)(char));
+const tree = (w: World, char: string) => Schema.decodeUnknownSync(Tree)(Str.repeat(w.size)(char));
 const land = (w: World) => Mail.Land.make({ type: "land", ref: w.ref, change: 1, head: id(w, "a"), reply: "queue" });
 const equal = (a: unknown, b: unknown) => expect(a).toEqual(b);
 
@@ -528,7 +528,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
           ? ChangeKind.verdict(prev.checks, msg.value)._tag
           : null;
       const fault =
-        (taken && msg.type.endsWith("_err")) ||
+        (taken && Str.endsWith("_err")(msg.type)) ||
         verdict === "lost" ||
         (verdict === "pending" && prev._tag === "checking" && at !== null && at >= prev.until);
 
@@ -813,7 +813,7 @@ const roundWalk = (p: Program, w: World) => {
               cmd,
               moved
                 ? Updated.cases.updated.make({
-                    head: Schema.decodeUnknownSync(Commit)((cmd.attempt + 16).toString(16).padStart(w.size, "0")),
+                    head: Schema.decodeUnknownSync(Commit)(Str.padStart(w.size, "0")((cmd.attempt + 16).toString(16))),
                     tree: tree(w, "e"),
                     main: id(w, "d"),
                   })

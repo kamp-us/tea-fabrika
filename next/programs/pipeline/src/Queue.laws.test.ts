@@ -6,7 +6,7 @@ import { Commit, Tree } from "@kampus/libfabrika/codehost/CodeHost";
 import { Started } from "@kampus/libfabrika/processes/Children";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { StartRefusal } from "@kampus/libfabrika/runtime/StartChild";
-import { ConfigProvider, Effect, Schema } from "effect";
+import { ConfigProvider, Effect, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import * as Mail from "./Mail.ts";
 import { queue } from "./Queue.ts";
@@ -31,9 +31,9 @@ type Oracle = {
 };
 
 const ctx = stubCtxThrowingProxy<never>();
-const head = Schema.decodeUnknownSync(Commit)("a".repeat(40));
-const tree = Schema.decodeUnknownSync(Tree)("b".repeat(40));
-const other = Schema.decodeUnknownSync(Tree)("c".repeat(40));
+const head = Schema.decodeUnknownSync(Commit)(Str.repeat(40)("a"));
+const tree = Schema.decodeUnknownSync(Tree)(Str.repeat(40)("b"));
+const other = Schema.decodeUnknownSync(Tree)(Str.repeat(40)("c"));
 const pid = "process_0000000000e008000000000001";
 
 const draw = fc.record({
@@ -437,13 +437,13 @@ for (const law of [
       { seed: 119120, numRuns: 200 },
     );
 
-    if (law.startsWith("Q3")) {
+    if (Str.startsWith("Q3")(law)) {
       for (const tag of ["merged", "red", "conflict", "moved", "closed", "unset", "abandoned", "behind"]) {
         expect(seen.has(`reply:${tag}`), tag).toBe(true);
       }
     }
 
-    if (law.startsWith("Q6")) {
+    if (Str.startsWith("Q6")(law)) {
       for (const state of ["idle", "landing", "stopped"]) {
         expect(seen.has(`late:start_child_err:${state}`), state).toBe(true);
       }
@@ -518,11 +518,11 @@ for (const [law, reached] of [
     );
     expect(seen.has(reached), reached).toBe(true);
 
-    if (law.startsWith("Q4")) {
+    if (Str.startsWith("Q4")(law)) {
       expect(seen.has("enqueue_stopped")).toBe(true);
     }
 
-    if (law.startsWith("Q5")) {
+    if (Str.startsWith("Q5")(law)) {
       for (const tag of [...reasons, "already_started", "already_present"]) {
         expect(seen.has(tag), tag).toBe(true);
       }

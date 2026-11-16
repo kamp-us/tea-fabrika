@@ -1,6 +1,6 @@
 // P19 next/. L1/L2/L4/L5 drive the real service through held native replies and TestClock.
 import { expect, it } from "@effect/vitest";
-import { Cause, Context, Effect, Exit, Fiber, Formatter, Layer, Logger, Schema, Tracer } from "effect";
+import { Cause, Context, Effect, Exit, Fiber, Formatter, Layer, Logger, Schema, Tracer, String as Str } from "effect";
 import { TestClock } from "effect/testing";
 import * as Outside from "./BrainControl.test-support.ts";
 import { BrainService } from "./BrainService.ts";
@@ -417,7 +417,7 @@ it.effect.prop(
           for (const form of [
             secret,
             encodeURIComponent(secret),
-            JSON.stringify(secret).slice(1, -1),
+            Str.slice(1, -1)(JSON.stringify(secret)),
             JSON.stringify([...new TextEncoder().encode(secret)]),
           ]) {
             expect(output).not.toContain(form);

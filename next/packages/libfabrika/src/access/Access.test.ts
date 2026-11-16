@@ -20,7 +20,7 @@
 //   else is `{reason: "not_granted"}`.
 // Signatures are not checked here, so `signed` values are opaque text with the signer named.
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Result, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import { admitted, type MemberEvent, type Access, members, Saw, Took } from "./Access.ts";
 import { allows, EMPTY, foldAccess } from "./AccessFold.ts";
@@ -63,7 +63,7 @@ const signed = (signer: string) => ({
 });
 
 let made = 0;
-const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
+const nextId = (prefix: string): string => `${prefix}_${Str.padStart(26, "0")(String(++made))}`;
 
 const founded = (keys: ReadonlyArray<string> = ["pA"], window: string | null = "wA"): MemberEvent => ({
   _tag: "founded",

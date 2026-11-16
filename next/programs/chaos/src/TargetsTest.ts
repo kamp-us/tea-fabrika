@@ -4,7 +4,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { type Incoming, type ProgramRunner, Sent } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, Schema, type Scope } from "effect";
+import { Arbitrary, Effect, Schema, type Scope, String as Str } from "effect";
 import type { Open as RunnerOpen } from "./RunnerTest.ts";
 
 type World = Effect.Success<RunnerOpen>;
@@ -60,7 +60,7 @@ const View = Schema.Struct({
 
 const shown = (raw: unknown) => {
   const view = Schema.decodeUnknownSync(View)(raw);
-  return { ...view, items: [...view.items].sort((a, b) => a.name.localeCompare(b.name)) };
+  return { ...view, items: [...view.items].sort((a, b) => Str.localeCompare(b.name)(a.name)) };
 };
 
 const Controller = Schema.TaggedStruct("armed", {
@@ -82,7 +82,7 @@ export const suite = (open: Open, checklist: unknown) =>
             const expected = () => ({
               items: [...items]
                 .map(([name, kept]) => ({ name, state: kept === null ? "new" : "checked", note: kept }))
-                .sort((a, b) => a.name.localeCompare(b.name)),
+                .sort((a, b) => Str.localeCompare(b.name)(a.name)),
               left: [...items.values()].filter((kept) => kept === null).length,
             });
             const send = Effect.fnUntraced(function* (

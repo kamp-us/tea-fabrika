@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import * as Public from "@kampus/libfabrika";
-import { Arbitrary, Cause, Clock, Effect, Exit, Schema, SchemaIssue, Tracer } from "effect";
+import { Arbitrary, Cause, Clock, Effect, Exit, Schema, SchemaIssue, Tracer, String as Str, Option } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import * as Front from "./Id.ts";
@@ -36,7 +36,7 @@ const prefixShapes = fc
     longest,
     `${first}_${last}`,
     `${first}__${last}`,
-    first + "_".repeat(61) + last,
+    first + Str.repeat(61)("_") + last,
   ]);
 
 const badPrefixShapes = fc
@@ -46,7 +46,7 @@ const badPrefixShapes = fc
     "_",
     `_${word}`,
     `${word}_`,
-    word.toUpperCase(),
+    Str.toUpperCase(word),
     long,
     // A bad character is refused in the middle and at both ends, so `${word}1` stays refused.
     `${word}${bad}${word}`,
@@ -70,31 +70,33 @@ const uuid = fc.tuple(clock, fc.uint8Array({ minLength: 10, maxLength: 10 })).ma
 
 // Independent oracle: follow the spec's bit-string recipe, not the generator's shift loop.
 const referenceEncode = (bytes: Uint8Array): string => {
-  const bits = `00${[...bytes].map((byte) => byte.toString(2).padStart(8, "0")).join("")}`;
-  return Array.from({ length: 26 }, (_, i) => alphabet[Number.parseInt(bits.slice(i * 5, i * 5 + 5), 2)]).join("");
+  const bits = `00${[...bytes].map((byte) => Str.padStart(8, "0")(byte.toString(2))).join("")}`;
+  return Array.from({ length: 26 }, (_, i) => alphabet[Number.parseInt(Str.slice(i * 5, i * 5 + 5)(bits), 2)]).join("");
 };
 
 const referenceDecode = (suffix: string): Uint8Array => {
-  const bits = [...suffix]
-    .map((char) => alphabet.indexOf(char).toString(2).padStart(5, "0"))
-    .join("")
-    .slice(2);
-  return Uint8Array.from({ length: 16 }, (_, i) => Number.parseInt(bits.slice(i * 8, i * 8 + 8), 2));
+  const bits = Str.slice(2)(
+    [...suffix]
+      .map((char) => Str.padStart(5, "0")(Option.getOrThrow(Str.indexOf(char)(alphabet)).toString(2)))
+      .join(""),
+  );
+  return Uint8Array.from({ length: 16 }, (_, i) => Number.parseInt(Str.slice(i * 8, i * 8 + 8)(bits), 2));
 };
 
 const wire = (type: string, bytes: Uint8Array): string => (type === "" ? "" : `${type}_`) + referenceEncode(bytes);
 
-const split = (value: string): readonly [string, string] => {
-  const separator = value.lastIndexOf("_");
-  return separator < 0 ? ["", value] : [value.slice(0, separator), value.slice(separator + 1)];
-};
+const split = (value: string): readonly [string, string] =>
+  Option.match(Str.lastIndexOf("_")(value), {
+    onNone: (): readonly [string, string] => ["", value],
+    onSome: (separator): readonly [string, string] => [Str.slice(0, separator)(value), Str.slice(separator + 1)(value)],
+  });
 
 const validPrefix = (type: string): boolean =>
   type.length > 0 &&
   type.length <= 63 &&
   /^[a-z]$/.test(type[0]!) &&
-  /^[a-z]$/.test(type.at(-1)!) &&
-  [...type].every((char) => "abcdefghijklmnopqrstuvwxyz_".includes(char));
+  Option.exists(Str.at(type, -1), (last) => /^[a-z]$/.test(last)) &&
+  [...type].every((char) => Str.includes(char)("abcdefghijklmnopqrstuvwxyz_"));
 
 const accepts = (input: unknown, type?: string): boolean => {
   if (typeof input !== "string") {
@@ -107,15 +109,15 @@ const accepts = (input: unknown, type?: string): boolean => {
     return false;
   }
 
-  if (found === "" && input.includes("_")) {
+  if (found === "" && Str.includes("_")(input)) {
     return false;
   }
 
-  if (suffix.length !== 26 || ![...suffix].every((char) => alphabet.includes(char))) {
+  if (suffix.length !== 26 || ![...suffix].every((char) => Str.includes(char)(alphabet))) {
     return false;
   }
 
-  if (alphabet.indexOf(suffix[0]!) > 7) {
+  if (Option.exists(Str.indexOf(suffix[0]!)(alphabet), (index) => index > 7)) {
     return false;
   }
 
@@ -354,20 +356,20 @@ describe("T518 Id format", () => {
           wrongVersion[6] = (bytes[6]! & 15) | (version << 4);
           wrongVariant[8] = (bytes[8]! & 63) | (variant << 6);
           const bad = [
-            raw.toUpperCase(),
-            head + suffix.toUpperCase(),
-            head + suffix.slice(0, index) + suffix.slice(index + 1),
-            `${head + suffix.slice(0, index)}0${suffix.slice(index)}`,
+            Str.toUpperCase(raw),
+            head + Str.toUpperCase(suffix),
+            head + Str.slice(0, index)(suffix) + Str.slice(index + 1)(suffix),
+            `${head + Str.slice(0, index)(suffix)}0${Str.slice(index)(suffix)}`,
             `${raw}0`,
             // A count is never an id: an id is not derived from how many came before it.
             `${head}${count}`,
             `${raw}-${count}`,
-            head + alphabet[overflow] + suffix.slice(1),
+            head + alphabet[overflow] + Str.slice(1)(suffix),
             wire(type, wrongVersion),
             wire(type, wrongVariant),
             ...[" ", "\t", "\n", "\r\n", "\u00a0"].flatMap((space) => [space + raw, raw + space]),
             ...["i", "l", "o", "u", "A", "-", "_", "é", "\0"].map(
-              (char) => head + suffix.slice(0, index) + char + suffix.slice(index + 1),
+              (char) => head + Str.slice(0, index)(suffix) + char + Str.slice(index + 1)(suffix),
             ),
             ...(type === "" ? [`_${suffix}`] : [type + suffix, `${type}__${suffix}`]),
           ];
@@ -613,7 +615,7 @@ describe("T518 Id order and generation", () => {
 
           for (const id of ids) {
             expect(accepts(id, type)).toBe(true);
-            expect(id.startsWith(`${type}_`)).toBe(true);
+            expect(Str.startsWith(`${type}_`)(id)).toBe(true);
             expect(Schema.decodeUnknownSync(Specific)(id)).toBe(id);
             expect(timestamp(id)).toBe(at);
           }

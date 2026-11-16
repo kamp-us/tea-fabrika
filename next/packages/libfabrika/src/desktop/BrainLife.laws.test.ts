@@ -2,7 +2,7 @@
 import { applyCell } from "@demlik/tea";
 import { arbGuidedSequence, propertyInvariant, propertyTrace, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { syncTest } from "../Testing.ts";
@@ -297,7 +297,7 @@ it.effect.prop(
           const [next] = applyCell(machine, prev, poisoned);
           const outputs = [JSON.stringify(next), JSON.stringify(Schema.encodeSync(BrainLife.Model)(next))];
           return outputs.every((output) =>
-            [secret, encoded, JSON.stringify(secret).slice(1, -1)].every((form) => !output.includes(form)),
+            [secret, encoded, Str.slice(1, -1)(JSON.stringify(secret))].every((form) => !Str.includes(form)(output)),
           );
         },
         { seed, numRuns: 1 },

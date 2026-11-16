@@ -10,7 +10,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, String as Str } from "effect";
 import {
   SPACE,
   refused,
@@ -106,7 +106,7 @@ describe("p44, one signature shape, with real ssh-keygen", () => {
       const made = join(home, "made");
       const keys = yield* keygen(["-q", "-t", "ed25519", "-N", "", "-C", "made@fabrika.test", "-f", made]);
       expect(keys.status, keys.stderr).toBe(0);
-      const line = readFileSync(`${made}.pub`, "utf8").trim();
+      const line = Str.trim(readFileSync(`${made}.pub`, "utf8"));
       const body = "made by ssh-keygen\nä ü ş\n";
 
       for (const options of [[], ["-O", "hashalg=sha256"]]) {

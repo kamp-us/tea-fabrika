@@ -6,7 +6,7 @@ import { arbGuidedSequence, arbMsgSequence, propertyInvariant } from "@demlik/te
 import { expect, it } from "@effect/vitest";
 import * as Fabrika from "@kampus/libfabrika";
 import { syncTest } from "@kampus/libfabrika/testing";
-import { Result, Schema } from "effect";
+import { Result, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { chaos } from "./program.ts";
@@ -23,7 +23,7 @@ type Command = ReturnType<
 >;
 
 const id = (n: number) =>
-  Schema.decodeUnknownSync(Fabrika.Chaos.ExperimentId)(`chaos_0000000000e008${n.toString(16).padStart(12, "0")}`);
+  Schema.decodeUnknownSync(Fabrika.Chaos.ExperimentId)(`chaos_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`);
 
 const process = Schema.decodeUnknownSync(Fabrika.Id.Process)("process_0000000000e008000000000000");
 
@@ -46,7 +46,7 @@ const starts = fc.record({
       client: `client:${n}`,
       key: `public:${n}`,
       process: Schema.decodeUnknownSync(Fabrika.Id.Process)(
-        `process_0000000000e008${n.toString(16).padStart(12, "0")}`,
+        `process_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`,
       ),
     }),
   ),
@@ -255,7 +255,7 @@ it("stop wins at every reached cut and late, duplicate or unrelated replies emit
         const [stopped, out] = applyCell(chaos.machine, model, { type: "stop" });
         expect(out).toEqual([]);
         expect(chaos.wake(stopped)).toBeNull();
-        const replies = run.msgs.filter((m) => m.type.endsWith("_ok") || m.type.endsWith("_err"));
+        const replies = run.msgs.filter((m) => Str.endsWith("_ok")(m.type) || Str.endsWith("_err")(m.type));
         const tail = arbMsgSequence(
           fc.constantFrom<Msg>({ type: "timer", at: 10_000_000 }, { type: "stop" }, ...replies),
           { minLength: 10, maxLength: 20 },
@@ -358,7 +358,7 @@ it("a previous experiment or duplicate reply cannot consume a new request", () =
 
         [current] = applyCell(chaos.machine, current, msg);
 
-        if (msg.type.endsWith("_ok") || msg.type.endsWith("_err")) {
+        if (Str.endsWith("_ok")(msg.type) || Str.endsWith("_err")(msg.type)) {
           const [again, extra] = applyCell(chaos.machine, current, msg);
           expect(again).toEqual(current);
           expect(extra).toEqual([]);

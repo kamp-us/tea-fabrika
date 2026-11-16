@@ -14,7 +14,7 @@
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import type { Binding } from "@kampus/libfabrika";
 import * as Keys from "@kampus/libfabrika/client/Keys";
-import { Result } from "effect";
+import { Result, String as Str } from "effect";
 import * as fc from "fast-check";
 import { commands } from "./commands.ts";
 import type { tezgahMachine } from "./program.ts";
@@ -52,8 +52,8 @@ describe("L19: every tezgah command is named tezgah.<word> and carries a word an
 
         for (const c of shipped) {
           expect(c.does, "L19: a command is tezgah.<word>").toMatch(/^tezgah\.[a-z][a-z_]*$/);
-          expect(c.word.trim(), `L19: ${c.does} carries a shell word`).not.toBe("");
-          expect(c.label.trim(), `L19: ${c.does} carries a palette label`).not.toBe("");
+          expect(Str.trim(c.word), `L19: ${c.does} carries a shell word`).not.toBe("");
+          expect(Str.trim(c.label), `L19: ${c.does} carries a palette label`).not.toBe("");
         }
 
         expect(

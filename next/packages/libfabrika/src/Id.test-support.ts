@@ -1,4 +1,4 @@
-import { Arbitrary, Effect, Schema } from "effect";
+import { Arbitrary, Effect, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import * as Id from "./Id.ts";
 
@@ -15,10 +15,11 @@ const encodeProcess = (at: number, random: ReadonlyArray<number>): string => {
     ...random.map((byte, i) => (i === 0 ? (byte & 15) | 0x70 : i === 2 ? (byte & 63) | 0x80 : byte)),
   ]);
   const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
-  const bits = `00${[...bytes].map((byte) => byte.toString(2).padStart(8, "0")).join("")}`;
-  const suffix = Array.from({ length: 26 }, (_, i) => alphabet[Number.parseInt(bits.slice(i * 5, i * 5 + 5), 2)]).join(
-    "",
-  );
+  const bits = `00${[...bytes].map((byte) => Str.padStart(8, "0")(byte.toString(2))).join("")}`;
+  const suffix = Array.from(
+    { length: 26 },
+    (_, i) => alphabet[Number.parseInt(Str.slice(i * 5, i * 5 + 5)(bits), 2)],
+  ).join("");
   return `process_${suffix}`;
 };
 

@@ -38,7 +38,7 @@ import { ProgramRunner } from "@kampus/libfabrika/runtime/Runner";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { FileSystem, Path } from "effect";
+import { FileSystem, Path, String as Str } from "effect";
 import type { Redacted } from "effect";
 import { Clock, ConfigProvider, Context, Effect, Exit, Layer, Option, Result, Schema, Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
@@ -78,9 +78,9 @@ const from = {
   build: BUILD,
 };
 
-const head = CodeHostTest.commit("a".repeat(40));
-const base = CodeHostTest.commit("d".repeat(40));
-const checked = CodeHostTest.tree("e".repeat(40));
+const head = CodeHostTest.commit(Str.repeat(40)("a"));
+const base = CodeHostTest.commit(Str.repeat(40)("d"));
+const checked = CodeHostTest.tree(Str.repeat(40)("e"));
 
 const settings = Effect.runSync(
   Settings.all.parse(
@@ -220,7 +220,7 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
     current.runner.msg({
       id: `incoming-${++serial}`,
       envelope: {
-        id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${serial.toString(16).padStart(12, "0")}`),
+        id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${Str.padStart(12, "0")(serial.toString(16))}`),
         by: owner,
         arrivedAt: serial,
         input,

@@ -1,7 +1,7 @@
 // next/, ticket 887, P21 slice 1. Each plant named here runs after Menu.ts exists.
 import { arbGuidedSequence, foldEvents, propertyInvariant, propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Schema } from "effect";
+import { ConfigProvider, Effect, pipe, Schema, String as Str, Option } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "../settings/Declarations.ts";
@@ -21,27 +21,27 @@ const signed = (cmds: ReadonlyArray<Test.Command>) =>
 const waiting = (s: Test.Model) =>
   Menu.view(s).filter((i): i is Extract<typeof Menu.Item.Type, { _tag: "waiting" }> => i._tag === "waiting");
 
-const safe = (s: string) => s.replace(/[\p{Cc}\p{Cf}]/gu, "");
+const safe = (s: string) => Str.replace(/[\p{Cc}\p{Cf}]/gu, "")(s);
 // pinned: amendment A-Lint uses the existing brain-line text cap, in UTF-16 code units.
 const labelLimit = 256;
 
 const displayed = (raw: string) => {
-  const cut = safe(raw).slice(0, labelLimit);
-  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
+  const cut = Str.slice(0, labelLimit)(safe(raw));
+  return /[\uD800-\uDBFF]$/.test(cut) ? Str.slice(0, -1)(cut) : cut;
 };
 
 const hasLabel = (words: string, raw: string) => {
   const clean = safe(raw);
   const shown = displayed(raw);
-  const next = clean.codePointAt(shown.length);
+  const next = Str.codePointAt(clean, shown.length);
   return (
     !/[\uD800-\uDFFF]/u.test(words) &&
-    words.includes(shown) &&
-    (next === undefined || !words.includes(shown + String.fromCodePoint(next)))
+    Str.includes(shown)(words) &&
+    (Option.isNone(next) || !Str.includes(shown + String.fromCodePoint(next.value))(words))
   );
 };
 
-const hasCode = (words: string, code: string) => words.replace(/\s/g, "").includes(code);
+const hasCode = (words: string, code: string) => pipe(words, Str.replace(/\s/g, ""), Str.includes(code));
 
 // After build: sign on approve, approve on Enter, or accept a checked reply with the wrong cmd.
 it("L1: signatures follow the matching check; no check failure or Enter writes", () => {
@@ -373,7 +373,7 @@ it.effect.prop(
   },
   ({ text, bytes, draw }) =>
     Effect.gen(function* () {
-      const secret = `made-up-link-secret:${text}:${bytes.map((b) => b.toString(16).padStart(2, "0")).join("")}`;
+      const secret = `made-up-link-secret:${text}:${bytes.map((b) => Str.padStart(2, "0")(b.toString(16))).join("")}`;
       const raw = new TextEncoder().encode(secret);
       const digest = yield* Digest.Digest;
       const hash = yield* digest.digestHex(Digest.sha256, raw);
@@ -402,12 +402,12 @@ it.effect.prop(
           ];
           const forms = [
             secret,
-            JSON.stringify(secret).slice(1, -1),
+            Str.slice(1, -1)(JSON.stringify(secret)),
             encodeURIComponent(secret),
             JSON.stringify(Array.from(raw)),
           ];
           return (
-            outputs.every((output) => forms.every((form) => !output.includes(form))) ||
+            outputs.every((output) => forms.every((form) => !Str.includes(form)(output))) ||
             "a link secret escaped its driver"
           );
         },
@@ -451,7 +451,7 @@ it("L8: equal models give ordered unique items, empty is explicit, and state is 
           return "empty was not explicit";
         }
 
-        if (items.some((i) => i.words.trim().length === 0)) {
+        if (items.some((i) => Str.trim(i.words).length === 0)) {
           return "an item has no words";
         }
 
@@ -500,7 +500,7 @@ it("L9: prompts and items keep the code and the safe label within the pinned 256
       fc.stringMatching(/^[A-Za-z]{512,1024}$/),
       fc
         .tuple(fc.integer({ min: 253, max: 257 }), fc.constantFrom("😀", "𐐷"))
-        .map(([length, pair]) => `${"x".repeat(length)}${pair}tail`),
+        .map(([length, pair]) => `${Str.repeat(length)("x")}${pair}tail`),
     ),
   });
   const flows = hostile.chain(({ label }) =>

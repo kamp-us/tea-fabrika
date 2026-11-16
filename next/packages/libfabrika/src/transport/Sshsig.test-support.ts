@@ -3,7 +3,7 @@
 // real `ssh-keygen` and so runs on the schedule (0536).
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, String as Str, Option } from "effect";
 import { checkSshsig, KeyLine, writeSshsig } from "./Sshsig.ts";
 
 export const SPACE = "fabrika-client";
@@ -14,9 +14,9 @@ const VECTORS = resolve(import.meta.dirname, "../../../../../fixtures/next/sshsi
 export const at = (name: string): string => readFileSync(join(VECTORS, name), "utf8");
 export const text = at("text.txt");
 export const goodSig = at("good.sig");
-export const signer = at("signer.pub").trim();
-export const other = at("other.pub").trim();
-export const ecdsa = at("ecdsa.pub").trim();
+export const signer = Str.trim(at("signer.pub"));
+export const other = Str.trim(at("other.pub"));
+export const ecdsa = Str.trim(at("ecdsa.pub"));
 
 export const check = (armored: string, signers: ReadonlyArray<string>, body: string = text) =>
   checkSshsig({ text: body, armored, space: SPACE, signers });
@@ -45,16 +45,17 @@ export const str = (s: Uint8Array | string): Uint8Array => {
 };
 
 export const base64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64");
-export const rows = (body: string): string => (body.match(/.{1,70}/g) ?? []).join("\n");
+
+export const rows = (body: string): string =>
+  Option.match(Str.match(/.{1,70}/g)(body), { onNone: () => "", onSome: (found) => found.join("\n") });
 
 export const armor = (blob: Uint8Array): string =>
   `-----BEGIN SSH SIGNATURE-----\n${rows(base64(blob))}\n-----END SSH SIGNATURE-----\n`;
 
 export const unarmor = (armored: string): Uint8Array =>
   Buffer.from(
-    armored
-      .split("\n")
-      .filter((row) => !row.startsWith("-----"))
+    Str.split(armored, "\n")
+      .filter((row) => !Str.startsWith("-----")(row))
       .join(""),
     "base64",
   );

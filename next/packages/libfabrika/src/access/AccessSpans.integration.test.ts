@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Option, Schema, type Scope, Stream, Tracer } from "effect";
+import { Effect, Layer, Option, Schema, type Scope, Stream, Tracer, String as Str } from "effect";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
@@ -152,7 +152,7 @@ const tags = (span: Tracer.NativeSpan): Record<string, unknown> => Object.fromEn
 
 /** The tag whose key is `word` or ends in `.word`. */
 const tagged = (span: Tracer.NativeSpan, word: string): unknown =>
-  Object.entries(tags(span)).find(([key]) => key === word || key.endsWith(`.${word}`))?.[1];
+  Object.entries(tags(span)).find(([key]) => key === word || Str.endsWith(`.${word}`)(key))?.[1];
 
 const holds = (span: Tracer.NativeSpan, value: unknown): boolean => Object.values(tags(span)).includes(value);
 
@@ -190,7 +190,7 @@ const signed = (signer: string) => ({
 });
 
 let made = 0;
-const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
+const nextId = (prefix: string): string => `${prefix}_${Str.padStart(26, "0")(String(++made))}`;
 
 const granted = (signer: string, key: string): MemberEvent => ({
   _tag: "granted",
@@ -259,7 +259,7 @@ const clean = (spans: ReadonlyArray<Tracer.NativeSpan>) => {
       const text = typeof value === "string" ? value : (JSON.stringify(value) ?? "");
 
       for (const mark of MARKS) {
-        expect(text.includes(mark), `${span.name} ${key}`).toBe(false);
+        expect(Str.includes(mark)(text), `${span.name} ${key}`).toBe(false);
       }
 
       expect(typeof value === "string" ? value.length : 0, `${span.name} ${key}`).toBeLessThanOrEqual(MOST);
@@ -505,9 +505,9 @@ describe("p97, names and numbers only", () => {
     ],
     examples([[300, 200]], (length: number, cap: number) => {
       const { tracer, spans, ended } = capture();
-      const long = (letter: string) => letter.repeat(length);
+      const long = (letter: string) => Str.repeat(length)(letter);
       // Process texts stay under their 256-character cap and still pass the 128 tag cut.
-      const capped = (letter: string) => letter.repeat(cap);
+      const capped = (letter: string) => Str.repeat(cap)(letter);
       return Effect.gen(function* () {
         const mailbox = yield* Mailbox;
         const manager = yield* ProcessManager;

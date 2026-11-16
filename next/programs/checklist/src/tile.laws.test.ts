@@ -13,7 +13,7 @@
 // draft: a typed text (empty, short, at the cap or past it), or a submit of what is there now.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import type { checklistMachine } from "./program.ts";
 import { tile } from "./tile.ts";
@@ -86,7 +86,7 @@ describe("L22: the checklist tile", () => {
 
           expect(cmds).toEqual([]);
           expect(next.draft.length, "the draft passes the cap").toBeLessThanOrEqual(CAP);
-          expect(m.text.startsWith(next.draft), "the draft is what was typed, from its start").toBe(true);
+          expect(Str.startsWith(next.draft)(m.text), "the draft is what was typed, from its start").toBe(true);
           seen[m.text.length <= CAP ? "short" : "long"]++;
           expect(m.text.length <= CAP ? next.draft : null).toBe(m.text.length <= CAP ? m.text : null);
         });

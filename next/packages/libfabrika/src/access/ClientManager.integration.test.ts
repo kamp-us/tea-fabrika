@@ -23,7 +23,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, References, Schema, type Scope, Stream, Tracer } from "effect";
+import { Effect, Layer, References, Schema, type Scope, Stream, Tracer, String as Str } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -175,7 +175,7 @@ const signed = (signer: string) => ({
 });
 
 let made = 0;
-const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
+const nextId = (prefix: string): string => `${prefix}_${Str.padStart(26, "0")(String(++made))}`;
 
 const granted = (
   signer: string,

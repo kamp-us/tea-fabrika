@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, SchemaIssue } from "effect";
+import { ConfigProvider, Effect, Exit, SchemaIssue, String as Str } from "effect";
 import * as fc from "fast-check";
 import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";
@@ -104,13 +104,13 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
         ];
         const path = paths[pick % paths.length]!;
 
-        if (path.startsWith("merger.")) {
-          broken.merger[path.split(".")[1]!] = bad;
+        if (Str.startsWith("merger.")(path)) {
+          broken.merger[Str.split(path, ".")[1]!] = bad;
         } else if (path === "queue.most") {
           broken.queue.most = bad;
         } else if (path === "queue.kinds") {
           broken.queue.kinds = {
-            rows: [pick % 3 === 0 ? "" : pick % 3 === 1 ? "!docs/**" : "x".repeat(65_537)],
+            rows: [pick % 3 === 0 ? "" : pick % 3 === 1 ? "!docs/**" : Str.repeat(65_537)("x")],
             docs: [],
           };
         } else {
@@ -158,7 +158,7 @@ it("L11: every declared numeric setting refuses zero, negatives and fractions at
       const declarations = Settings.all.declarations.filter((d) => typeof d.default === "number");
       expect(declarations.length).toBeGreaterThan(0);
       const declaration = declarations[pick % declarations.length]!;
-      const [group, key] = declaration.path.split(".") as [string, string];
+      const [group, key] = Str.split(declaration.path, ".") as [string, string];
       const parse = (value: unknown) =>
         Effect.runSyncExit(Settings.all.parse(ConfigProvider.fromUnknown({ [group]: { [key]: value } })));
 
@@ -174,7 +174,7 @@ it("L11: every declared numeric setting refuses zero, negatives and fractions at
                 )
               : [],
           );
-          expect(paths.some((path) => path.includes(declaration.path))).toBe(true);
+          expect(paths.some((path) => Str.includes(declaration.path)(path))).toBe(true);
         }
       }
     }),

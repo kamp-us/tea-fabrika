@@ -4,7 +4,7 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import * as CodeHost from "@kampus/libfabrika/codehost/CodeHost";
 import * as CodeHostTest from "@kampus/libfabrika/codehost/CodeHostTest";
 import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
-import { Cause, Context, Effect, Exit, Layer, Redacted, Schema } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Redacted, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import { handlers } from "./handlers.ts";
 
@@ -21,7 +21,7 @@ describe("L12: handlers map faults", () => {
         }),
         (cell) => {
           expect.hasAssertions();
-          const head = Schema.decodeUnknownSync(CodeHost.Commit)("a".repeat(40));
+          const head = Schema.decodeUnknownSync(CodeHost.Commit)(Str.repeat(40)("a"));
           const reason = cell.method === "checks" && cell.reason === "refused" ? "unavailable" : cell.reason;
           const cause = cell.cause === undefined ? undefined : new Error(cell.cause);
           const hostFault = new CodeHost.CodeHostError({
@@ -109,9 +109,12 @@ it.effect.prop(
         Layer.merge(CodeHostTest.layer({ token: Redacted.make(token) }), CiTest.layer({ token: Redacted.make(token) })),
       );
       yield* Context.get(services, CodeHostTest.Control).fail("update", { kind: "fault", reason });
-      const outcome = yield* handlers.update!({ type: "update", attempt: 1, change: 1, head: "a".repeat(40) }).pipe(
-        Effect.provide(services),
-      );
+      const outcome = yield* handlers.update!({
+        type: "update",
+        attempt: 1,
+        change: 1,
+        head: Str.repeat(40)("a"),
+      }).pipe(Effect.provide(services));
       RepliesTest.unleaked([JSON.stringify(outcome)], [token]);
       expect(outcome).toEqual({ _tag: "Err", error: { _tag: reason } });
     }),

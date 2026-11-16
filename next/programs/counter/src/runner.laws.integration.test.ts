@@ -16,7 +16,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Result, Schema, Stream } from "effect";
+import { Effect, Layer, pipe, Result, Schema, Stream, String as Str } from "effect";
 import * as fc from "fast-check";
 
 const PROCESS: string = Effect.runSync(
@@ -56,10 +56,9 @@ const reconstruct = (before: unknown, change: Update): unknown => {
       continue;
     }
 
-    const keys = p.path
-      .slice(1)
-      .split("/")
-      .map((k) => k.replaceAll("~1", "/").replaceAll("~0", "~"));
+    const keys = pipe(p.path, Str.slice(1), Str.split("/")).map((k) =>
+      pipe(k, Str.replaceAll("~1", "/"), Str.replaceAll("~0", "~")),
+    );
     let target = root;
 
     for (const key of keys.slice(0, -1)) {
@@ -246,7 +245,7 @@ describe("p22 real counter in the runner", () => {
           yield* r.msg({
             id: `counter-${n}`,
             envelope: {
-              id: `input_0000000000e0080000000000${n.toString(16).padStart(2, "0")}`,
+              id: `input_0000000000e0080000000000${Str.padStart(2, "0")(n.toString(16))}`,
               by: Writer.cases.person.make({ key: "SHA256:person", for: "person" }),
               arrivedAt: n,
               input: { type: "inc" },
@@ -460,7 +459,7 @@ describe("P40 the counter under its qualified identity", () => {
                       yield* r.msg({
                         id: `p40-${sent}`,
                         envelope: {
-                          id: `input_0000000000e0080000000000${sent.toString(16).padStart(2, "0")}`,
+                          id: `input_0000000000e0080000000000${Str.padStart(2, "0")(sent.toString(16))}`,
                           by: Writer.cases.person.make({ key: "SHA256:person", for: "person" }),
                           arrivedAt: sent,
                           input: { type },
@@ -478,7 +477,7 @@ describe("P40 the counter under its qualified identity", () => {
                       yield* r.msg({
                         id: `p40-${sent}`,
                         envelope: {
-                          id: `input_0000000000e0080000000000${sent.toString(16).padStart(2, "0")}`,
+                          id: `input_0000000000e0080000000000${Str.padStart(2, "0")(sent.toString(16))}`,
                           by: Writer.cases.person.make({ key: "SHA256:person", for: "person" }),
                           arrivedAt: sent,
                           input: { type: "inc" },
@@ -518,7 +517,7 @@ describe("P40 the counter under its qualified identity", () => {
       () => PROGRAM,
       (name) => `fabrika/${name}`,
       (name) => `${name}/x`,
-      (name) => name.replace(/[:.]/, "/"),
+      (name) => Str.replace(/[:.]/, "/")(name),
       () => `${counter.name}:1`,
     ];
     // The walk: each step starts the counter's code under a fresh valid registered name, or tries

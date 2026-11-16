@@ -2,7 +2,7 @@
 // its busy state and waits (0037, 0046). Callbacks only: no database, no runtime. Each walk reads
 // the saved attachment and the pending callbacks before it picks the next move (0093).
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Result, Schema, Tracer } from "effect";
+import { Deferred, Effect, Result, Schema, Tracer, String as Str } from "effect";
 import * as fc from "fast-check";
 import { connection } from "./Connection.ts";
 import { Answer, Attached, Wait } from "./Wire.ts";
@@ -643,7 +643,7 @@ const frameText = (r: FrameRecipe, state: { readonly held: ReadonlyArray<W>; rea
     method: r.method,
     ...(r.presence === "missing" ? {} : { params: r.presence === "null" ? null : params }),
   };
-  const [change, value] = r.mutation.split(":");
+  const [change, value] = Str.split(r.mutation, ":");
 
   if (change === "drop") {
     delete base[value!];
@@ -659,7 +659,7 @@ const frameText = (r: FrameRecipe, state: { readonly held: ReadonlyArray<W>; rea
 
   switch (r.mutation) {
     case "truncate":
-      return text.slice(0, -1);
+      return Str.slice(0, -1)(text);
     case "garbage":
       return `${text}}`;
     case "empty":

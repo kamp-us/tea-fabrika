@@ -4,7 +4,7 @@
 // Plants: accept the first version; omit one signed binding; consume before checking; admit verify.
 import { createHash } from "node:crypto";
 import { assert, describe, expect, it, vi } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import { checkHello, sameOrigin, selectVersion } from "./Hello.ts";
 import { Admission, type Who } from "./Wire.ts";
@@ -31,7 +31,7 @@ const armor = (bytes: Uint8Array) =>
     ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
 
 const fingerprint = (bytes: Uint8Array) =>
-  `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+  `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`;
 
 const signedBytes = (text: string, space: string = SPACE) =>
   Buffer.concat([
@@ -379,9 +379,9 @@ const Origin = fc.oneof(
   fc
     .tuple(Canonical, fc.constantFrom("/", "/path", "?q", "#h", ":80", ":443", ":", " ", "\n", "%2e"))
     .map(([origin, tail]) => `${origin}${tail}`),
-  Canonical.map((origin) => origin.toUpperCase()),
-  Canonical.map((origin) => origin.replace("://", "://user:pass@")),
-  Canonical.map((origin) => origin.replace("://", ":")),
+  Canonical.map((origin) => Str.toUpperCase(origin)),
+  Canonical.map((origin) => Str.replace("://", "://user:pass@")(origin)),
+  Canonical.map((origin) => Str.replace("://", ":")(origin)),
   Canonical.map((origin) => ` ${origin}`),
   fc.constantFrom("", "null", "/", "/relative", "//fabrika.test", "fabrika.test", "https:", "https://", "not a URL"),
   fc.string(),
