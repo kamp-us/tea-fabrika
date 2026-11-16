@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-max-ternary-depth-1-review-2",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-16T01:07:19-08:00",
+  "ended": "2026-11-16T01:15:17-08:00",
+  "parent": "2026-11-16-antislop-max-ternary-depth-1-build-3",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Recheck of anti-slop judgment slice AS-max-ternary-depth-1 at c0acb0144 (tests round 19ca79357, build round c0acb0144), in next/ and our tooling, reading the whole diff since e65ec3f88 (26 files): done. All 29 sites the review named are fixed in forms decision 0558 allows, and no if chain asking the same questions in the same order or one-use restart arrow remains in the diff. The only added if (next/apps/fabrika/src/runtime-quotas.laws.test.ts:322) reads a lookup Map of the two own methods. Build: .agents/skills/lead/scripts/chain.ts stepAgent is an ordered table read once with find; .agents/skills/lead/scripts/pr/Queue.ts refusal is a record keyed by the closed state set; next/packages/tuval/src/window/main.tsx uses Link.matchOrElse (finding 1 closed). Tests: Fold.ts's beside in the four fold copies; lookup records (FAULT_AFTER_ACQUIRE, CONCLUSION_PRIORITY, STATE_AT twice, LITERAL_TEXT); ordered rule tables read with find (IGNORED, the inbox cases, REFUSALS, verdicts); named functions (byText, branches, stringIn, reservationRefusal, currentAnswer, newWatchAnswer, landRefusal, abandonRefusal); and Match, Match.tag on f.call (finding 2 closed), Status.match and Result.match. Each answer was checked against the old one: the inbox table and IGNORED keep the first-match order, processTable's stale reading is the same (s.current.get(name) undefined), tasks STATE_AT fails with the same message wherever the old chain fell through to expect.fail, HandsDoor's finished-with-no-result still reads assigned, and every side-effecting fault branch stays a lazy thunk. The hand _tag comparisons left in the inbox table and IGNORED were moved unchanged from before this slice; none is new. No assertion was deleted or narrowed, every moved comment is kept, and there is no new disable line, lock line, .oxlintrc.json or tsconfig change.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Read-only apart from this row. Recount with anti-slop/max-ternary-depth at error maxDepth 2 in a scratch config outside the repo, over next/, .agents, oxlint-plugins and .github/ci: 0 at c0acb0144; a planted 3-deep ternary in a scratch file fires. loosening.sh on e65ec3f88..HEAD: 20 'unrecognized change' hits, one per changed exam-path file, each at a rewritten choice or an added import; read line by line, none loosens a law. Tests, one file each under nice -n 15 vitest --maxWorkers=3, at c0acb0144: 30 files, 285 laws, all green: the touched laws and suites' readers (runtime-quotas.laws, ci/Ci, pipeline handlers, Change, Merger.laws and the runner and queue integration laws, HandsMachine, HandsStart and HandsSecrets laws, Prefix.laws, WindowMachine.laws, node/gateway/Tasks, hands-client, node/Children, node/Monitors, processTable.laws, TomlEdit, TasksLedger, Task, cloudflare hands, RunnerHands.integration, Fold.laws, program-package-layout, runs-from-depth, lead chain and pr/Queue, tuval Layout.laws, spoken and words); the 0178 guard allowed every .integration. file. Not run: one-file.visual.test.ts and the e2e files that read p14.test-support.ts and tezgah.test-support.ts (Electron). One pnpm typecheck: exit 0.",
+  "step": "review"
+}
