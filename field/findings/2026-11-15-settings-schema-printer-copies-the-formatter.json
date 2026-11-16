@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-settings-schema-printer-copies-the-formatter",
+  "date": "2026-11-15",
+  "by": "lead",
+  "model": "claude-fable-5-2",
+  "rule": "duplicate",
+  "location": {
+    "path": "next/packages/libfabrika/src/settings/JsonSchema.ts",
+    "line": 62
+  },
+  "says": "In next/, JsonSchema.format now prints the settings schema with its own hand-written JSON layout and its own copy of the formatter's line width, 120, so that pnpm format leaves person.json alone. The layout rules and the width live twice: in the repo formatter and its settings, and in this function. Smallest fix: read the width from the formatter's settings, or write the file through the formatter itself.",
+  "proof": "settings/JsonSchema.ts:62 is const WIDTH = 120 with the comment that it comes from .oxfmtrc.json, and :83 folds an array onto one line by it; .oxfmtrc.json:9 is printWidth: 120; next/apps/fabrika/src/settings-generated.test.ts:30-31 compares the committed files with JsonSchema.format's text.",
+  "cost": "A change to the formatter's width or to how it folds arrays makes the settings-generated test and pnpm format disagree until this copy is edited by hand.",
+  "head": "ccc6670bee6fa1682587c967c3c4a89553c14401",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1092"
+}

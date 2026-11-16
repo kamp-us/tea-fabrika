@@ -12,6 +12,8 @@ tags: [effect, style, guidelines, review, plan, next, primitives, comments]
 and review in `next/` asks how they would build this piece, and one guidelines study turns the
 answer into principles.
 
+*[0560](0560-an-order-for-effect-code.md) says whose way wins when the Effect team, a trusted repo and a decision of ours disagree; every rule in this file still holds.*
+
 ## Context
 
 [0023](0023-next-follows-effects-code-style.md) says `next/` follows the Effect repository's code

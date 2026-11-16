@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-quota-snapshot-law-reads-an-unused-reader",
+  "date": "2026-11-15",
+  "by": "lead",
+  "model": "claude-fable-5-2",
+  "rule": "dead_code",
+  "location": {
+    "path": "next/packages/libfabrika/src/cloudflare/QuotaSettings.ts",
+    "line": 40
+  },
+  "says": "In next/, QuotaSettings.read is called only by the Q11 Worker law and by QuotaSettings.instance, which has no caller. The live Worker checks its settings snapshot in SettingsInput.decode, so the law that says the Worker never supplies a quota fallback tests a reader production does not run. Smallest fix: point the law at SettingsInput.decode, or at the limits the live objects are built with, and delete read.",
+  "proof": "cloudflare/quotas.test.ts:91 is the law 'Q11 Worker accepts only the checked complete snapshot and never supplies a quota fallback', and :102-112 call QuotaSettings.read; cloudflare/runtime.ts:195-198 builds the live input with SettingsInput.decode, whose own check is cloudflare/SettingsInput.ts:38; cloudflare/quotas.ts:36 and :49 take the limits from that input's values.",
+  "cost": "A green Q11 Worker law says nothing about the reader the live instance uses, so a fallback added there would pass it.",
+  "head": "ccc6670bee6fa1682587c967c3c4a89553c14401",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1092"
+}
