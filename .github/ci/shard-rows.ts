@@ -3,7 +3,7 @@ import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
-import { measured } from "../../vitest.shards.ts";
+import { full, measured } from "../../vitest.shards.ts";
 
 /**
  * next/ rows whose file is not among `files`, in path order. A file with no row is not listed:
@@ -50,10 +50,10 @@ export const nextFiles = async (root: string) =>
 /** next/'s visual files, the `next-visual` project: the end-to-end legs run them. */
 export const visualFiles = (root: string) => selected(root, "next-visual");
 
-/** Write the lint diagnostic for each stale row and return its exit code. */
-export const main = (rows: readonly string[], write: (line: string) => void): number => {
+/** Write the lint diagnostic for each stale row of `table` and return its exit code. */
+export const main = (rows: readonly string[], write: (line: string) => void, table = "vitest.shards.json"): number => {
   for (const path of rows) {
-    write(`stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in vitest.shards.json`);
+    write(`stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in ${table}`);
   }
 
   return rows.length === 0 ? 0 : 1;
@@ -71,5 +71,10 @@ export const main = (rows: readonly string[], write: (line: string) => void): nu
 if (import.meta.main) {
   const root = fileURLToPath(new URL("../../", import.meta.url));
   const files = [...(await nextFiles(root)), ...(await visualFiles(root))];
-  process.exitCode = main(stale(measured, files), (line) => console.error(line));
+  const write = (line: string) => console.error(line);
+  // The full-depth table is judged the same way: a renamed file must not keep a row in either.
+  process.exitCode = Math.max(
+    main(stale(measured, files), write),
+    main(stale(full, files), write, "vitest.shards.full.json"),
+  );
 }

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { depth } from "@kampus/vitest";
 import { BaseSequencer, type TestSpecification } from "vitest/node";
 
 // How `--shard k/n` splits the test files over the check's machines: each machine gets about the
@@ -57,6 +58,28 @@ const readTable = (path: string): Record<string, number> => {
  * that imports this file when a row changes.
  */
 export const measured: Readonly<Record<string, number>> = readTable(join(import.meta.dirname, "vitest.shards.json"));
+
+/**
+ * Seconds per next/ test file at full depth, which only the schedule runs (0535): the same file takes
+ * longer there, and the rows above cannot say so. At full depth a law runs its full case count and a
+ * file of the `next` project runs its real layer beside its memory one (0538), and the integration
+ * files run only there (0536). RepositoriesGit.test.ts takes 28 s on a pull request and 160 to 311 s
+ * on the schedule, and watch.laws.integration.test.ts, 363 to 395 s, had no row at all. Split by the
+ * rows above, one leg of scheduled runs 43723335863 and 43771306886 got about 2100 s of files where
+ * the others had 1000 to 1500 s, started watch.laws last, and ran into the job's limit.
+ *
+ * Each row is the median of the file's seconds in attempt 1 of the three green scheduled runs on
+ * main 43726565395 (at 27512b5f7), 43734956911 (at d795d772e) and 43765797242 (at f3313803f), or the
+ * larger of those in hand when a run did not hold the file, rounded to one decimal, read from each
+ * leg's Vitest report (the `results-next-1` to `-5` artifacts) as `shard-times` reads one. A file
+ * with no row here falls back to its row above, then to the median. Refresh a row from the report a
+ * scheduled run's leg uploads, or from the leg's time table, which lists its slowest files.
+ */
+export const full: Readonly<Record<string, number>> = readTable(join(import.meta.dirname, "vitest.shards.full.json"));
+
+/** The rows a run at `at` splits and orders by: at full depth a file's full row comes first. */
+export const rowsAt = (at: typeof depth): Readonly<Record<string, number>> =>
+  at === "full" ? { ...measured, ...full } : measured;
 
 /**
  * The middle of `seconds` once sorted; of an even count, the lower middle, so no two rows are
@@ -123,14 +146,20 @@ export const restLoads = (count: number): number[] => {
   );
 };
 
-/** A file's row, or undefined when the table has none. */
-const rowOf = (path: string): number | undefined => (Object.hasOwn(measured, path) ? measured[path] : undefined);
-
 /**
  * vitest's own sequencer with two changes: `shard` keeps this machine's files of `assign`, and
- * `sort` starts the heaviest file first.
+ * `sort` starts the heaviest file first. Both read `rows`, the seconds per file at this run's depth:
+ * the schedule's at full depth, the merge line's otherwise.
  */
 export class Shards extends BaseSequencer {
+  /** The seconds per file this sequencer splits and orders by. */
+  readonly rows: Readonly<Record<string, number>> = rowsAt(depth);
+
+  /** A file's row, or undefined when `rows` has none. */
+  rowOf(path: string): number | undefined {
+    return Object.hasOwn(this.rows, path) ? this.rows[path] : undefined;
+  }
+
   override async shard(files: TestSpecification[]): Promise<TestSpecification[]> {
     const { root, shard } = this.ctx.config;
 
@@ -142,7 +171,7 @@ export class Shards extends BaseSequencer {
     const machines = assign(
       files.map((spec) => {
         const path = relative(root, spec.moduleId);
-        return { path, seconds: rowOf(path) };
+        return { path, seconds: this.rowOf(path) };
       }),
       shard.count,
       files.every((spec) => inLaneStep(relative(root, spec.moduleId))) ? restLoads(shard.count) : [],
@@ -176,7 +205,7 @@ export class Shards extends BaseSequencer {
 
     const rank = (spec: TestSpecification) => groups.get(groupOf(spec)) ?? groups.size;
     const failed = (spec: TestSpecification) => this.ctx.cache.getTestSpecificationResult(spec)?.failed === true;
-    const seconds = (spec: TestSpecification) => rowOf(relative(root, spec.moduleId)) ?? guess;
+    const seconds = (spec: TestSpecification) => this.rowOf(relative(root, spec.moduleId)) ?? guess;
     return sorted.toSorted(
       (a, b) => rank(a) - rank(b) || Number(failed(b)) - Number(failed(a)) || seconds(b) - seconds(a),
     );
