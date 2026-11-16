@@ -10,6 +10,7 @@ import { expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 
 const CODE = "fabrika(reflect-disables)";
+
 const runs = { seed: 119120, numRuns: 12 };
 
 // The plan's named files and the count each may hold, and paths it names no line in.

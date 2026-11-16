@@ -698,6 +698,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     url: `http://127.0.0.1:${config.port}`,
     project: (project: string): DevProject => {
       const door = (method: string, args: ReadonlyArray<unknown>) => call("project", project, "", method, args);
+
       return proxy<DevProject>(door, {
         challenge: (...args) =>
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
@@ -769,6 +770,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         }),
         forProcess: (pid: string) => {
           const own = (method: string, args: ReadonlyArray<unknown>) => door(method, [pid, ...args]);
+
           return proxy<ReturnType<DevProject["forProcess"]>>(own, {
             append: (...args) =>
               // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
@@ -779,6 +781,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     },
     process: (pid: string): DevProcess => {
       const door = (method: string, args: ReadonlyArray<unknown>) => call("process", config.name, pid, method, args);
+
       return proxy<DevProcess>(door, {
         msg: (...args) =>
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Process matches the binding's Promise API

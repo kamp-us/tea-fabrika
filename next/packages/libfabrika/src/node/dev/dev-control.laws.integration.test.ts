@@ -487,6 +487,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 
           // @ts-expect-error ping is no method of a Process; this law fakes fetch, so any name reaches the wire
           const ping: () => Promise<unknown> = dev.process(name).ping;
+
           const answered = ping().then(
             (value): Answer => ({ _tag: "value", value }),
             (error: unknown): Answer => ({ _tag: "error", error }),
