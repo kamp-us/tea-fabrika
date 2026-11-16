@@ -8,7 +8,9 @@ import { describe, expect, it } from "vitest";
 import { fcProcessIds, processId } from "../Id.test-support.ts";
 
 const SEED = 119120;
+
 const start = Effect.runSync(processId);
+
 const after = Effect.runSync(processId);
 
 const events = [
@@ -29,6 +31,7 @@ const lifecycle = fc.record({
 });
 
 const normalLife = { start, after, build: "build-a", until: 250, reason: "crash" };
+
 const stopInFlight = [events[0], { type: "stop" }, events[1], events[2], { type: "stopped" }] as const;
 
 const messages = lifecycle.map(
@@ -56,6 +59,7 @@ describe("P12 instance machine laws", () => {
           { type: "started", start: after, after: start, build, reason },
           { type: "braked", after, reason },
         ] as const;
+
         const [initial] = brainLife.init(null, {});
         expect(initial).toMatchObject({ _tag: "starting" });
         const [online] = applyCell(brainLife, initial, msgs[0]);

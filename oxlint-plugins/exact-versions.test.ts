@@ -8,7 +8,9 @@ import * as fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 
 const SCRIPT = join(import.meta.dirname, "exact-versions.ts");
+
 const home = mkdtempSync(join(tmpdir(), "exact-versions-"));
+
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
 let trees = 0;
@@ -30,6 +32,7 @@ const run = (files: Readonly<Record<string, string>>, untracked: readonly string
   }
 
   const ran = spawnSync("node", [SCRIPT, tree], { encoding: "utf8" });
+
   return { status: ran.status, said: ran.stdout + ran.stderr };
 };
 
@@ -92,6 +95,7 @@ describe("a package.json", () => {
     const { status, said } = run({
       "package.json": JSON.stringify({ pnpm: { overrides: { thing: "^1.2.3" } } }),
     });
+
     expect(status).toBe(1);
     expect(said).toContain('package.json: pnpm.overrides: thing: "^1.2.3"');
   });
@@ -100,6 +104,7 @@ describe("a package.json", () => {
     const { status, said } = run({
       "package.json": JSON.stringify({ overrides: { thing: { other: "^1.2.3" } } }),
     });
+
     expect(status).toBe(1);
     expect(said).toContain("package.json: overrides: thing:");
   });
@@ -115,6 +120,7 @@ describe("a package.json", () => {
     const { status, said } = run({
       "fixtures/toy/repo/package.json": JSON.stringify({ devDependencies: { thing: "^1.0.0" } }),
     });
+
     expect(status).toBe(1);
     expect(said).toContain("fixtures/toy/repo/package.json: devDependencies: thing:");
   });
@@ -127,6 +133,7 @@ describe("a package.json", () => {
       },
       ["scratch/package.json"],
     );
+
     expect(status).toBe(0);
   });
 
@@ -135,6 +142,7 @@ describe("a package.json", () => {
       "package.json": "{}",
       "results/98-package.json": JSON.stringify({ dependencies: { thing: "^1.0.0" } }),
     });
+
     expect(status).toBe(0);
   });
 });
@@ -235,12 +243,14 @@ describe("a named catalog's pointer", () => {
     fc.assert(
       fc.property(fc.stringMatching(/^[a-z][a-z0-9-]{0,7}$/), (name) => {
         const bad = notNames(name);
+
         const { status, said } = run({
           "pnpm-workspace.yaml": `catalogs:\n  ${name}:\n    thing: 1.2.3\n`,
           "packages/one/package.json": JSON.stringify({
             dependencies: Object.fromEntries(bad.map((version, i) => [`thing${i}`, version])),
           }),
         });
+
         expect(status).toBe(1);
 
         for (const [i, version] of bad.entries()) {

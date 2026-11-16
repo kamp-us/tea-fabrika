@@ -97,8 +97,10 @@ const isValue = (node: Node & { readonly parent: Node }): boolean => {
 export const noProjectSettings: CreateRule = {
   create(context) {
     const source = context.sourceCode;
+
     const isEmptyList = (node: Node): boolean =>
       node.type === "ArrayExpression" && node.elements.length === 0 && grouped(source, node) === 0;
+
     return {
       Property(node) {
         if (node.parent.type !== "ObjectExpression") {
@@ -186,6 +188,7 @@ export const noProjectSettings: CreateRule = {
             element.value === "--setting-sources" &&
             grouped(source, element) === 0,
         );
+
         const flag = node.elements[at];
 
         if (at === -1 || flag == null || at + 1 >= node.elements.length) {

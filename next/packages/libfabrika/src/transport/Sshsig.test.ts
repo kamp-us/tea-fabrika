@@ -51,8 +51,11 @@ import {
 import type { writeSshsig } from "./Sshsig.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const runs = { seed: SEED, numRuns: 40 };
+
 const bodyArb = fc.string({ unit: "binary" });
+
 const wrongType = fc.string().filter((type) => type !== "ssh-ed25519");
 
 describe("the test's own wire helpers", () => {
@@ -103,8 +106,10 @@ describe("p27, the saved ssh-keygen vectors", () => {
           Effect.gen(function* () {
             const insert = (lines: string[], line: string, n: number) => {
               const at = n % (lines.length + 1);
+
               return [...lines.slice(0, at), line, ...lines.slice(at)];
             };
+
             expect(yield* check(goodSig, insert(before, signer, place))).toStrictEqual({ signer });
             const bare = lineFor(good.key);
             expect(yield* check(goodSig, insert(more, bare, barePlace))).toStrictEqual({
@@ -142,6 +147,7 @@ describe("p27, the saved ssh-keygen vectors", () => {
 
 describe("p27, blobs built by hand from good.sig's bytes", () => {
   const shortKey = keyBlob(goodKey.slice(0, 31));
+
   const cases: ReadonlyArray<readonly [string, string, ReadonlyArray<string>]> = [
     ["version 2", armor(build({ ...good, version: 2 })), [signer]],
     ["version 0", armor(build({ ...good, version: 0 })), [signer]],
@@ -175,6 +181,7 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
     ["a body that is not base64", goodSig.replace("U1NIU0lH", "U1NIU0l!"), [signer]],
     ["an empty text", "", [signer]],
   ];
+
   it("refuses malformed blobs and armor with the same answer", async () => {
     // Plant: ignore the SSHSIG version. The version-2 example must still be refused.
     const built = fc
@@ -200,6 +207,7 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
         wrongType.map((type) => build({ ...good, signature: join8(str(type), str(goodRaw)) })),
       )
       .map((bytes) => ({ armored: armor(bytes), signers: [signer] }));
+
     const malformed = fc.oneof(
       built,
       fc
@@ -207,6 +215,7 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
         .filter((bytes) => bytes.length !== 32)
         .map((bytes) => {
           const key = keyBlob(bytes);
+
           return { armored: armor(build({ ...good, key })), signers: [signer, lineFor(key)] };
         }),
       fc.string().map((body) => ({
@@ -214,6 +223,7 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
         signers: [signer],
       })),
     );
+
     await fc.assert(
       fc.asyncProperty(malformed, ({ armored, signers }) =>
         Effect.runPromise(
@@ -259,6 +269,7 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
               // Signed as "fabrika-other" but labelled "fabrika-client": the space is in the signed bytes.
               const key = yield* freshKey();
               const raw = yield* signWith(key)(toSign(space, "sha512", yield* digest("SHA-512", utf8(body))));
+
               const armored = armor(
                 build({
                   magic: utf8("SSHSIG"),
@@ -270,6 +281,7 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
                   signature: join8(str("ssh-ed25519"), str(raw)),
                 }),
               );
+
               expect(yield* check(armored, [key.line], body)).toStrictEqual(refused);
             }),
           ),
@@ -306,6 +318,7 @@ describe("KeyLine", () => {
     ["a key of 31 bytes", lineFor(keyBlob(goodKey.slice(0, 31)))],
     ["a key blob with a byte after it", lineFor(join8(good.key, Uint8Array.of(0)))],
   ];
+
   it("refuses malformed and non-Ed25519 key lines", async () => {
     // Plant: ignore the outer key type word. Exit.isFailure must become false.
     const invalid = fc.oneof(
@@ -317,6 +330,7 @@ describe("KeyLine", () => {
       fc.string().map((s) => `ssh-ed25519 !${s}`),
       wrongType.filter((type) => !/\s/.test(type)).map((type) => `${type} ${base64(good.key)}`),
     );
+
     await fc.assert(
       fc.asyncProperty(invalid, (line) =>
         Effect.runPromise(
@@ -349,6 +363,7 @@ describe("KeyLine", () => {
   it("is the only line writeSshsig takes: a plain string does not typecheck", () => {
     // Compile-time type law. The owner rule keeps this as a type check.
     type Line = Parameters<typeof writeSshsig>[0]["line"];
+
     // @ts-expect-error a plain string is not a KeyLine: decode it first, so a bad line never reaches the writer
     const plain: Line = signer;
     expect(plain).toBe(signer);
@@ -362,6 +377,7 @@ describe("p27, each field exactly, never a prefix of it", () => {
   const signedThenSwapped = (key: Key, swap: (raw: Uint8Array) => Partial<Blob>, body = text) =>
     Effect.gen(function* () {
       const raw = yield* signWith(key)(toSign(SPACE, "sha512", yield* digest("SHA-512", utf8(body))));
+
       return armor(
         build({
           magic: utf8("SSHSIG"),
@@ -375,6 +391,7 @@ describe("p27, each field exactly, never a prefix of it", () => {
         }),
       );
     });
+
   it("passes the same blob with nothing swapped, so each refusal below is the swap's", async () => {
     // Plant: refuse every verified Ed25519 signature. The signer equality must fail.
     await fc.assert(
@@ -422,6 +439,7 @@ describe("p27, each field exactly, never a prefix of it", () => {
         Effect.runPromise(
           Effect.gen(function* () {
             const key = yield* freshKey();
+
             const armored = yield* signedThenSwapped(
               key,
               (raw) => ({
@@ -429,6 +447,7 @@ describe("p27, each field exactly, never a prefix of it", () => {
               }),
               body,
             );
+
             expect(yield* check(armored, [key.line], body)).toStrictEqual(refused);
           }),
         ),
@@ -494,6 +513,7 @@ describe("p27, each field exactly, never a prefix of it", () => {
 describe("p27, the armor's own words", () => {
   const BEGIN = "-----BEGIN SSH SIGNATURE-----";
   const END = "-----END SSH SIGNATURE-----";
+
   // Each the same length as the line it stands in for, so only its words differ.
   const cases: ReadonlyArray<readonly [string, string]> = [
     ["a bad BEGIN line and a good END line", goodSig.replace(BEGIN, "-----BEGIN SSH SIGNATURX-----")],
@@ -505,14 +525,17 @@ describe("p27, the armor's own words", () => {
       goodSig.replace(BEGIN, "-----BEGIN SSH SIGNATURX-----").replace(END, "-----END SSH SIGNATURX-----"),
     ],
   ];
+
   it("refuses changed armor words of the same length", async () => {
     // Plant: check marker lengths alone. The changed-marker refusal must fail.
     const changed = fc.tuple(fc.nat(), fc.integer({ min: 1, max: 127 }), fc.boolean()).map(([place, delta, begin]) => {
       const word = begin ? BEGIN : END;
       const at = place % word.length;
       const swap = String.fromCharCode((word.charCodeAt(at) + delta) % 128);
+
       return goodSig.replace(word, `${word.slice(0, at)}${swap}${word.slice(at + 1)}`);
     });
+
     await fc.assert(
       fc.asyncProperty(changed, (armored) =>
         Effect.runPromise(
@@ -561,6 +584,7 @@ describe("a key line's parts and its type", () => {
     ["an ECDSA type word over an Ed25519 blob", `ecdsa-sha2-nistp256 ${key}`],
     ["an RSA type word over an Ed25519 blob", `ssh-rsa ${key} signer@fabrika.test`],
   ];
+
   it("KeyLine refuses a different type word and never matches it as a signer", async () => {
     // Plant: ignore the outer key type word. Exit.isFailure must become false.
     const invalid = wrongType.filter((type) => !/\s/.test(type)).map((type) => `${type} ${key} ${comment}`);
@@ -618,6 +642,7 @@ describe("properties", () => {
           const i = place % chars.length;
           const changed = [...chars.slice(0, i), swap, ...chars.slice(i + 1)].join("");
           fc.pre(Buffer.compare(Buffer.from(utf8(changed)), Buffer.from(utf8(body))) !== 0);
+
           return Effect.runPromise(
             Effect.gen(function* () {
               const armored = yield* write(key, body);
@@ -644,6 +669,7 @@ describe("properties", () => {
         const changed = [lines[0], ...body.map((x, i) => (i === r ? changedRow : x)), ...lines.slice(-2)];
         const armored = changed.join("\n");
         fc.pre(Buffer.compare(Buffer.from(unarmor(armored)), Buffer.from(unarmor(goodSig))) !== 0);
+
         return Effect.runPromise(
           Effect.gen(function* () {
             expect(yield* check(armored, [signer, other, ecdsa])).toStrictEqual(refused);
@@ -684,6 +710,7 @@ describe("properties", () => {
           expect(Exit.isSuccess(exit) ? exit.value : undefined).toStrictEqual(refused);
         }),
       );
+
     await fc.assert(fc.asyncProperty(fc.string({ unit: "binary" }), answers), {
       ...runs,
       numRuns: 150,

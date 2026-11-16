@@ -15,6 +15,7 @@ type AnyProgram = Program<any, any, any, any, any>;
  * @category models
  */
 export type WindowData<P extends AnyProgram> = Readonly<ReturnType<P["view"]["select"]>>;
+
 /**
  * The Msgs a program's window may send: the program's own, and nothing else.
  *
@@ -110,5 +111,6 @@ export const defineWindow = <P extends AnyProgram, View, T extends AnyTile = nev
  */
 export const commandMsg = (command: string): { readonly type: string } | null => {
   const dot = command.indexOf(".");
+
   return dot <= 0 || dot === command.length - 1 ? null : { type: command.slice(dot + 1) };
 };

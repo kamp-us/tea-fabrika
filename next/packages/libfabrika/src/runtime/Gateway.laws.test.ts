@@ -85,6 +85,7 @@ const setup = Effect.fnUntraced(function* (
   let saved: typeof Attached.Type = online();
   const frames: Array<Record<string, unknown>> = [];
   const closes: Array<number> = [];
+
   const c: Connection = connection({
     reader: "gateway/session-1",
     session,
@@ -102,6 +103,7 @@ const setup = Effect.fnUntraced(function* (
     wait,
     call,
   });
+
   return {
     c,
     frames,
@@ -141,13 +143,16 @@ describe("P12 Connection attachment laws", () => {
       try {
         const sql = nodeSql(db);
         let ring: Connection["ring"] = () => Effect.void;
+
         const bell = Layer.succeed(Doorbell, {
           ring: (_reader, stream, rev) =>
             ring(stream, rev).pipe(Effect.mapError((cause) => new LedgerError({ reason: "storage", cause }))),
         });
+
         const layer = Layer.mergeAll(RefereeSql.layer(sql), LedgerSql.layer(sql, { reader: "writer" })).pipe(
           Layer.provide(bell),
         );
+
         yield* Effect.gen(function* () {
           const referee = yield* Referee;
           const ledger = yield* Ledger;
@@ -199,14 +204,17 @@ describe("P12 Connection attachment laws", () => {
     Effect.gen(function* () {
       const entered = yield* Deferred.make<void>();
       const reply = yield* Deferred.make<{ readonly _tag: "ready"; readonly rev: number }>();
+
       const f = yield* setup((stream) =>
         stream === "old"
           ? Effect.gen(function* () {
               yield* Deferred.succeed(entered, undefined);
+
               return yield* Deferred.await(reply);
             })
           : Effect.succeed({ _tag: "parked" } as const),
       );
+
       const first = yield* Effect.forkChild(f.c.frame(request(id, "old")));
       yield* Deferred.await(entered);
       yield* f.c.ring("old", 1);
@@ -226,12 +234,15 @@ describe("P12 Connection attachment laws", () => {
     Effect.gen(function* () {
       const entered = yield* Deferred.make<void>();
       const reply = yield* Deferred.make<{ readonly _tag: "ready"; readonly rev: number }>();
+
       const f = yield* setup(() =>
         Effect.gen(function* () {
           yield* Deferred.succeed(entered, undefined);
+
           return yield* Deferred.await(reply);
         }),
       );
+
       const pending = yield* Effect.forkChild(f.c.frame(request(id)));
       yield* Deferred.await(entered);
       const fresh = Attached.cases.new.make({ client: "gateway/session-1", nonce: "fresh" });
@@ -246,6 +257,7 @@ describe("P12 Connection attachment laws", () => {
     Effect.gen(function* () {
       let ring: Connection["ring"] = () => Effect.void;
       let read: () => typeof Attached.Type = () => online();
+
       const f = yield* setup((stream, after, reader) =>
         Effect.gen(function* () {
           expect(reader).toBe("gateway/session-1");
@@ -254,9 +266,11 @@ describe("P12 Connection attachment laws", () => {
           yield* ring(stream, after + 1).pipe(
             Effect.mapError((cause) => new LedgerError({ reason: "storage", cause })),
           );
+
           return { _tag: "parked" } as const;
         }),
       );
+
       ring = f.c.ring;
       read = f.saved;
       yield* f.c.frame(request(id, "counter:1/inbox", after));
@@ -270,12 +284,15 @@ describe("P12 Connection attachment laws", () => {
     Effect.gen(function* () {
       const registered = yield* Deferred.make<void>();
       const reply = yield* Deferred.make<{ readonly _tag: "ready"; readonly rev: number }>();
+
       const f = yield* setup(() =>
         Effect.gen(function* () {
           yield* Deferred.succeed(registered, undefined);
+
           return yield* Deferred.await(reply);
         }),
       );
+
       const pending = yield* Effect.forkChild(f.c.frame(request("r")));
       yield* Deferred.await(registered);
       yield* f.c.ring("other", 99);
@@ -329,6 +346,7 @@ describe("P12 Connection attachment laws", () => {
       const entered = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
       let busyRead: () => typeof Attached.Type = () => online();
+
       const f = yield* setup(
         () => Effect.succeed({ _tag: "parked" } as const),
         () =>
@@ -336,10 +354,13 @@ describe("P12 Connection attachment laws", () => {
             expect(busyRead()).toMatchObject({ busy: true });
             yield* Deferred.succeed(entered, undefined);
             yield* Deferred.await(release);
+
             return Answer.cases.ok.make({ result: { _tag: "accepted", rev: 1, pos: 1 } });
           }),
       );
+
       busyRead = f.saved;
+
       const pending = yield* Effect.forkChild(
         f.c.frame(
           JSON.stringify({
@@ -350,6 +371,7 @@ describe("P12 Connection attachment laws", () => {
           }),
         ),
       );
+
       yield* Deferred.await(entered);
       const wake = yield* setup(() => Effect.succeed({ _tag: "parked" } as const));
       wake.save(JSON.parse(JSON.stringify(f.saved())));

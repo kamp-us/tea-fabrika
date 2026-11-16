@@ -12,7 +12,7 @@ StartsTest.law(
   ([recipe]) =>
     Effect.gen(function* () {
       const input = yield* StartsTest.input(recipe);
-      const decoded = yield* Schema.decodeUnknownEffect(Settings)(input, { onExcessProperty: "error" });
+      const decoded = yield* Schema.decodeEffect(Settings)(input, { onExcessProperty: "error" });
       expect(decoded).toEqual(input);
       expect(Object.hasOwn(decoded, "port")).toBe(false);
     }).pipe(Effect.provide(Digest.layerWebCrypto)),

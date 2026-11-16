@@ -34,20 +34,23 @@ import { ChildProcess } from "effect/process";
 export const LATE = 2 * 60 * 60 * 1000;
 
 export const Beat = Schema.TaggedUnion({
-  ok: { lastPass: Schema.NullOr(Schema.Number), merges: Schema.Number },
-  late: { lastPass: Schema.NullOr(Schema.Number), merges: Schema.Number, oldest: Schema.Number },
+  ok: { lastPass: Schema.NullOr(Schema.Finite), merges: Schema.Finite },
+  late: { lastPass: Schema.NullOr(Schema.Finite), merges: Schema.Finite, oldest: Schema.Finite },
 });
+
 export type Beat = typeof Beat.Type;
 
 /** The heartbeat at `now`, from the last passing run's start and the merges on main since. Pure. */
 export const beat = (now: number, lastPass: number | null, merges: ReadonlyArray<number>): Beat => {
   const oldest = Math.min(...merges);
+
   return merges.length > 0 && now - oldest > LATE
     ? Beat.cases.late.make({ lastPass, merges: merges.length, oldest })
     : Beat.cases.ok.make({ lastPass, merges: merges.length });
 };
 
 const iso = (ms: number | null) => (ms === null ? "none" : new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z"));
+
 const hours = (ms: number) => `${(ms / 3_600_000).toFixed(1)} h`;
 
 /** The one line it prints. Pure. */
@@ -65,17 +68,18 @@ const Commits = Schema.fromJsonString(
 );
 
 /** A `gh api` read that failed, with its stderr. */
-class ReadFailed extends Schema.TaggedError<ReadFailed>()("ReadFailed", {
+class ReadFailed extends Schema.TaggedError<ReadFailed, { readonly brand: unique symbol }>()("ReadFailed", {
   path: Schema.String,
   reason: Schema.String,
 }) {}
 
 /** The heartbeat is late; its line is already printed. */
-class Late extends Schema.TaggedError<Late>()("Late", {}) {}
+class Late extends Schema.TaggedError<Late, { readonly brand: unique symbol }>()("Late", {}) {}
 
 /** One `gh api` read: its stdout, or a failure with its stderr. */
 const gh = Effect.fn("heartbeat.gh")(function* (path: string) {
   const handle = yield* ChildProcess.make("gh", ["api", path]);
+
   const [out, err, code] = yield* Effect.all(
     [
       Stream.mkString(Stream.decodeText(handle.stdout)),
@@ -84,25 +88,31 @@ const gh = Effect.fn("heartbeat.gh")(function* (path: string) {
     ],
     { concurrency: 3 },
   );
+
   return Number(code) === 0 ? out : yield* ReadFailed.make({ path, reason: err.trim() });
 }, Effect.scoped);
 
 const main = Effect.gen(function* () {
   const now = yield* Clock.currentTimeMillis;
-  const runs = yield* Schema.decodeUnknownEffect(Runs)(
+
+  const runs = yield* Schema.decodeEffect(Runs)(
     yield* gh("repos/{owner}/{repo}/actions/workflows/mutation.yaml/runs?status=success&per_page=1"),
   );
+
   const passed = runs.workflow_runs[0];
   const lastPass = passed === undefined ? null : Date.parse(passed.created_at);
   const since = lastPass === null ? "" : `&since=${iso(lastPass)}`;
-  const commits = yield* Schema.decodeUnknownEffect(Commits)(
+
+  const commits = yield* Schema.decodeEffect(Commits)(
     yield* gh(`repos/{owner}/{repo}/commits?sha=main&per_page=100${since}`),
   );
+
   const b = beat(
     now,
     lastPass,
     commits.map((c) => Date.parse(c.commit.committer.date)),
   );
+
   yield* Console.log(line(now, b));
 
   if (b._tag === "late") {

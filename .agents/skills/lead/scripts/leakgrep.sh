@@ -8,7 +8,8 @@
 # private words.
 # In a diff, an added line that only respaces a line the same diff removes, from any file, is old text:
 # a line moved between files was already in the tree the diff starts from (0047, amended 2026-11-14).
-# In a pnpm patch under patches/, upstream's text the patch only quotes skips the style shapes.
+# In a pnpm patch under patches/, the removed, context and added lines inside its hunks skip only the
+# style shapes.
 # A line is read the way git writes it: up to the newline, and nothing else ends one.
 set -eu
 # Only deliberate diagnostics use fd 3. Shell and tool failures may contain private paths.
@@ -78,23 +79,26 @@ def kinds_of(line):
     return kinds + [kind for kind, pattern in patterns if pattern.search(line)]
 
 # A `pnpm patch` file under the repo's patches/ quotes upstream's removed and context lines byte for
-# byte: the patch stops applying if anyone rewords them. Those lines skip only the shapes here, which
-# are about how our own prose reads. Every secret, path, name and private-word shape still reads them,
-# and a patch's own added lines, its headers and every other file keep every shape.
+# byte: the patch stops applying if anyone rewords them. Its added lines are often upstream's too: a
+# patch built from an upstream pull request carries that pull request's own text, which must stay
+# upstream's exact output. So every removed, context and added line inside a patch's hunk skips only
+# the shapes here, which are about how our own prose reads. Every secret, path, name and private-word
+# shape still reads those lines, and a patch's headers and every other file keep every shape.
 style_only = {'em_dash'}
 
 # Whether a file is a pnpm patch, by its path from the repo root.
 def is_patch(path):
     return path is not None and path.startswith('patches/')
 
-# Reads the lines of one patch file in order, and says which are upstream text inside a hunk.
+# Reads the lines of one patch file in order, and says which are a removed, context or added line
+# inside one of its hunks.
 class Quotes:
     def __init__(self):
         self.in_hunk = False
     def quoted(self, line):
         if line.startswith('diff '): self.in_hunk = False
         if line.startswith('@@ '): self.in_hunk = True; return False
-        return self.in_hunk and line.startswith(('-', ' '))
+        return self.in_hunk and line.startswith(('-', ' ', '+'))
 
 # Ticket 500 (owner, 2026-11-09): a line that only changes spacing is old text. Two lines hold the
 # same text when they are equal after each run of spaces and tabs becomes one space, the ends are

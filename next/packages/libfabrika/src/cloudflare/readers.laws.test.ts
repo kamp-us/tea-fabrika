@@ -43,6 +43,7 @@ const recordConstructor = vi.hoisted(() => {
       ObjectState | WorkerEnvironment | Scope.Scope
     >;
   } = {};
+
   return slot;
 });
 
@@ -50,11 +51,13 @@ const recordConstructor = vi.hoisted(() => {
 vi.mock("./objects.ts", async (original) => {
   const actual = await original<typeof import("./objects.ts")>();
   const { Layer } = await import("effect");
+
   return {
     ...actual,
     RecordPart: {
       make: (implementation: NonNullable<typeof recordConstructor.value>) => {
         recordConstructor.value = implementation;
+
         return Layer.empty;
       },
     },
@@ -63,6 +66,7 @@ vi.mock("./objects.ts", async (original) => {
 
 vi.mock("effect", async (original) => {
   const actual = await original<typeof import("effect")>();
+
   return { ...actual, Effect: { ...actual.Effect } };
 });
 
@@ -109,11 +113,14 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
             const w = yield* Effect.acquireRelease(Effect.sync(world), (value) => Effect.sync(() => value.db.close()));
             let consumers = 0;
             let settingsCalls = 0;
+
             const bad =
               origin === undefined
                 ? StartsTest.corrupt(deployment, Math.floor(choice / moves.length))
                 : StartsTest.changeOrigin(deployment, origin);
+
             const sql = w.ctx.storage.sql;
+
             const ctx = {
               ...w.ctx,
               id: {
@@ -127,6 +134,7 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
               },
               getWebSockets: () => {
                 consumers++;
+
                 return [];
               },
               storage: new Proxy(w.ctx.storage, {
@@ -134,6 +142,7 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                   if (key === "get") {
                     return (...args: unknown[]) => {
                       consumers++;
+
                       return Reflect.apply(target.get, target, args);
                     };
                   }
@@ -144,6 +153,7 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                         key === "exec"
                           ? (...args: unknown[]) => {
                               consumers++;
+
                               return Reflect.apply(target.exec, target, args);
                             }
                           : Reflect.get(target, key),
@@ -154,6 +164,7 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                 },
               }),
             };
+
             const env = {
               ...w.env,
               INSTANCE: JSON.stringify(bad),
@@ -166,6 +177,7 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                             method === "settingsStart"
                               ? async (wire: StartsTest.Input) => {
                                   settingsCalls++;
+
                                   return StartsTest.reply(wire);
                                 }
                               : Reflect.get(stub, method),
@@ -173,7 +185,9 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                     : Reflect.get(target, key),
               }),
             };
+
             const publicKey = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x;
+
             const local = {
               ...config,
               name: "settings-law",
@@ -182,6 +196,7 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
               founder: publicKey ?? "missing-public-key",
               window: config.founding.window,
             };
+
             let exit: Exit.Exit<unknown, unknown>;
 
             if (path === "HTTP") {
@@ -201,6 +216,7 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                 Effect.gen(function* () {
                   const build = yield* constructor;
                   const part = yield* build;
+
                   return yield* part.read(Chain.cases.spans.make({}), 0, 0);
                 }).pipe(
                   Effect.provideService(WorkerEnvironment, env),
@@ -226,6 +242,7 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                 bootstrap: [{ id: "boot", name: "boot", program: "missing" }],
                 door: () => Effect.die("consumer before start"),
               });
+
               yield* Effect.addFinalizer(() => runtime.disposeEffect);
               exit = yield* Effect.promise(() => runtime.runPromiseExit(ProjectService));
             }
@@ -260,6 +277,7 @@ const parserControl = (request: Request, env: Env) =>
       Redacted.make("test"),
       {},
     ]);
+
     const response = yield* secure;
 
     if (response.status !== 403) {
@@ -267,6 +285,7 @@ const parserControl = (request: Request, env: Env) =>
     }
 
     const legacy: Effect.Effect<Response, unknown> = Reflect.apply(control, undefined, [request, env, "test", {}]);
+
     return yield* legacy;
   });
 
@@ -284,6 +303,7 @@ const typed = (exit: Exit.Exit<unknown, unknown>, tag = "LedgerError") => {
 const world = () => {
   const db = new DatabaseSync(":memory:"),
     sql = nodeSql(db);
+
   let attached: unknown = Attached.cases.online.make({
     client: "client",
     identity: { key: "public", person: "person", as: "agent" },
@@ -292,8 +312,10 @@ const world = () => {
     watching: false,
     busy: false,
   });
+
   let tags: unknown = ["session", "tab", "key"],
     name: unknown = "gateway";
+
   const ws = {
     deserializeAttachment: () => attached,
     serializeAttachment: (value: unknown) => {
@@ -302,8 +324,10 @@ const world = () => {
     send: vi.fn(),
     close: vi.fn(),
   };
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- the socket double supplies attachment, send and close; workerd owns the complete WebSocket
   const socket = ws as unknown as WebSocket;
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- only workerd constructs a complete DurableObjectState; these are the handles the real readers use
   const ctx = {
     id: {
@@ -326,7 +350,9 @@ const world = () => {
     acceptWebSocket: vi.fn(),
     setWebSocketAutoResponse: vi.fn(),
   } as unknown as DurableObjectState;
+
   const route = vi.fn(async (): Promise<unknown> => ({ _tag: "parked", stream: "stream", after: 0 }));
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- in-memory platform stubs supply just the RPCs these readers reach
   const env = {
     INSTANCE: JSON.stringify(config),
@@ -343,6 +369,7 @@ const world = () => {
     RECORD: { getByName: () => ({ write: async () => ({ _tag: "written" }) }) },
     MEASUREMENTS: {},
   } as unknown as Env;
+
   return {
     ctx,
     env,
@@ -369,6 +396,7 @@ for (const source of ["attachment", "tags", "name"] as const) {
       tags: Schema.Tuple([Schema.String, Schema.String, Schema.String]),
       name: Schema.String,
     }[source];
+
     await fc.assert(
       fc.asyncProperty(malformed(schema), async (raw) => {
         const w = world();
@@ -397,6 +425,7 @@ for (const method of ["message", "close", "ring", "probe", "notify"] as const) {
         try {
           const gateway = await runtime.runPromise(ConnectionService);
           w.attached(raw);
+
           const work = () =>
             ({
               message: () => gateway.message(w.socket, '{"jsonrpc":"2.0","id":1,"method":"view.open","params":{}}'),
@@ -405,6 +434,7 @@ for (const method of ["message", "close", "ring", "probe", "notify"] as const) {
               probe: () => gateway.probe("session"),
               notify: () => gateway.notify("client", {}),
             })[method]();
+
           typed(await runtime.runPromiseExit(Effect.suspend(work)));
         } finally {
           await runtime.dispose();
@@ -484,7 +514,9 @@ it("control bucket bytes fail as a typed parse error before its HTTP error respo
     fc.asyncProperty(malformed(Schema.Array(Schema.Number)), async (raw) => {
       const w = world(),
         attempts: Array<Exit.Exit<unknown, unknown>> = [];
+
       const original = Effect.result;
+
       const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
         original(
           work.pipe(
@@ -509,6 +541,7 @@ it("control bucket bytes fail as a typed parse error before its HTTP error respo
             args: ["key", raw, "checksum"],
           }),
         });
+
         const exit = await Effect.runPromiseExit(parserControl(request, w.env));
         expect(Exit.isSuccess(exit)).toBe(true);
         expect(attempts).toHaveLength(1);
@@ -532,7 +565,9 @@ for (const field of ["put key", "put checksum", "head key"] as const) {
       fc.asyncProperty(input, async (raw) => {
         const w = world(),
           attempts: Array<Exit.Exit<unknown, unknown>> = [];
+
         const original = Effect.result;
+
         const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
           original(
             work.pipe(
@@ -568,6 +603,7 @@ for (const field of ["put key", "put checksum", "head key"] as const) {
               args,
             }),
           });
+
           const exit = await Effect.runPromiseExit(parserControl(request, w.env));
           expect(attempts).toHaveLength(1);
           typed(attempts[0]!);
@@ -600,6 +636,7 @@ for (const service of ["process", "record"] as const) {
             service === "process"
               ? await runtime.runPromiseExit(ProcessService)
               : await Effect.runPromiseExit(recordRead(w.ctx, undefined, { _tag: "spans" }, 0, 0));
+
           typed(exit, service === "record" ? "SinkError" : "LedgerError");
         } finally {
           await runtime.dispose();
@@ -623,6 +660,7 @@ it("processDescriptor checks the saved value before returning it to a caller", a
     build: Schema.String,
     owner: Writer,
   });
+
   await fc.assert(
     fc.asyncProperty(malformed(descriptor), async (raw) => {
       const w = world();
@@ -663,10 +701,12 @@ it("Connection rejects missing or malformed URL segments with a typed error", as
     fc.constantFrom("/ws", "/ws/key", "/ws/%/tab", "/ws/key/%"),
     fc.string().map((text) => `/ws/${encodeURIComponent(text)}%/tab`),
   );
+
   await fc.assert(
     fc.asyncProperty(invalid, async (path) => {
       const w = world(),
         runtime = connectionRuntime(w.ctx, w.env, config);
+
       vi.stubGlobal(
         "WebSocketPair",
         class {
@@ -709,6 +749,7 @@ StartsTest.law(
       const w = yield* Effect.acquireRelease(Effect.sync(world), (value) => Effect.sync(() => value.db.close()));
       let size = 0;
       const raw = w.ctx.storage.sql;
+
       const ctx = {
         ...w.ctx,
         id: { ...w.ctx.id, name: JSON.stringify(["settings-law", "spans/0"]) },
@@ -717,7 +758,9 @@ StartsTest.law(
           sql: new Proxy(raw, { get: (target, key) => (key === "databaseSize" ? size : Reflect.get(target, key)) }),
         },
       };
+
       const chain = Chain.cases.spans.make({});
+
       const row = (n: number) => ({
         span: {
           traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
@@ -735,6 +778,7 @@ StartsTest.law(
         },
         content: null,
       });
+
       const old = row(id);
       const next = row(id + 1);
       const fresh = row(id + 2);

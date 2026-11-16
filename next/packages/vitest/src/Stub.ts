@@ -18,6 +18,7 @@ export const make = <A extends object>(rest: (method: string) => A[keyof A], own
   // listing, `in` and spread see this empty null-prototype object, so a stub stands in for calls and
   // nothing more.
   const target = Object.create(null) as A;
+
   return new Proxy<A>(target, {
     get: (_target, key) => {
       if (Predicate.isSymbol(key) || key === "then") {

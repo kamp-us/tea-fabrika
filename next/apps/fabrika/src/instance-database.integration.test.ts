@@ -32,7 +32,9 @@ db.close();
 const held = Effect.fnUntraced(function* (journal: "wal" | "delete") {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const file = path.join(yield* fs.makeTempDirectoryScoped({ prefix: "t962-lock-" }), "object.sqlite");
+
   const holder = yield* ChildProcess.make(process.execPath, [
     "--input-type=module",
     "-e",
@@ -41,8 +43,10 @@ const held = Effect.fnUntraced(function* (journal: "wal" | "delete") {
     journal,
     String(HOLD_MS),
   ]);
+
   const line = yield* holder.stdout.pipe(Stream.decodeText(), Stream.splitLines, Stream.runHead);
   expect(line._tag === "Some" ? line.value : undefined).toBe("held");
+
   return { file, done: holder.exitCode };
 });
 

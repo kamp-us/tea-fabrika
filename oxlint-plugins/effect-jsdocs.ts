@@ -166,6 +166,7 @@ function isInlineLinkStart(source: string, index: number): boolean {
   }
 
   const next = source[index + "{@link".length];
+
   return next === undefined || /\s|}/.test(next);
 }
 
@@ -176,6 +177,7 @@ export function parseLooseJSDocBlock(raw: string, range: [number, number]): JSDo
   const normalized = trimStructuralBlankLines(lines);
   const tags = parseTags(normalized);
   const internal = tags.some((tag) => tag.name === "internal");
+
   return { range, raw, lines: normalized, tags, diagnostics: [], internal };
 }
 
@@ -188,6 +190,7 @@ export function parseJSDocBlock(raw: string, range: [number, number]): JSDocBloc
   }
 
   const result = parseCoreJSDoc(normalized, tags);
+
   const block: JSDocBlock = {
     ...base,
     range,
@@ -197,6 +200,7 @@ export function parseJSDocBlock(raw: string, range: [number, number]): JSDocBloc
     diagnostics: result._tag === "Failure" ? Array.from(result.error.diagnostics) : [],
     internal,
   };
+
   return result._tag === "Success" ? { ...block, parsed: result.value } : block;
 }
 
@@ -305,6 +309,7 @@ function parseCoreJSDoc(lines: Array<string>, tags: Array<JSDocTag>): Result<Par
 
 function uniqueDiagnostics(diagnostics: ReadonlyArray<JSDocDiagnostic>): ReadonlyArray<JSDocDiagnostic> {
   const seen = new Set<string>();
+
   return diagnostics.filter((item) => {
     const key = `${item.code}:${item.message}`;
 
@@ -313,6 +318,7 @@ function uniqueDiagnostics(diagnostics: ReadonlyArray<JSDocDiagnostic>): Readonl
     }
 
     seen.add(key);
+
     return true;
   });
 }
@@ -333,11 +339,13 @@ interface ParsedContentResult {
 
 function parseDescriptionContent(lines: Array<string>): ParsedContentResult {
   const diagnostics: Array<JSDocDiagnostic> = [];
+
   const sections: Record<StandardHeading, string | null> = {
     "**When to use**": null,
     "**Details**": null,
     "**Gotchas**": null,
   };
+
   const examples: Array<ParsedExample> = [];
   const exampleTitles = new Set<string>();
   let index = 0;
@@ -489,6 +497,7 @@ function parseDescriptionContent(lines: Array<string>): ParsedContentResult {
 
 function hasWhenToUsePrefix(text: string): boolean {
   const trimmed = text.trimStart();
+
   return whenToUsePrefixes.some((prefix) => trimmed === prefix || trimmed.startsWith(`${prefix} `));
 }
 
@@ -607,6 +616,7 @@ function parseExample(
 
   if (fenceIndex === -1) {
     diagnostics.push(diagnostic("malformed-example", "Examples must include a non-empty ```ts fence"));
+
     return { nextIndex: index, diagnostics };
   }
 
@@ -651,6 +661,7 @@ function parseExample(
   }
 
   const result = { nextIndex: index, diagnostics };
+
   return match
     ? { ...result, example: { title: (match[1] ?? "").trim(), body: prose, code: joinBody(codeLines) } }
     : result;
@@ -733,6 +744,7 @@ function isHeadingLine(line: string | undefined): boolean {
   }
 
   const trimmed = line.trim();
+
   return (
     standardHeadings.includes(trimmed as StandardHeading) ||
     trimmed.startsWith("**Example**") ||
@@ -782,8 +794,10 @@ function extractParsedInlineLinks(source: string): ReadonlyArray<ParsedInlineLin
     const pipeIndex = content.indexOf("|");
     const beforeLabel = pipeIndex === -1 ? content : content.slice(0, pipeIndex).trim();
     const target = beforeLabel.split(/\s+/)[0] ?? "";
+
     const text =
       pipeIndex === -1 ? beforeLabel.slice(target.length).trim() || null : content.slice(pipeIndex + 1).trim() || null;
+
     links.push({ raw, target, text });
     index = source.indexOf("{@link", end + 1);
   }
@@ -796,6 +810,7 @@ export function buildTags(
   tags: ReadonlyArray<JSDocTag>,
 ): Result<ParsedModuleTags | ParsedDeclarationTags | ParsedNamespaceTags | ParsedMemberTags, JSDocParseError> {
   const diagnostics: Array<JSDocDiagnostic> = [];
+
   const allowed =
     scope === "declaration"
       ? new Set(["deprecated", "see", "stability", "category", "since"])
@@ -804,6 +819,7 @@ export function buildTags(
         : scope === "module"
           ? new Set(["deprecated", "see", "stability", "since"])
           : new Set(["deprecated", "see", "stability", "category", "since"]);
+
   let previousOrder = -1;
   const values = new Map<string, Array<string>>();
 

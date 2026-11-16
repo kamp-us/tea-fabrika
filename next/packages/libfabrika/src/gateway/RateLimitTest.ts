@@ -7,9 +7,13 @@ import type { Sql } from "../Sql.ts";
 import * as RateLimiterSql from "./RateLimiterSql.ts";
 
 export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
+
 export type Rig = { readonly open: Effect.Effect<Store, never, Scope.Scope> };
+
 const positive = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 8 }));
+
 const cell = Schema.Struct({ pick: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 })) });
+
 const trace = Schema.Array(cell).check(Schema.isMinLength(30), Schema.isMaxLength(80));
 
 const layer = (sql: Sql, policy: { limit: number; window: number }) =>
@@ -41,12 +45,14 @@ export const suite = (rig: Rig): void => {
         Effect.gen(function* () {
           const { sql } = yield* rig.open;
           const events: Array<"begin" | "end" | "read" | "write"> = [];
+
           const observed: Sql = {
             ...sql,
             transaction: (step) => {
               events.push("begin");
               const result = sql.transaction(step);
               events.push("end");
+
               return result;
             },
             exec: (query, ...params) => {
@@ -97,10 +103,12 @@ export const suite = (rig: Rig): void => {
 
           for (const { pick } of choices) {
             const known = [...history.keys()];
+
             const sender =
               known.length && pick % 3 === 0
                 ? Option.getOrThrow(Option.fromUndefinedOr(known[pick % known.length]))
                 : `key-${pick % 4}`;
+
             const saved = history.get(sender);
             const moves = ["take", "same", "reopen", "skip", "change", ...(saved ? ["back", "expiry"] : [])];
             const move = Option.getOrThrow(Option.fromUndefinedOr(moves[pick % moves.length]));
@@ -136,6 +144,7 @@ export const suite = (rig: Rig): void => {
             const old = history.get(sender);
             const same = old?.policy === JSON.stringify(policy);
             const at = old ? Math.max(now, old.at) : now;
+
             const row =
               old && same
                 ? old
@@ -145,6 +154,7 @@ export const suite = (rig: Rig): void => {
                     at,
                     policy: JSON.stringify(policy),
                   };
+
             const allowed = row.times.length < policy.limit;
             const result = yield* Effect.exit(consume(store.sql, sender, policy));
             expect(Exit.isSuccess(result)).toBe(allowed);

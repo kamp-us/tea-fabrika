@@ -9,7 +9,9 @@ import { Sender, type Senders, SendersError } from "../permissions/Senders.ts";
 import { NotGranted, SigningRefused, type Writer } from "./SessionManager.ts";
 
 const decodeSender = Schema.decodeUnknownResult(Sender);
+
 const isNotGranted = Schema.is(NotGranted);
+
 const isRefused = Schema.is(SigningRefused);
 
 /** A refusal or a failure of the signing service, as the port answers it. */

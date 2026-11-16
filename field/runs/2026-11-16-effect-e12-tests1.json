@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e12-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T03:55:00Z",
+  "ended": "2026-11-16T04:10:00Z",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E12 (preferSucceedSomeOrNone), in next/ and our tooling. Recount on origin/main with only this check at error across the 13 tsconfigs: 10 hits (libfabrika 8 in processes, runtime and telemetry; next/programs/pipeline 2). Locked processes, runtime and telemetry in libfabrika's tsconfig and all of src in next/programs/pipeline's. Fixed the 9 hits in exam paths (test suites and integration tests) by hand edits, each Effect.succeed(Option.none()) to Effect.succeedNone and Effect.succeed(Option.some(x)) to Effect.succeedSome(x); removed one Option import the edit left unused. The tenth hit, in the product file next/packages/libfabrika/src/telemetry/Records.ts line 185, was fixed by hand in a follow-up commit under the one-pull-request shape (E12 left 0). No hit sits in a file of pull request 1366. No script edited a file.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "note": "Per-check report for preferSucceedSomeOrNone: hits met 10, fixed by quick fix 0, hand edits 10 (Edit tool), left 0, waiting on 1366 0. Files: libfabrika processes/{ChildrenMemberTest,ChildrenTest,MonitorsTest,ProgramMailTest}.ts, runtime/MonitorTest.ts, telemetry/Records.ts; next/programs/pipeline src/node/{queue,runner}.laws.integration.test.ts. Typecheck per package: libfabrika 0 hits, pipeline program 0. Tests: ProcessMonitors.integration.test.ts and ProcessManager.integration.test.ts, 37 passed. Pull request 1438 was opened before the shape changed and is left as it is.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "added export const plantL1 = Effect.succeed(Option.none()) to libfabrika/src/runtime/MonitorTest.ts: the count went 1 to 2, the new one an error; removed",
+      "result": "red"
+    },
+    {
+      "law": "L2",
+      "plant": "dropped the src/telemetry glob from the libfabrika entry: the Records.ts hit went from error to message; put back",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

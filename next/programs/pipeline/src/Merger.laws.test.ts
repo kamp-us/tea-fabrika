@@ -14,12 +14,19 @@ import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";
 
 type Program = ReturnType<typeof merger>;
+
 type Model = Program["machine"]["model"]["Type"];
+
 type Msg = Program["msg"]["Type"];
+
 type Command = ReturnType<Program["machine"]["init"]>[1][number];
+
 const ctx = stubCtxThrowingProxy<never>();
+
 const LAST = 8.64e15;
+
 const clamp = (time: number) => Math.min(time, LAST);
+
 const faults = ["unavailable", "rate_limited", "refused", "handler_failed", "bad_cmd"] as const;
 
 const positive = fc.oneof(
@@ -68,9 +75,12 @@ const settingsFor = (w: World) =>
     ),
   );
 
-const id = (w: World, char: string) => Schema.decodeUnknownSync(Commit)(char.repeat(w.size));
-const tree = (w: World, char: string) => Schema.decodeUnknownSync(Tree)(char.repeat(w.size));
+const id = (w: World, char: string) => Schema.decodeSync(Commit)(char.repeat(w.size));
+
+const tree = (w: World, char: string) => Schema.decodeSync(Tree)(char.repeat(w.size));
+
 const land = (w: World) => Mail.Land.make({ type: "land", ref: w.ref, change: 1, head: id(w, "a"), reply: "queue" });
+
 const equal = (a: unknown, b: unknown) => expect(a).toEqual(b);
 
 const runAt = (w: World, choice: number) => ({
@@ -125,7 +135,7 @@ const valueFor = (w: World, cmd: Command, pick: number): unknown => {
   }
 
   if (cmd.type === "checks") {
-    return Schema.decodeUnknownSync(Checks)(pick % 11 === 0 ? [] : [runAt(w, pick)]);
+    return Schema.decodeSync(Checks)(pick % 11 === 0 ? [] : [runAt(w, pick)]);
   }
 
   if (cmd.type === "merge") {
@@ -159,7 +169,8 @@ const answer = (p: Program, w: World, cmd: Command, drawn: number, at: number): 
             ? 3
             : drawn
     : drawn;
-  return Schema.decodeUnknownSync(p.msg)(
+
+  return Schema.decodeSync(p.msg)(
     cmd.type !== "send" && pick % 5 === 0
       ? {
           type: `${cmd.type}_err`,
@@ -178,11 +189,14 @@ const answer = (p: Program, w: World, cmd: Command, drawn: number, at: number): 
 // chooses due/stale timers from the actual state, so shrinking keeps a legal walk.
 const guided = (p: Program, w: World) => {
   const draw = fc.record({ pick: fc.nat(), at: fc.integer({ min: 0, max: LAST }) });
+
   const cell = {
     draw,
     make: (cmd: Command, cell: { pick: number; at: number }) => answer(p, w, cmd, cell.pick, cell.at),
   };
+
   const cells = { change: cell, update: cell, checks: cell, merge: cell, send: cell };
+
   return arbGuidedSequence(
     p.machine,
     ctx,
@@ -204,7 +218,7 @@ const guided = (p: Program, w: World) => {
       const msgs: Array<Msg> = [];
 
       for (const event of raw) {
-        let msg: Msg = Schema.decodeUnknownSync(p.msg)(event);
+        let msg: Msg = Schema.decodeSync(p.msg)(event);
 
         if (event.type === "timer") {
           const due = p.wake(model);
@@ -215,7 +229,8 @@ const guided = (p: Program, w: World) => {
               : event.at % 3 === 0
                 ? Math.max(clock, due - 1)
                 : Math.max(clock, due);
-          msg = Schema.decodeUnknownSync(p.msg)({ type: "timer", at });
+
+          msg = Schema.decodeSync(p.msg)({ type: "timer", at });
           clock = at;
         } else if ("cmd" in event && event.cmd.type !== "send") {
           const command = out.find((c) => c.type === event.cmd.type && "attempt" in c && c.attempt === model.attempt);
@@ -230,10 +245,10 @@ const guided = (p: Program, w: World) => {
               event.at % 7 === 0 && model._tag === "checking" ? model.until : clock + (event.at % 10_000),
             ),
           );
-          msg = Schema.decodeUnknownSync(p.msg)({ ...event, cmd: command, at: clock });
+          msg = Schema.decodeSync(p.msg)({ ...event, cmd: command, at: clock });
         } else if ("cmd" in event && event.cmd.type === "send") {
           clock = Math.max(clock, event.at);
-          msg = Schema.decodeUnknownSync(p.msg)({ ...event, at: clock });
+          msg = Schema.decodeSync(p.msg)({ ...event, at: clock });
         } else if (event.type === "land" || event.type === "abandon") {
           if (p.refuse(model, event) !== null) {
             continue;
@@ -268,7 +283,7 @@ const guided = (p: Program, w: World) => {
           started = true;
         } else if (model.step._tag === "waiting" || (model.step.at !== null && cell.pick % 7 === 0)) {
           clock = Math.max(clock, model.step.at!);
-          msg = Schema.decodeUnknownSync(p.msg)({ type: "timer", at: clock });
+          msg = Schema.decodeSync(p.msg)({ type: "timer", at: clock });
         } else {
           const cmd = out.findLast((c) => service(c) && "attempt" in c && c.attempt === model.attempt);
 
@@ -517,16 +532,19 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
 
     if (law === "L3" && prev._tag !== "idle") {
       const at = "at" in msg ? msg.at : null;
+
       const taken =
         "cmd" in msg &&
         msg.cmd.type === stateCmd(prev) &&
         "attempt" in msg.cmd &&
         msg.cmd.attempt === prev.attempt &&
         prev.step._tag === "asking";
+
       const verdict =
         taken && msg.type === "checks_ok" && prev._tag === "checking"
           ? ChangeKind.verdict(prev.checks, msg.value)._tag
           : null;
+
       const fault =
         (taken && msg.type.endsWith("_err")) ||
         verdict === "lost" ||
@@ -615,8 +633,10 @@ describe("the merger, next/", () => {
     it(`${law}: generated worlds obey the merger's contract at every prefix`, () => {
       const walks = world.chain((w) => {
         const p = merger(settingsFor(w));
+
         return guided(p, w).map((msgs) => ({ w, p, msgs }));
       });
+
       let reached = 0;
       fc.assert(
         fc.property(walks, ({ w, p, msgs }) => {
@@ -654,6 +674,7 @@ describe("the merger, next/", () => {
                 run: (m, { p, w }) => {
                   const prev = m.model;
                   const active = m.current.find((c) => service(c) && "attempt" in c && c.attempt === prev.attempt);
+
                   const late = m.history.filter(
                     (c) =>
                       service(c) &&
@@ -663,10 +684,11 @@ describe("the merger, next/", () => {
                         c.attempt !== prev.attempt ||
                         c.type !== stateCmd(prev)),
                   );
+
                   const moves: Array<() => Msg> = [
                     () => land(w),
                     () =>
-                      Schema.decodeUnknownSync(p.msg)({
+                      Schema.decodeSync(p.msg)({
                         type: "abandon",
                         ref: cell.pick % 2 === 0 && prev._tag !== "idle" ? prev.job.ref : `${w.ref}other`,
                       }),
@@ -677,9 +699,7 @@ describe("the merger, next/", () => {
                   }
 
                   if (prev._tag !== "idle" && prev.step.at !== null) {
-                    moves.push(() =>
-                      Schema.decodeUnknownSync(p.msg)({ type: "timer", at: Math.max(m.clock, prev.step.at!) }),
-                    );
+                    moves.push(() => Schema.decodeSync(p.msg)({ type: "timer", at: Math.max(m.clock, prev.step.at!) }));
                   }
 
                   if (late.length > 0) {
@@ -693,6 +713,7 @@ describe("the merger, next/", () => {
                   }
 
                   const msg = moves[cell.move % moves.length]!();
+
                   const refused =
                     msg.type === "land"
                       ? prev._tag !== "idle"
@@ -713,6 +734,7 @@ describe("the merger, next/", () => {
 
                     if (refused !== null) {
                       equal(m.model, prev);
+
                       return;
                     }
                   }
@@ -786,7 +808,8 @@ describe("the merger, next/", () => {
 // This walk answers only the current request. Every update may discover another main.
 const roundWalk = (p: Program, w: World) => {
   const ok = (cmd: Command, value: unknown): Msg =>
-    Schema.decodeUnknownSync(p.msg)({ type: `${cmd.type}_ok`, cmd, value, at: w.at });
+    Schema.decodeSync(p.msg)({ type: `${cmd.type}_ok`, cmd, value, at: w.at });
+
   return arbGuidedSequence(
     p.machine,
     ctx,
@@ -813,7 +836,7 @@ const roundWalk = (p: Program, w: World) => {
               cmd,
               moved
                 ? Updated.cases.updated.make({
-                    head: Schema.decodeUnknownSync(Commit)((cmd.attempt + 16).toString(16).padStart(w.size, "0")),
+                    head: Schema.decodeSync(Commit)((cmd.attempt + 16).toString(16).padStart(w.size, "0")),
                     tree: tree(w, "e"),
                     main: id(w, "d"),
                   })
@@ -842,6 +865,7 @@ it("L15: updated heads spend the round budget; behind names the newest head and 
       world.chain((drawn) => {
         const w = { ...drawn, empty: [false, false, false] as [boolean, boolean, boolean] };
         const p = merger(settingsFor(w));
+
         return roundWalk(p, w).map((msgs) => ({ p, w, msgs }));
       }),
       ({ p, w, msgs }) => {
@@ -909,10 +933,10 @@ it("L15: updated heads spend the round budget; behind names the newest head and 
 const OldCount = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 const OldStep = Schema.TaggedUnion({
-  asking: { tries: OldCount, at: Schema.Number },
+  asking: { tries: OldCount, at: Schema.Finite },
   waiting: {
     tries: OldCount,
-    at: Schema.Number,
+    at: Schema.Finite,
     reason: Schema.Literals([
       "unavailable",
       "rate_limited",
@@ -935,7 +959,9 @@ const OldJob = Schema.Struct({
 });
 
 const oldCounts = { attempt: OldCount, late: OldCount };
+
 const oldWorking = { ...oldCounts, job: OldJob, step: OldStep };
+
 const oldPrepared = { ...oldWorking, kind: ChangeKind.Kind, checks: Schema.NonEmptyArray(ChangeKind.Check) };
 
 const OldModel = Schema.TaggedUnion({
@@ -945,7 +971,7 @@ const OldModel = Schema.TaggedUnion({
     step: Schema.Union([OldStep, Schema.TaggedStruct("asking", { tries: Schema.Literal(0), at: Schema.Null })]),
   },
   updating: oldPrepared,
-  checking: { ...oldPrepared, head: Commit, tree: Tree, until: Schema.Number },
+  checking: { ...oldPrepared, head: Commit, tree: Tree, until: Schema.Finite },
   merging: { ...oldWorking, head: Commit, tree: Tree },
 });
 
@@ -956,7 +982,7 @@ it.prop(
   ({ old }) => {
     const p = merger(Effect.runSync(Settings.all.parse(ConfigProvider.fromUnknown({}))));
     const result = Saved.upgrade({ v: 1, build: "slice-1", model: old, after: 0 }, p.state, "slice-2");
-    const model = Schema.decodeUnknownSync(p.state.schema)(result.saved.model);
+    const model = Schema.decodeSync(p.state.schema)(result.saved.model);
     expect(result.saved.v).toBe(2);
     expect(model).toMatchObject(old);
 

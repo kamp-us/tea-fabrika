@@ -12,13 +12,19 @@ import { connection } from "./Connection.ts";
 import { Answer, Attached, Wait } from "./Wire.ts";
 
 const SEED = 119120;
+
 const RUNS = 100;
+
 const READER = "gateway/session-1";
+
 const SESSION = "session-1";
+
 const PING = 42;
 
 type Saved = typeof Attached.Type;
+
 type W = typeof Wait.Type;
+
 type Waited = { readonly _tag: "ready"; readonly rev: number } | { readonly _tag: "parked" };
 
 type Frame = {
@@ -41,7 +47,9 @@ type Event =
   | { readonly _tag: "call"; readonly method: string; readonly params: unknown; readonly saved: Saved };
 
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
+
 const at = <A>(list: ReadonlyArray<A>, pick: number) => list[pick % list.length]!;
+
 const restored = (saved: Saved) => Schema.decodeUnknownSync(Attached)(JSON.parse(JSON.stringify(saved)));
 
 const online = (busy = false, waits: ReadonlyArray<W> = []) =>
@@ -79,6 +87,7 @@ const harness = (first: Saved) => {
   const calls: Array<Pending<typeof Answer.Type>> = [];
   const reentrant = new Set<string>();
   let ring: ReturnType<typeof connection>["ring"] = () => Effect.void;
+
   const c = connection<unknown>({
     reader: READER,
     session: SESSION,
@@ -102,11 +111,13 @@ const harness = (first: Saved) => {
         if (reentrant.delete(key)) {
           // A ring that arrives over RPC before registration returns.
           yield* ring(stream, after + 1);
+
           return { _tag: "parked" } as const;
         }
 
         const reply = yield* Deferred.make<Waited, unknown>();
         waits.push({ label: key, stream, after, reply });
+
         return yield* Deferred.await(reply);
       }),
     call: (method, params) =>
@@ -118,15 +129,19 @@ const harness = (first: Saved) => {
         calls.push({ label: method, reply });
         const answer = yield* Deferred.await(reply);
         calling -= 1;
+
         return answer;
       }),
   });
+
   ring = c.ring;
+
   const run = (effect: Effect.Effect<unknown, unknown>) =>
     Effect.gen(function* () {
       yield* Effect.forkChild(effect);
       yield* settle;
     });
+
   return { c, log, waits, calls, reentrant, run, saved: () => saved, most: () => most };
 };
 
@@ -141,7 +156,9 @@ const Choice = fc.record({
   rev: fc.integer({ min: 1, max: 9 }),
   reason: fc.option(fc.constantFrom("unreachable", "closed", "bad_stream"), { nil: undefined }),
 });
+
 type Choice = typeof Choice extends fc.Arbitrary<infer A> ? A : never;
+
 const Walk = fc.array(Choice, { minLength: 1, maxLength: 60, size: "max" });
 
 /** Did a saved attachment admit this wait, by the limits the driver had before the machine. */
@@ -151,6 +168,7 @@ const admits = (saved: Saved, wait: W) => {
   }
 
   const next = { ...saved, waits: [...saved.waits, wait] };
+
   return !saved.waits.some((w) => w.id === wait.id) && next.waits.length <= 64 && bytes(next) <= 16_384;
 };
 
@@ -166,13 +184,16 @@ it.effect.prop(
   ({ retryAfter, picks }) =>
     Effect.gen(function* () {
       const spans: Array<Tracer.NativeSpan> = [];
+
       const tracer = Tracer.make({
         span: (options) => {
           const span = new Tracer.NativeSpan(options);
           spans.push(span);
+
           return span;
         },
       });
+
       const h = harness(online());
 
       for (const [id, pick] of picks.entries()) {
@@ -217,20 +238,25 @@ it.effect.prop(
   ({ kind, id, params }) =>
     Effect.gen(function* () {
       const spans: Array<Tracer.NativeSpan> = [];
+
       const tracer = Tracer.make({
         span: (options) => {
           const span = new Tracer.NativeSpan(options);
           spans.push(span);
+
           return span;
         },
       });
+
       const h = harness(online());
       yield* h
         .run(h.c.frame(JSON.stringify({ jsonrpc: "2.0", id, method: "process.send", params })))
         .pipe(Effect.withTracer(tracer));
       expect(h.calls).toHaveLength(1);
+
       const answer =
         kind === "ok" ? Answer.cases.ok.make({ result: params }) : Answer.cases.refused.make({ reason: kind });
+
       yield* Deferred.succeed(h.calls[0]!.reply, answer);
       yield* settle;
       expect(answers(h.log, 0)).toEqual([kind === "ok" ? { jsonrpc: "2.0", id, result: params } : no(id, kind).frame]);
@@ -274,9 +300,11 @@ describe("T703 connection driver laws", () => {
                 }
 
                 yield* h.run(h.c.frame(waitFrame(id, { stream: wait.stream, after: wait.after })));
+
                 const refused = answers(h.log, from).filter(
                   (f) => f.id === id && f.error?.message === "too_many_waits",
                 );
+
                 expect(refused).toHaveLength(ok ? 0 : 1);
                 const registered = h.log.slice(from).find((e) => e._tag === "wait");
 
@@ -302,8 +330,10 @@ describe("T703 connection driver laws", () => {
                 seen.add("call");
               } else if (move < 60 && h.calls.length > 0) {
                 const [call] = h.calls.splice(pick % h.calls.length, 1);
+
                 const answer =
                   move % 2 === 0 ? Answer.cases.ok.make({ result: null }) : Answer.cases.refused.make({ reason: "x" });
+
                 yield* Deferred.succeed(call!.reply, answer);
                 yield* settle;
                 const after = h.log.slice(from);
@@ -396,6 +426,7 @@ describe("T703 connection driver laws", () => {
 
   it("wake, probe and pre-hello frames keep their results on every observed attachment", async () => {
     const seen = new Set<string>();
+
     const observation = fc.oneof(
       fc.constant(Attached.cases.new.make({ client: READER, nonce: "fresh" })),
       fc.constant(
@@ -419,12 +450,14 @@ describe("T703 connection driver laws", () => {
       ),
       fc.boolean().map((busy) => online(busy, [Wait.make({ id: "w", stream: "events", after: 1 })])),
     );
+
     const Step = fc.record({
       move: fc.nat({ max: 99 }),
       observation,
       other: fc.uuid(),
       id: fc.oneof(fc.string(), fc.integer()),
     });
+
     await fc.assert(
       fc.asyncProperty(fc.array(Step, { minLength: 1, maxLength: 40, size: "max" }), (steps) =>
         Effect.runPromise(
@@ -562,7 +595,7 @@ const admittedTotals = (log: ReadonlyArray<Event>) => {
 // parse, then the Request schema; and the old object, `in` and string checks for the reason.
 const OldRequest = Schema.Struct({
   jsonrpc: Schema.Literal("2.0"),
-  id: Schema.Union([Schema.String, Schema.Number]),
+  id: Schema.Union([Schema.String, Schema.Finite]),
   method: Schema.String,
   params: Schema.Unknown,
 });
@@ -628,6 +661,7 @@ const FrameRecipe = fc.record({
     { arbitrary: fc.constantFrom(...mutations), weight: 1 },
   ),
 });
+
 type FrameRecipe = typeof FrameRecipe extends fc.Arbitrary<infer A> ? A : never;
 
 /** A frame's text: a Request, maybe with extras, then one mutation of it. */
@@ -636,10 +670,12 @@ const frameText = (r: FrameRecipe, state: { readonly held: ReadonlyArray<W>; rea
   const reuse = r.method === "ledger.wait" && state.held.length > 0 && state.pick % 2 === 0;
   const held = reuse ? at(state.held, state.pick) : undefined;
   const id = held?.id ?? r.id;
+
   const params =
     held !== undefined && Math.floor(state.pick / 2) % 2 === 0
       ? { stream: held.stream, after: held.after + 1 }
       : r.params;
+
   const base: Record<string, unknown> = {
     ...r.extra,
     jsonrpc: "2.0",
@@ -647,6 +683,7 @@ const frameText = (r: FrameRecipe, state: { readonly held: ReadonlyArray<W>; rea
     method: r.method,
     ...(r.presence === "missing" ? {} : { params: r.presence === "null" ? null : params }),
   };
+
   const [change, value] = r.mutation.split(":");
 
   if (change === "drop") {
@@ -702,6 +739,7 @@ const Failure = fc.record({
   proxy: fc.boolean(),
   throwOn: fc.constantFrom("none", "none", "has", "get"),
 });
+
 type Failure = typeof Failure extends fc.Arbitrary<infer A> ? A : never;
 
 class Refused {
@@ -712,6 +750,7 @@ class Refused {
 const failure = (f: Failure, trace: Array<string>): unknown => {
   const fields: Record<string, unknown> = f.reason === "absent" ? {} : { reason: f.reason };
   const extra = f.extra === undefined ? {} : { extra: f.extra };
+
   const target: unknown = (() => {
     switch (f.kind) {
       case "plain":
@@ -777,6 +816,7 @@ const failure = (f: Failure, trace: Array<string>): unknown => {
 const oldAnswer = (f: Failure) => {
   const trace: Array<string> = [];
   const answer = Result.try({ try: () => oldReason(failure(f, trace)), catch: () => "thrown" as const });
+
   return { reason: Result.isSuccess(answer) ? answer.success : ("thrown" as const), trace };
 };
 
@@ -796,13 +836,16 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
         Effect.runPromise(
           Effect.gen(function* () {
             const h = harness(online());
+
             // Ordinary calls the old decode accepted, in the order they must reach `call`.
             const queued: Array<{ readonly id: string | number; readonly method: string; readonly params: unknown }> =
               [];
+
             const check = (from: number) => {
               const calls = h.log
                 .slice(from)
                 .flatMap((e) => (e._tag === "call" ? [{ method: e.method, params: e.params }] : []));
+
               // The calls the old decode accepted, in order, and no other.
               expect(calls).toEqual(queued.splice(0, calls.length).map(({ method, params }) => ({ method, params })));
             };
@@ -854,9 +897,11 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
                 const trace: Array<string> = [];
                 const value = failure(f, trace);
                 const before = h.saved();
+
                 const id = (before._tag === "online" ? before.waits : []).find(
                   (w) => `${w.stream}|${w.after}` === pending!.label,
                 )?.id;
+
                 yield* Deferred.fail(pending!.reply, value);
                 yield* settle;
                 const old = oldAnswer(f);
@@ -942,7 +987,9 @@ it.effect.prop(
         has,
         build,
       });
+
       const copies: Array<Saved> = [];
+
       const c = connection({
         reader: READER,
         session: SESSION,
@@ -957,6 +1004,7 @@ it.effect.prop(
         wait: () => Effect.succeed({ _tag: "parked" as const }),
         call: () => Effect.succeed(Answer.cases.ok.make({ result: null })),
       });
+
       yield* c.frame(callFrame("take", "tasks.take"));
       expect(copies.map((a) => a._tag === "online" && a.busy)).toEqual([true, false]);
 

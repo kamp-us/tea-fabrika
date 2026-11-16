@@ -241,10 +241,12 @@ type Roots = {
 const rootsOf = (path: string): Roots => {
   const config = readConfig(path);
   const dir = dirname(path);
+
   const parent: Roots =
     typeof config.extends === "string"
       ? rootsOf(resolve(dir, config.extends))
       : { include: undefined, files: undefined, exclude: undefined, allowJs: false };
+
   const own = (key: string) => (key in config ? { dir, list: strings(config[key]) } : undefined);
   const allowJs = record(config.compilerOptions).allowJs;
 
@@ -257,18 +259,21 @@ const rootsOf = (path: string): Roots => {
 };
 
 const TS = [".ts", ".tsx", ".mts", ".cts"];
+
 const JS = [".js", ".jsx", ".mjs", ".cjs"];
 
 /** The file a relative import names, as NodeNext resolution with `allowImportingTsExtensions` finds it. */
 const resolveImport = (from: string, request: string): string | undefined => {
   const base = resolve(dirname(from), request);
   const stem = base.slice(0, base.length - extname(base).length);
+
   const swapped: Readonly<Record<string, ReadonlyArray<string>>> = {
     ".js": [".ts", ".tsx"],
     ".jsx": [".tsx"],
     ".mjs": [".mts"],
     ".cjs": [".cts"],
   };
+
   const candidates = [
     base,
     ...(swapped[extname(base)] ?? []).map((extension) => stem + extension),
@@ -283,11 +288,13 @@ const resolveImport = (from: string, request: string): string | undefined => {
 const importsOf = (file: string): ReadonlyArray<string> => {
   const text = readFileSync(file, "utf8");
   const { module } = parseSync(file, text);
+
   const requests = [
     ...module.staticImports.map((entry) => entry.moduleRequest.value),
     ...module.staticExports.flatMap((entry) => entry.entries.flatMap((one) => one.moduleRequest?.value ?? [])),
     ...module.dynamicImports.flatMap((entry) => {
       const literal = /^(["'`])([^"'`$]*)\1$/.exec(text.slice(entry.moduleRequest.start, entry.moduleRequest.end));
+
       return literal?.[2] ?? [];
     }),
   ];
@@ -297,6 +304,7 @@ const importsOf = (file: string): ReadonlyArray<string> => {
 
 const excluded = (dir: string, globs: ReadonlyArray<string>, file: string): boolean => {
   const path = relative(dir, file).replaceAll("\\", "/");
+
   return globs.some((glob) =>
     glob.includes("*") ? matchesGlob(path, glob) : path === glob || path.startsWith(`${glob}/`),
   );
@@ -314,6 +322,7 @@ const programOf = (path: string): { readonly files: ReadonlyArray<string>; reado
   const roots = rootsOf(path);
   const allowed = roots.allowJs ? [...TS, ...JS] : TS;
   const checked = (file: string) => allowed.includes(extname(file)) && !file.split("/").includes("node_modules");
+
   const included = (roots.include?.list ?? []).flatMap((entry) => {
     const dir = roots.include?.dir ?? dirname(path);
     const full = resolve(dir, entry);
@@ -328,10 +337,12 @@ const programOf = (path: string): { readonly files: ReadonlyArray<string>; reado
 
     return existsSync(full) ? [full] : [];
   });
+
   const start = [
     ...included.filter((file) => roots.exclude === undefined || !excluded(roots.exclude.dir, roots.exclude.list, file)),
     ...(roots.files?.list ?? []).map((entry) => resolve(roots.files?.dir ?? dirname(path), entry)),
   ].filter(checked);
+
   const seen = new Set(start);
   const lost: Array<string> = [];
   const queue = [...start];

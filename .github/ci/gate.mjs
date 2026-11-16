@@ -75,9 +75,12 @@ export const decide = ({ event, now, gap, last, tested }) => {
 
 /** How many times a call is tried, and the wait before each try after the first. */
 const TRIES = 3;
+
 const BACKOFF = 2000;
+
 /** A call's own limit. */
 const CALL = 10_000;
+
 /**
  * The whole read's limit, well inside the gate step's `timeout-minutes` in scheduled.yaml: a read
  * that runs out of time fails here, loudly, so the step ends `failure` with no `start` and the
@@ -115,6 +118,7 @@ export const read = async (env, io = {}) => {
 
   const api = env["GITHUB_API_URL"] || "https://api.github.com";
   const end = now() + DEADLINE;
+
   const left = () => {
     const ms = end - now();
 
@@ -124,6 +128,7 @@ export const read = async (env, io = {}) => {
 
     return ms;
   };
+
   /** @param {string} path */
   const get = async (path) => {
     for (let attempt = 1; ; attempt++) {
@@ -154,17 +159,21 @@ export const read = async (env, io = {}) => {
       }
     }
   };
+
   // Main's finished runs of this workflow, newest first, of every event: GitHub fires only some
   // schedule slots, so no run kind is trusted to be there. `status=completed` leaves out this run
   // and every run waiting behind it; `branch=main` every hand-started branch run.
   /** @param {string} also */
   const runs = async (also) => {
     const answer = await get(`actions/workflows/${workflow}/runs?branch=main&status=completed${also}&per_page=100`);
+
     return (isMap(answer) && Array.isArray(answer["workflow_runs"]) ? answer["workflow_runs"] : []).filter(isMap);
   };
+
   // Each run's jobs are read once: the head's runs are mostly the runs the walk just read.
   /** @type {Map<string, import("./scheduled.mjs").Job[]>} */
   const asked = new Map();
+
   /** @param {Record<string, unknown>} run */
   const jobs = async (run) => {
     const id = String(run["id"]);
@@ -176,6 +185,7 @@ export const read = async (env, io = {}) => {
 
     const found = jobsOf(await get(`actions/runs/${id}/jobs?filter=latest&per_page=100`));
     asked.set(id, found);
+
     return found;
   };
 
@@ -209,6 +219,7 @@ export const read = async (env, io = {}) => {
   }
 
   left();
+
   return { event, now: now(), gap: Number(env["GAP_MINUTES"]), last, tested };
 };
 
@@ -228,15 +239,19 @@ export const main = async (env, io = {}) => {
     seen = await read(env, io);
   } catch (error) {
     const why = error instanceof Error ? `${error.name}: ${error.message}` : "an unknown error";
+
     return { code: 1, output: "", summary: "", line: `gate: cannot read GitHub (${why})` };
   }
 
   const decision = decide(seen);
+
   const last =
     seen.last === null
       ? "no full run on main before"
       : `the last full run on main, ${seen.last.id} at ${seen.last.sha.slice(0, 9)}, started ${new Date(seen.last.at).toISOString()}, ${Math.floor((seen.now - seen.last.at) / MINUTE)} minutes ago`;
+
   const line = `gate: ${seen.event} at ${(env["GITHUB_SHA"] ?? "").slice(0, 9)}: ${decision._tag}, ${decision.reason}; ${last}; the gap is ${seen.gap} minutes${seen.event === "workflow_dispatch" ? "" : `; the head ${seen.tested ? "has had" : "has had no"} full run`}`;
+
   return { code: 0, output: `start=${decision._tag === "start"}\n`, summary: `${line}\n`, line };
 };
 

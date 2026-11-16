@@ -526,7 +526,9 @@ const world = (
     deliveries: Array<Promise<"configured" | "failed">> = [],
     received: Incoming[] = [],
     entered = gate(),
-    interrupted = gate();
+    interrupted = gate(),
+    // Each one looks again whenever a configure is asked for, so a wait on attempts polls no clock.
+    onAttempt = new Set<() => void>();
   let project: ProjectObject;
   let settingsRefused = false;
   let beforeCommit = async () => {};
@@ -700,6 +702,10 @@ const world = (
                 return async (descriptor: Descriptor) => {
                   attempts.push(structuredClone(descriptor));
                   entered.resolve();
+
+                  for (const look of onAttempt) {
+                    look();
+                  }
 
                   if (attempts.length === 1 && fault === "failed") {
                     throw new Error("configure failed before save");
@@ -897,6 +903,18 @@ const world = (
     },
     db,
     attempts,
+    /** Settles once `count` configures were asked for, on the ask itself. */
+    asked: (count: number) =>
+      new Promise<void>((done) => {
+        const look = () => {
+          if (attempts.length >= count) {
+            onAttempt.delete(look);
+            done();
+          }
+        };
+        onAttempt.add(look);
+        look();
+      }),
     received,
     entered: entered.promise,
     /** How each start the Project delivered ended at its object, once the first one has ended. */
@@ -1172,9 +1190,8 @@ StartsTest.law(
       // Desk S2a: the boot list's later entries, the checklist and the founder's tezgah, configure on
       // their own time and each pays its own first gate. Wait until all three were asked for and every
       // delivery has settled, so no other process's first gate lands inside a move counted below.
-      yield* Effect.promise(() =>
-        vi.waitFor(() => expect(w.attempts.length).toBeGreaterThanOrEqual(3), { timeout: 5_000 }),
-      );
+      // The wait ends on the third ask itself: a 50 ms poll here cost each of the 100 runs a sleep.
+      yield* Effect.promise(() => w.asked(3)).pipe(Effect.timeout("5 seconds"));
       yield* Effect.promise(() => w.delivered());
       let pid = first!.process;
       const client = yield* Effect.promise(() => w.admit());
@@ -1262,6 +1279,9 @@ StartsTest.law(
         expect(costs).toEqual(warm);
       }
     }),
+  // Each case builds a real Project and three Process runtimes on SQLite and walks 12 to 20 moves:
+  // about 0.6 s on a CI leg, so a law over real IO reads its count from the depth (decision 0535).
+  { runs: runsFor({ fast: 10, full: 100 }) },
 );
 
 describe("P12 Project configure recovery", () => {
@@ -2076,7 +2096,7 @@ describe("P34c live object accounting", () => {
           const [journal] = w.process(pid).db.prepare("SELECT value FROM process_recovery").all();
           const { policy } = Schema.decodeUnknownSync(
             Schema.fromJsonString(
-              Schema.Struct({ policy: Schema.Struct({ backoff: Schema.Struct({ resetAfterMs: Schema.Number }) }) }),
+              Schema.Struct({ policy: Schema.Struct({ backoff: Schema.Struct({ resetAfterMs: Schema.Finite }) }) }),
             ),
           )(journal?.value);
           expect(early + late, "the law moves the clock past the healthy mark's window").toBeLessThan(

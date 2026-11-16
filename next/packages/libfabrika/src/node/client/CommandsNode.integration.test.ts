@@ -52,31 +52,38 @@ describe("P39 slice 4b: the real command on a real host", () => {
       Effect.gen(function* () {
         const real = yield* ChildProcessSpawner.ChildProcessSpawner;
         const pids: Array<number> = [];
+
         // The real spawner, with each child's pid kept so the law can look for it afterward.
         const watched = ChildProcessSpawner.make((command) =>
           real.spawn(command).pipe(Effect.tap((handle) => Effect.sync(() => pids.push(handle.pid)))),
         );
+
         const PATH = yield* Config.String("PATH");
         // A Node child that prints without end: it never exits by itself.
         const forever = "const b = Buffer.alloc(1024, 120); for (;;) process.stdout.write(b);";
+
         const answer = yield* capped(watched, [process.execPath, ["-e", forever]], { PATH }, CAP).pipe(
           Effect.timeout("20 seconds"),
         );
+
         expect(answer, "C5: the child past its cap answers output_limit").toEqual({
           _tag: "failed",
           reason: "output_limit",
         });
         expect(pids.length, "C5: one child was spawned").toBe(1);
         const pid = pids[0] ?? 0;
+
         // Gone means no process holds the pid: signal 0 checks and sends nothing. The kill is
         // asynchronous, so the check waits up to five seconds.
         const alive = Effect.try({ try: () => process.kill(pid, 0), catch: () => "gone" }).pipe(
           Effect.as(true),
           Effect.orElseSucceed(() => false),
         );
+
         const gone = yield* alive.pipe(
           Effect.repeat({ while: (running) => running, schedule: Schedule.spaced("100 millis"), times: 50 }),
         );
+
         expect(gone, `C5: pid ${pid} is gone once execute answered`).toBe(false);
       }).pipe(Effect.provide(NodeServices.layer)),
     60_000,

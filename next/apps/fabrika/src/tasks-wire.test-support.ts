@@ -11,7 +11,7 @@ export class Project extends RealProject {
 
   constructor(...args: ConstructorParameters<typeof RealProject>) {
     super(...args);
-    const target = Schema.decodeUnknownSync(Schema.NonEmptyString)(new.target.selected);
+    const target = Schema.decodeSync(Schema.NonEmptyString)(new.target.selected);
     this.ctx.blockConcurrencyWhile(() =>
       // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: object startup enters Effect once
       Effect.runPromise(

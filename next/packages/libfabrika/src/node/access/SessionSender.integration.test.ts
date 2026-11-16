@@ -4,7 +4,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Effect from "effect/Effect";
 import * as SessionSenderTest from "../../access/SessionSenderTest.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
@@ -14,10 +14,9 @@ const open = Effect.gen(function* () {
     Effect.sync(() => mkdtempSync(join(tmpdir(), "t953-sender-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
-  const db = yield* Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(join(folder, "session.db"))),
-    (held) => Effect.sync(() => held.isOpen && held.close()),
-  );
+
+  const db = yield* TestDatabase.make(join(folder, "session.db"));
+
   return { sql: nodeSql(db) } satisfies SessionSenderTest.Store;
 });
 

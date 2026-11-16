@@ -18,6 +18,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
   const quiet = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
   const script = join(import.meta.dirname, "ratchet.ts");
   const extra = { file: "next/b.ts", rule: "fabrika(no-of)", code: "const b = 2;" };
+
   // Each test builds its own repository in its own scope, which removes it when the test ends (0061).
   const scenario = Effect.acquireRelease(
     Effect.sync(() => mkdtempSync(join(tmpdir(), "ratchet-"))),
@@ -37,12 +38,16 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
 
         return out.stdout.trim();
       };
+
       const put = (file: string, entries: ReadonlyArray<object>) => writeFileSync(join(repo, file), text(entries));
+
       const commit = (message: string) => {
         git("add", "-A");
         git("commit", "-q", "--allow-empty", "-m", message);
+
         return git("rev-parse", "HEAD");
       };
+
       const ratchet = (base: string) =>
         spawnSync(process.execPath, [script, "--base", base], { cwd: repo, encoding: "utf8", env: quiet });
 
@@ -53,6 +58,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
       }
 
       const base = commit("base");
+
       return { repo, git, put, commit, ratchet, base };
     }),
   );
@@ -61,7 +67,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
     stdout
       .split("\n")
       .filter((line) => line.startsWith("{"))
-      .map((line) => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(line));
+      .map((line) => Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(line));
 
   it.effect("L4 scenario: a head that adds a row exits 1, naming the row in its JSON line and annotation", () =>
     Effect.gen(function* () {

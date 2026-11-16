@@ -22,6 +22,7 @@ export const responseIn = (out: string): Response => {
   const lines = head.split(/\r?\n/);
   const status = Number(/^HTTP\/\S+ (\d{3})\b/.exec(lines[0] ?? "")?.[1] ?? Number.NaN);
   const etag = lines.map((line) => /^etag:\s*(\S.*)$/i.exec(line)?.[1]?.trim()).find((e) => e !== undefined);
+
   return { status, etag: etag ?? null, body: rest.join("\n\n") };
 };
 
@@ -29,7 +30,7 @@ const Runs = Schema.fromJsonString(
   Schema.Struct({
     check_runs: Schema.Array(
       Schema.Struct({
-        id: Schema.Number,
+        id: Schema.Finite,
         status: Schema.String,
         conclusion: Schema.NullOr(Schema.String),
         app: Schema.optional(Schema.NullOr(Schema.Struct({ slug: Schema.String }))),
@@ -40,12 +41,14 @@ const Runs = Schema.fromJsonString(
 
 /** The latest check run GitHub Actions made in a check-runs body, as `Job`; none when it lists none. */
 export const latestIn = (body: string): Effect.Effect<Option.Option<Job>, Schema.SchemaError> =>
-  Effect.map(Schema.decodeUnknownEffect(Runs)(body), ({ check_runs }) => {
+  Effect.map(Schema.decodeEffect(Runs)(body), ({ check_runs }) => {
     const ours = check_runs.filter((run) => run.app?.slug === "github-actions");
+
     const latest = ours.reduce<(typeof ours)[number] | undefined>(
       (max, run) => (max === undefined || run.id > max.id ? run : max),
       undefined,
     );
+
     return latest === undefined
       ? Option.none()
       : Option.some({ id: latest.id, status: latest.status, conclusion: latest.conclusion });
@@ -64,6 +67,7 @@ export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpaw
       const call = Effect.fn("ChecksGh.call")(
         function* (args: ReadonlyArray<string>) {
           const handle = yield* ChildProcess.make("gh", ["api", ...args], { stdin: "ignore" });
+
           const [out, err, code] = yield* Effect.all(
             [
               Stream.mkString(Stream.decodeText(handle.stdout)),
@@ -72,6 +76,7 @@ export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpaw
             ],
             { concurrency: 3 },
           );
+
           return { out, err, code: Number(code) };
         },
         Effect.scoped,
@@ -85,6 +90,7 @@ export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpaw
       const exited = (args: ReadonlyArray<string>, ran: { readonly err: string; readonly code: number }) => {
         const last = ran.err.trim().split("\n").at(-1) ?? "";
         const path = args.find((a) => !a.startsWith("-")) ?? "";
+
         return ChecksError.make({ reason: `gh api ${path} exited ${ran.code}: ${last}` });
       };
 
@@ -127,6 +133,7 @@ export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpaw
         // needs gh 2.97.0 or later.
         const args = ["--allow-escape-sequences", `repos/${repo}/actions/jobs/${id}/logs`];
         const ran = yield* call(args);
+
         return ran.code === 0 ? ran.out : yield* exited(args, ran);
       });
 

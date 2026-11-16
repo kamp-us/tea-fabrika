@@ -51,6 +51,7 @@ export const Outcome = Schema.TaggedUnion({
   error: { reason: Schema.String },
   parked: { after: Schema.Int },
 });
+
 export type Outcome = typeof Outcome.Type;
 
 /** A take's answer, as `gateway/Tasks.ts` writes it inside an ok. */
@@ -71,6 +72,7 @@ type Saved = {
 };
 
 const SENT = "2026-11-15T10:00:00.000Z";
+
 const isResult = Schema.is(Result);
 
 /** The task as the brain's read answers it, in the tasks module's own schema. */
@@ -82,6 +84,7 @@ const task = (s: Saved): Task => {
           execution: s.execution,
           executor: { key: s.executor, connection: "connection_hands", has: ["git"], build: "hands-build" },
         };
+
   const state =
     s.phase === "requested" || assignment === undefined
       ? State.cases.requested.make({ request: s.request })
@@ -90,6 +93,7 @@ const task = (s: Saved): Task => {
         : s.phase === "started"
           ? State.cases.started.make({ request: s.request, assignment })
           : State.cases.assigned.make({ request: s.request, assignment });
+
   return { state, events: [] };
 };
 
@@ -102,8 +106,10 @@ export const brain = () => {
 
   const rev = (key: string) => lines.get(key) ?? 0;
   const open = (s: Saved) => s.phase !== "finished";
+
   const receipt = (): Outcome =>
     Outcome.cases.result.make({ result: { rev: head, arrivedAt: 1_763_200_000_000 + head } });
+
   const refused = (reason: string): Outcome => Outcome.cases.error.make({ reason });
 
   /** A program asked the hands key `target` to run the one command: one line on its `target:` stream. */
@@ -127,19 +133,23 @@ export const brain = () => {
     });
     head++;
     lines.set(target, head);
+
     return id;
   };
 
   /** Answers one call by `key`, and changes what the call changes. `finish` says how a finish is answered. */
   const call = (key: string, method: string, params: unknown, finish: FinishMode = "ok"): Outcome => {
     const p = typeof params === "object" && params !== null ? new Map(Object.entries(params)) : new Map();
+
     const text = (name: string) => {
       const value = p.get(name);
+
       return typeof value === "string" ? value : "";
     };
 
     if (method === "tasks.list") {
       const mine = [...tasks.values()].filter((s) => s.request.target === key && open(s));
+
       return Outcome.cases.result.make({
         result: { tasks: mine.map((s) => ({ id: s.request.id, process: s.request.process })), rev: rev(key) },
       });
@@ -148,6 +158,7 @@ export const brain = () => {
     if (method === "tasks.wait") {
       const after = p.get("after");
       const n = typeof after === "number" ? after : 0;
+
       return rev(key) > n
         ? Outcome.cases.result.make({ result: { rev: rev(key) } })
         : Outcome.cases.parked.make({ after: n });
@@ -157,6 +168,7 @@ export const brain = () => {
       const candidates = [...tasks.values()].filter(
         (s) => s.request.process === text("process") && s.request.target === key && open(s),
       );
+
       const [one] = candidates;
 
       if (one === undefined) {
@@ -201,6 +213,7 @@ export const brain = () => {
     }
 
     const result = p.get("result");
+
     // A failed wake answers `unavailable` after the finish was saved (slice 3's W1), and a garbled
     // answer comes after it was saved too.
     const answer = (): Outcome =>
@@ -222,6 +235,7 @@ export const brain = () => {
     s.phase = "finished";
     s.result = result;
     head++;
+
     return answer();
   };
 
@@ -236,6 +250,7 @@ export const brain = () => {
     /** An `assigned` answer for `id` naming the executor `key`, as a take for another key would get it. */
     assignedTo: (id: string, key: string): unknown => {
       const s = tasks.get(id);
+
       return s === undefined
         ? null
         : TakeReply.cases.assigned.make({
@@ -273,7 +288,7 @@ export const fakeResult = (n: number): Result =>
 /** One JSON-RPC call the client wrote. */
 const Call = Schema.fromJsonString(
   Schema.Struct({
-    id: Schema.Union([Schema.Number, Schema.String]),
+    id: Schema.Union([Schema.Finite, Schema.String]),
     method: Schema.String,
     params: Schema.optionalKey(Schema.Unknown),
   }),
@@ -318,9 +333,11 @@ const failed = (id: string | number, reason: string) =>
 /** The door as a script over the brain `b`, for the hands key `key`: one socket per dial, the challenge waiting in it. */
 export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
   const state: DoorState = { open: null, cut: null, parked: [], hellos: [], calls: [], sockets: [], dials: 0 };
+
   const answer = (text: string, on: MemorySocket) => {
     if (text === "ping") {
       on.receive("pong");
+
       return;
     }
 
@@ -342,6 +359,7 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
             ? failed(call.id, "not_granted")
             : JSON.stringify({ jsonrpc: "2.0", id: call.id, result: admitted(key) }),
       );
+
       return;
     }
 
@@ -350,6 +368,7 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
       on.receive(
         "reason" in said ? failed(call.id, said.reason) : JSON.stringify({ jsonrpc: "2.0", id: call.id, result: said }),
       );
+
       return;
     }
 
@@ -362,6 +381,7 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
     if (cut === "before") {
       state.cut = null;
       on.drop(1006);
+
       return;
     }
 
@@ -371,11 +391,13 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
     if (cut === "after") {
       state.cut = null;
       on.drop(1006);
+
       return;
     }
 
     if (outcome._tag === "parked") {
       state.parked.push({ id: call.id, after: outcome.after, on });
+
       return;
     }
 
@@ -385,6 +407,7 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
       on.receive(body);
     }
   };
+
   const socket = Layer.succeed(Socket.WebSocketConstructor, (url: string) => {
     state.dials++;
     const made: MemorySocket = new MemorySocket(url, { send: (text, from) => answer(text, from) });
@@ -392,8 +415,10 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
     state.sockets.push(made);
     made.open();
     made.receive(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce: `nonce_${state.dials}` } }));
+
     return made;
   });
+
   return {
     state,
     socket,

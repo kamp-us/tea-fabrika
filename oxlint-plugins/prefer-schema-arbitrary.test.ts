@@ -11,13 +11,18 @@ import { describe, expect, it } from "vitest";
 import { preferSchemaArbitrary } from "./prefer-schema-arbitrary.ts";
 
 const root = resolve(import.meta.dirname, "..");
+
 const oxlint = join(root, "node_modules/.bin/oxlint");
+
 const config = join(root, ".oxlintrc.json");
+
 const code = "fabrika(prefer-schema-arbitrary)";
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: root });
 
 const constructors = [
@@ -43,6 +48,7 @@ const constructors = [
 ] as const;
 
 const options = { seed: 119120, numRuns: 4 };
+
 const name = fc.stringMatching(/^[a-z]{3,8}$/).map((s) => `random_${s}`);
 
 interface Diagnostic {
@@ -84,6 +90,7 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
           ],
       { cwd: dir, encoding: "utf8", timeout: 10_000 },
     );
+
     expect(ran.error).toBeUndefined();
     expect(ran.signal).toBeNull();
 
@@ -96,6 +103,7 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
       report.diagnostics.filter((d) => d.code.includes("parse")),
       ran.stderr,
     ).toEqual([]);
+
     return { ran, hits: report.diagnostics.filter((d) => d.code === code) };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -129,12 +137,14 @@ const cases = () => {
   const cli = () => {
     const files = all.map((_, i) => `next/case${i}.test.ts`);
     const { hits } = lint(Object.fromEntries(all.map(({ text }, i) => [files[i]!, text])));
+
     const found = files.map((file) =>
       hits
         .filter((d) => d.filename === file)
         .map((d) => ({ line: d.labels[0]!.span.line, message: d.message }))
         .sort((a, b) => a.line - b.line),
     );
+
     expect(found).toEqual(
       all.map(({ hits }) =>
         hits.map((hit) => ({ line: hit.line ?? expect.any(Number), message: expect.stringMatching(hit.message) })),
@@ -178,6 +188,7 @@ ${alias}.assert(${alias}.property(${alias}.record({x: ${alias}.string()}), field
   const value = {...fields, unused: true}; return Schema.is(S)(value);
 }));
 ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.string()})), rows => rows.map(S.make)));`;
+
         want(assembled);
       }),
       options,
@@ -209,6 +220,7 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
     fc.assert(
       fc.property(fc.record({ alias: name, schemaName: name.map((n) => `S_${n}`) }), ({ alias, schemaName }) => {
         const prefix = `import ${alias} from 'fast-check';\nimport {Schema} from 'effect';\nimport * as data from './data.ts';\nclass ${schemaName} extends Schema.Class<${schemaName}>('${schemaName}')({x: Schema.String}) {}\n`;
+
         const lines = [
           `export const a: ${alias}.Arbitrary<typeof Schema.String.Type> = ${alias}.string();`,
           `export const b: ${alias}.Arbitrary<typeof data.S.Type> = ${alias}.record({x: ${alias}.string()});`,
@@ -216,6 +228,7 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
           `export const d = ${alias}.record({x: ${alias}.string()}).map(${schemaName}.make);`,
           `const g = ${alias}.record({x: ${alias}.string()}); ${alias}.assert(${alias}.property(g, value => Schema.is(${schemaName})(value)));`,
         ];
+
         want(
           prefix + lines.join("\n"),
           lines.map((_, i) => ({ line: i + 5, message: ADVICE })),
@@ -241,17 +254,21 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
           const prefix = named
             ? `import {record as ${alias}} from 'fast-check';\nimport {Schema} from 'effect';\nconst S = Schema.Struct({x: Schema.String});\n`
             : imports(alias);
+
           const data = named
             ? [`${alias}({x: ${alias}({})})`]
             : constructors.map((ctor) => `${alias}.${ctor}(${ctor === "record" ? `{x: ${alias}.string()}` : ""})`);
+
           const lines = data.map((expr, i) =>
             evidence === "type"
               ? `export const g${i}: ${named ? "import('fast-check')" : alias}.Arbitrary<typeof S.Type> = ${expr};`
               : `export const g${i} = ${expr}.map(S.${evidence === "case" ? "cases.x." : ""}make);`,
           );
+
           // Import-type annotations have no namespace binding; use the maker for named imports.
           const body =
             named && evidence === "type" ? data.map((expr, i) => `export const g${i} = ${expr}.map(S.make);`) : lines;
+
           // Each message holds the schema's name, S, and the nearby reason that excuses one.
           want(
             prefix + body.join("\n"),
@@ -315,11 +332,13 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
     fc.assert(
       fc.property(fc.record({ alias: name, ext: fc.constantFrom("ts", "tsx") }), ({ alias, ext }) => {
         const text = `${imports(alias)}export const data: ${alias}.Arbitrary<typeof S.Type> = ${alias}.record({x: ${alias}.string()});\n`;
+
         const { hits } = lint({
           [`next/unit.test.${ext}`]: text,
           "next/unit.ts": text,
           "packages/unit.test.ts": text,
         });
+
         expect(hits).toHaveLength(1);
         const blocked = lint({ [`next/unit.test.${ext}`]: text }, true).ran;
         expect(blocked.stdout).toContain(code);

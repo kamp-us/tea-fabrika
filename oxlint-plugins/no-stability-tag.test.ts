@@ -9,11 +9,14 @@ import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { noStabilityTag } from "./no-stability-tag.ts";
 
 const RUNS = { seed: 119120, numRuns: 100 };
+
 const CODE = "fabrika(no-stability-tag)";
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: import.meta.dirname });
 
 const block = (lines: ReadonlyArray<string>): string =>

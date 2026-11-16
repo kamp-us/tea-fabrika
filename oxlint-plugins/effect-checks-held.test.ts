@@ -16,7 +16,9 @@ import { expect, it } from "vitest";
 import { blockOf, levelAt, merge, type Options, record } from "./test-helpers/effect-config.ts";
 
 const ROOT = join(import.meta.dirname, "..");
+
 const CHECK = "preferSchemaTaggedError";
+
 const SERVICE = "@effect/language-service";
 
 /** Each place one set of checker options leaves the check below `error` or lets its errors pass, said in words. */
@@ -32,6 +34,7 @@ it("L3 scenario: preferSchemaTaggedError stays at error in every tracked tsconfi
   const files = execFileSync("git", ["ls-files", "*tsconfig*.json"], { cwd: ROOT, encoding: "utf8" })
     .split("\n")
     .filter((file) => basename(file).startsWith("tsconfig") && !file.startsWith("fixtures/"));
+
   // Coverage: the base and the projects that extend it, `next/` and the tooling among them.
   expect(files).toEqual(
     expect.arrayContaining([
@@ -49,6 +52,7 @@ it("L3 scenario: preferSchemaTaggedError stays at error in every tracked tsconfi
   expect(
     files.flatMap((file) => {
       const block = blockOf(join(ROOT, file));
+
       // An override reaches only the paths it matches, so each is judged on top of the block alone.
       return [
         ...lowered(file, block.options),

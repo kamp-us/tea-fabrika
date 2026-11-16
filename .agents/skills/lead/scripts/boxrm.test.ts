@@ -37,16 +37,21 @@ describe("box rm, today's tooling", () => {
             const commit = f.git(f.work, "rev-parse", "HEAD");
             const objects: string[] = [];
             const raw: string[] = [];
+
             const tag = (target: string, message: string, signed: boolean, label = v.name) => {
               const text = `object ${target}\ntype ${target === commit ? "commit" : "tag"}\ntag ${label}\ntagger Fixture <fixture@example.test> 1794096000 +0000\n\n${message}${signed ? `\n-----BEGIN PGP SIGNATURE-----\n${Buffer.from(v.value).toString("base64")}\n-----END PGP SIGNATURE-----\n` : ""}`;
+
               const made = spawnSync("/usr/bin/git", ["-C", f.work, "mktag"], {
                 input: text,
                 encoding: "utf8",
                 env: f.env,
               });
+
               expect(made.status, made.stderr).toBe(0);
+
               return { oid: made.stdout.trim(), text };
             };
+
             let target = commit;
 
             for (let i = 0; i < (kind === "nested" ? annotation.depth : 1); i++) {
@@ -55,6 +60,7 @@ describe("box rm, today's tooling", () => {
                 annotation.messages.join("\n"),
                 kind === "signed" || (kind === "nested" && annotation.signedInner),
               );
+
               objects.push(made.oid);
               raw.push(made.text);
               target = made.oid;
@@ -62,6 +68,7 @@ describe("box rm, today's tooling", () => {
 
             const ref = `refs/tags/${v.name}`;
             f.git(f.work, "update-ref", ref, target);
+
             const retainTag = (source: string) =>
               f.git(f.main, "fetch", "-q", "--no-tags", f.data, `${source}:refs/keep/${v.name}`);
 
@@ -87,6 +94,7 @@ describe("box rm, today's tooling", () => {
               .git(f.main, "rev-list", "--objects", "--all")
               .split("\n")
               .map((line) => line.split(" ")[0]);
+
             expect(reachable.includes(target)).toBe(retention === "retained");
 
             if (retention === "commit-only") {
@@ -94,6 +102,7 @@ describe("box rm, today's tooling", () => {
                 env: f.env,
                 encoding: "utf8",
               });
+
               expect(absent.status).not.toBe(0);
             }
 
@@ -108,10 +117,12 @@ describe("box rm, today's tooling", () => {
 
             for (const [i, oid] of objects.entries()) {
               const at = remove ? f.main : f.work;
+
               const read = spawnSync("/usr/bin/git", ["-C", at, "cat-file", "tag", oid], {
                 env: f.env,
                 encoding: "utf8",
               });
+
               expect(read.status, read.stderr).toBe(0);
               expect(read.stdout).toBe(raw[i]);
             }
@@ -130,12 +141,14 @@ describe("box rm, today's tooling", () => {
         minLength: 2,
         maxLength: 4,
       });
+
       fc.assert(
         fc.property(input, branches, fc.nat(), (v, names, choice) => {
           const remote = {
             branches: names.map((name) => `topic-${name}`),
             local: choice % names.length,
           };
+
           fixture(
             v,
             (f) => {
@@ -144,6 +157,7 @@ describe("box rm, today's tooling", () => {
                 base = f.git(f.work, "rev-parse", "HEAD"),
                 tree = f.git(f.main, "rev-parse", "HEAD^{tree}"),
                 changed = remote.branches[remote.branches.length - 1]!;
+
               const packed = readFileSync(join(f.data, "packed-refs"), "utf8");
 
               for (const name of remote.branches) {
@@ -171,6 +185,7 @@ describe("box rm, today's tooling", () => {
               for (const name of ["main", changed]) {
                 const parent = f.git(f.main, "rev-parse", `origin/${name}`),
                   tip = f.git(f.main, "commit-tree", tree, "-p", parent, "-m", `advance ${name}`);
+
                 f.git(origin, "fetch", "-q", f.main, `${tip}:refs/heads/${name}`);
               }
 
@@ -254,8 +269,10 @@ describe("box rm, today's tooling", () => {
             f.git(f.work, "checkout", "-q", "--detach", base);
             f.git(f.work, "branch", "-f", "main", base);
             rmSync(join(f.data, "logs"), { recursive: true });
+
             const name = ref === "HEAD" ? ref : `${ref}/${v.name}`,
               path = join(f.data, "logs", name);
+
             f.git(f.work, "update-ref", "--create-reflog", name, saved);
             f.git(f.work, "update-ref", "--create-reflog", name, base);
 
@@ -299,6 +316,7 @@ describe("box rm, today's tooling", () => {
       minLength: 1,
       maxLength: 5,
     });
+
     fc.assert(
       fc.property(input, namespace, (v, parts) =>
         fixture(v, (f) => {
@@ -369,6 +387,7 @@ describe("box rm, today's tooling", () => {
       ),
       fc.stringMatching(/^[A-Z]{2,12}$/).map((s) => `${s}_HEAD`),
     );
+
     fc.assert(
       fc.property(input, states, (v, state) =>
         fixture(v, (f) => {
@@ -481,6 +500,7 @@ describe("box rm, today's tooling", () => {
         fixture(v, (f) => {
           const bin = join(f.dir, "bin"),
             log = join(f.dir, "git-calls");
+
           mkdirSync(bin);
           writeFileSync(
             join(bin, "git"),

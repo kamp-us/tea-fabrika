@@ -2,6 +2,7 @@ import { Machine } from "@demlik/tea/effect";
 import * as Schema from "effect/Schema";
 
 const Inputs = { failedInputs: Schema.optionalKey(Schema.NullOr(Schema.String)) };
+
 const Model = Schema.TaggedUnion({ booting: Inputs, watching: Inputs });
 
 const Msg = Schema.Union([

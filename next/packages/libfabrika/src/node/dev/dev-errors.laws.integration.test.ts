@@ -44,6 +44,7 @@ const deploy = (port: number) => (local: Context.Context<never>) =>
     const plugin = [...local.mapUnsafe.values()].find(
       (value) => typeof value === "object" && value !== null && "sockets" in value,
     ) as { start: (ports: Record<string, number>) => Effect.Effect<unknown> };
+
     Context.get(local, RuntimeLifecycle)({ type: "start", worker: "errors", pid: 27001 });
     yield* plugin.start({ "fabrika-control": port });
   });
@@ -55,6 +56,7 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
         const home = mkdtempSync(join(tmpdir(), "p12-err-"));
         vi.stubEnv("FABRIKA_HOME", home);
         const reason = mode === "json" || mode === "schema" ? "bad_row" : mode === "remote" ? `remote-${id}` : mode;
+
         const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
           if (mode === "unreachable") {
             throw new Error(id);
@@ -86,6 +88,7 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
               Effect.provide(NodeServices.layer),
             ),
           );
+
           failure(exit, reason);
           expect(fetch.mock.calls.length === 0).toBe(mode === "offline");
         } finally {
@@ -110,6 +113,7 @@ it("instance reports start_timeout when deployment never opens the control liste
           Effect.scoped(
             Effect.gen(function* () {
               const deployed = yield* Deferred.make<void>();
+
               const running = yield* Effect.forkChild(
                 Effect.scoped(
                   startDev({ name: "errors", port: 18787, build, home, ...BRAIN }, () =>
@@ -117,8 +121,10 @@ it("instance reports start_timeout when deployment never opens the control liste
                   ),
                 ),
               );
+
               yield* Deferred.await(deployed);
               yield* TestClock.adjust("30 seconds");
+
               return yield* Fiber.await(running);
             }),
           ).pipe(
@@ -130,6 +136,7 @@ it("instance reports start_timeout when deployment never opens the control liste
             Effect.provide(TestClock.layer()),
           ),
         );
+
         failure(exit, "start_timeout");
       } finally {
         vi.unstubAllEnvs();
@@ -147,6 +154,7 @@ for (const mode of ["exit", "spawn"] as const) {
         const home = mkdtempSync(join(tmpdir(), "p12-rss-"));
         vi.stubEnv("FABRIKA_HOME", home);
         const samples: Array<Exit.Exit<unknown, unknown>> = [];
+
         const tracer = Tracer.make({
           span: (...args) => {
             const span = Tracer.nativeTracer.span(...args);
@@ -158,14 +166,19 @@ for (const mode of ["exit", "spawn"] as const) {
 
               end(time, exit);
             };
+
             return span;
           },
         });
+
         const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
           const call = JSON.parse(bodyText(options));
+
           return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
         });
+
         const kill = vi.spyOn(process, "kill").mockReturnValue(true);
+
         const spawner = Layer.succeed(
           ChildProcessSpawner.ChildProcessSpawner,
           ChildProcessSpawner.make(() => {
@@ -214,6 +227,7 @@ for (const mode of ["exit", "spawn"] as const) {
               Effect.withTracer(tracer),
             ),
           );
+
           expect(Exit.isSuccess(exit)).toBe(true);
           expect(kill).not.toHaveBeenCalled();
           expect(samples).toHaveLength(1);

@@ -25,7 +25,9 @@ import type { CreateRule } from "@oxlint/plugins";
 import type { Node } from "./match.ts";
 
 const RELATIVE = /^\.\.?(?:\/|$)/;
+
 const HAS_EXTENSION = /\/?[^/]*[^/.]\.[^/.]+$/;
+
 const EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json"];
 
 const isFile = (path: string): boolean => statSync(path, { throwIfNoEntry: false })?.isFile() === true;
@@ -44,6 +46,7 @@ const namesItsFile = (from: string, written: string): boolean => {
   }
 
   const stem = target.slice(0, -extname(target).length);
+
   return !EXTENSIONS.some((extension) => isFile(target + extension) || isFile(stem + extension));
 };
 
@@ -64,6 +67,7 @@ export const useImportExtensions: CreateRule = {
           "A relative import names its file whole, extension included: Node runs the .ts files as they are and does not guess (`./thing.ts`, not `./thing`).",
       });
     };
+
     return {
       ImportDeclaration: (node) => check(node.source),
       ExportNamedDeclaration: (node) => check(node.source),

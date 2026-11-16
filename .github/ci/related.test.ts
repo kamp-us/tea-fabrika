@@ -26,6 +26,7 @@ const files = readdirSync(join(root, ".agents/skills"), { recursive: true, withF
 // `forceRerunTriggers`), so its files are never held to "exactly their declaring tests". The
 // fixture law below holds them to that rule instead.
 const FIXTURE = /\/scripts\/(?:.+\/)?fixtures\//;
+
 const fixtures = files.filter((path) => FIXTURE.test(path));
 
 // Any depth under `scripts/`, as vitest.config.ts includes tests there (the flow runner's `flow/`).
@@ -36,6 +37,7 @@ const tree = new Map(
 );
 
 const scripts = [...tree.keys()].filter((path) => !path.endsWith(".test.ts"));
+
 const tests = [...tree.keys()].filter((path) => path.endsWith(".test.ts"));
 
 // Independent expected readers: follow source names, not the derivation under test.
@@ -65,7 +67,9 @@ const readers = new Map(
 const readScripts = scripts.filter((script) => [...readers.values()].some((paths) => paths.has(script)));
 
 const markdown = files.filter((path) => path.endsWith(".md") && !path.includes("/scripts/"));
+
 const options = { seed: 119120, numRuns: 20 };
+
 let vitest: Vitest;
 
 beforeAll(async () => {
@@ -78,6 +82,7 @@ afterAll(async () => {
 
 const affected = async (paths: string[]) => {
   vitest.config.related = paths.map((path) => join(root, path));
+
   return (await vitest.getRelevantTestSpecifications()).map((spec) => relative(root, spec.moduleId)).sort();
 };
 
@@ -134,15 +139,18 @@ describe("next workflow coverage", () => {
   const workflow = readFileSync(join(root, ".github/workflows/check.yaml"), "utf8");
   const nextWorkflow = parse(workflow).jobs.next;
   const indices = vitestLegs(workflow);
+
   const expression: string = nextWorkflow.steps.find((step: { run?: string }) =>
     step.run?.startsWith("pnpm exec vitest run --project next $FILTER "),
   )?.env.SHARD;
+
   // The full matrix's count, the fallback in `/${{ needs.changes.outputs.vitest-legs || N }}`; a sized pull
   // request's own count is legs.ts's, whose split legs.test.ts covers.
   const denominator = Number(/\|\|\s*([1-9]\d*)\s*\}\}$/.exec(expression)?.[1]);
   const contexts: Vitest[] = [];
   let nextSpecs: TestSpecification[];
   const repoPath = (spec: TestSpecification) => relative(root, spec.moduleId).replaceAll("\\", "/");
+
   const partition = async (specs: TestSpecification[]) => {
     const kept: string[][] = [];
 
@@ -153,10 +161,12 @@ describe("next workflow coverage", () => {
 
     return kept;
   };
+
   const complete = (kept: string[][], universe: string[]) => {
     expect(kept.flat().toSorted()).toEqual(universe.toSorted());
     expect(new Set(kept.flat()).size).toBe(kept.flat().length);
   };
+
   beforeAll(async () => {
     const baseline = await createVitest("test", { root, watch: false, maxWorkers: 1 });
     contexts.push(baseline);
@@ -208,6 +218,7 @@ describe("next workflow coverage", () => {
         fc.stringMatching(/^[a-z]{1,16}$/),
         async (subset, order, suffix) => {
           const project = nextSpecs[0]!.project;
+
           const unknown = ["a", "b"].map((letter) =>
             project.createSpecification(join(root, `next/apps/fabrika/src/unmeasured-${suffix}-${letter}.test.ts`)),
           );
@@ -217,10 +228,12 @@ describe("next workflow coverage", () => {
           }
 
           const files = [...subset, ...unknown];
+
           const shuffled = files
             .map((spec, i) => ({ spec, rank: order[i]! }))
             .toSorted((a, b) => a.rank - b.rank)
             .map(({ spec }) => spec);
+
           const first = await partition(files);
           complete(first, files.map(repoPath));
 

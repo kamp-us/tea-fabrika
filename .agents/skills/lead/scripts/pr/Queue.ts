@@ -25,7 +25,9 @@ import { Tickets } from "./Tickets.ts";
 export const REQUIRED = "ci-required";
 
 /** The pull request was not added to the queue, and nothing was asked of GitHub's merge. */
-export class NotQueued extends Schema.TaggedError<NotQueued>()("NotQueued", { reason: Schema.String }) {}
+export class NotQueued extends Schema.TaggedError<NotQueued, { readonly brand: unique symbol }>()("NotQueued", {
+  reason: Schema.String,
+}) {}
 
 /**
  * How long a caller lets the required check take to end, and the seconds between two reads. A read
@@ -45,7 +47,7 @@ export type Ask = {
 };
 
 /** The required check has not ended, or GitHub did not answer: a wait reads again. */
-class Pending extends Schema.TaggedError<Pending>()("Pending", {}) {}
+class Pending extends Schema.TaggedError<Pending, { readonly brand: unique symbol }>()("Pending", {}) {}
 
 /** The required check at `oid` as it stands: read once, or again until it ends or the wait is over. */
 const requiredAt = Effect.fn("Queue.requiredAt")(function* (oid: string, wait: Wait | undefined) {
@@ -57,6 +59,7 @@ const requiredAt = Effect.fn("Queue.requiredAt")(function* (oid: string, wait: W
   }
 
   let last: Option.Option<Job> = Option.none();
+
   const ended = read.pipe(
     Effect.tap((found) =>
       Effect.sync(() => {
@@ -71,14 +74,16 @@ const requiredAt = Effect.fn("Queue.requiredAt")(function* (oid: string, wait: W
     Effect.catchTag("Pending", () => Effect.sync(() => last)),
     Effect.timeoutOption(Duration.minutes(wait.minutes)),
   );
+
   return Option.getOrElse(yield* ended, () => last);
 });
 
 /** What `add` did: added it to the queue at this head, or found it merged already. */
 export const Added = Schema.TaggedUnion({
-  queued: { pr: Schema.Number, oid: Schema.String },
-  merged: { pr: Schema.Number, commit: Schema.String },
+  queued: { pr: Schema.Finite, oid: Schema.String },
+  merged: { pr: Schema.Finite, commit: Schema.String },
 });
+
 export type Added = typeof Added.Type;
 
 /** Why a pull request may not enter the queue as it stands, or `null` when it may. */
@@ -126,6 +131,7 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
   }
 
   yield* prs.enqueue(found.number, found.oid);
+
   return Added.cases.queued.make({ pr: found.number, oid: found.oid });
 });
 
@@ -160,9 +166,10 @@ export const closeNote = (repo: string, pr: number, commit: string): string =>
 
 /** How a pull request stands when `settle` reads it, and one line for each thing it did or left. */
 export const Settled = Schema.TaggedUnion({
-  merged: { pr: Schema.Number, commit: Schema.String, lines: Schema.Array(Schema.String) },
-  unmerged: { pr: Schema.Number, lines: Schema.Array(Schema.String) },
+  merged: { pr: Schema.Finite, commit: Schema.String, lines: Schema.Array(Schema.String) },
+  unmerged: { pr: Schema.Finite, lines: Schema.Array(Schema.String) },
 });
+
 export type Settled = typeof Settled.Type;
 
 /** Closes each open ticket the merged description names; trouble is a line, never a failure. */
@@ -211,6 +218,7 @@ const Standing = Schema.TaggedUnion({
   unmerged: { found: Detail, lines: Schema.Array(Schema.String) },
   merged: { found: Detail, commit: Schema.String },
 });
+
 type Standing = typeof Standing.Type;
 
 const standing = Effect.fn("Queue.standing")(function* (
@@ -229,6 +237,7 @@ const standing = Effect.fn("Queue.standing")(function* (
         : found.state === "CLOSED"
           ? "closed, not merged"
           : "not confirmed merged";
+
     return Standing.cases.unmerged.make({ found, lines: [said(`${stands}; closed no tickets`)] });
   }
 
@@ -254,6 +263,7 @@ export const closeOnly = Effect.fn("Queue.closeOnly")(function* (a: { readonly r
   }
 
   const closed = yield* closeNamed(a.repo, at.found, at.commit);
+
   return Settled.cases.merged.make({
     pr: at.found.number,
     commit: at.commit,
@@ -276,10 +286,12 @@ export const settle = Effect.fn("Queue.settle")(function* (a: { readonly repo: s
   }
 
   const closed = yield* closeNamed(a.repo, at.found, at.commit);
+
   const swept = yield* Effect.match(sweeps.kick, {
     onFailure: (e) => [`pr ${at.found.number}: box cleanup not started: ${e.reason}`],
     onSuccess: () => [],
   });
+
   return Settled.cases.merged.make({
     pr: at.found.number,
     commit: at.commit,

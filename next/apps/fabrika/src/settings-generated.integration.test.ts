@@ -24,6 +24,7 @@ import * as fc from "fast-check";
 import { plant } from "./exam/plant.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: 100 };
 
 /** The three generated outputs for a group, as the generation entry writes them. */
@@ -36,7 +37,9 @@ const outputs = <A>(group: Setting.Group<A>) => ({
 const committed = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const app = path.resolve(import.meta.dirname, "..");
+
   return {
     person: yield* fs.readFileString(path.join(app, "person.json")),
     repo: yield* fs.readFileString(path.join(app, "repo.json")),
@@ -45,7 +48,9 @@ const committed = Effect.gen(function* () {
 }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise);
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
+
 const segment = fc.stringMatching(/^[a-z][a-z0-9]{0,5}$/);
+
 const doc = fc.stringMatching(/^[A-Z][a-z |*_`#\n]{3,30}\.$/);
 
 const declared = fc.uniqueArray(
@@ -88,7 +93,7 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
     ({ limit, window }) => {
       expect(
         Result.isSuccess(
-          Schema.decodeUnknownResult(Files.schema(Declarations.all, "person"), { onExcessProperty: "error" })({
+          Schema.decodeResult(Files.schema(Declarations.all, "person"), { onExcessProperty: "error" })({
             gateway: { limit, window },
           }),
         ),
@@ -97,7 +102,7 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
       for (const gateway of [{ limit }, { window }, { limit, window }]) {
         expect(
           Result.isFailure(
-            Schema.decodeUnknownResult(Files.schema(Declarations.all, "repo"), { onExcessProperty: "error" })({
+            Schema.decodeResult(Files.schema(Declarations.all, "repo"), { onExcessProperty: "error" })({
               gateway,
             }),
           ),
@@ -161,6 +166,7 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
 
 // L9's callers: where an import sits, and whether it may take the TOML adapter or the parser.
 const ADAPTER = "next/packages/libfabrika/src/settings/TomlParser.ts";
+
 const RULE = "eslint(no-restricted-imports)";
 
 const word = fc.stringMatching(/^[a-z][a-z0-9]{2,7}$/);
@@ -223,6 +229,7 @@ const relative = (from: string, to: string) => {
   const shared = a.findIndex((s, n) => s !== b[n]);
   const n = shared === -1 ? a.length : shared;
   const rest = b.slice(n).join("/");
+
   return a.length === n ? `./${rest}` : `${"../".repeat(a.length - n)}${rest}`;
 };
 
@@ -246,10 +253,14 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
                       : t === "parser"
                         ? "toml-eslint-parser"
                         : "toml-eslint-parser/lib/ast";
+
               const allowed = t === "parser" || t === "parser-subpath" ? c.parser : c.adapter;
+
               return { file: c.file, spec, allowed };
             });
+
           fc.pre(planted.length > 0);
+
           const result = await plant(
             Object.fromEntries(
               planted.map((p) => [p.file, `import * as T from "${p.spec}";\n\nexport const t = T;\n`]),
@@ -277,14 +288,14 @@ it.prop(
     const value = { desktop: { "link-ttl": lifetime } };
     expect(
       Result.isSuccess(
-        Schema.decodeUnknownResult(Files.schema(Declarations.all, "person"), {
+        Schema.decodeResult(Files.schema(Declarations.all, "person"), {
           onExcessProperty: "error",
         })(value),
       ),
     ).toBe(true);
     expect(
       Result.isFailure(
-        Schema.decodeUnknownResult(Files.schema(Declarations.all, "repo"), {
+        Schema.decodeResult(Files.schema(Declarations.all, "repo"), {
           onExcessProperty: "error",
         })(value),
       ),

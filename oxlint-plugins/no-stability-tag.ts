@@ -15,11 +15,15 @@
 import type { CreateRule } from "@oxlint/plugins";
 
 const MESSAGE = "No @stability tag until libfabrika's first release (0574, E1). Fix: `pnpm format` deletes the line.";
+
 // A line that holds only the tag: ` * @stability unstable`.
 const TAG_LINE = /^[ \t]*\*[ \t]*@stability\b.*$/;
+
 // A tag anywhere after a `*` or the block's opening, for the report with no fix.
 const LOOSE = /(?:\/\*\*|\*)[ \t]*@stability\b/;
+
 const BLANK_STAR = /^[ \t]*\*[ \t]*$/;
+
 const CLOSER = /^[ \t]*\*\/[ \t]*$/;
 
 export const noStabilityTag: CreateRule = {

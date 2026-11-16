@@ -39,6 +39,7 @@ const isTell = (node: Node): boolean => {
   }
 
   const { property } = node.callee;
+
   return (
     property.type === "Identifier" &&
     (property.name === "tell" || property.name === "offer") &&
@@ -70,6 +71,7 @@ const keepsIt = (source: Context["sourceCode"], callee: Node): boolean => {
 export const noBareTell: CreateRule = {
   create(context) {
     const source = context.sourceCode;
+
     return {
       ExpressionStatement(node) {
         if (grouped(source, node.expression) === 0 && isTell(node.expression)) {

@@ -40,15 +40,20 @@ const PAIRS = MODULES.flatMap((module) =>
 );
 
 const modules = "fabrika(modules)";
+
 const restricted = "eslint(no-restricted-imports)";
+
 const fileCase = "unicorn(filename-case)";
 
 const file = (...lines: ReadonlyArray<string>): string => ["// planted", ...lines, ""].join("\n");
+
 const pascal = (name: string): string => `${name.slice(0, 1).toUpperCase()}${name.slice(1)}`;
+
 const own = "export const own = 1;";
 
 describe("fabrika/modules: no module file re-exports another module's names", async () => {
   const pair = (module: string, other: string) => `${SRC}/${module}/From${pascal(other)}.ts`;
+
   const files = {
     ...Object.fromEntries(
       PAIRS.map(([module, other]) => [
@@ -81,6 +86,7 @@ describe("fabrika/modules: no module file re-exports another module's names", as
     // Another package's folders are not libfabrika's modules.
     "next/packages/tuval/src/door/Door.ts": file('export {a} from "../ledger/Log.ts";'),
   };
+
   const linted = await plant(files);
 
   // Plant (the plan's): `processes/Mailbox.ts` holds `export {Rev} from "../ledger/Log.ts"`.
@@ -114,6 +120,7 @@ describe("fabrika/modules: src/ holds only the listed modules and top files", as
     `${SRC}/Helpers.ts`,
     `${SRC}/Helpers.test.ts`,
   ];
+
   const taken = [
     ...MODULES.map((module) => `${SRC}/${module}/Front.ts`),
     ...MODULES.map((module) => `${SRC}/${module}/Front.test.ts`),
@@ -134,6 +141,7 @@ describe("fabrika/modules: src/ holds only the listed modules and top files", as
     "next/packages/tuval/src/utils/x.ts",
     "next/apps/fabrika/src/utils/x.ts",
   ];
+
   const linted = await plant(Object.fromEntries([...refused, ...taken].map((path) => [path, file(own)])));
 
   // Plants (the plan's): add `src/utils/x.ts`; `src/LedgerError.ts` exists.
@@ -185,6 +193,7 @@ describe("fabrika/modules: every export in an internal/ file is @internal", asyn
     "// @internal", // 32: a line comment is not the tag a doc tool reads
     "export const k = 3;", // 33
   );
+
   const files = {
     ...Object.fromEntries(MODULES.map((module) => [`${SRC}/${module}/internal/part.ts`, body])),
     // The plan's real name, and a folder below `internal/`.
@@ -196,6 +205,7 @@ describe("fabrika/modules: every export in an internal/ file is @internal", asyn
     // Another package's `internal/` is not a module's.
     "next/packages/tuval/src/desktop/internal/part.ts": body,
   };
+
   const linted = await plant(files);
 
   // Plant: an `internal/` file with one export that has no `@internal` doc comment.
@@ -232,6 +242,7 @@ describe("fabrika/modules: the shared top files hold values only", async () => {
     "export class Fault extends Error {}", // 9: an error
     "export interface Sql { readonly run: (text: string) => void }", // 10: a shape
   );
+
   // The same two, reached by other spellings of the import (main's `id.ts` writes `Schema as S`).
   const spelled = file(
     'import {Schema as S} from "effect";', // 2
@@ -240,6 +251,7 @@ describe("fabrika/modules: the shared top files hold values only", async () => {
     'export class Sqls extends Context.Service<Sqls, {readonly n: number}>()("libfabrika/Sqls") {}', // 5
     "export const SqlValue = S.Union([S.String, S.Number, S.Null]);", // 6
   );
+
   const files = {
     [`${SRC}/Rev.ts`]: body,
     [`${SRC}/Sql.ts`]: spelled,
@@ -252,6 +264,7 @@ describe("fabrika/modules: the shared top files hold values only", async () => {
     [`${SRC}/Testing.ts`]: body,
     "next/packages/tuval/src/Rev.ts": body,
   };
+
   const linted = await plant(files);
 
   // Plant (the plan's): `src/Rev.ts` exports a `Schema.TaggedError`.
@@ -276,6 +289,7 @@ describe("fabrika/modules: the shared top files hold values only", async () => {
 describe("eslint/no-restricted-imports: nobody outside a module imports its internal/", async () => {
   const front = (module: string, other: string) => `${SRC}/${module}/Into${pascal(other)}.ts`;
   const inner = (module: string, other: string) => `${SRC}/${module}/internal/into${pascal(other)}.ts`;
+
   const files = {
     ...Object.fromEntries(
       PAIRS.flatMap(([module, other]) => [
@@ -341,6 +355,7 @@ describe("eslint/no-restricted-imports: nobody outside a module imports its inte
       "void ledgerStore;",
     ),
   };
+
   const linted = await plant(files);
 
   // Plants (the plan's): `gateway/Gateway.ts` imports `../ledger/internal/ledgerStore.ts`, and
@@ -375,6 +390,7 @@ describe("unicorn/filename-case: a front file is PascalCase and an internal/ fil
   // The modules with no file on main. `transport/` joins in PR 2 and `door/` in PR 5, when their
   // lowercase files have moved, so the rule fires on nothing on main.
   const FRESH = ["telemetry", "ledger", "processes", "presence", "tasks", "access", "runtime"] as const;
+
   const refused = [
     `${SRC}/ledger/log.ts`, // the plan's plant
     `${SRC}/ledger/internal/LedgerStore.ts`, // the plan's plant
@@ -387,6 +403,7 @@ describe("unicorn/filename-case: a front file is PascalCase and an internal/ fil
       `${SRC}/${module}/internal/PascalCase.test.ts`,
     ]),
   ];
+
   const taken = [
     ...FRESH.flatMap((module) => [
       `${SRC}/${module}/PascalCase.ts`,
@@ -406,6 +423,7 @@ describe("unicorn/filename-case: a front file is PascalCase and an internal/ fil
     `${SRC}/telemetry/internal/measurements.test.ts`,
     `${SRC}/Id.test-support.ts`,
   ];
+
   const linted = await plant(Object.fromEntries([...refused, ...taken].map((path) => [path, file(own)])));
 
   // Plants (the plan's): add `src/ledger/log.ts` and `src/ledger/internal/LedgerStore.ts`.
@@ -428,6 +446,7 @@ describe("unicorn/filename-case: a front file is PascalCase and an internal/ fil
 // says so replaces the modules override's options, so its Radix and `internal/` entries must still hold.
 describe("runtime/, access/ and gateway/ never import ledger/", async () => {
   const ABOVE = ["runtime", "access", "gateway"] as const;
+
   const body = (up: string) =>
     file(
       `import {Ledger} from "${up}ledger/Ledger.ts";`, // 2
@@ -439,12 +458,15 @@ describe("runtime/, access/ and gateway/ never import ledger/", async () => {
       'import {cyan} from "@radix-ui/colors";', // 8
       `export const all = [Ledger, Line, Sink, Mailbox, store, cyan];`,
     );
+
   const refused = ABOVE.flatMap((module) => [
     [`${SRC}/${module}/Front.ts`, "../"],
     [`${SRC}/${module}/Front.test.ts`, "../"],
     [`${SRC}/${module}/internal/front.ts`, "../../"],
   ]);
+
   const taken = (["processes", "presence"] as const).map((module) => [`${SRC}/${module}/Front.ts`, "../"]);
+
   const linted = await plant(
     Object.fromEntries([...refused, ...taken].map(([path = "", up = ""]) => [path, body(up)])),
   );
@@ -471,11 +493,13 @@ it("refuses the retired Id module at data/id.ts for generated contents, and take
   const root = join(import.meta.dirname, "..");
   const retired = `${SRC}/data/id.ts`;
   const taken = [`${SRC}/Id.ts`, `${SRC}/transport/id.ts`];
+
   const printed = spawnSync(join(root, "node_modules", ".bin", "oxlint"), ["--print-config"], {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 2 ** 28,
   });
+
   const config: { overrides: ReadonlyArray<{ rules: Record<string, unknown> }> } = JSON.parse(printed.stdout);
   // `--print-config` prints a setting as `[level, options]`.
   const setting = config.overrides.map(({ rules }) => rules["fabrika/modules"]).findLast(Array.isArray);

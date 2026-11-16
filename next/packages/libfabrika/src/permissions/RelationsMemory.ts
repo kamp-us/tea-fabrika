@@ -26,6 +26,7 @@ export const layer = (changes: ReadonlyArray<Change>): Layer.Layer<Relations> =>
     Relations,
     Effect.gen(function* () {
       const held = new Map<string, Change>();
+
       const add = (batch: ReadonlyArray<Change>): Result.Result<void, RelationsError> => {
         const next = new Map(held);
 
@@ -47,8 +48,10 @@ export const layer = (changes: ReadonlyArray<Change>): Layer.Layer<Relations> =>
 
         return Result.succeed(undefined);
       };
+
       // A test that hands in two rows under one id has a broken fixture, not a refusal to answer.
       yield* Effect.fromResult(add(changes)).pipe(Effect.orDie);
+
       return Relations.of({
         within: () => Result.succeed(fold([...held.values()].map(({ row }) => row))),
         write: (batch) => Effect.fromResult(add(batch)),

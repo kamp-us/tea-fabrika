@@ -7,6 +7,7 @@ export const reach = Effect.fnUntraced(function* <A, E, R, X>(
   unreachable: (cause: RpcCallError) => X,
 ) {
   const widened: Effect.Effect<A, E | RpcCallError, R> = call;
+
   return yield* widened.pipe(
     Effect.catchIf(Schema.is(Schema.instanceOf(RpcCallError)), (cause) => Effect.fail(unreachable(cause))),
   );

@@ -8,6 +8,7 @@ import type { ExitReason } from "../processes/ExitReason.ts";
 import type { WindowModel } from "./WindowMachine.ts";
 
 type Reach = WindowModel["tiles"][number]["reach"];
+
 type Case<Tag extends string> = Extract<Reach, { readonly _tag: Tag }>;
 
 it("type: opening and open require their ref, and ended requires its ExitReason", () => {
