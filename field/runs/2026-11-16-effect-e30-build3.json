@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e30-build3",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T22:08:25-08:00",
+  "ended": "2026-11-15T22:12:37-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Build step, round 3, for judgment slice E30 of the Effect-check sweep (strictEffectProvide), in next/. The two hits the tests step (2026-11-16-effect-e30-tests4) ruled for the build are fixed by hand: next/apps/fabrika/src/instance.ts:62 and :63 no longer provide localState() and the Alchemy engine inside the deploy callback. The callback already gets the dev run's scope from libfabrika's startDev, so it builds Layer.provideMerge(localState(), engine) once with Layer.buildWithScope in that scope and runs deploy under Effect.provideContext of the built services. The signature of startDev and its callback are unchanged, no caller or test changed. One difference: the state and engine now live until the dev run's scope closes, where Effect.provide closed them when deploy returned; deploy already runs in that scope and Alchemy's dev provider forks work that outlives deploy's return, so the longer life matches what the services serve. No test file was edited, no file in pull request 1366 was touched, and no lock line was added. Hits: met 2, fixed by quick fix 0, hand edits 2, left 0 of the ruled 2; the other 21 (14 in 1366's libfabrika files, 6 Digest provides, next/apps/fabrika/src/runtime.ts:57) wait for the after-1366 slice, untouched.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 4.2,
+  "note": "Recount at 4a80c24 plus this change: effect-tsgo diagnostics --format json on a temporary copy of next/apps/fabrika/tsconfig.json with only strictEffectProvide raised to error (removed after): 271 hits, 270 in test files and test support, and one product hit, next/apps/fabrika/src/runtime.ts:57, which waits; none in instance.ts. Laws, one file at a time: next/apps/fabrika/src/local-instance.integration.test.ts (2 passed, run without the host-run override, which was not needed) and next/apps/fabrika/src/error-cause.test.ts (2 passed). vitest --changed origin/main was refused by the test config as a broad run. The workerd laws that reach the real Alchemy layers (instance-one-file, instance-records, settings-start integration tests) were not run in this box. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144), the exam ratchet and loosening.sh 4a80c24..HEAD (0 hits) passed. The app's own typecheck (tsc --noEmit -p next/apps/fabrika) shows only the 14 expected TS377000 'directive has no effect' warnings.",
+  "plants": [],
+  "step": "build"
+}
