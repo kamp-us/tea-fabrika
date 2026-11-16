@@ -10,12 +10,13 @@ export const Call = Schema.TaggedUnion({
   ready: { number: Schema.Finite },
   enqueue: { number: Schema.Finite, oid: Schema.String },
   arm: { number: Schema.Finite, oid: Schema.String },
+  admin: { number: Schema.Finite, oid: Schema.String },
 });
 export type Call = typeof Call.Type;
 
 /** The calls that fail with a reason, by name. */
 export type Failing = Partial<
-  Record<"openOn" | "all" | "draft" | "edit" | "ready" | "view" | "enqueue" | "files" | "arm", string>
+  Record<"openOn" | "all" | "draft" | "edit" | "ready" | "view" | "enqueue" | "files" | "arm" | "admin", string>
 >;
 
 /** What `view` adds to a listed pull request; each part has a plain default. */
@@ -96,6 +97,10 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
       arm: (number, oid) =>
         Effect.map(fails("arm"), () => {
           w.calls.push(Call.cases.arm.make({ number, oid }));
+        }),
+      admin: (number, oid) =>
+        Effect.map(fails("admin"), () => {
+          w.calls.push(Call.cases.admin.make({ number, oid }));
         }),
     }),
   );

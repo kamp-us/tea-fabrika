@@ -61,6 +61,8 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
     if (!runner) {
       copyFileSync(config, join(dir, ".oxlintrc.json"));
       symlinkSync(join(root, "oxlint-plugins"), join(dir, "oxlint-plugins"));
+      // The config loads the vendored anti-slop plugins from here (0563).
+      symlinkSync(join(root, "vendor"), join(dir, "vendor"));
     }
 
     for (const [path, text] of Object.entries(files)) {

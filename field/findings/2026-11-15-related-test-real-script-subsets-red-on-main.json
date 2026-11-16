@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-related-test-real-script-subsets-red-on-main",
+  "date": "2026-11-15",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".github/ci/related.test.ts",
+    "line": 78
+  },
+  "says": "Two laws in .github/ci/related.test.ts fail on a clean checkout of origin/main: 'real script subsets select exactly their declaring tests, never an empty set' and 'the real script .agents/skills/lead/scripts/ci/fixtures/run-43776563690-jobs.json alone selects exactly its declaring tests, never none'.",
+  "proof": "With this branch's changes stashed (origin/main as is), `nice -n 19 volta run --node 26.13.0 pnpm exec vitest run --maxWorkers=1 .github/ci/related.test.ts` printed `Tests 2 failed | 109 passed (111)` with those two names.",
+  "cost": "A tooling law that is red on main hides the next real break in the same file, and the scheduled full run's tooling legs stay red.",
+  "head": "82296f5cf0a6e9cb16c1217809ab5f7aa3576f5e",
+  "ticket": null,
+  "pr": null
+}

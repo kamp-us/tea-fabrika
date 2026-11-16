@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-15-admin-merge-ran-past-a-leak-grep-hit",
+  "date": "2026-11-15",
+  "quests": ["kamp-us/tea-fabrika#1415"],
+  "stage": "harness",
+  "kind": "failure",
+  "what": "The lead admin-merged docs-only decision pull request 1415 under decision 0183, at 18:56 Pacific on 2026-11-15 (02:56 UTC on 2026-11-16), merge commit 580c80dc8. One shell line ran leakgrep.sh on the pull request's description and then ran gh pr merge --admin. The grep printed a hit and exited non-zero, but the line never checked its exit code, so the merge ran anyway. The merged file was clean. The description held a private word, and the pull request's public edit history still holds it. This is the second time the lead's leak check has been read loosely before a merge.",
+  "cause": "The admin merge for a docs-only pull request was a hand-typed shell line, as decision 0183's own example shows, with no code between the grep and the merge. Every other merge path (land.ts run and land.ts queue) runs the grep through pr/Queue.ts and stops on a non-zero exit, but land.ts arm ran no leak grep at all, and the admin merge had no command of its own.",
+  "person": false,
+  "primitive": "gate",
+  "fix": "land.ts merge <pr> [--admin] is now the only way the lead merges by hand. It and land.ts arm run one leak gate (pr/Leaks.ts) on the change, each commit since main, and the title and description, and refuse on any non-zero exit or on a grep that could not run. --admin refuses unless every changed file is docs (0183) or an open sev0 allows the branch (0532). The lead and sev skills now name land.ts merge, and a bare gh pr merge is never used.",
+  "test": "pr/Merge.test.ts and pr/Arm.test.ts: a leak word in the description or a commit refuses arm and merge; a clean pull request passes; --admin with a file that is not docs refuses; the real leakgrep.sh exiting non-zero refuses the words, and a scripts folder with no leakgrep.sh refuses. Each law went red on its plant.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1415"]
+}

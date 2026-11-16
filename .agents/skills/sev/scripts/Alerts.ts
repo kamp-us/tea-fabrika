@@ -1,5 +1,5 @@
 // Alerts: the open `ci-scheduled` issues the sev script reads, which keep a sev1 on. Two checks
-// open them: the 3-hour full run when red (0534, "Scheduled CI is red on main") and the daily speed
+// open them: the full run when red (0534, "Scheduled CI is red on main") and the daily speed
 // check when a number is over its goal (0541, "CI speed: a stage is over its goal"). Each closes its
 // own. The script only reads them: it never opens, closes, labels or comments on one.
 //
