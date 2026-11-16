@@ -572,6 +572,180 @@ Estimate: 6 steps, $42
 
 None.
 
+## Amendment, 2026-11-16: `scripts/typecheck*` gets a tsconfig program of its own
+
+**Why.** Law T1 above put the new files into the `.agents/tsconfig.json` program. The build
+(`8172034`) found that cannot pass: in that program every `scripts/` file gets TS377051
+`duplicatePackage`, because the program holds two `@demlik/tea` versions, and the only allowance is
+the `tsconfig.base.json` override whose `include` is `[".agents/**/*.ts"]`. Law E3 of the tea-msg-tag
+plan, `oxlint-plugins/duplicate-packages.test.ts`, holds that include to `.agents/**` globs alone.
+Proof: `field/findings/2026-11-16-typecheck-port-t1-cannot-pass.json` and the build's row
+`field/runs/2026-11-16-t766-port-typecheck-build.json`.
+
+**The lead's ruling (option b).** E3 stays as it is. The second tea version stays too: today's
+`programs/` pin 0.25.0 (one place 0.23.0) and `next/` is on 0.27.0, so the base allowance (ticket
+1065) stays scoped to `.agents/**` alone. `scripts/typecheck*` is type-checked in a tsconfig program of
+its own, outside `.agents/`. That program reaches only `effect`, `@effect/platform-node`, node and the
+test libraries, with no `@demlik/tea` import, so it needs no duplicate-package allowance. A new plant:
+an import of `@demlik/tea` from `scripts/typecheck.ts` must turn a check red.
+
+This amendment replaces what the plan says above where they differ: T1, the "Where the type check
+comes from" call under "Files", and the `.agents/tsconfig.json` rows. Everything else stands.
+
+### A call, at the top: the tea plant is held by lint, 85%
+
+A tea import alone does **not** turn the new program's type check red. Checked on 2026-11-16 at
+`0ec6ba3`: a scratch tsconfig that extends `tsconfig.base.json` and includes the 18 `scripts/typecheck*`
+files plus one file with `import { Cmd } from "@demlik/tea"` ran `tsc --noEmit` with exit 0. Its
+file list held `@demlik/tea@0.27.0` only, and the same run did report Effect's TS377001
+`floatingEffect` on a planted floating Effect, so Effect's checks were on. One tea version in a
+program is no duplicate. So the plant's law is a lint law, L2 below: oxlint's own
+`eslint/no-restricted-imports` names `@demlik/tea` for the typecheck files, and `pnpm lint` goes red.
+That is the repo's rule for a check on an import (AGENTS.md, "Checks": "A check on the shape of code
+is a lint rule, never a test: oxlint's own rule where one exists (`no-restricted-imports`)"). The type
+check still catches the case the ruling is about: if `scripts/typecheck*` ever reaches today's code on
+tea 0.25.0, the program holds two versions and TS377051 fires, with no allowance to stop it. The doubt
+(15%): the lead may want the plant to turn `pnpm typecheck` itself red. That needs a fake module or a
+`paths` entry that shadows tea, a trick no other program here uses; if the lead wants it, it is one
+more line in `scripts/tsconfig.json` and one more plant.
+
+### The new program, the way `.agents` gets its own
+
+`pnpm typecheck` runs `scripts/typecheck.ts`, which runs `pnpm -r typecheck --incremental
+--tsBuildInfoFile node_modules/.cache/tsc/typecheck.tsbuildinfo`, so a folder is type-checked when it
+is a workspace package with a `typecheck` script. `.agents`, `.github/ci` and `oxlint-plugins` are each
+reached that way: a `pnpm-workspace.yaml` glob, a `package.json` whose script is `tsc --noEmit -p .`,
+and a `tsconfig.json` that extends `../tsconfig.base.json`. `.agents` is the closest match: a package
+"only so `pnpm typecheck` reads the quest scripts", naming no dependency because its imports resolve
+from the root's, and reached for `pnpm lint:reach` by the root's `devDependencies`. `scripts/` takes
+the same shape. Call, 90%: it is the known way here three times over, and a root-level program that
+another package's script runs would be a fourth way.
+
+```jsonc
+// scripts/package.json, sketch.
+{
+  "name": "@tea-fabrika/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Today's tooling scripts. A package only so `pnpm typecheck` reads the typecheck's port (ticket 766) in a program of its own; its imports resolve from the root's dependencies.",
+  "scripts": { "typecheck": "tsc --noEmit -p ." },
+  "volta": { "extends": "../package.json" }
+}
+```
+
+```jsonc
+// scripts/tsconfig.json, sketch.
+{
+  // The typecheck's port (0113, ticket 766), lead tooling, in a program of its own. It imports no
+  // @demlik/tea, so it needs no duplicate-package allowance: the base's one is `.agents/**` alone
+  // (oxlint-plugins/duplicate-packages.test.ts). The other scripts here are not checked yet.
+  "extends": "../tsconfig.base.json",
+  "include": ["typecheck.ts", "typecheck/*.ts", "typecheck.test.ts", "typecheck-lock.test.ts"]
+}
+```
+
+```yaml
+# pnpm-workspace.yaml, the new glob right after `.agents`, sketch.
+  - .agents
+  # scripts: today's tooling scripts, so far the typecheck's port, type-checked in a program of
+  # its own (ticket 766). It names no dependency: its imports resolve from the root's.
+  - scripts
+```
+
+The rest that follows from it:
+
+- The root `package.json` names `"@tea-fabrika/scripts": "workspace:*"` in `devDependencies`, as it
+  names `@tea-fabrika/agents`, so `pnpm lint:reach` finds the package reached. `pnpm-lock.yaml` gains
+  the importer `scripts: {}` and that link. Both are workspace-only, so `pnpm install --offline` writes
+  them with no download.
+- `.github/workflows/check.yaml`'s tsc cache gains `scripts/node_modules/.cache/tsc` right after
+  `.agents/node_modules/.cache/tsc`: caches.ts's C4 wants one path per workspace glob, in the
+  workspace's order, in both the restore and the save step (they share the `*tsc` anchor).
+- `.agents/tsconfig.json` loses the four `../scripts/...` include lines and the comment's last
+  sentence the build added. Its comment keeps naming `scripts/typecheck.ts`.
+- `scripts/tsconfig.json` holds no `allowedDuplicatedPackages`; E3 already fails if any tsconfig
+  but the base does.
+- Lint already treats these files as lead tooling: `.oxlintrc.json`'s lead-tooling and lead-test
+  blocks name them (L1, already green). Becoming a package changes no lint glob.
+- `scripts/typecheck.integration.test.ts`, `scripts/caps.test.ts` and the other `scripts/` files stay
+  out of the new program, as they were out of `.agents`' include.
+- Is this a setting? No: which files a tsconfig checks is the build's shape, which no person picks
+  (0069).
+
+### One run traced
+
+1. `pnpm typecheck` runs `node scripts/typecheck.ts`, which takes the lock and runs `CHECK`.
+2. `pnpm -r typecheck --incremental --tsBuildInfoFile node_modules/.cache/tsc/typecheck.tsbuildinfo`
+   reaches `@tea-fabrika/scripts` as it reaches `@tea-fabrika/agents`.
+3. In `scripts/`, `tsc --noEmit -p . --incremental --tsBuildInfoFile ...` builds one program: the base
+   config's options and Effect checks, the 18 typecheck files, and what they import: `effect`,
+   `@effect/platform-node`, `vitest`, `@effect/vitest`, `fast-check`, `@kampus/vitest` (whose
+   manifest names no tea) and node. No `@demlik/tea` is in it, so TS377051 has nothing to fire on.
+4. `.agents`' program no longer holds the 18 files, so its own run is back to its own files.
+5. A tea import planted in `scripts/typecheck.ts` passes step 3 but fails `pnpm lint` (L2).
+
+### Laws, changed and new
+
+| Law | Kind (lint, type or test?) | Generator | Plant | Where |
+|---|---|---|---|---|
+| T1, changed: the 18 `scripts/typecheck*` files are type-checked, with Effect's checks, by the `@tea-fabrika/scripts` workspace package's `tsc`, which `pnpm -r typecheck` runs inside `pnpm typecheck`; a program of their own, outside `.agents`, with no duplicate-package allowance | type | type | (a) a wrong return type in `scripts/typecheck/Locks.ts`: `pnpm typecheck` fails in `scripts/`; (b) drop the `scripts` glob from `pnpm-workspace.yaml`: the same wrong type passes | scripts/tsconfig.json |
+| L2, new: no `scripts/typecheck*` file imports `@demlik/tea` or a subpath of it; the block repeats every `no-restricted-imports` path and pattern those files got before, since an oxlint override replaces a rule's options whole | lint | lint | (a) `import { Cmd } from "@demlik/tea"` in `scripts/typecheck.ts`: `pnpm lint` fails; (b) the same from `@demlik/tea/effect` in `scripts/typecheck/Look.ts`: fails; (c) an `@radix-ui/colors` import in `Look.ts` still fails, so the repeated list lost nothing | .oxlintrc.json |
+| E3 of the tea-msg-tag plan, unchanged: the one tea allowance stays in `tsconfig.base.json`, scoped to `.agents/**` | test | format: the checker reads the setting by its exact key and place | E3's own plants; and an `allowedDuplicatedPackages` in `scripts/tsconfig.json` turns it red | oxlint-plugins/duplicate-packages.test.ts |
+| C4, unchanged: check.yaml's tsc cache names one path per workspace glob, in order | test | pinned: the checked-in files | caches.test.ts's planted folder change; and the new glob with no cache path is red | .github/ci/workflow-lint/caches.test.ts |
+
+No law is loosened: T1 holds the same files to the same base checks, in another program. E3 and C4
+are not edited.
+
+### Who does what next
+
+- **The tests step** writes L2 (the new block in `.oxlintrc.json`, after every block that sets
+  `no-restricted-imports` for those files) and T1's law: the `scripts` glob in `pnpm-workspace.yaml`,
+  `scripts/package.json`, the root `devDependencies` line, `pnpm-lock.yaml` through
+  `pnpm install --offline`, and the cache path in `check.yaml`. With no `scripts/tsconfig.json` yet,
+  `pnpm -r typecheck` is red in `scripts/`: that is T1 red before the build. It runs L2's plants and
+  T1's plant (b) once each, and records them in its row. It runs `pnpm lint` (L2, `lint:reach`,
+  C4 through the workflow lint) and `caches.test.ts` by path.
+- **The build** moves the type check: it writes `scripts/tsconfig.json` and takes the four
+  `../scripts/...` lines and the added sentence out of `.agents/tsconfig.json`. Then it runs the
+  `scripts` package's own `tsc --noEmit -p .` and `.agents`' one, and T1's plant (a) once.
+- **The lead**, not a boxed step: one real `pnpm typecheck`, and CI's run, before the review.
+
+### Files, amended
+
+These rows replace the earlier rows for the same paths; every other row above stands.
+
+| File | Owner | Product lines expected | Change |
+|---|---|---|---|
+| `scripts/package.json` | tests | 12 | new: `@tea-fabrika/scripts`, the `typecheck` script, no dependency |
+| `pnpm-workspace.yaml` | tests | 3 | the `scripts` glob after `.agents`, with its comment |
+| `package.json` | tests | 2 | the `typecheck` script as above, and `"@tea-fabrika/scripts": "workspace:*"` |
+| `pnpm-lock.yaml` | tests | 4 | the `scripts` importer and the root's link, from `pnpm install --offline` |
+| `.github/workflows/check.yaml` | tests | 2 | the comment as above, and `scripts/node_modules/.cache/tsc` in the tsc cache |
+| `.oxlintrc.json` | tests | 60 | L1's names as above, and L2's block |
+| `scripts/tsconfig.json` | build | 10 | new: the program, its comment, its four include globs (T1) |
+| `.agents/tsconfig.json` | build | 2 | the comment names `scripts/typecheck.ts`; the four `../scripts/...` include lines and the added sentence come out |
+| `tsconfig.base.json`, `oxlint-plugins/duplicate-packages.test.ts`, `oxlint-plugins/workspace-reach.ts`, `.github/ci/workflow-lint/caches.test.ts` | tests | none | not changed: E3, `lint:reach` and C4 hold the new shape as written |
+
+About 95 product lines more than "Size" says, most of them L2's repeated list. The quest's budget
+line is not changed: the new work is one more lint block and two small files.
+
+### Callers, amended
+
+| Hit | Planned change |
+|---|---|
+| `.agents/tsconfig.json:2` | the comment names `scripts/typecheck.ts`; `include` gains nothing, and the build's four lines come out |
+| `scripts/tsconfig.json` (new) | includes the 18 files |
+| `pnpm-workspace.yaml`, `package.json` | the `scripts` glob and the root's `@tea-fabrika/scripts` link |
+| `.github/workflows/check.yaml:377` | the tsc cache path line after `.agents`' |
+
+### What this amendment cannot tell us
+
+- Whether `pnpm lint:dead` (code-graph) reads the new package the way it reads `.agents`, which also
+  has no `exports`. The tests step's `pnpm lint` shows it.
+- The scratch run proved a one-tea program passes; it did not run `pnpm -r typecheck` with the new
+  package, which the build and the lead do.
+
 ## Findings
 
 ```json
