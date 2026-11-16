@@ -114,8 +114,8 @@ const both = (
   applyCell(tezgahMachine as never, m as never, msg as never) as never;
 
 /** A view as the wire carries it, JSON. */
-const onWire = (view: typeof TezgahView.Type): unknown =>
-  Schema.decodeSync(Json)(Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(view)));
+const onWire = (view: typeof TezgahView.Type): Schema.Json =>
+  Schema.decodeSync(Schema.fromJsonString(Schema.Json))(Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(view)));
 
 const text = (state: unknown) =>
   state === null ? "null" : Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(state as never));

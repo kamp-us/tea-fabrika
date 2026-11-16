@@ -92,7 +92,11 @@ const runAt = (w: World, choice: number) => ({
         }),
 });
 
-const valueFor = (w: World, cmd: Command, pick: number): unknown => {
+const valueFor = (
+  w: World,
+  cmd: Command,
+  pick: number,
+): typeof Change.Type | typeof Updated.Type | typeof Checks.Type | typeof Merged.Type | typeof Queued.Type => {
   if (cmd.type === "change") {
     if (pick % 8 === 0) {
       return Change.cases.missing.make({ change: cmd.change });

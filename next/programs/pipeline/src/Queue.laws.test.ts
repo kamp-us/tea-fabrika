@@ -369,7 +369,7 @@ const choose = (walk: Walk, cell: Cell): Msg => {
   const starts = walk.history.filter((c) => c.type === "start_child");
   const sends = walk.history.filter((c) => c.type === "send");
   const queued = [...(m.current === null ? [] : [m.current]), ...m.line];
-  const moves: Array<() => unknown> = [
+  const moves: Array<() => object> = [
     () => enqueue(cell, (cell.pick % 10) + 1),
     () =>
       Mail.Drop.make({

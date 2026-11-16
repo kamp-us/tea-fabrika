@@ -573,7 +573,7 @@ const failedSelection = (body: string): never => {
   throw new Error(body);
 };
 
-const auditProgram = (select: (m: typeof AuditMessage.Type) => unknown) => ({
+const auditProgram = <A>(select: (m: typeof AuditMessage.Type) => A) => ({
   name: "audit-fixture",
   machine: Machine.make({
     model: Schema.Null,
@@ -1831,8 +1831,8 @@ describe("P10 review regressions", () => {
   type Armed = <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   // The spied WebCrypto call fails once, by a throw or a rejection, with the generated value.
   type Spy = {
-    mockImplementationOnce: (fn: () => never) => unknown;
-    mockRejectedValueOnce: (value: unknown) => unknown;
+    mockImplementationOnce: (fn: () => never) => void;
+    mockRejectedValueOnce: (value: unknown) => void;
     mockRestore: () => void;
   };
   const failOnce = (spy: Spy, thrown: unknown, sync: boolean) =>

@@ -199,18 +199,24 @@ const windowFile = (file: string) => /\.[jt]sx$/.test(file) && !/\.test\.[jt]sx$
 
 const isFile = (path: string) => existsSync(path) && statSync(path).isFile();
 
-// Unwrap what TypeScript adds around a value: `satisfies`, `as`, `<T>x`, `x!` and parentheses.
-const value = (node: unknown): unknown =>
-  map(node) &&
-  /^(?:TSSatisfiesExpression|TSAsExpression|TSTypeAssertion|TSNonNullExpression|ParenthesizedExpression)$/.test(
-    String(node.type),
-  )
-    ? value(node.expression)
-    : node;
+// Unwrap what TypeScript adds around a value: `satisfies`, `as`, `<T>x`, `x!` and parentheses. What
+// is no node is undefined, as every caller reads only a node.
+const value = (node: unknown): Record<string, unknown> | undefined =>
+  !map(node)
+    ? undefined
+    : /^(?:TSSatisfiesExpression|TSAsExpression|TSTypeAssertion|TSNonNullExpression|ParenthesizedExpression)$/.test(
+          String(node.type),
+        )
+      ? value(node.expression)
+      : node;
 
 // An object literal naming a handler, directly or through a spread of another such object
 // (`export default {...app}`). `named` follows a name to its value in the same file.
-const handlerObject = (node: unknown, named: (node: unknown) => unknown, seen = new Set<unknown>()): boolean => {
+const handlerObject = (
+  node: unknown,
+  named: (node: unknown) => Record<string, unknown> | undefined,
+  seen = new Set<unknown>(),
+): boolean => {
   const object = named(node);
 
   if (!map(object) || object.type !== "ObjectExpression" || seen.has(object)) {

@@ -324,7 +324,7 @@ const world = () => {
     acceptWebSocket: vi.fn(),
     setWebSocketAutoResponse: vi.fn(),
   } as unknown as DurableObjectState;
-  const route = vi.fn(async (): Promise<unknown> => ({ _tag: "parked", stream: "stream", after: 0 }));
+  const route = vi.fn(async (): Promise<object> => ({ _tag: "parked", stream: "stream", after: 0 }));
   // oxlint-disable-next-line fabrika/no-type-assertions -- in-memory platform stubs supply just the RPCs these readers reach
   const env = {
     INSTANCE: JSON.stringify(config),

@@ -368,7 +368,7 @@ type World = {
 };
 
 /** The public JSON a client sends or reads, written out by hand because the shape itself is the law. */
-const wire = (tag: string, fields: object): unknown =>
+const wire = (tag: string, fields: object): object =>
   // oxlint-disable-next-line fabrika/no-hand-tag -- format: L13 pins the encoded JSON other clients decode
   ({ _tag: tag, ...fields });
 

@@ -114,7 +114,7 @@ const wrongFor = (field: BadMsgCase["field"], wrong: BadMsgCase["wrong"]) =>
         ? Number(wrong)
         : wrong;
 
-const badInput = (c: BadMsgCase, kind: Bad): unknown => {
+const badInput = (c: BadMsgCase, kind: Bad): BadMsgCase["wrong"] | object => {
   // work is true, so a bad input that got through would also run a Cmd.
   const save = { type: "save", body: c.body, base: c.base, work: true };
 

@@ -5,6 +5,7 @@
 // the day the rule landed, which may only grow.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Schema } from "effect";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { RuleTester } from "oxlint/plugins-dev";
@@ -173,7 +174,7 @@ const LISTED = [
 // and objects are walked.
 type Tree = any;
 
-const toValue = (node: Tree): unknown => {
+const toValue = (node: Tree): Schema.Json => {
   if (node.type === "ObjectExpression") {
     return Object.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
   }

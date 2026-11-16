@@ -46,7 +46,7 @@ const Config = Schema.Struct({
 // oxc-parser's tree, read loosely: only literals, arrays and objects are walked.
 type Tree = any;
 
-const toValue = (node: Tree): unknown => {
+const toValue = (node: Tree): Schema.Json => {
   if (node.type === "ObjectExpression") {
     return Object.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
   }

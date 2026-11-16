@@ -27,7 +27,7 @@ vi.mock("@kampus/libfabrika/workers/runtime", async (original) => ({
 
 vi.mock("./door.ts", () => ({
   Gateway: {
-    pipe: (f: (self: Effect.Effect<void>) => unknown) => f(Effect.void),
+    pipe: <A>(f: (self: Effect.Effect<void>) => A) => f(Effect.void),
     layer: (options: unknown) => {
       held.door.push(options);
       return Layer.empty;

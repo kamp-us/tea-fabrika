@@ -6,6 +6,8 @@
 // `tsconfig.base.json` has comments, so it is read as a JS expression.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Schema } from "effect";
+import { Predicate } from "effect";
 import { type Expression, parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
 
@@ -18,11 +20,15 @@ const LISTED = ["next/packages/libfabrika/src/ci/**/*.ts", "next/packages/libfab
 const WHOLE = ["next/packages/**/*.ts", "next/packages/**/*.tsx"];
 
 /** A JSON value from the parsed config, comments dropped. */
-const value = (node: Expression): unknown => {
+const value = (node: Expression): Schema.Json => {
   switch (node.type) {
     case "ParenthesizedExpression":
       return value(node.expression);
     case "Literal":
+      if (Predicate.isBigInt(node.value) || Predicate.isRegExp(node.value)) {
+        throw new Error(`tsconfig.base.json holds a ${node.type} that is not JSON`);
+      }
+
       return node.value;
     case "ArrayExpression":
       return node.elements.map((element) =>

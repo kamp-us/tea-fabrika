@@ -165,7 +165,7 @@ export const changedRequest = (request: Request, pick: number, other: Request): 
 };
 
 /** A value one field away from valid: wrong type, empty text or a missing key. */
-export const broken = (value: object, pick: number, bad: ReadonlyArray<readonly [string, unknown]>): unknown => {
+export const broken = (value: object, pick: number, bad: ReadonlyArray<readonly [string, unknown]>): object => {
   const [key, replacement] = choose(bad, pick);
 
   if (replacement === MISSING) {
@@ -233,7 +233,7 @@ export const BAD_RECORDED: ReadonlyArray<readonly [string, unknown]> = [
 ];
 
 /** A result one field away from valid, for the case it has. */
-export const brokenResult = (result: Result, pick: number): unknown => {
+export const brokenResult = (result: Result, pick: number): object => {
   const fits = BAD_RESULT.filter(
     ([key]) =>
       key === "_tag" || (key === "code" ? result._tag === "exited" : key === "reason" && result._tag !== "exited"),

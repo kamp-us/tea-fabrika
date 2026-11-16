@@ -43,13 +43,19 @@ const throwing = (sql: Sql, failure: unknown): Sql => ({
   },
 });
 
-/** What an error keeps beneath it: the cause under its tagged reason (0119), or its own. */
-const beneath = (error: unknown): unknown => {
-  if (Predicate.hasProperty(error, "reason") && Predicate.hasProperty(error.reason, "cause")) {
-    return error.reason.cause;
-  }
+/**
+ * What an error keeps beneath it: the cause under its tagged reason (0119), or its own. A cause that
+ * is no object is nothing beneath, as neither caller reads one.
+ */
+const beneath = (error: unknown): object | undefined => {
+  const cause =
+    Predicate.hasProperty(error, "reason") && Predicate.hasProperty(error.reason, "cause")
+      ? error.reason.cause
+      : Predicate.hasProperty(error, "cause")
+        ? error.cause
+        : undefined;
 
-  return Predicate.hasProperty(error, "cause") ? error.cause : undefined;
+  return Predicate.isObjectOrArray(cause) ? cause : undefined;
 };
 
 /** An error and every cause under it, outermost first. */

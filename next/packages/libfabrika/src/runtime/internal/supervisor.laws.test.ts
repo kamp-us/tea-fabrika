@@ -57,7 +57,7 @@ const step = (model: Model, msg: Msg): Model => applyCell(supervisor, model, msg
 
 const valid = (model: unknown): boolean => Schema.is(Supervision)(model);
 
-const roundTrip = (model: Model): unknown =>
+const roundTrip = (model: Model): Schema.Json =>
   Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(JSON.stringify(Schema.encodeSync(Supervision)(model)));
 
 /** JSON text with sorted keys: a decoded copy may order its fields differently. */

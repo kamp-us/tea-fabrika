@@ -79,7 +79,7 @@ const env = {
   REPORT: "/runner/temp/next.json",
 };
 
-const io = (answer: () => unknown, report: () => string): Io => ({
+const io = <A>(answer: () => A, report: () => string): Io => ({
   job: () => Effect.sync(answer),
   read: () => Effect.sync(report),
 });

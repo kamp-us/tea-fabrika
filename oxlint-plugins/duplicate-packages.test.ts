@@ -9,6 +9,8 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Schema } from "effect";
+import { Predicate } from "effect";
 import { type Expression, parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
 
@@ -16,11 +18,15 @@ const ROOT = join(import.meta.dirname, "..");
 const KEY = "allowedDuplicatedPackages";
 
 /** A JSON value from the parsed config, comments dropped. */
-const value = (node: Expression): unknown => {
+const value = (node: Expression): Schema.Json => {
   switch (node.type) {
     case "ParenthesizedExpression":
       return value(node.expression);
     case "Literal":
+      if (Predicate.isBigInt(node.value) || Predicate.isRegExp(node.value)) {
+        throw new Error(`tsconfig.base.json holds a ${node.type} that is not JSON`);
+      }
+
       return node.value;
     case "ArrayExpression":
       return node.elements.map((element) =>

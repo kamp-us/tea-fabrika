@@ -24,7 +24,7 @@
 // move that state allows; stale and malformed input is built from what the walk delivered.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Predicate, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { ProcessId } from "../ProcessId.ts";
 import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";
@@ -96,7 +96,7 @@ const START: { readonly [K in Kind]: (typeof SHAPES)[K]["Type"] } = {
 };
 
 /** One generated edit of a value of `kind`, chosen from what the value holds now. */
-const edit = (kind: Kind, value: unknown, e: number, at: number, word: string): unknown => {
+const edit = (kind: Kind, value: unknown, e: number, at: number, word: string): ListView | TagsView | RecordView => {
   if (kind === "list") {
     const v = value as ListView;
     const i = v.items.length === 0 ? 0 : at % v.items.length;
@@ -372,7 +372,7 @@ type ViewChoice = typeof viewChoice extends fc.Arbitrary<infer C> ? C : never;
 /** The brain's side of one pid: its value at each revision, and every notice it made. */
 type Brain = { readonly kind: Kind; rev: number; views: Array<unknown>; made: Array<unknown> };
 
-const brainStep = (b: Brain, c: ViewChoice): unknown => {
+const brainStep = (b: Brain, c: ViewChoice): object => {
   const before = b.views[b.rev]!;
   const after = edit(b.kind, before, c.edit, c.at, c.word);
   b.views.push(after);
@@ -383,7 +383,7 @@ const brainStep = (b: Brain, c: ViewChoice): unknown => {
 /** The next notice the brain would send, broken one way: an op that is not RFC 6902, a path that is
  *  not there, an array index past the end, a value of the wrong type, the whole of another shape, or no
  *  list of ops at all. */
-const corrupt = (b: Brain, c: ViewChoice): unknown => {
+const corrupt = (b: Brain, c: ViewChoice): object | undefined => {
   const rev = b.rev;
   const next = (patch: unknown) => ({ type: "patch", base: rev, rev: rev + 1, patch });
   const wrongType =
@@ -499,8 +499,9 @@ const viewWalks = fc.tuple(
 const pidKind = (pid: string): Kind => pid.slice(pid.lastIndexOf("_") + 1) as Kind;
 const decodes = (pid: string, view: unknown): boolean => Schema.is(SHAPES[pidKind(pid)])(view);
 
-const noteType = (note: unknown): unknown =>
-  typeof note === "object" && note !== null ? Reflect.get(note, "type") : null;
+/** A notice's `type` when it is a string: every caller compares it with a string. */
+const noteType = (note: unknown): string | null =>
+  Predicate.hasProperty(note, "type") && Predicate.isString(note.type) ? note.type : null;
 
 const noteRev = (note: unknown): unknown =>
   typeof note === "object" && note !== null ? Reflect.get(note, "rev") : null;

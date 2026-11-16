@@ -83,7 +83,7 @@ const answering = (raw: unknown): LedgerCalls => ({
 });
 
 /** A valid answer for each call, then one schema-required field damaged. */
-const damaged = (method: Method, rev: number, bad: string): unknown => {
+const damaged = (method: Method, rev: number, bad: string): object => {
   if (method === "append") {
     return { ...Appended.cases.placed.make({ rev, pos: rev }), rev: bad };
   }

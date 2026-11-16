@@ -31,7 +31,7 @@ const Tape = fc.array(fc.record({ pick: fc.noBias(fc.nat()), move: fc.noBias(fc.
 
 const Samples = Arbitrary.array(Arbitrary.schema(Save), { minLength: 8, maxLength: 32 });
 
-const declared = (select: (msg: typeof Save.Type) => unknown, data: Schema.Codec<unknown, unknown> = Metadata) => ({
+const declared = <A>(select: (msg: typeof Save.Type) => A, data: Schema.Codec<unknown, unknown> = Metadata) => ({
   name: "audit-fixture",
   machine: Machine.make({
     model: Model,

@@ -8,6 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
+import type { Schema } from "effect";
 import { Effect, type FileSystem, type Path, Tracer } from "effect";
 import * as fc from "fast-check";
 import { bundle, bundleAsync, type Rule, transform } from "lightningcss";
@@ -69,7 +70,7 @@ const cssRules = (css: string) => {
   return rules;
 };
 
-const meaning = (rules: readonly Rule[]): unknown =>
+const meaning = (rules: readonly Rule[]): Schema.Json =>
   JSON.parse(JSON.stringify(rules, (key, value) => (key === "loc" ? undefined : value)));
 
 const fixture = (id: number) => {

@@ -568,7 +568,7 @@ const OldRead = Schema.Struct({ stream: Schema.String, after: Schema.Int.check(S
 const oldFrame = (text: string) =>
   Result.flatMap(
     // oxlint-disable-next-line eslint/no-restricted-properties -- oracle: the old parse this law compares against
-    Result.try({ try: (): unknown => JSON.parse(text), catch: () => null }),
+    Result.try({ try: (): Schema.Json => JSON.parse(text), catch: () => null }),
     (parsed) => Result.mapError(Schema.decodeUnknownResult(OldRequest)(parsed), () => null),
   );
 

@@ -167,7 +167,7 @@ const mailDiagnostics = () => {
   const stamp = () => ({ at: Date.now(), elapsed: performance.now() });
   const note = (event: string, value: unknown = null) => events.push({ ...stamp(), event, value });
   note("start");
-  const read = async (label: string, call: () => Promise<unknown>) => {
+  const read = async <A>(label: string, call: () => Promise<A>) => {
     const start = stamp();
     let value: unknown = null;
 

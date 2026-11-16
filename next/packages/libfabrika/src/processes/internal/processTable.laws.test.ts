@@ -323,7 +323,7 @@ const init = (machine: Machine): Model => machine.init(null, undefined)[0];
 const record = (machine: Machine, model: Model, entry: Entry): Model =>
   applyCell(machine, model, { type: "recorded", entry })[0];
 
-const thrown = (run: () => unknown): unknown => {
+const thrown = <A>(run: () => A): unknown => {
   const result = Result.try(run);
   return Result.isFailure(result) ? result.failure : undefined;
 };

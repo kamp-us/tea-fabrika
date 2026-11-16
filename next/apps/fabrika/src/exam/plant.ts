@@ -38,7 +38,7 @@ type Fires<A> = (code: string, file: string) => readonly A[];
  */
 export function plant(files: Files): Promise<Fires<number>>;
 export function plant<A>(files: Files, show: (fire: Fire) => A): Promise<Fires<A>>;
-export function plant(files: Files, show: (fire: Fire) => unknown = (f) => f.line): Promise<Fires<unknown>> {
+export function plant<A>(files: Files, show: (fire: Fire) => A | number = (f) => f.line): Promise<Fires<A | number>> {
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest awaits this test helper's Promise
   return Effect.runPromise(
     lint(files).pipe(

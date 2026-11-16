@@ -8,6 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
+import type { Schema } from "effect";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Path, PlatformError, Tracer } from "effect";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
@@ -57,7 +58,7 @@ const cssRules = (css: string) => {
 };
 
 // Source locations change when the printer normalizes whitespace and escapes.
-const meaning = (rules: readonly Rule[]): unknown =>
+const meaning = (rules: readonly Rule[]): Schema.Json =>
   JSON.parse(JSON.stringify(rules, (key, value) => (key === "loc" ? undefined : value)));
 
 const names = fc.integer({ min: 0, max: 10000 }).map((n) => `View${n}`);
