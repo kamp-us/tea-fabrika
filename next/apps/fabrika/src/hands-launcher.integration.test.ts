@@ -139,7 +139,7 @@ class CallError extends Schema.TaggedError<CallError, { readonly brand: unique s
 }) {}
 
 const call = <A>(label: string, invoke: () => Promise<A>) =>
-  Effect.tryPromise({ try: invoke, catch: (cause: unknown) => new CallError({ message: label, cause }) });
+  Effect.tryPromise({ try: invoke, catch: (cause: unknown) => CallError.make({ message: label, cause }) });
 
 /** What one launch of the flow saw: every line, the key's two halves, the task, and every stored row. */
 type Seen = {
@@ -481,7 +481,7 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
             ),
             { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }), includeErrorInReport: true },
           ),
-        catch: (cause) => new CallError({ message: "S2 failed", cause }),
+        catch: (cause) => CallError.make({ message: "S2 failed", cause }),
       }),
     1_800_000,
   );

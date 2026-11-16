@@ -1,7 +1,6 @@
 // Today's CSS rules share parsing and reporting, so the runner can count known debt too.
 import { relative } from "node:path";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
+import { Array as Arr, Option } from "effect";
 import valueParser from "postcss-value-parser";
 import stylelint from "stylelint";
 import names from "../packages/fabrika-design/src/token-names.json" with { type: "json" };

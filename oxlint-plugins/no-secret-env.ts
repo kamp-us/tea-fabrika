@@ -38,7 +38,7 @@
 // This repo's own rule, not a copy. It blocks. Its fires when it was
 // added are in oxlint-plugins/README.md.
 import type { CreateRule } from "@oxlint/plugins";
-import * as Arr from "effect/Array";
+import { Array as Arr } from "effect";
 import { below, dotted, grouped, isWritten, type Node, quoted } from "./match.ts";
 
 const SECRET =

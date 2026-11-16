@@ -1,4 +1,5 @@
-import { Array as Arr, String as Str, pipe } from "effect";
+import { Array as Arr, String as Str, pipe, Effect, FileSystem, Formatter, Layer, Option } from "effect";
+import type { Path, Scope } from "effect";
 // BoxTest: the laws of the box command, as suites a world runs (0062). A world makes MAIN and one clean box
 // in a fresh temp folder and gives the layers rm runs on: `BoxTest.memory` answers Git and the runs/
 // move from memory, `BoxTestGit.world` uses real git and keepruns.sh, so the memory one stays honest.
@@ -7,14 +8,7 @@ import { Array as Arr, String as Str, pipe } from "effect";
 //
 // Each case is a generated plan: one box, then what is planted in it. The oracle below names the
 // verdict the old Python rm gave that plan, check by check in its order.
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process";
-import type * as Scope from "effect/Scope";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import type { BoxGit } from "./BoxGit.ts";

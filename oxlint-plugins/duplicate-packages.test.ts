@@ -9,10 +9,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
-import * as Option from "effect/Option";
-import * as Rec from "effect/Record";
+import { Array as Arr, pipe, Option, Record as Rec } from "effect";
 import { type Expression, parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
 

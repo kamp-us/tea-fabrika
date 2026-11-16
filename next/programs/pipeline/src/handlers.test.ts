@@ -4,15 +4,7 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import * as CodeHost from "@kampus/libfabrika/codehost/CodeHost";
 import * as CodeHostTest from "@kampus/libfabrika/codehost/CodeHostTest";
 import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
-import { Record as Rec, String as Str } from "effect";
-import * as Cause from "effect/Cause";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
+import { Record as Rec, String as Str, Cause, Context, Effect, Exit, Formatter, Layer, Redacted, Schema } from "effect";
 import * as fc from "fast-check";
 import { handlers } from "./handlers.ts";
 

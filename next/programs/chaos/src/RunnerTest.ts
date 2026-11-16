@@ -5,15 +5,8 @@ import { Outcome } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Chaos, type Handler, type Incoming, Nemesis, type ProgramRunner, type Update } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, String as Str } from "effect";
-import * as Arbitrary from "effect/Arbitrary";
-import * as Deferred from "effect/Deferred";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import type * as Scope from "effect/Scope";
+import { Array as Arr, String as Str, Arbitrary, Deferred, Effect, Fiber, Formatter, Option, Schema } from "effect";
+import type { Scope } from "effect";
 import { chaos } from "./program.ts";
 
 const SEED = 119120;

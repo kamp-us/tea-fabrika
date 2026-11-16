@@ -10,9 +10,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import * as Arr from "effect/Array";
-import * as Exit from "effect/Exit";
-import * as Schema from "effect/Schema";
+import { Array as Arr, Exit, Schema } from "effect";
 
 const FOLDER = "vendor/anti-slop";
 

@@ -6,11 +6,7 @@ import { it } from "@effect/vitest";
 // oxlint's RuleTester. Laws 3 and 6 read the repo's own `.oxlintrc.json`: one real lint run over a
 // planted file per listed folder and per left-out kind, and the saved list of the folders listed on
 // the day the rule landed, which may only grow.
-import * as Arr from "effect/Array";
-import * as Effect from "effect/Effect";
-import { pipe } from "effect/Function";
-import * as Rec from "effect/Record";
-import * as Schema from "effect/Schema";
+import { Array as Arr, Effect, pipe, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { RuleTester } from "oxlint/plugins-dev";

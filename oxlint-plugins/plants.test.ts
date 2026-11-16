@@ -22,11 +22,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { it } from "@effect/vitest";
-import * as Arr from "effect/Array";
-import * as Effect from "effect/Effect";
-import { pipe } from "effect/Function";
-import * as Rec from "effect/Record";
-import * as Schema from "effect/Schema";
+import { Array as Arr, Effect, pipe, Record as Rec, Schema } from "effect";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";

@@ -65,9 +65,9 @@ import {
   Schema,
   Stream,
 } from "effect";
+import { Record as Rec } from "effect";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
-import * as Rec from "effect/Record";
 import { spoken } from "./flow/Beat.ts";
 
 // ---------------------------------------------------------------- the setting
@@ -174,15 +174,14 @@ const NOTHING = readOutput("");
 // ---------------------------------------------------------------- the status line
 
 /** The newest sweep that ran, and how many were skipped after it. */
-export const newest = (sweeps: ReadonlyArray<Sweep>) => {
-  return Option.match(
+export const newest = (sweeps: ReadonlyArray<Sweep>) =>
+  Option.match(
     Arr.findLastIndex(sweeps, (s) => s.outcome._tag !== "skipped"),
     {
       onNone: () => ({ last: null, skipped: sweeps.length }),
       onSome: (at) => ({ last: sweeps[at] ?? null, skipped: sweeps.length - 1 - at }),
     },
   );
-};
 
 /** Late: no sweep ran yet, or the newest one started more than two periods before `now`. */
 export const late = (last: Sweep | null, now: number, minutes: number): boolean =>

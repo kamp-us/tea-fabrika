@@ -1,17 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr } from "effect";
-import * as Arbitrary from "effect/Arbitrary";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
-import * as Formatter from "effect/Formatter";
-import * as Logger from "effect/Logger";
-import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
-import type * as Scope from "effect/Scope";
-import type * as Tracer from "effect/Tracer";
+import { Array as Arr, Arbitrary, Cause, Effect, Exit, Fiber, Formatter, Logger, Redacted, Schema } from "effect";
+import type { Scope, Tracer } from "effect";
 import * as Mail from "./Mail.ts";
 import type { merger } from "./Merger.ts";
 

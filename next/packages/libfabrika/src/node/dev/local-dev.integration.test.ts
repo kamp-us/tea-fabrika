@@ -126,7 +126,7 @@ describe("P12 local brain life", () => {
             let outbox = yield* brainOutbox(folder);
             yield* outbox.add(event);
             yield* Effect.exit(
-              outbox.flush(() => Effect.fail(new ControlFault({ message: "private control failure" }))),
+              outbox.flush(() => Effect.fail(ControlFault.make({ message: "private control failure" }))),
             );
             outbox = yield* brainOutbox(folder);
             expect(yield* outbox.pending).toEqual([event]);

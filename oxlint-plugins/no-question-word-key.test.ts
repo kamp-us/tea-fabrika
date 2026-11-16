@@ -1,8 +1,6 @@
 import { it } from "@effect/vitest";
 import type { Context, ESTree } from "@oxlint/plugins";
-import * as Arr from "effect/Array";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
+import { Array as Arr, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";

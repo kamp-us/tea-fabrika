@@ -2,8 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Array as Arr, pipe, String as Str } from "effect";
-import * as DateTime from "effect/DateTime";
+import { Array as Arr, pipe, String as Str, DateTime } from "effect";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 import {

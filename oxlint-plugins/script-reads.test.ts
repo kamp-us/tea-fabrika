@@ -1,13 +1,7 @@
 import { posix } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { layer } from "@effect/vitest";
-import * as Arr from "effect/Array";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import { pipe } from "effect/Function";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Rec from "effect/Record";
+import { Array as Arr, Effect, FileSystem, pipe, Option, Path, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { load, reached, scriptReads } from "./script-reads.mjs";

@@ -226,7 +226,7 @@ const replyCase = (
           replyCalls++;
 
           if (mode === "rpc" && replyCalls === 1) {
-            return Effect.runPromiseWith(services)(Effect.fail(new RpcFault({ message: "reply RPC lost" })));
+            return Effect.runPromiseWith(services)(Effect.fail(RpcFault.make({ message: "reply RPC lost" })));
           }
 
           if (mode === "decode" && replyCalls === 1) {

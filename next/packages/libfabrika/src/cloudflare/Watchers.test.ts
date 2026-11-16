@@ -46,7 +46,7 @@ describe("watcher delivery evidence, next/", () => {
           const publish = Publish.make(sql, (connection: string, client: string, news: unknown) =>
             Effect.suspend(() => {
               if (failSend) {
-                return Effect.fail(new Fault({ message: "unknown send failure" }));
+                return Effect.fail(Fault.make({ message: "unknown send failure" }));
               }
 
               delivered.push({ connection, client, news });
@@ -62,7 +62,7 @@ describe("watcher delivery evidence, next/", () => {
             WatcherManagerRemote.layer((client, update) =>
               Effect.suspend((): Effect.Effect<unknown, Fault> => {
                 if (rpc === "throw") {
-                  return Effect.fail(new Fault({ message: "RPC unreachable" }));
+                  return Effect.fail(Fault.make({ message: "RPC unreachable" }));
                 }
 
                 if (rpc === "malformed") {

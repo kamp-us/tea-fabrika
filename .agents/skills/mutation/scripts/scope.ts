@@ -24,12 +24,7 @@
  * - A test of an in-scope file is in, and a test of an out-of-scope file is out.
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Array as Arr, String as Str, pipe } from "effect";
-import * as Console from "effect/Console";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Stdio from "effect/Stdio";
-import * as Stream from "effect/Stream";
+import { Array as Arr, String as Str, pipe, Console, Effect, Option, Stdio, Stream } from "effect";
 
 const LEAD = ".agents/skills/lead/scripts/";
 

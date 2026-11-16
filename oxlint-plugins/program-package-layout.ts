@@ -3,11 +3,7 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
-import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
-import * as Option from "effect/Option";
-import * as Rec from "effect/Record";
-import * as Result from "effect/Result";
+import { Array as Arr, pipe, Option, Record as Rec, Result } from "effect";
 import { parseSync, Visitor } from "oxc-parser";
 import { ResolverFactory } from "oxc-resolver";
 

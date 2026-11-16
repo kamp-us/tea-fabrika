@@ -12,13 +12,8 @@
 // workspace, whose first tile tezgah starts itself. Every move is picked from tezgah's view as it
 // stands: a split from a live tile, a close of a live tile.
 import { describe, expect, it } from "@effect/vitest";
-import { Array as Arr } from "effect";
-import * as Effect from "effect/Effect";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
-import * as Schema from "effect/Schema";
-import type * as Scope from "effect/Scope";
+import { Array as Arr, Effect, Formatter, Option, Predicate, Schema } from "effect";
+import type { Scope } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;
@@ -84,15 +79,14 @@ const order = (node: unknown): ReadonlyArray<string> =>
       ? Arr.flatMap(node.parts, (p: unknown) => (Predicate.hasProperty(p, "inner") ? order(p.inner) : []))
       : [];
 
-const tilesOn = (v: View, n: number) => {
-  return Option.match(
+const tilesOn = (v: View, n: number) =>
+  Option.match(
     Arr.findFirst(v.workspaces, (w) => w.n === n),
     {
       onNone: () => [],
       onSome: (space) => Arr.flatMap(order(space.layout), (id) => Arr.filter(v.tiles, (t) => t.id === id)),
     },
   );
-};
 
 const via = Schema.encodeSync(Via)(Via.cases.key.make({ keys: "ctrl+b x" }));
 

@@ -24,12 +24,8 @@
 // shell is never a login shell (the `codex-exec` rows), and `NODE_PROBE` asks the box's own shell which
 // Node it finds before a step starts: `holdsPin` reads the answer.
 
-import { Array as Arr } from "effect";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
+import { Array as Arr, Effect, FileSystem, Option, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import * as Schema from "effect/Schema";
 
 /** The repo's Node: the root package.json's `volta.node`, else its `engines.node`; `null` when neither. */
 export const repoNode = Effect.fn("boxnode.repoNode")(function* (dir: string) {

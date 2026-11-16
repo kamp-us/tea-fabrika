@@ -7,7 +7,7 @@
 // Review keeps control-state judgment, relative/workspace I/O, globals, dynamic imports, hand edits
 // of another file's Model, and whether a factory returns its machine or receives a service.
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
-import * as Arr from "effect/Array";
+import { Array as Arr } from "effect";
 import { ancestors, below, type Node } from "./match.ts";
 
 const TEA = new Set(["@demlik/tea", "@demlik/tea/effect"]);

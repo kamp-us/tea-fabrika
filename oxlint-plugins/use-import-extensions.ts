@@ -22,7 +22,7 @@
 import { statSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
-import * as Arr from "effect/Array";
+import { Array as Arr } from "effect";
 import type { Node } from "./match.ts";
 
 const RELATIVE = /^\.\.?(?:\/|$)/;

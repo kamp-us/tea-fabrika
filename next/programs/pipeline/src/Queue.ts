@@ -1,8 +1,7 @@
 import type { Settled } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import { CodeHost, Program, Send, StartChild, Started, type Refusal } from "@kampus/libfabrika";
-import { Array as Arr, Record as Rec } from "effect";
-import * as Schema from "effect/Schema";
+import { Array as Arr, Record as Rec, Schema } from "effect";
 import { Abandon, Drop, Enqueue, Reply, Resume } from "./Mail.ts";
 import type { Values } from "./Settings.ts";
 

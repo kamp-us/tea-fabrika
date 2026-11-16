@@ -73,18 +73,22 @@
 //   - A plan with no "Product lines expected" column and no slices says so: it records no size.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Array as Arr, String as Str, pipe } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  pipe,
+  Console,
+  Effect,
+  Exit,
+  FileSystem,
+  Option,
+  Predicate,
+  Schema,
+  Stream,
+} from "effect";
+import type { PlatformError } from "effect";
 import { Argument, Command } from "effect/cli";
-import * as Console from "effect/Console";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
-import type * as PlatformError from "effect/PlatformError";
-import * as Predicate from "effect/Predicate";
 import { ChildProcess } from "effect/process";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 
 /**
  * Past this many product lines, `diff` asks whether the pull request should have been sliced. Advice

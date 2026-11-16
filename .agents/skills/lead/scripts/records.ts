@@ -44,16 +44,9 @@
 // Exit 0 with an answer. Exit 1 when origin/main cannot be fetched or read: it prints that the list
 // is unknown, never "0 records" and never a next number. Exit 2 when the command line is wrong.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Array as Arr, pipe, String as Str } from "effect";
+import { Array as Arr, pipe, String as Str, Console, Effect, Exit, Option, Predicate, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import * as Console from "effect/Console";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
 import { ChildProcess } from "effect/process";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 
 /** The ref every answer is read from. */
 const BASE = "origin/main";

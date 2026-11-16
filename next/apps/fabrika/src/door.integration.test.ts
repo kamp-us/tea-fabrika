@@ -177,7 +177,7 @@ class StoreFault extends Schema.TaggedError<StoreFault, { readonly brand: unique
 }) {}
 
 const web = <A>(call: () => Promise<A>): Effect.Effect<A, WebCryptoError> =>
-  Effect.tryPromise({ try: call, catch: () => new WebCryptoError({ message: "test WebCrypto failed" }) });
+  Effect.tryPromise({ try: call, catch: () => WebCryptoError.make({ message: "test WebCrypto failed" }) });
 
 const key = Effect.fn("test.key")(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
@@ -1178,7 +1178,7 @@ describe("T843 sender budget, next/", () => {
           w.sql.exec("UPDATE gateway_limits SET value=?", "{");
         }
 
-        const cause = new StoreFault({ message: "t843 write failed" });
+        const cause = StoreFault.make({ message: "t843 write failed" });
         const sql = failingTableWrites(w.sql, "gateway_limits", () => !corrupt, cause);
         yield* Effect.gen(function* () {
           const d = yield* Gateway;
@@ -1197,7 +1197,7 @@ describe("T843 sender budget, next/", () => {
       Effect.gen(function* () {
         const w = yield* world({ rateLimit: { limit: 1, window: 60_000 } });
         let broken = false;
-        const sql = failingTableWrites(w.sql, "sums", () => broken, new StoreFault({ message: "SQLITE_FULL" }));
+        const sql = failingTableWrites(w.sql, "sums", () => broken, StoreFault.make({ message: "SQLITE_FULL" }));
         const sink = SpanSink.layer(sql, { object: START });
         yield* Effect.gen(function* () {
           const d = yield* Gateway;

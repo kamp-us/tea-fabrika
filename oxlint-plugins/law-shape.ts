@@ -33,9 +33,7 @@
 // helper that wraps `it` is read at its own `it` only when that one is a property. Under-reporting
 // is the safe side for a rule that blocks.
 import type { CreateRule, ESTree } from "@oxlint/plugins";
-import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
-import * as Option from "effect/Option";
+import { Array as Arr, pipe, Option } from "effect";
 import { below, dotted, type Node } from "./match.ts";
 
 const LABELS = ["vector", "format", "pinned", "scenario", "type"] as const;

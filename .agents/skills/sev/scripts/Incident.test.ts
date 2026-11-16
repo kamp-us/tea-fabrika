@@ -2,15 +2,19 @@
 // asks GitHub or git. The log goes to a temporary folder.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Array as Arr, String as Str, pipe } from "effect";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Order from "effect/Order";
-import * as Rec from "effect/Record";
-import * as Schema from "effect/Schema";
-import type * as Scope from "effect/Scope";
+import {
+  Array as Arr,
+  String as Str,
+  pipe,
+  Duration,
+  Effect,
+  FileSystem,
+  Layer,
+  Order,
+  Record as Rec,
+  Schema,
+} from "effect";
+import type { Scope } from "effect";
 import * as BranchesTest from "../../lead/scripts/pr/BranchesTest.ts";
 import type { PullRequest } from "../../lead/scripts/pr/PullRequests.ts";
 import * as PullRequestsTest from "../../lead/scripts/pr/PullRequestsTest.ts";

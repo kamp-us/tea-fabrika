@@ -1,12 +1,8 @@
 // runFlow on the real tea engine and tea's own file store, in a temp folder, with fake runners
 // through `Runners.layer`: no git, network or agent.
 import { NodeServices } from "@effect/platform-node";
-import { Array as Arr } from "effect";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Rec from "effect/Record";
-import * as Schema from "effect/Schema";
-import type * as Scope from "effect/Scope";
+import { Array as Arr, Effect, FileSystem, Record as Rec, Schema } from "effect";
+import type { Scope } from "effect";
 import { describe, expect, it } from "vitest";
 import * as Flow from "./Flow.ts";
 import { landDecision } from "./flows/land-decision.ts";

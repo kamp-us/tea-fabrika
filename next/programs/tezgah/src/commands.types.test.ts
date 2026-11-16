@@ -14,8 +14,7 @@
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import type { Binding } from "@kampus/libfabrika";
 import * as Keys from "@kampus/libfabrika/client/Keys";
-import { Array as Arr, String as Str } from "effect";
-import * as Result from "effect/Result";
+import { Array as Arr, String as Str, Result } from "effect";
 import * as fc from "fast-check";
 import { commands } from "./commands.ts";
 import type { tezgahMachine } from "./program.ts";

@@ -1,5 +1,4 @@
-import { Array as Arr, String as Str, pipe } from "effect";
-import * as Option from "effect/Option";
+import { Array as Arr, String as Str, pipe, Option } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { inScope, pick, PRODUCT, related } from "./scope.ts";

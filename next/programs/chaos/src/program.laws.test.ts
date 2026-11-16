@@ -6,9 +6,7 @@ import { arbGuidedSequence, arbMsgSequence, propertyInvariant } from "@demlik/te
 import { expect, it } from "@effect/vitest";
 import * as Fabrika from "@kampus/libfabrika";
 import { syncTest } from "@kampus/libfabrika/testing";
-import { Array as Arr, String as Str } from "effect";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
+import { Array as Arr, String as Str, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { chaos } from "./program.ts";

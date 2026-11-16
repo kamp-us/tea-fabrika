@@ -352,7 +352,7 @@ const projectSecrets = Effect.fnUntraced(function* (
             return request;
           }).pipe(Effect.provide(logging)),
         ),
-      catch: (error) => new Rejected({ cause: error }),
+      catch: (error) => Rejected.make({ cause: error }),
     }).pipe(Effect.result);
 
     if (Result.isFailure(outcome)) {
@@ -586,7 +586,7 @@ const storageCall = Effect.fnUntraced(function* (
 
     const failed = yield* Effect.tryPromise({
       try: () => runtime.runPromise(start),
-      catch: (error) => new Rejected({ cause: error }),
+      catch: (error) => Rejected.make({ cause: error }),
     }).pipe(Effect.result);
 
     prepared = Result.isFailure(failed) && fixture.hit();
@@ -596,7 +596,7 @@ const storageCall = Effect.fnUntraced(function* (
 
     const failed = yield* Effect.tryPromise({
       try: () => runtime.runPromise(start),
-      catch: (error) => new Rejected({ cause: error }),
+      catch: (error) => Rejected.make({ cause: error }),
     }).pipe(Effect.result);
 
     prepared = Result.isFailure(failed) && fixture.hit();
@@ -687,7 +687,7 @@ const storageCall = Effect.fnUntraced(function* (
 
   const invoke = Effect.tryPromise({
     try: () => runtime.runPromise(call.pipe(Effect.provide(logging))),
-    catch: (error) => new Rejected({ cause: error }),
+    catch: (error) => Rejected.make({ cause: error }),
   });
 
   yield* inspect(fixture, invoke, reopen);

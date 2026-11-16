@@ -2,18 +2,22 @@
 // time limit, what a failed command answers, and the quest's state file. Commands here are plain
 // `sh` lines; no git, Electron, network or agent runs.
 import { NodeServices } from "@effect/platform-node";
-import { Array as Arr, String as Str, pipe } from "effect";
-import * as Clock from "effect/Clock";
+import {
+  Array as Arr,
+  String as Str,
+  pipe,
+  Clock,
+  Effect,
+  Fiber,
+  FileSystem,
+  Formatter,
+  Layer,
+  Option,
+  Ref,
+  Schema,
+} from "effect";
+import type { Scope } from "effect";
 import { Digest } from "effect/crypto";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Ref from "effect/Ref";
-import * as Schema from "effect/Schema";
-import type * as Scope from "effect/Scope";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { repoNode } from "../boxnode.ts";

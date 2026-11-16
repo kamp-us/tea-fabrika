@@ -2,10 +2,7 @@ import { join } from "node:path";
 import { it } from "@effect/vitest";
 // Each generated case runs in process through oxlint's RuleTester, at its next/ path; one oxlint run
 // over every case's files then proves the repo's own .oxlintrc.json wires the rule at those paths.
-import * as Arr from "effect/Array";
-import * as Effect from "effect/Effect";
-import * as Rec from "effect/Record";
-import * as Schema from "effect/Schema";
+import { Array as Arr, Effect, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect } from "vitest";

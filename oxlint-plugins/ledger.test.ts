@@ -1,7 +1,5 @@
 import { it } from "@effect/vitest";
-import * as Arr from "effect/Array";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
+import { Array as Arr, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";

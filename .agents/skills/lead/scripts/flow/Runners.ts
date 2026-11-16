@@ -3,8 +3,7 @@
 // A real flow gets its runners from a table (the landing runners); a test gives fakes through the same
 // `Runners.layer`, so no test needs git, the network or an agent.
 
-import { Context, Effect, Layer, Schema } from "effect";
-import * as Rec from "effect/Record";
+import { Context, Effect, Layer, Schema, Record as Rec } from "effect";
 import type { Answer } from "./Outcome.ts";
 import type { Step } from "./Step.ts";
 

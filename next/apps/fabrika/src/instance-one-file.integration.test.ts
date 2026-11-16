@@ -792,7 +792,7 @@ describe("P16 copied-file real instance, serial", () => {
                             }
                           }
                         },
-                        catch: (error) => new CheckError({ message: "P16 isolation check failed", cause: error }),
+                        catch: (error) => CheckError.make({ message: "P16 isolation check failed", cause: error }),
                       });
                     }),
                   ).pipe(
@@ -977,7 +977,7 @@ describe("P16 copied-file real instance, serial", () => {
                           b.ws.close();
                         }
                       },
-                      catch: (error) => new CheckError({ message: "P16 recovery check failed", cause: error }),
+                      catch: (error) => CheckError.make({ message: "P16 recovery check failed", cause: error }),
                     });
                   }),
                 ).pipe(

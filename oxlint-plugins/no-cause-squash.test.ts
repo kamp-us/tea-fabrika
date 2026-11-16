@@ -5,11 +5,7 @@ import { it } from "@effect/vitest";
 // process through oxlint's RuleTester: an import spelling, some uses and some neighbors that must
 // pass, one per line. Law 3 is one real oxlint run with the repo's config, since only the config
 // says which paths are tests.
-import * as Arr from "effect/Array";
-import * as Effect from "effect/Effect";
-import { pipe } from "effect/Function";
-import * as Rec from "effect/Record";
-import * as Schema from "effect/Schema";
+import { Array as Arr, Effect, pipe, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect } from "vitest";

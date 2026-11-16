@@ -23,9 +23,7 @@
 // that do not assign to each other, so each has a small adapter that reads the facts out. This file
 // holds oxlint's (`visitor`); test-kind.ts holds oxc-parser's.
 import type { ESTree, Visitor } from "@oxlint/plugins";
-import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
-import * as Rec from "effect/Record";
+import { Array as Arr, pipe, Record as Rec } from "effect";
 import { dotted } from "./match.ts";
 
 /** The real things 0584 names, by what a call opens. */

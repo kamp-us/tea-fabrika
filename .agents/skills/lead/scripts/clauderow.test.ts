@@ -7,16 +7,20 @@
 import { spawnSync } from "node:child_process";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Array as Arr, pipe, String as Str } from "effect";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as PlatformError from "effect/PlatformError";
-import * as Rec from "effect/Record";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
+import {
+  Array as Arr,
+  pipe,
+  String as Str,
+  DateTime,
+  Effect,
+  FileSystem,
+  Formatter,
+  Layer,
+  PlatformError,
+  Record as Rec,
+  Result,
+  Schema,
+} from "effect";
 import { type Ask, read, rounded, row, turns } from "./clauderow.ts";
 
 const tool = { type: "tool_use", id: "t", name: "Read", input: {} };

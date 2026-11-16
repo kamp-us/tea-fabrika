@@ -15,13 +15,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, matchesGlob, relative, resolve } from "node:path";
-import * as Arr from "effect/Array";
-import * as Exit from "effect/Exit";
-import { pipe } from "effect/Function";
-import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
-import * as Rec from "effect/Record";
-import * as Schema from "effect/Schema";
+import { Array as Arr, Exit, pipe, Option, Predicate, Record as Rec, Schema } from "effect";
 import { verify } from "./vendored.ts";
 
 /**

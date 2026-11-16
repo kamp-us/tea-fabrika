@@ -14,19 +14,10 @@
 // Exit codes, as the quest chain's: 0 done, 20 parked on an ask, 30 stuck, 2 usage.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Array as Arr } from "effect";
+import { Array as Arr, Console, Effect, Formatter, Layer, Option, Path, Runtime, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import * as Console from "effect/Console";
 import { Digest } from "effect/crypto";
-import * as Effect from "effect/Effect";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
-import * as Runtime from "effect/Runtime";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import * as Flow from "./Flow.ts";
 import { runners as hosting } from "./host.ts";
 import { runners as landing } from "./landing.ts";

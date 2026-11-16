@@ -797,7 +797,7 @@ describe("P12 Project authority", () => {
     const result = await Effect.runPromiseExit(
       Effect.tryPromise({
         try: w.reopen,
-        catch: (cause) => new ReopenError({ message: "project reopen failed", cause }),
+        catch: (cause) => ReopenError.make({ message: "project reopen failed", cause }),
       }),
     );
 

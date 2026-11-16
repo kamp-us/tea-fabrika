@@ -1,5 +1,4 @@
-import { Array as Arr, pipe, String as Str } from "effect";
-import * as DateTime from "effect/DateTime";
+import { Array as Arr, pipe, String as Str, DateTime, Effect, FileSystem, Option, Path, Schema } from "effect";
 // Remove: the box rm command, which removes one box (its work folder and its git data folder) only
 // when every commit and file it saved is somewhere MAIN keeps. Deletion needs proof for every saved
 // state, so anything unknown keeps the pair. Today's lead tooling, run on our own laptop.
@@ -12,11 +11,6 @@ import * as DateTime from "effect/DateTime";
 // The order of the checks is the contract: the first that fails names the reason. Paths are read the
 // way Python's pathlib read them before this port: "." parts drop, ".." stays, and a link is
 // followed by hand, so every link and its target count as MAIN's storage.
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
 import { BoxGit, type Inspection } from "./BoxGit.ts";
 import { Runs } from "./Runs.ts";
 

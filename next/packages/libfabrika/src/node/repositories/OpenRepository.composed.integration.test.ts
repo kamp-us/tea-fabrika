@@ -526,7 +526,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                       outputs.pending.push(snapshot);
 
                       return source === 8
-                        ? Effect.fail(new ConfirmFault({ message: `${url} ${folder} ${secret}` }))
+                        ? Effect.fail(ConfirmFault.make({ message: `${url} ${folder} ${secret}` }))
                         : Effect.succeed(c.move % 2 === 0);
                     },
                   }).pipe(

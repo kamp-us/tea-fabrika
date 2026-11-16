@@ -1,11 +1,15 @@
 import { expect, it } from "@effect/vitest";
-import { Array as Arr, Record as Rec, String as Str } from "effect";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
-import * as SchemaIssue from "effect/SchemaIssue";
+import {
+  Array as Arr,
+  Record as Rec,
+  String as Str,
+  ConfigProvider,
+  Effect,
+  Exit,
+  Option,
+  Predicate,
+  SchemaIssue,
+} from "effect";
 import * as fc from "fast-check";
 import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";

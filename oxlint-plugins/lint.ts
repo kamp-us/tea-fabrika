@@ -9,9 +9,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
-import * as Result from "effect/Result";
+import { Array as Arr, pipe, Result } from "effect";
 import { advises, stale, warnLines } from "./advice.ts";
 import { audit } from "./anti-slop.ts";
 import { checkTracked } from "./gitignore.mjs";

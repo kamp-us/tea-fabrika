@@ -105,21 +105,25 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices, type NodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Array as Arr, pipe, String as Str } from "effect";
-import * as Cause from "effect/Cause";
-import * as Clock from "effect/Clock";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Order from "effect/Order";
+import {
+  Array as Arr,
+  pipe,
+  String as Str,
+  Cause,
+  Clock,
+  DateTime,
+  Effect,
+  FileSystem,
+  Formatter,
+  Layer,
+  Option,
+  Order,
+  Record as Rec,
+  Result,
+  Schema,
+  Stream,
+} from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
-import * as Rec from "effect/Record";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import {
   type Agents,
   Answer,

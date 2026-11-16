@@ -22,7 +22,7 @@
 // edge, in functions with no Effect in them. 0523 sets that count aside: a pull request that makes
 // a folder block reports the fires it met and each disable line.
 import type { CreateRule } from "@oxlint/plugins";
-import * as Arr from "effect/Array";
+import { Array as Arr } from "effect";
 import type { Node } from "./match.ts";
 
 const isEffect = (text: unknown): boolean =>

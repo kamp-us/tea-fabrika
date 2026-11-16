@@ -1,4 +1,4 @@
-import { Array as Arr, String as Str } from "effect";
+import { Array as Arr, String as Str, DateTime, Effect, FileSystem, Path, Result, Schema } from "effect";
 // Level: the level CI is in, as data (decision 0532 for sev0, 0542 for the two levels and sev1).
 // Today's lead tooling, run on our own laptop; it is not product.
 //
@@ -10,12 +10,6 @@ import { Array as Arr, String as Str } from "effect";
 // The log is `runs/sev/log.jsonl` in the checkout (git ignores `runs/`): one line per fact, never
 // rewritten. The sev0 is folded from it, so two sev0s open at once cannot be written: `open` is
 // refused while one is open, and a log that holds two fails to fold.
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import { Run } from "./WorkflowRuns.ts";
 
 /** A command was refused: the level does not stand the way it needs. The reason says how it does. */

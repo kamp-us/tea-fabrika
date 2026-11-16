@@ -3,13 +3,8 @@
 // given (`next/packages/tuval/src/window/use-model.ts`), so the rules' own edge paths and the config's
 // `next/**` globs meet them as they would meet the real file. Nothing is written inside the repo.
 import { NodeServices } from "@effect/platform-node";
-import { Array as Arr, Record as Rec } from "effect";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
+import { Array as Arr, Record as Rec, Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 
 /** One fire: the rule's code, as oxlint prints it (`fabrika(no-of)`), where, and what it says. */
 interface Fire {

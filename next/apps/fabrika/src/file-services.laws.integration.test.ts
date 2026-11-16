@@ -923,7 +923,7 @@ it.effect.prop(
           vi.resetModules();
           yield* Effect.tryPromise({
             try: () => import("../dev.ts"),
-            catch: (cause: unknown) => new ImportError({ message: "dev import failed", cause }),
+            catch: (cause: unknown) => ImportError.make({ message: "dev import failed", cause }),
           });
           expect(cli.work).toBeDefined();
 

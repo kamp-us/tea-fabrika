@@ -229,7 +229,7 @@ const service = Effect.fnUntraced(function* (
           lower !== undefined &&
           stream === affected &&
           failure !== undefined &&
-          pipe(failure.part, Str.endsWith("wait") === true)
+          pipe(failure.part, Str.endsWith("wait"))
         ) {
           return yield* lower;
         }

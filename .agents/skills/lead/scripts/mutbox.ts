@@ -61,19 +61,23 @@
 // file with zero mutants (ticket 655).
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Array as Arr, pipe, String as Str } from "effect";
+import {
+  Array as Arr,
+  pipe,
+  String as Str,
+  Clock,
+  Console,
+  Effect,
+  FileSystem,
+  Option,
+  Path,
+  Record as Rec,
+  Schema,
+  Stream,
+} from "effect";
+import type { PlatformError } from "effect";
 import { Command, Flag } from "effect/cli";
-import * as Clock from "effect/Clock";
-import * as Console from "effect/Console";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import type * as PlatformError from "effect/PlatformError";
 import { ChildProcess } from "effect/process";
-import * as Rec from "effect/Record";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import { parseSync, Visitor } from "oxc-parser";
 
 /** Docker's own label on every image and container this script makes, so cleanup finds them. */

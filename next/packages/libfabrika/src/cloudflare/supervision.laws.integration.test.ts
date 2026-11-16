@@ -147,7 +147,7 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
                 fresh: async (s, m) => {
                   if (move === "rpc") {
                     return Effect.runPromiseWith(context)(
-                      Effect.fail(new RpcFault({ message: "transport failed before checking" })),
+                      Effect.fail(RpcFault.make({ message: "transport failed before checking" })),
                     );
                   }
 
@@ -162,7 +162,7 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
                 step: async (s, m) => {
                   if (move === "rpc") {
                     return Effect.runPromiseWith(context)(
-                      Effect.fail(new RpcFault({ message: "transport failed before the program" })),
+                      Effect.fail(RpcFault.make({ message: "transport failed before the program" })),
                     );
                   }
 

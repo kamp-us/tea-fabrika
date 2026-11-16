@@ -1,13 +1,8 @@
-import { Array as Arr, String as Str, pipe } from "effect";
+import { Array as Arr, String as Str, pipe, Effect, Layer, Option, Record as Rec, Stream } from "effect";
 // BoxGitProcess.layer: the BoxGit service on real git, run from MAIN. Git sees neither inherited
 // settings nor the box's own config, hooks, fsmonitor or attributes: the caller passes an
 // environment with every GIT_ variable gone, and each call turns the box's programs off.
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import * as Rec from "effect/Record";
-import * as Stream from "effect/Stream";
 import { BoxGit, BoxGitError, type Inspection } from "./BoxGit.ts";
 
 /** Settings no box config can turn back on, so inspection never runs a program from the box. */

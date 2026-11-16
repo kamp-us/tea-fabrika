@@ -8,14 +8,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import type { ProgramRunner } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, String as Str } from "effect";
-import * as Arbitrary from "effect/Arbitrary";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import type * as Scope from "effect/Scope";
+import { Array as Arr, String as Str, Arbitrary, DateTime, Effect, Formatter, Option, Schema } from "effect";
+import type { Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { checklist } from "./program.ts";
 

@@ -2,8 +2,7 @@
 // warn override still names the folder (0523). Match written schema evidence, never record keys or
 // capitalized names. Scope variables identify imports, aliases and callback inputs without types.
 import type { CreateRule } from "@oxlint/plugins";
-import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
+import { Array as Arr, pipe } from "effect";
 import { below, dotted, type Node } from "./match.ts";
 
 const constructors = new Set([

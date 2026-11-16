@@ -1,5 +1,4 @@
-import * as Arr from "effect/Array";
-import * as Rec from "effect/Record";
+import { Array as Arr, Record as Rec } from "effect";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 

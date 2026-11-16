@@ -122,7 +122,7 @@ class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand
 }) {}
 
 const web = <A>(call: () => Promise<A>) =>
-  Effect.tryPromise({ try: call, catch: () => new WebCryptoError({ message: "test crypto failed" }) });
+  Effect.tryPromise({ try: call, catch: () => WebCryptoError.make({ message: "test crypto failed" }) });
 
 const key = Effect.fnUntraced(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));

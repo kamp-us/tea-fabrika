@@ -1,6 +1,6 @@
 // Today's version, design foundations PR 3. Every CSS rule blocks from day one.
 import { join } from "node:path";
-import * as Arr from "effect/Array";
+import { Array as Arr } from "effect";
 import type { Config } from "stylelint";
 
 const WINDOW = "apps/fabrika/src/window/window.css";

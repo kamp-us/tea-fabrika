@@ -1,5 +1,4 @@
-import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
+import { Array as Arr, pipe } from "effect";
 // `fabrika/no-of` against generated modules, in process through oxlint's RuleTester (0029). Each
 // module is 1 to 6 pieces, one per line; the oracle is the plan's case table: the lines that fire,
 // each with its message. The valid case is the same module with every firing line taken out.

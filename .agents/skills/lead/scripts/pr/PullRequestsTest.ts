@@ -1,10 +1,6 @@
-import { Array as Arr } from "effect";
+import { Array as Arr, Effect, Layer, Option, Schema } from "effect";
 // PullRequestsTest.layer: the PullRequests service in memory, on one list of pull requests that its
 // writes change as GitHub's would. It asks GitHub nothing. `calls` keeps every write, in order.
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import { type Detail, type Patch, type PullRequest, PullRequests, PullRequestsError } from "./PullRequests.ts";
 
 /** One write the layer took, as the caller made it. */

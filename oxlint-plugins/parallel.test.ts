@@ -7,11 +7,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { constants, tmpdir } from "node:os";
 import { join } from "node:path";
-import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
-import * as Option from "effect/Option";
-import * as Order from "effect/Order";
-import * as Rec from "effect/Record";
+import { Array as Arr, pipe, Option, Order, Record as Rec } from "effect";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 

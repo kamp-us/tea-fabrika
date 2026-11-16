@@ -123,7 +123,7 @@ vi.mock("rolldown", async (original) => {
                 Effect.tryPromise({
                   try: () => Promise.resolve(listener(notification)),
                   catch: (cause: unknown) =>
-                    new NotificationError({ message: "the repeated Rolldown notification failed", cause }),
+                    NotificationError.make({ message: "the repeated Rolldown notification failed", cause }),
                 }).pipe(Effect.orDie),
               { discard: true, concurrency: 1 },
             );

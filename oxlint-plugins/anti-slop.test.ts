@@ -15,13 +15,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
-import * as Option from "effect/Option";
-import * as Order from "effect/Order";
-import * as Predicate from "effect/Predicate";
-import * as Rec from "effect/Record";
-import * as Schema from "effect/Schema";
+import { Array as Arr, pipe, Option, Order, Predicate, Record as Rec, Schema } from "effect";
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -212,9 +206,9 @@ const ON: ReadonlyArray<Site> = Arr.flatMap(TAKEN, (rule) =>
 );
 
 /** Each taken rule in the first folder its block does not list. A rule on in the whole scope has none left. */
-const OFF: ReadonlyArray<Site> = Arr.flatMap(TAKEN, (rule) => {
-  return Option.match(unlisted(rule), { onNone: () => [], onSome: (glob) => [{ rule, glob }] });
-});
+const OFF: ReadonlyArray<Site> = Arr.flatMap(TAKEN, (rule) =>
+  Option.match(unlisted(rule), { onNone: () => [], onSome: (glob) => [{ rule, glob }] }),
+);
 
 const made: Array<string> = [];
 

@@ -3,11 +3,7 @@ import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { devNull } from "node:os";
 import { join, relative } from "node:path";
-import * as Arr from "effect/Array";
-import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
-import * as Rec from "effect/Record";
-import * as Result from "effect/Result";
+import { Array as Arr, Effect, Predicate, Record as Rec, Result } from "effect";
 import stylelint from "stylelint";
 import type { CssResult } from "./css-support.ts";
 

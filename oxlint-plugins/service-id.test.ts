@@ -4,11 +4,7 @@ import { it } from "@effect/vitest";
 // Ticket 737, G2. `fabrika/service-id` asks a libfabrika service ID for the package, its file's path,
 // then `.Name` when the service is named otherwise (decision 0023). The fixtures are the rule's own
 // inputs (0093), planted at real libfabrika paths with the repo's config; the replay reads the tree.
-import * as Arr from "effect/Array";
-import * as Effect from "effect/Effect";
-import { pipe } from "effect/Function";
-import * as Rec from "effect/Record";
-import * as Schema from "effect/Schema";
+import { Array as Arr, Effect, pipe, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";

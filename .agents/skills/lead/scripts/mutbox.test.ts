@@ -4,17 +4,21 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { Array as Arr, String as Str, pipe } from "effect";
-import * as Clock from "effect/Clock";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Rec from "effect/Record";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
+import {
+  Array as Arr,
+  String as Str,
+  pipe,
+  Clock,
+  DateTime,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Option,
+  Record as Rec,
+  Schedule,
+  Stream,
+} from "effect";
 import { TestClock } from "effect/testing";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";

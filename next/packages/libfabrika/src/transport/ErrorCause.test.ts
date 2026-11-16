@@ -52,7 +52,7 @@ const rejecting = <A, E>(method: Method, failure: unknown, work: Effect.Effect<A
   );
 
 describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
-  // C5, internal/binary.ts:81. Plant: `const fail = () => new WebCryptoError({})`.
+  // C5, internal/binary.ts:81. Plant: `const fail = () => WebCryptoError.make({})`.
   law(
     "C5: a generated rejection on any WebCrypto call is WebCryptoError with that very value as its cause",
     fc.record({
@@ -106,7 +106,7 @@ class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand
 }) {}
 
 const web = <A>(work: () => Promise<A>): Effect.Effect<A, WebCryptoError> =>
-  Effect.tryPromise({ try: work, catch: (cause) => new WebCryptoError({ message: "test WebCrypto failed", cause }) });
+  Effect.tryPromise({ try: work, catch: (cause) => WebCryptoError.make({ message: "test WebCrypto failed", cause }) });
 
 /**
  * scenario: a passkey made when the law runs (WebCrypto, P-256) signs authenticator data and the

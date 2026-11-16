@@ -116,20 +116,24 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Array as Arr, pipe, String as Str } from "effect";
-import * as Clock from "effect/Clock";
-import * as Context from "effect/Context";
+import {
+  Array as Arr,
+  pipe,
+  String as Str,
+  Clock,
+  Context,
+  DateTime,
+  Duration,
+  Effect,
+  Formatter,
+  Layer,
+  Option,
+  Record as Rec,
+  Result,
+  Schedule,
+  Schema,
+} from "effect";
 import { Digest } from "effect/crypto";
-import * as DateTime from "effect/DateTime";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Rec from "effect/Record";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -1516,7 +1520,7 @@ const handlers = (s: Setup) => {
         const r = readRecord();
         const last = Arr.findFirst(r.steps, (e) => e.round === earlier + cmd.round);
 
-        if (Option.isSome(last !== undefined)) {
+        if (Option.isSome(last)) {
           saveStep({ ...last.value, judged: { box, answer } });
         }
 
@@ -1837,7 +1841,7 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     const statePath = join(env.BOXES, "state", `${quest}.json`);
 
     const saved: typeof SavedQuest.Type = existsSync(statePath)
-      ? yield* Schema.decodeUnknownEffect(SavedQuest)(readFileSync(statePath, "utf8")).pipe(
+      ? yield* Schema.decodeEffect(SavedQuest)(readFileSync(statePath, "utf8")).pipe(
           Effect.catch((error) =>
             Effect.sync(() => {
               console.error(`chain.ts: the quest's state file ${statePath} does not read: ${error.message}`);

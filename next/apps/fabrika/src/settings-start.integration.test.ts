@@ -472,7 +472,7 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
     yield* request.pipe(
       Effect.filterOrFail(
         (response) => response.status === 200,
-        (response) => new NotReopened({ status: response.status }),
+        (response) => NotReopened.make({ status: response.status }),
       ),
       Effect.retry({ times: 100, schedule: Schedule.spaced("100 millis") }),
     );

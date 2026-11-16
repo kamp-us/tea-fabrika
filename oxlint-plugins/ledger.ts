@@ -11,7 +11,7 @@
 // An entry is keyed by file, rule and the finding's line of code with its spaces collapsed, never a
 // line number, so code moving up or down keeps its entry and a changed line loses it.
 
-import * as Arr from "effect/Array";
+import { Array as Arr } from "effect";
 
 /** One finding, or one ledger entry: the same three keys. */
 export interface Finding {

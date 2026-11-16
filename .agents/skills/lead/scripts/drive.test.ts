@@ -14,15 +14,19 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Agent } from "@kampus/fabrika-old";
 import { nameOf } from "@kampus/pipeline/stages/outcome";
-import { Array as Arr, pipe, String as Str } from "effect";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Order from "effect/Order";
-import * as Rec from "effect/Record";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
+import {
+  Array as Arr,
+  pipe,
+  String as Str,
+  Effect,
+  Exit,
+  Formatter,
+  Option,
+  Order,
+  Record as Rec,
+  Schema,
+  Stream,
+} from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type Answer, answerFor, NO_SPENT, sendsFrom } from "./agents.ts";

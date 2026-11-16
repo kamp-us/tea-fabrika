@@ -123,7 +123,7 @@ const span = (piece: string, at: number, ms = 1, ok = true, attributes: Record<s
     yield* TestClock.setTime(at);
     yield* Effect.exit(
       TestClock.adjust(ms).pipe(
-        Effect.andThen(ok ? Effect.void : Effect.fail(new SpanFault({ message: "p101" }))),
+        Effect.andThen(ok ? Effect.void : Effect.fail(SpanFault.make({ message: "p101" }))),
         Effect.withSpan(piece, { attributes }),
       ),
     );

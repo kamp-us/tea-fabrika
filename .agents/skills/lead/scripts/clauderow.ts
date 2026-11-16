@@ -45,17 +45,21 @@
 //   - A transcript with no model calls is refused for a row, and prints no line for `--turns`.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Array as Arr, String as Str, pipe } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  pipe,
+  Console,
+  DateTime,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Order,
+  Result,
+  Schema,
+} from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import * as Console from "effect/Console";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Order from "effect/Order";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 
 export const SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing";
 

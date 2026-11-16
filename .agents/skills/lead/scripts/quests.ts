@@ -52,17 +52,21 @@
 // sweep log, and the status page read the quest's state file and a clock, which is ticket 685.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Array as Arr, pipe, String as Str } from "effect";
+import {
+  Array as Arr,
+  pipe,
+  String as Str,
+  Console,
+  DateTime,
+  Effect,
+  FileSystem,
+  Option,
+  Order,
+  Path,
+  Predicate,
+  Schema,
+} from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import * as Console from "effect/Console";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
-import * as Order from "effect/Order";
-import * as Path from "effect/Path";
-import * as Predicate from "effect/Predicate";
-import * as Schema from "effect/Schema";
 import * as Beat from "./flow/Beat.ts";
 import { paths } from "./gcloop.ts";
 

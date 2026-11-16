@@ -1,4 +1,4 @@
-import { Array as Arr, String as Str } from "effect";
+import { Array as Arr, String as Str, Effect, Layer, Schema } from "effect";
 // WorkflowRunsGh.layer: the WorkflowRuns service on `gh run`, the one way the sev script reaches
 // GitHub Actions. Every call names the repo, so the checkout it runs in does not pick it.
 //
@@ -6,10 +6,7 @@ import { Array as Arr, String as Str } from "effect";
 // miss an old queued run once enough newer runs had finished, and `gh run list --status` takes one
 // status a call. Five calls a beat of 20 seconds is 900 an hour, under the 5,000 a login gets
 // (GitHub's REST docs, "Rate limits for the REST API").
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { ChildProcessSpawner } from "effect/process";
-import * as Schema from "effect/Schema";
 import { lastLine, run } from "../../lead/scripts/pr/command.ts";
 import { type Run, WorkflowRuns, WorkflowRunsError } from "./WorkflowRuns.ts";
 

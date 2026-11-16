@@ -2,9 +2,7 @@
 // own laptop; it is not product.
 
 import { dirname, matchesGlob } from "node:path";
-import { Array as Arr, Option, Order, pipe, Schema } from "effect";
-import * as Predicate from "effect/Predicate";
-import * as Rec from "effect/Record";
+import { Array as Arr, Option, Order, pipe, Schema, Predicate, Record as Rec } from "effect";
 
 /** A text read as JSON, or none when it does not read. */
 const parsed = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));

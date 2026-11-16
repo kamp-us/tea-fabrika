@@ -2,13 +2,8 @@
 // asks GitHub. The log goes to a temporary folder, and the test clock drives the beats.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Array as Arr, String as Str, pipe } from "effect";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as FileSystem from "effect/FileSystem";
-import * as Schema from "effect/Schema";
-import type * as Scope from "effect/Scope";
+import { Array as Arr, String as Str, pipe, Duration, Effect, Fiber, FileSystem, Schema } from "effect";
+import type { Scope } from "effect";
 import { TestClock } from "effect/testing";
 import * as Freeze from "./Freeze.ts";
 import * as Level from "./Level.ts";

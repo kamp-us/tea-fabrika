@@ -1,6 +1,4 @@
-import { Array as Arr } from "effect";
-import * as DateTime from "effect/DateTime";
-import * as Schema from "effect/Schema";
+import { Array as Arr, DateTime, Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import * as Beat from "./Beat.ts";

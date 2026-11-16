@@ -2,9 +2,7 @@
 // off for the tooling and config a tool loads by its default, and a platform default passes only
 // under an inline edge comment on the line above it.
 import { it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
-import * as Arr from "effect/Array";
-import * as Rec from "effect/Record";
+import { Effect, Schema, Array as Arr, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";

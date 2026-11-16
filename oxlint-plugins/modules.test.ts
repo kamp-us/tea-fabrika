@@ -14,9 +14,7 @@
 // planted file is a comment, so no statement shares a line with a whole-file report.
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
-import * as Rec from "effect/Record";
+import { Array as Arr, pipe, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { describe, expect, it } from "vitest";

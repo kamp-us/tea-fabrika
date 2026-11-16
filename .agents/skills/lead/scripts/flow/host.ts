@@ -28,18 +28,22 @@
 // rules are the app's own: a start with a `FABRIKA_HOME` and no `FABRIKA_FOREGROUND` is quiet
 // (apps/fabrika/src/launch.ts), so this step sets the one and removes the other.
 
-import { Array as Arr, pipe, String as Str } from "effect";
+import {
+  Array as Arr,
+  pipe,
+  String as Str,
+  Duration,
+  Effect,
+  FileSystem,
+  Formatter,
+  Option,
+  Path,
+  Schedule,
+  Schema,
+  Stream,
+} from "effect";
 import { Digest } from "effect/crypto";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
-import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import { repoNode } from "../boxnode.ts";
 import { questKeyed, wipOf } from "../quest.ts";
 import * as Outcome from "./Outcome.ts";

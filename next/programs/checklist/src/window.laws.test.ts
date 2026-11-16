@@ -19,9 +19,7 @@
 // reasons, other words, free text or none.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Array as Arr, pipe, Record as Rec, String as Str } from "effect";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
+import { Array as Arr, pipe, Record as Rec, String as Str, Option, Schema } from "effect";
 import * as fc from "fast-check";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

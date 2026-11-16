@@ -22,17 +22,21 @@
 import type { NodeServices } from "@effect/platform-node/NodeServices";
 import { Agent } from "@kampus/fabrika-old";
 import { ADAPTERS, acpAdapter, psReaper } from "@kampus/fabrika-old/agents/acp";
-import { Array as Arr, String as Str, pipe } from "effect";
-import * as Clock from "effect/Clock";
-import * as Context from "effect/Context";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
+import {
+  Array as Arr,
+  String as Str,
+  pipe,
+  Clock,
+  Context,
+  DateTime,
+  Effect,
+  FileSystem,
+  Formatter,
+  Result,
+  Schema,
+  Stream,
+} from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import { boxEnv, repoNode } from "./boxnode.ts";
 import { CAPACITY, codexExecAdapter } from "./codexexec.ts";
 

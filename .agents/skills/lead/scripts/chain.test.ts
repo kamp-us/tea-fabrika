@@ -3,14 +3,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Agent } from "@kampus/fabrika-old";
-import { Array as Arr, String as Str, pipe } from "effect";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Order from "effect/Order";
-import * as Rec from "effect/Record";
-import * as Schema from "effect/Schema";
+import {
+  Array as Arr,
+  String as Str,
+  pipe,
+  DateTime,
+  Effect,
+  Formatter,
+  Option,
+  Order,
+  Record as Rec,
+  Schema,
+} from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Answer, listUsd, NO_SPENT, runTurn, type Spent, stepRow } from "./agents.ts";

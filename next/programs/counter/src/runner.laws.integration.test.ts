@@ -17,13 +17,7 @@ import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Array as Arr, pipe, String as Str } from "effect";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Predicate from "effect/Predicate";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
+import { Array as Arr, pipe, String as Str, Effect, Layer, Predicate, Result, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */

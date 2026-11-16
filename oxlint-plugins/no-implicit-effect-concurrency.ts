@@ -26,7 +26,7 @@
 // `// oxlint-disable-next-line fabrika/no-implicit-effect-concurrency -- <reason>`, never a blanket
 // exemption.
 import type { CreateRule } from "@oxlint/plugins";
-import * as Arr from "effect/Array";
+import { Array as Arr } from "effect";
 import { plainCall } from "./match.ts";
 
 const WHAT: Readonly<Record<string, string>> = {
