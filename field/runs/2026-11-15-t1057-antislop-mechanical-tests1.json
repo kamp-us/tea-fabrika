@@ -2,9 +2,9 @@
   "date": "2026-11-15",
   "run": "2026-11-15-t1057-antislop-mechanical-tests1",
   "ticket": "1057",
-  "pr": null,
+  "pr": "kamp-us/tea-fabrika#1507",
   "started": "2026-11-15T21:28:16-08:00",
-  "ended": "2026-11-15T22:20:00-08:00",
+  "ended": "2026-11-15T22:16:56-08:00",
   "parent": null,
   "active": null,
   "role": "tests",
@@ -31,7 +31,7 @@
   ],
   "tokens": null,
   "tools": null,
-  "minutes": 52,
+  "minutes": 49,
   "note": "Each plant ran once on a saved copy and was restored by copy. Ran at the uncommitted tree on 9186e6c: NODE_OPTIONS=--max-old-space-size=6144 pnpm lint green (17 parts), the list ratchet exit 0, one pnpm typecheck green before the three test edits. vitest --changed origin/main is refused locally (.oxlintrc.json is a force-rerun trigger), so narrow paths ran instead, nice -n 15 --maxWorkers=3: every changed plain test file plus every test that names .oxlintrc, then the exam lint integration files. All green but files that fail the same way on origin/main in this box, checked in a worktree there: .agents/skills/lead/scripts/box.test.ts (40), packages/pipeline lane.*.test.ts (today's version), packages/fabrika/src/agents/claude/rules.test.ts (1) and .agents/skills/mutation/scripts/run.test.ts (2, T300 signal cases). The first narrow run was stopped at its background time limit while the slow lane tests ran, and the rest was run again without them. 135 changed .integration. files that lint nothing were not run.",
   "step": "tests"
 }
