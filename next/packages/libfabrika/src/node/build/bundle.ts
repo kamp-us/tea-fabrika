@@ -89,7 +89,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
   plugins: Array<Plugin>,
   options: Options = {},
 ) {
-  const path = yield* Path.Path.pipe(Effect.provide(Path.layer));
+  const path = yield* Path.Path;
   const root = options.cwd ?? path.resolve();
   const relative = (file: string) => {
     const url = URL.parse(file);
