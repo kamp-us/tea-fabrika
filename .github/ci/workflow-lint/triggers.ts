@@ -1,6 +1,7 @@
 // Today's CI, serving both versions. check.yaml's triggers: the events that start a run, the paths
 // a pull request ignores, what cancels a run, and a draft's own check names.
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { ignored } from "../changes.mjs";
 import { compact, map, type Rule } from "./shared.ts";
 

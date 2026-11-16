@@ -1,6 +1,7 @@
 // Today's CI, serving both versions. check.yaml's changes job (S1): its flags and outputs, the
 // parser's pass, and the size step that sizes next's legs (legs.ts).
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { classifier, compact, env, FLAGS, map, ROW_INSTALL, type Rule, steps, VISUAL_LABEL } from "./shared.ts";
 
 // When changes' size step sizes next: any run next tests, all of next/ or the reader tests alone, as

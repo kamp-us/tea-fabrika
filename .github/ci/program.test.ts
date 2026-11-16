@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { transformSync } from "esbuild";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";

@@ -1,7 +1,8 @@
 // Today's CI, about next/'s test files.
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
 import { full, measured } from "../../vitest.shards.ts";

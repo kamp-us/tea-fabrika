@@ -1,5 +1,8 @@
 import { relative, resolve } from "node:path";
-import { type Duration, Effect, Option, pipe, String as Str } from "effect";
+import { type Duration, Effect } from "effect";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import {
