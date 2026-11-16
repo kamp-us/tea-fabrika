@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0579, 0043, 0573; body ab6f0f75f2ca
+Approved by the lead agent, builds 0555, 0579, 0043, 0573, 0574; body 801b351273ba
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `libfabrika/src/transport`, in next/ (ticket 1067)
@@ -208,7 +208,7 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <A exten
 
 ```ts
 // next/packages/libfabrika/src/transport/internal/binary.ts, the one changed line. A sketch.
-import { WebCrypto } from "effect/crypto";
+import * as WebCrypto from "effect/crypto/WebCrypto";
 
 export const subtle = Effect.fn("transport.crypto")(function* <M extends CryptoMethod>(method: M, ...args: CryptoArgs[M]) {
   const api: CryptoApi = (yield* WebCrypto.WebCrypto).subtle;
@@ -286,7 +286,7 @@ makes the loosening read harder. Each is only changed where it reads a mock.
 | A5. Fields a request adds do not reach the route's identity: the third argument is the attached identity | test | scenario: one request with a forged `future.by` | read the identity from the request's params: A5 red | next/packages/libfabrika/src/transport/Answer.test.ts |
 | A6. `answerFrame`'s environment is exactly `Routes`, so it cannot reach admission | type | type | make `answerFrame` also `yield* Admissions`: the type law's `@ts-expect-error` goes unused, red in a typecheck | next/packages/libfabrika/src/transport/Answer.test.ts |
 | C5. A rejection on any WebCrypto call through the edge is `WebCryptoError` with that very value as its cause | test | fc.record: steps of a method and a rejection, 100 runs | `const fail = () => new WebCryptoError({ cause: undefined })` in `internal/binary.ts`: C5 red | next/packages/libfabrika/src/transport/ErrorCause.test.ts |
-| C6. The edge reads the provided `WebCrypto`, not the global: with a stand-in that rejects `digest`, `checkHello` on a well-formed hello fails with `WebCryptoError` | test | scenario: one signed hello and a rejecting `digest` | read `globalThis.crypto.subtle` in `internal/binary.ts` again: C6 red (C5 stays green there only by luck of no spy, so C6 is the plant's law) | next/packages/libfabrika/src/transport/ErrorCause.test.ts |
+| C6. The edge reads the provided `WebCrypto`, not the global: with a stand-in that rejects `digest`, `checkHello` on a well-formed hello fails with `WebCryptoError` | test | scenario: one signed hello and a rejecting `digest` | read `globalThis.crypto.subtle` in `internal/binary.ts` again: C6 red. Wrong, the first guess kept: "C5 stays green there only by luck of no spy, so C6 is the plant's law". Amendment (2026-11-16, merge session ruling on transport-s1's review): C5 is red under this plant too, since C5 and C6 both inject their rejection through `WebCrypto.layer`, and an edge that reads the global never meets it; slice 1's review ran the plant and saw both red (`field/runs/2026-11-16-mock-transport-s1-review1.json` on `fabrikalfa/mock-transport-s1`) | next/packages/libfabrika/src/transport/ErrorCause.test.ts |
 | H1. A signed hello that admission refuses names its own fingerprint, and the record is exactly one admit with that fingerprint | test | fc.webUrl: the url, with `fc.string` tab and nonce, 40 runs | return the refusal without the fingerprint, or consume before admitting: H1 red | next/packages/libfabrika/src/transport/Hello.test.ts |
 | H2. A hello whose tab, nonce or trusted value differs, or whose signature, key or version is bad, records no call | test | Effect Arbitrary: Admission.cases.refused | admit before the signature check: H2 red | next/packages/libfabrika/src/transport/Hello.test.ts |
 | H3. A checked hello goes online, and the record is admit with its fingerprint, then consume, in that order | test | scenario: the `setup` hello | consume before admitting: H3 red | next/packages/libfabrika/src/transport/Hello.test.ts |
@@ -299,8 +299,9 @@ makes the loosening read harder. Each is only changed where it reads a mock.
   numbers are only this plan's. H1 to H3 are d2 and the p26 laws in `Hello.test.ts`, the same way.
   Each keeps every value the old law compared, and most get stronger: one equality on the whole
   record holds the count, the args and the order where the old law held only a count.
-- C5 keeps its title. C6 is new, since without the spy C5 alone no longer proves the edge reads
-  the reference.
+- C5 keeps its title. C6 is new: it proves the edge reads the provided reference on `checkHello`'s
+  own path, a signed hello, where C5 drives the edge alone. Under the plant that reads the global
+  again, both C5 and C6 go red (amendment 2026-11-16, C6's row), so neither stands only by luck.
 - H4 and H5 are new: `AdmissionError` is new, and 0043's "with its cause kept" needs a law.
 - L1's lines are planted in `oxlint-plugins/builtin-plants.ts`, and `plants.test.ts` runs them in
   every folder the block lists, as it does `REFLECT`'s. The Where cell names the folder's first
@@ -316,6 +317,7 @@ makes the loosening read harder. Each is only changed where it reads a mock.
 | next/packages/libfabrika/src/transport/Routes.ts | build | 22 | slice 1, new: `Routes` and `RouteError`, the contract only |
 | next/packages/libfabrika/src/transport/Answer.ts | build | 15 | slice 1: `answerFrame(text, attached)` asks for `Routes`; `Frame`, `Incoming` and `isOnline` go; the doc says so |
 | next/packages/libfabrika/src/transport/internal/binary.ts | build | 2 | slice 1: `subtle` reads `WebCrypto.WebCrypto` |
+| tsconfig.base.json | tests | 1 | slice 1. Amendment (2026-11-16, merge session ruling on transport-s1's review), an exam path, so the tests step writes it, as `plancheck.sh` holds: the one `allowedUnstableApis` list, in the override that sets `unstableApiUsage` to error, gains `"effect/crypto/WebCrypto"` in its sorted place after `effect/crypto/SecureRandom`. Pull request 1462 (`b490a32`) put the transport folder in that override, and `internal/binary.ts` and `ErrorCause.test.ts` read the module. The reason, which goes into the pull request that adds the entry, as [0574](../../../.decisions/0574-no-stability-tag-and-unstable-api-is-an-error.md) asks: this plan chose Effect's own `WebCrypto` reference on purpose, because it is the swap point Effect ships for a WebCrypto test double (`WebCrypto.ts:37`, `:68`), so the edge needs no service of ours and the law spies on nothing. It is a chosen part, not an entry that lets a hit pass |
 | next/packages/libfabrika/src/transport/Answer.test.ts | tests | tests | slice 1: A1 to A6 on `Recorder.layer(Routes, ...)` and `Layer.mock(Routes, ...)` |
 | next/packages/libfabrika/src/transport/ErrorCause.test.ts | tests | tests | slice 1: C5 on `WebCrypto.layer`, and C6 |
 | next/packages/libfabrika/src/transport/internal/rejecting.test-support.ts | tests | tests | slice 1, new: `crypto(method, failure)`, a stand-in `Crypto` |
@@ -326,6 +328,7 @@ makes the loosening read harder. Each is only changed where it reads a mock.
 | next/packages/libfabrika/src/transport/Hello.test.ts | tests | tests | slice 2: H1 to H4 on `Recorder.layer(Admissions, ...)` |
 | next/packages/libfabrika/src/gateway/GatewayCauseTest.ts | tests | tests | slice 2: H5, beside the T695 cause laws |
 | next/packages/libfabrika/src/node/client/KeyFile.laws.test.ts | tests | tests | slice 2: K2 provides `Layer.mock(Admissions, ...)` |
+| next/packages/libfabrika/src/transport/ErrorCause.test.ts | tests | tests | slice 2. Amendment (2026-11-16, merge session ruling on transport-s1's review): C6 moves onto `Layer.mock(Admissions, ...)`, since slice 2's `checkHello` asks for `Admissions`. Until then C6 hands `checkHello` plain `consume` and `admit` callbacks, which is right for slice 1 |
 | next/packages/libfabrika/src/node/ErrorCause.test.ts | tests | tests | slice 2: runs `GatewayCauseTest`'s suite, H5 included; no change expected |
 | .oxlintrc.json | tests | 25 | slice 2: the lock block for the transport folder, below; an exam path, so the tests step writes it with L1's plants |
 | oxlint-plugins/builtin-plants.ts | tests | tests | slice 2: L1's lines, in node's `VI_METHODS` set (amended 2026-11-15; first a `MOCKS` plant); and (amendment 2026-11-16, lead ruling) the `VI_PROPERTIES` plant, the lock's other half |
@@ -484,8 +487,9 @@ Both slices land on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, in
 request (amendment 2026-11-15, merge session ruling 1); neither opens a pull request of its own.
 Each still runs its own tests, build and review steps, one fresh agent each, in its own box.
 
-1. Slice 1, `Routes`, `answerFrame` and the WebCrypto edge: 39 product lines, about 120 test lines
-   changed. Tests $5, build $4, review $3. 39 lines.
+1. Slice 1, `Routes`, `answerFrame` and the WebCrypto edge: 40 product lines (the files table's 22, 15, 2 and 1), about 120 test lines
+   changed. Tests $5, build $4, review $3. 40 lines. Amendment (2026-11-16, lead at re-sign): was
+   39, which missed `tsconfig.base.json`'s one line.
 2. Slice 2, after 1366: `Admissions`, `checkHello`, the gateway's provide and the folder's lock: 67
    product lines (25 of them the lint config the tests step writes), about 150 test lines changed. Tests $6, build $5, review
    $3, and one likely send-back on the gateway's error readers, $4. 67 lines.
