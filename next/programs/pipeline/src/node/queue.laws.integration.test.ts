@@ -346,7 +346,7 @@ const open = Effect.fnUntraced(function* (
     return yield* runner.msg({
       id: `incoming:${n}`,
       envelope: {
-        id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
+        id: InputId.make(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
         by: owner,
         arrivedAt: n,
         input,
@@ -360,9 +360,11 @@ const open = Effect.fnUntraced(function* (
   // and one call for each name was half of S2's time, which ran out on a busy CI machine.
   const statuses = Effect.gen(function* () {
     const rows = yield* Ledger.use((ledger) => Stream.runCollect(ledger.read("processes", 0)));
-    const registrations = rows
-      .filter((row) => row._tag === "registered")
-      .map((row) => Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, program: Schema.String }))(row.body));
+    const registrations = yield* Effect.forEach(
+      rows.filter((row) => row._tag === "registered"),
+      (row) => Schema.decodeUnknownEffect(Schema.Struct({ name: Schema.String, program: Schema.String }))(row.body),
+      { concurrency: 1 },
+    );
     const processes = yield* ProcessManager;
     const answers = yield* LedgerTransaction.use((tx) =>
       tx.transact((turn) => {
@@ -415,7 +417,7 @@ const open = Effect.fnUntraced(function* (
     const model =
       checkpoint === null
         ? null
-        : Schema.decodeUnknownSync(programs["pipeline/queue"].state.schema)(checkpoint.saved.model);
+        : yield* Schema.decodeUnknownEffect(programs["pipeline/queue"].state.schema)(checkpoint.saved.model);
     return {
       model,
       view: model === null ? null : programs["pipeline/queue"].view.select(model),

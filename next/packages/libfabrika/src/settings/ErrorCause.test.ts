@@ -9,7 +9,7 @@
 // `Schema.optional(Schema.Unknown)`, and that error's encoded Error cause stays a plain object.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Exit, Schema } from "effect";
+import { Exit, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { SettingsError } from "./Files.ts";
 import { SnapshotError } from "./Snapshot.ts";
@@ -28,7 +28,8 @@ const snapshotBefore = Schema.Struct({ ...SnapshotError.fields, cause: Schema.op
 
 /**
  * Each error moved to `optional`, beside the schema it had before 0568, and its encoded form with no
- * cause: made with drawn fields and encoded by the old schema.
+ * cause: made with drawn fields and encoded by the old schema. The encode stays a `Result`, and the
+ * law fails on a failed one, so the generator never throws.
  */
 const errors = {
   SettingsError: {
@@ -36,14 +37,14 @@ const errors = {
     before: settingsBefore,
     encoded: fc
       .record({ reason: fc.constantFrom(...SettingsError.fields.reason.literals), message: fc.string() })
-      .map((fields) => Schema.encodeUnknownSync(settingsBefore)(new SettingsError(fields))),
+      .map((fields) => Schema.encodeUnknownResult(settingsBefore)(new SettingsError(fields))),
   },
   SnapshotError: {
     now: SnapshotError,
     before: snapshotBefore,
     encoded: fc
       .record({ message: fc.string() })
-      .map((fields) => Schema.encodeUnknownSync(snapshotBefore)(new SnapshotError(fields))),
+      .map((fields) => Schema.encodeUnknownResult(snapshotBefore)(new SnapshotError(fields))),
   },
 } as const;
 
@@ -53,13 +54,13 @@ const NAMES: ReadonlyArray<Name> = ["SettingsError", "SnapshotError"];
 /** An Error with a drawn name and message, encoded the way `Schema.Defect()` writes it. */
 const encodedError = fc
   .record({ name: fc.string(), message: fc.string() })
-  .map(({ name, message }) => Schema.encodeUnknownSync(Schema.Defect())(Object.assign(new Error(message), { name })));
+  .map(({ name, message }) => Schema.encodeUnknownResult(Schema.Defect())(Object.assign(new Error(message), { name })));
 
 /** The cause in each form, or no key at all. */
 const causeKey = (form: Form, json: fc.JsonValue, error: unknown): { cause?: unknown } =>
   form === "absent" ? {} : { cause: form === "undefined" ? undefined : form === "json" ? json : error };
 
-/** One encoded value of a drawn error, its cause in a drawn form. */
+/** One encoded value of a drawn error, its cause in a drawn form, or the encode's failure. */
 const encoded = fc
   .record({
     name: fc.constantFrom(...NAMES),
@@ -68,7 +69,14 @@ const encoded = fc
     error: encodedError,
   })
   .chain(({ name, form, json, error }) =>
-    errors[name].encoded.map((base) => ({ name, form, value: { ...base, ...causeKey(form, json, error) } })),
+    errors[name].encoded.map((base) => ({
+      name,
+      form,
+      built: Result.map(Result.all([base, error]), ([fields, cause]) => ({
+        ...fields,
+        ...causeKey(form, json, cause),
+      })),
+    })),
   );
 
 /**
@@ -86,8 +94,15 @@ describe("T1062 L4, a settings error whose cause may be missing reads a cause wr
   it("L4: SettingsError and SnapshotError decode a written-undefined cause, an encoded Error to an Error, and every value the optionalKey schema read to the same value", () => {
     const seen = new Map<string, number>();
     fc.assert(
-      fc.property(encoded, ({ name, form, value }) => {
+      fc.property(encoded, ({ name, form, built }) => {
         seen.set(`${name} ${form}`, (seen.get(`${name} ${form}`) ?? 0) + 1);
+        expect(Result.isSuccess(built), `the old ${name} schema encodes the drawn error`).toBe(true);
+
+        if (Result.isFailure(built)) {
+          return;
+        }
+
+        const value = built.success;
         const now = Schema.decodeUnknownExit(errors[name].now)(value);
         const before = Schema.decodeUnknownExit(errors[name].before)(value);
 

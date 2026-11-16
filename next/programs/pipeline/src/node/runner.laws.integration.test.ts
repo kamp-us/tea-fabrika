@@ -193,8 +193,8 @@ const life = Effect.fnUntraced(function* (
       Replies.use((replies) => replies.reply(NAME, id)).pipe(
         Effect.provide(RepliesSql.layer(store.sql("recovery"), { capacity: 1024 ** 3 })),
       ),
-    model: Effect.map(checkpoint, (saved) =>
-      saved === null ? null : Schema.decodeUnknownSync(program.state.schema)(saved.saved.model),
+    model: Effect.flatMap(checkpoint, (saved) =>
+      saved === null ? Effect.succeed(null) : Schema.decodeUnknownEffect(program.state.schema)(saved.saved.model),
     ),
   };
 });
@@ -220,7 +220,7 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
     current.runner.msg({
       id: `incoming-${++serial}`,
       envelope: {
-        id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${serial.toString(16).padStart(12, "0")}`),
+        id: InputId.make(`input_0000000000e008${serial.toString(16).padStart(12, "0")}`),
         by: owner,
         arrivedAt: serial,
         input,

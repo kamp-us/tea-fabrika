@@ -15,7 +15,7 @@
 //   environment name, flag (`--` and the path), reload, since, default and doc, in Markdown that
 //   keeps the doc's meaning whatever punctuation it holds.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Schema } from "effect";
+import { ByteSize, Effect, Result, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Print from "./Print.ts";
@@ -70,8 +70,13 @@ it("T753 L7–L8 byte references distinguish file input from recorded values and
         expect(report.includes(`${d.path} =`)).toBe(v.explicit || v.all);
         const text = plain(Reference.markdown(group));
         // The reference must show the declaration-derived file spelling separately from JSON digits.
-        const fileDefault = Schema.encodeSync(Schema.toCodecStringTree(d.schema))(d.default);
-        expect(text).toContain(String(fileDefault));
+        const fileDefault = Schema.encodeResult(Schema.toCodecStringTree(d.schema))(d.default);
+        expect(Result.isSuccess(fileDefault), "the default encodes in the file's spelling").toBe(true);
+
+        if (Result.isSuccess(fileDefault)) {
+          expect(text).toContain(String(fileDefault.success));
+        }
+
         expect(text).toContain(JSON.stringify(String(v.count)));
         expect(text).toContain(collapse(d.doc));
       },
@@ -204,7 +209,7 @@ describe("L5, rows carry the snapshot's values and origins, and only declared ke
           const d = group.declarations.find((d) => d.path === row.path)!;
           expect(row.value).toEqual(snapshot.values[d.path]);
           expect(row.origin).toEqual(snapshot.origins[d.path]);
-          expect(row.default).toEqual(Schema.encodeSync(Schema.toCodecJson(d.schema))(d.default));
+          expect(Schema.encodeResult(Schema.toCodecJson(d.schema))(d.default)).toEqual(Result.succeed(row.default));
           expect(row.doc).toBe(d.doc);
           expect(row.scope).toEqual(d.scope);
           expect(row.reload).toBe(d.reload);
@@ -286,7 +291,13 @@ describe("L3, the reference keeps each declaration's words, default, scope and r
             expect(text, shown).toContain(shown);
           }
 
-          expect(text).toContain(JSON.stringify(Schema.encodeSync(Schema.toCodecJson(d.schema))(d.default)));
+          const json = Schema.encodeResult(Schema.toCodecJson(d.schema))(d.default);
+          expect(Result.isSuccess(json), `${d.path}'s default encodes as JSON`).toBe(true);
+
+          if (Result.isSuccess(json)) {
+            expect(text).toContain(JSON.stringify(json.success));
+          }
+
           expect(text, d.doc).toContain(collapse(d.doc));
         }
       }),

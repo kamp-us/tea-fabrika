@@ -14,7 +14,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import type { Row } from "./rows.ts";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
@@ -67,9 +67,13 @@ const layersByName = (rows: Rules["layers"]): ReadonlyMap<string, number> =>
   new Map(rows.flatMap((row) => (row.layer === undefined ? [] : [[row.name, row.layer] as const])));
 
 /** The rule file `pnpm lint:layers` reads. Its paths start at the top of the repo. */
-const REAL: Rules = Schema.decodeUnknownSync(RuleFile)(
+const realRead = Schema.decodeUnknownResult(RuleFile)(
   JSON.parse(readFileSync(resolve(NEXT, "../layer-rules.json"), "utf8")),
 );
+
+const REAL: Rules = Result.isSuccess(realRead)
+  ? realRead.success
+  : expect.unreachable(`layer-rules.json does not decode as the tool reads it: ${realRead.failure.message}`);
 
 const Report = Schema.Struct({
   violations: Schema.Array(
@@ -83,7 +87,7 @@ const Report = Schema.Struct({
   unclaimed: Schema.Array(Schema.Struct({ file: Schema.String })),
 });
 
-const readReport = Schema.decodeUnknownSync(Schema.fromJsonString(Report));
+const readReport = Schema.decodeUnknownResult(Schema.fromJsonString(Report));
 
 type Edge = `${string} -> ${string} [${string}]`;
 
@@ -95,14 +99,19 @@ const runJson = (root: string, rules: Rules) => {
     encoding: "utf8",
   });
   // A rule file with no `layer` and no `imports` names no rule, since every break it has is upward.
-  const report =
+  const read =
     run.status === 2
-      ? { violations: [], unclaimed: [] }
-      : (({ violations, unclaimed }: typeof Report.Type) => ({
+      ? Result.succeed({ violations: [], unclaimed: [] })
+      : Result.map(readReport(run.stdout), ({ violations, unclaimed }) => ({
           violations: violations.map((v) => ({ ...v, rule: v.rule ?? "upward" })),
           unclaimed,
-        }))(readReport(run.stdout));
-  return { ...report, status: run.status, stderr: run.stderr };
+        }));
+
+  if (Result.isFailure(read)) {
+    return expect.unreachable(`the layer tool printed a report that does not decode: ${read.failure.message}`);
+  }
+
+  return { ...read.success, status: run.status, stderr: run.stderr };
 };
 
 /** Each import that breaks a rule as `from-file -> to-row [rule]`, each unclaimed file, the status. */

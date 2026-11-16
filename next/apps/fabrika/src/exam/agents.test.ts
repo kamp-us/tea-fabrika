@@ -5,7 +5,7 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import { senderTest } from "@kampus/libfabrika/testing";
-import { Arbitrary, Effect, FileSystem, Schema } from "effect";
+import { Arbitrary, Effect, FileSystem, Result, Schema } from "effect";
 
 const SEED = 119120;
 const options = { arbitrary: { seed: SEED, runs: 300, size: 4096, concurrency: 1 }, timeout: 60_000 };
@@ -144,7 +144,9 @@ const personRefusalControls = () => {
 
 const letters = (actual: ReadonlyArray<string>) => {
   for (const letter of actual) {
-    Schema.decodeUnknownSync(Id.Letter)(letter);
+    expect(Schema.decodeUnknownResult(Id.Letter)(letter), "each letter is a letter id").toStrictEqual(
+      Result.succeed(letter),
+    );
   }
 
   expect(new Set(actual).size).toBeLessThanOrEqual(1);
@@ -442,9 +444,15 @@ it.prop(
         }
 
         const d = declarations.filter((d) => !d.personOnly)[i - 1]!;
-        const shape = Schema.decodeUnknownSync(
+        const read = Schema.decodeUnknownResult(
           Schema.Struct({ properties: Schema.Record(Schema.String, Schema.Unknown) }),
         )(inputSchema(d));
+
+        if (Result.isFailure(read)) {
+          return expect.unreachable(`a tool's input schema has no properties object: ${read.failure.message}`);
+        }
+
+        const shape = read.success;
         const bad = { ...shape.properties, value: { type: "object", properties: {} } };
         expect(() =>
           tools(
@@ -478,7 +486,13 @@ it.prop(
   { declarations: DeclarationCases },
   ({ declarations }) => {
     personRefusalControls();
-    const object = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown));
+    const decodeObject = Schema.decodeUnknownResult(Schema.Record(Schema.String, Schema.Unknown));
+    const object = (value: unknown) => {
+      const read = decodeObject(value);
+      return Result.isSuccess(read)
+        ? read.success
+        : expect.unreachable(`a tool's input schema holds a non-object: ${read.failure.message}`);
+    };
 
     for (const inputs of declarationSets(declarations)) {
       const clean = cleanTools(inputs),

@@ -53,7 +53,7 @@ import { clientInbox, Down, inSignalSpace, NoProc, Recipient, signalId } from ".
 import { diff } from "../runtime/Patch.ts";
 import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
-import { type TezgahView, type Tile, type TileId, Workspace } from "../tezgah/Workspace.ts";
+import { type TezgahView, type Tile, type TileId, Workspace, WorkspaceId } from "../tezgah/Workspace.ts";
 import { ClientRecord } from "../transport/ClientRows.ts";
 import { linkTimer } from "../transport/Link.ts";
 import { PAGE } from "../transport/Wire.ts";
@@ -1789,9 +1789,16 @@ describe("P18 L6: a cut Model continues as the uncut run", () => {
       const live = events.flatMap((e, i) => (handshakeIn(e.next).id === undefined ? [] : [i]));
       const pool = live.length > 0 && cut % 2 === 0 ? live : events.map((_, i) => i);
       const k = pool[cut % pool.length]!;
-      const saved = Schema.encodeSync(Schema.fromJsonString(machine.model))(events[k]!.next);
-      const loaded = Schema.decodeUnknownSync(Schema.fromJsonString(machine.model))(saved);
-      let [s] = machine.init(loaded, ctx);
+      const loaded = Schema.encodeResult(Schema.fromJsonString(machine.model))(events[k]!.next).pipe(
+        Result.flatMap(Schema.decodeUnknownResult(Schema.fromJsonString(machine.model))),
+      );
+      expect(Result.isSuccess(loaded), "the reached Model saves and loads").toBe(true);
+
+      if (Result.isFailure(loaded)) {
+        return;
+      }
+
+      let [s] = machine.init(loaded.success, ctx);
       expect(s, "the saved Model did not load back as it was, with an empty region").toEqual(mounted(events[k]!.next));
       // The loaded run's region lacks the burst said before the cut, until the uncut run's burst ends.
       let before = events[k]!.next.said.messages.length;
@@ -2108,7 +2115,14 @@ describe("P18 L10: every frame family the parent reads decodes or reaches its ty
       ({ generated }) => {
         // The value as the window reads it after the wire: JSON cannot carry what a schema's
         // Arbitrary may make, such as `-0`, so the owner's Msg is built from the value JSON carries.
-        const value = Schema.decodeSync(Json)(Schema.encodeSync(Json)(generated));
+        const carried = Schema.encodeResult(Json)(generated).pipe(Result.flatMap(Schema.decodeResult(Json)));
+        expect(Result.isSuccess(carried), "the generated value crosses the wire as JSON").toBe(true);
+
+        if (Result.isFailure(carried)) {
+          return;
+        }
+
+        const value = carried.success;
         const prev = family.from();
         const sent = (family.sent ?? ((v) => v))(value as Record<string, unknown>);
         const [text, ms] = family.text(prev, sent);
@@ -2507,7 +2521,14 @@ const follow = (list: ReadonlyArray<FollowChoice>, each: (e: FollowEvent) => voi
         }
 
         w.cuts++;
-        const [loaded] = machine.init(Schema.decodeUnknownSync(save)(Schema.encodeSync(save)(next)), ctx);
+        const reloaded = Schema.encodeResult(save)(next).pipe(Result.flatMap(Schema.decodeUnknownResult(save)));
+        expect(Result.isSuccess(reloaded), "a reached Model saves and loads").toBe(true);
+
+        if (Result.isFailure(reloaded)) {
+          return next;
+        }
+
+        const [loaded] = machine.init(reloaded.success, ctx);
         expect(loaded, "a saved Model did not load back as it was, with an empty region").toEqual(mounted(next));
         return loaded;
       },
@@ -3067,13 +3088,22 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
         const online = reached.filter((s) => s.link._tag === "online");
         const pool = online.length > 0 && cut % 4 !== 0 ? online : reached;
         const saved = pool[cut % pool.length]!;
-        const load = () => Schema.decodeUnknownSync(save)(Schema.encodeSync(save)(saved));
+        const load = () => Schema.encodeResult(save)(saved).pipe(Result.flatMap(Schema.decodeUnknownResult(save)));
+        const homeModel = load();
+        const awayModel = load();
+        expect(Result.isSuccess(homeModel) && Result.isSuccess(awayModel), "a reached Model saves and loads").toBe(
+          true,
+        );
 
-        const [home] = machine.init(load(), ctx);
+        if (Result.isFailure(homeModel) || Result.isFailure(awayModel)) {
+          return;
+        }
+
+        const [home] = machine.init(homeModel.success, ctx);
         seen.burst += saved.said.messages.length > 0 ? 1 : 0;
         expect(home, "a Model loaded into its own tab changed more than its region").toEqual(mounted(saved));
 
-        const [away] = machine.init(load(), { tiles: TILES, tab: OTHER_TAB });
+        const [away] = machine.init(awayModel.success, { tiles: TILES, tab: OTHER_TAB });
         seen.moved++;
         expect(away.tab, "the loaded Model's tab").toBe(OTHER_TAB);
         expect(inboxIn(away), "the loaded Model's inbox").toEqual({ _tag: "idle", after: 0 });
@@ -3762,8 +3792,8 @@ type FocusWorld = DeskWorld & {
 /** A workspace split by `cuts`, focus on the tile `focus` picks. */
 const focusDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
   const first = typeId("tile", 1) as TileId;
-  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
-    id: typeId("workspace", 1),
+  let w: Workspace = Workspace.make({
+    id: WorkspaceId.make(typeId("workspace", 1)),
     n: 1,
     layout: first,
     focus: first,

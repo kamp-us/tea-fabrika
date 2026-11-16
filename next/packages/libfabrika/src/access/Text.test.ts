@@ -1,7 +1,7 @@
 // p42: signed bytes are schema-ordered JSON for the tagged change plus one LF. These independent
 // strings catch omitted tags, saw fields or reordered signing text. No crypto belongs here.
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 import { Adds, Grant } from "./Access.ts";
 import { grantText, revokeText, addText, enrollmentText } from "./Text.ts";
 
@@ -94,10 +94,9 @@ it.prop(
   ({ grant, as }) => {
     const signed = { ...grant, as };
     const text = grantText(signed);
-    expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(text)).toEqual({
-      _tag: "granted",
-      grant: signed,
-    });
+    expect(Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(text)).toEqual(
+      Result.succeed({ _tag: "granted", grant: signed }),
+    );
     expect(text.endsWith("\n")).toBe(true);
   },
   { arbitrary: { seed: 119120, runs: 100 } },

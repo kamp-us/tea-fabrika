@@ -5,7 +5,7 @@
 // the machine must now hold.
 import { applyCellChecked } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { Attached, Wait } from "../Wire.ts";
@@ -466,7 +466,14 @@ describe("T703 connection machine laws", () => {
         }
 
         // The attachment is the durable copy: JSON out, decoded back, observed by a fresh machine.
-        const saved = Schema.decodeUnknownSync(Attached)(JSON.parse(JSON.stringify(projected(model))));
+        const read = Schema.decodeUnknownResult(Attached)(JSON.parse(JSON.stringify(projected(model))));
+        expect(Result.isSuccess(read), "the attachment reads back through JSON").toBe(true);
+
+        if (Result.isFailure(read)) {
+          return;
+        }
+
+        const saved = read.success;
         const [fresh] = connection.init(null, {});
         const [back] = applyCellChecked(connection, fresh, { type: "observed", attached: saved });
         expect(back).toEqual(model);

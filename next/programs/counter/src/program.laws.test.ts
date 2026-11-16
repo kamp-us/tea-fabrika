@@ -2,7 +2,7 @@
 // No window export exists until P14. No copied counter implementation lives in the library.
 import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 
@@ -30,7 +30,7 @@ describe("P11 real counter laws", () => {
         const port = counter.inputs[type];
         expect(port.personOnly).toBe(false);
         expect(port.description.trim().length).toBeGreaterThan(0);
-        expect(Schema.decodeUnknownSync(port.schema)({ type })).toEqual({ type });
+        expect(Schema.decodeUnknownResult(port.schema)({ type })).toEqual(Result.succeed({ type }));
       }),
       { seed: SEED, numRuns: 100 },
     );
@@ -89,11 +89,13 @@ describe("P11 real counter laws", () => {
             const { counter } = await import("./program.ts");
             const { Program, ProgramLoader }: typeof import("@kampus/libfabrika") = await import(LIBRARY);
             // P40: the core pack is `fabrika`, so the counter's identity is `fabrika/counter` (0083).
-            expect(Schema.decodeUnknownSync(Program.schema)(counter)).toMatchObject({
-              name: "fabrika/counter",
-              state: { v: 1 },
-              writes: {},
-            });
+            const decoded = Schema.decodeUnknownResult(Program.schema)(counter);
+            expect(Result.isSuccess(decoded), "the counter decodes as a Program").toBe(true);
+
+            if (Result.isSuccess(decoded)) {
+              expect(decoded.success).toMatchObject({ name: "fabrika/counter", state: { v: 1 }, writes: {} });
+            }
+
             const p = Effect.runSync(
               Effect.gen(function* () {
                 return (yield* (yield* ProgramLoader).load("fabrika/counter")).stepper;

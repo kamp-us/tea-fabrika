@@ -2,7 +2,7 @@
 // whatever its answer. Rebuilds remember failed inputs without advancing the phase.
 import { arbGuidedSequence, propertyTrace } from "@demlik/tea/pbt";
 import { expect, expectTypeOf, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 
 it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attempt advances boot to watch", async () => {
@@ -54,7 +54,9 @@ it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attemp
         }
 
         expect(step.cmds).toEqual([]);
-        expect(Schema.decodeUnknownSync(json)(Schema.encodeSync(json)(step.next))).toEqual(step.next);
+        expect(Schema.encodeResult(json)(step.next).pipe(Result.flatMap(Schema.decodeUnknownResult(json)))).toEqual(
+          Result.succeed(step.next),
+        );
       }
 
       expect(final._tag).toBe(attemptedCount === 0 ? "booting" : "watching");

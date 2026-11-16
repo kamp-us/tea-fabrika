@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { checkSshsig, verifySshsig } from "./Sshsig.ts";
 import { line, realArmor, SPACE, text } from "./SshsigWebauthn.test-support.ts";
@@ -259,7 +259,7 @@ describe("P10 WebAuthn SSHSIG", () => {
               yield* Effect.flip(
                 writeWebauthnSshsig({
                   text,
-                  line: Schema.decodeUnknownSync(PasskeyLine)(line),
+                  line: yield* Schema.decodeUnknownEffect(PasskeyLine)(line),
                   assertion: {
                     authenticatorData: new Uint8Array(Buffer.from(real.authenticatorData, "base64url")),
                     clientDataJSON: new Uint8Array(Buffer.from(real.clientDataJSON, "base64url")),
@@ -382,7 +382,7 @@ describe("P10 WebAuthn SSHSIG", () => {
       expect(assertion.signature.length).toBe(72);
       const armored = yield* writeWebauthnSshsig({
         text,
-        line: Schema.decodeUnknownSync(PasskeyLine)(line),
+        line: yield* Schema.decodeUnknownEffect(PasskeyLine)(line),
         assertion,
       });
       expect(armored).toBe(realArmor);
@@ -634,8 +634,8 @@ describe("P10 WebAuthn SSHSIG", () => {
     // Plant: ignore the outer key type word. The ordinary ECDSA line must still throw.
     fc.assert(
       fc.property(passkeyLineArb, (line) => {
-        expect(Schema.decodeUnknownSync(PasskeyLine)(line)).toBe(line);
-        expect(() => Schema.decodeUnknownSync(PasskeyLine)(line.replace("sk-ecdsa", "ecdsa"))).toThrow();
+        expect(Schema.decodeUnknownResult(PasskeyLine)(line)).toStrictEqual(Result.succeed(line));
+        expect(Result.isFailure(Schema.decodeUnknownResult(PasskeyLine)(line.replace("sk-ecdsa", "ecdsa")))).toBe(true);
       }),
       { ...runs, examples: [[line]] },
     );

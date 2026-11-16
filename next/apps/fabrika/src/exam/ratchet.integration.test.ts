@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import { ROWS, text } from "./ratchet.test-support.ts";
 
 import { LISTS } from "./ratchet.ts";
@@ -61,7 +61,12 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
     stdout
       .split("\n")
       .filter((line) => line.startsWith("{"))
-      .map((line) => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(line));
+      .map((line) => {
+        const value = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(line);
+        return Result.isSuccess(value)
+          ? value.success
+          : expect.unreachable(`the ratchet printed a line that is not JSON: ${value.failure.message}`);
+      });
 
   it.effect("L4 scenario: a head that adds a row exits 1, naming the row in its JSON line and annotation", () =>
     Effect.gen(function* () {

@@ -276,7 +276,7 @@ describe("p96 and p97, replay and write answers", () => {
         yield* ledger.append(MEMBERS, "future", {
           ...from(),
           _tag: "future_member_fact",
-          body: Schema.decodeUnknownSync(Schema.Json)({ value: body }),
+          body: yield* Schema.decodeUnknownEffect(Schema.Json)({ value: body }),
         });
         const loaded = yield* Effect.exit(members);
         expect(loaded._tag, "unknown member events are skipped").toBe("Success");

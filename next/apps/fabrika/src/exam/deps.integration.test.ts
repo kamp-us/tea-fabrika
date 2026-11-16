@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import fc from "fast-check";
 import { rolldown, type Plugin } from "rolldown";
 
@@ -53,7 +53,14 @@ type Package = {
   readonly manifest: typeof Manifest.Type;
 };
 
-const readManifest = Schema.decodeUnknownSync(Manifest);
+const decodeManifest = Schema.decodeUnknownResult(Manifest);
+
+const readManifest = (raw: unknown, file: string) => {
+  const manifest = decodeManifest(raw);
+  return Result.isSuccess(manifest)
+    ? manifest.success
+    : expect.unreachable(`${file} does not decode as a package manifest: ${manifest.failure.message}`);
+};
 
 /** Every package under `next`: a child folder of a group that holds a `package.json`. */
 const packagesIn = (next: string): ReadonlyArray<Package> =>
@@ -69,7 +76,10 @@ const packagesIn = (next: string): ReadonlyArray<Package> =>
       .map((entry) => ({
         dir: join(folder, entry.name),
         group,
-        manifest: readManifest(JSON.parse(readFileSync(join(folder, entry.name, "package.json"), "utf8"))),
+        manifest: readManifest(
+          JSON.parse(readFileSync(join(folder, entry.name, "package.json"), "utf8")),
+          join(group, entry.name, "package.json"),
+        ),
       }));
   });
 

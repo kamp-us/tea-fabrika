@@ -15,12 +15,12 @@
 import { applyCell } from "@demlik/tea";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Arbitrary, Result, Schema } from "effect";
+import { Arbitrary, Effect, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
 import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
-import { type Tile, type TileId, TezgahView, Workspace } from "../tezgah/Workspace.ts";
+import { type Tile, type TileId, TezgahView, Workspace, WorkspaceId } from "../tezgah/Workspace.ts";
 import * as Keys from "./Keys.ts";
 import { optimisticState, type PendingMutation, type TezgahClient, tezgahMachine } from "./Tezgah.ts";
 import {
@@ -44,50 +44,52 @@ const FIELDS = ["id", "n", "shows", "program", "child", "keep", "cursor"] as con
 const step = (m: unknown, msg: unknown) => applyCell(tezgahMachine as never, m as never, msg as never)[0] as never;
 
 describe("Desk S2a L11: tezgah's view in the window", () => {
-  it.prop(
+  it.effect.prop(
     "L11: tezgah's view round-trips through TezgahView in the window: the encoded wire keeps every tile's fields, child included, and the window's server state is the view",
     {
       view: Arbitrary.schema(TezgahView),
       rev: Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000_000 }))),
     },
-    ({ view, rev }) => {
-      const wire: unknown = Schema.decodeSync(Json)(Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(view)));
-      // The view as JSON carries it: JSON has no `-0`, which a schema's Arbitrary may make.
-      const same = Schema.decodeUnknownSync(TezgahView)(wire);
-      expect(JSON.stringify(Schema.encodeSync(TezgahView)(same)), "L11: the wire view decodes to the view it was").toBe(
-        JSON.stringify(wire),
-      );
-      const tiles = (wire as { readonly tiles: ReadonlyArray<Record<string, unknown>> }).tiles;
-      expect(tiles, "L11: one wire tile per tile").toHaveLength(view.tiles.length);
+    ({ view, rev }) =>
+      Effect.gen(function* () {
+        const wire: unknown = yield* onWire(view);
+        // The view as JSON carries it: JSON has no `-0`, which a schema's Arbitrary may make.
+        const same = yield* Schema.decodeUnknownEffect(TezgahView)(wire);
+        expect(
+          JSON.stringify(yield* Schema.encodeEffect(TezgahView)(same)),
+          "L11: the wire view decodes to the view it was",
+        ).toBe(JSON.stringify(wire));
+        const tiles = (wire as { readonly tiles: ReadonlyArray<Record<string, unknown>> }).tiles;
+        expect(tiles, "L11: one wire tile per tile").toHaveLength(view.tiles.length);
 
-      for (const [i, tile] of tiles.entries()) {
-        expect(Object.keys(tile).sort(), "L11: the wire tile keeps every field").toEqual(
-          expect.arrayContaining([...FIELDS].sort()),
+        for (const [i, tile] of tiles.entries()) {
+          expect(Object.keys(tile).sort(), "L11: the wire tile keeps every field").toEqual(
+            expect.arrayContaining([...FIELDS].sort()),
+          );
+          expect(tile["child"], "L11: the wire says whether tezgah started the tile").toBe(view.tiles[i]?.child);
+          expect(typeof tile["child"], "L11: child is a boolean on the wire").toBe("boolean");
+        }
+
+        const [fresh] = tezgahMachine.init(null, { workspace: 1 });
+        expect(fresh, "L11: a window's tezgah child starts with no server state").toMatchObject({
+          workspace: 1,
+          serverState: null,
+          rev: 0,
+          pendingMutations: [],
+        });
+        const after: { readonly serverState: unknown } = step(fresh, { type: "server", rev, view: wire });
+        expect(after.serverState, "L11: the window's server state is tezgah's view").toEqual(same);
+        expect(optimisticState(after as never), "L11: with nothing pending, the drawn state is the server's").toEqual(
+          same,
         );
-        expect(tile["child"], "L11: the wire says whether tezgah started the tile").toBe(view.tiles[i]?.child);
-        expect(typeof tile["child"], "L11: child is a boolean on the wire").toBe("boolean");
-      }
 
-      const [fresh] = tezgahMachine.init(null, { workspace: 1 });
-      expect(fresh, "L11: a window's tezgah child starts with no server state").toMatchObject({
-        workspace: 1,
-        serverState: null,
-        rev: 0,
-        pendingMutations: [],
-      });
-      const after: { readonly serverState: unknown } = step(fresh, { type: "server", rev, view: wire });
-      expect(after.serverState, "L11: the window's server state is tezgah's view").toEqual(same);
-      expect(optimisticState(after as never), "L11: with nothing pending, the drawn state is the server's").toEqual(
-        same,
-      );
-
-      // A wire view that drops `child` from a tile is not tezgah's view: the window keeps what it had.
-      if (tiles.length > 0) {
-        const dropped = { ...(wire as object), tiles: tiles.map(({ child: _child, ...rest }) => rest) };
-        const kept: { readonly serverState: unknown } = step(after, { type: "server", rev: rev + 1, view: dropped });
-        expect(kept.serverState, "L11: a view without child changes nothing").toEqual(same);
-      }
-    },
+        // A wire view that drops `child` from a tile is not tezgah's view: the window keeps what it had.
+        if (tiles.length > 0) {
+          const dropped = { ...(wire as object), tiles: tiles.map(({ child: _child, ...rest }) => rest) };
+          const kept: { readonly serverState: unknown } = step(after, { type: "server", rev: rev + 1, view: dropped });
+          expect(kept.serverState, "L11: a view without child changes nothing").toEqual(same);
+        }
+      }),
     { arbitrary: { seed: SEED, runs: 200 } },
   );
 });
@@ -114,14 +116,19 @@ const both = (
   applyCell(tezgahMachine as never, m as never, msg as never) as never;
 
 /** A view as the wire carries it, JSON. */
-const onWire = (view: typeof TezgahView.Type): unknown =>
-  Schema.decodeSync(Json)(Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(view)));
+const onWire = (view: typeof TezgahView.Type): Effect.Effect<unknown, Schema.SchemaError> =>
+  Schema.encodeEffect(TezgahView)(view).pipe(
+    Effect.flatMap(Schema.encodeEffect(Json)),
+    Effect.flatMap(Schema.decodeEffect(Json)),
+  );
 
-const text = (state: unknown) =>
-  state === null ? "null" : Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(state as never));
+const text = (state: unknown): Effect.Effect<string, Schema.SchemaError> =>
+  state === null
+    ? Effect.succeed("null")
+    : Schema.encodeEffect(TezgahView)(state as never).pipe(Effect.flatMap(Schema.encodeEffect(Json)));
 
 describe("Desk S2a L11: a tezgah view patch in the window", () => {
-  it.prop(
+  it.effect.prop(
     "L11: a patch from the shown rev to one past it applies, a gap asks for a whole view and keeps the shown one, an old rev changes nothing",
     {
       // One view from the schema; the walk's other views are cut from it (tiles and workspaces dropped,
@@ -130,72 +137,78 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
       steps: Arbitrary.array(Arbitrary.schema(PatchStep), { minLength: 4, maxLength: 16 }),
       start: Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 6, maximum: 1_000_000 }))),
     },
-    ({ first, steps, start }) => {
-      const wires = [
-        first,
-        { workspaces: first.workspaces.slice(1), tiles: first.tiles.slice(1) },
-        { workspaces: [...first.workspaces].reverse(), tiles: [...first.tiles].reverse() },
-        { workspaces: [], tiles: [] },
-      ].map(onWire);
-      const [fresh] = tezgahMachine.init(null, { workspace: 1 });
-      let [m] = both(fresh, { type: "server", rev: start, view: wires[0] });
-      let shown = wires[0];
-      expect(text(m.serverState), "L11: the first whole view is shown").toBe(
-        text(Schema.decodeUnknownSync(TezgahView)(shown)),
-      );
-      const seen = { applied: 0, asked: 0, old: 0 };
+    ({ first, steps, start }) =>
+      Effect.gen(function* () {
+        const wires = yield* Effect.forEach(
+          [
+            first,
+            { workspaces: first.workspaces.slice(1), tiles: first.tiles.slice(1) },
+            { workspaces: [...first.workspaces].reverse(), tiles: [...first.tiles].reverse() },
+            { workspaces: [], tiles: [] },
+          ],
+          onWire,
+          { concurrency: 1 },
+        );
+        const [fresh] = tezgahMachine.init(null, { workspace: 1 });
+        let [m] = both(fresh, { type: "server", rev: start, view: wires[0] });
+        let shown = wires[0];
+        expect(yield* text(m.serverState), "L11: the first whole view is shown").toBe(
+          yield* text(yield* Schema.decodeUnknownEffect(TezgahView)(shown)),
+        );
+        const seen = { applied: 0, asked: 0, old: 0 };
 
-      // Each walk takes every kind once first, so each is walked; then the generated steps.
-      const walk = [
-        { kind: "next" as const, skew: 1, to: 1 },
-        { kind: "gap_base" as const, skew: 1, to: 0 },
-        { kind: "gap_rev" as const, skew: 2, to: 0 },
-        { kind: "old" as const, skew: 1, to: 0 },
-        ...steps,
-      ];
+        // Each walk takes every kind once first, so each is walked; then the generated steps.
+        const walk = [
+          { kind: "next" as const, skew: 1, to: 1 },
+          { kind: "gap_base" as const, skew: 1, to: 0 },
+          { kind: "gap_rev" as const, skew: 2, to: 0 },
+          { kind: "old" as const, skew: 1, to: 0 },
+          ...steps,
+        ];
 
-      for (const { kind, skew, to } of walk) {
-        const target = wires[to % wires.length];
-        const rev = m.rev;
-        const msg =
-          kind === "whole"
-            ? { type: "server", rev: rev + skew, view: target }
-            : kind === "next"
-              ? { type: "patch", base: rev, rev: rev + 1, patch: diff(shown, target) }
-              : kind === "gap_base"
-                ? { type: "patch", base: rev - skew, rev: rev + 1, patch: diff(shown, target) }
-                : kind === "gap_rev"
-                  ? { type: "patch", base: rev, rev: rev + 1 + skew, patch: diff(shown, target) }
-                  : { type: "patch", base: rev - skew - 1, rev: rev - skew + 1, patch: diff(shown, target) };
-        const [next, cmds] = both(m, msg);
-        const asks = cmds.filter((c) => c.type === "ask").length;
+        for (const { kind, skew, to } of walk) {
+          const target = wires[to % wires.length];
+          const rev = m.rev;
+          const msg =
+            kind === "whole"
+              ? { type: "server", rev: rev + skew, view: target }
+              : kind === "next"
+                ? { type: "patch", base: rev, rev: rev + 1, patch: diff(shown, target) }
+                : kind === "gap_base"
+                  ? { type: "patch", base: rev - skew, rev: rev + 1, patch: diff(shown, target) }
+                  : kind === "gap_rev"
+                    ? { type: "patch", base: rev, rev: rev + 1 + skew, patch: diff(shown, target) }
+                    : { type: "patch", base: rev - skew - 1, rev: rev - skew + 1, patch: diff(shown, target) };
+          const [next, cmds] = both(m, msg);
+          const asks = cmds.filter((c) => c.type === "ask").length;
 
-        if (kind === "next" || kind === "whole") {
-          seen.applied++;
-          expect(text(next.serverState), `L11: ${kind} shows the new view`).toBe(
-            text(Schema.decodeUnknownSync(TezgahView)(target)),
-          );
-          expect(next.rev, `L11: ${kind} moves the shown rev`).toBe(msg.rev);
-          expect(asks, `L11: ${kind} asks for nothing`).toBe(0);
-          shown = target;
-        } else {
-          seen[kind === "old" ? "old" : "asked"]++;
-          expect(text(next.serverState), `L11: ${kind} keeps the shown view`).toBe(text(m.serverState));
-          expect(next.rev, `L11: ${kind} keeps the shown rev`).toBe(rev);
-          expect(
-            asks,
-            kind === "old" ? "L11: an old patch asks for nothing" : `L11: ${kind} asks for a whole view`,
-          ).toBe(kind === "old" ? 0 : 1);
+          if (kind === "next" || kind === "whole") {
+            seen.applied++;
+            expect(yield* text(next.serverState), `L11: ${kind} shows the new view`).toBe(
+              yield* text(yield* Schema.decodeUnknownEffect(TezgahView)(target)),
+            );
+            expect(next.rev, `L11: ${kind} moves the shown rev`).toBe(msg.rev);
+            expect(asks, `L11: ${kind} asks for nothing`).toBe(0);
+            shown = target;
+          } else {
+            seen[kind === "old" ? "old" : "asked"]++;
+            expect(yield* text(next.serverState), `L11: ${kind} keeps the shown view`).toBe(yield* text(m.serverState));
+            expect(next.rev, `L11: ${kind} keeps the shown rev`).toBe(rev);
+            expect(
+              asks,
+              kind === "old" ? "L11: an old patch asks for nothing" : `L11: ${kind} asks for a whole view`,
+            ).toBe(kind === "old" ? 0 : 1);
+          }
+
+          m = next;
         }
 
-        m = next;
-      }
-
-      expect(seen.applied + seen.asked + seen.old, "L11: every step was one of the three").toBe(walk.length);
-      expect(Math.min(seen.applied, seen.asked, seen.old), "L11: the walk applied, asked and ignored").toBeGreaterThan(
-        0,
-      );
-    },
+        expect(seen.applied + seen.asked + seen.old, "L11: every step was one of the three").toBe(walk.length);
+        expect(
+          Math.min(seen.applied, seen.asked, seen.old),
+          "L11: the walk applied, asked and ignored",
+        ).toBeGreaterThan(0);
+      }),
     { arbitrary: { seed: SEED, runs: 200 } },
   );
 });
@@ -358,8 +371,8 @@ const tileRow = (id: string, n: number): Tile =>
 /** A workspace of 1 + cuts tiles, split by `cuts`, focus on the tile `focus` picks. */
 const makeDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
   const first = typeId("tile", 1) as TileId;
-  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
-    id: typeId("workspace", 1),
+  let w: Workspace = Workspace.make({
+    id: WorkspaceId.make(typeId("workspace", 1)),
     n: 1,
     layout: first,
     focus: first,

@@ -158,7 +158,7 @@ describe("T695, the passkey writer keeps why client data was refused", () => {
       Effect.gen(function* () {
         const { line, assertion } = yield* signed(client.data);
         const error = yield* Effect.flip(
-          writeWebauthnSshsig({ text, line: Schema.decodeUnknownSync(PasskeyLine)(line), assertion }),
+          writeWebauthnSshsig({ text, line: yield* Schema.decodeUnknownEffect(PasskeyLine)(line), assertion }),
         );
         expect(error._tag).toBe("BadAssertion");
         const cause = (error as { readonly cause?: unknown }).cause;

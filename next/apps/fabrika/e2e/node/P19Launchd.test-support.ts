@@ -451,8 +451,11 @@ export const check = Effect.fn("P19Host.check")(function* () {
     url,
     build: built.build,
   });
-  yield* fs.writeFileString(`${home}/spec.json`, JSON.stringify(Schema.encodeSync(BrainSpec)(spec)));
-  yield* fs.writeFileString(`${home}/snapshot.json`, JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(settings)));
+  yield* fs.writeFileString(`${home}/spec.json`, JSON.stringify(yield* Schema.encodeEffect(BrainSpec)(spec)));
+  yield* fs.writeFileString(
+    `${home}/snapshot.json`,
+    JSON.stringify(yield* Schema.encodeEffect(Snapshot.Snapshot)(settings)),
+  );
   const native = yield* Layer.build(Native.layer(spec, settings));
   yield* Context.get(native, BrainControl).install;
   // plutil, not a hand-written XML parser, verifies the native compiler preserves checked values.
@@ -594,7 +597,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   const fixture = `${home}/fixture.mjs`;
   yield* bundle(`import ${JSON.stringify(path.join(root, "fixtures/next/p19-launchd/brain.ts"))};`, fixture, root);
   const normal = yield* Schema.decodeUnknownEffect(BrainSpec)({ ...spec, args: [fixture] });
-  yield* fs.writeFileString(`${home}/spec.json`, JSON.stringify(Schema.encodeSync(BrainSpec)(normal)));
+  yield* fs.writeFileString(`${home}/spec.json`, JSON.stringify(yield* Schema.encodeEffect(BrainSpec)(normal)));
   const normalContext = yield* Layer.build(Native.layer(normal, settings));
   const normalControl = Context.get(normalContext, BrainControl);
   yield* normalControl.install;

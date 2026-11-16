@@ -26,7 +26,7 @@ const Report = Schema.Struct({
   ),
 });
 
-const readReport = Schema.decodeUnknownSync(Schema.fromJsonString(Report));
+const readReport = Schema.decodeUnknownEffect(Schema.fromJsonString(Report));
 
 type Files = Readonly<Record<string, string>>;
 type Fires<A> = (code: string, file: string) => readonly A[];
@@ -88,7 +88,7 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
     ],
     { concurrency: 3 },
   );
-  const report = readReport(out);
+  const report = yield* readReport(out);
 
   if (report.number_of_files !== Object.keys(files).length) {
     return yield* Effect.die(new Error(`oxlint read ${report.number_of_files} files: ${err}`));

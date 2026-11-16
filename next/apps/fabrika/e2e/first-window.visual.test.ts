@@ -75,7 +75,7 @@ const foldRows = (model: Model): ReadonlyArray<Row> =>
   model.items.map((i) => ({ name: i.name, checked: i.state._tag === "checked" }));
 
 /** Polls until `check` holds, or fails with the last value it read after 30 s. */
-const settle = <A>(read: Effect.Effect<A>, check: (a: A) => boolean, label: string) =>
+const settle = <A, E>(read: Effect.Effect<A, E>, check: (a: A) => boolean, label: string) =>
   Effect.gen(function* () {
     let last: A = yield* read;
 
@@ -224,7 +224,7 @@ const Resends = Schema.Struct({
 
 const resends = (page: import("playwright").Page) =>
   Effect.promise(() => page.evaluate(() => Reflect.get(globalThis, "__p14Resends"))).pipe(
-    Effect.map(Schema.decodeUnknownSync(Resends)),
+    Effect.flatMap(Schema.decodeUnknownEffect(Resends)),
   );
 
 /** Each move reads the selected tab's current rows, then presses a control enabled there. */
@@ -233,7 +233,7 @@ const useChecklist = (
   moves: ReadonlyArray<Control>,
   pool: ReadonlyArray<string>,
   observe: Effect.Effect<unknown> = Effect.void,
-  afterPress: (msg: Msg, at: number) => Effect.Effect<unknown> = () => Effect.void,
+  afterPress: (msg: Msg, at: number) => Effect.Effect<unknown, Schema.SchemaError> = () => Effect.void,
 ) =>
   Effect.gen(function* () {
     let model: Model = checklistMachine.init(null, {})[0];
@@ -474,7 +474,7 @@ describe("L15: use in two tabs (W2)", () => {
 
               for (const entry of inbox.filter((entry) => !letters.has(entry.id))) {
                 expect(entry._tag, "inbox entries are mailbox sends").toBe("send");
-                const { m } = Schema.decodeUnknownSync(Schema.Struct({ m: checklist.msg }))(entry.body);
+                const { m } = yield* Schema.decodeUnknownEffect(Schema.Struct({ m: checklist.msg }))(entry.body);
                 expect(m.type, "every remaining inbox entry is a runner timer").toBe("timer");
                 expect(entry.id, "the runner timer has its own revision-scoped id").toMatch(/\/due\/\d+\/\d+$/);
               }
@@ -609,26 +609,31 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   "the signed removal stays in its history",
                 ).toBe(true);
                 const accessBodies = new Map<string, string>();
-                const records = access.map((entry): readonly [string, string] => {
-                  if (entry._tag !== "granted" && entry._tag !== "revoked") {
-                    return ["access record", JSON.stringify(entry)];
-                  }
+                const object = Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.Json));
+                const records = yield* Effect.forEach(
+                  access,
+                  (entry) =>
+                    Effect.gen(function* (): Effect.fn.Return<readonly [string, string], Schema.SchemaError> {
+                      if (entry._tag !== "granted" && entry._tag !== "revoked") {
+                        return ["access record", JSON.stringify(entry)];
+                      }
 
-                  const event = Schema.decodeUnknownSync(
-                    Schema.Union([MemberEvent.cases.granted, MemberEvent.cases.revoked]),
-                  )(valueFor(entry));
+                      const event = yield* Schema.decodeUnknownEffect(
+                        Schema.Union([MemberEvent.cases.granted, MemberEvent.cases.revoked]),
+                      )(valueFor(entry));
 
-                  expect(
-                    [...h.grants.flatMap((g) => g.signatures), revoked.armored],
-                    "only the proof actually sent is retained",
-                  ).toContain(event.signed.armored);
-                  // Access.Signed keeps this proof by design. Check every other field for copies.
-                  const object = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json));
-                  const body = object(entry.body);
-                  const { armored: _proof, ...signed } = object(body.signed);
-                  accessBodies.set(JSON.stringify(body), JSON.stringify({ ...body, signed }));
-                  return ["access record", JSON.stringify({ ...entry, body: { ...body, signed } })];
-                });
+                      expect(
+                        [...h.grants.flatMap((g) => g.signatures), revoked.armored],
+                        "only the proof actually sent is retained",
+                      ).toContain(event.signed.armored);
+                      // Access.Signed keeps this proof by design. Check every other field for copies.
+                      const body = yield* object(entry.body);
+                      const { armored: _proof, ...signed } = yield* object(body.signed);
+                      accessBodies.set(JSON.stringify(body), JSON.stringify({ ...body, signed }));
+                      return ["access record", JSON.stringify({ ...entry, body: { ...body, signed } })] as const;
+                    }),
+                  { concurrency: 1 },
+                );
                 const proofs = [...[...h.grants, ...stranger.grants].flatMap((g) => g.signatures), revoked.armored];
                 // The tabs' last look comes while the instance still runs. The scan reads the home once
                 // more while it runs, then stops it and reads a home nothing writes to any more.

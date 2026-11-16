@@ -9,7 +9,7 @@ import { inspect } from "node:util";
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Context, Effect, Exit, Layer, Logger, ManagedRuntime, Redacted, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Logger, ManagedRuntime, Redacted, Result, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, expectTypeOf, it, vi } from "vitest";
@@ -149,19 +149,34 @@ const flow = async (sample: Flow) => {
     return db;
   };
   let mode = "ok";
-  const delivered = async (name: string, args: ReadonlyArray<unknown>) => {
-    const [chain, at, rows] = Schema.decodeUnknownSync(
+  // What the brain sent that this stand-in could not decode: answered 400 here, and the flow fails on any.
+  const malformed: Array<string> = [];
+  const refuse = (error: Schema.SchemaError) => {
+    malformed.push(error.message);
+    return Response.json({ error: { reason: "malformed" } }, { status: 400 });
+  };
+  const delivered = async (
+    name: string,
+    args: ReadonlyArray<unknown>,
+  ): Promise<Result.Result<unknown, Schema.SchemaError>> => {
+    const decoded = Schema.decodeUnknownResult(
       Schema.Tuple([
         Chain,
         Schema.Int,
         Schema.Array(Schema.Struct({ span: SpanRow, content: Schema.NullOr(Schema.String) })),
       ]),
     )(args);
+
+    if (Result.isFailure(decoded)) {
+      return Result.fail(decoded.failure);
+    }
+
+    const [chain, at, rows] = decoded.success;
     const store = recordPart(nodeSql(part(name)), chain, at, 1_000_000_000);
-    return Effect.runPromise(store.write(rows));
+    return Result.succeed(await Effect.runPromise(store.write(rows)));
   };
   const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
-    const call = Schema.decodeUnknownSync(
+    const decodedCall = Schema.decodeUnknownResult(
       Schema.fromJsonString(
         Schema.Struct({
           target: Schema.String,
@@ -171,6 +186,12 @@ const flow = async (sample: Flow) => {
         }),
       ),
     )(bodyText(options));
+
+    if (Result.isFailure(decodedCall)) {
+      return refuse(decodedCall.failure);
+    }
+
+    const call = decodedCall.success;
     // The platform send is allowed to hold the bearer; persistent outputs are checked below.
     // It holds no other header but the content type: no trace header rides along.
     expect(Object.fromEntries(new Headers(options?.headers))).toEqual({
@@ -179,7 +200,8 @@ const flow = async (sample: Flow) => {
     });
 
     if (call.method === "write") {
-      return Response.json({ value: await delivered(`node/${call.name}`, call.args) });
+      const written = await delivered(`node/${call.name}`, call.args);
+      return Result.isSuccess(written) ? Response.json({ value: written.success }) : refuse(written.failure);
     }
 
     if (call.method === "brain") {
@@ -187,7 +209,13 @@ const flow = async (sample: Flow) => {
         throw new Error(`${bearer} ${rawFrame}`);
       }
 
-      const event = Schema.decodeUnknownSync(BrainEvent)(call.args[0]);
+      const decodedEvent = Schema.decodeUnknownResult(BrainEvent)(call.args[0]);
+
+      if (Result.isFailure(decodedEvent)) {
+        return refuse(decodedEvent.failure);
+      }
+
+      const event = decodedEvent.success;
       await journal.runPromise(
         Ledger.use((ledger) =>
           ledger.append(
@@ -295,7 +323,17 @@ const flow = async (sample: Flow) => {
     },
     RECORD: {
       getByName: (name: string) => ({
-        write: (...args: Array<unknown>) => delivered(`worker/${name}`, args),
+        // A stub refuses arguments it cannot read, as the platform's RPC does; the flow fails on the refusal.
+        write: async (...args: Array<unknown>) => {
+          const written = await delivered(`worker/${name}`, args);
+
+          if (Result.isFailure(written)) {
+            malformed.push(written.failure.message);
+            throw written.failure;
+          }
+
+          return written.success;
+        },
       }),
     },
   } as unknown as Env;
@@ -320,7 +358,7 @@ const flow = async (sample: Flow) => {
               // Plugin props and HTTP headers are both platform sends. Each must receive
               // the bearer bytes; serializing a Redacted here would break the real instance.
               expect(
-                Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ token: Schema.String })))(
+                yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ token: Schema.String })))(
                   plugin.sockets[0]!.service.props.json,
                 ),
               ).toEqual({ token: bearer });
@@ -461,6 +499,7 @@ const flow = async (sample: Flow) => {
     expect(parts.size).toBeGreaterThan(0);
     expect(outputs.journal.length).toBeGreaterThan(0);
     expect(outputs.measurements.flat().length).toBeGreaterThan(0);
+    expect(malformed, "every call the brain sent decodes").toEqual([]);
     return { outputs, words, answer };
   } finally {
     fetch.mockRestore();

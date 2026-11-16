@@ -217,7 +217,7 @@ const refusedFor = (error: unknown, reason: string) => {
 };
 
 /** The fault a service's own error keeps under its tagged reason (0119). */
-const kept = Schema.decodeUnknownSync(Schema.Struct({ reason: Schema.Struct({ cause: Schema.Unknown }) }));
+const kept = Schema.decodeUnknownEffect(Schema.Struct({ reason: Schema.Struct({ cause: Schema.Unknown }) }));
 
 const signingLaws = (open: Open) => {
   it.prop(
@@ -232,7 +232,7 @@ const signingLaws = (open: Open) => {
           traceId: TRACE,
           span: { traceId: TRACE, spanId: SPAN },
         };
-        expect(Schema.decodeUnknownSync(Session)(session)).toEqual(session);
+        expect(Schema.decodeUnknownResult(Session)(session)).toEqual(Result.succeed(session));
 
         for (const span of [{}, { traceId: TRACE }, { spanId: SPAN }]) {
           expect(Schema.is(Session)({ ...session, span })).toBe(false);
@@ -454,7 +454,7 @@ const signingLaws = (open: Open) => {
           const refused = yield* Effect.flip(signer());
           expect(refused).toHaveProperty("_tag", "SessionManagerError");
           expect(refused).toHaveProperty("reason._tag", "Storage");
-          expect(kept(refused).reason.cause).toBe(failure.fault);
+          expect((yield* kept(refused)).reason.cause).toBe(failure.fault);
           expect(snapshot(sql)).toBe(before);
           const retry = yield* signer();
           expect(retry.parent).toBe(parent);

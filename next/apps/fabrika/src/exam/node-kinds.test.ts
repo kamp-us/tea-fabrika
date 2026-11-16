@@ -8,7 +8,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, matchesGlob } from "node:path";
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 
@@ -57,7 +57,13 @@ const exported = (path: string) =>
 
 /** What is wrong with one names file, as one line per problem; empty when every name is real. */
 const problems = (text: string) => {
-  const kinds = Schema.decodeUnknownSync(Kinds)(text);
+  const read = Schema.decodeUnknownResult(Kinds)(text);
+
+  if (Result.isFailure(read)) {
+    return [`the names file does not decode: ${read.failure.message}`];
+  }
+
+  const kinds = read.success;
   const found: string[] = [];
 
   for (const [name, { files, exports }] of Object.entries(kinds.entryExportConventions)) {
@@ -91,7 +97,13 @@ describe("node-kinds.json (L6)", () => {
   it("L6 scenario: every name is exported by a file its glob matches and bound by that string elsewhere in next/", () => {
     // The real file and the tracked tree: on main, RecordPart and IsolateTail, both from src/brain.ts.
     const text = readFileSync(join(ROOT, "node-kinds.json"), "utf8");
-    expect(Object.keys(Schema.decodeUnknownSync(Kinds)(text).entryExportConventions)).not.toEqual([]);
+    const kinds = Schema.decodeUnknownResult(Kinds)(text);
+    expect(Result.isSuccess(kinds), "node-kinds.json decodes").toBe(true);
+
+    if (Result.isSuccess(kinds)) {
+      expect(Object.keys(kinds.success.entryExportConventions)).not.toEqual([]);
+    }
+
     expect(problems(text)).toEqual([]);
   });
 });

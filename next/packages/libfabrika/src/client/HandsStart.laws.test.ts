@@ -61,7 +61,7 @@ const identity = (() => {
       .replaceAll("+", "-")
       .replaceAll("/", "_")
       .replace(/=+$/, ""),
-    line: Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
+    line: KeyLine.make(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
     found: "reused" as const,
     sign: () => Effect.succeed(new Uint8Array(64)),
   };
@@ -293,9 +293,10 @@ describe("P39 slice 4b: the host's os in the hello", () => {
               expect(d.state.hellos.length, "O1: the start says hello").toBeGreaterThan(0);
 
               for (const hello of d.state.hellos) {
-                expect(Schema.decodeUnknownSync(Hello)(hello).os, "O1: every hello carries the os it was given").toBe(
-                  os,
-                );
+                expect(
+                  (yield* Schema.decodeUnknownEffect(Hello)(hello)).os,
+                  "O1: every hello carries the os it was given",
+                ).toBe(os);
               }
 
               reached.add(os);

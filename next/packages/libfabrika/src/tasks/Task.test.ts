@@ -27,7 +27,9 @@ const RUNS = { seed: 119120, numRuns: 100 };
 
 /** Encode, write as JSON text, read it back and decode, as a value crosses a store or a wire. */
 const through = <S extends Schema.Codec<unknown, unknown>>(schema: S, value: S["Type"]) =>
-  Schema.decodeUnknownResult(schema)(JSON.parse(JSON.stringify(Schema.encodeSync(schema)(value))));
+  R.flatMap(Schema.encodeResult(schema)(value), (encoded) =>
+    Schema.decodeUnknownResult(schema)(JSON.parse(JSON.stringify(encoded))),
+  );
 
 const Values = fc.uniqueArray(fcFingerprint, { minLength: 2, maxLength: 3 }).chain((keys) =>
   fc.record({

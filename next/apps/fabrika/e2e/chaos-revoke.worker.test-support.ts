@@ -102,7 +102,7 @@ const heldOwner = (ctx: Parameters<typeof projectRuntime>[0], env: Parameters<ty
                 yield* Deferred.succeed(release, undefined);
               }
 
-              return Answer.cases.ok.make({ result: Schema.encodeSync(Hold.Model)(model) });
+              return Answer.cases.ok.make({ result: yield* Schema.encodeEffect(Hold.Model)(model) });
             });
           },
         };

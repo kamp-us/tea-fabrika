@@ -13,7 +13,7 @@
 // draft: a typed text (empty, short, at the cap or past it), or a submit of what is there now.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import type { checklistMachine } from "./program.ts";
 import { tile } from "./tile.ts";
@@ -126,12 +126,12 @@ describe("L22: the checklist tile", () => {
   });
 
   it("the Model round-trips its schema at every step", () => {
-    const decode = Schema.decodeUnknownSync(Schema.toType(tile.model));
-    const encode = Schema.encodeSync(Schema.toType(tile.model));
+    const decode = Schema.decodeUnknownResult(Schema.toType(tile.model));
+    const encode = Schema.encodeResult(Schema.toType(tile.model));
     fc.assert(
       fc.property(walks, (list) => {
         walk(list, (_prev, _m, next) => {
-          expect(decode(encode(next))).toEqual(next);
+          expect(Result.flatMap(encode(next), decode)).toEqual(Result.succeed(next));
         });
       }),
       opts,

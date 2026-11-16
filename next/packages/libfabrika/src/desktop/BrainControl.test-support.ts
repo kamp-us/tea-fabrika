@@ -6,7 +6,7 @@ import { BrainControl, BrainControlError, Command, Status } from "./BrainControl
 import { BrainProbe, BrainProbeError, Unreachable, Foreign, Readiness, Children, Cleanup } from "./BrainProbe.ts";
 import { BrainSpec } from "./BrainSpec.ts";
 
-export const spec = Schema.decodeUnknownSync(BrainSpec)({
+export const spec = BrainSpec.make({
   home: "/test/p19/home",
   executable: "/test/p19/Electron",
   args: ["/test/p19/brain.mjs"],
@@ -25,7 +25,7 @@ export const loaded = (value: BrainSpec = spec, pid: number | null = 81) =>
     pid,
   });
 
-export const foreign = loaded(Schema.decodeUnknownSync(BrainSpec)({ ...spec, args: [...spec.args, "foreign"] }));
+export const foreign = loaded(BrainSpec.make({ ...spec, args: [...spec.args, "foreign"] }));
 
 const World = Schema.Struct({
   job: Status,

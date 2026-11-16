@@ -17,8 +17,14 @@ const SourceRead = Schema.Union([
   SourceMetadata.cases.disk.mapFields((fields) => ({ ...fields, bytes: Schema.Uint8Array })),
 ]);
 
-const checkRead = (value: unknown, committed: boolean, commit: string, text: string, privateRoot: string) => {
-  const read = Schema.decodeUnknownSync(SourceRead)(value);
+const checkRead = Effect.fnUntraced(function* (
+  value: unknown,
+  committed: boolean,
+  commit: string,
+  text: string,
+  privateRoot: string,
+) {
+  const read = yield* Schema.decodeUnknownEffect(SourceRead)(value);
   expect(read._tag).toBe(committed ? "committed" : "disk");
   expect(new TextDecoder().decode(read.bytes)).toBe(text);
 
@@ -29,7 +35,7 @@ const checkRead = (value: unknown, committed: boolean, commit: string, text: str
   }
 
   expect(JSON.stringify(value)).not.toContain(privateRoot);
-};
+});
 
 const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
   return yield* (yield* ChildProcessSpawner.ChildProcessSpawner).string(
@@ -90,7 +96,8 @@ const personBases = Effect.fnUntraced(function* (root: string) {
 
               for (const [file] of reads) {
                 const value = yield* source.read(file);
-                const read = Schema.decodeUnknownSync(Schema.NullOr(SourceRead))(value);
+                // A read that does not decode is a broken source, not a refusal the match below names: it fails the law.
+                const read = yield* Schema.decodeUnknownEffect(Schema.NullOr(SourceRead))(value).pipe(Effect.orDie);
                 expect(JSON.stringify(value)).not.toContain(root);
                 values.push(read === null ? null : { tag: read._tag, text: new TextDecoder().decode(read.bytes) });
               }
@@ -162,7 +169,7 @@ const regularFileLinks = Effect.fnUntraced(function* (root: string) {
         const from = document === "repo" ? "../traversal" : "../disk traversal";
         const source = yield* resolve(from, document);
         // A plain file link remains readable. Only directory traversal must fail.
-        expect(string(yield* source.read("file-link"))).toBe("regular file");
+        expect(yield* string(yield* source.read("file-link"))).toBe("regular file");
 
         for (const operation of ["resolve", "read"] as const) {
           const requested: Effect.Effect<unknown, RepositoriesError> =
@@ -178,7 +185,7 @@ const regularFileLinks = Effect.fnUntraced(function* (root: string) {
         }
 
         // A refused source must leave the valid source usable.
-        expect(string(yield* source.read("entry.txt"))).toBe("regular file");
+        expect(yield* string(yield* source.read("entry.txt"))).toBe("regular file");
       }
 
       expect(actual, JSON.stringify(actual)).toEqual(expected);
@@ -209,7 +216,7 @@ it.effect.prop(
         yield* fs.makeDirectory(path.join(repo, ".fabrika"), { recursive: true });
         yield* fs.makeDirectory(path.join(repo, "inside space"));
         yield* fs.makeDirectory(person);
-        const commit = Schema.decodeUnknownSync(ObjectId)("a".repeat(40));
+        const commit = yield* Schema.decodeUnknownEffect(ObjectId)("a".repeat(40));
         const entries = new Map<string, { mode: string; type: string; id: string }>([
           [".fabrika", { mode: "040000", type: "tree", id: "b".repeat(40) }],
           ["inside space", { mode: "040000", type: "tree", id: "c".repeat(40) }],
@@ -293,8 +300,14 @@ it.effect.prop(
 
           if (Exit.isSuccess(source)) {
             expect(source.value._tag).toBe(pick < 3 ? "committed" : "disk");
-            expect(string(yield* source.value.read("entry.txt"))).toBe(pick < 3 ? "committed" : disk);
-            checkRead(yield* source.value.read("entry.txt"), pick < 3, commit, pick < 3 ? "committed" : disk, root);
+            expect(yield* string(yield* source.value.read("entry.txt"))).toBe(pick < 3 ? "committed" : disk);
+            yield* checkRead(
+              yield* source.value.read("entry.txt"),
+              pick < 3,
+              commit,
+              pick < 3 ? "committed" : disk,
+              root,
+            );
             expect(JSON.stringify(source.value)).not.toContain(root);
           } else {
             const fail = source.cause.reasons.find((reason) => reason._tag === "Fail");
@@ -305,16 +318,16 @@ it.effect.prop(
             expect(Exit.isFailure(yield* resolve(bad, "repo").pipe(Effect.exit))).toBe(true);
           }
 
-          expect(string(yield* (yield* resolve("./local", "repo")).read("entry.txt"))).toBe("committed");
+          expect(yield* string(yield* (yield* resolve("./local", "repo")).read("entry.txt"))).toBe("committed");
           const local = yield* resolve("./local", "repo");
 
           for (const file of ["entry.txt", "local-file", "absolute-local", "../inside space/entry.txt"]) {
-            checkRead(yield* local.read(file), true, commit, "committed", root);
+            yield* checkRead(yield* local.read(file), true, commit, "committed", root);
           }
 
           for (const file of ["outside-file", "absolute-outside", "../../outside space/entry.txt"]) {
             if (present) {
-              checkRead(yield* local.read(file), false, commit, disk, root);
+              yield* checkRead(yield* local.read(file), false, commit, disk, root);
             } else {
               expect(yield* local.read(file)).toBeNull();
             }
@@ -322,7 +335,7 @@ it.effect.prop(
 
           const own = yield* resolve("../repo/inside space", "person");
           expect(own._tag).toBe("disk");
-          checkRead(yield* own.read("entry.txt"), false, commit, `dirty ${index}`, root);
+          yield* checkRead(yield* own.read("entry.txt"), false, commit, `dirty ${index}`, root);
 
           const baseReads = yield* Effect.forEach(
             personResolvers,
@@ -330,7 +343,13 @@ it.effect.prop(
             { concurrency: 1 },
           );
           expect(baseReads.map((read) => read.actual)).toEqual(baseReads.map((read) => read.expected));
-          checkRead(yield* (yield* resolve("./local", "repo")).read("entry.txt"), true, commit, "committed", root);
+          yield* checkRead(
+            yield* (yield* resolve("./local", "repo")).read("entry.txt"),
+            true,
+            commit,
+            "committed",
+            root,
+          );
           yield* traversal.check(resolve, cell.traversal);
         }
       }),
@@ -338,10 +357,10 @@ it.effect.prop(
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
 );
 
-const string = (value: unknown) => {
-  const read = Schema.decodeUnknownSync(Schema.NullOr(SourceRead))(value);
-  return read === null ? null : new TextDecoder().decode(read.bytes);
-};
+const string = (value: unknown) =>
+  Schema.decodeUnknownEffect(Schema.NullOr(SourceRead))(value).pipe(
+    Effect.map((read) => (read === null ? null : new TextDecoder().decode(read.bytes))),
+  );
 
 const realGitRuns = runsFor({ fast: 3, full: 20 });
 const realGitRunBudget = 30_000;
@@ -456,8 +475,10 @@ it.each(GitLaws.gits)(
 
                     if (Exit.isSuccess(resolved)) {
                       expect(resolved.value._tag).toBe(committed ? "committed" : "disk");
-                      expect(string(yield* resolved.value.read("entry.txt"))).toBe(committed ? "commit 0" : disk);
-                      checkRead(
+                      expect(yield* string(yield* resolved.value.read("entry.txt"))).toBe(
+                        committed ? "commit 0" : disk,
+                      );
+                      yield* checkRead(
                         yield* resolved.value.read("entry.txt"),
                         committed,
                         pinned,
@@ -481,15 +502,15 @@ it.each(GitLaws.gits)(
                     }
 
                     const stillGood = yield* selected.resolve("../inside space", "repo");
-                    expect(string(yield* stillGood.read("entry.txt"))).toBe("commit 0");
+                    expect(yield* string(yield* stillGood.read("entry.txt"))).toBe("commit 0");
 
                     for (const file of ["entry.txt", "local-file", "absolute-local", "../inside space/entry.txt"]) {
-                      checkRead(yield* stillGood.read(file), true, pinned, "commit 0", root);
+                      yield* checkRead(yield* stillGood.read(file), true, pinned, "commit 0", root);
                     }
 
                     for (const file of ["outside-file", "absolute-outside", "../../outside space/entry.txt"]) {
                       if (present) {
-                        checkRead(yield* stillGood.read(file), false, pinned, disk, root);
+                        yield* checkRead(yield* stillGood.read(file), false, pinned, disk, root);
                       } else {
                         expect(yield* stillGood.read(file)).toBeNull();
                       }
@@ -497,7 +518,7 @@ it.each(GitLaws.gits)(
 
                     const own = yield* selected.resolve("../repo/inside space", "person");
                     expect(own._tag).toBe("disk");
-                    checkRead(yield* own.read("entry.txt"), false, pinned, checkout, root);
+                    yield* checkRead(yield* own.read("entry.txt"), false, pinned, checkout, root);
 
                     const baseReads = yield* Effect.forEach(
                       personSelections,
@@ -505,7 +526,7 @@ it.each(GitLaws.gits)(
                       { concurrency: 1 },
                     );
                     expect(baseReads.map((read) => read.actual)).toEqual(baseReads.map((read) => read.expected));
-                    checkRead(yield* stillGood.read("entry.txt"), true, pinned, "commit 0", root);
+                    yield* checkRead(yield* stillGood.read("entry.txt"), true, pinned, "commit 0", root);
                     expect(selected.snapshot.commit).toBe(pinned);
                     yield* traversal.check(selected.resolve, cell.traversal);
                   }

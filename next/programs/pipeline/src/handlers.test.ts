@@ -21,7 +21,7 @@ describe("L12: handlers map faults", () => {
         }),
         (cell) => {
           expect.hasAssertions();
-          const head = Schema.decodeUnknownSync(CodeHost.Commit)("a".repeat(40));
+          const head = CodeHost.Commit.make("a".repeat(40));
           const reason = cell.method === "checks" && cell.reason === "refused" ? "unavailable" : cell.reason;
           const cause = cell.cause === undefined ? undefined : new Error(cell.cause);
           const hostFault = new CodeHost.CodeHostError({

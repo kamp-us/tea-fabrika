@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 import fc from "fast-check";
 import { type Row, rowsAt } from "./rows.ts";
 
@@ -19,9 +19,13 @@ const RuleFile = Schema.Struct({
 });
 
 /** The rule file's rows, as `pnpm lint:layers` reads them. Their paths start at the top of the repo. */
-const REAL: ReadonlyArray<Row> = Schema.decodeUnknownSync(RuleFile)(
+const realRead = Schema.decodeUnknownResult(RuleFile)(
   JSON.parse(readFileSync(resolve(import.meta.dirname, "../../../../../layer-rules.json"), "utf8")),
-).layers;
+);
+
+const REAL: ReadonlyArray<Row> = Result.isSuccess(realRead)
+  ? realRead.success.layers
+  : expect.unreachable(`layer-rules.json does not decode as the tool reads it: ${realRead.failure.message}`);
 
 // Ticket 477, PR 0. Fixed seed, as the lead scripts' laws use.
 const options = { seed: 119120, numRuns: 500 };

@@ -1,7 +1,7 @@
 // P9's additive schema extension: metadata is durable, not caller authority. Existing P9 tests
 // still own root equality and recovery folds. Plants: strip the extension; lose enrollment proof.
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { Add, Adds, Signed } from "./Access.ts";
 
@@ -50,9 +50,9 @@ describe("P10 passkey records", () => {
             old: null,
           },
         };
-        expect(Schema.decodeUnknownSync(Add)(add)).toEqual(add);
+        expect(Schema.decodeUnknownResult(Add)(add)).toEqual(Result.succeed(add));
         const command = { ...add, saw: { ...add.saw, method: "command", kept: null, typed: false } };
-        expect(Schema.decodeUnknownSync(Add)(command)).toEqual(command);
+        expect(Schema.decodeUnknownResult(Add)(command)).toEqual(Result.succeed(command));
       }),
       { seed: 119120, includeErrorInReport: true, examples: [[commonExample, "sheet", "test"]] },
     );
@@ -90,9 +90,9 @@ describe("P10 passkey records", () => {
   it("question 19: Signed keeps checked backup state and zero counter beside the original bytes", () => {
     fc.assert(
       fc.property(fc.record({ text, armored: text, signer: text, passkey: checkedArb }), (input) => {
-        const decoded = Schema.decodeUnknownSync(Signed)(input);
-        expect(decoded).toEqual(input);
-        expect(Schema.encodeSync(Signed)(decoded)).toEqual(input);
+        const decoded = Schema.decodeUnknownResult(Signed)(input);
+        expect(decoded).toEqual(Result.succeed(input));
+        expect(Result.flatMap(decoded, Schema.encodeResult(Signed))).toEqual(Result.succeed(input));
       }),
       {
         seed: 119120,
@@ -134,9 +134,9 @@ describe("P10 passkey records", () => {
           })
           .map((value) => ({ _tag: "person" as const, ...value })),
         (input) => {
-          const decoded = Schema.decodeUnknownSync(Adds)(input);
-          expect(decoded).toEqual(input);
-          expect(Schema.encodeSync(Adds)(decoded)).toEqual(input);
+          const decoded = Schema.decodeUnknownResult(Adds)(input);
+          expect(decoded).toEqual(Result.succeed(input));
+          expect(Result.flatMap(decoded, Schema.encodeResult(Adds))).toEqual(Result.succeed(input));
         },
       ),
       { seed: 119120, includeErrorInReport: true, examples: [[example]] },
@@ -145,7 +145,7 @@ describe("P10 passkey records", () => {
   it("P7 compatibility: plain Ed25519 signed events need no invented passkey fields", () => {
     fc.assert(
       fc.property(fc.record({ text, armored: text, signer: text }), (input) => {
-        expect(Schema.decodeUnknownSync(Signed)(input)).toEqual(input);
+        expect(Schema.decodeUnknownResult(Signed)(input)).toEqual(Result.succeed(input));
       }),
       {
         seed: 119120,

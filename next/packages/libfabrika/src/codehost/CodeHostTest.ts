@@ -51,8 +51,8 @@ export class Control extends Context.Service<
   }
 >()("@kampus/libfabrika/codehost/CodeHostTest.Control") {}
 
-export const commit = (hex: string) => Schema.decodeUnknownSync(Commit)(hex);
-export const tree = (hex: string) => Schema.decodeUnknownSync(Tree)(hex);
+export const commit = (hex: string) => Commit.make(hex);
+export const tree = (hex: string) => Tree.make(hex);
 
 const reasons = { unavailable: Unavailable, rate_limited: RateLimited, refused: Refused };
 

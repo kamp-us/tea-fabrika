@@ -8,7 +8,7 @@
 //   from different sources have one hash. It may need `Digest` from `effect/crypto`.
 // - `Snapshot.Snapshot` is its Schema: what a process start saves, and what a replay reads back.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Cause, Effect, Exit, Formatter, Layer, Logger, References, Schema, Tracer } from "effect";
+import { ByteSize, Cause, Effect, Exit, Formatter, Layer, Logger, References, Result, Schema, Tracer } from "effect";
 import { Digest } from "effect/crypto";
 import { TestConsole } from "effect/testing";
 import * as fc from "fast-check";
@@ -170,7 +170,9 @@ describe("T753 complete checked snapshots", () => {
         const flow = save(v);
         const made = await digest(Snapshot.make(flow.group, flow));
         expect(made.values).toEqual({ "limits.record": String(v.count), "instance.port": v.port, "app.word": v.word });
-        const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Snapshot.Snapshot))(JSON.stringify(made));
+        const transported = await digest(
+          Schema.decodeUnknownEffect(Schema.fromJsonString(Snapshot.Snapshot))(JSON.stringify(made)),
+        );
         const wire = { ...transported, values: { ...transported.values }, origins: { ...transported.origins } };
         const checked = await digest(Snapshot.read(flow.group, wire));
         expect(checked.values).toEqual(flow.values);
@@ -375,8 +377,11 @@ describe("the snapshot: encoded values by path, and a hash of the values alone",
         expect(different.hash).not.toBe(fromFlags.hash);
 
         // What a start saves is what a replay reads back, hash and all.
-        const saved = JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(fromFlags));
-        expect(Schema.decodeUnknownSync(Snapshot.Snapshot)(JSON.parse(saved))).toEqual(fromFlags);
+        const replayed = Schema.encodeResult(Snapshot.Snapshot)(fromFlags).pipe(
+          Result.map((encoded) => JSON.stringify(encoded)),
+          Result.flatMap((saved) => Schema.decodeUnknownResult(Snapshot.Snapshot)(JSON.parse(saved))),
+        );
+        expect(replayed).toEqual(Result.succeed(fromFlags));
       }),
       check,
     );
@@ -468,7 +473,13 @@ describe("L14 [secrets], only declared settings reach values, errors and spans",
 
           if (Exit.isSuccess(exit)) {
             expect(place.named).toBeUndefined();
-            outputs.push(JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(exit.value.made)));
+            const made = Schema.encodeResult(Snapshot.Snapshot)(exit.value.made);
+            expect(Result.isSuccess(made), "the made snapshot encodes").toBe(true);
+
+            if (Result.isSuccess(made)) {
+              outputs.push(JSON.stringify(made.success));
+            }
+
             outputs.push(printed(exit.value.resolved));
             expect(exit.value.made.values["instance.port"]).toBe(port);
           } else {

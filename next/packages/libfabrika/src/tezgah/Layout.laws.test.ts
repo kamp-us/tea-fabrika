@@ -20,10 +20,10 @@
 // The second property breaks a walked, tidy workspace in one named way and asks `check` to see it,
 // so `check` is itself a checked oracle, as 0505's "a check that refuses a broken tree" asks.
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Layout from "./Layout.ts";
-import { TileId, Workspace } from "./Workspace.ts";
+import { TileId, Workspace, WorkspaceId } from "./Workspace.ts";
 
 const SEED = 119120;
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
@@ -51,10 +51,9 @@ type Space = {
   readonly recent: ReadonlyArray<string>;
 };
 
-/** The workspace as the wire shows it: what every client reads. */
-const encode = (w: unknown): Space => Schema.encodeUnknownSync(Workspace)(w) as Space;
-const decode = (w: Space) => Schema.decodeUnknownSync(Workspace)(w);
-const tileId = (id: string) => Schema.decodeUnknownSync(TileId)(id);
+/** The workspace as the wire shows it: what every client reads, or the encode's failure. */
+const encode = (w: unknown) => Schema.encodeUnknownResult(Workspace)(w) as Result.Result<Space, Schema.SchemaError>;
+const tileId = (id: string) => TileId.make(id);
 
 /** Reading order, written here: a container's parts in order, depth first. */
 const order = (node: Node): ReadonlyArray<string> =>
@@ -120,10 +119,17 @@ const untidy = (w: Space): ReadonlyArray<string> => {
 };
 
 type Model = { live: Array<string>; next: number };
-type Real = { w: ReturnType<typeof decode> };
+type Real = { w: Workspace };
 
 const after = (m: Model, r: Real, label: string) => {
-  const shown = encode(r.w);
+  const encoded = encode(r.w);
+  expect(Result.isSuccess(encoded), `L5: the workspace encodes after ${label}`).toBe(true);
+
+  if (Result.isFailure(encoded)) {
+    return;
+  }
+
+  const shown = encoded.success;
   expect(Layout.check(r.w), `L5: check after ${label}`).toEqual([]);
   expect(untidy(shown), `L5: the tree after ${label}`).toEqual([]);
   expect([...order(shown.layout)].sort(), `L5: the live tiles after ${label}`).toEqual([...m.live].sort());
@@ -164,8 +170,8 @@ const commands = fc.commands(
 
 /** One workspace of one tile, as tezgah makes workspace 1. */
 const first = () => {
-  const t1 = typeId("tile", 1);
-  return decode({ id: typeId("workspace", 1), n: 1, layout: t1, focus: t1, recent: [t1] });
+  const t1 = tileId(typeId("tile", 1));
+  return Workspace.make({ id: WorkspaceId.make(typeId("workspace", 1)), n: 1, layout: t1, focus: t1, recent: [t1] });
 };
 
 /** One named break of a tidy workspace, or null when this tree has no place for it. */
@@ -236,7 +242,14 @@ describe("Desk S2a L5: the layout stays tidy", () => {
         const t1 = typeId("tile", 1);
         const real = { w: first() };
         fc.modelRun(() => ({ model: { live: [t1], next: 2 }, real }), cmds);
-        const bad = broken(encode(real.w), kind, pick);
+        const encoded = encode(real.w);
+        expect(Result.isSuccess(encoded), "L5: the walked workspace encodes").toBe(true);
+
+        if (Result.isFailure(encoded)) {
+          return;
+        }
+
+        const bad = broken(encoded.success, kind, pick);
 
         if (bad === null) {
           return;
@@ -363,7 +376,14 @@ describe("Desk S2b: rects measure drawn tiles, with the frame's gap between part
           const t1 = typeId("tile", 1);
           const real = { w: first() };
           fc.modelRun(() => ({ model: { live: [t1], next: 2 }, real }), cmds);
-          const layout = encode(real.w).layout;
+          const encoded = encode(real.w);
+          expect(Result.isSuccess(encoded), "the walked workspace encodes").toBe(true);
+
+          if (Result.isFailure(encoded)) {
+            return;
+          }
+
+          const layout = encoded.success.layout;
           fc.pre(shortest(layout, width, height, gap) > 1);
           const at = Layout.rects(real.w.layout, { width, height }, { gap }) as ReadonlyMap<string, Box>;
           nested += typeof layout !== "string" && layout.parts.some((p) => typeof p.inner !== "string") ? 1 : 0;
@@ -443,7 +463,14 @@ describe("Desk S3 L26: neighbor picks the tile with the most overlap on that sid
         const t1 = typeId("tile", 1);
         const real = { w: first() };
         fc.modelRun(() => ({ model: { live: [t1], next: 2 }, real }), cmds);
-        const layout = encode(real.w).layout;
+        const encoded = encode(real.w);
+        expect(Result.isSuccess(encoded), "the walked workspace encodes").toBe(true);
+
+        if (Result.isFailure(encoded)) {
+          return;
+        }
+
+        const layout = encoded.success.layout;
         const boxes = unit(layout);
 
         for (const from of order(layout)) {

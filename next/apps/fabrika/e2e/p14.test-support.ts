@@ -17,11 +17,11 @@ import { revokeText } from "@kampus/libfabrika/access/Text";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Clock, DateTime, Effect, FileSystem, Schema, Stream } from "effect";
+import { Clock, DateTime, Effect, FileSystem, Result, Schema, Stream } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { type Browser, type BrowserContext, chromium, type Page, type WebSocket as PageSocket } from "playwright";
-import type { TestContext } from "vitest";
+import { expect, type TestContext } from "vitest";
 import { heldPort } from "../src/port.test-support.ts";
 
 const APP = resolve(import.meta.dirname, "..");
@@ -36,10 +36,14 @@ const Fault = Schema.Struct({
 });
 
 /** The fault the supervisor planted for this child, if any. */
-export const fault =
+const faultRead =
   process.env.P14_E2E_FAULT === undefined
-    ? undefined
-    : Schema.decodeUnknownSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
+    ? Result.succeed(undefined)
+    : Schema.decodeUnknownResult(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
+
+export const fault = Result.isSuccess(faultRead)
+  ? faultRead.success
+  : expect.unreachable(`P14_E2E_FAULT is not a fault the supervisor plants: ${faultRead.failure.message}`);
 
 const trace = process.env.P14_E2E_TRACE;
 
@@ -394,10 +398,11 @@ export const grant = (h: Home, w: Waiting, key = h.key) =>
         ],
         { concurrency: 4 },
       );
-      const sent = wire
-        .split("\n")
-        .filter((line) => line !== "")
-        .map((line) => Schema.decodeUnknownSync(Schema.fromJsonString(GrantWire))(line));
+      const sent = yield* Effect.forEach(
+        wire.split("\n").filter((line) => line !== ""),
+        (line) => Schema.decodeUnknownEffect(Schema.fromJsonString(GrantWire))(line),
+        { concurrency: 1 },
+      );
       const seen: GrantSeen = {
         urls: sent.map((row) => row.url),
         signatures: sent.flatMap((row) => (row.signature === undefined ? [] : [row.signature])),
@@ -582,6 +587,12 @@ const identity = () => {
 
 class WireClosed extends Schema.TaggedError<WireClosed>()("WireClosed", {}) {}
 
+/** A frame the page's socket got that is not one the client protocol knows. */
+class WireUnreadable extends Schema.TaggedError<WireUnreadable>()("WireUnreadable", {
+  text: Schema.String,
+  message: Schema.String,
+}) {}
+
 const Frame = Schema.Struct({
   id: Schema.optionalKey(Schema.Unknown),
   method: Schema.optionalKey(Schema.String),
@@ -603,6 +614,7 @@ export const reader = (h: Home, dev: Dev) =>
     const key = identity();
     const tab = "p14-reader";
     const frames: Array<Frame> = [];
+    const unreadable: Array<WireUnreadable> = [];
     let closed = false;
     const ws = yield* owned(
       "socket",
@@ -614,7 +626,13 @@ export const reader = (h: Home, dev: Dev) =>
           const text = String(data);
 
           if (text !== "pong") {
-            frames.push(Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(text));
+            const frame = Schema.decodeUnknownResult(Schema.fromJsonString(Frame))(text);
+
+            if (Result.isSuccess(frame)) {
+              frames.push(frame.success);
+            } else {
+              unreadable.push(new WireUnreadable({ text, message: frame.failure.message }));
+            }
           }
         });
         socket.addEventListener("close", () => {
@@ -638,6 +656,12 @@ export const reader = (h: Home, dev: Dev) =>
     const next = (test: (f: Frame) => boolean) =>
       Effect.gen(function* () {
         for (;;) {
+          const [bad] = unreadable;
+
+          if (bad !== undefined) {
+            return yield* bad;
+          }
+
           const at = frames.findIndex(test);
 
           const [frame] = at >= 0 ? frames.splice(at, 1) : [];

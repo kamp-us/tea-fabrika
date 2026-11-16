@@ -86,6 +86,6 @@ const Vectors = Schema.fromJsonString(
 );
 
 /** The real git lines C4's runs saved: what git printed, and what `execute` answers for it. */
-export const gitVectors = Schema.decodeUnknownSync(Vectors)(
+export const gitVectors = Schema.decodeUnknownEffect(Vectors)(
   readFileSync(resolve(import.meta.dirname, "../../../../../../fixtures/next/hands/git-version.json"), "utf8"),
-).vectors;
+).pipe(Effect.map(({ vectors }) => vectors));

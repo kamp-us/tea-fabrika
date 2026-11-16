@@ -6,7 +6,7 @@ import { Commit, Tree } from "@kampus/libfabrika/codehost/CodeHost";
 import { Started } from "@kampus/libfabrika/processes/Children";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { StartRefusal } from "@kampus/libfabrika/runtime/StartChild";
-import { ConfigProvider, Effect, Schema } from "effect";
+import { ConfigProvider, Effect, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Mail from "./Mail.ts";
 import { queue } from "./Queue.ts";
@@ -15,6 +15,15 @@ import * as Settings from "./Settings.ts";
 type Program = ReturnType<typeof queue>;
 type Model = Program["machine"]["model"]["Type"];
 type Msg = Program["msg"]["Type"];
+
+/** A value the walk built, decoded as the program reads it; a value that does not decode fails the law. */
+const built = <S extends Schema.ConstraintDecoder<unknown>>(schema: S, raw: unknown): S["Type"] => {
+  const decoded = Schema.decodeUnknownResult(schema)(raw);
+  return Result.isSuccess(decoded)
+    ? decoded.success
+    : expect.unreachable(`the walk built a value its schema refuses: ${decoded.failure.message}`);
+};
+
 type Command = ReturnType<Program["machine"]["init"]>[1][number];
 type Start = Extract<Command, { type: "start_child" }>;
 type Entry = { change: number; head: string; reply: { to: string; ref: string } | null };
@@ -31,9 +40,9 @@ type Oracle = {
 };
 
 const ctx = stubCtxThrowingProxy<never>();
-const head = Schema.decodeUnknownSync(Commit)("a".repeat(40));
-const tree = Schema.decodeUnknownSync(Tree)("b".repeat(40));
-const other = Schema.decodeUnknownSync(Tree)("c".repeat(40));
+const head = Commit.make("a".repeat(40));
+const tree = Tree.make("b".repeat(40));
+const other = Tree.make("c".repeat(40));
 const pid = "process_0000000000e008000000000001";
 
 const draw = fc.record({
@@ -126,7 +135,7 @@ const reasons = [...StartRefusal.literals, "bad_cmd"] as const;
 
 const startRefusalAnswer = (p: Program, cell: Cell): Msg => {
   const reason = reasons[cell.pick % reasons.length]!;
-  return Schema.decodeUnknownSync(p.msg)({
+  return built(p.msg, {
     type: "start_child_err",
     cmd: { type: "start_child" },
     reason,
@@ -137,7 +146,8 @@ const startRefusalAnswer = (p: Program, cell: Cell): Msg => {
 
 const startAnswer = (p: Program, cmd: Start, cell: Cell, allowRefusal = true): Msg => {
   const which = cell.pick % (allowRefusal ? reasons.length + 3 : 3);
-  return Schema.decodeUnknownSync(p.msg)(
+  return built(
+    p.msg,
     which < 3
       ? {
           type: "start_child_ok",
@@ -406,7 +416,7 @@ const choose = (walk: Walk, cell: Cell): Msg => {
     );
   }
 
-  return Schema.decodeUnknownSync(p.msg)(moves[cell.move % moves.length]!());
+  return built(p.msg, moves[cell.move % moves.length]!());
 };
 
 for (const law of [
@@ -502,7 +512,7 @@ for (const [law, reached] of [
 
           // Keep the guided fold intact: interleaving another walk would orphan its answers.
           for (const msg of msgs) {
-            step(walk, Schema.decodeUnknownSync(walk.p.msg)(msg));
+            step(walk, built(walk.p.msg, msg));
           }
 
           for (const cell of cells) {

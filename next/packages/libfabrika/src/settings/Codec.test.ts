@@ -1,7 +1,7 @@
 // T753, next/: L1–L4. File input and recorded JSON share one declaration.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import type { Config } from "effect";
-import { ByteSize, Exit, Schema } from "effect";
+import { ByteSize, Exit, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
 import * as Setting from "./Setting.ts";
@@ -48,9 +48,15 @@ describe("T753 shared codecs", () => {
     fc.assert(
       fc.property(fc.record({ port: fc.integer(), enabled: fc.boolean(), word: fc.string() }), (v) => {
         const group = declarations(1n, v.port, v.enabled, v.word);
-        expect(Schema.decodeUnknownSync(Codec.file(group.settings.port))(v.port)).toBe(v.port);
-        expect(Schema.decodeUnknownSync(Codec.file(group.settings.enabled))(v.enabled)).toBe(v.enabled);
-        expect(Schema.decodeUnknownSync(Codec.file(group.settings.word))(v.word)).toBe(v.word);
+        expect(Schema.decodeUnknownResult(Codec.file(group.settings.port))(v.port)).toStrictEqual(
+          Result.succeed(v.port),
+        );
+        expect(Schema.decodeUnknownResult(Codec.file(group.settings.enabled))(v.enabled)).toStrictEqual(
+          Result.succeed(v.enabled),
+        );
+        expect(Schema.decodeUnknownResult(Codec.file(group.settings.word))(v.word)).toStrictEqual(
+          Result.succeed(v.word),
+        );
         expect(Exit.isFailure(Schema.decodeUnknownExit(Codec.file(group.settings.port))(String(v.port)))).toBe(true);
         expect(Exit.isFailure(Schema.decodeUnknownExit(Codec.file(group.settings.enabled))(String(v.enabled)))).toBe(
           true,
@@ -74,15 +80,19 @@ describe("T753 shared codecs", () => {
         const d = declarations(count, 1, true, "a").settings.record;
         const file = Codec.file(d);
         const text = `${v.whole}${v.half ? ".5" : ""} ${v.unit.name}`;
-        expect(ByteSize.toBigInt(Schema.decodeUnknownSync(file)(text))).toBe(count);
+        expect(Result.map(Schema.decodeUnknownResult(file)(text), ByteSize.toBigInt)).toStrictEqual(
+          Result.succeed(count),
+        );
 
         for (const invalid of [Number(count), String(count), `${v.whole} wobble`, `-${text}`, {}, null]) {
           expect(Exit.isFailure(Schema.decodeUnknownExit(file)(invalid))).toBe(true);
         }
 
-        const encoded = Schema.encodeSync(file)(ByteSize.bytes(count));
-        expect(typeof encoded).toBe("string");
-        expect(Schema.decodeUnknownSync(file)(encoded)).toBe(ByteSize.bytes(count));
+        const encoded = Schema.encodeResult(file)(ByteSize.bytes(count));
+        expect(Result.map(encoded, (text) => typeof text)).toStrictEqual(Result.succeed("string"));
+        expect(Result.flatMap(encoded, Schema.decodeUnknownResult(file))).toStrictEqual(
+          Result.succeed(ByteSize.bytes(count)),
+        );
       }),
       check,
     );
@@ -95,8 +105,10 @@ describe("T753 shared codecs", () => {
         const codec = Codec.values(group);
         const decoded = { record: ByteSize.bytes(v.count), port: v.port, enabled: v.enabled, word: v.word };
         const json = { record: String(v.count), port: v.port, enabled: v.enabled, word: v.word };
-        expect(Schema.encodeSync(codec)(decoded)).toEqual(json);
-        expect(Schema.decodeUnknownSync(Schema.fromJsonString(codec))(JSON.stringify(json), strict)).toEqual(decoded);
+        expect(Schema.encodeResult(codec)(decoded)).toEqual(Result.succeed(json));
+        expect(Schema.decodeUnknownResult(Schema.fromJsonString(codec))(JSON.stringify(json), strict)).toEqual(
+          Result.succeed(decoded),
+        );
 
         for (const key of Object.keys(json)) {
           const missing = { ...json };
@@ -127,7 +139,9 @@ describe("T753 shared codecs", () => {
             format: "text",
           });
           const group = Setting.group({ record: d });
-          expect(Schema.decodeUnknownSync(Codec.file(d))(`${v.ceiling} B`)).toBe(ByteSize.bytes(v.ceiling));
+          expect(Schema.decodeUnknownResult(Codec.file(d))(`${v.ceiling} B`)).toStrictEqual(
+            Result.succeed(ByteSize.bytes(v.ceiling)),
+          );
           expect(Exit.isFailure(Schema.decodeUnknownExit(Codec.file(d))(`${v.ceiling + v.extra} B`))).toBe(true);
           expect(
             Exit.isFailure(Schema.decodeUnknownExit(Codec.values(group))({ record: String(v.ceiling + v.extra) })),

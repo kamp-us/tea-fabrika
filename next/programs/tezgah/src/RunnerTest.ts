@@ -56,7 +56,7 @@ const Answer = Schema.TaggedUnion({
   error: { reason: Schema.String },
 });
 
-const answered = (u: unknown) => Schema.decodeUnknownSync(Answer)(u);
+const answered = (u: unknown) => Schema.decodeUnknownEffect(Answer)(u);
 
 /** The keybindings note's Via, as the window sends it. */
 const Via = Schema.TaggedUnion({ key: { keys: Schema.String } });
@@ -80,14 +80,14 @@ const tilesOn = (v: View, n: number) => {
   return space === undefined ? [] : order(space.layout).flatMap((id) => v.tiles.filter((t) => t.id === id));
 };
 
-const via = Schema.encodeSync(Via)(Via.cases.key.make({ keys: "ctrl+b x" }));
+const via = Schema.encodeEffect(Via)(Via.cases.key.make({ keys: "ctrl+b x" }));
 let minted = 0;
 const fresh = () => typeId("tile", 70_000 + ++minted);
 
 type Live = Effect.Success<Open>;
 
 /** Polls `look` once a second until `done`, then answers it; past WAIT it fails with what it last saw. */
-const until = <A>(label: string, look: Effect.Effect<A>, done: (a: A) => boolean) =>
+const until = <A, E>(label: string, look: Effect.Effect<A, E>, done: (a: A) => boolean) =>
   Effect.gen(function* () {
     let last: A | undefined;
 
@@ -104,7 +104,7 @@ const until = <A>(label: string, look: Effect.Effect<A>, done: (a: A) => boolean
     return yield* Effect.die(new Error(`${label}: no answer in ${WAIT} s; last saw ${JSON.stringify(last)}`));
   });
 
-const readView = (live: Live) => Effect.map(live.view, (v) => Schema.decodeUnknownSync(View)(v));
+const readView = (live: Live) => Effect.flatMap(live.view, (v) => Schema.decodeUnknownEffect(View)(v));
 
 /** One move of the walk on workspace `n`: a split from a live tile, or a close of one. */
 type Move = { readonly kind: "split_right" | "split_down" | "close"; readonly pick: number };
@@ -124,7 +124,9 @@ const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: 
   if (m.kind !== "close") {
     const tile = fresh();
     const does = m.kind === "split_right" ? "tezgah.split_right" : "tezgah.split_down";
-    expect(answered(yield* live.send({ type: "did", does, from: from.id, via, tile }))._tag).toBe("accepted");
+    expect((yield* answered(yield* live.send({ type: "did", does, from: from.id, via: yield* via, tile })))._tag).toBe(
+      "accepted",
+    );
     yield* until(`the split's ${tile} on workspace ${n}`, readView(live), (v) =>
       tilesOn(v, n).some((t) => t.id === tile),
     );
@@ -132,7 +134,9 @@ const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: 
   }
 
   const was = yield* live.process(from.shows);
-  const answer = answered(yield* live.send({ type: "did", does: "tezgah.close", from: from.id, via }));
+  const answer = yield* answered(
+    yield* live.send({ type: "did", does: "tezgah.close", from: from.id, via: yield* via }),
+  );
 
   if (tiles.length === 1) {
     expect(answer, "the last tile of a workspace never closes").toEqual(
@@ -189,7 +193,9 @@ export const suite = (open: Open) =>
 
             for (const [i, moves] of fc.sample(Moves, { seed: SEED, numRuns: RUNS }).entries()) {
               const n = i + 1;
-              expect(answered(yield* live.send({ type: "attach", workspace: n, tile: fresh() }))._tag).toBe("accepted");
+              expect((yield* answered(yield* live.send({ type: "attach", workspace: n, tile: fresh() })))._tag).toBe(
+                "accepted",
+              );
               const first = yield* until(`workspace ${n}`, readView(live), (v) => tilesOn(v, n).length === 1);
 
               if (n === 1) {

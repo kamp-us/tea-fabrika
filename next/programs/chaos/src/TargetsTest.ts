@@ -36,8 +36,8 @@ export type Open = Effect.Effect<
       readonly before: (input: Before) => Effect.Effect<void>;
       readonly saved: Effect.Effect<unknown>;
     };
-    readonly history: (name: string) => Effect.Effect<ReadonlyArray<unknown>>;
-    readonly dead: Effect.Effect<ReadonlyArray<unknown>>;
+    readonly history: (name: string) => Effect.Effect<ReadonlyArray<unknown>, Schema.SchemaError>;
+    readonly dead: Effect.Effect<ReadonlyArray<unknown>, Schema.SchemaError>;
   },
   never,
   Scope.Scope
@@ -58,10 +58,10 @@ const View = Schema.Struct({
   left: Schema.Int,
 });
 
-const shown = (raw: unknown) => {
-  const view = Schema.decodeUnknownSync(View)(raw);
-  return { ...view, items: [...view.items].sort((a, b) => a.name.localeCompare(b.name)) };
-};
+const shown = (raw: unknown) =>
+  Schema.decodeUnknownEffect(View)(raw).pipe(
+    Effect.map((view) => ({ ...view, items: [...view.items].sort((a, b) => a.name.localeCompare(b.name)) })),
+  );
 
 const Controller = Schema.TaggedStruct("armed", {
   attempts: Schema.Array(Schema.Struct({ process: Schema.String, error: Schema.String })),
@@ -104,7 +104,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 expect(
                   (yield* send(runner, { type: "check", name: "first", note: "replacement" }, world.agent)).answer._tag,
                 ).toBe("accepted");
-                expect(shown((yield* runner.open("first-note")).view).items[0]?.note).toBe(note);
+                expect((yield* shown((yield* runner.open("first-note")).view)).items[0]?.note).toBe(note);
                 const kept = (yield* world.letters(NAME)).find((row) => row.id === checked.input.id);
                 expect(kept).toMatchObject({
                   by: world.agent.key,
@@ -129,10 +129,10 @@ export const suite = (open: Open, checklist: unknown) =>
                     expect(yield* runner.msg(refused.input)).toEqual(refused.answer);
                   }
 
-                  expect(shown((yield* runner.open("reopen")).view)).toEqual(expected());
+                  expect(yield* shown((yield* runner.open("reopen")).view)).toEqual(expected());
 
                   for (const move of moves.slice(offset, offset + cut + 1)) {
-                    const before = shown((yield* runner.open("before")).view);
+                    const before = yield* shown((yield* runner.open("before")).view);
                     const saved = yield* world.letters(NAME);
 
                     if (move.retry) {
@@ -140,7 +140,7 @@ export const suite = (open: Open, checklist: unknown) =>
 
                       if (previous !== undefined) {
                         expect(yield* runner.msg(previous.input)).toEqual(previous.answer);
-                        expect(shown((yield* runner.open("duplicate")).view)).toEqual(before);
+                        expect(yield* shown((yield* runner.open("duplicate")).view)).toEqual(before);
                         expect(yield* world.letters(NAME)).toEqual(saved);
                       }
 
@@ -175,7 +175,7 @@ export const suite = (open: Open, checklist: unknown) =>
                       items.set(input.name, null);
                     }
 
-                    expect(shown((yield* runner.open("after")).view)).toEqual(expected());
+                    expect(yield* shown((yield* runner.open("after")).view)).toEqual(expected());
                   }
                 }),
               );
@@ -261,7 +261,7 @@ export const suite = (open: Open, checklist: unknown) =>
             }
 
             expect(new Set(processes).size).toBe(times);
-            const armed = Schema.decodeUnknownSync(Controller)(yield* world.fault.saved);
+            const armed = yield* Schema.decodeUnknownEffect(Controller)(yield* world.fault.saved);
             expect(armed.attempts).toEqual(processes.map((process, n) => ({ process, error: errors[n] })));
             const lives = yield* world.history(NAME);
             const restarts = lives.filter(Schema.is(Schema.TaggedStruct("restarted", { body: Schema.Unknown })));
@@ -296,7 +296,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 if (times === 1) {
                   expect((yield* runner.msg(poison))._tag).toBe("accepted");
                   expect(
-                    shown((yield* runner.open("success")).view).items.find((item) => item.name === "kept"),
+                    (yield* shown((yield* runner.open("success")).view)).items.find((item) => item.name === "kept"),
                   ).toMatchObject({ state: "checked", note: "first-agent-note" });
                 } else {
                   for (let n = 0; n < cut + 1; n++) {
@@ -310,16 +310,18 @@ export const suite = (open: Open, checklist: unknown) =>
                   ))._tag,
                 ).toBe("accepted");
                 expect(
-                  shown((yield* runner.open("other")).view).items.find((item) => item.name === "other")?.note,
+                  (yield* shown((yield* runner.open("other")).view)).items.find((item) => item.name === "other")?.note,
                 ).toBe("unrelated-note");
-                expect(Schema.decodeUnknownSync(Controller)(yield* world.fault.saved).attempts).toEqual(armed.attempts);
+                expect((yield* Schema.decodeUnknownEffect(Controller)(yield* world.fault.saved)).attempts).toEqual(
+                  armed.attempts,
+                );
                 // Rearm an already saved input, then force the real successor to fold it from history.
                 const saved = world.letter(30, { type: "check", name: "other", note: "unrelated-note" }, world.agent);
                 yield* world.fault.arm(NAME, saved.id, errors);
                 yield* runner.restart({ id: "person-fold-saved", build: "chaos-law" });
                 yield* runner.open("folded");
                 expect((yield* runner.msg(saved))._tag).toBe("accepted");
-                expect(Schema.decodeUnknownSync(Controller)(yield* world.fault.saved).attempts).toEqual([]);
+                expect((yield* Schema.decodeUnknownEffect(Controller)(yield* world.fault.saved)).attempts).toEqual([]);
               }),
             );
             const dead = yield* world.dead;

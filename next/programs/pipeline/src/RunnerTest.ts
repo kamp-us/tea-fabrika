@@ -50,7 +50,11 @@ export type Driver = {
 const NAME = "merger:1";
 
 const replies = Effect.fnUntraced(function* (h: World) {
-  return (yield* h.current().letters("queue")).map((letter) => Schema.decodeUnknownSync(Mail.Reply)(letter.m));
+  return yield* Effect.forEach(
+    yield* h.current().letters("queue"),
+    (letter) => Schema.decodeUnknownEffect(Mail.Reply)(letter.m),
+    { concurrency: 1 },
+  );
 });
 
 const finish = Effect.fnUntraced(function* (h: World) {

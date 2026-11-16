@@ -319,19 +319,26 @@ describe("ticket 806 the checklist's laws", () => {
     const loaded = stepper(checklist);
     expect(Result.isSuccess(loaded)).toBe(true);
     const p = Result.getOrThrow(loaded);
-    const encode = Schema.encodeSync(checklist.state.schema);
+    const encode = Schema.encodeResult(checklist.state.schema);
     fc.assert(
       fc.property(reached(checklist.machine), ({ model, msg }) => {
-        const saved = encode(model);
+        const [next] = applyCell(checklist.machine, model, msg);
+        const encoded = Result.all([encode(model), encode(next)]);
+        expect(Result.isSuccess(encoded), "the reached models encode").toBe(true);
+
+        if (Result.isFailure(encoded)) {
+          return;
+        }
+
+        const [saved, nextSaved] = encoded.success;
         const before = JSON.stringify(saved);
         const step = p.step(saved, msg);
         const no = reason(model, msg);
-        const [next] = applyCell(checklist.machine, model, msg);
         expect(step).toEqual(
           no === null
             ? {
                 _tag: "stepped",
-                model: encode(next),
+                model: nextSaved,
                 view: checklist.view.select(next),
                 cmds: [],
                 wake: checklist.wake(next),
@@ -406,7 +413,7 @@ describe("ticket 806 the checklist's laws", () => {
     const { checklistMachine, checklist } = await load();
     const port = checklist.inputs.left;
     // The query takes no input: its schema is `Null`, and its answer reads the view alone.
-    expect(Schema.decodeUnknownSync(port.schema)(null)).toBeNull();
+    expect(Schema.decodeUnknownResult(port.schema)(null)).toStrictEqual(Result.succeed(null));
     propertyInvariant(
       checklistMachine,
       {},
@@ -430,7 +437,8 @@ describe("ticket 806 the checklist's laws", () => {
 
   it("L8: finished is a Done exactly when there is an item and all are checked, and it decodes by Done", async () => {
     const { checklistMachine, finished, Done } = await load();
-    const roundTrip = (d: unknown) => Schema.decodeUnknownSync(Done)(Schema.encodeUnknownSync(Done)(d));
+    const roundTrip = (d: unknown) =>
+      Schema.encodeUnknownResult(Done)(d).pipe(Result.flatMap(Schema.decodeUnknownResult(Done)));
     propertyInvariant(
       checklistMachine,
       {},
@@ -443,9 +451,13 @@ describe("ticket 806 the checklist's laws", () => {
           return out === null || "finished before every item was checked";
         }
 
+        const back = out === null ? null : roundTrip(out);
+
         return (
           (out !== null &&
-            JSON.stringify(roundTrip(out)) === JSON.stringify(out) &&
+            back !== null &&
+            Result.isSuccess(back) &&
+            JSON.stringify(back.success) === JSON.stringify(out) &&
             JSON.stringify([...out.items].sort()) === JSON.stringify(next.items.map((i) => i.name).sort())) ||
           `not finished, or not a Done of every item: ${JSON.stringify(out)}`
         );
@@ -458,7 +470,7 @@ describe("ticket 806 the checklist's laws", () => {
     const { checklist } = await load();
     const port = checklist.inputs.items;
     expect(port._tag).toBe("read");
-    expect(Schema.decodeUnknownSync(port.schema)(null)).toBeNull();
+    expect(Schema.decodeUnknownResult(port.schema)(null)).toStrictEqual(Result.succeed(null));
     fc.assert(
       fc.property(walked(checklist.machine), ({ msgs }) => {
         for (const { model, record } of folded(checklist.machine, msgs)) {
@@ -474,13 +486,14 @@ describe("ticket 806 the checklist's laws", () => {
   it("L14: every reached model and walked Msg goes through the program's schemas back to itself, a reached model one field wrong does not, and a main-shaped model still decodes at v 1", async () => {
     const { checklist } = await load();
     const model = checklist.state.schema;
-    const roundTrip = (m: Model) => Schema.decodeUnknownSync(model)(Schema.encodeSync(model)(m));
+    const roundTrip = (m: Model) =>
+      Schema.encodeResult(model)(m).pipe(Result.flatMap(Schema.decodeUnknownResult(model)));
     const decodes = (u: unknown) => Result.isSuccess(Schema.decodeUnknownResult(model)(u));
     expect(checklist.state.v).toBe(1);
     fc.assert(
       fc.property(walked(checklist.machine), Broken, fc.nat(), ({ msgs }, broken, pick) => {
         for (const { record } of folded(checklist.machine, msgs)) {
-          expect(roundTrip(record), "a reached model").toEqual(record);
+          expect(roundTrip(record), "a reached model").toEqual(Result.succeed(record));
           // The schema is a wall, not a pass-through: the same model with one item made wrong is refused.
           const items: ReadonlyArray<Item> =
             record.items.length === 0 ? [{ name: "x", state: { _tag: "new" } }] : record.items;
@@ -489,7 +502,7 @@ describe("ticket 806 the checklist's laws", () => {
         }
 
         for (const msg of msgs) {
-          expect(Schema.decodeUnknownSync(checklist.msg)(msg), "a walked Msg").toEqual(msg);
+          expect(Schema.decodeUnknownResult(checklist.msg)(msg), "a walked Msg").toEqual(Result.succeed(msg));
         }
       }),
       { seed: SEED, numRuns: RUNS },
@@ -499,7 +512,9 @@ describe("ticket 806 the checklist's laws", () => {
       // pinned: main's saved shape, `note: NullOr(String)` with no length checks (plan, L14): an
       // empty note and one past `MOST` still decode, so the saved state needs no upgrade and stays v 1.
       const saved = { items: [{ name: "x", state: { _tag: "checked", note } }] };
-      expect(Schema.decodeUnknownSync(model)(saved), `a saved note of ${note?.length ?? "null"}`).toEqual(saved);
+      expect(Schema.decodeUnknownResult(model)(saved), `a saved note of ${note?.length ?? "null"}`).toEqual(
+        Result.succeed(saved),
+      );
     }
   });
 

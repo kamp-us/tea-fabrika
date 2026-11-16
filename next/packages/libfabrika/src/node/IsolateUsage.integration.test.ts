@@ -278,7 +278,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
         service.msg({
           id,
           envelope: {
-            id: Schema.decodeUnknownSync(InputId)("input_0000000000e008000000000001"),
+            id: InputId.make("input_0000000000e008000000000001"),
             by: OWNER,
             arrivedAt: 0,
             input: { type: "add", n },

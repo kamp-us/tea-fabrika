@@ -19,9 +19,10 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
   ByteSize,
-  JsonSchema as EffectJsonSchema,
   Exit,
+  JsonSchema as EffectJsonSchema,
   Predicate,
+  Result,
   Schema,
   SchemaAST,
   SchemaRepresentation,
@@ -296,7 +297,9 @@ it("T753 L7 shared byte schemas keep distinct file defaults, descriptions and re
           expect(node.description).toBe(d.doc);
           expect(typeof node.default).toBe("string");
           expect(node.default).not.toBe(String(d.default));
-          expect(Schema.decodeUnknownSync(Schema.toCodecStringTree(shared))(node.default)).toBe(d.default);
+          expect(Schema.decodeUnknownResult(Schema.toCodecStringTree(shared))(node.default)).toStrictEqual(
+            Result.succeed(d.default),
+          );
           const input = { limits: { [d.segments[1]!]: node.default } };
           expect(Exit.isSuccess(Schema.decodeUnknownExit(editor)(input, { onExcessProperty: "error" }))).toBe(true);
           expect(Exit.isSuccess(Schema.decodeUnknownExit(Files.schema(group, v.file))(input))).toBe(true);
@@ -327,7 +330,9 @@ describe("L3, every allowed declaration keeps its own words and encoded default 
 
             if (node !== undefined) {
               expect(node.description).toBe(d.doc);
-              expect(node.default).toEqual(Schema.encodeSync(Schema.toCodecJson(d.schema))(defaults[n]));
+              expect(Schema.encodeResult(Schema.toCodecJson(d.schema))(defaults[n])).toEqual(
+                Result.succeed(node.default),
+              );
             }
 
             // The declaration's own schema keeps the words a refused value is explained with.
@@ -354,7 +359,7 @@ describe("L3, every allowed declaration keeps its own words and encoded default 
           expect(node.description).toBe(d.doc);
           // The default as the file spells it: JSON, or a `text` setting's text, as `mail.chunk`'s "65536 bytes".
           const spelled = d.format === "text" ? Schema.toCodecStringTree(d.schema) : Schema.toCodecJson(d.schema);
-          expect(node.default).toEqual(Schema.encodeSync(spelled)(d.default));
+          expect(Schema.encodeResult(spelled)(d.default)).toEqual(Result.succeed(node.default));
         }
       }
 

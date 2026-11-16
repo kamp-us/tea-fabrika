@@ -4,7 +4,7 @@
 // merge of that shared file turns its check off, and nothing else says so.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 
@@ -59,7 +59,10 @@ const toValue = (node: Tree): unknown => {
 describe("tsconfig.base.json", () => {
   const text = readFileSync(join(ROOT, "tsconfig.base.json"), "utf8");
   const tree: Tree = parseSync("tsconfig.ts", `export default ${text}`).program;
-  const config = Schema.decodeUnknownSync(Config)(toValue(tree.body[0].declaration));
+  const read = Schema.decodeUnknownResult(Config)(toValue(tree.body[0].declaration));
+  const config = Result.isSuccess(read)
+    ? read.success
+    : expect.unreachable(`tsconfig.base.json does not decode as this law reads it: ${read.failure.message}`);
   const overrides = config.compilerOptions.plugins.filter((p) => p.name === PLUGIN).flatMap((p) => p.overrides);
 
   // pinned: the config's own lines, since a check lost in a merge is silent: the type check passes

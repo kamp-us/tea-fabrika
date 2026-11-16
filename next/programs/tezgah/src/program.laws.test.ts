@@ -196,9 +196,15 @@ const begin = (p: Stepper): World => {
   const s = p.init(null);
   expect(s._tag).toBe("stepped");
   const stepped = s as Extract<typeof s, { _tag: "stepped" }>;
+  const view = Schema.decodeUnknownResult(View)(stepped.view);
+
+  if (Result.isFailure(view)) {
+    return expect.unreachable(`the init view does not decode as a client reads it: ${view.failure.message}`);
+  }
+
   return {
     model: stepped.model,
-    view: Schema.decodeUnknownSync(View)(stepped.view),
+    view: view.success,
     waiting: [],
     stops: [],
     next: 1,
@@ -214,7 +220,13 @@ const take = (p: Stepper, w: World, msg: unknown, saved: boolean) => {
   if (s._tag === "stepped") {
     w.model = s.model;
     // L11's program half: every view decodes as a client reads it, `child` and all.
-    w.view = Schema.decodeUnknownSync(View)(s.view);
+    const view = Schema.decodeUnknownResult(View)(s.view);
+
+    if (Result.isFailure(view)) {
+      return expect.unreachable(`L11: a stepped view does not decode as a client reads it: ${view.failure.message}`);
+    }
+
+    w.view = view.success;
     const cmds = s.cmds as ReadonlyArray<Cmd>;
     w.stops.push(...cmds.filter((c) => c.type === "stop_child"));
     return { before, after: w.view, result: { _tag: "stepped" }, cmds };

@@ -48,7 +48,7 @@ export const agent = Writer.cases.agent.make({ key: "SHA256:test-agent", for: "t
 export const letter = (n: number, input: unknown, by: Writer = person) => ({
   id: `chaos-input-${n}`,
   envelope: {
-    id: Schema.decodeUnknownSync(Id.Input)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
+    id: Id.Input.make(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
     by,
     arrivedAt: n,
     input,
@@ -275,17 +275,21 @@ export const open = Effect.gen(function* () {
     Effect.scoped(
       Effect.gen(function* () {
         const sql = yield* files("manager");
-        return sql
-          .exec("SELECT * FROM entries WHERE stream=? ORDER BY rev", `processes/${name}`)
-          .map((row) => Schema.decodeUnknownSync(Row)(row));
+        return yield* Effect.forEach(
+          sql.exec("SELECT * FROM entries WHERE stream=? ORDER BY rev", `processes/${name}`),
+          (row) => Schema.decodeUnknownEffect(Row)(row),
+          { concurrency: 1 },
+        );
       }),
     );
   const dead = Effect.scoped(
     Effect.gen(function* () {
       const sql = yield* files("manager");
-      return sql
-        .exec("SELECT * FROM entries WHERE _tag='dead' ORDER BY rev")
-        .map((row) => Schema.decodeUnknownSync(Row)(row));
+      return yield* Effect.forEach(
+        sql.exec("SELECT * FROM entries WHERE _tag='dead' ORDER BY rev"),
+        (row) => Schema.decodeUnknownEffect(Row)(row),
+        { concurrency: 1 },
+      );
     }),
   );
 

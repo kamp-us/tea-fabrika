@@ -5,7 +5,7 @@
 // `next/` file that is not a test, so the list of edge files cannot come back through the config.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
@@ -142,7 +142,10 @@ const toValue = (node: Tree): unknown => {
 describe(".oxlintrc.json", () => {
   const text = readFileSync(join(ROOT, ".oxlintrc.json"), "utf8");
   const tree: Tree = parseSync("oxlintrc.ts", `export default ${text}`).program;
-  const config = Schema.decodeUnknownSync(Config)(toValue(tree.body[0].declaration));
+  const read = Schema.decodeUnknownResult(Config)(toValue(tree.body[0].declaration));
+  const config = Result.isSuccess(read)
+    ? read.success
+    : expect.unreachable(`.oxlintrc.json does not decode as this law reads it: ${read.failure.message}`);
   const RULES = ["fabrika/no-promises", "fabrika/no-effect-run-outside-edge", "fabrika/edge-comment"];
   const TESTS = ["next/**/*.test.ts", "next/**/*.test.tsx"];
   const off = (setting: unknown): boolean =>

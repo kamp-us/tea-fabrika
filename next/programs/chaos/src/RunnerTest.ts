@@ -82,12 +82,12 @@ const uncertainExperiments = Arbitrary.flatMap(experiments, (input) =>
   Arbitrary.map(bounded(1, input.most + 1), (ordinal) => ({ ...input, most: input.most + 1, ordinal })),
 );
 
-const experimentId = Schema.decodeUnknownSync(Chaos.ExperimentId)("chaos_0000000000e008000000000000");
+const experimentId = Chaos.ExperimentId.make("chaos_0000000000e008000000000000");
 
 const fireRequest = Schema.toType(Chaos.Fire);
 const now = () => Effect.succeed(Outcome.ok(100));
 const read = (world: World, binding: Chaos.Target) => () => world.check(binding).pipe(Effect.map(Outcome.ok));
-const phase = (raw: unknown) => Schema.decodeUnknownSync(chaos.state.schema)(raw);
+const phase = (raw: unknown) => Schema.decodeUnknownEffect(chaos.state.schema)(raw);
 
 const target = (process: string) =>
   Chaos.Target.make({
@@ -109,7 +109,7 @@ const startTarget = Effect.fnUntraced(function* (world: World, checklist: unknow
 
 const nextDeadline = Effect.fnUntraced(function* (world: World) {
   const saved = yield* world.snapshot(NAME);
-  return chaos.wake(phase(saved.model));
+  return chaos.wake(yield* phase(saved.model));
 });
 
 const noLeak = (value: unknown, marker: string, output: string) => {
@@ -222,7 +222,7 @@ export const suite = (open: Open, checklist: unknown) =>
             expect(calls).toEqual([]);
             const after = yield* runner.open("after-refusal");
             expect(after.view).toEqual(before.view);
-            expect(chaos.wake(phase(after.view))).toBeNull();
+            expect(chaos.wake(yield* phase(after.view))).toBeNull();
           }),
         ),
       { arbitrary, timeout: 120_000 },
@@ -240,18 +240,18 @@ export const suite = (open: Open, checklist: unknown) =>
             const published: Array<Update> = [];
             const observations: Array<{
               readonly request: Chaos.Fire;
-              readonly model: ReturnType<typeof phase>;
+              readonly model: Effect.Success<ReturnType<typeof phase>>;
               readonly pos: number | undefined;
               readonly view: number | undefined;
             }> = [];
             const fire: Handler<never> = (raw) =>
               Effect.gen(function* () {
-                const request = Schema.decodeUnknownSync(fireRequest)(raw);
+                const request = yield* Schema.decodeUnknownEffect(fireRequest)(raw);
                 const saved = yield* world.snapshot(NAME);
                 const installed = (yield* world.letters(NAME)).find((letter) => letter.rev === saved.after);
                 observations.push({
                   request,
-                  model: phase(saved.model),
+                  model: yield* phase(saved.model),
                   pos: installed?.pos,
                   view: published.at(-1)?.rev,
                 });
@@ -332,14 +332,14 @@ export const suite = (open: Open, checklist: unknown) =>
               );
             }
 
-            const final = phase((yield* world.snapshot(NAME)).model);
+            const final = yield* phase((yield* world.snapshot(NAME)).model);
             expect(final.phase._tag).toBe("done");
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
                 yield* runner.open("after-reopen");
                 yield* runner.due(100_000_000);
-                expect(phase((yield* world.snapshot(NAME)).model)).toEqual(final);
+                expect(yield* phase((yield* world.snapshot(NAME)).model)).toEqual(final);
               }),
             );
             expect(calls.map((c) => [c.id, c.ordinal])).toEqual(
@@ -376,7 +376,7 @@ export const suite = (open: Open, checklist: unknown) =>
             const calls: Array<number> = [];
             const fire: Handler<never> = (raw) =>
               Effect.gen(function* () {
-                const request = Schema.decodeUnknownSync(fireRequest)(raw);
+                const request = yield* Schema.decodeUnknownEffect(fireRequest)(raw);
                 calls.push(request.ordinal);
                 expect(calls.filter((ordinal) => ordinal === request.ordinal)).toHaveLength(1);
 
@@ -429,7 +429,7 @@ export const suite = (open: Open, checklist: unknown) =>
                   }
 
                   while (calls.length < cut) {
-                    const model = phase((yield* world.snapshot(NAME)).model);
+                    const model = yield* phase((yield* world.snapshot(NAME)).model);
                     expect(model.phase._tag).toBe("active");
 
                     if (model.phase._tag !== "active") {
@@ -460,7 +460,7 @@ export const suite = (open: Open, checklist: unknown) =>
             }
 
             expect(calls).toEqual(Array.from({ length: input.most }, (_, n) => n + 1));
-            const final = phase((yield* world.snapshot(NAME)).model);
+            const final = yield* phase((yield* world.snapshot(NAME)).model);
             // Interrupting the last fire also leaves its following check undispatched. That saved
             // checking phase is honest uncertainty; reopening must not guess or retry either Cmd.
             expect(final.phase._tag).toBe(
@@ -503,7 +503,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
                 yield* runner.open("final-reopen");
                 yield* runner.due(100_000_000);
-                expect(phase((yield* world.snapshot(NAME)).model)).toEqual(final);
+                expect(yield* phase((yield* world.snapshot(NAME)).model)).toEqual(final);
                 expect(calls).toHaveLength(input.most);
               }),
             );
@@ -528,11 +528,11 @@ export const suite = (open: Open, checklist: unknown) =>
             const release = yield* Deferred.make<void>();
             const nextEntered = yield* Deferred.make<void>();
             const nextRelease = yield* Deferred.make<void>();
-            const nextId = Schema.decodeUnknownSync(Chaos.ExperimentId)("chaos_0000000000e008000000000001");
+            const nextId = Chaos.ExperimentId.make("chaos_0000000000e008000000000001");
             const calls: Array<Chaos.Fire> = [];
             const fire: Handler<never> = (raw) =>
               Effect.gen(function* () {
-                const request = Schema.decodeUnknownSync(fireRequest)(raw);
+                const request = yield* Schema.decodeUnknownEffect(fireRequest)(raw);
                 calls.push(request);
                 expect(calls.filter((c) => c.id === request.id && c.ordinal === request.ordinal)).toHaveLength(1);
 
@@ -562,9 +562,10 @@ export const suite = (open: Open, checklist: unknown) =>
               });
             const handlers = {
               now: (raw: unknown) => {
-                const request = Schema.decodeUnknownSync(Schema.Struct({ id: Chaos.ExperimentId }))(raw);
-                return Effect.succeed(
-                  Outcome.ok(request.id === nextId ? 100 + (input.most + 1) * (input.gap + input.late) : 100),
+                return Schema.decodeUnknownEffect(Schema.Struct({ id: Chaos.ExperimentId }))(raw).pipe(
+                  Effect.map((request) =>
+                    Outcome.ok(request.id === nextId ? 100 + (input.most + 1) * (input.gap + input.late) : 100),
+                  ),
                 );
               },
               fire,
@@ -580,7 +581,7 @@ export const suite = (open: Open, checklist: unknown) =>
             });
             const advance = Effect.fnUntraced(function* (runner: Runner, through: number) {
               while (true) {
-                const model = phase((yield* world.snapshot(NAME)).model);
+                const model = yield* phase((yield* world.snapshot(NAME)).model);
 
                 if (model.phase._tag !== "active" || model.phase.experiment.ordinal > through) {
                   return;
@@ -624,14 +625,14 @@ export const suite = (open: Open, checklist: unknown) =>
                 yield* advance(runner, cut);
               }),
             );
-            const before = phase((yield* world.snapshot(NAME)).model);
+            const before = yield* phase((yield* world.snapshot(NAME)).model);
             expect(calls.map((c) => c.ordinal)).toEqual(Array.from({ length: cut }, (_, n) => n + 1));
 
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
                 yield* runner.open("before-callback");
-                expect(phase((yield* world.snapshot(NAME)).model)).toEqual(before);
+                expect(yield* phase((yield* world.snapshot(NAME)).model)).toEqual(before);
 
                 const newer =
                   delivery === "replaced"
@@ -651,12 +652,12 @@ export const suite = (open: Open, checklist: unknown) =>
                       })
                     : null;
 
-                const current = phase((yield* world.snapshot(NAME)).model);
+                const current = yield* phase((yield* world.snapshot(NAME)).model);
                 const count = calls.length;
                 yield* Deferred.succeed(release, undefined);
                 yield* Fiber.join(pending);
                 expect(calls).toHaveLength(count);
-                const after = phase((yield* world.snapshot(NAME)).model);
+                const after = yield* phase((yield* world.snapshot(NAME)).model);
 
                 if (delivery === "replaced") {
                   expect(after, "an old fire and its old check cannot settle the current experiment").toEqual(current);
@@ -688,7 +689,7 @@ export const suite = (open: Open, checklist: unknown) =>
               }),
             );
 
-            const final = phase((yield* world.snapshot(NAME)).model);
+            const final = yield* phase((yield* world.snapshot(NAME)).model);
             expect(final.phase._tag).toBe(
               delivery === "replaced" ||
                 (outcome !== "off" && outcome !== "failed" && (cut < input.most || input.ordinal === input.most))
@@ -718,7 +719,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
                 yield* runner.open("after-callback-reopen");
                 yield* runner.due(100_000_000);
-                expect(phase((yield* world.snapshot(NAME)).model)).toEqual(final);
+                expect(yield* phase((yield* world.snapshot(NAME)).model)).toEqual(final);
               }),
             );
             expect(new Set(calls.map((c) => `${c.id}/${c.ordinal}`)).size).toBe(calls.length);
@@ -770,7 +771,7 @@ export const suite = (open: Open, checklist: unknown) =>
               Effect.gen(function* () {
                 const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
                 yield* runner.open("after-reopen");
-                const model = phase((yield* world.snapshot(NAME)).model);
+                const model = yield* phase((yield* world.snapshot(NAME)).model);
                 expect(model.phase._tag).toBe("incomplete");
                 expect(chaos.wake(model)).toBeNull();
               }),
@@ -841,19 +842,19 @@ export const suite = (open: Open, checklist: unknown) =>
 
               yield* runner.due(deadline);
               const letters = yield* world.letters(NAME);
-              const answers = letters.filter(
-                (l) =>
-                  Schema.is(Schema.Struct({ type: Schema.String }))(l.m) &&
-                  /_(ok|err)$/.test(Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String }))(l.m).type),
-              );
+              const typed = Schema.is(Schema.Struct({ type: Schema.String }));
+              const answers = letters.filter((l) => typed(l.m) && /_(ok|err)$/.test(l.m.type));
               expect(answers.length).toBeGreaterThanOrEqual(3);
 
               const view = (yield* runner.open("shown")).view;
               const report = yield* world.check(binding);
-              const reasons = answers.map(
+              const reasons = yield* Effect.forEach(
+                answers,
                 (a) =>
-                  Schema.decodeUnknownSync(Schema.Struct({ reason: Schema.optional(Schema.String) }))(a.m).reason ??
-                  "ok",
+                  Schema.decodeUnknownEffect(Schema.Struct({ reason: Schema.optional(Schema.String) }))(a.m).pipe(
+                    Effect.map(({ reason }) => reason ?? "ok"),
+                  ),
+                { concurrency: 1 },
               );
               expect(reasons).toHaveLength(answers.length);
               const { rows, health } = yield* recorded;

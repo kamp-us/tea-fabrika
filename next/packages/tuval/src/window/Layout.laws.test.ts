@@ -16,7 +16,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Layout from "@kampus/libfabrika/tezgah/Layout";
 import { type Tile, type TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
-import { Schema } from "effect";
 import * as fc from "fast-check";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -273,8 +272,8 @@ describe("L20: one main, one region per open tile named by tileName, aria-curren
         (cmds) => {
           const first = typeId("tile", 1) as TileId;
           const real: Desk = {
-            w: Schema.decodeUnknownSync(Workspace)({
-              id: typeId("workspace", 1),
+            w: Workspace.make({
+              id: typeId("workspace", 1) as Workspace["id"],
               n: 1,
               layout: first,
               focus: first,
@@ -375,8 +374,8 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
     fc.assert(
       fc.property(Folded, ({ width, height, cuts, focus }) => {
         const first = typeId("tile", 1) as TileId;
-        let w: Workspace = Schema.decodeUnknownSync(Workspace)({
-          id: typeId("workspace", 1),
+        let w: Workspace = Workspace.make({
+          id: typeId("workspace", 1) as Workspace["id"],
           n: 1,
           layout: first,
           focus: first,

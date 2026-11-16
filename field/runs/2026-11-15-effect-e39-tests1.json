@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e39-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:32:21-08:00",
+  "ended": "2026-11-15T21:12:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E39 of the Effect-check sweep (schemaSync and schemaSyncInEffect), in next/ and our tooling, under decision 0576. Counted with only the two checks at error through --lspconfig over the 13 tsconfigs, at f7169afee: 381 hits in the slice's 24 folders, 338 in exam paths and 43 in product files, none in a file of pull request 1366. Fixed 310 exam-path hits by hand edits and small scratch scripts, no lock line: 117 decodes of outside input (78 Effect form with a typed SchemaError, 16 a Result asserted against Result.succeed or guarded by an expect, 12 a Result whose failure goes to expect.unreachable with the issue, 6 the Effect form with Effect.orDie inside a stand-in whose contract has no error, 4 a Result recorded by a fetch or socket stand-in that answers a refusal and a law that asserts none came, 1 dropped where Schema.is had already narrowed the value), 141 decodes of a value the test built (37 of them became the schema's own make constructor) and 52 encodes of a value the test built. 28 exam-path hits are left, each waiting on a product contract or another slice: 17 feed syncTest's bare encode and decode (Testing.ts), 7 feed windowMachineFor's never-called decode option (WindowMachine.ts:400), 1 clientMachineFor's ClientChecks (runtime/Client.ts, E81), 3 a runtime suite's Rig rows (E81). The 43 product hits go to the build.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 40,
+  "note": "Recount after the fix, same command: 806 hits in all before, 496 after, 310 fewer, none new elsewhere; in the slice's folders 28 exam and 43 product left. tsc --noEmit on libfabrika, tuval, the app, the six programs and .agents: 0 errors. pnpm format: 0 blocking, advice 1228 before and after. Narrow vitest on every touched test file and every suite consumer: green. Integration laws run one at a time: ClientManager, IsolateUsage, SessionManager, RepositoryTrust, dev-secrets, dev, build-one-file, runner-contract, no-of, no-promises, bytes, deps, edge-comment, layers, ratchet, chaos, checklist-runner, inbox-runner, tezgah-runner, pipeline queue and runner, counter runner, stored, chaos-revoke: green. instance-wire: 14 pass, 1 fails because this box has no ssh-keygen (spawn ENOENT), not this change. Not run here: .visual. laws, BrainControlLaunchd (launchd), the full suite. @effect/vitest/utils assertSuccess was not used: it is tagged unstable. Installed Effect 4.1.3 names the constructor make, not makeUnsafe.",
+  "plants": [
+    {
+      "law": "Id.test.ts, the Result compare",
+      "plant": "Id.ts's specific pattern reads prefix- for prefix_: four Id laws go red, each naming the SchemaError's RegExp",
+      "result": "red"
+    },
+    {
+      "law": "inbox program.laws I4, the Effect form",
+      "plant": "inbox's view adds one key: I4 goes red with SchemaError 'Expected no excess property'",
+      "result": "red"
+    },
+    {
+      "law": "tezgah program.laws, expect.unreachable in take",
+      "plant": "a made tile's child is a string: seven tezgah laws go red with SchemaError 'Expected boolean at [\"tiles\"][0][\"child\"]'",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

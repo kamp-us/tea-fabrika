@@ -84,15 +84,15 @@ const scan = (
         const db = yield* instanceDatabase(file, { readOnly: true });
         const allowed = new Map<string, string>();
         retained.set(file, allowed);
-        const tables = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String })))(
+        const tables = yield* Schema.decodeUnknownEffect(Schema.Array(Schema.Struct({ name: Schema.String })))(
           db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all(),
         );
 
         for (const { name } of tables) {
           const table = `"${name.replaceAll('"', '""')}"`;
-          const keys = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String, pk: Schema.Int })))(
-            db.prepare(`PRAGMA table_info(${table})`).all(),
-          )
+          const keys = (yield* Schema.decodeUnknownEffect(
+            Schema.Array(Schema.Struct({ name: Schema.String, pk: Schema.Int })),
+          )(db.prepare(`PRAGMA table_info(${table})`).all()))
             .filter((column) => column.pk > 0)
             .map((column) => column.name);
           const select = db.prepare(`SELECT * FROM ${table}`);
@@ -117,9 +117,9 @@ const scan = (
               row.stream === "gateway/access" &&
               ["granted", "revoked"].includes(String(row._tag))
             ) {
-              const entry = Schema.decodeUnknownSync(LedgerRow)(row);
+              const entry = yield* Schema.decodeUnknownEffect(LedgerRow)(row);
               const body = JSON.stringify(entry.body);
-              const replacement = Schema.decodeUnknownSync(Schema.String)(accessBodies.get(body));
+              const replacement = yield* Schema.decodeUnknownEffect(Schema.String)(accessBodies.get(body));
               allowed.set(body, replacement);
               cells = { ...row, body: replacement };
             }
@@ -133,8 +133,8 @@ const scan = (
             // fields are checked too, and the raw file below is still checked whole for a private key
             // and for every credential.
             if (name === "gateway_state" && /^(?:changePending|change)\//.test(String(row.name))) {
-              const value = Schema.decodeUnknownSync(Schema.String)(row.value);
-              const { armored, ...rest } = Schema.decodeUnknownSync(
+              const value = yield* Schema.decodeUnknownEffect(Schema.String)(row.value);
+              const { armored, ...rest } = yield* Schema.decodeUnknownEffect(
                 Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
               )(value);
 

@@ -14,7 +14,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { connect } from "node:net";
 import { join, resolve } from "node:path";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, type TestContext } from "vitest";
 import { suite as scopedSuite } from "./p14.test-support.ts";
@@ -40,7 +40,12 @@ const rows = (file: string): ReadonlyArray<Row> =>
     ? readFileSync(file, "utf8")
         .split("\n")
         .filter((line) => line !== "")
-        .map((line) => Schema.decodeUnknownSync(Schema.fromJsonString(Row))(line))
+        .map((line) => {
+          const row = Schema.decodeUnknownResult(Schema.fromJsonString(Row))(line);
+          return Result.isSuccess(row)
+            ? row.success
+            : expect.unreachable(`${file} holds a line that is not a resource row: ${row.failure.message}`);
+        })
     : [];
 
 /** A folder for one child's trace, given back by the scope. */

@@ -22,7 +22,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream } from "effect";
+import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Result, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 
@@ -49,7 +49,7 @@ const key = Effect.fnUntraced(function* () {
   blob.set(new TextEncoder().encode("ssh-ed25519"), 4);
   new DataView(blob.buffer).setUint32(15, 32);
   blob.set(raw, 19);
-  const line = Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
+  const line = yield* Schema.decodeUnknownEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
   const fingerprint = `SHA256:${Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))).replace(/=+$/, "")}`;
   return {
     raw: Base64Url.encode(raw),
@@ -192,7 +192,9 @@ type World = Effect.Success<ReturnType<typeof world>>;
 
 const identity = (input: Incoming, fingerprint: string) => {
   expect(input.envelope.by).toEqual({ _tag: "agent", key: fingerprint, for: person });
-  Schema.decodeUnknownSync(Id.InputId)(input.envelope.id);
+  expect(Schema.decodeUnknownResult(Id.InputId)(input.envelope.id), "the input's id is an input id").toStrictEqual(
+    Result.succeed(input.envelope.id),
+  );
 };
 
 const failure = (exit: Exit.Exit<unknown, unknown>) => {
@@ -372,11 +374,14 @@ it.effect.prop(
       const w = yield* world();
       // The plant trusts an agent's signature on an added change, as if a person key had signed it.
       // A failed test-key signature is a broken harness, so it dies instead of joining the Gateway's errors.
+      // So does a grant the plant cannot read: the law fails on the defect, naming the decode.
       const planted: GrantDoor = {
         grant: (input) =>
           Effect.gen(function* () {
-            const { text } = Schema.decodeUnknownSync(Schema.Struct({ text: Schema.String }))(input);
-            const change = Schema.decodeUnknownSync(Schema.fromJsonString(Change))(text);
+            const { text } = yield* Schema.decodeUnknownEffect(Schema.Struct({ text: Schema.String }))(input).pipe(
+              Effect.orDie,
+            );
+            const change = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Change))(text).pipe(Effect.orDie);
             return change._tag === "added"
               ? yield* w.door.grant({ text, armored: yield* Effect.orDie(w.root.sign(text)) })
               : yield* w.door.grant(input);

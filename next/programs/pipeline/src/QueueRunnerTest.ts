@@ -1,6 +1,18 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Effect,
+  Exit,
+  Fiber,
+  Logger,
+  Redacted,
+  Result,
+  Schema,
+  type Scope,
+  type Tracer,
+} from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as Mail from "./Mail.ts";
@@ -65,7 +77,11 @@ export type Driver = {
 };
 
 const replies = (snapshot: Snapshot, change: number) =>
-  snapshot.letters.filter((l) => l.name === `quest:${change}`).map((l) => Schema.decodeUnknownSync(Mail.Reply)(l.m));
+  Effect.forEach(
+    snapshot.letters.filter((l) => l.name === `quest:${change}`),
+    (l) => Schema.decodeUnknownEffect(Mail.Reply)(l.m),
+    { concurrency: 1 },
+  );
 
 const finish = Effect.fnUntraced(function* (h: World) {
   for (let turn = 0; turn < 96; turn++) {
@@ -178,16 +194,16 @@ export const suite = (driver: Driver) =>
             line: [{ change }],
           });
           expect(started(refused)).toEqual([]);
-          expect(replies(refused, change)).toEqual([]);
+          expect(yield* replies(refused, change)).toEqual([]);
           yield* h.allowStart(true);
           yield* h.resume;
           expect(started(yield* h.snapshot).map((p) => p.name)).toEqual([`merger:${change}.2`]);
           yield* finish(h);
           const landed = yield* h.snapshot;
           expect(landed.model?._tag).toBe("idle");
-          expect(replies(landed, change)).toHaveLength(1);
-          expect(replies(landed, change)[0]).toHaveProperty("_tag", "merged");
-          expect(replies(landed, change)[0]).toHaveProperty("ref", ref);
+          expect(yield* replies(landed, change)).toHaveLength(1);
+          expect((yield* replies(landed, change))[0]).toHaveProperty("_tag", "merged");
+          expect((yield* replies(landed, change))[0]).toHaveProperty("ref", ref);
           allNormal(landed);
         }).pipe(Effect.scoped),
       // 200 isolated worlds each refuse a real start, then start and finish a real merger.
@@ -227,9 +243,12 @@ export const suite = (driver: Driver) =>
                 cmd: { type: "start_child" },
                 reason: "forbidden",
               });
-              expect(Schema.decodeUnknownSync(Schema.Struct({ cmd: Schema.Unknown }))(answer.m).cmd).toEqual({
-                type: "start_child",
-              });
+              expect(
+                Result.map(
+                  Schema.decodeUnknownResult(Schema.Struct({ cmd: Schema.Unknown }))(answer.m),
+                  ({ cmd }) => cmd,
+                ),
+              ).toEqual(Result.succeed({ type: "start_child" }));
             }
 
             expect(s.model?.attempt).toBe(attempts);
@@ -268,9 +287,9 @@ export const suite = (driver: Driver) =>
           inspect(s, reopens.length + 1, reopens.length);
           expect(started(s).map((p) => p.name)).toEqual([`merger:${change}.${reopens.length + 1}`]);
           expect(s.model?._tag).toBe("idle");
-          expect(replies(s, change)).toHaveLength(1);
-          expect(replies(s, change)[0]).toHaveProperty("_tag", "merged");
-          expect(replies(s, change)[0]).toHaveProperty("ref", ref);
+          expect(yield* replies(s, change)).toHaveLength(1);
+          expect((yield* replies(s, change))[0]).toHaveProperty("_tag", "merged");
+          expect((yield* replies(s, change))[0]).toHaveProperty("ref", ref);
           allNormal(s);
         }).pipe(Effect.scoped),
       { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 30 }) } },
@@ -297,9 +316,9 @@ export const suite = (driver: Driver) =>
         ).toEqual([1, 2, 3]);
 
         for (let change = 1; change <= 3; change++) {
-          expect(replies(s, change)).toHaveLength(1);
-          expect(replies(s, change)[0]).toHaveProperty("_tag", "merged");
-          expect(replies(s, change)[0]).toMatchObject({ type: "reply", ref: `own:${change}` });
+          expect(yield* replies(s, change)).toHaveLength(1);
+          expect((yield* replies(s, change))[0]).toHaveProperty("_tag", "merged");
+          expect((yield* replies(s, change))[0]).toMatchObject({ type: "reply", ref: `own:${change}` });
           const first = s.letters.filter(
             (l) =>
               l.name === `merger:${change}.${change}` &&
@@ -327,8 +346,8 @@ export const suite = (driver: Driver) =>
         yield* finish(h);
         const s = yield* h.snapshot;
         expect(started(s).map((p) => p.name)).toEqual(["merger:1.1", "merger:2.2"]);
-        expect(replies(s, 1)).toHaveLength(1);
-        expect(replies(s, 2)).toHaveLength(1);
+        expect(yield* replies(s, 1)).toHaveLength(1);
+        expect(yield* replies(s, 2)).toHaveLength(1);
         expect(s.model?._tag).toBe("idle");
         allNormal(s);
       }),
@@ -356,7 +375,7 @@ export const suite = (driver: Driver) =>
         const before = yield* h.host.read(2);
         expect(before).toBeDefined();
         expect(h.ci.starts()).toContain(before?.head);
-        expect(replies(yield* h.snapshot, 1)).toHaveLength(1);
+        expect(yield* replies(yield* h.snapshot, 1)).toHaveLength(1);
         expect(h.host.calls().filter((c) => c.method === "merge" && c.change === 2)).toEqual([]);
         yield* h.green(2);
         yield* h.moveMain;
@@ -367,7 +386,7 @@ export const suite = (driver: Driver) =>
         expect(h.ci.starts()).toContain(after?.head);
         yield* finish(h);
         const s = yield* h.snapshot;
-        const answer = replies(s, 2)[0];
+        const answer = (yield* replies(s, 2))[0];
         expect(answer).toHaveProperty("_tag", "merged");
         expect(answer).toHaveProperty("head", after?.head);
 
@@ -388,7 +407,7 @@ export const suite = (driver: Driver) =>
         yield* h.moveBeforeMerge;
         yield* finish(h);
         const s = yield* h.snapshot;
-        const answer = replies(s, 1)[0];
+        const answer = (yield* replies(s, 1))[0];
         expect(s.model?._tag).toBe("stopped");
         expect(answer?._tag).toBe("merged");
 
@@ -400,11 +419,11 @@ export const suite = (driver: Driver) =>
         }
 
         expect(started(s)).toHaveLength(1);
-        expect(replies(s, 2)).toEqual([]);
+        expect(yield* replies(s, 2)).toEqual([]);
         yield* h.resume;
         expect(started(yield* h.snapshot)).toHaveLength(2);
         yield* finish(h);
-        expect(replies(yield* h.snapshot, 2)).toHaveLength(1);
+        expect(yield* replies(yield* h.snapshot, 2)).toHaveLength(1);
       }),
     );
 

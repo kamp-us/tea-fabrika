@@ -18,7 +18,7 @@
 // close or block from outside, or a stale copy of a Msg this walk already delivered on an older dial.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { backoff, CAP, Link, linkMachine, type LinkMsg, linkTimer } from "./Link.ts";
 
@@ -34,7 +34,7 @@ const step = (s: Link, m: LinkMsg): Step => applyCell(linkMachine, s, m);
 
 const currentDial = (s: Link): number | null => ("dial" in s ? s.dial : null);
 const live = (s: Link): boolean => s._tag !== "removed" && s._tag !== "blocked";
-const roundTrip = (s: Link): Link => Schema.decodeUnknownSync(Link)(Schema.encodeSync(Link)(s));
+const roundTrip = (s: Link) => Schema.encodeResult(Link)(s).pipe(Result.flatMap(Schema.decodeUnknownResult(Link)));
 
 /** One generated step: choice numbers and words the walk turns into a move against its state. */
 const choice = fc.record({
@@ -293,7 +293,7 @@ describe("L1: the link machine", () => {
       fc.property(walks, (list) => {
         fold(list, (_prev, _m, s) => {
           reached.add(s._tag);
-          expect(roundTrip(s)).toEqual(s);
+          expect(roundTrip(s)).toEqual(Result.succeed(s));
         });
       }),
       opts,

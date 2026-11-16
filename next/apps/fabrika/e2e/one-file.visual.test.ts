@@ -233,10 +233,14 @@ const Fault = Schema.Struct({
   kind: Schema.Literals(["setup", "test", "hold"]),
 });
 
-const fault =
+const faultRead =
   process.env.P14_E2E_FAULT === undefined
-    ? undefined
-    : Schema.decodeUnknownSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
+    ? Result.succeed(undefined)
+    : Schema.decodeUnknownResult(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
+
+const fault = Result.isSuccess(faultRead)
+  ? faultRead.success
+  : expect.unreachable(`P14_E2E_FAULT is not a fault the supervisor plants: ${faultRead.failure.message}`);
 
 const trace = process.env.P14_E2E_TRACE;
 

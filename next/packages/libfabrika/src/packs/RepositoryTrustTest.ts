@@ -23,13 +23,12 @@ class TrustLawFailed extends Schema.TaggedError<TrustLawFailed>()("TrustLawFaile
   cause: Schema.Defect(),
 }) {}
 
-// Effect 4 owns schema generation; fast-check chooses its seed and the operation tape.
+// Effect 4 owns schema generation; fast-check chooses its seed and the operation tape. The schema's
+// own Arbitrary draws only values of its type, so the draw is used as it comes, with no decode.
 const generated = <S extends Schema.ConstraintDecoder<unknown>>(schema: S): fc.Arbitrary<S["Type"]> =>
   fc.nat().map((seed) => {
-    return Schema.decodeUnknownSync(schema)(
-      // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's generator is synchronous
-      Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }))[0],
-    );
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's generator is synchronous
+    return Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }))[0];
   });
 
 const input = generated(Id.InputId);
@@ -130,14 +129,14 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       otherKey === key ? `${key.slice(0, -1)}${key.endsWith("0") ? "1" : "0"}` : otherKey;
                     const otherLocation = yield* trust.history(distinct, operator);
                     expect(otherLocation).toEqual([]);
-                    const otherPerson = Schema.decodeUnknownSync(Id.make("person"))(
+                    const otherPerson = yield* Schema.decodeUnknownEffect(Id.make("person"))(
                       `${operator.slice(0, -1)}${operator.endsWith("0") ? "1" : "0"}`,
                     );
                     const otherIdentity = yield* trust.history(key, otherPerson);
                     expect(otherIdentity).toEqual([]);
                     // New commits do not change the lookup identity or rewrite the answered commit.
                     expect(same.filter((event) => event._tag === "decision")).toEqual([accepted]);
-                    const reopened = Schema.decodeUnknownSync(Id.InputId)(
+                    const reopened = yield* Schema.decodeUnknownEffect(Id.InputId)(
                       `${selection.slice(0, -1)}${selection.endsWith("0") ? "1" : "0"}`,
                     );
 
@@ -386,14 +385,14 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       }
                     }
 
-                    const corrupt: Entry = Schema.decodeUnknownSync(EntrySchema)({
+                    const corrupt: Entry = yield* Schema.decodeUnknownEffect(EntrySchema)({
                       id: selection,
                       stream: "fixture",
                       pos: 1,
                       rev: 1,
                       arrivedAt: 1,
                       ...recorded,
-                      ...Schema.encodeSync(Event)(event),
+                      ...(yield* Schema.encodeEffect(Event)(event)),
                       body: { repository: repoId, key, request: selection, decision: cell.pick },
                     });
                     const bad = { ...ledger, read: () => Stream.make(corrupt) };

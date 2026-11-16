@@ -24,7 +24,7 @@
 // real run under TestClock, so a Cmd that waits for an answer, or a timer that never fires, shows.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, Function, Layer, Option, Random, Schema, Scope, Tracer } from "effect";
+import { Deferred, Effect, Exit, Fiber, Function, Layer, Option, Random, Result, Schema, Scope, Tracer } from "effect";
 import * as Clock from "effect/Clock";
 import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
@@ -73,7 +73,7 @@ const Call = Schema.fromJsonString(
 const decodeFrame = Schema.decodeUnknownOption(Call);
 
 /** One sent frame as the whole JSON value the page wrote, every key kept. */
-const decodeJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
+const decodeJson = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Unknown));
 
 /** A notice that makes the page say hello: a nonce to sign, from the first challenge or a grant. */
 const asksHello = Schema.is(
@@ -272,7 +272,7 @@ const identity = Effect.gen(function* () {
   );
   const field = (bytes: Uint8Array) => [...new Uint8Array(new Uint32Array([bytes.length]).buffer).reverse(), ...bytes];
   const blob = new Uint8Array([...field(new TextEncoder().encode("ssh-ed25519")), ...field(raw)]);
-  const line = Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`);
+  const line = yield* Schema.decodeUnknownEffect(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`);
   return {
     fingerprint: "SHA256:test",
     raw: btoa(String.fromCharCode(...raw))
@@ -1342,9 +1342,11 @@ describe("P18 slice 2: the start's wire for wait and monitor", () => {
               ? { method: "ledger.wait", params: { stream: call["stream"], after: call["after"] } }
               : { method: "process.monitor", params: { ref: call["ref"], pid: call["pid"] } };
           expect(
-            door.sent.map((t) => decodeJson(t)).filter((f) => Reflect.get(Object(f), "id") === w.id),
-            `the frame of write ${w.id}`,
-          ).toEqual([{ jsonrpc: "2.0", id: w.id, ...params }]);
+            door.sent
+              .map((t) => decodeJson(t))
+              .filter((f) => Result.isFailure(f) || Reflect.get(Object(f.success), "id") === w.id),
+            `the frame of write ${w.id}, and no frame that is not JSON`,
+          ).toEqual([Result.succeed({ jsonrpc: "2.0", id: w.id, ...params })]);
         }
 
         expect(

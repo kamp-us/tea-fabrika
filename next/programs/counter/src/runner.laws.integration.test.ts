@@ -257,7 +257,7 @@ describe("p22 real counter in the runner", () => {
           });
 
           for (const state of seen.values()) {
-            expect(Schema.decodeUnknownSync(expected)(state.view)).toEqual({ count: n });
+            expect(yield* Schema.decodeUnknownEffect(expected)(state.view)).toEqual({ count: n });
           }
         }
 

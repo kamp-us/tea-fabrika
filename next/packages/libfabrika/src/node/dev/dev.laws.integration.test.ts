@@ -7,7 +7,20 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { it as effectIt } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Clock, Context, Effect, Exit, Fiber, FileSystem, Option, Predicate, Schema, Scope } from "effect";
+import {
+  Cause,
+  Clock,
+  Context,
+  Effect,
+  Exit,
+  Fiber,
+  FileSystem,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+  Scope,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -408,10 +421,19 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
   const requests: Array<Request> = [];
   const world: { startup: boolean; ended: string | null; asked: number } = { startup: true, ended: null, asked: 0 };
 
+  // A control request this stand-in cannot decode is answered 400 and recorded; the scope's end fails on any.
+  const malformed: Array<string> = [];
   yield* Effect.acquireRelease(
     Effect.sync(() =>
       vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
-        const body = Schema.decodeUnknownSync(Body)(bodyText(options));
+        const decoded = Schema.decodeUnknownResult(Body)(bodyText(options));
+
+        if (Result.isFailure(decoded)) {
+          malformed.push(decoded.failure.message);
+          return Response.json({ error: { reason: "malformed" } }, { status: 400 });
+        }
+
+        const body = decoded.success;
         const port = Number(new URL(String(url)).port);
         requests.push({ port, method: body.method, at: clock.currentTimeMillisUnsafe() });
 
@@ -434,7 +456,11 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
         return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
       }),
     ),
-    (spy) => Effect.sync(() => spy.mockRestore()),
+    (spy) =>
+      Effect.sync(() => {
+        spy.mockRestore();
+        expect(malformed, "every control request the brain sent decodes").toEqual([]);
+      }),
   );
   yield* Effect.acquireRelease(
     Effect.sync(() =>

@@ -57,7 +57,7 @@ const identity = Effect.fn("RevokeTest.identity")(function* () {
     try: () => crypto.subtle.digest("SHA-256", bytes),
     catch: (cause) => new WireFailure({ cause }),
   });
-  const line = Schema.decodeUnknownSync(KeyLine)(
+  const line = yield* Schema.decodeUnknownEffect(KeyLine)(
     `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(bytes)]).toString("base64")}`,
   );
   return {
@@ -457,7 +457,7 @@ it.live(
           client: oldKey.fingerprint,
           key: oldKey.raw,
         });
-        const id = Schema.decodeUnknownSync(Chaos.ExperimentId)("chaos_0000000000e008000000000017");
+        const id = yield* Schema.decodeUnknownEffect(Chaos.ExperimentId)("chaos_0000000000e008000000000017");
         const start = Chaos.Start.make({ id, seed: SEED, target: binding, most: 64, gap: 1000 });
         let schedule = ChaosSchedule.seed(start.seed);
         let most = 0;
@@ -486,7 +486,7 @@ it.live(
             expect(request.target).toEqual(binding);
             expect(request.fault.key).toBe(oldKey.raw);
             const model = yield* world.snapshot(NAME);
-            const saved = Schema.decodeUnknownSync(chaos.state.schema)(model.model);
+            const saved = yield* Schema.decodeUnknownEffect(chaos.state.schema)(model.model);
             expect(saved.phase._tag).toBe("checking");
 
             if (saved.phase._tag !== "checking") {
@@ -526,7 +526,7 @@ it.live(
             expect((yield* runner.msg(world.letter(1, { type: "start", ...start, most })))._tag).toBe("accepted");
 
             for (let n = 0; n < most; n++) {
-              const saved = Schema.decodeUnknownSync(chaos.state.schema)((yield* world.snapshot(NAME)).model);
+              const saved = yield* Schema.decodeUnknownEffect(chaos.state.schema)((yield* world.snapshot(NAME)).model);
               const deadline = chaos.wake(saved);
 
               if (deadline === null) {
@@ -537,7 +537,7 @@ it.live(
             }
           }),
         );
-        const final = Schema.decodeUnknownSync(chaos.state.schema)((yield* world.snapshot(NAME)).model);
+        const final = yield* Schema.decodeUnknownEffect(chaos.state.schema)((yield* world.snapshot(NAME)).model);
         expect(final.phase._tag).toBe("done");
         const revoked = (yield* rows("gateway/access")).find((row) => row._tag === "revoked");
         expect(revoked).toBeDefined();
@@ -581,7 +581,7 @@ it.live(
 
         // The checklist runner stamps its own timer letters with the program owner's key.
         for (const row of sends.filter((entry) => !clientKeys.has(entry.by))) {
-          const { m } = Schema.decodeUnknownSync(
+          const { m } = yield* Schema.decodeUnknownEffect(
             Schema.Struct({
               m: Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int, arrivedAt: Schema.Int }),
             }),
@@ -615,7 +615,9 @@ it.live(
             const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
             yield* runner.open("reopen");
             yield* runner.due(Number.MAX_SAFE_INTEGER);
-            expect(Schema.decodeUnknownSync(chaos.state.schema)((yield* world.snapshot(NAME)).model)).toEqual(final);
+            expect(yield* Schema.decodeUnknownEffect(chaos.state.schema)((yield* world.snapshot(NAME)).model)).toEqual(
+              final,
+            );
           }),
         );
         expect((yield* rows("gateway/access")).filter((row) => row._tag === "revoked")).toHaveLength(1);

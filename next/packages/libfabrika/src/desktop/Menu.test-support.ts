@@ -137,4 +137,4 @@ export const walks = proposals.map((messages): ReadonlyArray<Msg> => {
 });
 
 export const modelJson = Schema.fromJsonString(Schema.toType(machine.model));
-export const encoded = (model: Model) => Schema.encodeSync(modelJson)(model);
+export const encoded = (model: Model) => Schema.encodeResult(modelJson)(model);

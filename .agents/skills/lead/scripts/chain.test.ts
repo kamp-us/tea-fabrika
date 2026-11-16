@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Answer, listUsd, NO_SPENT, runTurn, type Spent, stepRow } from "./agents.ts";
@@ -1060,8 +1060,10 @@ describe("T341 the chain record is a Schema value, today's tooling", () => {
 
         for (const r of [before, after]) {
           expect(
-            Schema.decodeUnknownSync(ChainRecord)(JSON.parse(JSON.stringify(Schema.encodeSync(ChainRecord)(r)))),
-          ).toEqual(r);
+            Result.flatMap(Schema.encodeResult(ChainRecord)(r), (encoded) =>
+              Schema.decodeUnknownResult(ChainRecord)(JSON.parse(JSON.stringify(encoded))),
+            ),
+          ).toEqual(Result.succeed(r));
         }
       }),
       options,
@@ -1303,10 +1305,16 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
   // red: stepRow drops `plants`; Answer has no `plants` key.
   it("the plants a step's answer names decode with it and land on its row whole, and a row with none has no plants key", () => {
     const plant = fc.record({ law: fc.string(), plant: fc.string(), result: fc.constantFrom("red", "green") });
-    const read = Schema.decodeUnknownSync(Schema.fromJsonString(Answer));
+    const read = Schema.decodeUnknownResult(Schema.fromJsonString(Answer));
     fc.assert(
       fc.property(fc.option(fc.array(plant, { maxLength: 8 }), { nil: undefined }), fc.string(), (plants, reason) => {
-        const answer = read(JSON.stringify({ verb: "done", to: null, reason, laws: null, ...(plants && { plants }) }));
+        const decoded = read(JSON.stringify({ verb: "done", to: null, reason, laws: null, ...(plants && { plants }) }));
+
+        if (Result.isFailure(decoded)) {
+          return expect.unreachable(`a step's answer with its plants does not decode: ${decoded.failure.message}`);
+        }
+
+        const answer = decoded.success;
         expect(answer.plants).toEqual(plants);
         const row = JSON.parse(
           stepRow({
@@ -1600,11 +1608,23 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
         },
       ],
     };
-    const read = Schema.decodeUnknownSync(ChainRecord)(old);
+    const decoded = Schema.decodeUnknownResult(ChainRecord)(old);
+
+    if (Result.isFailure(decoded)) {
+      return expect.unreachable(`the old chain record does not read: ${decoded.failure.message}`);
+    }
+
+    const read = decoded.success;
     expect(read.steps[0]?.line).toMatchObject({ fault: null, listUsd: null });
     expect(read.stop).toBeUndefined();
     expect(read.quest).toBe("p14");
-    const written = Schema.encodeSync(ChainRecord)(read);
+    const encoded = Schema.encodeResult(ChainRecord)(read);
+
+    if (Result.isFailure(encoded)) {
+      return expect.unreachable(`the read chain record does not write: ${encoded.failure.message}`);
+    }
+
+    const written = encoded.success;
     expect(written).toMatchObject({ quest: "p14" });
     expect(written).not.toHaveProperty("lane");
   });

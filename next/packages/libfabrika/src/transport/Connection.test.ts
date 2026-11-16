@@ -38,7 +38,9 @@ type Event =
 
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
 const at = <A>(list: ReadonlyArray<A>, pick: number) => list[pick % list.length]!;
-const restored = (saved: Saved) => Schema.decodeUnknownSync(Attached)(JSON.parse(JSON.stringify(saved)));
+/** A saved attachment through JSON and read back, as a restart reads it. */
+const throughJson = (saved: Saved) => JSON.parse(JSON.stringify(saved));
+const restored = (saved: Saved) => Schema.decodeUnknownEffect(Attached)(throughJson(saved));
 
 const online = (busy = false, waits: ReadonlyArray<W> = []) =>
   Attached.cases.online.make({
@@ -433,7 +435,7 @@ describe("T703 connection driver laws", () => {
 
               if (move < 20) {
                 // A restart: the saved attachment, through JSON, read by a new connection.
-                h = harness(restored(move < 10 ? observation : now));
+                h = harness(yield* restored(move < 10 ? observation : now));
                 seen.add(`restored:${h.saved()._tag}`);
               } else if (move < 35) {
                 yield* h.c.wake();
@@ -936,15 +938,20 @@ it.effect.prop(
         has,
         build,
       });
-      const copies: Array<Saved> = [];
+      // Each save goes through JSON and is read back; a save that does not read back fails the law below.
+      const reads: Array<Result.Result<Saved, Schema.SchemaError>> = [];
       const c = connection({
         reader: READER,
         session: SESSION,
         ping: () => PING,
-        read: () => restored(saved),
+        read: () => saved,
         save: (next) => {
-          saved = restored(next) as typeof saved;
-          copies.push(saved);
+          const read = Schema.decodeUnknownResult(Attached)(throughJson(next));
+          reads.push(read);
+
+          if (Result.isSuccess(read)) {
+            saved = read.success as typeof saved;
+          }
         },
         send: () => {},
         close: () => {},
@@ -952,6 +959,8 @@ it.effect.prop(
         call: () => Effect.succeed(Answer.cases.ok.make({ result: null })),
       });
       yield* c.frame(callFrame("take", "tasks.take"));
+      expect(reads.every(Result.isSuccess), "every saved attachment reads back through JSON").toBe(true);
+      const copies = reads.flatMap((read) => (Result.isSuccess(read) ? [read.success] : []));
       expect(copies.map((a) => a._tag === "online" && a.busy)).toEqual([true, false]);
 
       for (const copy of copies) {

@@ -231,9 +231,10 @@ describe("P39 slice 4b: the real command layer", () => {
 
   it.live("C1 vector: real git's own stdout, saved by C4's run, answers exited with its line less the newline", () =>
     Effect.gen(function* () {
-      expect(gitVectors.length).toBeGreaterThan(0);
+      const vectors = yield* gitVectors;
+      expect(vectors.length).toBeGreaterThan(0);
 
-      for (const vector of gitVectors) {
+      for (const vector of vectors) {
         const seen = fresh();
         const child: Child = {
           spawn: "ok",

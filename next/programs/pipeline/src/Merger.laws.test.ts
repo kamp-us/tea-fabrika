@@ -6,7 +6,7 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Change, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { Saved } from "@kampus/libfabrika/runtime/State";
-import { Arbitrary, ConfigProvider, Effect, Schema } from "effect";
+import { Arbitrary, ConfigProvider, Effect, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import * as ChangeKind from "./Change.ts";
 import * as Mail from "./Mail.ts";
@@ -17,6 +17,15 @@ type Program = ReturnType<typeof merger>;
 type Model = Program["machine"]["model"]["Type"];
 type Msg = Program["msg"]["Type"];
 type Command = ReturnType<Program["machine"]["init"]>[1][number];
+
+/** A value the walk built, decoded as the program reads it; a value that does not decode fails the law. */
+const built = <S extends Schema.ConstraintDecoder<unknown>>(schema: S, raw: unknown): S["Type"] => {
+  const decoded = Schema.decodeUnknownResult(schema)(raw);
+  return Result.isSuccess(decoded)
+    ? decoded.success
+    : expect.unreachable(`the walk built a value its schema refuses: ${decoded.failure.message}`);
+};
+
 const ctx = stubCtxThrowingProxy<never>();
 const LAST = 8.64e15;
 const clamp = (time: number) => Math.min(time, LAST);
@@ -68,8 +77,8 @@ const settingsFor = (w: World) =>
     ),
   );
 
-const id = (w: World, char: string) => Schema.decodeUnknownSync(Commit)(char.repeat(w.size));
-const tree = (w: World, char: string) => Schema.decodeUnknownSync(Tree)(char.repeat(w.size));
+const id = (w: World, char: string) => Commit.make(char.repeat(w.size));
+const tree = (w: World, char: string) => Tree.make(char.repeat(w.size));
 const land = (w: World) => Mail.Land.make({ type: "land", ref: w.ref, change: 1, head: id(w, "a"), reply: "queue" });
 const equal = (a: unknown, b: unknown) => expect(a).toEqual(b);
 
@@ -125,7 +134,7 @@ const valueFor = (w: World, cmd: Command, pick: number): unknown => {
   }
 
   if (cmd.type === "checks") {
-    return Schema.decodeUnknownSync(Checks)(pick % 11 === 0 ? [] : [runAt(w, pick)]);
+    return built(Checks, pick % 11 === 0 ? [] : [runAt(w, pick)]);
   }
 
   if (cmd.type === "merge") {
@@ -159,7 +168,8 @@ const answer = (p: Program, w: World, cmd: Command, drawn: number, at: number): 
             ? 3
             : drawn
     : drawn;
-  return Schema.decodeUnknownSync(p.msg)(
+  return built(
+    p.msg,
     cmd.type !== "send" && pick % 5 === 0
       ? {
           type: `${cmd.type}_err`,
@@ -204,7 +214,7 @@ const guided = (p: Program, w: World) => {
       const msgs: Array<Msg> = [];
 
       for (const event of raw) {
-        let msg: Msg = Schema.decodeUnknownSync(p.msg)(event);
+        let msg: Msg = built(p.msg, event);
 
         if (event.type === "timer") {
           const due = p.wake(model);
@@ -215,7 +225,7 @@ const guided = (p: Program, w: World) => {
               : event.at % 3 === 0
                 ? Math.max(clock, due - 1)
                 : Math.max(clock, due);
-          msg = Schema.decodeUnknownSync(p.msg)({ type: "timer", at });
+          msg = built(p.msg, { type: "timer", at });
           clock = at;
         } else if ("cmd" in event && event.cmd.type !== "send") {
           const command = out.find((c) => c.type === event.cmd.type && "attempt" in c && c.attempt === model.attempt);
@@ -230,10 +240,10 @@ const guided = (p: Program, w: World) => {
               event.at % 7 === 0 && model._tag === "checking" ? model.until : clock + (event.at % 10_000),
             ),
           );
-          msg = Schema.decodeUnknownSync(p.msg)({ ...event, cmd: command, at: clock });
+          msg = built(p.msg, { ...event, cmd: command, at: clock });
         } else if ("cmd" in event && event.cmd.type === "send") {
           clock = Math.max(clock, event.at);
-          msg = Schema.decodeUnknownSync(p.msg)({ ...event, at: clock });
+          msg = built(p.msg, { ...event, at: clock });
         } else if (event.type === "land" || event.type === "abandon") {
           if (p.refuse(model, event) !== null) {
             continue;
@@ -268,7 +278,7 @@ const guided = (p: Program, w: World) => {
           started = true;
         } else if (model.step._tag === "waiting" || (model.step.at !== null && cell.pick % 7 === 0)) {
           clock = Math.max(clock, model.step.at!);
-          msg = Schema.decodeUnknownSync(p.msg)({ type: "timer", at: clock });
+          msg = built(p.msg, { type: "timer", at: clock });
         } else {
           const cmd = out.findLast((c) => service(c) && "attempt" in c && c.attempt === model.attempt);
 
@@ -666,7 +676,7 @@ describe("the merger, next/", () => {
                   const moves: Array<() => Msg> = [
                     () => land(w),
                     () =>
-                      Schema.decodeUnknownSync(p.msg)({
+                      built(p.msg, {
                         type: "abandon",
                         ref: cell.pick % 2 === 0 && prev._tag !== "idle" ? prev.job.ref : `${w.ref}other`,
                       }),
@@ -677,9 +687,7 @@ describe("the merger, next/", () => {
                   }
 
                   if (prev._tag !== "idle" && prev.step.at !== null) {
-                    moves.push(() =>
-                      Schema.decodeUnknownSync(p.msg)({ type: "timer", at: Math.max(m.clock, prev.step.at!) }),
-                    );
+                    moves.push(() => built(p.msg, { type: "timer", at: Math.max(m.clock, prev.step.at!) }));
                   }
 
                   if (late.length > 0) {
@@ -785,8 +793,7 @@ describe("the merger, next/", () => {
 
 // This walk answers only the current request. Every update may discover another main.
 const roundWalk = (p: Program, w: World) => {
-  const ok = (cmd: Command, value: unknown): Msg =>
-    Schema.decodeUnknownSync(p.msg)({ type: `${cmd.type}_ok`, cmd, value, at: w.at });
+  const ok = (cmd: Command, value: unknown): Msg => built(p.msg, { type: `${cmd.type}_ok`, cmd, value, at: w.at });
   return arbGuidedSequence(
     p.machine,
     ctx,
@@ -813,7 +820,7 @@ const roundWalk = (p: Program, w: World) => {
               cmd,
               moved
                 ? Updated.cases.updated.make({
-                    head: Schema.decodeUnknownSync(Commit)((cmd.attempt + 16).toString(16).padStart(w.size, "0")),
+                    head: Commit.make((cmd.attempt + 16).toString(16).padStart(w.size, "0")),
                     tree: tree(w, "e"),
                     main: id(w, "d"),
                   })
@@ -956,7 +963,13 @@ it.prop(
   ({ old }) => {
     const p = merger(Effect.runSync(Settings.all.parse(ConfigProvider.fromUnknown({}))));
     const result = Saved.upgrade({ v: 1, build: "slice-1", model: old, after: 0 }, p.state, "slice-2");
-    const model = Schema.decodeUnknownSync(p.state.schema)(result.saved.model);
+    const loaded = Schema.decodeUnknownResult(p.state.schema)(result.saved.model);
+
+    if (Result.isFailure(loaded)) {
+      return expect.unreachable(`L17: the upgraded slice 1 state does not load: ${loaded.failure.message}`);
+    }
+
+    const model = loaded.success;
     expect(result.saved.v).toBe(2);
     expect(model).toMatchObject(old);
 

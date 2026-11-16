@@ -825,7 +825,9 @@ describe("T877 public TOML edits, next/", () => {
           const parsed = yield* toml.parse(text);
           const decoded = yield* Schema.decodeUnknownEffect(file)(parsed.value, strict);
           expect(decoded).toEqual({ instance: { port }, limits: { record: ByteSize.bytes(count) } });
-          expect(get(parsed.value, bytes.segments)).toBe(Schema.encodeSync(Codec.file(bytes))(ByteSize.bytes(count)));
+          expect(get(parsed.value, bytes.segments)).toBe(
+            yield* Schema.encodeEffect(Codec.file(bytes))(ByteSize.bytes(count)),
+          );
           expect(Exit.isFailure(yield* Effect.exit(checkedSet(text, Declarations.port, port, "repo")))).toBe(true);
           const invalid = i % 2 ? 0 : 65536;
           expect(Exit.isFailure(yield* Effect.exit(checkedSet(text, Declarations.port, invalid, "person")))).toBe(true);

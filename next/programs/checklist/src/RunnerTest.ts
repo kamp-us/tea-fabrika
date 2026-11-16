@@ -74,15 +74,15 @@ const View = Schema.Struct({
   left: Schema.Int,
 });
 
-const shown = (view: unknown) => {
-  const v = Schema.decodeUnknownSync(View)(view);
-  return {
-    items: v.items
-      .map((i) => ({ name: i.name, state: i.state, note: i.note }))
-      .sort((a, b) => (a.name < b.name ? -1 : 1)),
-    left: v.left,
-  };
-};
+const shown = (view: unknown) =>
+  Schema.decodeUnknownEffect(View)(view).pipe(
+    Effect.map((v) => ({
+      items: v.items
+        .map((i) => ({ name: i.name, state: i.state, note: i.note }))
+        .sort((a, b) => (a.name < b.name ? -1 : 1)),
+      left: v.left,
+    })),
+  );
 
 /** Only the letters this suite sent: the runner's own timers are not a writer's. */
 const sent = (letters: ReadonlyArray<Saved>) => letters.filter((l) => l.id.startsWith("checklist-"));
@@ -209,7 +209,7 @@ export const suite = (open: Open, fresh: Fresh) =>
             for (const step of steps) {
               const input = named(items, step) ?? { type: "add", name: "git" };
               const by = step.by === "agent" ? agent : person;
-              const before = shown((yield* r.open("before")).view);
+              const before = yield* shown((yield* r.open("before")).view);
               const saved = (yield* letters).length;
               const answer = yield* r.msg(letter(++n, by, input));
               const refusable = items.has(input["name"] ?? "") && input["type"] === "add";
@@ -230,7 +230,7 @@ export const suite = (open: Open, fresh: Fresh) =>
                 apply(items, input);
               }
 
-              const after = shown((yield* r.open("after")).view);
+              const after = yield* shown((yield* r.open("after")).view);
               expect(after, "the view is the record's").toEqual(recorded(items));
               expect(walled || refusable || bad ? after : before, "a refused input changes nothing").toEqual(before);
               expect((yield* letters).length - saved, "a refused input writes no letter").toBe(
@@ -267,7 +267,7 @@ export const suite = (open: Open, fresh: Fresh) =>
             }
 
             for (const { step, retry } of moves) {
-              const before = shown((yield* r.open("before")).view);
+              const before = yield* shown((yield* r.open("before")).view);
               const rows = sent(yield* letters).length;
 
               if (retry === "retry") {
@@ -276,7 +276,7 @@ export const suite = (open: Open, fresh: Fresh) =>
                 if (first !== undefined) {
                   // The same letter, id and body, sent again after later letters.
                   expect(yield* r.msg(first.sent), `a retry of ${first.sent.id}`).toEqual(first.answer);
-                  expect(shown((yield* r.open("after")).view), "a retry changes nothing").toEqual(before);
+                  expect(yield* shown((yield* r.open("after")).view), "a retry changes nothing").toEqual(before);
                   expect(sent(yield* letters).length, "a retry writes no row").toBe(rows);
                   continue;
                 }
@@ -296,7 +296,7 @@ export const suite = (open: Open, fresh: Fresh) =>
                 apply(items, input);
               }
 
-              expect(shown((yield* r.open("after")).view), "the view is the record's").toEqual(recorded(items));
+              expect(yield* shown((yield* r.open("after")).view), "the view is the record's").toEqual(recorded(items));
               expect(sent(yield* letters).length, "a fresh accepted letter is one new row").toBe(rows + (ok ? 1 : 0));
             }
 
@@ -324,7 +324,7 @@ export const suite = (open: Open, fresh: Fresh) =>
             const r = yield* start(checklist, alarms);
             const writer = side === "agent" ? agent : person;
             const clock = DateTime.formatIso(DateTime.makeUnsafe(BASE + skew));
-            const view = r.open("watch").pipe(Effect.map((o) => shown(o.view)));
+            const view = r.open("watch").pipe(Effect.flatMap((o) => shown(o.view)));
             const one = (state: string, n: string | null) => ({
               items: [{ name: "git", state, note: n }],
               left: state === "checked" ? 0 : 1,
@@ -347,7 +347,7 @@ export const suite = (open: Open, fresh: Fresh) =>
             expect(alarms.at(-1), "nothing is left to wake for").toBeNull();
 
             const saved = (yield* letters).find((l) => l.id === check.id);
-            const m = Schema.decodeUnknownSync(Schema.Struct({ note: Schema.String }))(saved?.m);
+            const m = yield* Schema.decodeUnknownEffect(Schema.Struct({ note: Schema.String }))(saved?.m);
             expect(new TextEncoder().encode(m.note), "the note's exact bytes").toEqual(new TextEncoder().encode(note));
             expect(saved?.by, "the writer's checked key").toBe(key(writer));
             expect(saved?.sentAt, "the writer's own clock, kept as it came").toBe(clock);
@@ -379,7 +379,7 @@ export const suite = (open: Open, fresh: Fresh) =>
                   return yield* f(r);
                 }),
               );
-            const view = (r: Runner) => r.open("watch").pipe(Effect.map((o) => shown(o.view)));
+            const view = (r: Runner) => r.open("watch").pipe(Effect.flatMap((o) => shown(o.view)));
             const both = (git: string) => ({
               items: [
                 { name: "git", state: git, note: null },

@@ -1,7 +1,7 @@
 // L13 guard, next/. A host test never signals a group it does not own, and never group 0 or 1.
 // Plants: drop `row.group > 1`; drop the leader check; let a root of 1 through.
 import { expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import * as ProcessGroups from "./ProcessGroups.test-support.ts";
 
@@ -64,9 +64,9 @@ it("scenario: a service that leads its own group, with a child in it and a child
 it("property: a saved list that holds a group of 1 or below does not decode", () => {
   fc.assert(
     fc.property(fc.array(fc.integer({ min: 2, max: 99_999 })), fc.integer({ min: -9, max: 1 }), (good, bad) => {
-      const decode = Schema.decodeUnknownSync(Schema.fromJsonString(ProcessGroups.Saved));
-      expect(decode(JSON.stringify(good))).toEqual(good);
-      expect(() => decode(JSON.stringify([...good, bad]))).toThrow();
+      const decode = Schema.decodeUnknownResult(Schema.fromJsonString(ProcessGroups.Saved));
+      expect(decode(JSON.stringify(good))).toEqual(Result.succeed(good));
+      expect(Result.isFailure(decode(JSON.stringify([...good, bad])))).toBe(true);
     }),
   );
 });

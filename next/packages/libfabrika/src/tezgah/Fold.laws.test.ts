@@ -30,11 +30,10 @@
 // decide the law, and so is a run whose strips and gaps alone overflow a container (an open point the
 // amendment does not settle; the law counts them).
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
 import * as fc from "fast-check";
 import { drawn, fold, STRIP } from "./Fold.ts";
 import * as Layout from "./Layout.ts";
-import { type TileId, Workspace } from "./Workspace.ts";
+import { type TileId, Workspace, WorkspaceId } from "./Workspace.ts";
 
 const SEED = 119120;
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
@@ -181,8 +180,8 @@ type Cut = typeof Cut extends fc.Arbitrary<infer C> ? C : never;
 /** A workspace walked from one tile by `cuts`, focus on the live tile `focus` picks. */
 const walked = (cuts: ReadonlyArray<Cut>, focus: number) => {
   const first = typeId("tile", 1) as TileId;
-  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
-    id: typeId("workspace", 1),
+  let w: Workspace = Workspace.make({
+    id: WorkspaceId.make(typeId("workspace", 1)),
     n: 1,
     layout: first,
     focus: first,
@@ -317,12 +316,12 @@ describe("Desk S4 L31: one drawn geometry; a window folds a tile under 220x120 i
 
   it("scenario: a 2x2 at 400x300 with t1 focused folds the bottom row whole: one band 20px tall across the area, its two strips lying along it apart, and t1 holds the rest beside c's 22px strip (amendment 13, point 3)", () => {
     const [t1, c, a, b] = [1, 2, 3, 4].map((n) => typeId("tile", n) as TileId);
-    let w: Workspace = Schema.decodeUnknownSync(Workspace)({
-      id: typeId("workspace", 1),
+    let w: Workspace = Workspace.make({
+      id: WorkspaceId.make(typeId("workspace", 1)),
       n: 1,
-      layout: t1,
-      focus: t1,
-      recent: [t1],
+      layout: t1!,
+      focus: t1!,
+      recent: [t1!],
     });
     w = Layout.split(w, t1!, "column", a!);
     w = Layout.split(w, a!, "row", b!);
