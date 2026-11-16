@@ -1,15 +1,15 @@
-Approved by the lead agent, builds 0569, 0572, 0054, 0214, 0226; body 9733d6f02e73
+
 Plancheck-Version: 3
 
-# Plan: tea moves to 0.27.0, then one local patch keys tea's Msgs, Cmds, Subs and state table on `_tag` and carries ten more asks, and every machine of ours follows
+# Plan: tea moves to 0.27.0, then one local patch keys tea's Msgs, Cmds, Subs and state table on `_tag` and carries eleven more asks, and every machine of ours follows
 
 This is `next/` and our tooling (`.agents/`). Today's version is left as it runs now. It builds
 [0569](../../../.decisions/0569-tea-msgs-are-keyed-on-tag.md) (owner, 2026-11-15) and its amendment
 for Cmds, Subs and the state table
 ([pull request 1384](https://github.com/kamp-us/tea-fabrika/pull/1384)). It counts as a fix of that
 day's sev0. Everything we ask tea for is patched here and not waited on: one patch file,
-`patches/@demlik__tea@0.27.0.patch`, carries eleven asks on `kamp-us/demlik`, and each lands through the
-steps in its own pull request, except 956 and 958, which share one. Eleven pull requests in all.
+`patches/@demlik__tea@0.27.0.patch`, carries twelve asks on `kamp-us/demlik`, and each lands through the
+steps in its own pull request, except 956 and 958, which share one. Twelve pull requests in all.
 
 ```ts
 // The whole idea. Before, on main (next/programs/counter/src/program.ts):
@@ -25,7 +25,7 @@ const Msg = Schema.TaggedUnion({ inc: {}, dec: {}, reset: {} });
 runtime.dispatch(Msg.cases.inc.make({}));     // the schema's maker writes the key
 // update: { inc, dec, reset } is unchanged: tea keys the table by the same names.
 
-// After slices 3 to 11, the asks our code proved, each deleting the workaround it replaces:
+// After slices 3 to 12, the asks our code proved, each deleting the workaround it replaces:
 applyCell(child, s.child, m);                 // 950: types from the machine, a wrong Msg fails to compile
 def.schema.input;                             // 951: the Cmd's own Effect schema, typed
 Schema.Union([Land, change.settled]);         // 952: tea builds a Cmd's `_ok | _err` schema
@@ -44,30 +44,47 @@ syncTest(machine, {}, { msgs, seed });          // 955: save and restart at ever
 |---|---|---|---|
 | 1 | tea 0.25.0 to 0.27.0; today's version on its own catalog at 0.25.0, unpatched | 897, already shipped | the patch is written against 0.27.0, and the bump deletes the 0.25.0 patch (0569) |
 | 2 | the `_tag` patch: Msg, Cmd and the `cmd` a settled Msg carries, Sub, the state table; all of our side; old dev and test homes wiped at landing | [949](https://github.com/kamp-us/demlik/issues/949) | every later ask is written in `_tag` terms, and the issues say so ("With #949, `type` here becomes `_tag`") |
-| 3 | `applyCell` and its siblings take their types from the machine | [950](https://github.com/kamp-us/demlik/issues/950) | types only, the smallest; slice 11 steps children with the typed `applyCell` |
+| 3 | `applyCell` and its siblings take their types from the machine | [950](https://github.com/kamp-us/demlik/issues/950) | types only, the smallest; slice 12 steps children with the typed `applyCell` |
 | 4 | a Cmd from `Cmd.make` keeps its Effect schemas in its type; the any-def keeps `input` | [951](https://github.com/kamp-us/demlik/issues/951) | types only; slice 5 builds `settled` from these typed schemas |
 | 5 | a Cmd def carries `settled`, the schema of its `_ok \| _err` Msgs | [952](https://github.com/kamp-us/demlik/issues/952) | needs slice 4; slice 6's `dropStale` reads the answers' `cmd`, typed by the union slice 5 makes |
-| 6 | tea ships `before(check, table)`: one check before every cell of an update table; Merger and Queue use it, and their `reduce` splits into one handler per Msg | [954](https://github.com/kamp-us/demlik/issues/954) | needs slice 5 (above); touches only the pipeline's two machines, so it is small and independent of slice 11 |
+| 6 | tea ships `before(check, table)`: one check before every cell of an update table; Merger and Queue use it, and their `reduce` splits into one handler per Msg | [954](https://github.com/kamp-us/demlik/issues/954) | **on hold** (see below); nothing else waits on it |
 | 7 | `Machine.types<{ ctx; sub }>()` names a machine's ctx and Sub types with no cast | [960](https://github.com/kamp-us/demlik/issues/960) | types only and tiny; nothing depends on it, so it goes where it costs least: after the pipeline work, before the slices that change machine fields |
 | 8 | `Cmd.cells(def, onOk, onErr)`: typed cells for a Cmd whose answer names are known only at run time | [959](https://github.com/kamp-us/demlik/issues/959) | additive and small; it reads a def's answer types, which slices 4 and 5 made exact |
 | 9 | `init` may be the first model itself, `cmds` defaults to `[]`; tea exports `AnyMachine` and `Machine.is` | [956](https://github.com/kamp-us/demlik/issues/956), [958](https://github.com/kamp-us/demlik/issues/958) | one slice, two issues: our copy of tea's machine shape (`Program.ts`'s `isSteps`) refuses an object `init`, and 958's `Machine.is` is what replaces that copy, so neither lands green alone |
 | 10 | `syncTest` in `@demlik/tea/pbt`: save and restart at every Msg, and the run must match the unbroken one | [955](https://github.com/kamp-us/demlik/issues/955) | after slice 9, so tea's `syncTest` is written once against both forms of `init` and boots object-`init` machines from day one |
-| 11 | `Cmd.within`: a parent wraps its child's Cmds as data, and their answers come back wrapped; the window and hands machines take Elm's parent shape, one `link` Msg and one row | [953](https://github.com/kamp-us/demlik/issues/953) | the biggest change to tea's run time (the settle step, both engines, save and replay), so it goes last, on top of the typed `applyCell` (slice 3) it steps the child with |
+| 11 | a cell may answer a pipeable `Step` (`Step.stay`, `Step.to(model)`, `Step.run(cmd)`) in place of the `[model, cmds]` tuple, on the Effect entry | [962](https://github.com/kamp-us/demlik/issues/962) | after 949, whose `_tag` state table the ruling builds on; before 953, so slice 12's new parent code writes its returns once, as `Step` |
+| 12 | `Cmd.within`: a parent wraps its child's Cmds as data, and their answers come back wrapped; the window and hands machines take Elm's parent shape, one `link` Msg and one row | [953](https://github.com/kamp-us/demlik/issues/953) | the biggest change to tea's run time (the settle step, both engines, save and replay), so it goes last, on top of the typed `applyCell` (slice 3) it steps the child with |
 
 No two must land together: each slice is whole, green on its own, and deletes its own workaround.
 Slices 3 and 4 touch different tea files and different files of ours, so their order between
 themselves is free; 3 goes first because it is smaller. The one pair that must land together is 956
-and 958, as one slice (9). **6 before 11 still holds, for a new reason.** With the function form
-dropped, slice 6 no longer touches the window or the hands client, so 11 no longer waits on it for
-those files. They share no file of ours, only the patch file; 6 goes first because it is small, and
-953, the riskiest run-time change, stays last, after the five new asks too. Slices 7 and 8 are free
-among themselves; 9 must come before 10. 85% sure of this order.
+and 958, as one slice (9). Slices 7 and 8 are free among themselves; 9 must come before 10; 11 must
+come before 12. 953, the riskiest run-time change, stays last. 85% sure of this order.
 
-**On hold: the step return.** The owner will rule on a more readable step return than the
-`[s, [cmd]]` tuple. No slice here changes how a cell, an `init`, a check or a helper returns. Where a
-slice writes a return, it writes today's tuple: slice 6's `dropStale` and its split handlers, slice
-8's `onOk` and `onErr`, slice 9's function form of `init` (an object `init` writes no return at all),
-and slice 11's `stepLink`. Each slice's review checks that no return shape moved.
+**On hold: slice 6 (demlik 954, `before`).** The owner holds it until he rules. Tea's maintainer, on
+954, says the root cause is that our runner steps machines by hand with `applyCell` (`Program.ts`,
+`Runner.ts`), so tea's identity filter, which drops a stale answer before a cell runs on tea's
+engine, never runs for us. Demlik issue 961 is that gap in the pure stepping functions. So no
+`before` patch and no rewrite of Merger's or Queue's stale checks lands until the owner rules. Slice
+6's text stays below, marked held. What depended on it, and what changes:
+
+- **Its laws, G1 to G3,** are held with it. No other law reads `before`.
+- **The order "6 before 12"** goes. Slice 12 never needed a file of slice 6, and nothing in slices 7
+  to 12 waits on 6 now: they start from main after slice 5.
+- **Merger and Queue** keep their `reduce` and their 21 forwarding rows until the ruling. No other
+  slice here touches them.
+
+**Step returns, once slice 11 is in.** The owner ruled that a cell answers a pipeable `Step` ([0578](../../../.decisions/0578-tea-cell-answers-a-step.md)). The sweep of today's return sites is not in this plan (see "What comes after"). Each
+slice that writes a return says which form it writes, so no return is written twice:
+
+- slices 2 to 10 write no new return shape: they move keys, types and helpers, and every return they
+  touch stays today's tuple, for the sweep to rewrite once;
+- slice 8's `onOk` and `onErr` are the existing `settle` handler, unchanged;
+- slice 9's `init` is not a cell: its function form stays a tuple, and an object `init` writes no
+  return at all;
+- slice 12 lands after slice 11, so its new parent code (`stepLink`, the `link` row) writes `Step`
+  from the start;
+- held slice 6, if the owner releases it after slice 11, writes its split handlers as `Step`.
 
 ## Today's version: answered, no question left
 
@@ -84,9 +101,14 @@ alone unless he names it.
   workspace (from memory of the docs, not fetched for this plan).
   `oxlint-plugins/exact-versions.ts` already checks that a `catalogs.<name>` entry is exact (line
   61); it only needs to accept the `catalog:<name>` pointer (line 16). Law E1 holds that.
-- One small doubt: the root's tooling imports today's library (`.agents/skills/lead/scripts/agents.ts`
-  imports `Agent` from `@kampus/fabrika-old`), so 0.25.0 and 0.27.0 meet in one type check. If a tea
-  type crosses that line, slice 1's `pnpm typecheck` shows it. 85% sure none does.
+- The root's tooling imports both versions: the lead scripts import tea directly (`chain.ts`,
+  `drive.ts`, `flow/machine.ts`, `flow/walk.ts`: 0.27.0) and today's agent runner from
+  `@kampus/fabrika-old` (`agents.ts`, `boxfiles.ts`, `codexexec.ts` and their tests: `Agent`, the
+  acp adapters, `rawOfLine`, which reach tea 0.25.0 through `catalog:old`). No tea value crosses
+  between them, so the two copies never meet at run time. But Effect's checker refuses two versions
+  of one package in one program (`duplicatePackage`, TS377051), and slice 1's build found law E2 red
+  on it, in the `.agents` project only. Slice 1 allows `@demlik/tea` there and nowhere else (see
+  "Slice 1").
 
 ## How others do it
 
@@ -114,8 +136,8 @@ alone unless he names it.
   `SchemaTransformation.d.ts:401`).
 - **Elm:** a Msg is a custom type with no key; its constructors play the part of
   `Msg.cases.inc.make`. A parent holds its child's Msg inside one of its own
-  (`Link LinkMsg`) and steps the child with one `case` branch, which is slice 11. A parent wraps its child's Cmds with `Cmd.map` and gets the child's answers back
-  wrapped (https://guide.elm-lang.org/webapps/structure.html), which is slice 11, kept as data because
+  (`Link LinkMsg`) and steps the child with one `case` branch, which is slice 12. A parent wraps its child's Cmds with `Cmd.map` and gets the child's answers back
+  wrapped (https://guide.elm-lang.org/webapps/structure.html), which is slice 12, kept as data because
   a tea Cmd is saved and replayed. Old saved JSON is read with a decoder that accepts both shapes
   (`Json.Decode.oneOf`), an upcaster written as a decoder. From the Elm guide, not fetched.
 - **Erlang/OTP:** a message's case is its tuple tag. A shape change goes with hot code upgrade:
@@ -172,8 +194,38 @@ const exact = (version: unknown) =>
 - [0256](../../../.decisions/0256-a-program-is-one-program-make.md) lines 52-53 still say tea's side
   is unfixed and patched locally. The bump fixes that line: "tea 0.26.0 shipped it (demlik 897); no
   patch is needed". A fact correction, in the same pull request.
-- Our code needs no change for 0.27.0: `Program.make` already reads the machine's `model` and `msg`,
-  which 0.27.0 types the same way the patch did. The type check is the proof (law E2).
+- Our code needs one change for 0.27.0, and it is a setting, not code: Effect's checker is told
+  that `@demlik/tea` may appear twice in the `.agents` project. Today's library keeps 0.25.0 under
+  [0217](../../../.decisions/0217-next-grows-beside-today.md) until `next/` takes the job, the tooling
+  still uses today's agent runner, and no tea value crosses between the two. It is a declared
+  dependency choice, like
+  [0574](../../../.decisions/0574-no-stability-tag-and-unstable-api-is-an-error.md)'s
+  `allowedUnstableApis`, and not a list that lets broken code pass. It goes when the tooling stops
+  importing `@kampus/fabrika-old` (ticket 1065). Everything else type-checks as it is:
+  `Program.make` already reads the machine's `model` and `msg`, which 0.27.0 types the way the patch
+  did (law E2).
+
+```jsonc
+// tsconfig.base.json, the Effect checker's `overrides` (a sketch). One more entry, scoped to the
+// tooling. tsgo's schema calls this a "scoped allow-list for duplicatePackage".
+{
+  // The lead tooling imports tea 0.27.0 itself and today's agent runner, which runs on tea 0.25.0
+  // (0217); no tea value crosses between them. Goes with ticket 1065.
+  "include": [".agents/**/*.ts"],
+  "options": { "allowedDuplicatedPackages": ["@demlik/tea"] }
+}
+```
+
+- **Where the setting lives: an override in `tsconfig.base.json`, not `.agents/tsconfig.json`.**
+  The lead asked for `.agents/tsconfig.json` only. TypeScript does not merge `compilerOptions.plugins`
+  from an `extends`: a `plugins` key in `.agents/tsconfig.json` replaces the whole array, so the
+  tooling would need its own copy of the checker's entry (about 100 lines of settings in
+  `tsconfig.base.json:18-120`), which would drift. tsgo reads `allowedDuplicatedPackages` inside an
+  `overrides` entry, scoped by `include` (its `schema.json`, "Scoped allow-list for
+  duplicatePackage"), as the base file already scopes rules to `next/**`. So the scope is held by the
+  entry's `include`, and law E3 holds that scope. 80% sure; if the override form turns out not to
+  silence the check for a whole program, the fallback is the lead's form, with the plugin entry
+  copied whole.
 
 ## Slice 2: the `_tag` patch, and all of our side
 
@@ -244,7 +296,7 @@ stays: E extends { type: string } (22), E["type"], Extract<E, ...>
   # One file, every change we asked tea for, each dropped at the release that has it:
   # demlik#949 Msgs, Cmds, Subs and the state table keyed on `_tag`.
   '@demlik/tea@0.27.0': patches/@demlik__tea@0.27.0.patch
-  # Slices 3 to 11 each add their line: #950, #951, #952, #954, #960, #959, #956 and #958, #955, #953.
+  # Slices 3 to 12 each add their line: #950, #951, #952, #954, #960, #959, #956 and #958, #955, #962, #953.
 ```
 
 ### Our side
@@ -361,7 +413,7 @@ Where saved tea values live, read on main today, and what happens to each:
   left open across the upgrade, sent again after the reload.
 - **Sub values are never saved:** a Sub comes from the Model through `deps` on every turn.
 
-## Slices 3 to 11: what tea gets, and what of ours goes
+## Slices 3 to 12: what tea gets, and what of ours goes
 
 Each slice adds its hunks to the same patch file and its line to the workspace row, deletes our
 workaround in the same pull request, and posts its own hunks on its issue (see "Each issue carries
@@ -433,7 +485,10 @@ const Msg = Schema.Union([Land, Abandon, change.settled, merge.settled, send.set
   of `runtime/ChaosMachine.ts`'s 3 Cmds, and the casts in `desktop/BrainServiceManaged.ts:100`, `:104`,
   which mint through `def.ok` and `def.err` instead.
 
-### Slice 6, demlik 954: `before(check, table)`
+### Slice 6, demlik 954: `before(check, table)` (on hold)
+
+**Held by the owner** until he rules on the maintainer's root cause (see "On hold: slice 6" above).
+The text below stays as its plan, unchanged.
 
 ```ts
 // tea's maintainer's code on issue 954, compiled and run on tea main; after slice 2 its bound is
@@ -474,7 +529,7 @@ Machine.make({
   the current one counts as `late`) and Queue's `refuse(s, m)` (`Queue.ts:132-138`).
 - **Each handler reads its own Msg** with no `m._tag ===` test, so 0567 holds without a matcher.
 - **Not here:** the window and the hands client. Their forwarding rows are the forwarding kind, which
-  `before` does not fit, and they get Elm's parent shape in slice 11.
+  `before` does not fit, and they get Elm's parent shape in slice 12.
 - 954's comment did not run `before` with real `_ok` and `_err` answers; law G1 does, on Merger's
   own Cmds.
 
@@ -562,7 +617,44 @@ syncTest(controller, {}, { msgs, seed: 119120 });
 - **Ours goes:** `syncTest` in `next/packages/libfabrika/src/Testing.ts` (and the file, if nothing
   else is left in it), and the 25 calls in 12 test files (counted on main) move to tea's.
 
-### Slice 11, demlik 953: `Cmd.within`, Elm's `Cmd.map` kept as data
+### Slice 11, demlik 962: a cell may answer a pipeable `Step`
+
+```ts
+// On @demlik/tea/effect, beside Machine (effect/index.d.ts, effect/index.js), a sketch from issue 962.
+Step.stay;                                       // nothing changes; it holds no model, tea fills in the one it gave the cell
+Step.to(model);                                  // move to this model
+Step.to(model).pipe(Step.run(a), Step.run(b));   // `run` is a `dual`, piped after `to`; Cmds run in pipe order
+
+// Machine.make (effect/index.js `make2`, :51) wraps each cell once: a Step becomes tea's tuple, and a
+// tuple passes as it is. Core, applyCell and the engine do not change, so our runner's applyCell
+// calls (Program.ts, Runner.ts) still get the tuple.
+
+// A cell after, matching its state with the Model union's own matcher (0567):
+upload_ok: (s, m) =>
+  Model.match(s, {
+    uploading: () => Step.to(Model.cases.done.make({ url: m.value.url })).pipe(Step.run(notify({ text: "Uploaded" }))),
+    orElse: () => Step.stay,
+  }),
+```
+
+- **Our side in this slice:** no workaround to delete and no return to rewrite. The laws use small
+  machines of their own. The sweep of the return sites comes after, in its own slices.
+- **Open point 1, `Step.typed<Model, Cmd>()`. Lean: take it, 75%.** `Step.to(model)` takes its type
+  from its argument, so a misspelled field in a spread inside a helper (outside the `update` table)
+  is not caught. A per-machine `const S = Step.typed<Model, Cmd>()` in the machine's file brings the
+  check back for helpers too; typing from the machine alone covers only cells written inline in the
+  table. It is the shape Effect uses for its own type-first makers (`Schema.TaggedError<Self>()`,
+  `Context.Tag(...)<Self, Shape>()`). The doubt: one more name per machine file.
+- **Open point 2, `Step.resolve(step, model)`. Lean: no, 65%.** `applyCell` stays in core and keeps
+  answering the tuple, as ruled, so a parent that steps a child (43 sites, by the lead's count) holds
+  the child's tuple, not a `Step`. What the parent needs is to answer its own `Step` with the child's
+  list of Cmds, so `Step.run` also takes a readonly list: `Step.to({ ...s, link }).pipe(Step.run(cmds))`.
+  `Step.resolve` would add a second way to read a child's answer. The doubt: one `run` that takes one
+  Cmd or a list is less plain than two names; `Step.runAll(cmds)` is the fallback if the review finds
+  it hard to read.
+- Until the sweep, a cell may answer either form, so nothing breaks in between.
+
+### Slice 12, demlik 953: `Cmd.within`, Elm's `Cmd.map` kept as data
 
 ```ts
 // A sketch. core: a new Cmd.within beside Cmd.when (core-CDR1i78K.d.ts:383-470), the settle step
@@ -600,17 +692,17 @@ update: {
 }
 const stepLink = (s: WindowModel, msg: LinkMsg): Step => {
   const [link, cmds] = applyCell(linkMachine, s.link, msg);  // typed by slice 3
-  return [{ ...s, link }, Cmd.within("link", cmds)];        // answers come back as `link`
+  return Step.to({ ...s, link }).pipe(Step.run(Cmd.within("link", cmds))); // a Step, since slice 11 is in
 };
 ```
 
   The link's Sub delivers its Msgs wrapped the same way, made with `WindowMsg.cases.link.make`.
-- **Why the parent shape is in slice 11, not a slice of its own.** `Cmd.within("link", cmds)` makes
-  every child answer come back as a `link` Msg, so slice 11 must add the `link` row to delete the
+- **Why the parent shape is in slice 12, not a slice of its own.** `Cmd.within("link", cmds)` makes
+  every child answer come back as a `link` Msg, so slice 12 must add the `link` row to delete the
   answer-forwarding cells at all. If the 11 rows for the same child's other Msgs stayed for a later
   slice, the machine would hold two shapes for one child: one row for its answers, and 11 rows for
   the rest, stepping the same `linked` function. One slice moves the whole child to one shape, in the
-  same two files. 75% sure; the cost is about 40 more lines in slice 11.
+  same two files. 75% sure; the cost is about 40 more lines in slice 12.
 
 ## One value traced: an `inc` pressed, saved, and folded after a restart, next to old rows
 
@@ -628,7 +720,7 @@ const stepLink = (s: WindowModel, msg: LinkMsg): Step => {
    `dev.ts` start founded a fresh one. Had one survived, its first `{ "type": "inc" }` row would stop
    the restart with `ProgramDown` `saved_letter`, loudly.
 6. Sends from a tab still on old code are refused at the gateway's door and never saved.
-7. After slice 11, the window's handshake child sends `hello`. The window wraps it:
+7. After slice 12, the window's handshake child sends `hello`. The window wraps it:
    `Cmd.within("handshake", [hello])`. The answer comes back as
    `{ _tag: "handshake", msg: { _tag: "hello_ok", ... } }`, and the window's one `handshake` cell hands
    `m.msg` to the child unchanged. The four forwarding cells at `WindowMachine.ts:1634-1637` are gone.
@@ -638,7 +730,8 @@ const stepLink = (s: WindowModel, msg: LinkMsg): Step => {
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
 | E1 (slice 1): `exact-versions` accepts `catalog:<name>` for any lower-case name, refuses a range inside `catalogs.<name>`, and still refuses `catalog:^1`, `catalog: old` and a bare tag. It runs the real script on its own git tree, as its siblings do | test | fc.stringMatching: catalog names, 10 runs | (a) leave `POINTERS` as it is: `catalog:old` is refused, E1 red; (b) a pointer pattern that allows any text after `catalog:`: `catalog:^1` passes, E1 red | oxlint-plugins/exact-versions.test.ts |
-| E2 (slice 1): `next/` and tooling type-check on 0.27.0 with no patch, and today's version on `catalog:old` at 0.25.0. The compiler and the existing suites are the law | type | type | point one `next/` package at `catalog:old`: `Program.make` loses the machine's `msg` type (0.25.0 unpatched has none), and its type check fails | pnpm typecheck |
+| E2 (slice 1): `next/` and tooling type-check on 0.27.0 with no patch, and today's version on `catalog:old` at 0.25.0, the `.agents` project with its one allowed duplicate. The compiler and the existing suites are the law | type | type | point one `next/` package at `catalog:old`: `Program.make` loses the machine's `msg` type (0.25.0 unpatched has none), and its type check fails | pnpm typecheck |
+| E3 (slice 1): `allowedDuplicatedPackages` appears in `tsconfig.base.json` only inside one checker override whose `include` is `.agents/**` globs alone, names only `@demlik/tea`, and appears in no other tsconfig of the repo. Read the way `namespace-imports.test.ts` reads the same file | test | format: tsconfig.base.json, the checker's plugin entry and its overrides | (a) set it in the checker's top-level options: E3 red; (b) add `next/**/*.ts` to the override's `include`: E3 red; (c) add a second package name: E3 red | oxlint-plugins/duplicate-packages.test.ts |
 | K1 (slice 2): a Msg made with `Schema.TaggedUnion` is taken by the patched `Machine.make`; a missing handler, a misspelled handler, a misspelled Msg sent to `dispatch`, a Msg schema keyed `type`, and a Cmd input with a `_tag` field are each a compile error (`@ts-expect-error`); an answer (`<cmd>_ok`) is handled in the same table, and its `cmd` is typed with `_tag` | type | type | (a) drop the patch's `.d.ts` hunks: the tagged machine fails to compile, K1 red; (b) keep `Extract<M, { type: K }>` in `Reducer`: the handler's Msg loses its fields, K1 red; (c) keep `Cmd<T>`'s `readonly type`: the answer's `cmd._tag` fails, K1 red | next/packages/libfabrika/src/runtime/MsgKey.types.test.ts |
 | K2 (slice 2): the patched engine routes by `_tag` at run time: for generated Msg sequences of a small tagged machine with one Cmd and one timer Sub, the Effect engine's `run` and tea's `foldMsgs` reach the model a plain reduce over the handlers reaches; the Cmd runs through its interpreter by its `_tag` and its answer comes back; the timer Sub starts and fires; tea's own `arbMsg` draws carry `_tag`; a raw `{ type: "inc" }` is refused as a Msg with no cell | test | @demlik/tea/pbt.arbMsgSequence: the small machine, 100 runs | (a) leave `chunk-SKI5V64W.js:284` on `record[msg.type]`: every Msg misses its cell; (b) leave `chunk-BXLD374W.js:292` on `cmd.type`: the Cmd finds no interpreter; (c) leave `chunk-BXLD374W.js:217` on `sub.type`: the timer never starts; (d) leave `pbt/index.js:41, 45` writing `type`: the draws have no `_tag`. Each turns K2 red | next/packages/libfabrika/src/runtime/MsgKey.test.ts |
 | K2b (slice 2): the state table keys on `_tag`: for generated sequences, a small machine written with `Transitions` over a `TaggedUnion` Model folds like the same machine written as a reducer | test | @demlik/tea/pbt.arbMsgSequence: the small state machine, 100 runs | leave `chunk-SKI5V64W.js:266, 293` on `state.type`: no row is found, K2b red | next/packages/libfabrika/src/runtime/MsgKey.test.ts |
@@ -651,9 +744,9 @@ const stepLink = (s: WindowModel, msg: LinkMsg): Step => {
 | B2 (slice 4): the same, as types: `def.schema.input` is `Schema.Codec<Input>`; a def made on core from another Standard Schema does not claim one | type | type | drop the hunks: B2 red | next/packages/libfabrika/src/runtime/TeaAsks.types.test.ts |
 | C1 (slice 5): `def.settled` decodes exactly what `def.ok` and `def.err` make: for generated input, value and error, the minted answer decodes and re-encodes to itself; an answer with an error tag the def never declared, or a `cmd` of another def, is refused; `malformed_result` is accepted on every def | test | Effect Arbitrary: SampleCmdInput | (a) a `settled` with no `malformed_result`: tea's own error fails to decode, C1 red; (b) a `settled` whose `cmd` is the bare input with no `_tag`: C1 red | next/packages/libfabrika/src/runtime/TeaAsks.test.ts |
 | C2 (slice 5): the pipeline's, the queue's and the brain life's machines decode every answer their runner saves, with `settled` in place of the deleted helpers: their existing laws stay green | test | @demlik/tea/pbt.arbMsgSequence: each machine, each file's own runs | delete one Cmd's `settled` from Merger's `Msg`: its answers no longer decode, the laws red | next/programs/pipeline/src/Merger.test.ts |
-| G1 (slice 6): `before(check, table)` runs the check before every cell: for generated Msg sequences, including real `_ok` and `_err` answers, a machine with `before` folds like the same machine whose every cell starts with the check by hand; when the check answers, the cell never runs; when it answers `undefined`, the cell runs with its own narrowed Msg; `msgKeysOf`, `acceptedTypes`, `describeMachine` and `NoCellError` give the same names as the plain table | test | @demlik/tea/pbt.arbMsgSequence: a small machine with one Cmd, both forms, 100 runs | (a) a `before` that runs the cell first and the check after: a stale answer changes the model, G1 red; (b) a `before` that drops the cells' names: `msgKeysOf` answers `[]`, G1 red | next/packages/libfabrika/src/runtime/TeaAsks.test.ts |
-| G2 (slice 6): a table under `before` that leaves a Msg out is a compile error; a misspelled cell name is a compile error; each cell's `m` is narrowed to its own Msg; a check that returns anything but a cell or `undefined` is a compile error | type | type | type `before`'s `table` as `Record<string, ...>`: the missing Msg compiles, the `@ts-expect-error` is unused, G2 red | next/packages/libfabrika/src/runtime/TeaAsks.types.test.ts |
-| G3 (slice 6): Merger and Queue, rewritten with `before` and one handler per Msg, keep every law they have: a stale answer still counts as `late` and changes nothing else, a refused Msg still changes nothing | test | @demlik/tea/pbt.arbMsgSequence: each machine, each file's own runs | a `dropStale` that never drops: the stale-answer laws red | next/programs/pipeline/src/Merger.test.ts |
+| G1 (slice 6, held): `before(check, table)` runs the check before every cell: for generated Msg sequences, including real `_ok` and `_err` answers, a machine with `before` folds like the same machine whose every cell starts with the check by hand; when the check answers, the cell never runs; when it answers `undefined`, the cell runs with its own narrowed Msg; `msgKeysOf`, `acceptedTypes`, `describeMachine` and `NoCellError` give the same names as the plain table | test | @demlik/tea/pbt.arbMsgSequence: a small machine with one Cmd, both forms, 100 runs | (a) a `before` that runs the cell first and the check after: a stale answer changes the model, G1 red; (b) a `before` that drops the cells' names: `msgKeysOf` answers `[]`, G1 red | next/packages/libfabrika/src/runtime/TeaAsks.test.ts |
+| G2 (slice 6, held): a table under `before` that leaves a Msg out is a compile error; a misspelled cell name is a compile error; each cell's `m` is narrowed to its own Msg; a check that returns anything but a cell or `undefined` is a compile error | type | type | type `before`'s `table` as `Record<string, ...>`: the missing Msg compiles, the `@ts-expect-error` is unused, G2 red | next/packages/libfabrika/src/runtime/TeaAsks.types.test.ts |
+| G3 (slice 6, held): Merger and Queue, rewritten with `before` and one handler per Msg, keep every law they have: a stale answer still counts as `late` and changes nothing else, a refused Msg still changes nothing | test | @demlik/tea/pbt.arbMsgSequence: each machine, each file's own runs | a `dropStale` that never drops: the stale-answer laws red | next/programs/pipeline/src/Merger.test.ts |
 | T1 (slice 7): `Machine.types<{ ctx: X; sub: Y }>()` gives a machine the same ctx and Sub types as `{ ctx: {} as X, sub: {} as Y }`; a `sub` that is not a Sub is a compile error | type | type | drop the slice's hunk: `Machine.types` does not exist, T1 red | next/packages/libfabrika/src/runtime/TeaAsks.types.test.ts |
 | H1 (slice 8): `Cmd.cells(def, onOk, onErr)` gives exactly the two cells `def.okType` and `def.errType`, each `m` typed as that def's `_ok` or `_err` Msg; spread into a table, a missing Msg elsewhere in the table still fails to compile | type | type | a `Cmd.cells` typed as `Record<string, ...>`: the other cells lose their check, H1 red | next/packages/libfabrika/src/runtime/TeaAsks.types.test.ts |
 | H2 (slice 8): the scheduled job, rewritten with `Cmd.cells`, keeps every law it has: each tick dispatches its work once, and each answer settles it | test | @demlik/tea/pbt.arbMsgSequence: the scheduled job's machine, its file's own runs | swap `onOk` and `onErr` in `Cmd.cells`: the settle laws red | next/packages/libfabrika/src/schedules/ScheduledJob.test.ts |
@@ -661,11 +754,14 @@ const stepLink = (s: WindowModel, msg: LinkMsg): Step => {
 | I2 (slice 9): `Machine.is` accepts every machine `Machine.make` and `defineMachine` return, in both `init` forms, and refuses a generated plain object with `update` and `init` fields that tea did not make | test | fc.anything: plain objects, 200 runs | an `is` that checks field names only: a hand-made object passes, I2 red | next/packages/libfabrika/src/runtime/TeaAsks.test.ts |
 | I3 (slice 9): `Program.make` takes a machine with an object `init` and refuses anything `Machine.is` refuses, with its `expected: "a tea machine"` refusal | test | Effect Arbitrary: CounterMachines | keep `isSteps`: the object-`init` machine is refused, I3 red | next/packages/libfabrika/src/runtime/Program.test.ts |
 | S1 (slice 10): tea's `syncTest` fails where our stopgap failed and passes where it passed: for a machine that loses a field on save, it fails and names the seed, the cut and the check; for each machine that calls it today, it passes | test | @demlik/tea/pbt.arbMsgSequence: a machine whose encode drops a field, and each caller's machine, each file's own runs | a `syncTest` that compares only the last model: the lost field at a middle cut passes, S1 red | next/packages/libfabrika/src/runtime/TeaAsks.test.ts |
-| W1 (slice 11): a parent that wraps a child's Cmds with `Cmd.within` gets each answer back wrapped, outermost name first, at every depth up to 3, on the Effect engine and through our runner; the wrapped parent folds like the same parent written with today's mark-and-route cells | test | @demlik/tea/pbt.arbMsgSequence: the two-search-box parent from issue 953, nested to depth 3, 100 runs | (a) a settle step that ignores `within`: the answer comes back flat, W1 red; (b) a wrap in the engine only, not in `def.ok`: our runner's answers come back flat, W1 red | next/packages/libfabrika/src/runtime/TeaAsks.test.ts |
-| W2 (slice 11): a wrapped Cmd survives save and replay: a checkpoint that holds owed wrapped Cmds restarts and their answers still arrive wrapped; a replayed trace of a wrapped run reaches the same states | test | @demlik/tea/pbt.arbMsgSequence: the same parent, a cut at every Msg, 50 runs | a checkpoint that drops a Cmd's unknown fields when it saves it: `within` is lost, W2 red | next/packages/libfabrika/src/runtime/RunnerWithin.integration.test.ts |
-| W3 (slice 11): the window and the hands client keep every handshake and link law with the forwarding cells and the 11 forwarding rows each gone, and each machine has exactly one `link` row | test | @demlik/tea/pbt.arbMsgSequence: each machine, each file's own runs | route one wrapped answer to the wrong child: the handshake laws red | next/packages/libfabrika/src/client/WindowMachine.laws.test.ts |
+| P1 (slice 11): a cell may answer `Step.stay`, `Step.to(model)`, `Step.to(model).pipe(Step.run(cmd), ...)`, `Step.run(cmds)` with a list, or the tuple; a Cmd not in the machine's `cmds` is a compile error at `Step.run`; a wrong model shape is a compile error at `Step.to`; through `Step.typed<Model, Cmd>()`, a misspelled field in a helper's spread is a compile error; a missing Msg handler still is | type | type | (a) drop the slice's `.d.ts` hunks: `Step` does not exist; (b) a `Step.typed` that returns the plain `Step`: the helper's typo compiles. Each turns P1 red | next/packages/libfabrika/src/runtime/TeaAsks.types.test.ts |
+| P2 (slice 11): for generated Msg sequences, a machine whose cells answer `Step` folds and runs exactly like the same machine written with tuples: the same models, and the same Cmds in pipe order, through tea's `run` and through `applyCell` | test | @demlik/tea/pbt.arbMsgSequence: a small machine with two Cmds, in both forms, 100 runs | (a) a `make` that turns `Step.run(a)` then `Step.run(b)` into `[b, a]`: the Cmds come out reversed, P2 red; (b) a `make` that leaves a `Step` unturned: `applyCell` hands back a `Step`, P2 red | next/packages/libfabrika/src/runtime/TeaAsks.test.ts |
+| P3 (slice 11): `Step.stay` answers the very model the cell was given, for any generated model, and never another | test | @demlik/tea/pbt.arbMsgSequence: the same machine, 100 runs | a `stay` that answers the machine's first model: a later stay resets the state, P3 red | next/packages/libfabrika/src/runtime/TeaAsks.test.ts |
+| W1 (slice 12): a parent that wraps a child's Cmds with `Cmd.within` gets each answer back wrapped, outermost name first, at every depth up to 3, on the Effect engine and through our runner; the wrapped parent folds like the same parent written with today's mark-and-route cells | test | @demlik/tea/pbt.arbMsgSequence: the two-search-box parent from issue 953, nested to depth 3, 100 runs | (a) a settle step that ignores `within`: the answer comes back flat, W1 red; (b) a wrap in the engine only, not in `def.ok`: our runner's answers come back flat, W1 red | next/packages/libfabrika/src/runtime/TeaAsks.test.ts |
+| W2 (slice 12): a wrapped Cmd survives save and replay: a checkpoint that holds owed wrapped Cmds restarts and their answers still arrive wrapped; a replayed trace of a wrapped run reaches the same states | test | @demlik/tea/pbt.arbMsgSequence: the same parent, a cut at every Msg, 50 runs | a checkpoint that drops a Cmd's unknown fields when it saves it: `within` is lost, W2 red | next/packages/libfabrika/src/runtime/RunnerWithin.integration.test.ts |
+| W3 (slice 12): the window and the hands client keep every handshake and link law with the forwarding cells and the 11 forwarding rows each gone, and each machine has exactly one `link` row | test | @demlik/tea/pbt.arbMsgSequence: each machine, each file's own runs | route one wrapped answer to the wrong child: the handshake laws red | next/packages/libfabrika/src/client/WindowMachine.laws.test.ts |
 
-**Lint, type or test?** K1, K7, A1, B2, G2, T1 and H1 are types: only the compiler sees a missing handler, a
+**Lint, type or test?** K1, K7, A1, B2, G2, T1, H1 and P1 are types: only the compiler sees a missing handler, a
 wrong key or an inferred type. K8 is lint. The rest are tests, since they are about what runs: tea's
 lookup, a fold, a wrap. No lint rule can tell a semantic event's `type` from the
 rest, so the review checks the readers table line by line.
@@ -674,7 +770,7 @@ rest, so the review checks the readers table line by line.
 defined in the test. `CounterMachines` draws the counter written with a function `init` and with an
 object `init`, defined in the test. Both are restated as [0135](../../../.decisions/0135-a-laws-file-pins-its-shapes-to-the-schema.md)
 allows. `TeaAsks.test.ts` and `TeaAsks.types.test.ts` hold the laws of
-slices 3 to 11, one `describe` per issue.
+slices 3 to 12, one `describe` per issue.
 
 **No law for the wipe.** The wipe is a landing step on real homes, not code, so no law tests it; the
 owner ruled out conversion code, and every law that tested it went with it. The re-recorded fixture
@@ -685,7 +781,7 @@ an integration test, since it needs the runner on a real SQLite file; under
 [0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md) a pull request leaves
 it to the 3-hour schedule, and it is not run on this laptop. Slice 2 also edits about 43
 `*.integration.test.ts` files and the law suites they run (`RunnerTest.ts`, `ChildrenTest.ts` and the
-rest). The lead runs `scheduled.yaml` once on the branches of slices 2 and 11 (`workflow_dispatch`)
+rest). The lead runs `scheduled.yaml` once on the branches of slices 2 and 12 (`workflow_dispatch`)
 before each merge (see "Calls taken").
 
 ## Files
@@ -712,6 +808,9 @@ before each merge (see "Calls taken").
 | docs/tutorials/agents/package.json | build | 1 | `catalog:old` |
 | docs/tutorials/two-hosts/package.json | build | 1 | `catalog:old` |
 | .decisions/0256-a-program-is-one-program-make.md | build | docs | lines 52-53: tea 0.26.0 shipped 897, no patch is needed |
+| tsconfig.base.json | tests | 6 | one checker override for `.agents/**` with `allowedDuplicatedPackages: ["@demlik/tea"]` and its comment, naming ticket 1065; an exam path, so the tests step writes it |
+| oxlint-plugins/duplicate-packages.test.ts | tests | tests | E3, new |
+| .agents/tsconfig.json | build | 0 | no change: the setting lives in the base file's override (see "Slice 1"); it changes only if the fallback is taken |
 | docs/direction/pin-exact-versions.md | build | docs | one line: a named catalog's pointer is exact as well |
 
 ### Slice 2: the `_tag` patch, and all of our side
@@ -769,35 +868,36 @@ before each merge (see "Calls taken").
 a Msg, Cmd or Sub (`rg` over `next` and `.agents` finds 234 files with a Msg spot, product and tests).
 The build step owns product files only.
 
-### Slices 3 to 11: one tea ask each
+### Slices 3 to 12: one tea ask each
 
 | File | Owner | Product lines expected | Change |
 |---|---|---|---|
-| next/packages/libfabrika/src/runtime/TeaAsks.types.test.ts | tests | tests | new in slice 3: A1; then B2 (slice 4), G2 (slice 6), T1 (slice 7), H1 (slice 8) |
-| next/packages/libfabrika/src/runtime/TeaAsks.test.ts | tests | tests | new in slice 5: C1; then G1 (slice 6), I1 and I2 (slice 9), S1 (slice 10), W1 (slice 11) |
+| next/packages/libfabrika/src/runtime/TeaAsks.types.test.ts | tests | tests | new in slice 3: A1; then B2 (slice 4), G2 (slice 6, held), T1 (slice 7), H1 (slice 8), P1 (slice 11) |
+| next/packages/libfabrika/src/runtime/TeaAsks.test.ts | tests | tests | new in slice 5: C1; then G1 (slice 6, held), I1 and I2 (slice 9), S1 (slice 10), P2 and P3 (slice 11), W1 (slice 12) |
 | next/packages/libfabrika/src/schedules/ScheduledJob.test.ts | tests | tests | H2 (slice 8), if the file holds the scheduled job's laws; otherwise the laws file that does |
 | next/packages/libfabrika/src/runtime/Program.test.ts | tests | tests | I3 (slice 9) |
-| next/packages/libfabrika/src/runtime/RunnerWithin.integration.test.ts | tests | tests | new in slice 11: W2 |
+| next/packages/libfabrika/src/runtime/RunnerWithin.integration.test.ts | tests | tests | new in slice 12: W2 |
 | next/programs/pipeline/src/Merger.test.ts | tests | tests | C2 (slice 5) and G3 (slice 6), if the file holds Merger's laws; otherwise the laws file that does |
-| next/packages/libfabrika/src/client/WindowMachine.laws.test.ts | tests | tests | W3 (slice 11) |
+| next/packages/libfabrika/src/client/WindowMachine.laws.test.ts | tests | tests | W3 (slice 12) |
 | next/**/*.test.ts | tests | tests | each slice: the tests whose code it changes (hand types, helper calls, forwarding Msgs, the window's and hands' link Msgs now wrapped in `link`, test machines' `init` and `cmds`, the 25 `syncTest` calls in 12 files) |
 | patches/@demlik__tea@0.27.0.patch | tests | 40 | slice 3: the five signatures (types) |
 | patches/@demlik__tea@0.27.0.patch | tests | 30 | slice 4: `CmdDef`, `AnyCmdDef`, the Effect `Cmd.make` type |
 | patches/@demlik__tea@0.27.0.patch | tests | 60 | slice 5: `settled` in `effect/index.js` `Cmd.make` and its type |
-| patches/@demlik__tea@0.27.0.patch | tests | 30 | slice 6: `before` beside `Reducer`, its body in the core chunk, its root export |
+| patches/@demlik__tea@0.27.0.patch | tests | 30 | slice 6 (held): `before` beside `Reducer`, its body in the core chunk, its root export |
 | patches/@demlik__tea@0.27.0.patch | tests | 10 | slice 7: `Machine.types` and its type |
 | patches/@demlik__tea@0.27.0.patch | tests | 25 | slice 8: `Cmd.cells` and its type |
 | patches/@demlik__tea@0.27.0.patch | tests | 70 | slice 9: the two `init` forms and optional `cmds` in `make` and `defineMachine`, the brand, `AnyMachine`, `Machine.is` |
 | patches/@demlik__tea@0.27.0.patch | tests | 110 | slice 10: `syncTest` in `pbt`, core and Effect forms |
-| patches/@demlik__tea@0.27.0.patch | tests | 150 | slice 11: `Cmd.within`, `CmdInput`, `def.ok` and `def.err`, `mint`, both engines' settle, pbt and testing helpers |
+| patches/@demlik__tea@0.27.0.patch | tests | 90 | slice 11: `Step`, `Step.typed`, `Step.run` taking one Cmd or a list, and `Machine.make`'s turn of a `Step` into the tuple, on the Effect entry |
+| patches/@demlik__tea@0.27.0.patch | tests | 150 | slice 12: `Cmd.within`, `CmdInput`, `def.ok` and `def.err`, `mint`, both engines' settle, pbt and testing helpers |
 | pnpm-workspace.yaml | tests | 1 | each slice: its issue's line in the row's comment |
 | pnpm-lock.yaml | tests | generated | each slice: the patch's hash |
 | next/packages/libfabrika/src/cloudflare/runtime.ts | build | 5 | slice 3: its hand-typed `applyCell` goes |
 | next/packages/libfabrika/src/**/*.ts | build | 30 | slice 3: the other hand-typed calls and the `ReturnType<...>` helpers |
 | next/packages/libfabrika/src/runtime/Program.ts | build | 15 | slice 4: the dig-out at `:740-741`, `accepts` and `isDeclared` go |
 | next/packages/libfabrika/src/runtime/Runner.ts | build | 10 | slice 4: the take-apart at `:279`, `:302` goes |
-| next/programs/pipeline/src/Merger.ts | build | 230 | slice 5: `answers` goes; slice 6: the 13 rows go, `reduce` splits into one handler per Msg under `before(dropStale, ...)` |
-| next/programs/pipeline/src/Queue.ts | build | 100 | slice 5: `answers` goes; slice 6: the 8 rows go, `reduce` splits under `before(refused, ...)` |
+| next/programs/pipeline/src/Merger.ts | build | 230 | slice 5: `answers` goes; slice 6 (held): the 13 rows go, `reduce` splits into one handler per Msg under `before(dropStale, ...)` |
+| next/programs/pipeline/src/Queue.ts | build | 100 | slice 5: `answers` goes; slice 6 (held): the 8 rows go, `reduce` splits under `before(refused, ...)` |
 | next/packages/libfabrika/src/desktop/BrainLife.ts | build | 25 | slice 5: `responses` and the hand `malformed_result` go |
 | next/packages/libfabrika/src/desktop/BrainServiceManaged.ts | build | 4 | slice 5: mints through `def.ok` and `def.err`, no cast |
 | next/packages/libfabrika/src/runtime/ChaosMachine.ts | build | 12 | slice 5: its 6 hand structs go |
@@ -806,8 +906,8 @@ The build step owns product files only.
 | next/packages/libfabrika/src/runtime/Program.ts | build | 20 | slice 9: `Steps`, `isSteps` and `isObjectOrNull` go; `Schema.declare(Machine.is, ...)` |
 | next/**/*.ts | build | 140 | slice 9: the one-line `init`s and the `cmds: [],` lines in product machines (tests move theirs in the tests step) |
 | next/packages/libfabrika/src/Testing.ts | build | 80 | slice 10: `syncTest` goes (deleted lines) |
-| next/packages/libfabrika/src/client/HandsMachine.ts | build | 45 | slice 11: the forwarding cells, the Cmd filter and the 11 forwarding rows go; one `link` Msg and row |
-| next/packages/libfabrika/src/client/WindowMachine.ts | build | 70 | slice 11: the forwarding cells, the 4 Cmd maps, `linkUpdate` and its cast go; one `link` Msg and row |
+| next/packages/libfabrika/src/client/HandsMachine.ts | build | 45 | slice 12: the forwarding cells, the Cmd filter and the 11 forwarding rows go; one `link` Msg and row |
+| next/packages/libfabrika/src/client/WindowMachine.ts | build | 70 | slice 12: the forwarding cells, the 4 Cmd maps, `linkUpdate` and its cast go; one `link` Msg and row |
 | docs/plan/README.md | build | docs | each slice: its row |
 
 ## Calls taken
@@ -827,7 +927,7 @@ The build step owns product files only.
   `{ type: "<cmd>_ok" }` in tea's shape today. tea's `CmdDef` has `ok(cmd, value, at)` and
   `err(cmd, error, at)` (`core-CDR1i78K.d.ts:172-173`), and tea's decision 0021 says the engine makes
   these Msgs. The runner builds its answer with them and adds its `reason` field to the error. Then
-  our answers move with tea's, and slice 11's wrap reaches them for free. 70% sure the runner holds the
+  our answers move with tea's, and slice 12's wrap reaches them for free. 70% sure the runner holds the
   def there. If it holds only the Cmd value, it finds the def by the Cmd's `_tag` in the program's
   `cmds`, which `Program.ts:685` already reads.
 - **Old homes are wiped by a landing step, by name, never by folder.** The owner's ruling sets the
@@ -844,7 +944,7 @@ The build step owns product files only.
 - **No `_tag` by hand, tests included.** 0562 holds the principle for tests before its lint turns on
   there. So slice 2's tests step writes about 870 values with makers rather than the cheaper
   `{ _tag: "inc" }`, and K8 checks the diff.
-- **The lead runs the scheduled workflow once on slices 2 and 11.** 80% sure. Both change what the
+- **The lead runs the scheduled workflow once on slices 2 and 12.** 80% sure. Both change what the
   integration tests exercise, and 0536 leaves those to the schedule. A break found after the merge
   would leave main red for up to 3 hours. One extra CI run each is the cost.
 - **Is this a setting?** No new choice here is one
@@ -865,9 +965,9 @@ The build step owns product files only.
   and after slice 1.
 - **Slice 2 goes before the Effect-check sweep in busy folders**
   ([0565](../../../.decisions/0565-effects-own-checks-block.md)): a sweep pull request in `runtime/`,
-  `processes/` or `client/` starts after slice 2 merges. Slices 3 to 11 are smaller and may run beside
+  `processes/` or `client/` starts after slice 2 merges. Slices 3 to 12 are smaller and may run beside
   the sweep; each rebases onto what merged.
-- **Slices 3 to 11** each start from main after the slice before merges, since each adds hunks to the
+- **Slices 3 to 12** each start from main after the slice before merges, since each adds hunks to the
   same patch file.
 
 Clashes, from `gh pr view <n> --json files` against the 234 files that hold a Msg spot:
@@ -885,21 +985,21 @@ Clashes, from `gh pr view <n> --json files` against the 234 files that hold a Ms
 | [1371](https://github.com/kamp-us/tea-fabrika/pull/1371) accumulating spread | none | 3 files |
 | Plan pull requests whose builds will touch `next/`: [1365](https://github.com/kamp-us/tea-fabrika/pull/1365), [1369](https://github.com/kamp-us/tea-fabrika/pull/1369), [1373](https://github.com/kamp-us/tea-fabrika/pull/1373), [1344](https://github.com/kamp-us/tea-fabrika/pull/1344) | none today | their builds start after slice 2 or rebase onto it |
 
-Slices 3 to 11 touch few files each (the files tables above): `Program.ts`, `Runner.ts`,
+Slices 3 to 12 touch few files each (the files tables above): `Program.ts`, `Runner.ts`,
 `WindowMachine.ts`, `HandsMachine.ts`, `Merger.ts`, `Queue.ts`, `BrainLife.ts`. Any open branch on
 those rebases. A branch that adds a `type`-keyed Msg after slice 2 merges fails `pnpm typecheck` on
 rebase (K7), so a stale branch breaks loudly, never quietly.
 
 ## Each issue carries its patch
 
-A named step of slices 2 to 11, after the build is green and before the merge
+A named step of slices 2 to 12, after the build is green and before the merge
 ([0060](../../../.decisions/0060-upstream-issue-carries-the-patch.md)): the slice's tests step saves
 only that slice's hunks under `runs/`. The lead reads every line and appends them to that issue's
 body, inside `<details><summary>The patch we apply locally</summary>`, a fenced `diff` block, then
 `</details>`. Slice 2 posts on 949, slice 3 on 950, slice 4 on 951, slice 5 on 952, slice 6 on 954,
 slice 7 on 960, slice 8 on 959, slice 9 on 956 and 958 (each issue gets its own hunks), slice 10 on
-955, slice 11 on 953. If a fix round changes a slice's hunks, the lead edits that section too. A later
-slice that edits lines an earlier slice wrote (slice 11 changes `def.ok`, which slice 2 moved to
+955, slice 11 on 962, slice 12 on 953. Held slice 6 posts on 954 only if the owner releases it. If a fix round changes a slice's hunks, the lead edits that section too. A later
+slice that edits lines an earlier slice wrote (slice 12 changes `def.ok`, which slice 2 moved to
 `_tag`) posts its own hunk against the file as it stands after the earlier slices, and says so.
 
 ## Validation
@@ -909,14 +1009,14 @@ slice that edits lines an earlier slice wrote (slice 11 changes `def.ok`, which 
 - Slice 1 build step: `pnpm lint`; the narrow paths `packages/pipeline/src/machine-make.test.ts`,
   `next/packages/libfabrika/src/runtime/Program.test.ts`, and one test file of each of today's
   programs.
-- Slices 2 to 11, tests step: the slice's laws red on main plus its hunks, before the build; each
+- Slices 2 to 12, tests step: the slice's laws red on main plus its hunks, before the build; each
   planted fault seen red once.
-- Slices 2 to 11, build step: the slice's laws and K9 green, the narrow paths of each folder it
+- Slices 2 to 12, build step: the slice's laws and K9 green, the narrow paths of each folder it
   changed, `pnpm lint`.
 - Every slice changes the lockfile, so `--changed origin/main` is the full suite and is not run
   locally: the narrow paths stand in for it, and CI runs the rest. The lead runs one `pnpm typecheck`
   and reads CI.
-- The lockfile is written by `pnpm install` (slice 1) and `pnpm patch-commit` (slices 2 to 11) inside
+- The lockfile is written by `pnpm install` (slice 1) and `pnpm patch-commit` (slices 2 to 12) inside
   the step's box, the one install each slice needs. Nothing is installed on the laptop outside a box,
   and no `.integration.` or `.visual.` file is run on it.
 
@@ -934,15 +1034,16 @@ slice that edits lines an earlier slice wrote (slice 11 changes `def.ok`, which 
 
 ## Size
 
-1. Slice 1, tea 0.27.0 and today's catalog: 30 lines (11 package.json files, the catalog block, 4
-   lines in `exact-versions.ts`, two docs lines), plus E1, the deleted patch and the lockfile.
+1. Slice 1, tea 0.27.0 and today's catalog: 36 lines (11 package.json files, the catalog block, 4
+   lines in `exact-versions.ts`, the checker's one override, two docs lines), plus E1, E3, the deleted patch
+   and the lockfile.
 2. Slice 2, the `_tag` switch, which holds the first patch: 1,250 lines (the patch, about 700 diff
    lines; our product code, about 550 lines in about 80 files), plus about 950 spots in about 160
    test files, four new laws, the re-recorded fixture home, the landing wipe and about 10 docs lines.
 3. Slice 3, demlik 950, typed `applyCell`: 75 lines (40 patch, 35 ours, mostly deleted).
 4. Slice 4, demlik 951, a Cmd's Effect schemas typed: 55 lines (30 patch, 25 ours, mostly deleted).
 5. Slice 5, demlik 952, `settled`: 175 lines (60 patch, about 115 of ours deleted or rewritten).
-6. Slice 6, demlik 954, `before`: 360 lines (30 patch, about 330 of ours: Merger's and Queue's
+6. Slice 6, demlik 954, `before`, on hold: 360 lines (30 patch, about 330 of ours: Merger's and Queue's
    `reduce` rewritten as one handler per Msg, and 21 rows gone).
 7. Slice 7, demlik 960, `Machine.types`: 21 lines (10 patch, 11 of ours).
 8. Slice 8, demlik 959, `Cmd.cells`: 33 lines (25 patch, 8 of ours, mostly deleted).
@@ -950,12 +1051,14 @@ slice that edits lines an earlier slice wrote (slice 11 changes `def.ok`, which 
    ours, mostly deleted one-liners), plus the test machines' own.
 10. Slice 10, demlik 955, `syncTest`: 190 lines (110 patch, about 80 of ours deleted), plus 25 calls
     moved in 12 test files.
-11. Slice 11, demlik 953, `Cmd.within`: 265 lines (150 patch, about 115 of ours: the forwarding cells
+11. Slice 11, demlik 962, `Step`: 90 lines (the patch), plus three laws. Nothing of ours changes; the
+    sweep comes after.
+12. Slice 12, demlik 953, `Cmd.within`: 265 lines (150 patch, about 115 of ours: the forwarding cells
    and rows gone, one `link` Msg and row in each of the window and hands machines).
 
-About 30 agent hours across the eleven slices, 60% sure. The doubts: slice 2's tests step, about 870
+About 32 agent hours across the twelve slices, 60% sure. The doubts: slice 2's tests step, about 870
 hand values rewritten with makers in about 130 test files, may take two sessions, and its build two
-more; and slice 11 changes tea's settle step in both engines, the riskiest hand edit in hashed chunks.
+more; and slice 12 changes tea's settle step in both engines, the riskiest hand edit in hashed chunks.
 K2 and W1 are what catch a missed spot.
 
 Budget basis: `field/runs/` list prices for the largest steps so far: $28 for the p18 slice 1 build
@@ -963,9 +1066,10 @@ Budget basis: `field/runs/` list prices for the largest steps so far: $28 for th
 Slice 1 is 3 steps at about $10. Slice 2 is two tests steps, two build steps, one review and one fix
 round, about $130. Slices 3 and 4 are 3 steps each at about $12. Slice 5 is 3 steps at about $18, and
 slice 6, with its two `reduce` rewrites, 3 steps at about $25. Slices 7 and 8 are 3 steps each at
-about $8. Slice 9 is 3 steps at about $20, and slice 10 3 steps at about $18. Slice 11 is 4 steps (tests, build, review, one fix round) at about $45.
+about $8. Slice 9 is 3 steps at about $20, slice 10 3 steps at about $18, and slice 11 3 steps at about $15.
+Held slice 6 stays in the budget, in case the owner releases it. Slice 12 is 4 steps (tests, build, review, one fix round) at about $45.
 
-Estimate: 38 steps, $329
+Estimate: 41 steps, $344
 
 ## Open questions
 
@@ -974,6 +1078,12 @@ None.
 ## What comes after
 
 Each is its own pull request or waits on its own ruling. None is in this plan's slices.
+
+- **The `Step` sweep:** about 500 to 650 return sites in 35 machine files move from the tuple to
+  `Step` after slice 11 lands, as their own slices (the lead's count), folder by folder like the
+  other sweeps.
+- **Slice 6's ruling:** whether `before` lands, or our stepper runs tea's identity check before
+  `applyCell`, as the maintainer showed on 954 and as demlik issue 961 asks tea to export.
 
 - **Machines that compare a state's `_tag` by hand could move to `Transitions`,** which slice 2 keys
   on `_tag`. The research counted 22 of 35 machine files that do. A design call per machine, later.
@@ -1000,6 +1110,6 @@ Each is its own pull request or waits on its own ruling. None is in this plan's 
   missed; the landing step's before-and-after listing is how the lead would see it.
 - **Whether a `next/` stage is deployed on Cloudflare:** I did not check any account. The lead does,
   at the landing.
-- **Slices 3 to 11's tea shapes** are my sketches of what each issue asks; each issue leaves its shape
+- **Slices 3 to 12's tea shapes** are my sketches of what each issue asks; each issue leaves its shape
   to the maintainer. Where tea's release differs, the bump rewrites our call sites.
 - **Whether the runner holds each Cmd's def** where it mints answers: 70%, as "Calls taken" says.
