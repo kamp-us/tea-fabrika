@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-ban-s7-tests1",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T19:14:00-08:00",
+  "ended": "2026-11-15T19:35:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 7 of the Reflect ban (0554, ticket 1056) in next/. The counter's patch walker in runner.laws.integration.test.ts no longer calls Reflect.get or Reflect.set (kind 8): it narrows with Predicate.hasProperty at each step, skips a non-object node with Predicate.isObjectOrArray, and writes with Object.assign. Reflect.deleteProperty stays, as the rule does not ban it. next/programs/counter/** joins the next/ error block in .oxlintrc.json. L5 (the folder has no fire) holds: pnpm lint and pnpm typecheck pass. The file is .integration. so it was not run here; CI's full run proves the law. Pull request 1301 was still open and shares this file, so whichever lands second rebases.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": null,
+  "plants": [
+    {
+      "law": "L5",
+      "plant": "Reflect.get(Object(target), key) put back at the walk's get in runner.laws.integration.test.ts: oxlint reports error eslint(no-restricted-properties) 'Reflect.get' is restricted (0554) at line 66; undone",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
