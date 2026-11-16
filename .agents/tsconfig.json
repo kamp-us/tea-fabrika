@@ -4,6 +4,20 @@
   // workspace package: its imports resolve from the root's own dependencies. The other skill
   // scripts (the plan and mutation scripts) still hold type errors and join with ticket 486.
   "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A class made by Effect Schema is checked with `Schema.is`, never `instanceof`. On for the folders at zero, their tests too (globs read from this folder).
+        "overrides": [
+          {
+            "include": ["**/*.ts"],
+            "options": { "diagnosticSeverity": { "instanceOfSchema": "error" } }
+          }
+        ]
+      }
+    ]
+  },
   "include": [
     "raw.d.ts",
     "skills/lead/scripts/agents.ts",

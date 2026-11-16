@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e10-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T09:00:00-08:00",
+  "ended": "2026-11-16T10:00:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E10 of the Effect-check sweep (instanceOfSchema), in next/ and our tooling. Recount on origin/main: 53 hits over the 13 tsconfigs, 17 in this slice's folders (libfabrika src/*.ts, access, node, settings; the app's src/*.ts; .agents), none in a file of pull request 1366. Wrote the lock as an overrides entry in three tsconfigs: libfabrika's, the app's and .agents/. Typecheck was red with 17 errors (11, 5, 1). Fixed the 15 hits in exam paths by hand with the editor, each `x instanceof C` made `Schema.is(C)(x)`, one hit at a time (no tool edited a file). Left 2 product hits for the build: next/packages/libfabrika/src/Id.ts:200 and .agents/skills/lead/scripts/flow/landing.ts:103. The LOCKED row waits for E0 (pull request 1417), as the rules say.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 60,
+  "note": "pnpm lint passed 16 of 17 parts; lint:dead was killed with SIGABRT in this box (not caused by this change, no export was added or removed).",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "one `x instanceof NotGranted` line added to src/access/SessionSenderTest.ts: libfabrika's instanceOfSchema errors go from 1 to 2",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "src/access/**/*.ts dropped from libfabrika's override with the planted line still in: the count goes from 2 back to 1, so the glob is what holds that folder",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

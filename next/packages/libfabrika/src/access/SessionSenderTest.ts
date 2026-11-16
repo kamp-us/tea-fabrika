@@ -10,7 +10,7 @@
 // Two oracles: the walk's own model of what it recorded, delivered, ended and removed, and `signer`
 // itself, asked under a kind and an id no other call uses, so its answer is the one it would sign.
 import { describe, expect, it } from "@effect/vitest";
-import { Brand, Cause, Effect, Exit, Option, Predicate, type Scope } from "effect";
+import { Brand, Cause, Effect, Exit, Option, Predicate, Schema, type Scope } from "effect";
 import * as fc from "fast-check";
 import type * as Id from "../Id.ts";
 import type { Sql } from "../Sql.ts";
@@ -108,9 +108,9 @@ const shown = (exit: Exit.Exit<unknown, unknown>): Shown => {
   }
 
   const error = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
-  return error instanceof NotGranted
+  return Schema.is(NotGranted)(error)
     ? { refused: "NotGranted" }
-    : error instanceof SigningRefused
+    : Schema.is(SigningRefused)(error)
       ? { refused: "SigningRefused", reason: error.reason }
       : { other: Predicate.hasProperty(error, "_tag") ? String(error._tag) : String(exit.cause) };
 };

@@ -3,7 +3,19 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"],
     // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A class made by Effect Schema is checked with `Schema.is`, never `instanceof`. On for the folders at zero, their tests too (globs read from this folder).
+        "overrides": [
+          {
+            "include": ["src/*.ts", "src/access/**/*.ts", "src/node/**/*.ts", "src/settings/**/*.ts"],
+            "options": { "diagnosticSeverity": { "instanceOfSchema": "error" } }
+          }
+        ]
+      }
+    ]
   },
   "include": ["src"]
 }
