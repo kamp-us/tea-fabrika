@@ -82,13 +82,12 @@ export const Incoming = Schema.Struct({
 export type Incoming = typeof Incoming.Type;
 
 /**
- * A Cmd handler: it does the outside work and answers with tea's Outcome. It is given the Cmd as
- * the runner dispatched it, checked against its input schema and as JSON.
+ * A Cmd handler: it does the outside work and answers with tea's Outcome.
  *
  * @stability unstable
  * @category models
  */
-export type Handler<R> = Code<[cmd: Schema.Json], Effect.Effect<Outcome<unknown, unknown>, unknown, R>>;
+export type Handler<R> = Code<[cmd: unknown], Effect.Effect<Outcome<unknown, unknown>, unknown, R>>;
 
 /**
  * An in-process program: its pure stepper, runner execution, checked declaration and allowed Cmd
@@ -101,9 +100,7 @@ export type Loaded = {
   readonly stepper: Stepper;
   readonly execution: Execution;
   readonly declaration: Declaration;
-  readonly handler: (
-    cmd: string,
-  ) => Option.Option<(cmd: Schema.Json) => Effect.Effect<Outcome<unknown, unknown>, unknown>>;
+  readonly handler: (cmd: string) => Option.Option<(cmd: unknown) => Effect.Effect<Outcome<unknown, unknown>, unknown>>;
 };
 
 /** The one Cmd that only the chaos program may run. */
@@ -176,7 +173,7 @@ export class ProgramLoader extends Context.Service<
                   return Option.none();
                 }
 
-                return Option.some((value: Schema.Json) => run(value).pipe(Effect.provideContext(context)));
+                return Option.some((value: unknown) => run(value).pipe(Effect.provideContext(context)));
               },
             };
           }),
