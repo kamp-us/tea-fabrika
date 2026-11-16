@@ -123,9 +123,7 @@ describe("P34 recovery storage", () => {
     const disk = storage();
     const before = disk.sql.exec("SELECT name FROM sqlite_master");
     await Effect.runPromise(
-      Effect.gen(function* () {
-        yield* S;
-      }).pipe(Effect.provide(S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3, schema: Supervision }))),
+      S.pipe(Effect.provide(S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3, schema: Supervision }))),
     );
     expect(disk.sql.exec("SELECT name FROM sqlite_master")).toEqual(before);
   });

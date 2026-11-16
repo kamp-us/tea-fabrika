@@ -6,7 +6,8 @@
 // `make`, `Permission`, `provide`, `recheck` and `Denied`, and never `mint`, which stays in
 // `internal/proof.ts`. A right's class is the context tag of its proof (phoenix's capability, 0107).
 import { expectTypeOf, it } from "@effect/vitest";
-import { Effect, type Result } from "effect";
+import type { Effect } from "effect";
+import { type Result } from "effect";
 import { Model, StartProgram } from "./Model.ts";
 import * as Rebac from "./Rebac.ts";
 import type { Tuples } from "./Relation.ts";
@@ -23,9 +24,7 @@ type OtherProof = Passed<ReturnType<typeof Other.within>>;
 
 /** The values the assertions read. Never called: its body is checked by the compiler only. */
 const shapes = (proof: StartProof, other: OtherProof) => {
-  const needs = Effect.gen(function* () {
-    return yield* StartProgram;
-  });
+  const needs = StartProgram;
   return {
     needs,
     provided: needs.pipe(Rebac.provide(proof)),
