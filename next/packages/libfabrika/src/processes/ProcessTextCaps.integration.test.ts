@@ -2,7 +2,7 @@
 // in the schema, small enough that no brain line can reach the ledger's per-line limit. The cap is
 // the lead's lean, 256 characters, counted as `string.length`, as Schema's max length counts.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Exit, Schema } from "effect";
+import { Arbitrary, Effect, Exit, Option, Schema } from "effect";
 import * as fc from "fast-check";
 import {
   A,
@@ -74,7 +74,7 @@ const downs = (letters: ReadonlyArray<{ readonly m: unknown }>) =>
   letters.flatMap((letter) => {
     const down = Schema.decodeUnknownOption(Down)(letter.m);
 
-    return down._tag === "Some" ? [down.value] : [];
+    return Option.isSome(down) ? [down.value] : [];
   });
 
 /** A request as a client sends it: raw, never passed through a schema's `make`. */

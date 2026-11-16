@@ -14,7 +14,7 @@ import { Senders } from "@kampus/libfabrika/permissions/Senders";
 import type { StartGrant } from "@kampus/libfabrika/processes/Children";
 import * as ChildrenLedger from "@kampus/libfabrika/processes/ChildrenLedger";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
-import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
+import { Owner, Recipient, Start, State } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import * as ProgramMailLedger from "@kampus/libfabrika/processes/ProgramMailLedger";
 import {
@@ -465,7 +465,7 @@ const open = Effect.fnUntraced(function* (
         process: i.state.process,
         program: i.program,
         state: i.state._tag,
-        reason: i.state._tag === "ended" ? i.state.reason : null,
+        reason: State.matchOrElse(i.state, { ended: (s) => s.reason }, () => null),
       })),
       letters: letters.flat(),
       saved,
@@ -494,7 +494,7 @@ const open = Effect.fnUntraced(function* (
     yield* notify(NAME);
     const info = yield* statuses.pipe(Effect.provide(current.context));
 
-    for (const child of info.filter((i) => i.program === "pipeline/merger" && i.state._tag === "live")) {
+    for (const child of info.filter((i) => i.program === "pipeline/merger" && State.isAnyOf(["live"])(i.state))) {
       yield* notify(child.name);
     }
 

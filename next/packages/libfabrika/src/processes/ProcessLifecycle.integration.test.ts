@@ -1,6 +1,6 @@
 // P33 / p79. The manager is rebuilt over the same SQLite file for each reopen check.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import { Ledger } from "../ledger/Ledger.ts";
@@ -103,7 +103,7 @@ describe("P33, saved state and process authority", () => {
         const recovered = recoverActivity(idle);
         expect(recovered._tag).toBe("Success");
 
-        if (recovered._tag === "Success") {
+        if (Result.isSuccess(recovered)) {
           expect(recovered.success).toEqual(idle);
         }
       }),

@@ -41,8 +41,8 @@
 //   and the view, the model and the Cmds stay as they were.
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { type Stepper, stepper } from "@kampus/libfabrika";
-import { Result, Schema } from "effect";
+import { Step, type Stepper, stepper } from "@kampus/libfabrika";
+import { Match, Result, Schema } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;
@@ -186,7 +186,8 @@ type Event = {
   readonly move: string;
   readonly before: View;
   readonly after: View;
-  readonly result: { readonly _tag: string; readonly reason?: string };
+  /** The step's answer, as the stepper's `Step` names it, with a refusal's reason. */
+  readonly result: { readonly _tag: "stepped" } | { readonly _tag: "refused"; readonly reason: string };
   readonly cmds: ReadonlyArray<Cmd>;
   readonly waiting?: Waiting;
   readonly answer?: "started" | "already_started" | "refused";
@@ -215,11 +216,16 @@ const begin = (p: Stepper): World => {
 };
 
 /** One letter or answer through the stepper; a stepped answer moves the world on. */
-const take = (p: Stepper, w: World, msg: unknown, saved: boolean) => {
+const take = (
+  p: Stepper,
+  w: World,
+  msg: unknown,
+  saved: boolean,
+): Pick<Event, "before" | "after" | "result" | "cmds"> => {
   const s = saved ? p.fold(w.model, msg) : p.step(w.model, msg);
   const before = w.view;
 
-  if (s._tag === "stepped") {
+  if (Step.isAnyOf(["stepped"])(s)) {
     w.model = s.model;
     // L11's program half: every view decodes as a client reads it, `child` and all.
     w.view = Schema.decodeUnknownSync(View)(s.view);
@@ -262,7 +268,7 @@ type Kind =
 /** One move of `kind`, picked from what is possible in `w`, or null when nothing of that kind is. */
 const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
   const tiles = live(w.view);
-  const pending = new Set(w.waiting.flatMap((x) => (x._tag === "split" ? [x.from] : [])));
+  const pending = new Set(w.waiting.flatMap((x) => Match.valueTags(x, { split: (x) => [x.from], attach: () => [] })));
   const ids = new Set([...tiles, ...w.waiting.map((x) => x.tile)]);
   w.at++;
 
@@ -270,7 +276,8 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
     case "attach": {
       const free = [1, 2, 3].filter(
         (n) =>
-          !w.view.workspaces.some((s) => s.n === n) && !w.waiting.some((x) => x._tag === "attach" && x.workspace === n),
+          !w.view.workspaces.some((s) => s.n === n) &&
+          !w.waiting.some((x) => Match.valueTags(x, { attach: (x) => x.workspace === n, split: () => false })),
       );
 
       const n = free[pick % Math.max(free.length, 1)];
@@ -360,7 +367,10 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
         };
       }
 
-      const answer = waiting._tag === "attach" && pick % 2 === 0 ? "already_started" : "started";
+      const answer = Match.valueTags(waiting, { attach: () => pick % 2 === 0, split: () => false })
+        ? "already_started"
+        : "started";
+
       const value = started(waiting.cmd, answer, w);
 
       return {
@@ -393,7 +403,8 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
       // start's: a reused id, which would put one tile on two workspaces.
       const free = [1, 2, 3, 4].filter(
         (n) =>
-          !w.view.workspaces.some((s) => s.n === n) && !w.waiting.some((x) => x._tag === "attach" && x.workspace === n),
+          !w.view.workspaces.some((s) => s.n === n) &&
+          !w.waiting.some((x) => Match.valueTags(x, { attach: (x) => x.workspace === n, split: () => false })),
       );
 
       const n = free[pick % Math.max(free.length, 1)];
@@ -592,7 +603,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
               });
             }
 
-            if (e.result._tag === "stepped") {
+            if (Match.valueTags(e.result, { stepped: () => true, refused: () => false })) {
               expect([...e.after.tiles.map((t) => t.id)].sort(), `${e.move}: the tiles are the layouts' tiles`).toEqual(
                 [...live(e.after)].sort(),
               );
@@ -672,7 +683,11 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
           for (const e of walk(p, cmds)) {
             const stops = e.cmds.filter((c) => c.type === "stop_child");
 
-            if (!e.move.startsWith("close") || e.from === undefined || e.result._tag !== "stepped") {
+            if (
+              !e.move.startsWith("close") ||
+              e.from === undefined ||
+              Match.valueTags(e.result, { stepped: () => false, refused: () => true })
+            ) {
               expect(stops, `L8: ${e.move} stops nothing`).toEqual([]);
               continue;
             }

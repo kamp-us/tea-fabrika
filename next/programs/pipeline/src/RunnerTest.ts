@@ -1,6 +1,18 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Effect,
+  Exit,
+  Fiber,
+  Logger,
+  Match,
+  Redacted,
+  Schema,
+  type Scope,
+  type Tracer,
+} from "effect";
 import * as Mail from "./Mail.ts";
 import type { merger } from "./Merger.ts";
 
@@ -170,8 +182,17 @@ export const suite = (driver: Driver) =>
     const step = Effect.fnUntraced(function* (cell: typeof Cell.Type, m: { n: number }, r: Real) {
       const state = yield* r.h.current().model;
 
-      if (state === null || state._tag === "idle") {
-        if (state?._tag === "idle") {
+      // The merger's Model union is not exported, so the suite matches it with Effect's Match (0567, form 2).
+      const working =
+        state === null
+          ? null
+          : Match.value(state).pipe(
+              Match.tag("idle", () => null),
+              Match.orElse((s) => s),
+            );
+
+      if (working === null) {
+        if (state !== null) {
           yield* r.inspect;
           r.h = yield* driver.open(r.token);
         }
@@ -186,7 +207,10 @@ export const suite = (driver: Driver) =>
           "fire",
           "reopen",
           "busy",
-          ...(state._tag === "merging" ? [] : ["abandon"]),
+          ...Match.value(working).pipe(
+            Match.tag("merging", () => []),
+            Match.orElse(() => ["abandon"]),
+          ),
           "fault",
           "green",
           "crash",
@@ -199,9 +223,14 @@ export const suite = (driver: Driver) =>
         } else if (move === "busy") {
           yield* r.h.land(`busy${m.n}`);
         } else if (move === "abandon") {
-          yield* r.h.deliver(Mail.Abandon.make({ type: "abandon", ref: state.job.ref }));
+          yield* r.h.deliver(Mail.Abandon.make({ type: "abandon", ref: working.job.ref }));
         } else if (move === "fault") {
-          if (state._tag === "checking" && cell.pick % 3 !== 0) {
+          const checking = Match.value(working).pipe(
+            Match.tag("checking", () => true),
+            Match.orElse(() => false),
+          );
+
+          if (checking && cell.pick % 3 !== 0) {
             yield* r.h.ci.fail(
               cell.pick % 3 === 1 ? "start" : "at",
               cell.pick % 2 === 0
@@ -210,13 +239,11 @@ export const suite = (driver: Driver) =>
             );
           } else {
             yield* r.h.host.fail(
-              state._tag === "reading"
-                ? cell.pick % 3 === 0
-                  ? "update"
-                  : "change"
-                : state._tag === "updating"
-                  ? "update"
-                  : "merge",
+              Match.value(working).pipe(
+                Match.tag("reading", (): "update" | "change" => (cell.pick % 3 === 0 ? "update" : "change")),
+                Match.tag("updating", (): "update" => "update"),
+                Match.orElse((): "merge" => "merge"),
+              ),
               cell.pick % 2 === 0 ? { kind: "fault", reason: cell.reason } : { kind: "defect" },
             );
           }

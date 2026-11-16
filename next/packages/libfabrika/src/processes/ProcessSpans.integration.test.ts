@@ -1,7 +1,7 @@
 // P33 extends p97/p99 through P37's real SQLite sink and JobRecords.
 // Raw process failure text may be content. It must never become tags or measurements data.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Layer, Redacted, Schema, Stream, Tracer } from "effect";
+import { Arbitrary, Effect, Layer, Match, Redacted, Schema, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as Id from "../Id.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -67,7 +67,10 @@ const capture = () => {
   return {
     tracer,
     spans,
-    ended: (name: string) => spans.filter((span) => span.name === name && span.status._tag === "Ended"),
+    ended: (name: string) =>
+      spans.filter(
+        (span) => span.name === name && Match.valueTags(span.status, { Started: () => false, Ended: () => true }),
+      ),
   };
 };
 

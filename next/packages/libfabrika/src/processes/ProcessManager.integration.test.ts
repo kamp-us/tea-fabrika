@@ -1,7 +1,7 @@
 // Exam amendment, P33 / ticket 252. Replaces P9's per-build start identity only.
 // Mail, writer fields, ledger refusals and lazy layer failures stay covered.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Layer, Stream, Tracer } from "effect";
+import { Cause, Effect, Exit, Layer, Match, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -65,7 +65,9 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
         const processes = yield* ProcessManager;
         yield* processes.start(makeFirst(), from());
         yield* processes.exit(A, reason, from());
-        const exits = spans.filter((s) => s.name === "process.exit" && s.status._tag === "Ended");
+        const exits = spans.filter(
+          (s) => s.name === "process.exit" && Match.valueTags(s.status, { Started: () => false, Ended: () => true }),
+        );
         expect(exits).toHaveLength(1);
         expect(exits[0]?.attributes.get("fab.process")).toBe(A);
       }).pipe(Effect.provide(manager(store)), Effect.withTracer(tracer));
@@ -84,7 +86,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
           const result = yield* Effect.exit(Stream.runCollect(processes.receive(process, 0)));
           expect(result._tag, "fresh receive refuses a life that is not live").toBe("Failure");
 
-          if (result._tag === "Failure") {
+          if (Exit.isFailure(result)) {
             expect(Cause.squash(result.cause)).toMatchObject({
               _tag: "ProcessError",
               reason: "ended",

@@ -101,10 +101,21 @@ const put = <K, V>(map: ReadonlyMap<K, V>, key: K, value: V): ReadonlyMap<K, V> 
 
 /** The canonical recipient key, byte for byte as main writes it. */
 const keyFor = (to: To, ref: string): string =>
-  JSON.stringify([to._tag === "process" ? { _tag: "process", process: to.process } : { ...CLIENT_TO, ...to }, ref]);
+  JSON.stringify([
+    Recipient.match(to, {
+      process: (to) => ({ _tag: "process", process: to.process }),
+      client: (to) => ({ ...CLIENT_TO, ...to }),
+    }),
+    ref,
+  ]);
 
 const sameOwner = (a: Owned | undefined, b: Owned): boolean =>
-  a !== undefined && a._tag === b._tag && (a._tag === "brain" || (b._tag === "process" && a.process === b.process));
+  a !== undefined &&
+  a._tag === b._tag &&
+  Owner.match(a, {
+    brain: () => true,
+    process: (a) => Owner.isAnyOf(["process"])(b) && a.process === b.process,
+  });
 
 /** One step of a walk: the entry offered, and what the transition table says it does. */
 type Step =
@@ -237,7 +248,7 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
         continue;
       }
 
-      if (event._tag === "restarted") {
+      if (ProcessEvent.isAnyOf(["restarted"])(event)) {
         const request = Start.cases.again.make({
           id: life.request.id,
           name: event.name,
@@ -253,7 +264,7 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
         lives = put(
           lives,
           target,
-          event._tag === "exited"
+          ProcessEvent.isAnyOf(["exited"])(event)
             ? {
                 ...life,
                 exited: event.reason,
@@ -443,7 +454,7 @@ const deliveries = (w: Watch) =>
     .flatMap((n) =>
       [w.process, B].flatMap((process) =>
         [BRAIN, CLIENT].flatMap((by) =>
-          [w.to._tag === "process" ? w.to.process : A, X].map((receiver) => ({
+          [Recipient.match(w.to, { process: (to) => to.process, client: () => A }), X].map((receiver) => ({
             n,
             by,
             receiver,
@@ -478,13 +489,14 @@ const expected = (s: Folded) => {
       exits: REASONS.map((reason) =>
         typeof owned === "string"
           ? owned
-          : owned.state._tag !== "live" && (owned.exited === undefined || !sameExit(owned.exited, EXITS[reason]))
+          : !State.isAnyOf(["live"])(owned.state) &&
+              (owned.exited === undefined || !sameExit(owned.exited, EXITS[reason]))
             ? "ended"
             : owned,
       ),
-      downs: typeof owned === "string" ? owned : owned.state._tag === "live" ? "alive" : owned,
+      downs: typeof owned === "string" ? owned : State.isAnyOf(["live"])(owned.state) ? "alive" : owned,
       inbound: liveWatches.filter((w) => w.process === p).map(shown),
-      outbound: liveWatches.filter((w) => w.to._tag === "process" && w.to.process === p).map(shown),
+      outbound: liveWatches.filter((w) => Recipient.isAnyOf(["process"])(w.to) && w.to.process === p).map(shown),
     };
   });
 
@@ -541,14 +553,17 @@ const expected = (s: Folded) => {
           ? "bad_ref"
           : held?.tag === "live"
             ? undefined
-            : w.to._tag === "process" && !live(w.to.process)
+            : Recipient.isAnyOf(["process"])(w.to) && !live(w.to.process)
               ? "ended"
               : (held?.round ?? 0) + 1,
       ),
       deliver: deliveries(w).map(({ n, by, target, receiver }) =>
         by !== BRAIN || held === undefined || held.process !== target || n > held.round
           ? "mail"
-          : n === held.round && held.tag === "live" && held.to._tag === "process" && held.to.process === receiver
+          : n === held.round &&
+              held.tag === "live" &&
+              Recipient.isAnyOf(["process"])(held.to) &&
+              held.to.process === receiver
             ? "signal"
             : "drop",
       ),
@@ -556,7 +571,7 @@ const expected = (s: Folded) => {
   });
 
   const info = lives
-    .filter((life) => life.state._tag === "live")
+    .filter((life) => State.isAnyOf(["live"])(life.state))
     .map((life) => ({
       process: life.state.process,
       name: life.name,
@@ -568,7 +583,9 @@ const expected = (s: Folded) => {
   // A session holds its live watches on processes that still run. A watch on a process that exited,
   // or is down, already sent its DOWN, and as in OTP a monitor that fired is gone (ticket 979).
   const held = SESSIONS.map((session) =>
-    liveWatches.filter((w) => w.to._tag === "client" && w.to.session === session && live(w.process)).map(shown),
+    liveWatches
+      .filter((w) => Recipient.isAnyOf(["client"])(w.to) && w.to.session === session && live(w.process))
+      .map(shown),
   );
 
   return { lifecycle, statuses, starts, fresh, watches, held, info };

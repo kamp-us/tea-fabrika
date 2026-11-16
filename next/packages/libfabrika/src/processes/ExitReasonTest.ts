@@ -48,11 +48,21 @@ type World = {
 const CLIENT = brain().recipient;
 
 const toKey = (to: typeof Recipient.Type): string =>
-  to._tag === "client" ? `client:${to.client}:${to.session}` : `process:${to.process}`;
+  Recipient.match(to, {
+    client: (to) => `client:${to.client}:${to.session}`,
+    process: (to) => `process:${to.process}`,
+  });
 
 /** Structural equality, field by field, as the ledger keeps a reason. */
 const same = (a: ExitReason, b: ExitReason): boolean =>
-  a._tag === b._tag && (a._tag !== "crashed" || (b._tag === "crashed" && a.phase === b.phase && a.error === b.error));
+  a._tag === b._tag &&
+  ExitReason.matchOrElse(
+    a,
+    {
+      crashed: (a) => ExitReason.isAnyOf(["crashed"])(b) && a.phase === b.phase && a.error === b.error,
+    },
+    () => true,
+  );
 
 /** One tape cell: which move, which target, the reason and one invalid copy of it. */
 const Cell = fc.record({
@@ -265,7 +275,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
     const writes = (process: string) => {
       const watches = [...world.watches.values()].filter((w) => w.live);
       const inbound = watches.filter((w) => w.target === process).length;
-      const outbound = watches.filter((w) => w.to._tag === "process" && w.to.process === process).length;
+      const outbound = watches.filter((w) => Recipient.isAnyOf(["process"])(w.to) && w.to.process === process).length;
 
       return 1 + inbound + outbound;
     };
@@ -311,7 +321,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           const watchers = [CLIENT, ...live(world).map((n) => Recipient.cases.process.make({ process: n.process }))];
           const to = choose(watchers, step.cut);
           const ref = `watch:${++world.refs}`;
-          const caller = to._tag === "client" ? brain() : watcher(to.process);
+          const caller = Recipient.match(to, { client: () => brain(), process: (to) => watcher(to.process) });
           const answer = yield* as(caller, (p) => p.monitor(ref, target, from()));
           expect(Result.isSuccess(answer), "a monitor from a live recipient is placed").toBe(true);
           const key = `${toKey(to)}|${ref}`;
@@ -334,7 +344,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           );
 
           const ref = key.slice(key.lastIndexOf("|") + 1);
-          const caller = watch.to._tag === "client" ? brain() : watcher(watch.to.process);
+          const caller = Recipient.match(watch.to, { client: () => brain(), process: (to) => watcher(to.process) });
           const answer = yield* as(caller, (p) => p.demonitor(ref, from()));
           expect(Result.isSuccess(answer), "a cancel of a live watch is placed").toBe(true);
           watch.live = false;
@@ -356,7 +366,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
             if (watch.target === target.process) {
               world.downs.set(key, step.reason);
               watch.live = false;
-            } else if (watch.to._tag === "process" && watch.to.process === target.process) {
+            } else if (Recipient.isAnyOf(["process"])(watch.to) && watch.to.process === target.process) {
               watch.live = false;
             }
           }
@@ -425,9 +435,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
         expect(Result.isSuccess(letters), "a live process can receive").toBe(true);
 
         const downs = Result.isSuccess(letters)
-          ? [...letters.success].flatMap(({ m }) =>
-              Predicate.isObject(m) && Predicate.hasProperty(m, "_tag") && m._tag === "DOWN" ? [m] : [],
-            )
+          ? [...letters.success].flatMap(({ m }) => (Predicate.isTagged(m, "DOWN") ? [m] : []))
           : [];
 
         for (const down of downs) {

@@ -6,7 +6,7 @@ import { Commit, Tree } from "@kampus/libfabrika/codehost/CodeHost";
 import { Started } from "@kampus/libfabrika/processes/Children";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { StartRefusal } from "@kampus/libfabrika/runtime/StartChild";
-import { ConfigProvider, Effect, Schema } from "effect";
+import { ConfigProvider, Effect, Match, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Mail from "./Mail.ts";
 import { queue } from "./Queue.ts";
@@ -268,7 +268,7 @@ const step = (walk: Walk, input: Msg) => {
     if (m.state !== "starting" || ("name" in input.cmd && input.cmd.name !== m.current?.name)) {
       walk.seen.add(`late:${input.type}:${m.state}`);
       m.late++;
-    } else if (input.type === "start_child_ok" && input.value._tag === "started") {
+    } else if (input.type === "start_child_ok" && Started.isAnyOf(["started"])(input.value)) {
       m.state = "landing";
       m.since = input.at;
     } else {
@@ -291,7 +291,12 @@ const step = (walk: Walk, input: Msg) => {
 
     if (m.late === before.late) {
       expect(before._tag).toBe("starting");
-      expect(walk.unanswered?.name).toBe(before._tag === "starting" ? before.current.name : null);
+      expect(walk.unanswered?.name).toBe(
+        Match.value(before).pipe(
+          Match.tag("starting", (b) => b.current.name),
+          Match.orElse(() => null),
+        ),
+      );
       walk.unanswered = null;
     }
   } else if (input.type === "reply") {
@@ -302,7 +307,7 @@ const step = (walk: Walk, input: Msg) => {
       walk.seen.add(input._tag);
       walk.seen.add(`reply:${input._tag}`);
 
-      if (input._tag === "merged" && input.tree !== input.checked) {
+      if (Mail.Reply.isAnyOf(["merged"])(input) && input.tree !== input.checked) {
         m.state = "stopped";
         m.reason = Schema.TaggedStruct("tree_drift", {
           change: Schema.Finite,
@@ -354,14 +359,16 @@ const step = (walk: Walk, input: Msg) => {
     unset: w.enabled ? null : "queue.checks",
   });
 
-  if (model._tag === "starting" || model._tag === "landing") {
-    expect(model.current).toBeDefined();
-  }
-
-  if (model._tag === "idle") {
-    expect("current" in model).toBe(false);
-    expect("line" in model).toBe(false);
-  }
+  // The queue's Model union is not exported, so the law matches it with Effect's Match (0567, form 2).
+  Match.valueTags(model, {
+    idle: (model) => {
+      expect("current" in model).toBe(false);
+      expect("line" in model).toBe(false);
+    },
+    starting: (model) => expect(model.current).toBeDefined(),
+    landing: (model) => expect(model.current).toBeDefined(),
+    stopped: () => undefined,
+  });
 
   walk.model = model;
 

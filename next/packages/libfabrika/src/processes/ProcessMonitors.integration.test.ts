@@ -1,6 +1,6 @@
 // p79's OTP monitor rules, P33. Stored mail is read independently of fresh delivery.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Exit, Layer, Schema } from "effect";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -239,7 +239,7 @@ describe("p79, addressed and independent monitors", () => {
           );
           expect((yield* fresh(store)).map((letter) => letter.id).sort()).toEqual(
             mail
-              .filter((row) => row.m.to._tag === "process" && row.m.to.process === W)
+              .filter((row) => Recipient.isAnyOf(["process"])(row.m.to) && row.m.to.process === W)
               .map((row) => row.id)
               .sort(),
           );
@@ -673,7 +673,7 @@ describe("P33, a client's inbox is not a process's inbox", () => {
         ).pipe(Effect.provide(manager(store, brain(), ids(B).next))),
       );
 
-      if (placed._tag === "Failure") {
+      if (Exit.isFailure(placed)) {
         return false;
       }
 
@@ -695,8 +695,8 @@ describe("P33, a client's inbox is not a process's inbox", () => {
       return Effect.gen(function* () {
         expect(yield* twin(store, name, name)).toBe(true);
         const downs = signals(store);
-        const forProcess = downs.filter((down) => down.m.to._tag === "process");
-        const forClient = downs.filter((down) => down.m.to._tag === "client");
+        const forProcess = downs.filter((down) => Recipient.isAnyOf(["process"])(down.m.to));
+        const forClient = downs.filter((down) => Recipient.isAnyOf(["client"])(down.m.to));
         expect(forProcess.map((down) => down.stream)).toEqual([`${name}/inbox`]);
         expect(forClient.map((down) => down.m.to)).toEqual([notesClient(name)]);
         expect(forClient.map((down) => down.stream)).toEqual([`client:${name}/inbox`]);
@@ -733,8 +733,8 @@ describe("P33, a client's inbox is not a process's inbox", () => {
         }
 
         const downs = signals(store);
-        const forProcess = downs.filter((down) => down.m.to._tag === "process");
-        const forClient = downs.filter((down) => down.m.to._tag === "client");
+        const forProcess = downs.filter((down) => Recipient.isAnyOf(["process"])(down.m.to));
+        const forClient = downs.filter((down) => Recipient.isAnyOf(["client"])(down.m.to));
         expect(forProcess).toHaveLength(1);
         expect(forClient).toHaveLength(1);
         expect(forClient[0]!.stream).not.toBe(forProcess[0]!.stream);
@@ -765,9 +765,10 @@ describe("P18 P1, a client session's leave ends its watches", () => {
     to === null ? Recipient.cases.process.make({ process: W }) : Recipient.cases.client.make(to);
 
   const callerFor = (to: typeof Recipient.Type) =>
-    to._tag === "process"
-      ? watcher(to.process)
-      : { owner: Owner.cases.process.make({ process: to.session }), recipient: to };
+    Recipient.match(to, {
+      process: (to) => watcher(to.process),
+      client: (to) => ({ owner: Owner.cases.process.make({ process: to.session }), recipient: to }),
+    });
 
   const key = (to: typeof Recipient.Type, ref: string) => JSON.stringify([to, ref]);
 
@@ -801,11 +802,13 @@ describe("P18 P1, a client session's leave ends its watches", () => {
               }
             }
 
-            const ends = made.filter((w) => !w.cancel && w.to._tag === "client" && w.to.session === session);
+            const ends = made.filter(
+              (w) => !w.cancel && Recipient.isAnyOf(["client"])(w.to) && w.to.session === session,
+            );
             const stays = made.filter((w) => !w.cancel && !ends.includes(w));
             seen.ended += ends.length;
-            seen.kept += stays.filter((w) => w.to._tag === "client").length;
-            seen.processes += stays.filter((w) => w.to._tag === "process").length;
+            seen.kept += stays.filter((w) => Recipient.isAnyOf(["client"])(w.to)).length;
+            seen.processes += stays.filter((w) => Recipient.isAnyOf(["process"])(w.to)).length;
             seen.canceled += made.filter((w) => w.cancel).length;
             const before = store.rows();
             yield* leave(store, session);

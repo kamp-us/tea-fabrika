@@ -2,7 +2,7 @@
 // ProcessIdGenerator.layer owns one writer's state; next remains an Effect<ProcessId>.
 import { describe, expect, it, vi } from "@effect/vitest";
 // The id format, clocks, rollback and exhaustion are Id.Generator's own laws, in Id.test.ts.
-import { Cause, Effect, Exit, Option, Schema, Tracer } from "effect";
+import { Cause, Effect, Exit, Match, Option, Schema, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import { processClocks } from "../Id.test-support.ts";
 import { ProcessIdGenerator } from "./ProcessIdGenerator.ts";
@@ -189,9 +189,10 @@ describe("P10 shared process ids", () => {
             for (const span of [process, id]) {
               expect(span.status._tag).toBe("Ended");
 
-              if (span.status._tag === "Ended") {
-                expect(Exit.isFailure(span.status.exit)).toBe(true);
-              }
+              Match.valueTags(span.status, {
+                Started: () => undefined,
+                Ended: ({ exit }) => expect(Exit.isFailure(exit)).toBe(true),
+              });
             }
           } finally {
             random.mockRestore();

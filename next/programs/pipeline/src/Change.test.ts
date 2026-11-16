@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Checks } from "@kampus/libfabrika/ci/Ci";
+import { Checks, Status } from "@kampus/libfabrika/ci/Ci";
 import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Path } from "@kampus/libfabrika/codehost/CodeHost";
 import { Schema } from "effect";
@@ -34,6 +34,12 @@ const check = fc
   .record({ name: CiTest.word, source: fc.option(CiTest.word, { nil: undefined }) })
   .map(({ name, source }) => (source === undefined ? { name } : { name, source }));
 
+/** What a verdict names: the checks still pending, or the runs behind any other answer. */
+const valuesFor = Change.Verdict.matchOrElse(
+  { pending: (v): ReadonlyArray<unknown> => v.checks },
+  (v): ReadonlyArray<unknown> => v.runs,
+);
+
 const normalize = (values: ReadonlyArray<unknown>) => [...new Set(values.map((v) => JSON.stringify(v)))].sort();
 
 const oracle = (checks: ReadonlyArray<typeof Change.Check.Type>, runs: typeof Checks.Type) => {
@@ -44,17 +50,17 @@ const oracle = (checks: ReadonlyArray<typeof Change.Check.Type>, runs: typeof Ch
   );
 
   const red = selected.filter(
-    (r) => r.status._tag === "done" && ["failure", "timed_out"].includes(r.status.conclusion),
+    (r) => Status.isAnyOf(["done"])(r.status) && ["failure", "timed_out"].includes(r.status.conclusion),
   );
 
   const lost = selected.filter(
-    (r) => r.status._tag === "done" && ["cancelled", "startup_failure"].includes(r.status.conclusion),
+    (r) => Status.isAnyOf(["done"])(r.status) && ["cancelled", "startup_failure"].includes(r.status.conclusion),
   );
 
   const pending = asked.filter((c) => {
     const matching = selected.filter((r) => r.name === c.name && (c.source === undefined || c.source === r.source));
 
-    return matching.length === 0 || matching.some((r) => r.status._tag !== "done");
+    return matching.length === 0 || matching.some((r) => !Status.isAnyOf(["done"])(r.status));
   });
 
   return red.length > 0
@@ -95,16 +101,16 @@ describe("L5: the verdict", () => {
         const answer = Change.verdict(checks, runs);
         expect(Schema.is(Change.Verdict)(answer)).toBe(true);
         expect(answer._tag).toBe(expected.tag);
-        const values = answer._tag === "pending" ? answer.checks : answer.runs;
+        const values = valuesFor(answer);
         expect(values.length).toBeGreaterThan(0);
         expect(normalize(values)).toEqual(normalize(expected.values));
         const repeated = Change.verdict([...checks, ...checks], shuffled);
         expect(repeated._tag).toBe(answer._tag);
-        expect(normalize(repeated._tag === "pending" ? repeated.checks : repeated.runs)).toEqual(normalize(values));
+        expect(normalize(valuesFor(repeated))).toEqual(normalize(values));
         const unused = { ...extra, name: `${checks.map((c) => c.name).join("")}unused` };
         const added = Change.verdict(checks, [...runs, unused]);
         expect(added._tag).toBe(answer._tag);
-        expect(normalize(added._tag === "pending" ? added.checks : added.runs)).toEqual(normalize(values));
+        expect(normalize(valuesFor(added))).toEqual(normalize(values));
 
         for (const pair of [
           { name: "a\u0000b", source: "c" },
@@ -113,7 +119,7 @@ describe("L5: the verdict", () => {
           const one = Change.verdict([pair], runs);
           const wanted = oracle([pair], runs);
           expect(one._tag).toBe(wanted.tag);
-          expect(normalize(one._tag === "pending" ? one.checks : one.runs)).toEqual(normalize(wanted.values));
+          expect(normalize(valuesFor(one))).toEqual(normalize(wanted.values));
         }
       }),
       { seed: 119120, numRuns: 500 },

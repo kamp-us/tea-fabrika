@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Predicate, SchemaIssue } from "effect";
+import { Cause, ConfigProvider, Effect, Exit, Predicate, Schema, SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";
@@ -139,7 +139,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
 
         if (Exit.isFailure(refused)) {
           const keys = refused.cause.reasons.flatMap((reason) =>
-            reason._tag === "Fail" && reason.error.cause._tag === "SchemaError"
+            Cause.isFailReason(reason) && Schema.isSchemaError(reason.error.cause)
               ? SchemaIssue.makeFormatterStandardSchemaV1()(reason.error.cause.issue).issues.map((issue) =>
                   (issue.path ?? []).map((part) => String(typeof part === "object" ? part.key : part)).join("."),
                 )
@@ -179,7 +179,7 @@ it("L11: every declared numeric setting refuses zero, negatives and fractions at
 
         if (Exit.isFailure(refused)) {
           const paths = refused.cause.reasons.flatMap((reason) =>
-            reason._tag === "Fail" && reason.error.cause._tag === "SchemaError"
+            Cause.isFailReason(reason) && Schema.isSchemaError(reason.error.cause)
               ? SchemaIssue.makeFormatterStandardSchemaV1()(reason.error.cause.issue).issues.map((issue) =>
                   (issue.path ?? []).map((part) => String(typeof part === "object" ? part.key : part)).join("."),
                 )

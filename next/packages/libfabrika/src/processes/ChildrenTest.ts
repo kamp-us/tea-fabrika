@@ -548,7 +548,7 @@ const walk = (
       const started = Result.getOrThrow(answer);
       expect(started._tag, `${label}: a fresh start answers started`).toBe("started");
 
-      if (started._tag !== "started") {
+      if (!Started.isAnyOf(["started"])(started)) {
         return;
       }
 
@@ -970,7 +970,7 @@ const walk = (
             (e) => e._tag === "exited" && body(e)["process"] === requester && e.stream.startsWith("processes/"),
           ) as Entry;
 
-          if (Result.isSuccess(answer) && answer.success._tag === "started") {
+          if (Result.isSuccess(answer) && Started.isAnyOf(["started"])(answer.success)) {
             // L4: started only when the requester's exit committed after the write turn.
             expect(want.outcome, "L4: only a fresh start can answer started").toBe("fresh");
             expect(exited.rev, "L4: a requester exit committed after the write turn leaves started").toBeGreaterThan(

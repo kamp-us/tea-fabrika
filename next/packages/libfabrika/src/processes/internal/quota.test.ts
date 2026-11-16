@@ -107,7 +107,7 @@ describe("P34c quota machine", () => {
         let totalWrites = 0;
 
         for (const [n, c] of cells.entries()) {
-          if (model._tag === "reserve_fault") {
+          if (Quota.Model.isAnyOf(["reserve_fault"])(model)) {
             const fault = model.fault;
             const operation = model.operation;
             const advanced = applyCell(machine, model, { type: "advance", at: at + 60_001 + (c.amount % 100) })[0];
@@ -144,7 +144,7 @@ describe("P34c quota machine", () => {
           } else {
             expect(proposed._tag).toBe("reserve_fault");
 
-            if (proposed._tag !== "reserve_fault") {
+            if (!Quota.Model.isAnyOf(["reserve_fault"])(proposed)) {
               throw new Error("recovery beyond its allowance must fault");
             }
 
@@ -224,7 +224,7 @@ describe("P34c quota machine", () => {
         })[0];
         expect(twice._tag).toBe("reserve_fault");
 
-        if (twice._tag !== "reserve_fault") {
+        if (!Quota.Model.isAnyOf(["reserve_fault"])(twice)) {
           throw new Error("a replay cannot spend the same message's room twice");
         }
 

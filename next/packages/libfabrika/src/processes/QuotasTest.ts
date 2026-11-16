@@ -274,13 +274,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               expect(w.snapshot()).toEqual(saved);
               const answer = yield* w.input(name, id, text);
               const after = yield* w.status(alpha);
-              expect(trial).toBe(answer._tag === "placed");
+              expect(trial).toBe(Appended.isAnyOf(["placed"])(answer));
 
-              if (answer._tag === "placed") {
+              if (Appended.isAnyOf(["placed"])(answer)) {
                 overhead = after.bytes + after.ahead.bytes - before.bytes - before.ahead.bytes - textBytes(text);
               }
 
-              if (answer._tag === "refused") {
+              if (Appended.isAnyOf(["refused"])(answer)) {
                 expect(answer.reason).toBe("quota");
                 expect(w.snapshot()).toEqual(saved);
                 refusal++;

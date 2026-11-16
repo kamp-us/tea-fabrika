@@ -2,7 +2,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema, Stream, Tracer } from "effect";
+import { Effect, Layer, Match, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -82,7 +82,11 @@ describe("P11 richer mailbox history", () => {
         }
 
         expect(yield* Stream.runCollect(mailbox.read("counter:1", 0))).toHaveLength(messages.length);
-        expect(spans.filter((s) => s.name === "mailbox.read" && s.status._tag === "Ended")).toHaveLength(1);
+        expect(
+          spans.filter(
+            (s) => s.name === "mailbox.read" && Match.valueTags(s.status, { Started: () => false, Ended: () => true }),
+          ),
+        ).toHaveLength(1);
       }).pipe(Effect.provide(world()), Effect.withTracer(tracer));
     }),
   );

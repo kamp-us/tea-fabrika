@@ -6,7 +6,7 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Change, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { Saved } from "@kampus/libfabrika/runtime/State";
-import { Arbitrary, ConfigProvider, Effect, Schema } from "effect";
+import { Arbitrary, ConfigProvider, Effect, Match, Schema } from "effect";
 import * as fc from "fast-check";
 import * as ChangeKind from "./Change.ts";
 import * as Mail from "./Mail.ts";
@@ -22,6 +22,39 @@ type Msg = Program["msg"]["Type"];
 type Command = ReturnType<Program["machine"]["init"]>[1][number];
 
 const ctx = stubCtxThrowingProxy<never>();
+
+// The merger's Model and Step unions are not exported, so these laws match them with Effect's Match
+// (0567, form 2). Each state matcher answers its case or null, so a null check narrows as before.
+const working = Match.type<Model>().pipe(
+  Match.tag("idle", () => null),
+  Match.orElse((s) => s),
+);
+
+type Working = NonNullable<ReturnType<typeof working>>;
+
+const idle = (s: Model) => working(s) === null;
+
+const reading = Match.type<Model>().pipe(
+  Match.tag("reading", (s) => s),
+  Match.orElse(() => null),
+);
+
+const updating = Match.type<Model>().pipe(
+  Match.tag("updating", (s) => s),
+  Match.orElse(() => null),
+);
+
+const checking = Match.type<Model>().pipe(
+  Match.tag("checking", (s) => s),
+  Match.orElse(() => null),
+);
+
+/** Whether a working state's step is asking, rather than waiting to ask again. */
+const asking = (s: Working) => Match.valueTags(s.step, { asking: () => true, waiting: () => false });
+
+/** A waiting step's reason, or false while it asks. */
+const waitReason = (s: Working) =>
+  Match.valueTags(s.step, { asking: (): string | false => false, waiting: (step) => step.reason });
 
 const LAST = 8.64e15;
 
@@ -235,16 +268,14 @@ const guided = (p: Program, w: World) => {
         } else if ("cmd" in event && event.cmd.type !== "send") {
           const command = out.find((c) => c.type === event.cmd.type && "attempt" in c && c.attempt === model.attempt);
 
-          if (command === undefined || model._tag === "idle" || model.step._tag !== "asking") {
+          const busy = working(model);
+
+          if (command === undefined || busy === null || !asking(busy)) {
             continue;
           }
 
-          clock = clamp(
-            Math.max(
-              clock,
-              event.at % 7 === 0 && model._tag === "checking" ? model.until : clock + (event.at % 10_000),
-            ),
-          );
+          const due = checking(model);
+          clock = clamp(Math.max(clock, event.at % 7 === 0 && due !== null ? due.until : clock + (event.at % 10_000)));
           msg = Schema.decodeSync(p.msg)({ ...event, cmd: command, at: clock });
         } else if ("cmd" in event && event.cmd.type === "send") {
           clock = Math.max(clock, event.at);
@@ -273,16 +304,17 @@ const guided = (p: Program, w: World) => {
       // unanswered after a retry; this tail answers only the current attempt and fires saved waits.
       for (const cell of tail) {
         let msg: Msg;
+        const busy = working(model);
 
-        if (model._tag === "idle") {
+        if (busy === null) {
           if (started) {
             break;
           }
 
           msg = land(w);
           started = true;
-        } else if (model.step._tag === "waiting" || (model.step.at !== null && cell.pick % 7 === 0)) {
-          clock = Math.max(clock, model.step.at!);
+        } else if (!asking(busy) || (busy.step.at !== null && cell.pick % 7 === 0)) {
+          clock = Math.max(clock, busy.step.at!);
           msg = Schema.decodeSync(p.msg)({ type: "timer", at: clock });
         } else {
           const cmd = out.findLast((c) => service(c) && "attempt" in c && c.attempt === model.attempt);
@@ -291,9 +323,8 @@ const guided = (p: Program, w: World) => {
             break;
           }
 
-          clock = clamp(
-            Math.max(clock, model._tag === "checking" && cell.at % 3 === 0 ? model.until : clock + (cell.at % 10_000)),
-          );
+          const due = checking(model);
+          clock = clamp(Math.max(clock, due !== null && cell.at % 3 === 0 ? due.until : clock + (cell.at % 10_000)));
           msg = answer(p, w, cmd, cell.pick, clock);
         }
 
@@ -310,14 +341,12 @@ const guided = (p: Program, w: World) => {
 
 const service = (cmd: Command) => cmd.type !== "send" && cmd.type !== "exit";
 
-const stateCmd = (model: Model) =>
-  model._tag === "reading"
-    ? "change"
-    : model._tag === "updating"
-      ? "update"
-      : model._tag === "checking"
-        ? "checks"
-        : "merge";
+const stateCmd = Match.type<Model>().pipe(
+  Match.tag("reading", () => "change"),
+  Match.tag("updating", () => "update"),
+  Match.tag("checking", () => "checks"),
+  Match.orElse(() => "merge"),
+);
 
 // Each invariant reads a complete tea fold. A cut-off job is checked for its prefix, never for a
 // reply it has not sent yet.
@@ -337,15 +366,21 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
   for (const { prev, msg, next, cmds } of folded.steps) {
     const sent = cmds.filter((c) => c.type === "send");
     const asked = cmds.filter(service);
+    const was = working(prev);
+    const now = working(next);
 
     if (law === "L9") {
-      const own = Mail.Abandon.make({ type: "abandon", ref: prev._tag === "idle" ? w.ref : prev.job.ref });
+      const own = Mail.Abandon.make({ type: "abandon", ref: was === null ? w.ref : was.job.ref });
       expect(p.refuse(prev, own)?.reason ?? null).toBe(
-        prev._tag === "idle" ? "idle" : prev._tag === "merging" ? "merging" : null,
+        Match.value(prev).pipe(
+          Match.tag("idle", () => "idle"),
+          Match.tag("merging", () => "merging"),
+          Match.orElse(() => null),
+        ),
       );
     }
 
-    if (prev._tag === "idle" && msg.type === "land") {
+    if (was === null && msg.type === "land") {
       replies = 0;
       checkedHead = null;
       checkedTree = null;
@@ -353,16 +388,19 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
       lastLook = null;
     }
 
+    const looking = updating(prev);
+
     if (
       msg.type === "update_ok" &&
-      prev._tag === "updating" &&
-      prev.step._tag === "asking" &&
-      msg.cmd.attempt === prev.attempt &&
-      (msg.value._tag === "current" || msg.value._tag === "updated")
+      looking !== null &&
+      asking(looking) &&
+      msg.cmd.attempt === looking.attempt &&
+      Updated.isAnyOf(["current", "updated"])(msg.value)
     ) {
-      lastLook = msg.value._tag === "current" && green && checkedHead === msg.value.head ? msg.value.head : null;
+      lastLook =
+        Updated.isAnyOf(["current"])(msg.value) && green && checkedHead === msg.value.head ? msg.value.head : null;
 
-      if (msg.value._tag === "updated") {
+      if (Updated.isAnyOf(["updated"])(msg.value)) {
         green = false;
       }
 
@@ -370,13 +408,10 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
       checkedTree = msg.value.tree;
     }
 
-    if (
-      msg.type === "checks_ok" &&
-      prev._tag === "checking" &&
-      prev.step._tag === "asking" &&
-      msg.cmd.attempt === prev.attempt
-    ) {
-      green = ChangeKind.verdict(prev.checks, msg.value)._tag === "green";
+    const judging = checking(prev);
+
+    if (msg.type === "checks_ok" && judging !== null && asking(judging) && msg.cmd.attempt === judging.attempt) {
+      green = ChangeKind.Verdict.isAnyOf(["green"])(ChangeKind.verdict(judging.checks, msg.value));
     }
 
     if (law === "L1") {
@@ -409,7 +444,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
 
     if (law === "L10") {
       for (const cmd of sent) {
-        if (cmd.type === "send" && Schema.is(Mail.Reply)(cmd.m) && cmd.m._tag === "merged") {
+        if (cmd.type === "send" && Schema.is(Mail.Reply)(cmd.m) && Mail.Reply.isAnyOf(["merged"])(cmd.m)) {
           reached = true;
           expect(cmd.m.checked).toBe(checkedTree);
         }
@@ -424,10 +459,10 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
       replies += sent.length;
       expect(replies).toBeLessThanOrEqual(1);
 
-      if (prev._tag !== "idle" && next._tag === "idle") {
+      if (was !== null && now === null) {
         expect(replies).toBe(1);
-        expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ ref: prev.job.ref, change: prev.job.change });
-      } else if (next._tag !== "idle") {
+        expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ ref: was.job.ref, change: was.job.change });
+      } else if (now !== null) {
         expect(replies).toBe(0);
       }
 
@@ -435,11 +470,11 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
         if (msg.type === "change_ok") {
           const value = msg.value;
 
-          if (value._tag === "missing") {
+          if (Change.isAnyOf(["missing"])(value)) {
             expect(next._tag).toBe("idle");
             expect(sent).toHaveLength(1);
             expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "closed", state: "missing" });
-          } else if (value._tag === "found" && value.state !== "open") {
+          } else if (Change.isAnyOf(["found"])(value) && value.state !== "open") {
             expect(next._tag).toBe("idle");
             expect(sent).toHaveLength(1);
             expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "closed", state: value.state });
@@ -447,20 +482,17 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
         }
 
         if (msg.type === "update_ok" || msg.type === "merge_ok") {
-          if (msg.value._tag === "conflict") {
-            expect(next._tag).toBe("idle");
-            expect(sent).toHaveLength(1);
-            expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({
-              _tag: "conflict",
-              main: msg.value.main,
-              paths: msg.value.paths,
-            });
-          }
+          // The answer is CodeHost's Updated or Merged: Match reads the cases the two share.
+          const ended = Match.value(msg.value).pipe(
+            Match.tag("conflict", (value) => ({ _tag: "conflict", main: value.main, paths: value.paths })),
+            Match.tag("closed", (value) => ({ _tag: "closed", state: value.state })),
+            Match.orElse(() => null),
+          );
 
-          if (msg.value._tag === "closed") {
+          if (ended !== null) {
             expect(next._tag).toBe("idle");
             expect(sent).toHaveLength(1);
-            expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "closed", state: msg.value.state });
+            expect(sent[0]?.type === "send" && sent[0].m).toMatchObject(ended);
           }
         }
       }
@@ -472,13 +504,13 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
     }
 
     if (law === "L4") {
-      if (next._tag !== "idle" && next.step._tag === "waiting") {
+      if (now !== null && !asking(now)) {
         reached = true;
       }
 
-      expect(p.wake(next)).toBe(next._tag === "idle" ? null : next.step.at);
+      expect(p.wake(next)).toBe(now === null ? null : now.step.at);
 
-      if (msg.type === "timer" && (prev._tag === "idle" || prev.step.at === null || msg.at < prev.step.at)) {
+      if (msg.type === "timer" && (was === null || was.step.at === null || msg.at < was.step.at)) {
         equal(next, prev);
         expect(cmds).toEqual([]);
       }
@@ -489,36 +521,47 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
       "value" in msg &&
       (msg.type === "change_ok" || msg.type === "update_ok" || msg.type === "merge_ok")
     ) {
-      if (
-        msg.value._tag === "moved" ||
-        (msg.type === "change_ok" &&
-          msg.value._tag === "found" &&
-          msg.value.state === "open" &&
-          prev._tag !== "idle" &&
-          msg.value.head !== prev.job.head)
-      ) {
+      // The answer is CodeHost's Change, Updated or Merged: Match reads `moved` across all three.
+      const moved = Match.value(msg.value).pipe(
+        Match.tag("moved", (value) => value.head),
+        Match.tag("found", (value) =>
+          msg.type === "change_ok" && value.state === "open" && was !== null && value.head !== was.job.head
+            ? value.head
+            : null,
+        ),
+        Match.orElse(() => null),
+      );
+
+      if (moved !== null) {
         expect(next._tag).toBe("idle");
         expect(sent).toHaveLength(1);
-        expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "moved", head: msg.value.head });
+        expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "moved", head: moved });
         reached = true;
         expect(asked).toEqual([]);
       }
     }
 
-    if (law === "L9" && msg.type === "abandon" && prev._tag !== "idle" && prev._tag !== "merging") {
+    const abandonable = Match.value(prev).pipe(
+      Match.tag("idle", "merging", () => null),
+      Match.orElse((s) => s),
+    );
+
+    if (law === "L9" && msg.type === "abandon" && abandonable !== null) {
       reached = true;
       expect(next._tag).toBe("idle");
       expect(p.wake(next)).toBeNull();
-      expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "abandoned", ref: prev.job.ref });
+      expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "abandoned", ref: abandonable.job.ref });
     }
+
+    const read = reading(prev);
 
     if (
       law === "L13" &&
       msg.type === "change_ok" &&
-      prev._tag === "reading" &&
-      msg.value._tag === "found" &&
+      read !== null &&
+      Change.isAnyOf(["found"])(msg.value) &&
       msg.value.state === "open" &&
-      msg.value.head === prev.job.head
+      msg.value.head === read.job.head
     ) {
       const kind = ChangeKind.kind(settingsFor(w).kinds, msg.value.paths);
 
@@ -530,25 +573,25 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
       }
     }
 
-    if (law === "L3" && prev._tag !== "idle") {
+    if (law === "L3" && was !== null) {
       const at = "at" in msg ? msg.at : null;
 
       const taken =
         "cmd" in msg &&
-        msg.cmd.type === stateCmd(prev) &&
+        msg.cmd.type === stateCmd(was) &&
         "attempt" in msg.cmd &&
-        msg.cmd.attempt === prev.attempt &&
-        prev.step._tag === "asking";
+        msg.cmd.attempt === was.attempt &&
+        asking(was);
 
       const verdict =
-        taken && msg.type === "checks_ok" && prev._tag === "checking"
-          ? ChangeKind.verdict(prev.checks, msg.value)._tag
+        taken && msg.type === "checks_ok" && judging !== null
+          ? ChangeKind.verdict(judging.checks, msg.value)._tag
           : null;
 
       const fault =
         (taken && msg.type.endsWith("_err")) ||
         verdict === "lost" ||
-        (verdict === "pending" && prev._tag === "checking" && at !== null && at >= prev.until);
+        (verdict === "pending" && judging !== null && at !== null && at >= judging.until);
 
       if (fault && at !== null) {
         reached = true;
@@ -556,63 +599,65 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
         expect(asked).toEqual([]);
         expect(next._tag).toBe(prev._tag);
 
-        if (next._tag !== "idle") {
-          expect(next.step._tag).toBe("waiting");
-          expect(next.step.tries).toBe(prev.step.tries + 1);
-          expect(next.step.at).toBe(clamp(at + Math.min(w.poll * 1000 * 2 ** prev.step.tries, w.backoff * 1000)));
+        if (now !== null) {
+          expect(now.step._tag).toBe("waiting");
+          expect(now.step.tries).toBe(was.step.tries + 1);
+          expect(now.step.at).toBe(clamp(at + Math.min(w.poll * 1000 * 2 ** was.step.tries, w.backoff * 1000)));
 
           if (taken && "error" in msg) {
-            expect(next.step._tag === "waiting" && next.step.reason).toBe(msg.error._tag);
+            expect(waitReason(now)).toBe(msg.error._tag);
           }
 
           if (verdict === "lost") {
-            expect(next.step._tag === "waiting" && next.step.reason).toBe("ci_lost");
+            expect(waitReason(now)).toBe("ci_lost");
           }
 
           if (verdict === "pending") {
-            expect(next.step._tag === "waiting" && next.step.reason).toBe("ci_silent");
+            expect(waitReason(now)).toBe("ci_silent");
           }
         }
       }
 
-      if (verdict === "pending" && !fault && at !== null && next._tag === "checking") {
-        expect(next.step.at).toBe(clamp(at + w.poll * 1000));
-        expect(next.step.tries).toBe(prev.step.tries);
+      const polled = checking(next);
+
+      if (verdict === "pending" && !fault && at !== null && polled !== null) {
+        expect(polled.step.at).toBe(clamp(at + w.poll * 1000));
+        expect(polled.step.tries).toBe(was.step.tries);
       }
 
-      if (prev._tag === "checking" && next._tag === "checking") {
-        expect(next.until).toBe(
+      if (judging !== null && polled !== null) {
+        expect(polled.until).toBe(
           (verdict === "lost" || (verdict === "pending" && fault)) && at !== null
             ? clamp(at + w.wait * 60_000)
-            : prev.until,
+            : judging.until,
         );
       }
 
-      if (msg.type === "timer" && prev.step.at !== null && msg.at >= prev.step.at) {
+      if (msg.type === "timer" && was.step.at !== null && msg.at >= was.step.at) {
         reached = true;
         expect(asked).toHaveLength(1);
-        expect(asked[0]?.type).toBe(stateCmd(prev));
+        expect(asked[0]?.type).toBe(stateCmd(was));
 
-        if (next._tag !== "idle") {
-          expect(next.step.tries).toBe(prev.step.tries + (prev.step._tag === "asking" ? 1 : 0));
+        if (now !== null) {
+          expect(now.step.tries).toBe(was.step.tries + (asking(was) ? 1 : 0));
         }
 
         if (asked[0]?.type === "checks") {
-          expect(asked[0].start).toBe(!(prev.step._tag === "waiting" && prev.step.reason === "pending"));
+          expect(asked[0].start).toBe(!(waitReason(was) === "pending"));
         }
       }
 
       for (const cmd of asked) {
-        if (at !== null && next._tag !== "idle") {
-          expect(next.step._tag).toBe("asking");
-          expect(next.step.at).toBe(clamp(at + w.wait * 60_000));
+        if (at !== null && now !== null) {
+          expect(now.step._tag).toBe("asking");
+          expect(now.step.at).toBe(clamp(at + w.wait * 60_000));
         }
 
-        expect(cmd.type).toBe(next._tag === "idle" ? "none" : stateCmd(next));
+        expect(cmd.type).toBe(now === null ? "none" : stateCmd(now));
       }
 
-      if (next._tag !== prev._tag && next._tag !== "idle") {
-        expect(next.step.tries).toBe(0);
+      if (next._tag !== prev._tag && now !== null) {
+        expect(now.step.tries).toBe(0);
       }
     }
 
@@ -673,13 +718,14 @@ describe("the merger, next/", () => {
                 check: () => true,
                 run: (m, { p, w }) => {
                   const prev = m.model;
+                  const was = working(prev);
                   const active = m.current.find((c) => service(c) && "attempt" in c && c.attempt === prev.attempt);
 
                   const late = m.history.filter(
                     (c) =>
                       service(c) &&
-                      (prev._tag === "idle" ||
-                        prev.step._tag !== "asking" ||
+                      (was === null ||
+                        !asking(was) ||
                         !("attempt" in c) ||
                         c.attempt !== prev.attempt ||
                         c.type !== stateCmd(prev)),
@@ -690,16 +736,16 @@ describe("the merger, next/", () => {
                     () =>
                       Schema.decodeSync(p.msg)({
                         type: "abandon",
-                        ref: cell.pick % 2 === 0 && prev._tag !== "idle" ? prev.job.ref : `${w.ref}other`,
+                        ref: cell.pick % 2 === 0 && was !== null ? was.job.ref : `${w.ref}other`,
                       }),
                   ];
 
-                  if (active !== undefined && prev._tag !== "idle" && prev.step._tag === "asking") {
+                  if (active !== undefined && was !== null && asking(was)) {
                     moves.push(() => answer(p, w, active, cell.pick, m.clock));
                   }
 
-                  if (prev._tag !== "idle" && prev.step.at !== null) {
-                    moves.push(() => Schema.decodeSync(p.msg)({ type: "timer", at: Math.max(m.clock, prev.step.at!) }));
+                  if (was !== null && was.step.at !== null) {
+                    moves.push(() => Schema.decodeSync(p.msg)({ type: "timer", at: Math.max(m.clock, was.step.at!) }));
                   }
 
                   if (late.length > 0) {
@@ -716,17 +762,15 @@ describe("the merger, next/", () => {
 
                   const refused =
                     msg.type === "land"
-                      ? prev._tag !== "idle"
+                      ? was !== null
                         ? "busy"
                         : null
                       : msg.type === "abandon"
-                        ? prev._tag === "idle"
-                          ? "idle"
-                          : prev._tag === "merging"
-                            ? "merging"
-                            : msg.ref !== prev.job.ref
-                              ? "other_job"
-                              : null
+                        ? Match.value(prev).pipe(
+                            Match.tag("idle", () => "idle"),
+                            Match.tag("merging", () => "merging"),
+                            Match.orElse((s) => (msg.ref !== s.job.ref ? "other_job" : null)),
+                          )
                         : null;
 
                   if (msg.type === "land" || msg.type === "abandon") {
@@ -741,14 +785,14 @@ describe("the merger, next/", () => {
 
                   const [next, cmds] = applyCell<Model, Msg, Command>(p.machine, prev, msg);
 
-                  if (msg.type === "land" && prev._tag === "idle") {
+                  if (msg.type === "land" && was === null) {
                     m.replies = 0;
                   }
 
                   m.replies += cmds.filter((c) => c.type === "send").length;
                   expect(m.replies).toBeLessThanOrEqual(1);
 
-                  if (prev._tag !== "idle" && next._tag === "idle") {
+                  if (was !== null && idle(next)) {
                     expect(m.replies).toBe(1);
                   }
 
@@ -757,8 +801,8 @@ describe("the merger, next/", () => {
                     expect(cmds).toEqual([]);
                   } else if (
                     "cmd" in msg &&
-                    (prev._tag === "idle" ||
-                      prev.step._tag !== "asking" ||
+                    (was === null ||
+                      !asking(was) ||
                       msg.cmd.type !== stateCmd(prev) ||
                       !("attempt" in msg.cmd) ||
                       msg.cmd.attempt !== prev.attempt)
@@ -873,18 +917,20 @@ it("L15: updated heads spend the round budget; behind names the newest head and 
         let rounds = 0;
 
         for (const { prev, msg, next, cmds } of foldEvents(p.machine, ctx, null, msgs).steps) {
-          if (prev._tag === "idle" && msg.type === "land") {
+          if (idle(prev) && msg.type === "land") {
             rounds = 0;
           }
 
-          const updated =
-            prev._tag === "updating" &&
-            msg.type === "update_ok" &&
-            prev.step._tag === "asking" &&
-            msg.cmd.attempt === prev.attempt &&
-            msg.value._tag === "updated";
+          const looking = updating(prev);
 
-          if (updated && msg.type === "update_ok" && msg.value._tag === "updated") {
+          const updated =
+            looking !== null &&
+            msg.type === "update_ok" &&
+            asking(looking) &&
+            msg.cmd.attempt === looking.attempt &&
+            Updated.isAnyOf(["updated"])(msg.value);
+
+          if (updated && msg.type === "update_ok" && Updated.isAnyOf(["updated"])(msg.value)) {
             if (rounds === w.rounds) {
               bounded++;
               expect(next._tag).toBe("idle");
@@ -907,15 +953,16 @@ it("L15: updated heads spend the round budget; behind names the newest head and 
             }
           }
 
-          if (next._tag === "updating" || next._tag === "checking") {
-            expect(next.round).toBe(rounds);
-          }
+          Match.value(next).pipe(
+            Match.tag("updating", "checking", (s) => expect(s.round).toBe(rounds)),
+            Match.orElse(() => undefined),
+          );
 
           if (
-            prev._tag === "updating" &&
+            looking !== null &&
             msg.type === "update_ok" &&
-            msg.value._tag === "current" &&
-            next._tag === "checking"
+            Updated.isAnyOf(["current"])(msg.value) &&
+            checking(next) !== null
           ) {
             expect(cmds).toContainEqual(
               expect.objectContaining({ type: "checks", head: msg.value.head, start: false }),
@@ -986,13 +1033,17 @@ it.prop(
     expect(result.saved.v).toBe(2);
     expect(model).toMatchObject(old);
 
-    if (model._tag === "updating") {
-      expect(model).toMatchObject({ head: old._tag === "updating" ? old.job.head : null, round: 0, checked: null });
-    }
-
-    if (model._tag === "checking") {
-      expect(model.round).toBe(0);
-    }
+    Match.value(model).pipe(
+      Match.tag("updating", (model) =>
+        expect(model).toMatchObject({
+          head: OldModel.matchOrElse(old, { updating: (o) => o.job.head }, () => null),
+          round: 0,
+          checked: null,
+        }),
+      ),
+      Match.tag("checking", (model) => expect(model.round).toBe(0)),
+      Match.orElse(() => undefined),
+    );
   },
   { arbitrary: { seed: 119120, runs: 200 } },
 );
