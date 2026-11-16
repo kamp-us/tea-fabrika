@@ -434,6 +434,45 @@ None.
 The one question of round 1 (keep `no-context-tag` or accept a documented miss) was closed by
 the merge session on 2026-11-16: it stays until ticket 486.
 
+## Amendments
+
+- 2026-11-15, Pacific (fix round after the review's first send-back; ruled by the coordinator by
+  0573's "never a gap", the principle the merge session applied to `no-context-tag`). This section
+  overrides the body where they differ.
+  1. **`no-data-taggederror` stays, and waits like `no-context-tag`,** until a trusted rule refuses
+     `Data.TaggedError` in type positions. Ours matches with `banNames` (`oxlint-plugins/match.ts`),
+     which also visits `TSQualifiedName`, so it refuses `export type Made = typeof Data.TaggedError;`
+     and `InstanceType<ReturnType<typeof Data.TaggedError<"X">>>`. The review found that no trusted
+     rule does: `no-restricted-properties` reads only value members, `typescript/no-restricted-types`
+     names types, not a value's `typeof`, and the checker's `preferSchemaTaggedError` reads only a
+     class's `extends`. Deleting ours would leave those lines unguarded, which 0573 forbids.
+     `oxlint-plugins/no-data-taggederror.ts`, its `index.ts` name, its root line in `.oxlintrc.json`
+     and its plant in `plants.test.ts` stay as on main.
+  2. **Pull request 1 swaps two rules,** `no-node-filesystem` (to `no-node-imports`) and
+     `one-id-module` (to `modules`, rule 2). The `Data.TaggedError` entries of
+     `no-restricted-properties` stay beside ours as extra cover in every block, and L2 stays as
+     written.
+  3. **L1 changes.** `typeof Data.TaggedError` and the other type-position lines are refused lines,
+     not passing ones: in every folder that L1 plants, `fabrika(no-data-taggederror)` refuses them,
+     beside `no-restricted-properties` refusing the value forms. Plant: drop
+     `"fabrika/no-data-taggederror"` from `.oxlintrc.json`, and the type lines are not refused, L1
+     red. Ours' plant in `plants.test.ts` gains the same type lines, run in process.
+  4. **L3 widens.** It also fails when a tracked tsconfig's `@effect/language-service` block sets
+     `"ignoreEffectErrorsInTscExitCode": true` or `"diagnostics": false`, since either one lets a
+     `preferSchemaTaggedError` error pass `tsc`. Plant: each of the two settings in
+     `tsconfig.base.json`, L3 red.
+  5. **L4 checks all 8 modules in every run.** fast-check counts the 3 examples inside `numRuns`,
+     so at seed 119120 and 8 runs `fc.constantFrom` drew 6 of the 8 and never `fs` or
+     `node:path/posix`. The property draws only the `// edge:` reason and loops over the 8 names,
+     and its coverage check counts them. Plant: skip only the bare `fs` specifier in
+     `no-node-imports.ts`, L4 red.
+  6. **What must reach zero first, for `no-data-taggederror`'s own later pull request:** nothing in
+     code (ours fires 0 times). It waits on a trusted rule that refuses `Data.TaggedError` in a type
+     position, in every file oxlint lints; ticket 486 alone does not end the wait, since the type
+     check accepts `typeof Data.TaggedError`. That plan's probe shows the rule holds every line ours
+     does. The Files table's rows that delete
+     `no-data-taggederror.ts` and its plant, and its README row, are void.
+
 ## Findings
 
 ```json
