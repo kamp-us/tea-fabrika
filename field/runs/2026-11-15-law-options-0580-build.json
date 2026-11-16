@@ -1,0 +1,52 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-law-options-0580-build",
+  "ticket": "580",
+  "pr": "kamp-us/tea-fabrika#1497",
+  "started": "2026-11-15T22:53:50-08:00",
+  "ended": "2026-11-15T23:15:12-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "blocked",
+  "why": "Build step for slice 1 of docs/plan/quests/law-options-0580-PLAN.md (0580, 0579), next/ and tooling. Wrote next/packages/vitest/src/Law.ts (it with effect, live, prop, effect.prop and live.prop, options last; LawOptions with at most one label; Label as a Schema TaggedUnion; toTestOptions; the TaskMeta widening; seed 119120 on both engines at load), src/internal/fastCheck.ts (the old property runner's body: a Scope per case, stopOnAbort, the law's answer never its verdict, run with the law's own services), src/Plants.ts (records), the index exports (it, describe, expect, expectTypeOf, assertType, Plants), package.json (@effect/vitest, fast-check and vitest move to dependencies; sideEffects names Law.ts), and .agents/skills/tests/scripts/plant.ts (one law through vitest's Node API, one JSON record, exit 1 on no match, two matches or no plant). Skill and doc lines: tests SKILL.md, field/README.md, docs/direction/five-steps-for-every-check.md. Every slice-1 law is green. Blocked on one tests-owned fault: Law.integration.test.ts line 32 declares NestedRun with cause: Schema.Defect (not called), so pnpm typecheck fails in next/packages/vitest (TS2769 at 32:72, TS2741 at 48, 51, 55); the fix is Schema.Defect() in that law file, which the build may not edit. Second blocker: the brief gives the build the pnpm-lock.yaml change for that dependency move, but stepcommit.sh refuses it (pnpm-lock.yaml is an exam path in exam-paths.json: 'a build may not commit exam paths; answer send to tests'), so it is not committed; the plan's Files table also gives it to tests. A plain pnpm install regenerates it: an 18-line move of three entries from devDependencies to dependencies under importers next/packages/vitest. Until it lands, a frozen install fails on the committed package.json.",
+  "plants": [
+    {
+      "file": "next/packages/vitest/src/Law.test.ts",
+      "law": "toTestOptions puts the plant and the label in meta, with its tag and reason, and passes every other vitest option through unchanged",
+      "plant": "drop retry from what toTestOptions passes through, in Law.ts",
+      "result": "red"
+    },
+    {
+      "file": "next/packages/vitest/src/Law.integration.test.ts",
+      "law": "two runs of the same failing law, on either engine, report the same counterexample: the seed comes from the package",
+      "plant": "remove the Arbitrary.configureGlobal call in Law.ts",
+      "result": "red"
+    },
+    {
+      "file": "next/packages/vitest/src/Law.integration.test.ts",
+      "law": "scenario: after the law's timeout, no case or shrink opens another scope",
+      "plant": "delete the stopOnAbort step in internal/fastCheck.ts",
+      "result": "red"
+    },
+    {
+      "file": "next/packages/vitest/src/Plants.test.ts",
+      "law": "Plants.records lists exactly the laws that ran, each with its file, title, plant and red or green, and refuses a law that ran with no plant",
+      "plant": "write green for a failed law in Plants.ts",
+      "result": "red"
+    },
+    {
+      "file": ".agents/skills/tests/scripts/plant.test.ts",
+      "law": "scenario: plant.ts prints one record for a law that matches once, red or green, and refuses a title that matches no law or two, and a law with no plant",
+      "plant": "pick the first of two matches in plant.ts (refuse only a title that matches none)",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 22,
+  "note": "Plants ran once each on a saved copy of the build's own file, restored by copy and checked with cmp; each turned its law red. Tests run in this box at the build's working tree on a96d4d2, one file at a time with nice -n 15 and --maxWorkers=3: Law.test.ts 37 passed, Plants.test.ts 1 passed, Law.integration.test.ts 3 passed (the 0178 guard allowed it: CLAUDE_CODE_REMOTE=true on Linux), plant.test.ts 1 passed. Law.types.test.ts is clean under the package's tsc. pnpm lint exits 0 after fixes; the list ratchet exits 0; libfabrika's own typecheck exits 0; pnpm typecheck exits 1 only on Law.integration.test.ts. Not run: --changed (lead), the CI and law-shape laws (no file of theirs changed here).",
+  "step": "build"
+}

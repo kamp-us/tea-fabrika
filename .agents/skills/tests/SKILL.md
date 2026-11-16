@@ -74,7 +74,12 @@ this skill for the law. The reviewer reads that law on its recheck.
      narrowing a law still waits on the owner
      ([0014](../../../.decisions/0014-the-lead-merges-when-every-step-passed.md)). A lint rule's own
      planted lines (`oxlint-plugins/plants.test.ts`, `next/apps/fabrika/src/exam/plant.ts`) are its
-     test inputs and stay. Each law names its plant in a comment, as the neighbors do.
+     test inputs and stay. A law declared with `@kampus/vitest`'s `it` names its plant as an
+     option, `{ plant: "<the break>" }`, and its label too, `{ scenario: "<why>" }`, never in a
+     comment or the title ([0580](../../../.decisions/0580-law-options-carry-plant-and-label.md)).
+     Its record comes from `node .agents/skills/tests/scripts/plant.ts <file> "<title>"`, run with
+     the break in place: paste the line it prints into the run row's `plants`, never a record by
+     hand. A law in a file still on `@effect/vitest` keeps its plant in a comment until its sweep.
    - A shape check (an import ban, a naming rule) is a lint rule, not a test.
    - If secrets must stay out of records, URLs or spans, require `[secrets]` in the plan's Law
      cell and a property over generated flows. Generate made-up words, keys and passes,
@@ -169,7 +174,8 @@ These hold in every tests round, so the brief does not repeat them.
 - **Run row:** write the file the brief's `Run row:` field names, in the shape of the newest tests
   rows (`ls field/runs | grep tests | tail -3`), with real start and end times from
   `TZ=America/Los_Angeles date`, every law with its red reason, and every plant as
-  `{law, plant, result}` with `result` `red` or `green`. CI's `field` job checks its shape.
+  `{file, law, plant, result}` with `result` `red` or `green`, as `plant.ts` prints it. CI's
+  `field` job checks its shape, and its plant check holds each changed law's plant against it.
 - **Commit and push:** commit your own paths by name with plain `git commit`, a plain-word subject,
   no trailer naming a chat tool and no session link
   ([0161](../../../.decisions/0161-no-step-signing-by-hand.md)). Then

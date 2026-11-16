@@ -62,8 +62,11 @@ Decided 2026-11-08 by the owner, after PR 516's laws were all example tests.
 - **A hand-picked example stays only as a pinned case of a named past bug,** in fast-check's
   `examples`, with the bug named beside it.
 - **A check on the shape of code is a lint rule or a type,** not a test.
-- **Five kinds of law may be a fixed test, and the test's name says which** (owner, 2026-11-08;
-  the fifth, `type:`, 2026-11-14).
+- **Five kinds of law may be a fixed test, and its label says which** (owner, 2026-11-08;
+  the fifth, `type:`, 2026-11-14). A law on `@kampus/vitest`'s `it` gives the label as an option
+  with its reason, `{ scenario: "<why>" }`, beside its `plant`
+  ([0580](../../.decisions/0580-law-options-carry-plant-and-label.md)); a file still on
+  `@effect/vitest` keeps the label at the start of the title until its sweep.
   Anything else is a property. A hand-picked example that checks a general rule is a miss.
 
 | Label | What it is | Example |
@@ -81,11 +84,13 @@ fc.assert(
 	{examples: [[[2, 1, 2]]]}, // the duplicate-id bug, pinned
 );
 
-// A sketch: the four fixed kinds, each named by its label.
-it("vector: TypeID spec, the nil UUID", () => {/* ... */});
-it("format: keys writes keybindings.toml as a person would", () => {/* ... */});
-it("pinned: duplicate ids sort once (the duplicate-id bug)", () => {/* ... */});
-it("scenario: the app opens a real window on a fresh home", () => {/* ... */});
+// A sketch: the fixed kinds, each named by its label option with its reason (0580).
+import { it } from "@kampus/vitest";
+
+it("the nil UUID encodes as the spec says", () => {/* ... */}, { vector: "TypeID spec's test vectors", plant: "drop the prefix" });
+it("keys writes keybindings.toml as a person would", () => {/* ... */}, { format: "the file a person writes by hand", plant: "quote every key" });
+it("duplicate ids sort once", () => {/* ... */}, { pinned: 412, plant: "keep the second id" });
+it("the app opens a real window on a fresh home", () => {/* ... */}, { scenario: "one real Electron start", plant: "skip the window's show" });
 ```
 
 [Claessen and Hughes's QuickCheck](https://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quick.pdf)
