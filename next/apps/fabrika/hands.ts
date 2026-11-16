@@ -19,7 +19,7 @@ import * as Load from "@kampus/libfabrika/node/settings/Load";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { ClientKey } from "@kampus/libfabrika/transport/ClientKey";
-import type { Link } from "@kampus/libfabrika/transport/Link";
+import { Link } from "@kampus/libfabrika/transport/Link";
 import { Config, Effect, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { Socket } from "effect/socket";
@@ -51,11 +51,14 @@ const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) 
 
 /** What a parent needs to know of the link: waiting for a grant, online, or neither. */
 const lineFor = (link: Link, fingerprint: string): Line =>
-  link._tag === "waiting_grant"
-    ? Line.cases.waiting.make({ fingerprint, code: link.code, until: link.until })
-    : link._tag === "online"
-      ? Line.cases.online.make({ fingerprint })
-      : Line.cases.offline.make({ fingerprint });
+  Link.matchOrElse(
+    link,
+    {
+      waiting_grant: ({ code, until }) => Line.cases.waiting.make({ fingerprint, code, until }),
+      online: () => Line.cases.online.make({ fingerprint }),
+    },
+    () => Line.cases.offline.make({ fingerprint }),
+  );
 
 const hands = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem,

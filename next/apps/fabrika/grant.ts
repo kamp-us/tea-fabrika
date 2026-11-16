@@ -1,6 +1,6 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { grantText } from "@kampus/libfabrika/access/Text";
-import { Console, DateTime, Effect, Schema, Stream } from "effect";
+import { Console, DateTime, Effect, Predicate, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { SecureRandom } from "effect/crypto";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
@@ -122,7 +122,7 @@ const grant = Command.make(
       Effect.mapError(() => GrantError.make({ reason: "bad_reply" })),
     );
 
-    if (reply._tag !== "applied") {
+    if (!Predicate.isTagged(reply, "applied")) {
       return yield* GrantError.make({ reason: "refused" });
     }
 

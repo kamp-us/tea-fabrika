@@ -29,6 +29,10 @@ const Model = Schema.TaggedUnion({
 
 type Model = typeof Model.Type;
 
+const empty = Model.isAnyOf(["empty"]);
+
+const waiting = Model.isAnyOf(["waiting"]);
+
 // The state follows from the rows: `empty` holds none, `waiting` at least one.
 const settle = (c: typeof Config.Type, pending: ReadonlyArray<Pending>): Model =>
   Arr.isReadonlyArrayNonEmpty(pending)
@@ -115,7 +119,7 @@ export const Stored = Saved.pipe(
 export const rows = (s: Model): ReadonlyArray<Row> => Schema.encodeSync(Stored)(s).rows;
 
 const expire = (s: Model, at: number): Model => {
-  if (s._tag === "empty") {
+  if (empty(s)) {
     return s;
   }
 
@@ -139,9 +143,9 @@ export const machine = Machine.make({
     expire: (s, m) => [expire(s, m.at), []],
     knock: (s, m) => {
       const live = expire(s, m.at);
-      const old = live._tag === "empty" ? undefined : live.rows.find((r) => r.key === m.key);
+      const old = empty(live) ? undefined : live.rows.find((r) => r.key === m.key);
 
-      if (live._tag === "waiting" && old !== undefined) {
+      if (waiting(live) && old !== undefined) {
         const known = old.clients.includes(m.client);
         const clients: Pending["clients"] = known ? old.clients : [...old.clients, m.client];
         const kept = live.rows.map((r) => (r === old ? { ...old, clients } : r));
@@ -166,7 +170,7 @@ export const machine = Machine.make({
       return [settle(live, [...kept, row].slice(-live.most)), []];
     },
     leave: (s, m) => {
-      if (s._tag === "empty") {
+      if (empty(s)) {
         return [s, []];
       }
 
@@ -185,7 +189,7 @@ export const machine = Machine.make({
       return [settle(s, kept), []];
     },
     accepted: (s, m) => {
-      if (s._tag === "empty") {
+      if (empty(s)) {
         return [s, []];
       }
 

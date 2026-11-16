@@ -4,7 +4,7 @@
 import { Effect, Result, Schema, Stream } from "effect";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
-import { Task, Result as TaskResult, type Recorded } from "../tasks/Task.ts";
+import { State, Task, Result as TaskResult, type Recorded } from "../tasks/Task.ts";
 import { type Tasks, targetStream } from "../tasks/Tasks.ts";
 import { Answer, type Attached } from "../transport/Wire.ts";
 import * as TaskAccess from "./TaskAccess.ts";
@@ -33,6 +33,8 @@ const TakeReply = Schema.TaggedUnion({
 });
 
 const strict = { onExcessProperty: "error" } as const;
+
+const absent = State.isAnyOf(["absent"]);
 
 /** What one task call answers, and the registered name to wake once the write turn is free: the
  *  requester's, after a finish was accepted or repeated, so its program collects the result. */
@@ -101,7 +103,7 @@ export const route = Effect.fn("gateway.tasks")(
       const listed = yield* tasks.forTarget(identity.key);
 
       const pointers = listed.tasks.flatMap(({ state }) =>
-        state._tag === "absent" ? [] : [{ id: state.request.id, process: state.request.process }],
+        absent(state) ? [] : [{ id: state.request.id, process: state.request.process }],
       );
 
       return ok({ tasks: pointers, rev: listed.rev });
@@ -118,7 +120,7 @@ export const route = Effect.fn("gateway.tasks")(
         for: identity.person,
         sentAt: meta.sentAt,
         seen: meta.seen,
-        parent: task.state._tag === "absent" ? null : task.state.request.parent,
+        parent: absent(task.state) ? null : task.state.request.parent,
         traceId: span.traceId,
         build,
         connection: client,
@@ -147,7 +149,7 @@ export const route = Effect.fn("gateway.tasks")(
         return ok(TakeReply.cases.idle.make({}));
       }
 
-      if (!TaskAccess.owns(task, { ...subject, process: params.process }) || task.state._tag === "absent") {
+      if (!TaskAccess.owns(task, { ...subject, process: params.process }) || absent(task.state)) {
         return no("not_allowed");
       }
 
@@ -193,7 +195,7 @@ export const route = Effect.fn("gateway.tasks")(
 
       if (
         !TaskAccess.owns(task, { ...subject, process: params.process, execution: params.execution }) ||
-        task.state._tag === "absent"
+        absent(task.state)
       ) {
         return no("not_allowed");
       }

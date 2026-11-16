@@ -2,7 +2,7 @@
 // `ps -o rss= -p <pid>`, and a test answers that one command with the size it picks, so no test
 // grows a process on purpose and no test samples a pid it made up.
 import { Effect, Layer, Sink, Stream } from "effect";
-import { ChildProcessSpawner } from "effect/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 /**
  * Layer over the real `ChildProcessSpawner` that answers `ps -o rss= -p <pid>` with `kib(pid)`, the
@@ -17,7 +17,7 @@ export const rssStandIn = (kib: (pid: number) => number | null) =>
 
       return ChildProcessSpawner.make((command) => {
         const sample =
-          command._tag === "StandardCommand" &&
+          ChildProcess.isStandardCommand(command) &&
           command.command === "ps" &&
           command.args.length === 4 &&
           command.args[0] === "-o" &&

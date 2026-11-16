@@ -6,16 +6,17 @@ import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import * as Schema from "effect/Schema";
 import type { Sql } from "../Sql.ts";
 import * as Rate from "./internal/rateLimit.ts";
-import { Policy } from "./RateLimit.ts";
+import { Decision, Policy } from "./RateLimit.ts";
 
 const Saved = Schema.Struct({
   v: Schema.Literal(1),
   build: Schema.NonEmptyString,
-  model: Rate.Model.check(Schema.makeFilter((s) => s._tag !== "fresh")),
+  model: Rate.Model.check(Schema.makeFilter((s) => !Rate.Model.isAnyOf(["fresh"])(s))),
 });
 
 const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Saved));
@@ -74,12 +75,12 @@ const make = (sql: Sql, options: { readonly build: string; readonly policy: Poli
 
             const decision = command.decision;
 
-            if (decision._tag === "invalid") {
+            if (Decision.isAnyOf(["invalid"])(decision)) {
               // A synchronous transaction rolls back by throwing; Effect.try below keeps the cause.
               throw decision.cause;
             }
 
-            if (next._tag === "fresh") {
+            if (Rate.Model.isAnyOf(["fresh"])(next)) {
               return Schema.decodeUnknownSync(Schema.Never)(next);
             }
 
@@ -90,9 +91,10 @@ const make = (sql: Sql, options: { readonly build: string; readonly policy: Poli
               encode({ v: 1, build, model: next }),
             );
 
-            return decision._tag === "allowed"
-              ? ([decision.count, decision.ttl] as const)
-              : ([policy.limit + 1, decision.retryAfter] as const);
+            return Match.valueTags(decision, {
+              allowed: ({ count, ttl }) => [count, ttl] as const,
+              refused: ({ retryAfter }) => [policy.limit + 1, retryAfter] as const,
+            });
           }),
         catch: fail,
       });

@@ -1,4 +1,5 @@
 import { Cmd, Machine } from "@demlik/tea/effect";
+import * as Match from "effect/Match";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { Decision, Policy } from "../RateLimit.ts";
@@ -15,8 +16,20 @@ export const Model = Schema.TaggedUnion({
   open: { policy: Policy, until: Integer, at: Integer, used: Positive },
   full: { policy: Policy, until: Integer, at: Integer },
 }).check(
-  Schema.makeFilter((s) => s._tag === "fresh" || (s.until > s.at && (s._tag === "full" || s.used < s.policy.limit))),
+  Schema.makeFilter((s) =>
+    Match.valueTags(s, {
+      fresh: () => true,
+      open: ({ policy, until, at, used }) => until > at && used < policy.limit,
+      full: ({ until, at }) => until > at,
+    }),
+  ),
 );
+
+const fresh = Model.isAnyOf(["fresh"]);
+
+const full = Model.isAnyOf(["full"]);
+
+const open = Model.isAnyOf(["open"]);
 
 const Msg = Schema.Struct({ type: Schema.Literal("take"), at: Integer, policy: Policy });
 
@@ -32,9 +45,9 @@ export const machine = Machine.make({
   init: (loaded) => [loaded ?? Model.cases.fresh.make({}), []],
   update: {
     take: (s, m) => {
-      const live = s._tag !== "fresh" && m.at < s.until;
+      const live = !fresh(s) && m.at < s.until;
       const at = live ? Math.max(m.at, s.at) : m.at;
-      const same = s._tag !== "fresh" && s.policy.limit === m.policy.limit && s.policy.window === m.policy.window;
+      const same = !fresh(s) && s.policy.limit === m.policy.limit && s.policy.window === m.policy.window;
       const continuing = live && same;
       const until = continuing ? s.until : (Math.floor(at / m.policy.window) + 1) * m.policy.window;
       const checked = times({ at, until, ttl: until - at });
@@ -45,14 +58,14 @@ export const machine = Machine.make({
 
       const { ttl } = checked.success;
 
-      if (continuing && s._tag === "full") {
+      if (continuing && full(s)) {
         return [
           Model.cases.full.make({ policy: m.policy, until, at }),
           [report({ decision: Decision.cases.refused.make({ retryAfter: ttl }) })],
         ];
       }
 
-      const used = continuing && s._tag === "open" ? s.used + 1 : 1;
+      const used = continuing && open(s) ? s.used + 1 : 1;
 
       const next =
         used === m.policy.limit

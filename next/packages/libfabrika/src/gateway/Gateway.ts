@@ -5,15 +5,28 @@
  * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import { Context, Duration, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
+import {
+  Context,
+  Duration,
+  Effect,
+  Exit,
+  Layer,
+  Match,
+  Option,
+  Result,
+  Schema,
+  Semaphore,
+  Stream,
+  Tracer,
+} from "effect";
 import * as Cause from "effect/Cause";
 import { Base64, Base64Url } from "effect/encoding";
 import { RateLimiter } from "effect/persistence/RateLimiter";
 import * as Redacted from "effect/Redacted";
-import { admitted, MemberEvent, Saw } from "../access/Access.ts";
+import { Adds, admitted, MemberEvent, Saw } from "../access/Access.ts";
 import { foldAccess } from "../access/AccessFold.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
-import { ClientManager, type Written } from "../access/ClientManager.ts";
+import { ClientManager, Written } from "../access/ClientManager.ts";
 import type * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
 import {
   type Envelope,
@@ -49,8 +62,8 @@ import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SinkError, SpanSink } from "../telemetry/Sink.ts";
 import { Chain, REFUSED } from "../telemetry/Trace.ts";
-import { type CheckedHello, checkHello, type WebCryptoError } from "../transport/Hello.ts";
-import { type Checked, KeyLine, verifySshsig } from "../transport/Sshsig.ts";
+import { CheckedHello, checkHello, type WebCryptoError } from "../transport/Hello.ts";
+import { Checked, KeyLine, verifySshsig } from "../transport/Sshsig.ts";
 import { PasskeyLine, passkeyRp } from "../transport/Webauthn.ts";
 import { Admission, Answer, Attached, Hello, RateCountFailure, RateRefusal } from "../transport/Wire.ts";
 import { type GatewayError } from "./GatewayError.ts";
@@ -109,6 +122,12 @@ const EnvelopeState = Schema.TaggedUnion({
   retryable: {},
   settled: { result: Schema.Json },
 });
+
+const allocated = EnvelopeState.isAnyOf(["allocated"]);
+
+const settled = EnvelopeState.isAnyOf(["settled"]);
+
+const person = Writer.isAnyOf(["person"]);
 
 const Link = Schema.Struct({ traceId: Schema.String, spanId: Schema.String });
 
@@ -598,7 +617,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       }),
     );
 
-    if (result._tag === "refused") {
+    if (CheckedHello.isAnyOf(["refused"])(result)) {
       if (result.reason === "not_granted" && !claimed) {
         return no("bad_nonce");
       }
@@ -656,9 +675,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         line: lineFor(from, event),
       });
 
-      if (placed._tag === "refused") {
-        return yield* new LedgerError({ reason: "refused" });
-      }
+      yield* Match.valueTags(placed, {
+        placed: () => Effect.void,
+        refused: () => Effect.fail(new LedgerError({ reason: "refused" })),
+      });
 
       yield* store.atomic(() => {
         sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
@@ -748,7 +768,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return WatchReply.cases.refused.make({ reason: "not_granted", rows: [] });
     }
 
-    if (checked.success.by._tag !== "person") {
+    if (!person(checked.success.by)) {
       return WatchReply.cases.refused.make({ reason: "person_only", rows: [] });
     }
 
@@ -890,7 +910,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         }),
       );
 
-      if (checked._tag !== "refused") {
+      if (!Checked.isAnyOf(["refused"])(checked)) {
         verified = checked;
         break;
       }
@@ -913,7 +933,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     let enrollmentChecked: typeof Enrolled.Type | null = null;
 
-    if (c._tag === "added" && c.add.adds._tag === "person") {
+    if (Change.isAnyOf(["added"])(c) && Adds.isAnyOf(["person"])(c.add.adds)) {
       const added = c.add.adds;
 
       if (!Schema.is(KeyLine)(added.key) && !Schema.is(PasskeyLine)(added.key)) {
@@ -957,7 +977,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           }),
         );
 
-        if (proof._tag !== "passkey" || proof.origin !== pass.origin || proof.be !== pass.be || proof.bs !== pass.bs) {
+        if (
+          !Checked.isAnyOf(["passkey"])(proof) ||
+          proof.origin !== pass.origin ||
+          proof.be !== pass.be ||
+          proof.bs !== pass.bs
+        ) {
           return GrantReply.cases.refused.make({ reason: "bad_enrollment" });
         }
 
@@ -990,7 +1015,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         text,
         armored,
         signer,
-        ...(checked._tag === "passkey"
+        ...(Checked.isAnyOf(["passkey"])(checked)
           ? {
               passkey: {
                 origin: checked.origin,
@@ -1032,14 +1057,14 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
       const reply = yield* clients.write(event, pending.from);
 
-      if (reply._tag === "refused") {
+      if (Written.isAnyOf(["refused"])(reply)) {
         return GrantReply.cases.refused.make({ reason: reply.reason });
       }
 
       yield* store.atomic(() => {
         store.set(`change/${value.id}`, Receipt, { text, armored, reply });
 
-        if (c._tag === "added" && c.add.adds._tag === "person" && c.add.adds.passkey !== undefined) {
+        if (Change.isAnyOf(["added"])(c) && Adds.isAnyOf(["person"])(c.add.adds) && c.add.adds.passkey !== undefined) {
           const old = store.get(`enrollment/${value.id}`, Enrolled);
 
           if (old !== null) {
@@ -1052,7 +1077,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     return yield* applyGrant().pipe(
       Effect.flatMap((reply) =>
         Effect.gen(function* () {
-          if (reply._tag === "applied") {
+          if (GrantReply.isAnyOf(["applied"])(reply)) {
             const latest = yield* clients.members;
             const at = yield* clock;
             const pending = yield* store.atomic(() => {
@@ -1107,7 +1132,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return GrantReply.cases.refused.make({ reason: "not_granted" });
     }
 
-    if (checked.success.by._tag !== "person") {
+    if (!person(checked.success.by)) {
       return GrantReply.cases.refused.make({ reason: "person_only" });
     }
 
@@ -1133,7 +1158,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             Effect.flatMap(Schema.decodeUnknownEffect(Schema.TaggedUnion({ ready: { rev: Schema.Int }, parked: {} }))),
             Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
           );
-    return waited._tag === "parked" ? Answer.cases.parked.make({ stream, after }) : ok({ rev: waited.rev });
+    return Match.valueTags(waited, {
+      parked: () => Answer.cases.parked.make({ stream, after }),
+      ready: ({ rev }) => ok({ rev }),
+    });
   });
   /**
    * Whether the target's program has room for one send, asked as its message would land, with
@@ -1203,11 +1231,11 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     );
 
     if (Result.isFailure(budget)) {
-      if (budget.failure.reason._tag !== "RateLimitExceeded") {
-        return yield* new LedgerError({ reason: "storage", cause: budget.failure });
-      }
-
-      const answer = yield* refuseRate(Duration.toMillis(budget.failure.reason.retryAfter));
+      const failure = budget.failure;
+      const answer = yield* Match.valueTags(failure.reason, {
+        RateLimitStoreError: () => Effect.fail(new LedgerError({ reason: "storage", cause: failure })),
+        RateLimitExceeded: ({ retryAfter }) => refuseRate(Duration.toMillis(retryAfter)),
+      });
       yield* sink.check.pipe(
         Effect.mapError(
           (cause) =>
@@ -1296,7 +1324,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       refusal ??= "bad_input";
     }
 
-    if (method === "spans.deleteContent" && (by._tag !== "person" || !Schema.is(DeleteContent)(params))) {
+    if (method === "spans.deleteContent" && (!person(by) || !Schema.is(DeleteContent)(params))) {
       refusal ??= "not_allowed";
     }
 
@@ -1325,7 +1353,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         ? yield* options.policy(target)
         : { inputs: options.inputs.personOnly, events: options.events.personOnly };
 
-    if (request !== null && Result.isSuccess(request) && request.success.traceId !== undefined && by._tag === "agent") {
+    if (
+      request !== null &&
+      Result.isSuccess(request) &&
+      request.success.traceId !== undefined &&
+      Writer.isAnyOf(["agent"])(by)
+    ) {
       const traceId = request.success.traceId;
       const delivered = yield* store.atomic(
         () =>
@@ -1378,7 +1411,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           }
 
           if (
-            old.state._tag === "settled" ||
+            settled(old.state) ||
             held !== undefined ||
             destination?.state._tag !== "live" ||
             destination.state.process === old.process
@@ -1460,13 +1493,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
       const recorded = Option.isSome(priorRecord);
 
-      if (!recorded && binding.state._tag !== "allocated") {
+      if (!recorded && !allocated(binding.state)) {
         return yield* new LedgerError({ reason: "bad_row" });
       }
 
       if (recorded) {
-        const kept =
-          binding.state._tag === "allocated" ? { ...binding, state: EnvelopeState.cases.recorded.make({}) } : binding;
+        const kept = allocated(binding.state) ? { ...binding, state: EnvelopeState.cases.recorded.make({}) } : binding;
 
         if (letter !== null && kept !== binding) {
           yield* store.atomic(() => saveBinding(kept));
@@ -1534,11 +1566,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         line: lineFor(fromInput(binding), recordedEvent),
       });
 
-      if (placed._tag === "refused") {
-        return yield* new LedgerError({ reason: "refused" });
-      }
+      yield* Match.valueTags(placed, {
+        placed: () => Effect.void,
+        refused: () => Effect.fail(new LedgerError({ reason: "refused" })),
+      });
 
-      if (binding.state._tag === "allocated") {
+      if (allocated(binding.state)) {
         const recorded: Binding = { ...binding, state: EnvelopeState.cases.recorded.make({}) };
 
         if (letter !== null) {
@@ -1569,18 +1602,25 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
         if (method === "gateway.watch") {
           const answer = yield* watch(client);
-          return answer._tag === "refused" ? no(answer.reason) : ok({ rows: answer.rows });
+          return WatchReply.match(answer, {
+            watching: ({ rows }) => ok({ rows }),
+            refused: ({ reason }) => no(reason),
+          });
         }
 
         if (method === "gateway.deny") {
           const answer = yield* deny(client, params);
-          return answer._tag === "refused" ? no(answer.reason) : ok(answer);
+          return Match.valueTags(answer, {
+            applied: (applied) => ok(applied),
+            ignored: (ignored) => ok(ignored),
+            refused: ({ reason }) => no(reason),
+          });
         }
 
         if (method === "process.send" && message !== null && request !== null && Result.isSuccess(request)) {
           yield* membership(binding.client);
 
-          if (binding.state._tag === "settled") {
+          if (settled(binding.state)) {
             return deliveryAnswer(binding.state.result);
           }
 
@@ -1718,7 +1758,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         }
 
         if (method === "spans.deleteContent") {
-          if (by._tag !== "person") {
+          if (!person(by)) {
             return no("person_only");
           }
 
@@ -1788,7 +1828,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     if (
       Option.isSome(processes) &&
-      (destination === null || destination.state._tag !== "live" || destination.state.process !== binding.process)
+      (destination === null ||
+        !Match.valueTags(destination.state, {
+          live: ({ process }) => process === binding.process,
+          ended: () => false,
+          down: () => false,
+        }))
     ) {
       return yield* new NotGranted({});
     }

@@ -2,7 +2,7 @@
  * Selection and ownership rules for authenticated task access.
  */
 import { Result } from "effect";
-import type { Task } from "../tasks/Task.ts";
+import { State, type Task } from "../tasks/Task.ts";
 
 type Subject = { readonly process: string; readonly key: string; readonly execution?: string };
 
@@ -14,11 +14,15 @@ type Subject = { readonly process: string; readonly key: string; readonly execut
 export const owns = (task: Task, subject: Subject): boolean => {
   const state = task.state;
 
-  if (state._tag === "absent" || state.request.process !== subject.process || state.request.target !== subject.key) {
+  if (
+    State.isAnyOf(["absent"])(state) ||
+    state.request.process !== subject.process ||
+    state.request.target !== subject.key
+  ) {
     return false;
   }
 
-  if (state._tag === "requested") {
+  if (State.isAnyOf(["requested"])(state)) {
     return subject.execution === undefined;
   }
 
@@ -36,9 +40,7 @@ export const owns = (task: Task, subject: Subject): boolean => {
 export const select = (tasks: ReadonlyArray<Task>, subject: Subject): Result.Result<Task | null, "ambiguous"> => {
   const candidates = tasks.filter(
     (task) =>
-      task.state._tag !== "absent" &&
-      task.state._tag !== "finished" &&
-      task.state._tag !== "collected" &&
+      !State.isAnyOf(["absent", "finished", "collected"])(task.state) &&
       task.state.request.process === subject.process &&
       task.state.request.target === subject.key,
   );
