@@ -36,11 +36,12 @@ it("C0: the checked-in workflows, setup, workspace and typecheck pass the cache 
   expect(lintCaches(text(realFiles()))).toEqual([]);
 });
 
-it("C0 state: a workflow that runs by hand on main may keep setup-node's cache", () => {
+it("C0 state: the workflow that runs by hand on main uses the shared setup, which caches nothing", () => {
   const files = realFiles();
   const mutation = files.workflows[".github/workflows/mutation.yaml"];
   expect(mutation?.["on"]).not.toHaveProperty("pull_request");
-  expect(JSON.stringify(mutation)).toContain('"cache":"pnpm"');
+  expect(JSON.stringify(mutation)).not.toContain('"cache":"pnpm"');
+  expect(JSON.stringify(mutation)).toContain('"uses":"./.github/actions/pnpm"');
   expect(lintCaches(text(files))).toEqual([]);
 });
 
@@ -58,7 +59,48 @@ for (const [name, plant, error] of [
     (f: Files) => {
       step(setup(f), "setup", "node").with!["cache"] = "pnpm";
     },
-    ".github/actions/pnpm/action.yml: setup-node's cache saves on every ref; use .github/actions/pnpm",
+    ".github/actions/pnpm/action.yml: setup-node's cache is a pnpm store cache; use .github/actions/pnpm",
+  ],
+  [
+    "C1b: setup-node's own cache in a workflow that runs on main only",
+    (f: Files) => {
+      const jobs = Object.values(
+        f.workflows[".github/workflows/mutation.yaml"]!["jobs"] as Record<string, { steps: unknown[] }>,
+      );
+      jobs[0]!.steps.push({ uses: "actions/setup-node@v7", with: { "node-version": "26.13.0", cache: "pnpm" } });
+    },
+    ".github/workflows/mutation.yaml: setup-node's cache is a pnpm store cache; use .github/actions/pnpm",
+  ],
+  [
+    "C1b: pnpm/action-setup's own cache in the shared setup",
+    (f: Files) => {
+      step(setup(f), "setup", "pnpm").with!["cache"] = true;
+    },
+    ".github/actions/pnpm/action.yml: pnpm/action-setup's cache is a pnpm store cache; use .github/actions/pnpm",
+  ],
+  [
+    "C1b: pnpm/action-setup's own cache in a workflow that runs on main only",
+    (f: Files) => {
+      const jobs = Object.values(
+        f.workflows[".github/workflows/mutation.yaml"]!["jobs"] as Record<string, { steps: unknown[] }>,
+      );
+      jobs[0]!.steps.push({ uses: "pnpm/action-setup@v6", with: { run_install: false, cache: true } });
+    },
+    ".github/workflows/mutation.yaml: pnpm/action-setup's cache is a pnpm store cache; use .github/actions/pnpm",
+  ],
+  [
+    "C1b: a main-only save of the pnpm store",
+    (f: Files) => {
+      const jobs = Object.values(
+        f.workflows[".github/workflows/mutation.yaml"]!["jobs"] as Record<string, { steps: unknown[] }>,
+      );
+      jobs[0]!.steps.push({
+        uses: "actions/cache/save@v6",
+        if: `\${{ github.ref == 'refs/heads/main' }}`,
+        with: { path: "~/.local/share/pnpm/store", key: "store" },
+      });
+    },
+    ".github/workflows/mutation.yaml: a cache of the pnpm store did not pay; use .github/actions/pnpm",
   ],
   [
     "C2: the shared setup saving on main",

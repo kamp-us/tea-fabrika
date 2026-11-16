@@ -1,7 +1,7 @@
 ---
 id: 0135
 title: A laws file may restate a program's shapes by hand, and pins each one to the schema's type so drift fails the typecheck
-status: accepted
+status: amended-in-part by [0562](0562-nothing-teaches-the-wrong-shape.md)
 date: 2026-11-11
 tags: [tests, laws, schema, types, exam, programs]
 ---
@@ -21,6 +21,8 @@ expectTypeOf<Model>().toEqualTypeOf<typeof checklist.state.schema.Type>();
 
 **What this decides:** whether a test may write a program's Model, Msg and state types by hand, and
 what keeps the hand-written copy true.
+
+*[0562](0562-nothing-teaches-the-wrong-shape.md) ends the hand-written `_tag` inside a restated shape; the rest of this file still holds.*
 
 ## Context
 

@@ -65,6 +65,7 @@ each job over ([0217](./.decisions/0217-next-grows-beside-today.md),
 | Understand a design that is still a draft | `docs/` (for example [`docs/review-machine.md`](./docs/review-machine.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too |
 | Build the new version | [`next/AGENTS.md`](./next/AGENTS.md), then `docs/direction/` | Code in `next/`, with its test beside it as `name.test.ts` |
 | Change the machines (today's version) | `packages/fabrika`, `packages/pipeline`, `programs/*`, with the top-level [`README.md`](./README.md#what-is-in-this-repository) as the map and each part's own README | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. Outside a package, import it by its name, never by a path; inside one, by relative path. Toy projects used by tests live in `fixtures/` |
+| Do an operation by hand: a sev, a wipe of the dev and test homes | [`.runbooks/`](./.runbooks/), the one file for that operation | One file there, the first time the operation is done for real, linking the decision it follows ([0571](./.decisions/0571-runbooks-live-in-top-level-runbooks.md)) |
 | Learn a package by doing it | [`docs/tutorials/`](./docs/tutorials/), one folder per tutorial | A folder there with a `package.json` whose `typecheck` covers the files. Run every step on a fresh clone before it lands |
 | Run a real ticket through the pipeline | [the how-to](./docs/how-to/run-a-pipeline-ticket.md) and [its rules](./docs/how-to/run-a-pipeline-ticket.md#the-rules-for-a-live-run) | The run's rows in `field/`, the same day |
 | Look at a live run's state and logs | `runs/` on your own machine | Nothing by hand. `runs/` is ignored by git and is never committed |
@@ -147,7 +148,9 @@ For every agent, whatever its step. A step's skill adds its own rules and its ow
   reviewer rechecks ([0177](./.decisions/0177-fix-round-is-one-agent.md)); a law that needs the real
   machine runs before the first review, and on the owner's Mac only after the lead's read and the
   owner's yes ([0178](./.decisions/0178-host-only-laws-run-first.md)); a quest stops at its second
-  sent-back review ([0176](./.decisions/0176-second-send-back-stops-lane.md)); no number caps a pull
+  sent-back review ([0176](./.decisions/0176-second-send-back-stops-lane.md)), unless its faults are
+  named, located and inside the plan, when the lead decides one more fix round itself
+  ([0564](./.decisions/0564-lead-decides-further-fix-rounds.md)); no number caps a pull
   request's size ([0099](./.decisions/0099-no-number-caps-a-pull-request.md)); the lead merges once
   every step passed, and only real loosening of a law or a new design call waits on the owner
   ([0014](./.decisions/0014-the-lead-merges-when-every-step-passed.md)); owed work needs no owner

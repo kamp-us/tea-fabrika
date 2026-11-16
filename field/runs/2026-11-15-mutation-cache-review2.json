@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mutation-cache-review2",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1378",
+  "started": "2026-11-15T16:20:38-08:00",
+  "ended": "2026-11-15T16:21:29-08:00",
+  "parent": "2026-11-15-mutation-cache-review1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Recheck of the mutation cache fix at 230cca10d, in today's CI tooling: merge-ready, one finding row. Rule C1b now refuses pnpm/action-setup's cache input in the shared action and every workflow, and an actions/cache, cache/save or cache/restore step whose path names pnpm's store; each case sent back is named by its own error. The row: a store path given through pnpm's own recipe, path ${{ env.STORE_PATH }}, still passes, though the regex's comment says it covers pnpm store path's answer.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 4,
+  "note": "Ran alone with the pinned Node: caches.test.ts (18 passed), from the worktree with a node_modules symlink, removed after. Plants in a scratch copy of the lint, never the branch: pnpm/action-setup cache true in the shared action and in scheduled.yaml; main-only saves of ~/.local/share/pnpm/store in scheduled.yaml, of .pnpm-store in ci-speed.yaml and of a two-line path with the store second; a restore of ~/Library/pnpm/store in host.yaml (all named); a save of ${{ env.STORE_PATH }} and of a step output (both pass). Not run: the mutation workflow, pnpm typecheck.",
+  "step": "review"
+}

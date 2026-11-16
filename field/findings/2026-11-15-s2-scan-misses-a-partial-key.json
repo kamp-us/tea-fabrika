@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-s2-scan-misses-a-partial-key",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/client/HandsSecrets.laws.test.ts",
+    "line": 427
+  },
+  "says": "In next/, the S2 property finds the hands key's private half only as a whole string, so a leak of most of it (all but a few characters) passes.",
+  "proof": "In a scratch copy outside the worktree, KeyFile.ts's read logged Effect.logDebug(\"key read\", stored.jwk.d.slice(4)): HandsSecrets.laws.test.ts printed Tests 1 passed (1). The same line with the whole stored.jwk.d failed with 'S2: [secrets] the private half is in no logs'.",
+  "cost": "A log, span or error that holds a cut or reformatted private key, enough to rebuild it, stays green on the one law that guards it.",
+  "head": "c9d0238e7204c1d3bdb7ba107c2d61afd802c80b",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1331"
+}

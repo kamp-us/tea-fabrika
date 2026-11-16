@@ -1,7 +1,7 @@
 ---
 id: 0046
 title: In next/, every state machine is a tea machine and a file exports at most one, or one factory of one, with its Model, Msg and update in that file and no input or output code, never a plain union with a function or a state edited by hand from outside
-status: accepted
+status: amended-in-part by [0567](0567-a-tagged-value-is-matched.md)
 date: 2026-11-09
 tags: [state-machine, tea, file-layout, lint, properties, elm, next]
 ---
@@ -197,6 +197,9 @@ machine (`app/runner.ts:271-272`).
 
 ## Amendments
 
+- 2026-11-15: [0567](0567-a-tagged-value-is-matched.md) supersedes the amendment just below, the
+  one on how an `update` handler picks the next state. The rest of this file holds as written.
+
 - 2026-11-10: **an `update` handler picks the next state with a plain conditional on the state's
   `_tag`,** the form `next/packages/libfabrika/src/app/brain-life.ts` has today. It does not use
   Effect's `Match` module or the Model's own `Schema.TaggedUnion` `.match` for that. Tracker
@@ -216,6 +219,8 @@ machine (`app/runner.ts:271-272`).
     machine's property tests carry that (Consequences).
   - **What it does not cover.** Only the transition code inside `update`. `Match` and `.match`
     anywhere else are untouched.
+  - **Later.** [0558](0558-no-ternary-deeper-than-two.md) caps how deep such a conditional nests
+    when it is a ternary: 2. Everything above still holds.
 
 - 2026-11-10: **a file may export a machine factory in place of a machine:** one function that
   takes a config and returns one tea machine. It is for a machine that needs something from its
