@@ -73,7 +73,7 @@ const isNode = (u: unknown): u is Node =>
     "parts" in u &&
     Array.isArray(u.parts) &&
     u.parts.every(
-      (p: unknown) =>
+      (p: unknown): p is { percent: number; inner: Node } =>
         typeof p === "object" &&
         p !== null &&
         "percent" in p &&

@@ -36,7 +36,7 @@ export type World = {
   readonly reopen: Effect.Effect<void, unknown>;
   readonly fire: Effect.Effect<void, unknown>;
   readonly green: Effect.Effect<void>;
-  readonly deliver: (input: unknown) => Effect.Effect<unknown, unknown>;
+  readonly deliver: (input: typeof Mail.Land.Type | typeof Mail.Abandon.Type) => Effect.Effect<unknown, unknown>;
   readonly land: (ref: string) => Effect.Effect<unknown, unknown>;
   readonly savedReplies: Effect.Effect<ReadonlyArray<unknown>, unknown>;
 };

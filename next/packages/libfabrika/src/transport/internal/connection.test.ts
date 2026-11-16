@@ -27,7 +27,7 @@ type Msg =
   | { readonly type: "waited"; readonly wait: W }
   | { readonly type: "answered"; readonly wait: W };
 
-const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
+const bytes = (value: Saved) => new TextEncoder().encode(JSON.stringify(value)).length;
 const same = (a: W, b: W) => a.id === b.id && a.stream === b.stream && a.after === b.after;
 
 /** The named state an attachment stands for: busy lives only in the tag. */

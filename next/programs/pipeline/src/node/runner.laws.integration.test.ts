@@ -216,7 +216,7 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
   yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
   let current = yield* life(store, services, scope);
   let serial = 0;
-  const deliver = (input: unknown) =>
+  const deliver = (input: typeof Mail.Land.Type | typeof Mail.Abandon.Type) =>
     current.runner.msg({
       id: `incoming-${++serial}`,
       envelope: {

@@ -53,6 +53,7 @@ import {
 } from "effect";
 import { TestClock } from "effect/testing";
 import { handlers } from "../handlers.ts";
+import type * as Mail from "../Mail.ts";
 import { merger } from "../Merger.ts";
 import { queue } from "../Queue.ts";
 import * as QueueRunnerTest from "../QueueRunnerTest.ts";
@@ -340,7 +341,9 @@ const open = Effect.fnUntraced(function* (
   const grants: Array<typeof StartGrant.Type> = [{ source: "pipeline/queue", to: "pipeline/merger" }];
   let current = yield* life(store, wrapped, ids, scope, grants);
   let letter = 0;
-  const deliver = Effect.fnUntraced(function* (input: unknown) {
+  const deliver = Effect.fnUntraced(function* (
+    input: typeof Mail.Enqueue.Type | typeof Mail.Drop.Type | typeof Mail.Resume.Type,
+  ) {
     const runner = yield* current.runner(NAME);
     const n = ++letter;
     return yield* runner.msg({

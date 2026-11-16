@@ -12,7 +12,15 @@ import * as Id from "../Id.ts";
 import { Recipient, inSignalSpace } from "../processes/Process.ts";
 import { signalId } from "../processes/Process.ts";
 import type { Sql } from "../Sql.ts";
-import { Writer, Session, SessionManager, NotGranted, SignRequest } from "./SessionManager.ts";
+import {
+  Writer,
+  Session,
+  SessionManager,
+  NotGranted,
+  SignRequest,
+  type SessionManagerError,
+  type SigningRefused,
+} from "./SessionManager.ts";
 
 // Match fc.jsonValue({maxDepth: depth}): finite numbers, strings/keys of
 // length 0..10, and arrays/objects of width 0..10. No required object keys.
@@ -211,7 +219,7 @@ const commitFault = (inner: Sql) => {
 };
 
 /** Holds that `error` is the signer's own refusal, for that reason. */
-const refusedFor = (error: unknown, reason: string) => {
+const refusedFor = (error: SigningRefused | NotGranted | SessionManagerError | null, reason: string) => {
   expect(error).toHaveProperty("_tag", "SigningRefused");
   expect(error).toHaveProperty("reason", reason);
 };

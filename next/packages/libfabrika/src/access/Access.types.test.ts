@@ -23,7 +23,7 @@ type FromLedger<Service> = Extract<Failures<Service>, { readonly _tag: "LedgerEr
 /** A service that breaks the law in one method, so the helper is seen to find it. */
 type Leaky = {
   readonly load: Effect.Effect<void, { readonly _tag: "Own" }>;
-  readonly save: (value: unknown) => Effect.Effect<void, { readonly _tag: "Own" } | { readonly _tag: "LedgerError" }>;
+  readonly save: (value: string) => Effect.Effect<void, { readonly _tag: "Own" } | { readonly _tag: "LedgerError" }>;
 };
 
 it("type: no service of access/ fails with an error tagged LedgerError", () => {

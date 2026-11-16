@@ -419,7 +419,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
     const answer = yield* trace(d.grant({ text: value, armored: yield* c.key.sign(value) }));
     expect(answer._tag).toBe("refused");
   });
-  const route = Effect.fnUntraced(function* (c: Client, method: string, params: unknown) {
+  const route = Effect.fnUntraced(function* (c: Client, method: string, params: Schema.Json) {
     // oxlint-disable-next-line fabrika/no-ledger-sql -- edge: this security law audits persisted input records
     const inputRows = () => store.sql.exec("SELECT * FROM entries WHERE stream='gateway/inputs'");
     const beforeInputs = inputRows();
@@ -466,7 +466,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
    * W2b: two calls through a second door over the same store whose budget is one call a minute; a
    * new budget starts a new window, so the first spends it and the second is over it.
    */
-  const routeLimited = Effect.fnUntraced(function* (c: Client, method: string, params: unknown) {
+  const routeLimited = Effect.fnUntraced(function* (c: Client, method: string, params: Schema.Json) {
     const tight = store.gateway({ ...options, rateLimit: { limit: 1, window: 60_000 } }).pipe(Layer.provide(wakeups));
     return yield* Gateway.use((g) =>
       Effect.gen(function* () {
@@ -507,7 +507,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
     wakeFault,
     rings: store.rings,
     /** One call straight at the door, as a connection's `call` makes it, with no frame around it. */
-    door: (c: Client, method: string, params: unknown) => trace(d.route(c.client, method, params)),
+    door: (c: Client, method: string, params: Schema.Json) => trace(d.route(c.client, method, params)),
     keys,
     grant,
     hello,

@@ -154,7 +154,7 @@ const tags = (span: Tracer.NativeSpan): Record<string, unknown> => Object.fromEn
 const tagged = (span: Tracer.NativeSpan, word: string): unknown =>
   Object.entries(tags(span)).find(([key]) => key === word || key.endsWith(`.${word}`))?.[1];
 
-const holds = (span: Tracer.NativeSpan, value: unknown): boolean => Object.values(tags(span)).includes(value);
+const holds = (span: Tracer.NativeSpan, value: string): boolean => Object.values(tags(span)).includes(value);
 
 /** Whether `outer` is above `span`, walking its parents. */
 const within = (span: Tracer.NativeSpan, outer: Tracer.NativeSpan): boolean => {
