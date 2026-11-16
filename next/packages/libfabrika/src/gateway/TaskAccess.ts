@@ -3,7 +3,7 @@
  *
  * @stability unstable
  */
-import { Result } from "effect";
+import { Array as Arr, Result } from "effect";
 import type { Task } from "../tasks/Task.ts";
 
 type Subject = { readonly process: string; readonly key: string; readonly execution?: string };
@@ -38,7 +38,8 @@ export const owns = (task: Task, subject: Subject): boolean => {
  * @category getters
  */
 export const select = (tasks: ReadonlyArray<Task>, subject: Subject): Result.Result<Task | null, "ambiguous"> => {
-  const candidates = tasks.filter(
+  const candidates = Arr.filter(
+    tasks,
     (task) =>
       task.state._tag !== "absent" &&
       task.state._tag !== "finished" &&

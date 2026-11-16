@@ -8,7 +8,7 @@
  *
  * @stability unstable
  */
-import { Cause, Schema } from "effect";
+import { Array as Arr, Cause, Schema } from "effect";
 import { ProcessId } from "../ProcessId.ts";
 
 /**
@@ -358,7 +358,7 @@ const cut = (text: string): string => {
  */
 export const short = (texts: Readonly<Record<string, string>>): Record<string, string | number> =>
   Object.fromEntries(
-    Object.entries(texts).flatMap(([key, text]) =>
+    Arr.flatMap(Object.entries(texts), ([key, text]) =>
       text.length <= MOST_CHARS
         ? [[key, text]]
         : [

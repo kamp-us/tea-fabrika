@@ -8,7 +8,7 @@
  *
  * @stability unstable
  */
-import { Context, Effect, Layer, Schema } from "effect";
+import { Array as Arr, Context, Effect, Layer, Schema } from "effect";
 import { SinkError } from "./Trace.ts";
 
 /**
@@ -23,7 +23,11 @@ export interface BucketCalls {
   readonly head: (key: string) => Promise<{ readonly sha256: string } | null>;
 }
 
-const hex = (bytes: Uint8Array): string => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+const hex = (bytes: Uint8Array): string =>
+  Arr.join(
+    Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")),
+    "",
+  );
 
 /**
  * Computes a body's SHA-256, as lowercase hex.

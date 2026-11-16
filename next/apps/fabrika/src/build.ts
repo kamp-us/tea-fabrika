@@ -6,7 +6,7 @@
  */
 import { BuildError, build as buildOne, type Selection } from "@kampus/libfabrika/build";
 import type { Row } from "@kampus/libfabrika/compiler";
-import { Effect, FileSystem, Path } from "effect";
+import { Array as Arr, Effect, FileSystem, Path } from "effect";
 import { programs as selected } from "./table.ts";
 
 export type {
@@ -52,13 +52,13 @@ export const build = Effect.fn("build.app")(function* (options: Options) {
     ROOT = path.resolve(APP, "../../..");
   const extra = options.programs ?? {};
   const programs: ReadonlyArray<Selection> = [
-    ...selected.filter((p) => !Object.hasOwn(extra, p.name)),
-    ...Object.entries(extra).map(([name, module]) => ({ name, package: module, export: "program" })),
+    ...Arr.filter(selected, (p) => !Object.hasOwn(extra, p.name)),
+    ...Arr.map(Object.entries(extra), ([name, module]) => ({ name, package: module, export: "program" })),
   ];
   const files =
     options.files ??
     (yield* fs.glob("next/**/*.tsx", { root: ROOT }).pipe(
-      Effect.map((found) => found.filter((p) => !p.includes("node_modules") && !p.includes(".test."))),
+      Effect.map((found) => Arr.filter(found, (p) => !p.includes("node_modules") && !p.includes(".test."))),
       Effect.mapError((cause) => new BuildError({ reason: "read", cause })),
     ));
   const styles = yield* Effect.forEach(STYLES, (module) => path.fromFileUrl(new URL(import.meta.resolve(module))), {
