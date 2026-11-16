@@ -290,7 +290,7 @@ const guarded = <A>(work: Effect.Effect<A, ChildrenError>, defect: string) =>
     });
     return yield* work.pipe(
       Effect.withTracer(safe),
-      Effect.catchCause((cause) => (Cause.hasDies(cause) ? Effect.die(new Error(defect)) : Effect.failCause(cause))),
+      Effect.catchCauseIf(Cause.hasDies, () => Effect.die(new Error(defect))),
     );
   });
 
