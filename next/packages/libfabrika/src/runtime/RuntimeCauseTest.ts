@@ -20,6 +20,7 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
 import { Effect, Layer, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { MemberEvent } from "../access/Access.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
@@ -686,8 +687,8 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
           expect(sent).toBeInstanceOf(ProgramDown);
           const saved = yield* openRecovery(sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision }).load;
           const stored = [
-            ...(saved?.receipts ?? []).flatMap((receipt) => receipt.errors),
-            ...(saved?.observations ?? []).flatMap((o) => ("error" in o && o.error !== undefined ? [o.error] : [])),
+            ...Arr.flatMap(saved?.receipts ?? [], (receipt) => receipt.errors),
+            ...Arr.flatMap(saved?.observations ?? [], (o) => ("error" in o && o.error !== undefined ? [o.error] : [])),
           ];
           expect(stored.length, "the failed step is stored").toBeGreaterThan(0);
 

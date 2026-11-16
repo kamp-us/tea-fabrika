@@ -27,6 +27,7 @@ import {
   Schema,
   Stream,
 } from "effect";
+import * as Arr from "effect/Array";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { SessionManagerError, Storage } from "../access/SessionManager.ts";
@@ -356,11 +357,11 @@ const body = (row: Entry) => Schema.decodeUnknownSync(Schema.Record(Schema.Strin
 
 const inbox = read(`${NAME}/inbox`);
 const events = read("facts");
-const steps = read(PROCESS).pipe(Effect.map((rows) => rows.filter((r) => r._tag === "stepped")));
+const steps = read(PROCESS).pipe(Effect.map((rows) => Arr.filter(rows, (r) => r._tag === "stepped")));
 
 const resultLetters = inbox.pipe(
   Effect.map((rows) =>
-    rows.filter((r) => {
+    Arr.filter(rows, (r) => {
       const m = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Struct({ type: Schema.String }) }))(r.body);
       return Option.isSome(m) && /_(ok|err)$/.test(m.value.m.type);
     }),
@@ -643,7 +644,8 @@ const worldOn = async (
               yield* Deferred.succeed(entered, undefined);
               const rows = yield* inbox;
               expect(
-                rows.some(
+                Arr.some(
+                  rows,
                   (row) =>
                     JSON.stringify(row.body).includes(`"n":${cmd.n}`) ||
                     JSON.stringify(row.body).includes(`"at":${cmd.n}`),
@@ -970,7 +972,7 @@ describe("ticket 884, next/ brain mail", () => {
               expect((yield* r.open(`notice-${index}`)).view).toEqual(model);
             }
 
-            expect((yield* steps).map((row) => body(row).input)).toEqual(msgs.map((_, i) => notice(String(i))));
+            expect(Arr.map(yield* steps, (row) => body(row).input)).toEqual(Arr.map(msgs, (_, i) => notice(String(i))));
           }).pipe(Effect.provide(w.layer())),
         );
         w.reopen();
@@ -1019,7 +1021,7 @@ describe("ticket 884, next/ brain mail", () => {
               _tag: "placed",
             });
             expect((yield* r.open("after")).view).toEqual(before);
-            expect((yield* inbox).map((row) => row.id)).toEqual(["plain-mail"]);
+            expect(Arr.map(yield* inbox, (row) => row.id)).toEqual(["plain-mail"]);
             expect(yield* steps).toEqual([]);
           }).pipe(Effect.provide(w.layer())),
         );
@@ -1055,11 +1057,11 @@ describe("ticket 884, next/ brain mail", () => {
             const before = (yield* r.open("before")).view;
             yield* appendNotice(notice("bad"), bad);
             expect((yield* r.open("bad")).view).toEqual(before);
-            expect((yield* read(PROCESS)).filter((row) => row._tag === "down")).toEqual([]);
+            expect(Arr.filter(yield* read(PROCESS), (row) => row._tag === "down")).toEqual([]);
             expect(yield* steps).toEqual([]);
             yield* appendNotice(notice("good"), { type: "add", n: 2 });
             expect((yield* r.open("good")).view).toEqual({ ...before, count: 2 });
-            expect((yield* steps).map((row) => body(row).input)).toEqual([notice("good")]);
+            expect(Arr.map(yield* steps, (row) => body(row).input)).toEqual([notice("good")]);
           }).pipe(Effect.provide(w.layer())),
         );
       }),
@@ -1105,8 +1107,8 @@ describe("ticket 884, next/ brain mail", () => {
             expect((yield* r.open("good-port")).view).toEqual({ ...before, count: 1 });
             expect(checked).toEqual([-n, n + 1]);
             expect((yield* r.open("after-good-port")).view).toEqual({ ...before, count: 1 });
-            expect((yield* steps).map((row) => body(row).input)).toEqual([notice("bypass-port"), "good-port"]);
-            expect((yield* read(PROCESS)).filter((row) => row._tag === "down")).toEqual([]);
+            expect(Arr.map(yield* steps, (row) => body(row).input)).toEqual([notice("bypass-port"), "good-port"]);
+            expect(Arr.filter(yield* read(PROCESS), (row) => row._tag === "down")).toEqual([]);
           }).pipe(Effect.provide(w.layer())),
         );
         w.reopen();
@@ -1151,11 +1153,11 @@ describe("ticket 884, next/ brain mail", () => {
             expect(yield* ProcessStore.use((s) => s.placed("retry-mail"))).toBeNull();
             failing = false;
             expect((yield* r.open("retry")).view).toEqual({ ...before, count: n });
-            expect((yield* steps).map((row) => body(row).input)).toEqual(["retry-mail"]);
+            expect(Arr.map(yield* steps, (row) => body(row).input)).toEqual(["retry-mail"]);
             yield* mailbox.send(NAME, "later-mail", { type: "add", n: 1 }, from());
             expect((yield* r.open("later")).view).toEqual({ ...before, count: n + 1 });
-            expect((yield* steps).map((row) => body(row).input)).toEqual(["retry-mail", "later-mail"]);
-            expect((yield* read(PROCESS)).filter((row) => row._tag === "down")).toEqual([]);
+            expect(Arr.map(yield* steps, (row) => body(row).input)).toEqual(["retry-mail", "later-mail"]);
+            expect(Arr.filter(yield* read(PROCESS), (row) => row._tag === "down")).toEqual([]);
           }).pipe(Effect.provide(w.layer())),
         );
       }),
@@ -1273,15 +1275,18 @@ describe("p14 turns and watcher revisions", () => {
           const answers = yield* Effect.forEach(messages, (m) => r.msg(m), {
             concurrency: "unbounded",
           });
-          expect(answers.every((a) => a._tag === "accepted")).toBe(true);
-          expect(answers.map((a) => (a._tag === "accepted" ? a.pos : -1)).sort((a, b) => a - b)).toEqual(
+          expect(Arr.every(answers, (a) => a._tag === "accepted")).toBe(true);
+          expect(Arr.map(answers, (a) => (a._tag === "accepted" ? a.pos : -1)).sort((a, b) => a - b)).toEqual(
             Array.from({ length: 24 }, (_, i) => i + 1),
           );
           expect(yield* inbox).toHaveLength(24);
           expect((yield* r.open("inspect")).view.count).toBe(24);
 
           for (const client of ["a", "b"]) {
-            expect(w.published.get(client)?.map((u) => u.rev)).toEqual(Array.from({ length: 25 }, (_, i) => i));
+            const updates = w.published.get(client);
+            expect(updates === undefined ? undefined : Arr.map(updates, (u) => u.rev)).toEqual(
+              Array.from({ length: 25 }, (_, i) => i),
+            );
           }
         }).pipe(Effect.provide(w.layer())),
       );
@@ -1298,7 +1303,8 @@ describe("p14 turns and watcher revisions", () => {
           yield* r.msg(w.input(1, { type: "add", n: 2 }));
           yield* ledger.append("elsewhere", "noise", lineFor(from(), { _tag: "noise" }));
           yield* r.msg(w.input(2, { type: "add", n: 3 }));
-          expect(w.published.get("a")?.map((u) => u.rev)).toEqual([0, 1, 2]);
+          const updates = w.published.get("a");
+          expect(updates === undefined ? undefined : Arr.map(updates, (u) => u.rev)).toEqual([0, 1, 2]);
           expect((yield* r.open("inspect")).view.count).toBe(5);
         }).pipe(Effect.provide(w.layer())),
       );
@@ -1680,19 +1686,24 @@ describe("p35 Cmd order, replay and recorded failures", () => {
             ids.push(`${PROCESS}/due/${asked}/${before.rev}`);
             yield* TestClock.setTime(arrivedAt);
             yield* r.due(before.view.wake!);
-            const timers = (yield* inbox).filter((row) => row.id.includes("/due/"));
+            const timers = Arr.filter(yield* inbox, (row) => row.id.includes("/due/"));
             expect((yield* r.open("delivered")).view).toMatchObject({
               count: n + 1,
               replies: n + 1,
               wake: asked + 10,
             });
-            expect(timers.map((row) => body(row).m)).toEqual(
-              arrivals.slice(0, n + 1).map((clock) => ({ type: "timer", at: asked, arrivedAt: clock })),
+            expect(Arr.map(timers, (row) => body(row).m)).toEqual(
+              Arr.map(arrivals.slice(0, n + 1), (clock) => ({ type: "timer", at: asked, arrivedAt: clock })),
             );
             expect(w.workCalls()).toBe(n + 1);
           }
 
-          expect((yield* inbox).filter((row) => row.id.includes("/due/")).map((row) => row.id)).toEqual(ids);
+          expect(
+            Arr.map(
+              Arr.filter(yield* inbox, (row) => row.id.includes("/due/")),
+              (row) => row.id,
+            ),
+          ).toEqual(ids);
           expect(new Set(ids).size).toBe(2);
         }).pipe(Effect.provide(w.layer()));
       }),
@@ -1723,7 +1734,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           w.fault.record = true;
           yield* TestClock.setTime(arrivedAt);
           expect(yield* failure(r.due(asked))).toMatchObject({ _tag: "LedgerError" });
-          const first = (yield* inbox).filter((row) => row.id.includes("/due/"));
+          const first = Arr.filter(yield* inbox, (row) => row.id.includes("/due/"));
           expect(first).toHaveLength(1);
           expect(first[0]!.id).toBe(`${PROCESS}/due/${asked}/${before.rev}`);
           expect(body(first[0]!).m).toEqual({ type: "timer", at: asked, arrivedAt });
@@ -1731,7 +1742,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           expect(w.workCalls()).toBe(0);
           yield* TestClock.adjust(lag);
           yield* r.due(asked);
-          expect((yield* inbox).filter((row) => row.id.includes("/due/"))).toEqual(first);
+          expect(Arr.filter(yield* inbox, (row) => row.id.includes("/due/"))).toEqual(first);
           expect((yield* r.open("repeated")).view).toMatchObject({ count: 1, wake: asked + 10 });
         }).pipe(Effect.provide(w.layer()));
       }),
@@ -1847,7 +1858,9 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           yield* r.due(40);
           expect(w.workCalls()).toBe(1);
           expect((yield* r.open("a")).view).toMatchObject({ count: 1, replies: 1, wake: 50 });
-          expect((yield* inbox).filter((row) => JSON.stringify(row.body).includes('"type":"timer"'))).toHaveLength(1);
+          expect(Arr.filter(yield* inbox, (row) => JSON.stringify(row.body).includes('"type":"timer"'))).toHaveLength(
+            1,
+          );
           expect(w.alarms.at(-1)).toBe(50);
         }).pipe(Effect.provide(w.layer())),
       );
@@ -1885,7 +1898,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           expect(w.workCalls()).toBe(1);
           expect(yield* resultLetters).toHaveLength(0);
           const tables = w.store.db().prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
-          const saved = tables.map(({ name }) =>
+          const saved = Arr.map(tables, ({ name }) =>
             w.store
               .db()
               .prepare(`SELECT * FROM "${String(name)}"`)
@@ -2097,7 +2110,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
                 yield* w.deliver(input, "comment");
                 expect(yield* r.msg(input)).toMatchObject({ _tag: "accepted" });
                 expect((yield* r.open("stamp")).view).toMatchObject({ note: input.envelope.id });
-                expect((yield* events).map((row) => ({ by: row.by, parent: row.parent }))).toEqual([
+                expect(Arr.map(yield* events, (row) => ({ by: row.by, parent: row.parent }))).toEqual([
                   { by: writer("agent").key, parent: input.envelope.id },
                 ]);
               }).pipe(Effect.provide(w.layer())),
@@ -2133,7 +2146,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
                 yield* Deferred.succeed(w.gate, undefined);
                 yield* Fiber.join(running);
                 const rows = yield* events;
-                expect(rows.map((row) => ({ token: body(row).token, by: row.by, parent: row.parent }))).toEqual([
+                expect(Arr.map(rows, (row) => ({ token: body(row).token, by: row.by, parent: row.parent }))).toEqual([
                   { token: value, by: writer("agent").key, parent: b.envelope.id },
                 ]);
                 expect((yield* r.open("done")).view).toMatchObject({ queue: [], replies: 2 });
@@ -2177,7 +2190,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
                 yield* r.msg(own);
                 expected.push({ token: "own", by: owner.key, parent: null });
                 expect(
-                  (yield* events).map((row) => ({
+                  Arr.map(yield* events, (row) => ({
                     token: body(row).token,
                     by: row.by,
                     parent: row.parent,
@@ -2224,7 +2237,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 
                   yield* r.msg(i);
                   expect(yield* events).toEqual([]);
-                  expect(w.calls.filter((c) => c.parent === null)).toEqual([]);
+                  expect(Arr.filter(w.calls, (c) => c.parent === null)).toEqual([]);
                   expect((yield* resultLetters).at(-1)?.body).toMatchObject({
                     m: { type: "write_err", reason },
                   });
@@ -2265,7 +2278,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
                 const r: Runner = yield* w.ProgramRunner;
                 yield* w.deliver(first);
                 yield* r.msg(first);
-                expect((yield* events).map((row) => body(row).token)).toEqual([value]);
+                expect(Arr.map(yield* events, (row) => body(row).token)).toEqual([value]);
                 expect((yield* resultLetters).at(-1)?.body).toMatchObject({ m: { reason: "spent" } });
               }).pipe(Effect.provide(w.layer())),
             );
@@ -2324,13 +2337,13 @@ describe("p69 sender survives queued work and Cmd replies", () => {
                 Effect.gen(function* () {
                   const r: Runner = yield* w.ProgramRunner;
                   expect(yield* r.msg(i)).toMatchObject({ _tag: "accepted" });
-                  expect((yield* events).map((row) => ({ by: row.by, parent: row.parent }))).toEqual([
+                  expect(Arr.map(yield* events, (row) => ({ by: row.by, parent: row.parent }))).toEqual([
                     { by: writer("agent").key, parent: i.envelope.id },
                   ]);
                   expect(w.signCalls.length).toBeGreaterThanOrEqual(2);
-                  expect(new Set(w.signCalls.map((call) => call.id)).size).toBe(1);
+                  expect(new Set(Arr.map(w.signCalls, (call) => call.id)).size).toBe(1);
                   expect(
-                    (yield* resultLetters).filter((row) => JSON.stringify(row.body).includes("write_ok")),
+                    Arr.filter(yield* resultLetters, (row) => JSON.stringify(row.body).includes("write_ok")),
                   ).toHaveLength(1);
                 }).pipe(Effect.provide(w.layer())),
               );
@@ -2555,7 +2568,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
                   _tag: "accepted",
                 });
                 expect((yield* r.open("still-live")).view).toMatchObject({ count: 1 });
-                expect((yield* read(PROCESS)).filter((row) => row._tag === "down")).toEqual([]);
+                expect(Arr.filter(yield* read(PROCESS), (row) => row._tag === "down")).toEqual([]);
               }).pipe(Effect.provide(w.layer())),
             );
           }),
@@ -2684,7 +2697,7 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
                     yield* r.msg(input);
                     expect(w.calls, "no checked commit may be attempted on this stream").toEqual([]);
                     expect(yield* read(stream)).toEqual([]);
-                    expect((yield* resultLetters).map((row) => row.body)).toMatchObject([
+                    expect(Arr.map(yield* resultLetters, (row) => row.body)).toMatchObject([
                       { m: { type: "write_err", reason: expect.any(String) } },
                     ]);
                   }).pipe(Effect.provide(w.layer())),
@@ -2728,7 +2741,7 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
                   yield* w.deliver(input, "comment");
                   yield* r.msg(input);
                   expect(w.calls).toHaveLength(1);
-                  expect((yield* resultLetters).map((row) => row.body)).toMatchObject([
+                  expect(Arr.map(yield* resultLetters, (row) => row.body)).toMatchObject([
                     { m: { type: "write_err", reason: value, error: { _tag: value } } },
                   ]);
                   expect(yield* events).toEqual([]);
@@ -2851,7 +2864,7 @@ describe("P11 recovery gaps and durable installation", () => {
             const inspect = Effect.gen(function* () {
               const r = yield* w.ProgramRunner;
               yield* r.open("inspect-gap");
-              expect((yield* inbox).map((row) => row.id)).toEqual([i.id]);
+              expect(Arr.map(yield* inbox, (row) => row.id)).toEqual([i.id]);
               expect(w.workCalls()).toBe(0);
               expect((yield* ProcessStore.use((s) => s.load))?.cmds).toMatchObject([
                 { id: `${PROCESS}/1/0`, state: "dispatched", cmd: { type: "work", n: 71 } },
@@ -2960,9 +2973,12 @@ describe("P11 recovery gaps and durable installation", () => {
           expect(w.workCalls()).toBe(1);
           const saved = yield* ProcessStore.use((s) => s.load);
           expect(
-            saved?.cmds.filter(
-              (cmd) => typeof cmd === "object" && cmd !== null && "id" in cmd && cmd.id === `${PROCESS}/2/0`,
-            ),
+            saved === null
+              ? undefined
+              : Arr.filter(
+                  saved.cmds,
+                  (cmd) => typeof cmd === "object" && cmd !== null && "id" in cmd && cmd.id === `${PROCESS}/2/0`,
+                ),
           ).toMatchObject([{ id: `${PROCESS}/2/0`, state: "dispatched", cmd: { type: "work", n: 73 } }]);
         }).pipe(Effect.provide(w.layer())),
       );
@@ -3022,7 +3038,7 @@ describe("P11 recovery gaps and durable installation", () => {
               Effect.gen(function* () {
                 const r: Runner = yield* w.ProgramRunner;
                 expect((yield* r.msg(w.input(1, { type: "work", n: value })))._tag).toBe("accepted");
-                expect((yield* resultLetters).map((row) => row.body)).toMatchObject([
+                expect(Arr.map(yield* resultLetters, (row) => row.body)).toMatchObject([
                   { m: { type: "work_err", reason: "bad_cmd" } },
                 ]);
               }).pipe(Effect.provide(w.layer())),
@@ -3138,7 +3154,7 @@ describe("P11 recovery gaps and durable installation", () => {
             const r: Runner = yield* w.ProgramRunner;
             expect((yield* r.open("a")).view.count).toBe(9);
             const rows = yield* read(PROCESS);
-            expect(rows.filter((row) => row._tag === "state.upgraded")).toMatchObject([
+            expect(Arr.filter(rows, (row) => row._tag === "state.upgraded")).toMatchObject([
               {
                 build: "old-build",
                 body: { program: "queue", from: 1, to: 3, ran: ["n_to_count", "add_runtime"] },
@@ -3151,7 +3167,7 @@ describe("P11 recovery gaps and durable installation", () => {
           Effect.gen(function* () {
             const r: Runner = yield* w.ProgramRunner;
             expect((yield* r.open("b")).view.count).toBe(9);
-            expect((yield* read(PROCESS)).filter((row) => row._tag === "state.upgraded")).toHaveLength(1);
+            expect(Arr.filter(yield* read(PROCESS), (row) => row._tag === "state.upgraded")).toHaveLength(1);
           }).pipe(Effect.provide(w.layer())),
         );
       }),
@@ -3317,20 +3333,22 @@ describe("P11 monitoring, content and storage failures", () => {
           const rows: ReadonlyArray<SpanRow> = yield* recorded();
 
           for (const name of ["runner.open", "runner.step", "runner.cmd", "runner.write", "runner.due"]) {
-            expect(rows.some((row) => row.name === name)).toBe(true);
+            expect(Arr.some(rows, (row) => row.name === name)).toBe(true);
           }
 
-          const linked = rows.filter((row) => row.name === "runner.write");
-          expect(rows.find((row) => row.name === "runner.cmd")?.attributes).toMatchObject({
+          const linked = Arr.filter(rows, (row) => row.name === "runner.write");
+          expect(
+            Option.getOrUndefined(Arr.findFirst(rows, (row) => row.name === "runner.cmd"))?.attributes,
+          ).toMatchObject({
             "fab.process": PROCESS,
             "fab.runner.cmd": "write",
             "fab.runner.id": w.signCalls[0]!.id,
           });
           expect(linked[0]?.attributes["fab.runner.stream"]).toBe("facts");
-          expect(linked.some((row) => row.links.some((link) => link.traceId === TRACE && link.spanId === SPAN))).toBe(
-            true,
-          );
-          expect(linked.some((row) => Object.values(row.attributes).includes(w.signCalls[0]!.id))).toBe(true);
+          expect(
+            Arr.some(linked, (row) => Arr.some(row.links, (link) => link.traceId === TRACE && link.spanId === SPAN)),
+          ).toBe(true);
+          expect(Arr.some(linked, (row) => Object.values(row.attributes).includes(w.signCalls[0]!.id))).toBe(true);
           expect(w.sink.db().prepare("SELECT count(*) AS n FROM unsent").get()?.n).toBe(0);
         }).pipe(Effect.provide(w.layer())),
       );
@@ -3383,7 +3401,7 @@ describe("P11 monitoring, content and storage failures", () => {
                 yield* r.msg(w.input(1, { type: "work", n: 59, signature, body: "private model body P11" }));
                 const rows: ReadonlyArray<SpanRow> = yield* recorded();
                 const tags = JSON.stringify(
-                  rows.map((row) => ({
+                  Arr.map(rows, (row) => ({
                     attributes: row.attributes,
                     events: row.events,
                     links: row.links,
@@ -3396,9 +3414,9 @@ describe("P11 monitoring, content and storage failures", () => {
                   expect(measurements).not.toContain(secret);
                 }
 
-                const failed = rows.filter((row) => !row.ok);
+                const failed = Arr.filter(rows, (row) => !row.ok);
                 expect(failed.length).toBeGreaterThan(0);
-                expect(failed.some((row) => typeof row.attributes["error.type"] === "string")).toBe(true);
+                expect(Arr.some(failed, (row) => typeof row.attributes["error.type"] === "string")).toBe(true);
                 const records = yield* RecordManager;
                 const content = yield* Effect.forEach(
                   failed,
@@ -3406,7 +3424,13 @@ describe("P11 monitoring, content and storage failures", () => {
                   { concurrency: 1 },
                 );
                 expect(JSON.stringify(content)).toContain(marker);
-                const contentSpan = failed[content.findIndex((value) => JSON.stringify(value).includes(marker))]!;
+                const contentSpan =
+                  failed[
+                    Option.getOrElse(
+                      Arr.findFirstIndex(content, (value) => JSON.stringify(value).includes(marker)),
+                      () => -1,
+                    )
+                  ]!;
                 yield* records.deleteContent({ _tag: "job", process: PROCESS }, contentSpan.spanId, {
                   by: "SHA256:person",
                   reason: value,
@@ -3414,7 +3438,7 @@ describe("P11 monitoring, content and storage failures", () => {
                 expect(
                   Option.getOrNull(yield* records.content({ _tag: "job", process: PROCESS }, contentSpan.spanId)),
                 ).toMatchObject({ _tag: "deleted", reason: value });
-                expect((yield* recorded()).some((row) => row.spanId === contentSpan.spanId)).toBe(true);
+                expect(Arr.some(yield* recorded(), (row) => row.spanId === contentSpan.spanId)).toBe(true);
                 expect(JSON.stringify(yield* resultLetters)).not.toContain(marker);
               }).pipe(Effect.provide(w.layer())),
             );
@@ -3432,7 +3456,7 @@ describe("P11 monitoring, content and storage failures", () => {
           expect(yield* failure(r.msg(w.input(1, { type: "throw" })))).toMatchObject({
             _tag: "ProgramDown",
           });
-          expect((yield* recorded()).some((row) => row.name === "runner.step" && !row.ok)).toBe(true);
+          expect(Arr.some(yield* recorded(), (row) => row.name === "runner.step" && !row.ok)).toBe(true);
           expect(w.sink.db().prepare("SELECT count(*) AS n FROM unsent").get()?.n).toBe(0);
         }).pipe(Effect.provide(w.layer())),
       );
