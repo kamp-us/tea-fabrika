@@ -3,7 +3,7 @@ state: "decided 2026-11-01"
 summary: "`next/` first. Six principles: every entry says the last rev its writer had folded (`seen`, bounded by the referee, before Tier 1's first real note); every machine passes GGPO's sync test; a saved model carries its shape's number and a chain of named upgrades (branch A, which walks back \"no version number on each machine\" for carried state); a code step's key is built from its declared reads; the first place two folds part is written down; a replay re-runs code, never an agent."
 ---
 
-> Superseded until the first release by [0572](../../.decisions/0572-pre-release-shape-change-wipes-data.md): a saved-shape change wipes the stored data, with no upgrade chain.
+> S3, the shape number and its chain of named upgrades, is set aside until the first release by [0572](../../.decisions/0572-pre-release-shape-change-wipes-data.md): a saved-shape change wipes the stored data. The other principles stand.
 
 # Saved state, replay and what a writer saw
 
