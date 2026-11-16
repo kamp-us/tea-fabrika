@@ -27,7 +27,7 @@ import { heldPort } from "../src/port.test-support.ts";
 const APP = resolve(import.meta.dirname, "..");
 export const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
-export const RESOURCES = ["home", "port", "server", "browser", "context", "page", "socket"] as const;
+const RESOURCES = ["home", "port", "server", "browser", "context", "page", "socket"] as const;
 type Resource = (typeof RESOURCES)[number];
 
 const Fault = Schema.Struct({
@@ -54,7 +54,7 @@ class KeygenFailed extends Schema.TaggedError<KeygenFailed>()("KeygenFailed", { 
 const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
 
 /** Fails once this worker is told to stop, so a race against the suite closes its scope first. */
-export const stopped = Effect.callback<never, Stopped>((resume) => {
+const stopped = Effect.callback<never, Stopped>((resume) => {
   const stops = STOPS.map((reason) => {
     const stop = () => resume(Effect.fail(new Stopped({ reason })));
     process.once(reason, stop);

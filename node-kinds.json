@@ -3,6 +3,10 @@
     "alchemy-durable-object-export": {
       "files": "src/brain.ts",
       "exports": ["RecordPart", "Connection", "Process", "IsolateTail"]
+    },
+    "alchemy-durable-object-test-entry": {
+      "files": "e2e/chaos-revoke.worker.test-support.ts",
+      "exports": ["Project"]
     }
   },
   "testSupportFilePatterns": {
