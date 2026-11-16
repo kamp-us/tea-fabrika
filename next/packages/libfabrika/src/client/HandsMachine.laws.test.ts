@@ -48,6 +48,7 @@ import {
   TakeReply,
 } from "./HandsDoor.test-support.ts";
 import { handsMachine } from "./HandsMachine.ts";
+import { JournalError } from "./Journal.ts";
 
 const SEED = 119120;
 /** The client's own hands key, as the door admits it, and another key the brain also holds work for. */
@@ -361,7 +362,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
       if (moves.forge && cell.variant % 5 === 0 && w.s.work._tag === "recalling" && about(w.s).id === task) {
         w.refused.set(task, w.listRev ?? -1);
         done.add("recall:bad_entry");
-        return { type: "journal_read_err", cmd: c, error: { _tag: "JournalError", reason: "bad_entry" }, at: w.at };
+        return { type: "journal_read_err", cmd: c, error: JournalError.make({ reason: "bad_entry" }), at: w.at };
       }
 
       const entry = w.journal.get(task) ?? null;
@@ -372,7 +373,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     if (c.type === "journal_write") {
       if (cell.variant % 7 === 0) {
         done.add("journal_failed");
-        return { type: "journal_write_err", cmd: c, error: { _tag: "JournalError", reason: "storage" }, at: w.at };
+        return { type: "journal_write_err", cmd: c, error: JournalError.make({ reason: "storage" }), at: w.at };
       }
 
       w.journal.set(text(r.get("task")), r.get("entry"));

@@ -21,6 +21,7 @@ import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
 import type { Binding } from "../runtime/Program.ts";
+import { Sent } from "../runtime/Runner.ts";
 import * as Layout from "../tezgah/Layout.ts";
 import { type Tile, type TileId, TezgahView, Workspace } from "../tezgah/Workspace.ts";
 import * as Keys from "./Keys.ts";
@@ -39,6 +40,13 @@ import {
 const SEED = 119120;
 /** JSON text, the only form a view takes on the wire. */
 const Json = Schema.fromJsonString(Schema.Unknown);
+
+/** A `processes/<name>` start as the brain's read answers it, cut to what the window reads. */
+const StartedEntry = Schema.TaggedStruct("started", {
+  by: Schema.String,
+  body: Schema.Struct({ process: Schema.String, name: Schema.String }),
+  rev: Schema.Int,
+});
 
 /** A tile's fields as every client reads them off the wire: none may be left out. */
 const FIELDS = ["id", "n", "shows", "program", "child", "keep", "cursor"] as const;
@@ -577,7 +585,10 @@ const reply = (world: World, i: number, each: (e: Event) => void) => {
       type: "send_ok",
       id: r.id,
       dial: r.dial,
-      value: r.pos < 0 ? { _tag: "refused", reason: "missing" } : { _tag: "accepted", rev: r.pos + LEDGER, pos: r.pos },
+      value:
+        r.pos < 0
+          ? Sent.cases.refused.make({ reason: "missing" })
+          : Sent.cases.accepted.make({ rev: r.pos + LEDGER, pos: r.pos }),
       ms: 3,
     } as WindowMsg,
     each,
@@ -713,7 +724,7 @@ const online = (world: World, i: number, each: (e: Event) => void) => {
         {
           type: "read_ok",
           ...on,
-          value: [{ _tag: "started", by: "brain", body: { process, name }, rev: 1 }],
+          value: [StartedEntry.make({ by: "brain", body: { process, name }, rev: 1 })],
           ms: 1,
         } as WindowMsg,
         each,

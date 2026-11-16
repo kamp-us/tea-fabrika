@@ -46,6 +46,18 @@ import { type WindowModel, type WindowMsg, windowMachineFor } from "./WindowMach
 const SEED = 119120;
 const PREFIX = "ctrl+b";
 const SMALLEST = { width: 220, height: 120 } as const;
+
+/** A `processes/<name>` start as the brain's read answers it, cut to what the window reads. */
+const StartedEntry = Schema.TaggedStruct("started", {
+  by: Schema.String,
+  body: Schema.Struct({ process: Schema.String, name: Schema.String }),
+  rev: Schema.Int,
+});
+
+/** A command given by keys, in tezgah's own Via, cut to its case: a law matches it, keys aside. */
+const ByKeys = Schema.TaggedStruct("key", {});
+/** The window's polite refusal of a split, as the window's Model holds it. */
+const NoRoom = Schema.TaggedStruct("no_room", { tile: Schema.String });
 const ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 
 const typeId = (prefix: string, n: number): string => {
@@ -206,7 +218,7 @@ const drain = (world: World, i: number) => {
         step(world, i, {
           type: "read_ok",
           ...on,
-          value: [{ _tag: "started", by: "brain", body: { process, name }, rev: 1 }],
+          value: [StartedEntry.make({ by: "brain", body: { process, name }, rev: 1 })],
           ms: 1,
         } as WindowMsg);
       } else if (flight.call._tag === "open" && flight.call.pid === TEZGAH_PID) {
@@ -505,7 +517,7 @@ describe("L13: the prefix arms only the window it was pressed in", () => {
             if (split !== undefined && fits(shownBefore, focus, split.dir, { width: 1440, height: 868 })) {
               counts.commands++;
               expect(dids(sent), `L13: ${e.key} after the prefix is one ${split.does}`).toMatchObject([
-                { type: "did", does: split.does, from: focus, via: { _tag: "key" } },
+                { type: "did", does: split.does, from: focus, via: ByKeys.make({}) },
               ]);
               expect(
                 shownBefore.tiles.some((t) => t.id === dids(sent)[0]!.tile),
@@ -565,10 +577,9 @@ describe("L17: a close of a tezgah child asks y/n", () => {
           press(w, 0, PREFIX);
           const asked = press(w, 0, "x");
           expect(asked.sent, "L17: the ask sends nothing").toEqual([]);
-          expect(prefix(w.wins[0]!.s), "L17: the window asks about the focused tile").toMatchObject({
-            _tag: "asking",
-            tile: focus,
-          });
+          expect(prefix(w.wins[0]!.s), "L17: the window asks about the focused tile").toMatchObject(
+            Schema.TaggedStruct("asking", { tile: Schema.String }).make({ tile: focus }),
+          );
 
           const sent = keys.flatMap((key) => press(w, 0, key).sent);
           const closes = dids(sent).filter((d) => d.does === "tezgah.close");
@@ -576,7 +587,7 @@ describe("L17: a close of a tezgah child asks y/n", () => {
           if (keys[0] === "y") {
             seen.y++;
             expect(closes, "L17: y sends one close of the asked tile").toMatchObject([
-              { type: "did", does: "tezgah.close", from: focus, via: { _tag: "key" } },
+              { type: "did", does: "tezgah.close", from: focus, via: ByKeys.make({}) },
             ]);
           } else {
             seen.no++;
@@ -605,7 +616,7 @@ describe("L17: a close of a tezgah child asks y/n", () => {
         const { sent } = press(w, 0, "x");
         expect(prefix(w.wins[0]!.s)._tag, "L17: no ask for a tile tezgah did not start").toBe("idle");
         expect(dids(sent), "L17: one close of the focused tile").toMatchObject([
-          { type: "did", does: "tezgah.close", from: focus, via: { _tag: "key" } },
+          { type: "did", does: "tezgah.close", from: focus, via: ByKeys.make({}) },
         ]);
       }),
       { seed: SEED, numRuns: 100 },
@@ -654,10 +665,9 @@ describe("L18: a split with no room is refused in the window", () => {
             cmds.filter((c) => c.type !== "record").map((c) => c.type),
             "L18: a refused split mints nothing",
           ).toEqual([]);
-          expect(polite(w.wins[0]!.s), "L18: the refusal is said politely, naming the tile").toEqual({
-            _tag: "no_room",
-            tile: at,
-          });
+          expect(polite(w.wins[0]!.s), "L18: the refusal is said politely, naming the tile").toEqual(
+            NoRoom.make({ tile: at }),
+          );
         },
       ),
       { seed: SEED, numRuns: 300 },
@@ -700,7 +710,7 @@ describe("L18: a split with no room is refused in the window", () => {
           `L18: ${c.key} in a ${c.width}x${c.height} area is ${taken ? "taken" : "refused"}`,
         ).toBe(taken ? 1 : 0);
         expect(polite(w.wins[0]!.s), `L18: ${c.width}x${c.height} says the refusal, or nothing`).toEqual(
-          taken ? null : { _tag: "no_room", tile: at },
+          taken ? null : NoRoom.make({ tile: at }),
         );
       }),
       {

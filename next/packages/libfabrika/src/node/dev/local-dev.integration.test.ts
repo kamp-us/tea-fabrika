@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
@@ -29,16 +30,18 @@ const home = (prefix: string) =>
     (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
   );
 
-const firstStart: typeof BrainEvent.Type = {
+const firstStart: typeof BrainEvent.Type = BrainEvent.cases.started.make({
   id: "brain-start-1",
-  _tag: "started",
   start: Effect.runSync(processId),
   after: null,
   build: "build-a",
   reason: "open",
   pid: 417,
   at: 42,
-};
+});
+
+/** A brain failure, cut to the reason a law matches. */
+const BrainFailure = Schema.TaggedStruct("BrainError", { reason: Schema.String });
 
 const life = {
   id: fc.string({ minLength: 1 }),
@@ -53,21 +56,20 @@ const life = {
 const reason = fc.constantFrom("open", "crash", "memory", "core");
 
 const brainEvent: fc.Arbitrary<typeof BrainEvent.Type> = fc.oneof(
-  fc.record({
-    ...life,
-    _tag: fc.constant("started"),
-    after: fc.option(fc.string(), { nil: null }),
-    build: fc.string(),
-    reason,
-    pid: fc.integer({ min: 1 }),
-  }),
-  fc.record({ ...life, _tag: fc.constant("exited"), reason }),
-  fc.record({
-    ...life,
-    _tag: fc.constant("braked"),
-    reason: fc.constantFrom("intensity", "restart_failed"),
-  }),
-  fc.record({ ...life, _tag: fc.constant("stopped"), reason: fc.constant("stop") }),
+  fc
+    .record({
+      ...life,
+      after: fc.option(fc.string(), { nil: null }),
+      build: fc.string(),
+      reason,
+      pid: fc.integer({ min: 1 }),
+    })
+    .map((fields) => BrainEvent.cases.started.make(fields)),
+  fc.record({ ...life, reason }).map((fields) => BrainEvent.cases.exited.make(fields)),
+  fc
+    .record({ ...life, reason: fc.constantFrom("intensity", "restart_failed") })
+    .map((fields) => BrainEvent.cases.braked.make(fields)),
+  fc.record({ ...life, reason: fc.constant("stop") }).map((fields) => BrainEvent.cases.stopped.make(fields)),
 );
 
 describe("P12 local brain life", () => {
@@ -166,10 +168,9 @@ describe("P12 durable brain outbox", () => {
             const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
             expect(Cause.hasDies(cause)).toBe(false);
             expect(Cause.hasFails(cause)).toBe(true);
-            expect(Cause.findErrorOption(cause)).toMatchObject({
-              _tag: "Some",
-              value: { _tag: "BrainError", reason: "bad_row" },
-            });
+            expect(Option.getOrNull(Cause.findErrorOption(cause))).toMatchObject(
+              BrainFailure.make({ reason: "bad_row" }),
+            );
           },
         ),
         { seed: SEED, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [17]] },
@@ -308,16 +309,10 @@ describe("P12 durable brain outbox", () => {
             const folder = yield* home("p12-m-");
             const outbox = yield* brainOutbox(folder);
             const excess = { ...event, [`x-${extra}`]: extra };
-            expect(yield* Effect.flip(outbox.add(excess))).toMatchObject({
-              _tag: "BrainError",
-              reason: "bad_row",
-            });
+            expect(yield* Effect.flip(outbox.add(excess))).toMatchObject(BrainFailure.make({ reason: "bad_row" }));
             expect(yield* outbox.pending).toEqual([]);
             writeFileSync(join(folder, "brain.pending.jsonl"), `${JSON.stringify(excess)}\n`);
-            expect(yield* Effect.flip(outbox.pending)).toMatchObject({
-              _tag: "BrainError",
-              reason: "bad_row",
-            });
+            expect(yield* Effect.flip(outbox.pending)).toMatchObject(BrainFailure.make({ reason: "bad_row" }));
           }),
         ),
       ),
@@ -337,16 +332,14 @@ describe("P12 durable brain outbox", () => {
 
             if (event._tag === "started") {
               const build = event.build === "build-b" ? "build-c" : "build-b";
-              expect(yield* Effect.flip(outbox.add({ ...event, build }))).toMatchObject({
-                _tag: "BrainError",
-                reason: "id_reused",
-              });
+              expect(yield* Effect.flip(outbox.add({ ...event, build }))).toMatchObject(
+                BrainFailure.make({ reason: "id_reused" }),
+              );
             }
 
-            expect(yield* Effect.flip(outbox.add({ ...event, start: `${event.start}-changed` }))).toMatchObject({
-              _tag: "BrainError",
-              reason: "id_reused",
-            });
+            expect(yield* Effect.flip(outbox.add({ ...event, start: `${event.start}-changed` }))).toMatchObject(
+              BrainFailure.make({ reason: "id_reused" }),
+            );
             expect(yield* (yield* brainOutbox(folder)).pending).toEqual([event]);
           }),
         ),

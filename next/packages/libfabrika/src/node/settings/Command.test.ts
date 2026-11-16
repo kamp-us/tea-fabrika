@@ -28,6 +28,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as PlatformError from "effect/PlatformError";
 import * as References from "effect/References";
+import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as TestConsole from "effect/testing/TestConsole";
 import * as Tracer from "effect/Tracer";
@@ -45,10 +46,11 @@ const check = { seed: SEED, numRuns: 100 };
 const VERSION = "0.0.0";
 const HOME = "/t730";
 
-type Person =
-  | { readonly _tag: "missing" }
-  | { readonly _tag: "text"; readonly text: string }
-  | { readonly _tag: "unreadable" };
+/** The person's file as a run finds it: missing, holding some text, or there and unreadable. */
+const Person = Schema.TaggedUnion({ missing: {}, text: { text: Schema.String }, unreadable: {} });
+type Person = typeof Person.Type;
+/** The person's file holding `text`. */
+const holding = (text: string): Person => Person.cases.text.make({ text });
 
 /** What one run asked of the FileSystem, read from the Recorder that watched it. */
 interface Counts {
@@ -236,15 +238,15 @@ const badPort = fc.oneof(fc.integer({ min: 65536, max: 2 ** 30 }), fc.integer({ 
 
 // The person's file: missing, empty, a valid port, or each way it can fail to load.
 const person = fc.oneof(
-  fc.constant<Person>({ _tag: "missing" }),
-  fc.constant<Person>({ _tag: "text", text: "" }),
-  port.map((p): Person => ({ _tag: "text", text: `# the person's\n\n[instance]\nport = ${p}\n` })),
-  badPort.map((p): Person => ({ _tag: "text", text: `[instance]\nport = ${p}\n` })),
+  fc.constant<Person>(Person.cases.missing.make({})),
+  fc.constant<Person>(holding("")),
+  port.map((p): Person => holding(`# the person's\n\n[instance]\nport = ${p}\n`)),
+  badPort.map((p): Person => holding(`[instance]\nport = ${p}\n`)),
   fc.constantFrom<Person>(
-    { _tag: "text", text: "[instance]\nprot = 18800\n" },
-    { _tag: "text", text: "[instance\nport = 1\n" },
-    { _tag: "text", text: 'fabrika-version = "0.0.0"\n' },
-    { _tag: "unreadable" },
+    holding("[instance]\nprot = 18800\n"),
+    holding("[instance\nport = 1\n"),
+    holding('fabrika-version = "0.0.0"\n'),
+    Person.cases.unreadable.make({}),
   ),
 );
 
@@ -269,7 +271,7 @@ it("T753 L8 explicit values equal to defaults remain visible without all", async
       const ran = await run({
         args: [...(v.all ? ["--all"] : []), ...(v.viaEnv ? [] : [`--${d.path}=${d.default}`])],
         env: { HOME, ...(v.viaEnv ? { [d.env]: String(d.default) } : {}) },
-        person: { _tag: "text", text: `[instance]\nport = ${d.default}\n` },
+        person: holding(`[instance]\nport = ${d.default}\n`),
       });
       expect(Exit.isSuccess(ran.exit)).toBe(true);
       expect(ran.counts.reads).toBe(1);
@@ -377,7 +379,7 @@ describe("L8 [secrets], unrelated environment values and refused file values nev
             ...Object.fromEntries(fields.map((f) => [f, word])),
             ...(envPort === undefined ? {} : { [Declarations.port.env]: String(envPort) }),
           };
-          const ran = await run({ args: all ? ["--all"] : [], env, person: { _tag: "text", text } });
+          const ran = await run({ args: all ? ["--all"] : [], env, person: holding(text) });
           const outputs = [
             ...ran.stdout,
             ...ran.stderr,

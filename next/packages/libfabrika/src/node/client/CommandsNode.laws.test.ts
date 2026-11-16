@@ -27,7 +27,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as fc from "fast-check";
 import { Commands } from "../../client/Commands.ts";
-import { Command, type Result } from "../../tasks/Task.ts";
+import { Command, Result } from "../../tasks/Task.ts";
 import { property } from "../../Testing.test-support.ts";
 import * as CommandsNode from "./CommandsNode.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
@@ -59,13 +59,13 @@ const layers = (child: Child, seen: Seen, env: Record<string, string>, d: Memory
 /** The oracle's answer for a child: from its bytes alone. */
 const expected = (child: Child): Result => {
   if (child.spawn === "fails") {
-    return { _tag: "failed", reason: "spawn_failed" };
+    return Result.cases.failed.make({ reason: "spawn_failed" });
   }
 
   const total = child.chunks.reduce((n, c) => n + c.bytes.length, 0);
 
   if (total > CAP) {
-    return { _tag: "failed", reason: "output_limit" };
+    return Result.cases.failed.make({ reason: "output_limit" });
   }
 
   const out = new Uint8Array(child.chunks.filter((c) => c.to === "out").flatMap((c) => [...c.bytes]));
@@ -77,7 +77,7 @@ const expected = (child: Child): Result => {
       ? decoded
       : "";
 
-  return { _tag: "exited", code: child.code, version: text.endsWith("\n") ? text.slice(0, -1) : text };
+  return Result.cases.exited.make({ code: child.code, version: text.endsWith("\n") ? text.slice(0, -1) : text });
 };
 
 const encoder = new TextEncoder();
@@ -247,7 +247,7 @@ describe("P39 slice 4b: the real command layer", () => {
         };
         const exit = yield* execute(child, seen, { PATH: "/usr/bin" }, withGit());
         const answer = Exit.isSuccess(exit) && exit.value._tag === "Some" ? exit.value.value : null;
-        expect(answer).toEqual({ _tag: "exited", code: 0, version: vector.version });
+        expect(answer).toEqual(Result.cases.exited.make({ code: 0, version: vector.version }));
       }
     }),
   );

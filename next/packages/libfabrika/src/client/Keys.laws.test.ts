@@ -100,11 +100,9 @@ describe("L15: a binding on a key the backend cannot have fails at load; a defau
         ).toBe(true);
 
         if (Result.isFailure(loaded)) {
-          expect(loaded.failure, "L15: the failure names the command and the key").toMatchObject({
-            _tag: "cannot",
-            does: bad.does,
-            key: pick.key,
-          });
+          expect(loaded.failure, "L15: the failure names the command and the key").toMatchObject(
+            Keys.LoadError.cases.cannot.make({ does: bad.does, key: pick.key }),
+          );
         }
       }),
       { seed: SEED, numRuns: Math.max(100, CANNOT.length * 4) },
@@ -178,34 +176,32 @@ describe("L16: the router takes 0272's steps 1, 2 and 6 in order", () => {
     expect(platform, "L16: a browser tab on Linux has a key it cannot have").toBeDefined();
 
     // Step 1: the platform's keys, in any prefix state.
-    expect(Keys.route(t, idle, null, { key: platform! }), "L16 step 1, idle").toMatchObject({ _tag: "platform" });
-    expect(Keys.route(t, armed, null, { key: platform! }), "L16 step 1, armed").toMatchObject({
-      _tag: "platform",
-    });
+    expect(Keys.route(t, idle, null, { key: platform! }), "L16 step 1, idle").toMatchObject(
+      Keys.Routed.cases.platform.make({}),
+    );
+    expect(Keys.route(t, armed, null, { key: platform! }), "L16 step 1, armed").toMatchObject(
+      Keys.Routed.cases.platform.make({}),
+    );
 
     // Step 2: the prefix, before the tile could take the key.
-    expect(Keys.route(t, idle, null, { key: PREFIX }), "L16 step 2: the prefix arms").toMatchObject({
-      _tag: "prefix",
-    });
-    expect(Keys.route(t, armed, null, { key: "%" }), "L16 step 2: % after the prefix").toEqual({
-      _tag: "command",
-      does: "demo.split_right",
-    });
-    expect(Keys.route(t, armed, null, { key: '"' }), 'L16 step 2: " after the prefix').toEqual({
-      _tag: "command",
-      does: "demo.split_down",
-    });
-    expect(Keys.route(t, armed, null, { key: "x" }), "L16 step 2: x after the prefix").toEqual({
-      _tag: "command",
-      does: "demo.close",
-    });
+    expect(Keys.route(t, idle, null, { key: PREFIX }), "L16 step 2: the prefix arms").toMatchObject(
+      Keys.Routed.cases.prefix.make({}),
+    );
+    expect(Keys.route(t, armed, null, { key: "%" }), "L16 step 2: % after the prefix").toEqual(
+      Keys.Routed.cases.command.make({ does: "demo.split_right" }),
+    );
+    expect(Keys.route(t, armed, null, { key: '"' }), 'L16 step 2: " after the prefix').toEqual(
+      Keys.Routed.cases.command.make({ does: "demo.split_down" }),
+    );
+    expect(Keys.route(t, armed, null, { key: "x" }), "L16 step 2: x after the prefix").toEqual(
+      Keys.Routed.cases.command.make({ does: "demo.close" }),
+    );
 
     // Step 6: the focused tile's own content, for a key no step took.
     for (const key of ["a", "%", "x", "enter", "ctrl+c", "shift+a"]) {
-      expect(Keys.route(t, idle, null, { key }), `L16 step 6: ${key} while idle reaches the tile`).toEqual({
-        _tag: "tile",
-        key,
-      });
+      expect(Keys.route(t, idle, null, { key }), `L16 step 6: ${key} while idle reaches the tile`).toEqual(
+        Keys.Routed.cases.tile.make({ key }),
+      );
     }
   });
 });
@@ -234,10 +230,10 @@ describe("L14: the keys after the prefix (the router's half)", () => {
         const does = bound.get(key);
         const want =
           key === PREFIX
-            ? { _tag: "tile", key: PREFIX }
+            ? Keys.Routed.cases.tile.make({ key: PREFIX })
             : does !== undefined
-              ? { _tag: "command", does }
-              : { _tag: "dropped" };
+              ? Keys.Routed.cases.command.make({ does })
+              : Keys.Routed.cases.dropped.make({});
         expect(routed, `L14: ${JSON.stringify(key)} after the prefix`).toEqual(want);
       }),
       { seed: SEED, numRuns: 200 },

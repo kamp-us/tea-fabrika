@@ -27,6 +27,7 @@ import * as Declarations from "../../settings/Declarations.ts";
 import { SettingsError } from "../../settings/Files.ts";
 import * as Print from "../../settings/Print.ts";
 import * as Reference from "../../settings/Reference.ts";
+import { Origin } from "../../settings/Sources.ts";
 import * as TomlParser from "../../settings/TomlParser.ts";
 import * as Load from "./Load.ts";
 
@@ -36,10 +37,12 @@ const REPO = ".fabrika/fabrika.toml";
 const PERSON = "~/.fabrika/fabrika.toml";
 const DEFAULT = 18787;
 
-type File =
-  | { readonly _tag: "missing" }
-  | { readonly _tag: "text"; readonly text: string }
-  | { readonly _tag: "folder" };
+/** A settings file as a start finds it: missing, holding some text, or a folder where it should be. */
+const File = Schema.TaggedUnion({ missing: {}, text: { text: Schema.String }, folder: {} });
+type File = typeof File.Type;
+const missingFile = File.cases.missing.make({});
+/** A repo's own file as a T730 law lays it, before the load reads it. */
+const RepoFile = Schema.TaggedUnion({ none: {}, missing: {}, unstated: {}, stated: { minimum: Schema.String } });
 
 /** The repo text is already pinned. Only the person's file is read from disk. */
 const lay = (repo: File, person: File) =>
@@ -107,7 +110,7 @@ const reason = (exit: Exit.Exit<unknown, unknown>) => {
   return fail?._tag === "Fail" && fail.error instanceof SettingsError ? fail.error.reason : "not a SettingsError";
 };
 
-const text = (t: string): File => ({ _tag: "text", text: t });
+const text = (t: string): File => File.cases.text.make({ text: t });
 const port = fc.integer({ min: 1, max: 65535 });
 
 // Each failure a start must stop on, the file it sits in, and the reason it gives.
@@ -147,7 +150,7 @@ describe("L11, no failed load reaches build, Alchemy startup or the settings-sta
   it("each failure stops the start with its reason, even when a flag or env sets the same key", async () => {
     await fc.assert(
       fc.asyncProperty(failures, fc.option(port, { nil: undefined }), fc.boolean(), async (failure, over, viaEnv) => {
-        const bad: File = failure.kind === "read" ? { _tag: "folder" } : text(failure.body);
+        const bad: File = failure.kind === "read" ? File.cases.folder.make({}) : text(failure.body);
         const good = text("");
         // L7: a flag or env value for the port does not excuse the file's own value.
         const override =
@@ -170,14 +173,14 @@ describe("L11, no failed load reaches build, Alchemy startup or the settings-sta
 
   it("good files start once, missing files are empty ones, and the sources keep their order", async () => {
     const file = fc.oneof(
-      fc.constant({ _tag: "missing" as const }),
+      fc.constant(missingFile),
       fc.constant(text("")),
       port.map((p) => text(`# the person's\n\n[instance]\nport = ${p}\n`)),
     );
     await fc.assert(
       fc.asyncProperty(
         file,
-        fc.constantFrom({ _tag: "missing" as const }, text(""), text('fabrika-version = "0.0.0"\n')),
+        fc.constantFrom(missingFile, text(""), text('fabrika-version = "0.0.0"\n')),
         fc.option(port, { nil: undefined }),
         fc.option(port, { nil: undefined }),
         async (person, repo, flag, env) => {
@@ -199,7 +202,7 @@ describe("L11, no failed load reaches build, Alchemy startup or the settings-sta
             expect(origin?._tag).toBe(tag);
 
             if (tag === "file") {
-              expect(origin).toEqual({ _tag: "file", file: PERSON, line: 4 });
+              expect(origin).toEqual(Origin.cases.file.make({ file: PERSON, line: 4 }));
             }
           }
         },
@@ -282,10 +285,10 @@ describe("T730, a load keeps the repo file's own minimum, and invents none witho
   const part = fc.oneof(fc.integer({ min: 0, max: 12 }), fc.integer({ min: 90, max: 110 }));
   const release = fc.tuple(part, part, part).map((t) => t.join("."));
   const repoFile = fc.oneof(
-    fc.constant({ _tag: "none" as const }),
-    fc.constant({ _tag: "missing" as const }),
-    fc.constant({ _tag: "unstated" as const }),
-    release.map((minimum) => ({ _tag: "stated" as const, minimum })),
+    fc.constant(RepoFile.cases.none.make({})),
+    fc.constant(RepoFile.cases.missing.make({})),
+    fc.constant(RepoFile.cases.unstated.make({})),
+    release.map((minimum) => RepoFile.cases.stated.make({ minimum })),
   );
 
   it("repo.minimum is the file's stated version or the default, whatever flag or env says; no repo gives none", async () => {
@@ -304,7 +307,7 @@ describe("T730, a load keeps the repo file's own minimum, and invents none witho
                     ? text(`fabrika-version = "${repo.minimum}"\n`)
                     : repo._tag === "unstated"
                       ? text("# no version\n")
-                      : { _tag: "missing" },
+                      : missingFile,
                   text(""),
                 );
                 const exit = yield* Load.load({

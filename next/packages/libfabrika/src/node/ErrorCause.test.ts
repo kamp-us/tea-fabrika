@@ -6,6 +6,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as GatewayCauseTest from "../gateway/GatewayCauseTest.ts";
 import { Doorbell, Ledger, type LedgerCalls, LedgerError } from "../ledger/Ledger.ts";
@@ -134,10 +135,13 @@ const dump = (sql: Sql): string =>
 type Flow = "ledger_rejects" | "ledger_decode" | "archive_rejects" | "store_throws";
 const flows = fc.constantFrom<Flow>("ledger_rejects", "ledger_decode", "archive_rejects", "store_throws");
 
+/** A door's `ready` answer to a wait whose rev is an object holding the text: it fails to decode. */
+const BadReady = Schema.TaggedStruct("ready", { rev: Schema.Struct({ input: Schema.String }) });
+
 /** One failing operation whose failure holds `text`, inside a span the sink stores. */
 const fail = (flow: Flow, text: string, carrier: unknown): Effect.Effect<unknown, unknown> => {
   if (flow === "ledger_rejects" || flow === "ledger_decode") {
-    const answer = flow === "ledger_rejects" ? null : { _tag: "ready", rev: { input: text } };
+    const answer = flow === "ledger_rejects" ? null : BadReady.make({ rev: { input: text } });
     const calls: LedgerCalls = {
       append: () => (answer === null ? Promise.reject(carrier) : Promise.resolve(answer)),
       read: () => (answer === null ? Promise.reject(carrier) : Promise.resolve([{ rev: { input: text } }])),

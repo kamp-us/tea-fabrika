@@ -9,7 +9,7 @@ import * as fc from "fast-check";
 import * as Declarations from "../settings/Declarations.ts";
 import * as Test from "./Menu.test-support.ts";
 import * as Menu from "./Menu.ts";
-import { PersonCheck } from "./PersonCheck.ts";
+import { Answer, PersonCheck } from "./PersonCheck.ts";
 import * as PersonCheckTest from "./PersonCheckTest.ts";
 
 const options = (numRuns: number) => ({ seed: Test.seed, numRuns });
@@ -589,7 +589,11 @@ it.effect.prop(
 
         if (actual._tag === "Success") {
           expect(actual.success).toEqual(
-            answer === "declined" ? { _tag: "declined" } : { _tag: "checked", check: answer },
+            answer === "declined"
+              ? Answer.cases.declined.make({})
+              : answer === "unavailable"
+                ? null
+                : Answer.cases.checked.make({ check: answer }),
           );
         }
       }

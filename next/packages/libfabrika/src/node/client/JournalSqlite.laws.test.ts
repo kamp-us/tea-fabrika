@@ -21,6 +21,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { Journal, type Entry, Entry as EntrySchema } from "../../client/Journal.ts";
 import * as JournalStore from "../../client/JournalStore.ts";
@@ -29,10 +30,8 @@ import { property } from "../../Testing.test-support.ts";
 import * as JournalSqlite from "./JournalSqlite.ts";
 
 /** What one store answers a read: the entry, nothing, or the journal error's reason. */
-type Read =
-  | { readonly _tag: "entry"; readonly entry: Entry }
-  | { readonly _tag: "none" }
-  | { readonly _tag: "error"; readonly reason: string };
+const Read = Schema.TaggedUnion({ entry: { entry: EntrySchema }, none: {}, error: { reason: Schema.String } });
+type Read = typeof Read.Type;
 
 /** One journal over one store, with the store itself for a raw value and its size. */
 type Side = { readonly journal: Context.Service.Shape<typeof Journal>; readonly store: KeyValueStore.KeyValueStore };
@@ -68,8 +67,8 @@ const side = (store: Layer.Layer<KeyValueStore.KeyValueStore>) =>
 
 const read = (s: Side, task: string): Effect.Effect<Read> =>
   s.journal.read(task).pipe(
-    Effect.map((entry): Read => (entry === null ? { _tag: "none" } : { _tag: "entry", entry })),
-    Effect.catch((error) => Effect.succeed<Read>({ _tag: "error", reason: error.reason })),
+    Effect.map((entry): Read => (entry === null ? Read.cases.none.make({}) : Read.cases.entry.make({ entry }))),
+    Effect.catch((error) => Effect.succeed<Read>(Read.cases.error.make({ reason: error.reason }))),
   );
 
 /** Both stores answer one read alike, and both hold as many values as the model. */
@@ -81,10 +80,10 @@ const agree = (m: Model, r: Real, task: string, label: string) =>
     const saved = m.saved.get(task);
     expect(memory, `J1: ${label}: the memory journal reads what was written`).toEqual(
       saved === undefined
-        ? { _tag: "none" }
+        ? Read.cases.none.make({})
         : saved === "not-an-entry"
-          ? { _tag: "error", reason: "bad_entry" }
-          : { _tag: "entry", entry: saved },
+          ? Read.cases.error.make({ reason: "bad_entry" })
+          : Read.cases.entry.make({ entry: saved }),
     );
     const sizes = yield* Effect.all([r.sql.store.size, r.memory.store.size], { concurrency: 1 }).pipe(Effect.orDie);
     expect(sizes, `J1: ${label}: one value per key, however often a key is written`).toEqual([

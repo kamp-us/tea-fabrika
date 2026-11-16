@@ -16,7 +16,7 @@ import * as Layer from "effect/Layer";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schedule from "effect/Schedule";
 import { Commands } from "../../client/Commands.ts";
-import { Command } from "../../tasks/Task.ts";
+import { Command, Result } from "../../tasks/Task.ts";
 import * as CommandsNode from "./CommandsNode.ts";
 import { capped } from "./internal/capped.ts";
 
@@ -62,10 +62,9 @@ describe("P39 slice 4b: the real command on a real host", () => {
         const answer = yield* capped(watched, [process.execPath, ["-e", forever]], { PATH }, CAP).pipe(
           Effect.timeout("20 seconds"),
         );
-        expect(answer, "C5: the child past its cap answers output_limit").toEqual({
-          _tag: "failed",
-          reason: "output_limit",
-        });
+        expect(answer, "C5: the child past its cap answers output_limit").toEqual(
+          Result.cases.failed.make({ reason: "output_limit" }),
+        );
         expect(pids.length, "C5: one child was spawned").toBe(1);
         const pid = pids[0] ?? 0;
         // Gone means no process holds the pid: signal 0 checks and sends nothing. The kill is

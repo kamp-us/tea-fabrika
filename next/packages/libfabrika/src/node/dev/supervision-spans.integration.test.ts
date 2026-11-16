@@ -15,11 +15,16 @@ import { Archive, Mailbox, ProcessManager, ProcessStore, RecordManager, Writer }
 import { A, B, W, X, brain, data, first, from, ids, read, storage } from "../../processes/Process.test-support.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "../../runtime/Entry.ts";
 import { workerExecution } from "../../runtime/Execution.ts";
+import { Input } from "../../runtime/Program.ts";
 import { RecoveryStore } from "../../runtime/RecoveryStore.ts";
 import { type Descriptor, ProgramRunner, Supervision } from "../../runtime/Runner.ts";
 import { mailChunk } from "../../settings/Declarations.ts";
 import type { Sql } from "../../Sql.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
+import { Chain } from "../../telemetry/Trace.ts";
+
+/** A span's content once deleted, cut to its case: who deleted it and when are the walk's own. */
+const Deleted = Schema.TaggedStruct("deleted", {});
 
 const policy = {
   maxDeliveries: 3,
@@ -80,7 +85,7 @@ const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveri
     msg: Msg,
     view: { data: Model, select: (s: Model) => s },
     refuse: () => null,
-    inputs: { poison: { _tag: "write", schema: Msg, description: "Poison", personOnly: false } },
+    inputs: { poison: Input.cases.write.make({ schema: Msg, description: "Poison", personOnly: false }) },
     outputs: {},
     writes: {},
     wake: () => null,
@@ -175,7 +180,8 @@ const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveri
   };
 };
 
-const recorded = (process: string) => RecordManager.use((r) => Stream.runCollect(r.read({ _tag: "job", process })));
+const recorded = (process: string) =>
+  RecordManager.use((r) => Stream.runCollect(r.read(Chain.cases.job.make({ process }))));
 
 const recoverySpans = (w: ReturnType<typeof world>, process: string) =>
   Effect.gen(function* () {
@@ -309,7 +315,7 @@ for (const adapter of ["node", "worker"] as const) {
               yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input)));
               const rows = yield* recorded(A);
               const r = yield* RecordManager;
-              const chain = { _tag: "job", process: A } as const;
+              const chain = Chain.cases.job.make({ process: A });
               const contents = yield* Effect.forEach(rows, (row) => r.content(chain, row.spanId), {
                 concurrency: 1,
               });
@@ -371,9 +377,7 @@ for (const adapter of ["node", "worker"] as const) {
                   by: owner.key,
                   reason: "test deletion",
                 });
-                expect(Option.getOrNull(yield* r.content(chain, content.spanId))).toMatchObject({
-                  _tag: "deleted",
-                });
+                expect(Option.getOrNull(yield* r.content(chain, content.spanId))).toMatchObject(Deleted.make({}));
               }
 
               const after = yield* Effect.forEach(rows, (row) => r.content(chain, row.spanId), {
@@ -454,7 +458,7 @@ describe("P34 supervision recording", () => {
               const r = yield* RecordManager;
               const contents = yield* Effect.forEach(
                 rows,
-                (row) => r.content({ _tag: "job", process: A }, row.spanId),
+                (row) => r.content(Chain.cases.job.make({ process: A }), row.spanId),
                 { concurrency: 1 },
               );
               const at = contents.findIndex((content) =>
@@ -482,13 +486,13 @@ describe("P34 supervision recording", () => {
               }
 
               const span = rows[at]!;
-              yield* r.deleteContent({ _tag: "job", process: A }, span.spanId, {
+              yield* r.deleteContent(Chain.cases.job.make({ process: A }), span.spanId, {
                 by: owner.key,
                 reason: "test deletion",
               });
-              expect(Option.getOrNull(yield* r.content({ _tag: "job", process: A }, span.spanId))).toMatchObject({
-                _tag: "deleted",
-              });
+              expect(
+                Option.getOrNull(yield* r.content(Chain.cases.job.make({ process: A }), span.spanId)),
+              ).toMatchObject(Deleted.make({}));
               expect((yield* recorded(A)).find((row) => row.spanId === span.spanId)).toEqual(span);
             }).pipe(Effect.provide(w.layer()));
           }),

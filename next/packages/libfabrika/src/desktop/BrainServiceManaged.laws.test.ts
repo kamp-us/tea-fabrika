@@ -12,7 +12,7 @@ import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
 import * as Outside from "./BrainControl.test-support.ts";
-import { BrainService } from "./BrainService.ts";
+import { BrainService, BrainServiceError, Conflict, Timeout } from "./BrainService.ts";
 import * as ServiceTest from "./BrainServiceTest.ts";
 
 const schedule = Schema.Struct({
@@ -78,7 +78,12 @@ const finish = Effect.fnUntraced(function* <A, E>(
   return yield* Fiber.await(fiber);
 });
 
-const reason = (exit: Exit.Exit<unknown, unknown>) => (Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined);
+/** The checked reason of a failed exit, when it failed with the service's own error; else undefined. */
+const reason = (exit: Exit.Exit<unknown, unknown>) => {
+  const failure = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+
+  return failure instanceof BrainServiceError ? failure.reason : undefined;
+};
 
 it.effect.prop(
   "L1 absent installs once, matches reuse, foreign jobs are untouched",
@@ -290,10 +295,9 @@ it.effect.prop(
 
       yield* TestClock.adjust("30 millis");
       expect(first.pollUnsafe()).toBeDefined();
-      expect(reason(yield* Fiber.await(first))).toMatchObject({
-        _tag: "BrainServiceError",
-        reason: { _tag: "Timeout", action },
-      });
+      const timedOut = reason(yield* Fiber.await(first));
+      expect(timedOut).toBeInstanceOf(Timeout);
+      expect(timedOut).toMatchObject({ action });
       expect(outside.calls).not.toContain("remove");
       expect((yield* outside.read).file).toBe("matching");
       const from = outside.calls.length;
@@ -349,10 +353,9 @@ it.effect.prop(
       yield* TestClock.adjust("30 millis");
       expect(first.pollUnsafe(), "record delivery also has a bounded wait").toBeDefined();
       expect(flushes).toBeGreaterThan(0);
-      expect(reason(yield* Fiber.await(first))).toMatchObject({
-        _tag: "BrainServiceError",
-        reason: { _tag: "Timeout", action },
-      });
+      const timedOut = reason(yield* Fiber.await(first));
+      expect(timedOut).toBeInstanceOf(Timeout);
+      expect(timedOut).toMatchObject({ action });
       expect(outside.calls).not.toContain("remove");
       expect((yield* outside.read).file).toBe("matching");
     }),
@@ -480,10 +483,10 @@ it.effect.prop(
       }
 
       const failed = yield* Fiber.await(up);
-      expect(reason(failed)).toMatchObject({ _tag: "BrainServiceError", reason: { _tag: "Conflict" } });
+      expect(reason(failed)).toBeInstanceOf(Conflict);
       yield* outside.observe({ job: Outside.foreign });
       const stopped = yield* finish(outside, yield* Effect.forkScoped(brain.stop), "stop", v.steps);
-      expect(reason(stopped)).toMatchObject({ _tag: "BrainServiceError", reason: { _tag: "Conflict" } });
+      expect(reason(stopped)).toBeInstanceOf(Conflict);
       expect(outside.calls).not.toContain("start");
       expect(outside.calls).not.toContain("stop");
       expect(outside.calls).not.toContain("remove");

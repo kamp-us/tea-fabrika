@@ -40,9 +40,10 @@ import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
+import { Sent } from "../runtime/Runner.ts";
 import { ClientKey, ClientKeyError } from "../transport/ClientKey.ts";
-import { ClientRow, ClientRows, ClientRowsError, ErrorClass } from "../transport/ClientRows.ts";
-import { backoff, CAP, linkTimer, ping } from "../transport/Link.ts";
+import { ClientRecord, ClientRow, ClientRows, ClientRowsError, ErrorClass } from "../transport/ClientRows.ts";
+import { backoff, CAP, Link, linkTimer, ping } from "../transport/Link.ts";
 import { KeyLine } from "../transport/Sshsig.ts";
 import { windowMachineFor, type WindowModel, type WindowMsg, write } from "./WindowMachine.ts";
 import { MemorySocket } from "./WindowStart.test-support.ts";
@@ -58,6 +59,23 @@ const ListView = Schema.Struct({
   items: Schema.Array(Schema.Struct({ name: Schema.String, state: Schema.String })),
   left: Schema.Int,
 });
+
+/** A `processes/<name>` start as the door's `ledger.read` answers it, cut to what the window reads. */
+const StartedEntry = Schema.TaggedStruct("started", {
+  by: Schema.String,
+  body: Schema.Struct({ process: Schema.String, name: Schema.String }),
+  rev: Schema.Int,
+  pos: Schema.Int,
+});
+
+/** The two malformed refusals a door may answer a send with: no reason, and a reason that is not text. */
+const Bare = Schema.TaggedStruct("refused", {});
+const NumberReason = Schema.TaggedStruct("refused", { reason: Schema.Number });
+/** The knock a renewed grant wait writes as a call. */
+const Knock = Schema.TaggedStruct("knock", {});
+/** The parts of a link and a connect row these laws match, the rest left to the window. */
+const Online = Schema.TaggedStruct("online", { pings: Schema.Int });
+const Connect = Schema.TaggedStruct("connect", { result: Schema.String, code: Schema.Int });
 
 const list = (n: number) => ({
   items: Array.from({ length: n }, (_, i) => ({ name: `item ${i}`, state: "open" })),
@@ -204,13 +222,18 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
     } else if (frame.method === "ledger.read") {
       result({
         entries: [
-          { _tag: "started", by: "brain", body: { process: script.pid ?? PID, name: "checklist:1" }, rev: 1, pos: 1 },
+          StartedEntry.make({
+            by: "brain",
+            body: { process: script.pid ?? PID, name: "checklist:1" },
+            rev: 1,
+            pos: 1,
+          }),
         ],
       });
     } else if (frame.method === "view.open" && script.open) {
       result({ rev: 0, view: list(0) });
     } else if (frame.method === "process.send" && script.send) {
-      result({ _tag: "accepted", rev: 2, pos: 1 });
+      result(Sent.cases.accepted.make({ rev: 2, pos: 1 }));
     }
 
     return true;
@@ -508,7 +531,7 @@ describe("L10: real runtime progress", () => {
         }
 
         expect(lastPong, "the current online dial received a pong").toBeGreaterThan(previousPong);
-        expect(run.getState().link).toMatchObject({ _tag: "online", pings: 0 });
+        expect(run.getState().link).toMatchObject(Online.make({ pings: 0 }));
 
         // Stop answering pings on the current dial. A later successful dial is allowed.
         script.pong = false;
@@ -664,7 +687,7 @@ describe("L9: failure classes through the real runtime", () => {
           expect(
             failures.map((row) => row.record),
             "one attempt keeps the original platform class",
-          ).toEqual([{ _tag: "failure", op, error }]);
+          ).toEqual([ClientRecord.cases.failure.make({ op, error })]);
 
           for (const row of rows) {
             expect(Schema.is(ClientRow)(row)).toBe(true);
@@ -767,8 +790,8 @@ describe("L12: wire formats are refused as typed values", () => {
           .filter((f) => f.method === "process.send");
         expect(sends.length, "the press went out").toBeGreaterThan(0);
         const id = sends.at(-1)!.id;
-        door.message({ jsonrpc: "2.0", id, result: { _tag: "refused" } });
-        door.message({ jsonrpc: "2.0", id, result: { _tag: "refused", reason: 7 } });
+        door.message({ jsonrpc: "2.0", id, result: Bare.make({}) });
+        door.message({ jsonrpc: "2.0", id, result: NumberReason.make({ reason: 7 }) });
         yield* door.tick(500);
         expect(run.getState().client.pending, "a malformed refusal removed the letter").toHaveLength(1);
         expect(run.getState().tiles.map((t) => t.refusal)).toEqual([null]);
@@ -839,7 +862,7 @@ const scripted = (
       beat: (s, m) =>
         socketDialIn(s.link) === m.dial
           ? real.beat(s, m)
-          : [s, [ping({ dial: m.dial }), write({ call: { _tag: "knock" }, id: STALE, dial: m.dial })]],
+          : [s, [ping({ dial: m.dial }), write({ call: Knock.make({}), id: STALE, dial: m.dial })]],
       ping_ok: (s, m) => {
         kept(m);
         return real.ping_ok(s, m);
@@ -887,7 +910,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
         // The call ids the door has answered, per socket.
         const replied = new Map<MemorySocket, Set<number>>();
         let read: () => { readonly link: { readonly _tag: string; readonly dial?: number } } = () => ({
-          link: { _tag: "dialing", dial: 1 },
+          link: Link.cases.dialing.make({ dial: 1 }),
         });
         let armed = false;
         let thrown: number | null = null;
@@ -1084,11 +1107,9 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
 
           if (closed !== null) {
             const connect = rows.filter((r) => r.record._tag === "connect" && r.record.dial === closed.dial).at(-1);
-            expect(connect?.record, `close ${closed.code} on dial ${closed.dial}`).toMatchObject({
-              _tag: "connect",
-              result: closed.code === 4003 ? "removed" : "closed",
-              code: closed.code,
-            });
+            expect(connect?.record, `close ${closed.code} on dial ${closed.dial}`).toMatchObject(
+              Connect.make({ result: closed.code === 4003 ? "removed" : "closed", code: closed.code }),
+            );
           }
 
           if (thrown !== null) {

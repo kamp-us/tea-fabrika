@@ -53,10 +53,13 @@ import type * as SchemaAST from "effect/SchemaAST";
 import * as fc from "fast-check";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace, NoProc, Recipient, signalId } from "../processes/Process.ts";
+import { Pending } from "../runtime/Client.ts";
 import { diff } from "../runtime/Patch.ts";
 import type { Binding } from "../runtime/Program.ts";
+import { Sent } from "../runtime/Runner.ts";
 import * as Layout from "../tezgah/Layout.ts";
 import { type TezgahView, type Tile, type TileId, Workspace } from "../tezgah/Workspace.ts";
+import { ClientKeyError } from "../transport/ClientKey.ts";
 import { ClientRecord } from "../transport/ClientRows.ts";
 import { linkTimer } from "../transport/Link.ts";
 import { PAGE } from "../transport/Wire.ts";
@@ -139,6 +142,82 @@ const isWrite = (c: Cmd): c is Write => c.type === "write";
 /** A saved Model as it mounts: the polite region's burst is empty, and its id is kept (0504). */
 const mounted = (s: WindowModel): WindowModel => ({ ...s, said: { id: s.said.id, messages: [] } });
 const recordIn = (c: Cmd): Row | null => (c.type === "record" ? (c["record"] as Row) : null);
+
+// The tagged values these laws write, each made by a schema, so no tag is written by hand (0562).
+// A library schema is used where the library exports one; the rest restate the door's or the
+// window's shape, cut to what a law reads (0135).
+
+/** A ledger entry as the brain's `ledger.read` answers it: its case, writer and body. */
+const EntryLine = {
+  by: Schema.String,
+  body: Schema.Record(Schema.String, Schema.Unknown),
+  rev: Schema.Int,
+  arrivedAt: Schema.optionalKey(Schema.String),
+};
+
+const Entry = Schema.TaggedUnion({ started: EntryLine, exited: EntryLine });
+/** A brain call's error, as the door's answer frames become them. */
+const CallError = Schema.TaggedUnion({ unreachable: {}, unknown: {} });
+/** A call's error: `unreachable` when the door may be tried again, else `unknown`. */
+const callError = (again: boolean) => (again ? CallError.cases.unreachable.make({}) : CallError.cases.unknown.make({}));
+/** A tea Cmd's error answer, by the name its Cmd gives it. */
+const CmdError = Schema.TaggedUnion({ clock: {}, unreachable: {}, unsupported: {}, failed: {} });
+/** The parts of a letter, a link, a hello, a reach and an inbox the laws match, cut to the fields each reads. */
+const DatingFor = Schema.TaggedStruct("dating", { pid: Schema.String, n: Schema.Int });
+
+const LinkPart = Schema.TaggedUnion({
+  waiting_grant: { code: Schema.String, until: Schema.Number },
+  online: { dial: Schema.Int, ping: Schema.Number },
+});
+
+const HandshakePart = Schema.TaggedUnion({
+  knocking: { dial: Schema.Int },
+  refused: { dial: Schema.Int, reason: Schema.String },
+  none: {},
+});
+
+const ReachPart = Schema.TaggedUnion({
+  resolving: { id: Schema.Int },
+  opening: { pid: Schema.String, ref: Schema.Unknown, id: Schema.Int },
+  ended: { pid: Schema.String, id: Schema.Int },
+});
+
+/** The inbox as a law expects it: `id` is the call the step wrote, undefined when it wrote none. */
+const InboxPart = Schema.TaggedUnion({
+  idle: { after: Schema.Number },
+  waiting: { after: Schema.Number, id: Schema.Unknown },
+  reading: { after: Schema.Number, id: Schema.Unknown },
+  none: { after: Schema.Number },
+});
+
+/** A status message of the polite region, as the window's Model holds it. */
+const Said = Schema.TaggedUnion({
+  ended: { tile: Schema.String, reason: ExitReason },
+  refused: { tile: Schema.UndefinedOr(Schema.String), m: Schema.Json, reason: Schema.String },
+});
+
+/** A ledger entry the walk's brain or a forger appends, before the ledger gives it its rev. */
+const FactLine = {
+  by: Schema.String,
+  id: Schema.String,
+  body: Schema.Record(Schema.String, Schema.Unknown),
+  rev: Schema.optionalKey(Schema.Int),
+  arrivedAt: Schema.optionalKey(Schema.Int),
+};
+
+const FactEntry = Schema.TaggedUnion({
+  send: FactLine,
+  started: FactLine,
+  restarted: FactLine,
+  exited: FactLine,
+  down: FactLine,
+});
+
+/** Two malformed results a door could send: a tag that is a number, beside fields of the wrong type. */
+const NumberTag = Schema.TaggedStruct(7, {});
+const Junk = Schema.TaggedStruct(1, { rev: Schema.String, entries: Schema.Number });
+/** One of the window's own Msgs, as its machine's own schema checks it. */
+const isOwnMsg = (u: unknown): u is WindowMsg => Schema.is(machine.msg)(u);
 
 const socketDial = (s: WindowModel): number | null =>
   s.link._tag === "dialing" || s.link._tag === "waiting_grant" || s.link._tag === "online" ? s.link.dial : null;
@@ -345,7 +424,7 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
         const entries =
           live === null
             ? []
-            : [{ _tag: "started", by: "brain", body: { process: live, name }, rev: 1, arrivedAt: "t" }];
+            : [Entry.cases.started.make({ by: "brain", body: { process: live, name }, rev: 1, arrivedAt: "t" })];
 
         if (live !== null) {
           w.pids.set(name, live);
@@ -353,35 +432,33 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
 
         return { type: "read_ok", ...on, value: entries, ms: c.ms };
       });
-      out.push(() => ({ type: "read_err", ...on, error: { _tag: "unreachable" } }));
+      out.push(() => ({ type: "read_err", ...on, error: CallError.cases.unreachable.make({}) }));
     } else if (f.call._tag === "open") {
       const pid = String(f.call["pid"]);
       out.push(() => {
         const b = brainFor(w, pid);
         return { type: "open_ok", ...on, value: { rev: b.rev, view: b.views[b.rev]! }, ms: c.ms };
       });
-      out.push(() => ({ type: "open_err", ...on, error: { _tag: "unknown" } }));
+      out.push(() => ({ type: "open_err", ...on, error: CallError.cases.unknown.make({}) }));
     } else if (f.call._tag === "send") {
       out.push(() => ({
         type: "send_ok",
         ...on,
         value:
           OUTCOMES[c.aux % 2] === "accepted"
-            ? { _tag: "accepted", rev: c.ms, pos: c.aux }
-            : { _tag: "refused", reason: REASONS[c.ms % REASONS.length]! },
+            ? Sent.cases.accepted.make({ rev: c.ms, pos: c.aux })
+            : Sent.cases.refused.make({ reason: REASONS[c.ms % REASONS.length]! }),
         ms: c.ms,
       }));
-      out.push(() => ({ type: "send_err", ...on, error: { _tag: c.aux % 2 === 0 ? "unreachable" : "unknown" } }));
+      out.push(() => ({ type: "send_err", ...on, error: callError(c.aux % 2 === 0) }));
     } else if (f.call._tag === "wait") {
       // P18 slice 2: the door's ledger.wait answers the rev it woke at, or an error.
       out.push(() => answerMsg({ type: "wait_ok", ...on, value: { rev: c.ms }, ms: c.ms }));
-      out.push(() =>
-        answerMsg({ type: "wait_err", ...on, error: { _tag: c.aux % 2 === 0 ? "unreachable" : "unknown" } }),
-      );
+      out.push(() => answerMsg({ type: "wait_err", ...on, error: callError(c.aux % 2 === 0) }));
     } else if (f.call._tag === "monitor") {
       // P18 slice 2: the door's process.monitor answers null, or refuses.
       out.push(() => answerMsg({ type: "monitor_ok", ...on, value: null, ms: c.ms }));
-      out.push(() => answerMsg({ type: "monitor_err", ...on, error: { _tag: "unknown" } }));
+      out.push(() => answerMsg({ type: "monitor_err", ...on, error: CallError.cases.unknown.make({}) }));
     }
   }
 
@@ -393,7 +470,7 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
       f.call._tag === "open"
         ? { type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms }
         : f.call._tag === "send"
-          ? { type: "send_ok", ...on, value: { _tag: "accepted", rev: 1, pos: 1 }, ms: c.ms }
+          ? { type: "send_ok", ...on, value: Sent.cases.accepted.make({ rev: 1, pos: 1 }), ms: c.ms }
           : f.call._tag === "wait"
             ? answerMsg({ type: "wait_ok", ...on, value: { rev: c.ms }, ms: c.ms })
             : f.call._tag === "monitor"
@@ -409,7 +486,13 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
         current.call._tag === "open"
           ? { type: "open_ok", id: current.id, dial: oldDial, value: { rev: 0, view: EMPTY }, ms: c.ms }
           : current.call._tag === "send"
-            ? { type: "send_ok", id: current.id, dial: oldDial, value: { _tag: "accepted", rev: 1, pos: 1 }, ms: c.ms }
+            ? {
+                type: "send_ok",
+                id: current.id,
+                dial: oldDial,
+                value: Sent.cases.accepted.make({ rev: 1, pos: 1 }),
+                ms: c.ms,
+              }
             : { type: "read_ok", id: current.id, dial: oldDial, value: [], ms: c.ms },
       );
     }
@@ -431,7 +514,7 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
             found: cmd["rejected"] === null ? (c.aux % 2 === 0 ? "created" : "reused") : "replaced",
             fingerprint: `SHA256:${c.word}`,
           },
-          { _tag: "ClientKeyError", op: "open", error: "QuotaExceededError" },
+          ClientKeyError.make({ op: "open", error: "QuotaExceededError" }),
         ),
       );
     } else if (cmd.type === "now") {
@@ -441,15 +524,15 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
             letter: `letter_${c.word}_${c.ms}`,
             sentAt: `2026-11-11T00:00:00.${String(c.ms % 1000).padStart(3, "0")}Z`,
           },
-          { _tag: "clock" },
+          CmdError.cases.clock.make({}),
         ),
       );
     } else if (cmd.type === "write") {
-      out.push(answer(null, { _tag: "unreachable" }));
+      out.push(answer(null, CmdError.cases.unreachable.make({})));
     } else if (cmd.type === "persist") {
-      out.push(answer(c.aux % 2 === 0, { _tag: "unsupported" }));
+      out.push(answer(c.aux % 2 === 0, CmdError.cases.unsupported.make({})));
     } else {
-      out.push(answer(null, { _tag: "failed" }));
+      out.push(answer(null, CmdError.cases.failed.make({})));
     }
   }
 
@@ -891,7 +974,7 @@ describe("L8: the window parent's connection", () => {
           const open = reach?._tag === "open" ? reach : null;
           seen[open === null ? "closed" : "open"]++;
           expect(open === null ? {} : next.client.pending.at(-1)).toMatchObject(
-            open === null ? {} : { _tag: "dating", pid: open.pid, n: prev.client.written },
+            open === null ? {} : DatingFor.make({ pid: open.pid, n: prev.client.written }),
           );
           expect(cmds.filter((c) => c.type === "now")).toEqual(
             open === null ? [] : [{ type: "now", n: prev.client.written }],
@@ -949,14 +1032,13 @@ describe("L8: the window parent's connection", () => {
 
           seen.pressed++;
           expect(letters).toEqual([
-            {
-              _tag: "dating",
+            Pending.cases.dating.make({
               n: prev.client.written,
               pid: open.pid,
-              m: pressed[0]!["m"],
+              m: Schema.decodeUnknownSync(Schema.Json)(pressed[0]!["m"]),
               seen: prev.client.seen,
               viewRev: prev.client.views[open.pid]?.rev ?? 0,
-            },
+            }),
           ]);
           expect(cmds.filter((c) => c.type === "now")).toEqual([{ type: "now", n: prev.client.written }]);
         });
@@ -1062,7 +1144,7 @@ describe("L9: the records the window emits", () => {
           expect(cmds).toEqual(
             m.cmd.record._tag === "failure"
               ? []
-              : [{ type: "record", record: { _tag: "failure", op: "record", error: "other" } }],
+              : [{ type: "record", record: ClientRecord.cases.failure.make({ op: "record", error: "other" }) }],
           );
         });
       }),
@@ -1096,9 +1178,9 @@ describe("L9: the records the window emits", () => {
           const persists = rows.filter((r) => r._tag === "persist" || (r._tag === "failure" && r["op"] === "persist"));
 
           seen.key += m.type === "key_ok" ? 1 : 0;
-          expect(keys).toEqual(m.type === "key_ok" ? [{ _tag: "key", result: m.value.found }] : []);
+          expect(keys).toEqual(m.type === "key_ok" ? [ClientRecord.cases.key.make({ result: m.value.found })] : []);
 
-          const outcome =
+          const outcome: (typeof ClientRecord.cases.connect.Type)["result"] | null =
             prev.link._tag !== "online" && next.link._tag === "online"
               ? "online"
               : prev.link._tag !== "waiting_grant" && next.link._tag === "waiting_grant"
@@ -1111,20 +1193,20 @@ describe("L9: the records the window emits", () => {
                       : "stalled"
                     : null;
 
-          const connected = outcome !== null && "ms" in m && "dial" in m ? { dial: m.dial, ms: m.ms } : null;
+          const connected =
+            outcome !== null && "ms" in m && "dial" in m ? { dial: m.dial, ms: m.ms, result: outcome } : null;
           seen.connect += connected === null ? 0 : 1;
           expect(connects, `${m.type}'s connect rows`).toEqual(
             connected === null
               ? []
               : [
-                  {
-                    _tag: "connect",
+                  ClientRecord.cases.connect.make({
                     dial: connected.dial,
-                    result: outcome,
+                    result: connected.result,
                     ms: connected.ms,
                     // P18 L11: a closed dial's row also keeps the close code it saw.
                     ...(m.type === "closed" ? { code: m.code } : {}),
-                  },
+                  }),
                 ],
           );
           const answered = m.type === "persist_ok" || m.type === "persist_err";
@@ -1187,14 +1269,13 @@ describe("L9: the records the window emits", () => {
                 m.value._tag === "refused" ? { reason: isWord(m.value.reason) ? m.value.reason : "other" } : {};
               seen.free += m.value._tag === "refused" && !isWord(m.value.reason) ? 1 : 0;
               expect(replies).toEqual([
-                {
-                  _tag: "reply",
+                ClientRecord.cases.reply.make({
                   letter,
                   result: m.value._tag,
                   attempts: sends.get(letter) ?? 0,
                   ms: m.ms,
                   ...reason,
-                },
+                }),
               ]);
               return;
             }
@@ -1310,12 +1391,14 @@ type Pick = typeof Pick.Type;
 const Picks = Schema.Array(Pick).check(Schema.isMinLength(40), Schema.isMaxLength(200));
 
 /** What the step's frame should do, known when the move was made. */
-type Expect =
-  | { readonly _tag: "owner"; readonly owner: WindowMsg } // the same as the Msg its owner already had
-  | { readonly _tag: "nothing" } // changes nothing and asks for nothing
-  | { readonly _tag: "handshake" } // a string id or a handshake notice: no flight moves
-  | { readonly _tag: "settles"; readonly id: number; readonly dial: number } // only that flight leaves
-  | { readonly _tag: "none" }; // not a frame
+const Expect = Schema.TaggedUnion({
+  owner: { owner: Schema.declare(isOwnMsg) }, // the same as the Msg its owner already had
+  nothing: {}, // changes nothing and asks for nothing
+  handshake: {}, // a string id or a handshake notice: no flight moves
+  settles: { id: Schema.Int, dial: Schema.Int }, // only that flight leaves
+  none: {}, // not a frame
+});
+type Expect = typeof Expect.Type;
 
 type Flight = WindowModel["flight"][number];
 
@@ -1338,7 +1421,7 @@ type FrameEvent = {
 
 /** The model's handshake: its state, its dial and its live request id. */
 const handshakeIn = (s: WindowModel): { readonly _tag: string; readonly dial?: number; readonly id?: string } =>
-  Reflect.get(s, "handshake") ?? { _tag: "none" };
+  Reflect.get(s, "handshake") ?? HandshakePart.cases.none.make({});
 
 const frame = (w: FrameWorld, dial: number, text: string, ms?: number): WindowMsg =>
   ({ type: "frame", dial, text, at: w.at, ...(ms === undefined ? {} : { ms }) }) as WindowMsg;
@@ -1357,7 +1440,9 @@ const goodAnswer = (
 
   if (f.call._tag === "read") {
     const name = f.call.stream.replace(/^processes\//, "");
-    const entries = [{ _tag: "started", by: "brain", body: { process: `process_${name}_${c.word}`, name }, rev: 1 }];
+    const entries = [
+      Entry.cases.started.make({ by: "brain", body: { process: `process_${name}_${c.word}`, name }, rev: 1 }),
+    ];
     return { result: { entries }, owner: { type: "read_ok", ...on, value: entries, ms: c.ms } };
   }
 
@@ -1369,8 +1454,8 @@ const goodAnswer = (
   if (f.call._tag === "send") {
     const value =
       c.aux % 2 === 0
-        ? { _tag: "accepted" as const, rev: c.ms, pos: c.aux }
-        : { _tag: "refused" as const, reason: REASONS[c.ms % REASONS.length]! };
+        ? Sent.cases.accepted.make({ rev: c.ms, pos: c.aux })
+        : Sent.cases.refused.make({ reason: REASONS[c.ms % REASONS.length]! });
     return { result: value, owner: { type: "send_ok", ...on, value, ms: c.ms } };
   }
 
@@ -1394,8 +1479,13 @@ const goodAnswer = (
 const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [WindowMsg, Expect]> => {
   const s = w.s;
   const out: Array<() => readonly [WindowMsg, Expect]> = [];
-  const none: Expect = { _tag: "none" };
-  const nothing: Expect = { _tag: "nothing" };
+  const none = Expect.cases.none.make({});
+  const nothing = Expect.cases.nothing.make({});
+  const handshake = Expect.cases.handshake.make({});
+  const owns = (owner: WindowMsg) => Expect.cases.owner.make({ owner });
+  /** A good answer's owner, or, when the Link takes it alone, only its own flight settling. */
+  const settles = (f: Flight, owner: WindowMsg | null) =>
+    owner === null ? Expect.cases.settles.make({ id: f.id, dial: f.dial }) : owns(owner);
   const dial = socketDial(s);
   const past = [...w.dials].filter((d) => d !== dial);
   const timer = linkTimer(s.link);
@@ -1451,13 +1541,10 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
     const d = dial;
     const nonce = `nonce_${c.word}_${c.ms}`;
     out.push(
-      () => [frame(w, d, rpc({ method: "challenge", params: { nonce } })), { _tag: "handshake" }],
-      () => [frame(w, d, rpc({ method: "client.granted", params: { nonce } })), { _tag: "handshake" }],
-      () => [
-        frame(w, d, rpc({ method: "gateway.waiting", params: { code: c.word, until: c.ms } })),
-        { _tag: "handshake" },
-      ],
-      () => [frame(w, d, "pong"), { _tag: "owner", owner: { type: "pong", dial: d } }],
+      () => [frame(w, d, rpc({ method: "challenge", params: { nonce } })), handshake],
+      () => [frame(w, d, rpc({ method: "client.granted", params: { nonce } })), handshake],
+      () => [frame(w, d, rpc({ method: "gateway.waiting", params: { code: c.word, until: c.ms } })), handshake],
+      () => [frame(w, d, "pong"), owns({ type: "pong", dial: d })],
       () => [frame(w, d, JUNK[c.aux % JUNK.length]!), nothing],
     );
 
@@ -1482,7 +1569,7 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
                 : null;
 
       if (next !== null) {
-        const move = (): readonly [WindowMsg, Expect] => [frame(w, d, next), { _tag: "handshake" }];
+        const move = (): readonly [WindowMsg, Expect] => [frame(w, d, next), handshake];
         out.push(move, move, move);
       }
     }
@@ -1498,7 +1585,7 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
       ];
 
       for (const text of answers) {
-        out.push(() => [frame(w, d, text), { _tag: "handshake" }]);
+        out.push(() => [frame(w, d, text), handshake]);
       }
     }
 
@@ -1518,24 +1605,18 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
         type: `${f.call._tag}_err`,
         id: f.id,
         dial: f.dial,
-        error: { _tag: AGAIN.has(reason) ? "unreachable" : "unknown" },
+        error: callError(AGAIN.has(reason)),
       } as WindowMsg;
       out.push(
-        () => [
-          frame(w, f.dial, rpc({ id: f.id, result: good.result }), c.ms),
-          good.owner === null ? { _tag: "settles", id: f.id, dial: f.dial } : { _tag: "owner", owner: good.owner },
-        ],
-        () => [
-          frame(w, f.dial, rpc({ id: f.id, result: good.result }), c.ms),
-          good.owner === null ? { _tag: "settles", id: f.id, dial: f.dial } : { _tag: "owner", owner: good.owner },
-        ],
+        () => [frame(w, f.dial, rpc({ id: f.id, result: good.result }), c.ms), settles(f, good.owner)],
+        () => [frame(w, f.dial, rpc({ id: f.id, result: good.result }), c.ms), settles(f, good.owner)],
         () => [
           frame(w, f.dial, rpc({ id: f.id, error: { code: -32000, message: "no", data: { reason } } }), c.ms),
-          { _tag: "owner", owner: error },
+          owns(error),
         ],
-        () => [frame(w, f.dial, rpc({ id: f.id, result: { rev: "bad", entries: 7, _tag: 1 } }), c.ms), nothing],
+        () => [frame(w, f.dial, rpc({ id: f.id, result: Junk.make({ rev: "bad", entries: 7 }) }), c.ms), nothing],
         // The flight's id as a string is the handshake's kind of id: it never settles the flight.
-        () => [frame(w, f.dial, rpc({ id: String(f.id), result: good.result }), c.ms), { _tag: "handshake" }],
+        () => [frame(w, f.dial, rpc({ id: String(f.id), result: good.result }), c.ms), handshake],
       );
     }
 
@@ -1547,7 +1628,7 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
       const good = goodAnswer(late, c, hs);
       const move = (): readonly [WindowMsg, Expect] => [
         frame(w, late.dial, rpc({ id: late.id, result: good.result }), c.ms),
-        good.owner === null ? { _tag: "settles", id: late.id, dial: late.dial } : { _tag: "owner", owner: good.owner },
+        settles(late, good.owner),
       ];
       out.push(move, move, move, move);
     }
@@ -1563,10 +1644,7 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
       const pid = pids[c.pick % pids.length]!;
       const params = { pid, type: "whole", rev: c.aux % 7, view: listEdit(EMPTY, c.aux, c.word) };
       out.push(
-        () => [
-          frame(w, d, rpc({ method: "view.whole", params })),
-          { _tag: "owner", owner: { type: "view", pid, note: params } },
-        ],
+        () => [frame(w, d, rpc({ method: "view.whole", params })), owns({ type: "view", pid, note: params })],
         () => [frame(w, d, rpc({ method: "view.whole", params: { ...params, pid: undefined } })), nothing],
       );
     }
@@ -1866,8 +1944,7 @@ const Wire = {
   }),
   entries: Schema.Struct({
     entries: Schema.Array(
-      Schema.Struct({
-        _tag: Schema.Literal("started"),
+      Schema.TaggedStruct("started", {
         by: Schema.Literal("brain"),
         body: Schema.Struct({ process: Schema.String, name: Schema.Literal("checklist:1") }),
         rev: Schema.Int,
@@ -1875,10 +1952,7 @@ const Wire = {
     ),
   }),
   opened: Schema.Struct({ rev: Schema.Int, view: ListView }),
-  sent: Schema.Union([
-    Schema.Struct({ _tag: Schema.Literal("accepted"), rev: Schema.Int, pos: Schema.Int }),
-    Schema.Struct({ _tag: Schema.Literal("refused"), reason: Schema.String }),
-  ]),
+  sent: Schema.TaggedUnion({ accepted: { rev: Schema.Int, pos: Schema.Int }, refused: { reason: Schema.String } }),
   whole: Schema.Struct({ rev: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)), view: ListView }),
   patch: Schema.Struct({ base: Schema.Int, rev: Schema.Int }),
   woke: Schema.Struct({ rev: Schema.Int }),
@@ -1918,7 +1992,7 @@ const door = {
   opening: (): WindowModel => {
     const s = door.online();
     const read = s.flight.find((f) => f.call._tag === "read")!;
-    const entries = [{ _tag: "started", by: "brain", body: { process: PID_A, name: "checklist:1" }, rev: 1 }];
+    const entries = [Entry.cases.started.make({ by: "brain", body: { process: PID_A, name: "checklist:1" }, rev: 1 })];
     return door.frame(s, rpc({ id: read.id, result: { entries } }), 1)[0];
   },
   /** Online with one letter in flight. */
@@ -1986,7 +2060,8 @@ const FAMILIES: Readonly<Record<string, Family>> = {
     schema: Wire.code,
     from: door.knocking,
     text: (_s, params) => [rpc({ method: "gateway.waiting", params })],
-    good: (_p, [next], v) => expect(next.link).toMatchObject({ _tag: "waiting_grant", code: v.code, until: v.until }),
+    good: (_p, [next], v) =>
+      expect(next.link).toMatchObject(LinkPart.cases.waiting_grant.make({ code: v.code, until: v.until })),
     drop: ["code", "until"],
     wrong: { code: 7, until: "soon" },
   },
@@ -1994,7 +2069,7 @@ const FAMILIES: Readonly<Record<string, Family>> = {
     schema: Wire.admitted,
     from: door.initializing,
     text: (s, result) => [rpc({ id: handshakeIn(s).id, result })],
-    good: (_p, [next], v) => expect(next.link).toMatchObject({ _tag: "online", dial: 1, ping: v.ping }),
+    good: (_p, [next], v) => expect(next.link).toMatchObject(LinkPart.cases.online.make({ dial: 1, ping: v.ping })),
     drop: ["version", "ping", "identity"],
     wrong: { version: "one", ping: "5s", identity: "me" },
   },
@@ -2009,12 +2084,14 @@ const FAMILIES: Readonly<Record<string, Family>> = {
       const word = /^[a-z_]{1,40}$/.test(v.reason) ? v.reason : "other";
       const knocks = v.reason === "not_granted";
       expect(handshakeIn(next), `the hello's outcome for ${v.reason}`).toMatchObject(
-        knocks ? { _tag: "knocking", dial: 1 } : { _tag: "refused", dial: 1, reason: word },
+        knocks
+          ? HandshakePart.cases.knocking.make({ dial: 1 })
+          : HandshakePart.cases.refused.make({ dial: 1, reason: word }),
       );
       expect(
         cmds.map(recordIn).filter((r) => r?._tag === "connect"),
         `the connect rows for ${v.reason}`,
-      ).toEqual(knocks ? [] : [{ _tag: "connect", dial: 1, result: "refused", reason: word, ms: 0 }]);
+      ).toEqual(knocks ? [] : [ClientRecord.cases.connect.make({ dial: 1, result: "refused", reason: word, ms: 0 })]);
       expect(next.link, "the link keeps its own path").toEqual(p.link);
     },
     drop: ["reason"],
@@ -2024,7 +2101,8 @@ const FAMILIES: Readonly<Record<string, Family>> = {
     schema: Wire.code,
     from: door.knocking,
     text: (s, result) => [rpc({ id: handshakeIn(s).id, result })],
-    good: (_p, [next], v) => expect(next.link).toMatchObject({ _tag: "waiting_grant", code: v.code, until: v.until }),
+    good: (_p, [next], v) =>
+      expect(next.link).toMatchObject(LinkPart.cases.waiting_grant.make({ code: v.code, until: v.until })),
     drop: ["code", "until"],
     wrong: { code: 7, until: "soon" },
   },
@@ -2051,7 +2129,7 @@ const FAMILIES: Readonly<Record<string, Family>> = {
     text: (s, result) => [rpc({ id: flightFor(s, "send").id, result }), 3],
     good: (p, after, v) => sameAs(p, after, { type: "send_ok", id: flightFor(p, "send").id, dial: 1, value: v, ms: 3 }),
     drop: ["_tag"],
-    wrong: { _tag: 7 },
+    wrong: NumberTag.make({}),
   },
   "view.whole": {
     schema: Wire.whole,
@@ -2222,7 +2300,7 @@ type ReachView = {
 type InboxView = { readonly _tag: string; readonly after: number; readonly id?: number };
 
 const reachIn = (s: WindowModel, tile: string): ReachView => s.tiles.find((t) => t.id === tile)!.reach;
-const inboxIn = (s: WindowModel): InboxView => Reflect.get(s, "inbox") ?? { _tag: "none", after: -1 };
+const inboxIn = (s: WindowModel): InboxView => Reflect.get(s, "inbox") ?? InboxPart.cases.none.make({ after: -1 });
 const holds = (r: ReachView) => r._tag === "opening" || r._tag === "open";
 
 /** A Msg's type and the write it answers, read the same for the Msgs slice 2 adds. */
@@ -2254,12 +2332,15 @@ const clientTo = (session: string, client = TAB) => Recipient.cases.client.make(
 
 /** The brain's DOWN for a watch, under the watch's own signal id, in the window's inbox. */
 const signal = (w: Follow, ref: string, pid: string, reason: typeof Down.Type.reason, session: string) =>
-  append(w, w.inbox, {
-    _tag: "send",
-    by: BRAIN_BY,
-    id: signalId(clientTo(session), ref, 1),
-    body: { m: Down.make({ ref, process: pid, reason, to: clientTo(session) }) },
-  });
+  append(
+    w,
+    w.inbox,
+    FactEntry.cases.send.make({
+      by: BRAIN_BY,
+      id: signalId(clientTo(session), ref, 1),
+      body: { m: Down.make({ ref, process: pid, reason, to: clientTo(session) }) },
+    }),
+  );
 
 const lastLife = (w: Follow, name: string): string | null => {
   const lives = lifeFacts(w, name).filter((f) => trusted(f.by) && (f._tag === "started" || f._tag === "restarted"));
@@ -2274,12 +2355,11 @@ const crash = (w: Follow, name: string, reason: ExitReason) => {
     return;
   }
 
-  append(w, lifeFacts(w, name), {
-    _tag: "exited",
-    by: BRAIN_BY,
-    id: JSON.stringify(["exited", pid]),
-    body: { process: pid, reason },
-  });
+  append(
+    w,
+    lifeFacts(w, name),
+    FactEntry.cases.exited.make({ by: BRAIN_BY, id: JSON.stringify(["exited", pid]), body: { process: pid, reason } }),
+  );
   w.live.set(name, null);
 
   for (const watch of w.watches.filter((x) => x.live && x.pid === pid)) {
@@ -2291,20 +2371,26 @@ const crash = (w: Follow, name: string, reason: ExitReason) => {
 const place = (w: Follow, name: string) => {
   const pid = processAt(w.next++);
   const after = lastLife(w, name);
-  append(w, lifeFacts(w, name), {
-    _tag: "started",
-    by: BRAIN_BY,
-    id: `start:${pid}`,
-    body: { process: pid, name, program: "fabrika/checklist", hash: "h" },
-  });
+  append(
+    w,
+    lifeFacts(w, name),
+    FactEntry.cases.started.make({
+      by: BRAIN_BY,
+      id: `start:${pid}`,
+      body: { process: pid, name, program: "fabrika/checklist", hash: "h" },
+    }),
+  );
 
   if (after !== null) {
-    append(w, lifeFacts(w, name), {
-      _tag: "restarted",
-      by: BRAIN_BY,
-      id: JSON.stringify(["restarted", pid]),
-      body: { process: pid, after, name, reason: "crashed", build: "h" },
-    });
+    append(
+      w,
+      lifeFacts(w, name),
+      FactEntry.cases.restarted.make({
+        by: BRAIN_BY,
+        id: JSON.stringify(["restarted", pid]),
+        body: { process: pid, after, name, reason: "crashed", build: "h" },
+      }),
+    );
   }
 
   w.live.set(name, pid);
@@ -2339,20 +2425,22 @@ const brainStep = (w: Follow, c: FollowChoice) => {
       w,
       lifeFacts(w, name),
       kind === 0
-        ? { _tag: "exited", by: PERSON_BY, id: `forged:${w.rev}`, body: { process: pid, reason: EXITS[0]! } }
+        ? FactEntry.cases.exited.make({
+            by: PERSON_BY,
+            id: `forged:${w.rev}`,
+            body: { process: pid, reason: EXITS[0]! },
+          })
         : kind === 1
-          ? {
-              _tag: "started",
+          ? FactEntry.cases.started.make({
               by: PERSON_BY,
               id: `forged:${w.rev}`,
               body: { process: processAt(w.next++), name, program: "fabrika/checklist", hash: "h" },
-            }
-          : {
-              _tag: "down",
+            })
+          : FactEntry.cases.down.make({
               by: BRAIN_BY,
               id: JSON.stringify(["down", pid, w.rev]),
               body: { process: pid, reason: "too_many", crashes: 1, until: 0 },
-            },
+            }),
     );
   } else if (k <= 7) {
     forge(w, c);
@@ -2377,35 +2465,44 @@ const forge = (w: Follow, c: FollowChoice) => {
   const kind = c.aux % 5;
 
   if (kind === 0) {
-    append(w, w.inbox, { _tag: "send", by: PERSON_BY, id: signalId(clientTo(session), ref, 1), body: { m } });
+    append(
+      w,
+      w.inbox,
+      FactEntry.cases.send.make({ by: PERSON_BY, id: signalId(clientTo(session), ref, 1), body: { m } }),
+    );
   } else if (kind === 1) {
-    append(w, w.inbox, { _tag: "send", by: BRAIN_BY, id: `letter_${c.word}`, body: { m } });
+    append(w, w.inbox, FactEntry.cases.send.make({ by: BRAIN_BY, id: `letter_${c.word}`, body: { m } }));
   } else if (kind === 2) {
     const to = clientTo(session, OTHER_TAB);
-    append(w, w.inbox, {
-      _tag: "send",
-      by: BRAIN_BY,
-      id: signalId(to, ref, 1),
-      body: { m: Down.make({ ref, process: pid, reason, to }) },
-    });
+    append(
+      w,
+      w.inbox,
+      FactEntry.cases.send.make({
+        by: BRAIN_BY,
+        id: signalId(to, ref, 1),
+        body: { m: Down.make({ ref, process: pid, reason, to }) },
+      }),
+    );
   } else if (kind === 3) {
     // An earlier dial's watch of this same pid, which an evicted session may still hold.
     const old = w.monitors.filter((x) => x.ref !== ref);
     const was = old[c.ms % Math.max(1, old.length)] ?? { ref: "w0", session: processAt(1) };
     const to = clientTo(was.session);
-    append(w, w.inbox, {
-      _tag: "send",
-      by: BRAIN_BY,
-      id: signalId(to, was.ref, 1),
-      body: { m: Down.make({ ref: was.ref, process: pid, reason, to }) },
-    });
+    append(
+      w,
+      w.inbox,
+      FactEntry.cases.send.make({
+        by: BRAIN_BY,
+        id: signalId(to, was.ref, 1),
+        body: { m: Down.make({ ref: was.ref, process: pid, reason, to }) },
+      }),
+    );
   } else {
-    append(w, w.inbox, {
-      _tag: "send",
-      by: BRAIN_BY,
-      id: signalId(clientTo(session), ref, 2),
-      body: { m: { hello: 1 } },
-    });
+    append(
+      w,
+      w.inbox,
+      FactEntry.cases.send.make({ by: BRAIN_BY, id: signalId(clientTo(session), ref, 2), body: { m: { hello: 1 } } }),
+    );
   }
 };
 
@@ -2421,7 +2518,7 @@ const followAnswer =
     if (call._tag === "read") {
       const page = all.filter((e) => e.rev > after).slice(0, PAGE);
       const ok = (): WindowMsg => ({ type: "read_ok", ...on, value: page, ms: c.ms });
-      return [ok, ok, ok, (): WindowMsg => ({ type: "read_err", ...on, error: { _tag: "unreachable" } })];
+      return [ok, ok, ok, (): WindowMsg => ({ type: "read_err", ...on, error: CallError.cases.unreachable.make({}) })];
     }
 
     if (call._tag === "wait") {
@@ -2429,7 +2526,9 @@ const followAnswer =
       const ok = () => answerMsg({ type: "wait_ok", ...on, value: { rev: top }, ms: c.ms });
       return [
         ...(top > after ? [ok, ok, ok] : []),
-        ...(c.aux % 6 === 0 ? [() => answerMsg({ type: "wait_err", ...on, error: { _tag: "unreachable" } })] : []),
+        ...(c.aux % 6 === 0
+          ? [() => answerMsg({ type: "wait_err", ...on, error: CallError.cases.unreachable.make({}) })]
+          : []),
       ];
     }
 
@@ -2448,7 +2547,7 @@ const followAnswer =
 
         return answerMsg({ type: "monitor_ok", ...on, value: null, ms: c.ms });
       };
-      return [ok, ok, ok, () => answerMsg({ type: "monitor_err", ...on, error: { _tag: "unknown" } })];
+      return [ok, ok, ok, () => answerMsg({ type: "monitor_err", ...on, error: CallError.cases.unknown.make({}) })];
     }
 
     return undefined;
@@ -2646,7 +2745,7 @@ const readsOn = (e: Event, tile: WindowModel["tiles"][number], page: ReadonlyArr
     mine.map((c) => [c.call._tag, streamIn(c.call), c.call["after"]]),
     `${tile.name}'s full page`,
   ).toEqual([["read", stream, last]]);
-  expect(reachIn(e.next, tile.id)).toMatchObject({ _tag: "resolving", id: mine[0]!.id });
+  expect(reachIn(e.next, tile.id)).toMatchObject(ReachPart.cases.resolving.make({ id: mine[0]!.id }));
 };
 
 /**
@@ -2669,12 +2768,9 @@ const decides = (e: Event, tile: WindowModel["tiles"][number], pages: ReadonlyAr
       ["monitor", want.live, socketDial(e.next)],
       ["open", want.live, socketDial(e.next)],
     ]);
-    expect(now, `${tile.name}'s reach after its monitor and open`).toMatchObject({
-      _tag: "opening",
-      pid: want.live,
-      ref: mine[0]!.call["ref"],
-      id: mine[1]!.id,
-    });
+    expect(now, `${tile.name}'s reach after its monitor and open`).toMatchObject(
+      ReachPart.cases.opening.make({ pid: want.live, ref: mine[0]!.call["ref"], id: mine[1]!.id }),
+    );
     return "live" as const;
   }
 
@@ -2683,11 +2779,9 @@ const decides = (e: Event, tile: WindowModel["tiles"][number], pages: ReadonlyAr
       mine.map((c) => [c.call._tag, streamIn(c.call), c.call["after"]]),
       `${tile.name} ended: one wait on its name after the last rev read`,
     ).toEqual([["wait", stream, want.after]]);
-    expect(now, `${tile.name}'s reach when it ended`).toMatchObject({
-      _tag: "ended",
-      pid: want.ended.pid,
-      id: mine[0]!.id,
-    });
+    expect(now, `${tile.name}'s reach when it ended`).toMatchObject(
+      ReachPart.cases.ended.make({ pid: want.ended.pid, id: mine[0]!.id }),
+    );
     expect(now.reason, `${tile.name}'s ended reason is its exit's`).toEqual(want.ended.reason);
     return "ended" as const;
   }
@@ -2850,7 +2944,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
               reads.map((c) => c.call["after"]),
               `${waiting.name}'s wait answer reads it again`,
             ).toEqual([0]);
-            expect(reachIn(e.next, waiting.id)).toMatchObject({ _tag: "resolving", id: reads[0]!.id });
+            expect(reachIn(e.next, waiting.id)).toMatchObject(ReachPart.cases.resolving.make({ id: reads[0]!.id }));
           }
 
           book.after(e, read === null || pages === null ? null : { tile: read.tile.id, pages });
@@ -2905,7 +2999,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
               ? [
                   {
                     calls: [["wait", was.after, calls[0]?.[2]]],
-                    now: { _tag: "waiting", after: was.after, id: calls[0]?.[2] },
+                    now: InboxPart.cases.waiting.make({ after: was.after, id: calls[0]?.[2] }),
                   },
                   "online",
                 ]
@@ -2913,7 +3007,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
                 ? [
                     {
                       calls: [["read", was.after, calls[0]?.[2]]],
-                      now: { _tag: "reading", after: was.after, id: calls[0]?.[2] },
+                      now: InboxPart.cases.reading.make({ after: was.after, id: calls[0]?.[2] }),
                     },
                     "woke",
                   ]
@@ -2921,14 +3015,14 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
                   ? [
                       {
                         calls: [["wait", top, calls[0]?.[2]]],
-                        now: { _tag: "waiting", after: top, id: calls[0]?.[2] },
+                        now: InboxPart.cases.waiting.make({ after: top, id: calls[0]?.[2] }),
                       },
                       "pages",
                     ]
                   : lost
-                    ? [{ calls: [], now: { _tag: "idle", after: was.after } }, "errors"]
+                    ? [{ calls: [], now: InboxPart.cases.idle.make({ after: was.after }) }, "errors"]
                     : prev.link._tag === "online" && next.link._tag !== "online"
-                      ? [{ calls: [], now: { _tag: "idle", after: was.after } }, "offline"]
+                      ? [{ calls: [], now: InboxPart.cases.idle.make({ after: was.after }) }, "offline"]
                       : m.type === "resend" &&
                           m.dial === socketDial(prev) &&
                           prev.link._tag === "online" &&
@@ -2936,7 +3030,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
                         ? [
                             {
                               calls: [["wait", was.after, calls[0]?.[2]]],
-                              now: { _tag: "waiting", after: was.after, id: calls[0]?.[2] },
+                              now: InboxPart.cases.waiting.make({ after: was.after, id: calls[0]?.[2] }),
                             },
                             "armed",
                           ]
@@ -3009,13 +3103,14 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
             rows.filter((r) => r._tag === "down"),
             `${e.m.type}'s down rows`,
           ).toEqual(
-            takes.map((t) => ({
-              _tag: "down",
-              name: t.tile.name,
-              pid: t.down.process,
-              reason: t.down.reason._tag,
-              rev: t.rev,
-            })),
+            takes.map((t) =>
+              ClientRecord.cases.down.make({
+                name: t.tile.name,
+                pid: t.down.process,
+                reason: t.down.reason._tag,
+                rev: t.rev,
+              }),
+            ),
           );
           const answer = msgKey(e.m);
           const flight = answeredFlight(e.prev, e.m);
@@ -3033,12 +3128,12 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
             monitored === null
               ? []
               : [
-                  {
-                    _tag: "monitor",
-                    name: named.get(String(Reflect.get(monitored.call, "ref"))),
-                    pid: Reflect.get(monitored.call, "pid"),
+                  // A name the walk never saw monitored reads as "undefined", which no tile is named.
+                  ClientRecord.cases.monitor.make({
+                    name: String(named.get(String(Reflect.get(monitored.call, "ref")))),
+                    pid: String(Reflect.get(monitored.call, "pid")),
                     result,
-                  },
+                  }),
                 ],
           );
 
@@ -3079,7 +3174,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
         const [away] = machine.init(load(), { tiles: TILES, tab: OTHER_TAB });
         seen.moved++;
         expect(away.tab, "the loaded Model's tab").toBe(OTHER_TAB);
-        expect(inboxIn(away), "the loaded Model's inbox").toEqual({ _tag: "idle", after: 0 });
+        expect(inboxIn(away), "the loaded Model's inbox").toEqual(InboxPart.cases.idle.make({ after: 0 }));
         expect(away.said, "the moved Model's region").toEqual({ id: saved.said.id, messages: [] });
         expect(
           { ...away, tab: saved.tab, inbox: saved.inbox, said: saved.said },
@@ -3116,14 +3211,13 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
           "the woken wait reads the moved Model's inbox",
         ).toEqual([0]);
         const to = clientTo(processAt(9_999), OTHER_TAB);
-        const letter = {
-          _tag: "send",
+        const letter = FactEntry.cases.send.make({
           by: BRAIN_BY,
           id: signalId(to, r.ref, 1),
           rev,
           arrivedAt: rev,
           body: { m: Down.make({ ref: r.ref, process: r.pid, reason: EXITS[3]!, to }) },
-        };
+        });
         const [after, cmds] = step(
           reading,
           answerMsg({ type: "read_ok", id: inboxRead[0]!.id, dial, value: [letter], ms: 0 }),
@@ -3133,10 +3227,9 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
           again.map((c) => c.call["after"]),
           `${watch.name}'s DOWN in the moved Model's inbox reads its name again`,
         ).toEqual([0]);
-        expect(reachIn(after, watch.id), `${watch.name} after its DOWN`).toMatchObject({
-          _tag: "resolving",
-          id: again[0]!.id,
-        });
+        expect(reachIn(after, watch.id), `${watch.name} after its DOWN`).toMatchObject(
+          ReachPart.cases.resolving.make({ id: again[0]!.id }),
+        );
         seen.downed++;
       }),
       opts,
@@ -3176,9 +3269,9 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
               m.value._tag === "refused" &&
               slot !== undefined &&
               prev.tiles.some((t) => t.id === owner)
-                ? [{ _tag: "refused", tile: owner, m: slot.m, reason: m.value.reason }]
+                ? [Said.cases.refused.make({ tile: owner, m: slot.m, reason: m.value.reason })]
                 : [];
-            const messages = [...ended.map(({ tile, reason }) => ({ _tag: "ended", tile, reason })), ...refused];
+            const messages = [...ended.map(({ tile, reason }) => Said.cases.ended.make({ tile, reason })), ...refused];
             const tick = m.type === "resend";
             seen.cleared += tick && was.messages.length > 0 ? 1 : 0;
             seen.idle += tick && was.messages.length === 0 ? 1 : 0;
@@ -3397,7 +3490,7 @@ const deskMoves = (w: DeskWorld, c: DeskPick): ReadonlyArray<() => WindowMsg | n
         return {
           type: "read_ok",
           ...on,
-          value: none ? [] : [{ _tag: "started", by: "brain", body: { process, name }, rev: 1 }],
+          value: none ? [] : [Entry.cases.started.make({ by: "brain", body: { process, name }, rev: 1 })],
           ms: c.ms,
         } as WindowMsg;
       }
@@ -3413,7 +3506,12 @@ const deskMoves = (w: DeskWorld, c: DeskPick): ReadonlyArray<() => WindowMsg | n
       }
 
       if (f.call._tag === "send") {
-        return { type: "send_ok", ...on, value: { _tag: "accepted", rev: c.ms, pos: c.pick }, ms: c.ms } as WindowMsg;
+        return {
+          type: "send_ok",
+          ...on,
+          value: Sent.cases.accepted.make({ rev: c.ms, pos: c.pick }),
+          ms: c.ms,
+        } as WindowMsg;
       }
 
       return { type: "knock_ok", ...on, value: null, ms: c.ms } as WindowMsg;
@@ -3821,13 +3919,15 @@ const focusMoves = (
       if (f.call._tag === "read") {
         const name = f.call.stream.replace(/^processes\//, "");
         const process = name.startsWith("tezgah:") ? TEZGAH_PID : `process_of_${name}`;
-        const started = { _tag: "started", by: "brain", body: { process, name }, rev: 1 };
+        const started = Entry.cases.started.make({ by: "brain", body: { process, name }, rev: 1 });
         const ended = ends && !name.startsWith("tezgah:") && c.pick % 2 === 1;
         const reason = EXITS[c.pick % EXITS.length]!;
         send({
           type: "read_ok",
           ...on,
-          value: ended ? [started, { _tag: "exited", by: "brain", body: { process, reason }, rev: 2 }] : [started],
+          value: ended
+            ? [started, Entry.cases.exited.make({ by: "brain", body: { process, reason }, rev: 2 })]
+            : [started],
           ms: c.ms,
         } as WindowMsg);
       } else if (f.call._tag === "open" && f.call.pid === TEZGAH_PID) {
@@ -3840,7 +3940,7 @@ const focusMoves = (
         send({
           type: "send_ok",
           ...on,
-          value: { _tag: "accepted", rev: pos + 1_000, pos },
+          value: Sent.cases.accepted.make({ rev: pos + 1_000, pos }),
           ms: c.ms,
         } as WindowMsg);
       } else if (f.call._tag === "monitor") {
@@ -4451,7 +4551,13 @@ describe("Desk S4: a window folds at its own size, records each change of its fo
                 : `fold row: after ${m.type} no strip changed, no fold row`,
             ).toEqual(
               changed
-                ? [{ _tag: "fold", strips: after.length, width: next.size!.width, height: next.size!.height }]
+                ? [
+                    ClientRecord.cases.fold.make({
+                      strips: after.length,
+                      width: next.size!.width,
+                      height: next.size!.height,
+                    }),
+                  ]
                 : [],
             );
             seen.rows += rows.length;

@@ -13,14 +13,14 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import * as Outside from "../../desktop/BrainControl.test-support.ts";
-import { BrainControl } from "../../desktop/BrainControl.ts";
+import { BrainControl, BrainControlError, Command, Unsupported } from "../../desktop/BrainControl.ts";
 import * as FilesTest from "../../desktop/BrainFilesTest.ts";
 import { BrainProbe, Readiness, Children } from "../../desktop/BrainProbe.ts";
-import { BrainService } from "../../desktop/BrainService.ts";
+import { BrainService, BrainServiceError, Timeout } from "../../desktop/BrainService.ts";
 import * as Managed from "../../desktop/BrainServiceManaged.ts";
 import type { BrainSpec } from "../../desktop/BrainSpec.ts";
 import { Archive } from "../../telemetry/Archive.ts";
-import { RecordManager } from "../../telemetry/Records.ts";
+import { RecordManager, Written } from "../../telemetry/Records.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 import { SinkError, SpanRow } from "../../telemetry/Trace.ts";
 import * as ServiceLaunchd from "./BrainServiceLaunchd.ts";
@@ -155,10 +155,10 @@ it.effect.prop(
       yield* TestClock.adjust(Number(disk.settings.values["desktop.brain-stop-timeout"]) + late);
       yield* Deferred.succeed(reply, undefined);
       const expired = yield* Fiber.await(stopping);
-      expect(Exit.isFailure(expired) ? Cause.squash(expired.cause) : null).toMatchObject({
-        _tag: "BrainServiceError",
-        reason: { _tag: "Timeout", action: "stop" },
-      });
+      const timedOut = Exit.isFailure(expired) ? Cause.squash(expired.cause) : null;
+      expect(timedOut).toBeInstanceOf(BrainServiceError);
+      expect(timedOut).toMatchObject({ reason: expect.any(Timeout) });
+      expect(timedOut).toMatchObject({ reason: { action: "stop" } });
       expect(removalObservations).toEqual([null]);
       expect(yield* disk.read).toBe(original);
       expect(disk.seen.filter((call) => call.args.includes("bootout"))).toHaveLength(initiallyLoaded ? 1 : 0);
@@ -312,10 +312,10 @@ it.effect.prop(
         expect(Exit.isFailure(first)).toBe(true);
 
         if (by === "deadline") {
-          expect(Exit.isFailure(first) ? Cause.squash(first.cause) : null).toMatchObject({
-            _tag: "BrainServiceError",
-            reason: { _tag: "Timeout", action },
-          });
+          const timedOut = Exit.isFailure(first) ? Cause.squash(first.cause) : null;
+          expect(timedOut).toBeInstanceOf(BrainServiceError);
+          expect(timedOut).toMatchObject({ reason: expect.any(Timeout) });
+          expect(timedOut).toMatchObject({ reason: { action } });
         }
 
         expect(Exit.isSuccess(yield* Fiber.await(retry))).toBe(true);
@@ -371,12 +371,12 @@ it.effect.prop(
       const exit = yield* disk.control.inspect.pipe(Effect.exit);
       expect(Exit.isFailure(exit)).toBe(true);
       const failure = Exit.isFailure(exit) ? Cause.squash(exit.cause) : null;
-      expect(failure).toMatchObject({ _tag: "BrainControlError", reason: { cause: expect.anything() } });
+      expect(failure).toBeInstanceOf(BrainControlError);
+      expect(failure).toMatchObject({ reason: { cause: expect.anything() } });
 
       if (!spawnFailure) {
-        expect(failure).toMatchObject({
-          reason: { _tag: "Command", ...(signal === null ? { code } : { signal }) },
-        });
+        expect(failure).toMatchObject({ reason: expect.any(Command) });
+        expect(failure).toMatchObject({ reason: signal === null ? { code } : { signal } });
 
         if (signal !== null) {
           expect(failure).not.toMatchObject({ reason: { code: expect.any(Number) } });
@@ -461,7 +461,7 @@ it.effect.prop(
               }
 
               delivered.push(...rows);
-              return { _tag: "written", count: rows.length };
+              return Written.cases.written.make({});
             });
             const reopen = Effect.fnUntraced(function* (action: "up" | "stop" = "up") {
               const context = yield* Layer.build(
@@ -563,7 +563,7 @@ it.effect.prop(
           (_target: "record" | "bucket", _name: string, _method: string, args: ReadonlyArray<unknown>) =>
             Effect.sync(() => {
               sent.push(args);
-              return { _tag: "written" };
+              return Written.cases.written.make({});
             }),
         ).pipe(Layer.provide(disk.native)),
       );
@@ -632,10 +632,10 @@ it.effect.prop(
         yield* disk.control.install;
       }).pipe(Effect.exit);
       expect(Exit.isFailure(exit)).toBe(true);
-      expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : null).toMatchObject({
-        _tag: "BrainControlError",
-        reason: { _tag: "Unsupported", cause: expect.anything() },
-      });
+      const refused = Exit.isFailure(exit) ? Cause.squash(exit.cause) : null;
+      expect(refused).toBeInstanceOf(BrainControlError);
+      expect(refused).toMatchObject({ reason: expect.any(Unsupported) });
+      expect(refused).toMatchObject({ reason: { cause: expect.anything() } });
 
       for (const disk of opened) {
         expect(yield* disk.read).toBeNull();

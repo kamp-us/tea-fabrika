@@ -6,7 +6,16 @@ import * as Exit from "effect/Exit";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
+import { BrainControlError, Command, Status as Job, Unsupported } from "../../desktop/BrainControl.ts";
 import * as Status from "./LaunchdStatus.ts";
+
+/** A loaded job, cut to the fields a law reads when the configuration is the print's own. */
+const LoadedPart = Schema.TaggedStruct("loaded", {
+  executable: Schema.String,
+  args: Schema.Array(Schema.String),
+  home: Schema.String,
+  pid: Schema.NullOr(Schema.Int),
+});
 
 const target = "gui/501/test.p19.brain";
 const Word = Schema.String.check(Schema.isPattern(/^[a-zA-Z][a-zA-Z0-9_雪 -]{0,18}[a-zA-Z0-9雪]$/));
@@ -97,13 +106,14 @@ it.effect.prop(
   ([word, pid]) =>
     Effect.gen(function* () {
       const value = yield* decode(0, print(word, pid));
-      expect(value).toMatchObject({
-        _tag: "loaded",
-        executable: `/test/${word}/Electron`,
-        args: [`/test/${word}/brain.mjs`],
-        home: `/test/${word}`,
-        pid,
-      });
+      expect(value).toMatchObject(
+        LoadedPart.make({
+          executable: `/test/${word}/Electron`,
+          args: [`/test/${word}/brain.mjs`],
+          home: `/test/${word}`,
+          pid,
+        }),
+      );
     }),
   { arbitrary: { seed: 119120, runs: 200 } },
 );
@@ -114,7 +124,7 @@ it.effect.prop(
   ([word]) =>
     Effect.gen(function* () {
       const missing = `Could not find service "test.p19.brain" in domain for user gui: 501\n`;
-      expect(yield* decode(113, "", missing)).toEqual({ _tag: "absent" });
+      expect(yield* decode(113, "", missing)).toEqual(Job.cases.absent.make({}));
       const invalid = [
         [113, "", `Could not find service "other-${word}" in domain for user gui: 501\n`],
         [113, "", `Could not find service "test.p19.brain" in domain for user gui: 502\n`],
@@ -127,7 +137,8 @@ it.effect.prop(
 
       for (const [code, out, err] of invalid) {
         const failure = error(yield* decode(code, out, err).pipe(Effect.exit));
-        expect(failure).toMatchObject({ _tag: "BrainControlError", reason: { cause: expect.anything() } });
+        expect(failure).toBeInstanceOf(BrainControlError);
+        expect(failure).toMatchObject({ reason: { cause: expect.anything() } });
       }
     }),
   { arbitrary: { seed: 119120, runs: 200 } },
@@ -140,7 +151,7 @@ it.effect.each([
   `Bad request.\nCould not find service "test.p19.brain" in domain for user gui: 501\n`,
 ])("vector: L3 a real Mac's missing-service output with code 113 confirms absence", (missing) =>
   Effect.gen(function* () {
-    expect(yield* decode(113, "", missing)).toEqual({ _tag: "absent" });
+    expect(yield* decode(113, "", missing)).toEqual(Job.cases.absent.make({}));
 
     // The first line is accepted only as that exact line, before the exact missing-service line.
     for (const err of [
@@ -150,7 +161,9 @@ it.effect.each([
       "Bad request.\n",
     ]) {
       const failure = error(yield* decode(113, "", err).pipe(Effect.exit));
-      expect(failure).toMatchObject({ _tag: "BrainControlError", reason: { _tag: "Command", code: 113 } });
+      expect(failure).toBeInstanceOf(BrainControlError);
+      expect(failure).toMatchObject({ reason: expect.any(Command) });
+      expect(failure).toMatchObject({ reason: { code: 113 } });
     }
   }),
 );
@@ -163,17 +176,19 @@ it.effect.each([
   ["not running", null],
 ] as const)("vector: L3 a real Mac's print of a job in state %s is a loaded job", ([state, pid]) =>
   Effect.gen(function* () {
-    expect(yield* decode(0, real(state, pid))).toEqual({
-      _tag: "loaded",
-      executable: "/test/Electron",
-      args: ["/test/brain-home/brain.mjs", "spaces & <angles> 雪"],
-      home: "/test/brain-home",
-      configuration: "build-a",
-      pid,
-    });
+    expect(yield* decode(0, real(state, pid))).toEqual(
+      Job.cases.loaded.make({
+        executable: "/test/Electron",
+        args: ["/test/brain-home/brain.mjs", "spaces & <angles> 雪"],
+        home: "/test/brain-home",
+        configuration: "build-a",
+        pid,
+      }),
+    );
     // A state no Mac has shown us is still refused.
     const failure = error(yield* decode(0, real(`${state} later`, pid)).pipe(Effect.exit));
-    expect(failure).toMatchObject({ _tag: "BrainControlError", reason: { _tag: "Unsupported" } });
+    expect(failure).toBeInstanceOf(BrainControlError);
+    expect(failure).toMatchObject({ reason: expect.any(Unsupported) });
   }),
 );
 
@@ -209,10 +224,9 @@ it("L3 missing, duplicate, nested, ambiguous and wrong-target fields fail Unsupp
                       ? text.replace("\tpid = 81", "\tpid = 82\n\tpid = 81")
                       : text.slice(0, -3);
         const exit = Effect.runSync(decode(0, broken).pipe(Effect.exit));
-        expect(error(exit)).toMatchObject({
-          _tag: "BrainControlError",
-          reason: { _tag: "Unsupported", cause: expect.anything() },
-        });
+        expect(error(exit)).toBeInstanceOf(BrainControlError);
+        expect(error(exit)).toMatchObject({ reason: expect.any(Unsupported) });
+        expect(error(exit)).toMatchObject({ reason: { cause: expect.anything() } });
       },
     ),
     { seed: 119120, numRuns: 200 },

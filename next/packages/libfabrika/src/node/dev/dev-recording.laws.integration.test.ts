@@ -13,6 +13,7 @@ import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
+import { Written } from "../../telemetry/Records.ts";
 import { devRecording } from "./dev-recording.ts";
 
 for (const failed of [false, true]) {
@@ -55,10 +56,9 @@ for (const failed of [false, true]) {
 
         try {
           const exit = await Effect.runPromiseExit(
-            Effect.scoped(devRecording(folder, "brain:test", () => Effect.succeed({ _tag: "written" }))).pipe(
-              Effect.provide(platform),
-              Effect.provide(NodeServices.layer),
-            ),
+            Effect.scoped(
+              devRecording(folder, "brain:test", () => Effect.succeed(Written.cases.written.make({}))),
+            ).pipe(Effect.provide(platform), Effect.provide(NodeServices.layer)),
           );
           expect(directories).toEqual([[folder, { recursive: true }]]);
           expect(Exit.isFailure(exit)).toBe(failed);

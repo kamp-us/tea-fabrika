@@ -11,10 +11,17 @@ import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { bundle, bundleAsync, type Rule, transform } from "lightningcss";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+/** A build's refusal as a law matches it: a reloaded module's BuildError is another class, so by its tag. */
+const BundleRefused = Schema.TaggedStruct("BuildError", { reason: Schema.String });
+/** What a result failed with, or null when it succeeded. */
+const failureIn = <A, E>(result: Result.Result<A, E>): E | null => (Result.isFailure(result) ? result.failure : null);
 
 type Inline = (file: string) => Effect.Effect<string, unknown, FileSystem.FileSystem | Path.Path>;
 
@@ -99,7 +106,7 @@ const failure = async (stylesheet: Effect.Effect<string, unknown>) => {
     throw new Error("expected stylesheet failure");
   }
 
-  expect(result.failure).toMatchObject({ _tag: "BuildError", reason: "bundle" });
+  expect(result.failure).toMatchObject(BundleRefused.make({ reason: "bundle" }));
   return result.failure;
 };
 
@@ -205,9 +212,7 @@ const refusedBuild = async (home: string) => {
 
   try {
     writeFileSync(file, ".baseline { color: red; }");
-    expect(await Effect.runPromise(attempt), "the same build succeeds with supported CSS").toMatchObject({
-      _tag: "Success",
-    });
+    expect(Result.isSuccess(await Effect.runPromise(attempt)), "the same build succeeds with supported CSS").toBe(true);
   } finally {
     writeFileSync(file, original);
   }
@@ -314,11 +319,8 @@ describe("P16 CSS tokens", () => {
 
           if (output._tag === "Failure") {
             expect(graph.named || graph.between || remoteAfterLocal, "a supported graph must bundle").toBe(true);
-            expect(output.failure).toMatchObject({ _tag: "BuildError", reason: "bundle" });
-            expect(await refusedBuild(f.home)).toMatchObject({
-              _tag: "Failure",
-              failure: { _tag: "BuildError", reason: "bundle" },
-            });
+            expect(output.failure).toMatchObject(BundleRefused.make({ reason: "bundle" }));
+            expect(failureIn(await refusedBuild(f.home))).toMatchObject(BundleRefused.make({ reason: "bundle" }));
             return;
           }
 
@@ -617,11 +619,8 @@ describe("P16 CSS tokens", () => {
               : `@import ("child${id}.css");`;
         const error = await failure(f.read(css));
         const verify = (actual: unknown) => {
-          expect(actual).toMatchObject({
-            _tag: "BuildError",
-            reason: "bundle",
-            message: expect.stringContaining(`stylesheet has a broken ${token}`),
-          });
+          expect(actual).toMatchObject(BundleRefused.make({ reason: "bundle" }));
+          expect(actual).toMatchObject({ message: expect.stringContaining(`stylesheet has a broken ${token}`) });
         };
         verify(error);
 

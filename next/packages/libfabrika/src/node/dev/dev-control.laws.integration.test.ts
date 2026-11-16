@@ -21,6 +21,7 @@ import * as TestClock from "effect/testing/TestClock";
 import { vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
+import { Written } from "../../telemetry/Records.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
 import { bodyText, fetchClient } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
@@ -77,21 +78,33 @@ type Row = typeof BrainEvent.Type;
 type Cause = { readonly reason: "open" | "crash" | "memory"; readonly bytes?: number };
 
 // What a row must say, before its start ids are known.
-type Fact =
-  | { readonly _tag: "started"; readonly at: number; readonly pid: number; readonly cause: Cause }
-  | { readonly _tag: "replacing"; readonly at: number; readonly pid: number; readonly bytes: number }
-  | { readonly _tag: "exited" | "restarting"; readonly at: number; readonly cause: Cause; readonly exit: Exit }
-  | { readonly _tag: "braked"; readonly at: number; readonly reason: string; readonly exit: Exit }
-  | { readonly _tag: "stopped"; readonly at: number };
+const CauseFact = Schema.Struct({
+  reason: Schema.Literals(["open", "crash", "memory"]),
+  bytes: Schema.optionalKey(Schema.Number),
+});
 
-type Exit = { readonly exitCode: number | null; readonly signal: string | null };
+const ExitFact = Schema.Struct({ exitCode: Schema.NullOr(Schema.Number), signal: Schema.NullOr(Schema.String) });
+
+const Fact = Schema.TaggedUnion({
+  started: { at: Schema.Number, pid: Schema.Number, cause: CauseFact },
+  replacing: { at: Schema.Number, pid: Schema.Number, bytes: Schema.Number },
+  exited: { at: Schema.Number, cause: CauseFact, exit: ExitFact },
+  restarting: { at: Schema.Number, cause: CauseFact, exit: ExitFact },
+  braked: { at: Schema.Number, reason: Schema.String, exit: ExitFact },
+  stopped: { at: Schema.Number },
+});
+type Fact = typeof Fact.Type;
 
 type Call = {
   readonly url: string;
   readonly body: { target: string; project: string; name: string; method: string; args: Array<unknown> };
 };
 
-type Answer = { readonly _tag: "value"; readonly value: unknown } | { readonly _tag: "error"; readonly error: unknown };
+const Answer = Schema.TaggedUnion({ value: { value: Schema.Unknown }, error: { error: Schema.Unknown } });
+type Answer = typeof Answer.Type;
+/** The parts of a control failure and of a stop row the laws match, cut to the fields each reads. */
+const ControlFailure = Schema.TaggedStruct("ControlError", { reason: Schema.String });
+const StoppedBy = Schema.TaggedStruct("stopped", { reason: Schema.String });
 type Span = { readonly span: { name: string; ok: boolean; attributes: Record<string, unknown> } };
 
 // `replacing`: the sampler sent the old process its SIGTERM, and the walk's process ends by its exit.
@@ -297,7 +310,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
         sent.push({ url: new URL(String(url)).href, body });
 
         if (mode === "startup") {
-          return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
+          return Response.json({ value: body.method === "write" ? Written.cases.written.make({}) : null });
         }
 
         if (body.method === "brain") {
@@ -306,7 +319,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
         }
 
         if (body.target === "record") {
-          return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
+          return Response.json({ value: body.method === "write" ? Written.cases.written.make({}) : null });
         }
 
         if (world.phase !== "up") {
@@ -350,7 +363,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
       );
       // The startup flush delivered the first started row; its brain call keeps what it said.
       const startup = sent.find((call) => call.body.method === "brain")!.body.args[0] as Row;
-      facts.push({ _tag: "started", at: walk.base, pid: walk.pid, cause: { reason: "open" } });
+      facts.push(Fact.cases.started.make({ at: walk.base, pid: walk.pid, cause: { reason: "open" } }));
       world.cause = { reason: "crash" };
       mode = "walk";
       let ready = false;
@@ -400,25 +413,25 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
         if (kind === "exit") {
           const at = world.now + (world.held === null ? move.tick : 0);
           const cause = yield* lifecycle({ type: "exit", worker: NAME, exit }, move);
-          facts.push({ _tag: "exited", at, cause, exit: ended });
+          facts.push(Fact.cases.exited.make({ at, cause, exit: ended }));
           world.phase = "exited";
           world.waiting = true;
           world.pending = true;
         } else if (kind === "restart") {
           const at = world.now + (world.held === null ? move.tick : 0);
           const cause = yield* lifecycle({ type: "restart", worker: NAME, exit, delay: move.delay }, move);
-          facts.push({ _tag: "restarting", at, cause, exit: ended });
+          facts.push(Fact.cases.restarting.make({ at, cause, exit: ended }));
           world.phase = "waiting";
         } else if (kind === "start") {
           const at = world.now + (world.held === null ? move.tick : 0);
           world.pid++;
           const cause = yield* lifecycle({ type: "start", worker: NAME, pid: world.pid }, move);
-          facts.push({ _tag: "started", at, pid: world.pid, cause });
+          facts.push(Fact.cases.started.make({ at, pid: world.pid, cause }));
           world.phase = "up";
         } else if (kind === "brake") {
           const at = world.now + (world.held === null ? move.tick : 0);
           yield* lifecycle({ type: "stop", worker: NAME, exit, reason: move.reason }, move);
-          facts.push({ _tag: "braked", at, reason: move.reason, exit: ended });
+          facts.push(Fact.cases.braked.make({ at, reason: move.reason, exit: ended }));
           world.phase = "braked";
 
           if (world.waiting) {
@@ -441,7 +454,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
           kills.push([yield* Queue.take(killed), world.pid]);
           // The replace wrote its fact before the SIGTERM; that write's acknowledgement is not a lifecycle's.
           yield* Queue.poll(acks);
-          facts.push({ _tag: "replacing", at, pid: world.pid, bytes: move.rss * 1024 });
+          facts.push(Fact.cases.replacing.make({ at, pid: world.pid, bytes: move.rss * 1024 }));
           // The sampler's next sleep comes once its turn ends, after the replace for a waiting call.
           ready = false;
           platform.rss = 0;
@@ -472,12 +485,12 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
             answer: move.answer,
             name,
             sent: [],
-            got: { _tag: "value", value: undefined },
+            got: Answer.cases.value.make({ value: undefined }),
             woken: null,
           });
           const answered = (Reflect.get(dev.process(name), "ping")() as Promise<unknown>).then(
-            (value): Answer => ({ _tag: "value", value }),
-            (error: unknown): Answer => ({ _tag: "error", error }),
+            (value): Answer => Answer.cases.value.make({ value }),
+            (error: unknown): Answer => Answer.cases.error.make({ error }),
           );
 
           if (world.pending) {
@@ -531,7 +544,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 
       world.now += 1;
       yield* TestClock.setTime(world.now);
-      facts.push({ _tag: "stopped", at: world.now });
+      facts.push(Fact.cases.stopped.make({ at: world.now }));
       return startup;
     }),
   ).pipe(
@@ -598,7 +611,9 @@ describe("T708 dev control laws", () => {
           if (port === 0 || !up) {
             // No listener of a live process: offline, and nothing is sent, after an exit or a brake too.
             expect(call.sent).toEqual([]);
-            expect(call.got).toMatchObject({ _tag: "error", error: { _tag: "ControlError", reason: "offline" } });
+            expect(call.got).toMatchObject(
+              Answer.cases.error.make({ error: ControlFailure.make({ reason: "offline" }) }),
+            );
             continue;
           }
 
@@ -613,12 +628,11 @@ describe("T708 dev control laws", () => {
           });
 
           if (call.answer === "remote") {
-            expect(call.got).toMatchObject({
-              _tag: "error",
-              error: { _tag: "ControlError", reason: `remote-${call.name}` },
-            });
+            expect(call.got).toMatchObject(
+              Answer.cases.error.make({ error: ControlFailure.make({ reason: `remote-${call.name}` }) }),
+            );
           } else {
-            expect(call.got).toEqual({ _tag: "value", value: { echo: call.name } });
+            expect(call.got).toEqual(Answer.cases.value.make({ value: { echo: call.name } }));
           }
         }
       }),
@@ -678,7 +692,7 @@ describe("T708 dev control laws", () => {
             // The replace names the process it signaled and the size the sampler saw.
             expect(row).toMatchObject({ reason: "memory", pid: fact.pid, bytes: fact.bytes, limit: BRAIN.memory });
           } else {
-            expect(row).toMatchObject({ _tag: "stopped", reason: "stop" });
+            expect(row).toMatchObject(StoppedBy.make({ reason: "stop" }));
           }
         }
 

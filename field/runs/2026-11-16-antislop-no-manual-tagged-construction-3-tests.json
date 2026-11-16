@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-manual-tagged-construction-3-tests",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T23:52:31-08:00",
+  "ended": "2026-11-16T00:32:43-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step of anti-slop judgment slice AS-no-manual-tagged-construction-3 (ticket 1057, decisions 0562 and 0563), in next/, on branch fabrikalfa/antislop-no-manual-tagged-construction-3 made from origin/main at b490a3203 (PR 1366 already merged there, so the merge of origin/main was a no-op). Counted with anti-slop-effect/no-manual-tagged-construction forced to error in a scratch config outside the repo, over next/packages/libfabrika/src/node, client and desktop: 300 hits (node 164, client 126, desktop 10), the same as the brief's count; none of PR 1366's files has a hit in these folders. All 300 are in exam paths (test files and *.test-support.ts); no product file has a hit, so the build step has nothing to do for this rule. Fixed 291, all by hand with the Edit tool; the checker's quick fix and no script were used. How: a value the library already has a schema for is made by that schema's maker (Keys.Routed and LoadError, Sent, ClientRecord, Pending, Link, ClientKeyError, JournalError, PersonCheck Answer, tasks Result, Swapped, Installed, Input, Written, Origin, Chain, BrainEvent, Status, the Wire Answer); a wire frame or a test's own union that the library does not export is restated as a test-local Schema.TaggedUnion or TaggedStruct, cut to the fields the law reads (0135), and made by its maker, the malformed frames included (a tag that is a number, a refusal with no reason or a number reason, a rev that is an object); a partial toMatchObject keeps its partial shape through a cut-down TaggedStruct; a failure matched as {_tag: Some/Failure, value/failure: {...}} is now Option.getOrNull or a Result failure read, then the same match; an error class matched by tag is checked with toBeInstanceOf and its fields, except in the build tests, where vi.resetModules reloads the module so the class differs and the match stays by tag through a TaggedStruct; six hand-written TS unions of tests (WindowMachine.laws Expect, JournalSqlite Read, Command Person, Load File, dev-control Fact and Answer) became Schema.TaggedUnion with their type read from it; DevLife's test-local view renamed its _tag key to state. Left 9, all the same case: Effect's own PlatformError.systemError takes the system error's kind as its `_tag` input field, so the hand-written key is Effect's constructor argument and no maker exists: next/packages/libfabrika/src/node/client/Spawner.test-support.ts:37, next/packages/libfabrika/src/node/client/MemoryFiles.test-support.ts:34, next/packages/libfabrika/src/node/launchd/Launchd.test-support.ts:41 and :137, next/packages/libfabrika/src/node/settings/Command.test.ts:88 and :107, next/packages/libfabrika/src/node/build/build-assets.integration.test.ts:609, next/packages/libfabrika/src/node/dev/dev-errors.laws.integration.test.ts:180, next/packages/libfabrika/src/node/dev/dev-recording.laws.integration.test.ts:37. Their right fix is the inline ignore 0562 and 0563 C allow, beside the fabrika/no-hand-tag edge comment most already carry, but it cannot land in this slice: the rule is not on for node/ yet, and options.reportUnusedDisableDirectives makes pnpm lint fail an ignore for a rule that reports nothing there (tried once on Spawner.test-support.ts:36 and undone). So they wait for the lock pull request that turns the rule on for node/, which adds the nine ignore lines with it. No disable line was added. No assertion was deleted or narrowed, no law loosened, no .oxlintrc.json change and no lock line (owner ruling for judgment slices).",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/desktop/BrainServiceManaged.laws.test.ts: L5 each deadline fails visibly, leaves the plist and retries the same address (now checked by toBeInstanceOf(Timeout))",
+      "plant": "next/packages/libfabrika/src/desktop/BrainServiceManaged.ts: the deadline's BrainServiceError carries Conflict in place of Timeout",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/client/Keys.laws.test.ts: L14: the prefix again passes the prefix key to the tile; Escape and an unbound key are dropped; a bound key is its one command (expected values now made by Keys.Routed)",
+      "plant": "next/packages/libfabrika/src/client/Keys.ts: an unbound key after the prefix routes as prefix in place of dropped",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 40,
+  "note": "Run in a cloud box with no step keys. Each plant ran once on a saved copy and was restored by copy; git status showed no product file after. Tests at b490a3203 plus this step's edits: the 15 touched plain test files (166 tests) and 15 touched .integration. files (142 tests), each alone under nice -n 15 vitest --maxWorkers=3, all green; CLAUDE_CODE_REMOTE is true, so the 0178 guard refused none. Not run: next/packages/libfabrika/src/node/client/CommandsNode.integration.test.ts, which spawns a real child and has it killed past its output cap, and the tests skill forbids a real signal here. One root pnpm typecheck ran and found three errors in this step's own edits (two `new JournalError` the Effect checker refuses, one widened literal); after their fixes the libfabrika package typecheck (tsc --noEmit -p .) exits 0. pnpm format and NODE_OPTIONS=--max-old-space-size=6144 pnpm lint: 17 of 18 parts pass; the red part is oxlint-plugins/lint.ts asking that next/packages/libfabrika/src/client/** and desktop/** now at zero be added to the rule's block in .oxlintrc.json, which the owner ruled waits for the later lock pull request. The list ratchet exits 0.",
+  "step": "tests"
+}

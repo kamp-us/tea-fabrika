@@ -24,7 +24,8 @@ import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
-import type { Install } from "../../runtime/Code.ts";
+import { type Install, Installed } from "../../runtime/Code.ts";
+import { Written } from "../../telemetry/Records.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
 import { bodyText, fetchClient } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
@@ -33,6 +34,10 @@ import { brainOutbox } from "./local-dev.ts";
 
 // The brain's two settings as these laws start it: 0292's 500 MB mark and OTP's 5 s grace.
 const BRAIN = { memory: 500_000_000, grace: 5000 };
+
+/** A control failure and an Alchemy platform failure, cut to the fields a law matches. */
+const ControlFailure = Schema.TaggedStruct("ControlError", { reason: Schema.String });
+const PlatformFailure = Schema.TaggedStruct("SystemError", { subtag: Schema.String });
 
 // The driver gives Alchemy its control plugin as a plain config with a `start`. The deploy's context
 // is typed as holding nothing, and Alchemy's contract also allows an Effect that builds a plugin,
@@ -92,10 +97,9 @@ it("the control plugin returns a typed error for malformed platform port data", 
           expect(Cause.hasFails(cause)).toBe(true);
           // Alchemy beta.84's PluginConfig.start fails with RuntimeError. A bad
           // platform port is its SystemError case, not our private ControlError.
-          expect(Cause.findErrorOption(cause)).toMatchObject({
-            _tag: "Some",
-            value: { _tag: "SystemError", subtag: "control_port" },
-          });
+          expect(Option.getOrNull(Cause.findErrorOption(cause))).toMatchObject(
+            PlatformFailure.make({ subtag: "control_port" }),
+          );
         } finally {
           vi.unstubAllEnvs();
           rmSync(home, { recursive: true, force: true });
@@ -130,7 +134,7 @@ it("every observed exit is durable once across restart or brake, with its reason
         const call = JSON.parse(bodyText(options)) as { method: string };
         // Keep lifecycle events in the real outbox while the real record sink still flushes.
         return Response.json(
-          call.method === "brain" ? { error: { reason: "offline" } } : { value: { _tag: "written" } },
+          call.method === "brain" ? { error: { reason: "offline" } } : { value: Written.cases.written.make({}) },
         );
       });
 
@@ -144,7 +148,7 @@ it("every observed exit is durable once across restart or brake, with its reason
               // The first info call succeeds. Startup flush has no events until deployment yields.
               fetch.mockImplementation(async (_url, options) => {
                 const call = JSON.parse(bodyText(options)) as { method: string };
-                return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
+                return Response.json({ value: call.method === "write" ? Written.cases.written.make({}) : null });
               });
               yield* startDev({ name: "life-test", port: 18787, build: "test", home, ...BRAIN }, (local) =>
                 Effect.gen(function* () {
@@ -159,7 +163,9 @@ it("every observed exit is durable once across restart or brake, with its reason
                 const call = JSON.parse(bodyText(options)) as Call;
                 calls.push(call);
                 return Response.json(
-                  call.method === "brain" ? { error: { reason: "offline" } } : { value: { _tag: "written" } },
+                  call.method === "brain"
+                    ? { error: { reason: "offline" } }
+                    : { value: Written.cases.written.make({}) },
                 );
               });
               const outbox = yield* brainOutbox(home);
@@ -295,7 +301,7 @@ it("every observed exit is durable once across restart or brake, with its reason
         fetch.mockImplementation(async (_url, options) => {
           const call = JSON.parse(bodyText(options)) as Call;
           calls.push(call);
-          return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
+          return Response.json({ value: call.method === "write" ? Written.cases.written.make({}) : null });
         });
         await Effect.runPromise(
           Effect.scoped(
@@ -438,10 +444,10 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
         }
 
         if (body.method === "codeInstall") {
-          return Response.json({ value: { _tag: "same" } });
+          return Response.json({ value: Installed.cases.same.make({}) });
         }
 
-        return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
+        return Response.json({ value: body.method === "write" ? Written.cases.written.make({}) : null });
       }),
     ),
     (spy) => Effect.sync(() => spy.mockRestore()),
@@ -763,7 +769,7 @@ effectIt.effect.prop(
           } else {
             // The new listener answers it, at the moment it listens.
             expect(at).toBe(heard);
-            expect(exit).toEqual(Exit.succeed({ _tag: "same" }));
+            expect(exit).toEqual(Exit.succeed(Installed.cases.same.make({})));
           }
         }
 
@@ -813,10 +819,7 @@ effectIt.effect.prop(
             }),
           ).pipe(Effect.provide(rssLayer(() => 600_000)), Effect.scoped, Effect.exit);
           const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : undefined;
-          expect(error?._tag === "Some" ? error.value : exit).toMatchObject({
-            _tag: "ControlError",
-            reason: "bad_pid",
-          });
+          expect(error?._tag === "Some" ? error.value : exit).toMatchObject(ControlFailure.make({ reason: "bad_pid" }));
           expect(kill).not.toHaveBeenCalled();
           const rows = yield* (yield* brainOutbox(home)).pending;
           expect(rows.filter((row) => row._tag === "started")).toEqual([]);

@@ -10,6 +10,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
+import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { brainOutbox } from "./local-dev.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -31,16 +32,19 @@ const failures: fc.Arbitrary<object> = fc.oneof(
   fc.record({ code: fc.string(), detail: fc.jsonValue() }, { noNullPrototype: true }),
 );
 
-const started = (id: string) => ({
-  _tag: "started",
-  id,
-  start: `start-${id}`,
-  at: 1,
-  after: null,
-  build: "b-1",
-  reason: "open",
-  pid: 7,
-});
+const started = (id: string) =>
+  BrainEvent.cases.started.make({
+    id,
+    start: `start-${id}`,
+    at: 1,
+    after: null,
+    build: "b-1",
+    reason: "open",
+    pid: 7,
+  });
+
+/** A `started` row whose id is a number: the pending file's decoder refuses it. */
+const BadStarted = Schema.TaggedStruct("started", { id: Schema.Number });
 
 const disk = (calls: Partial<FileSystem.FileSystem>) => Layer.merge(FileSystem.layerNoop(calls), Path.layer);
 const fails = <A>(failure: unknown) => Effect.fail(failure as never) as Effect.Effect<A, never>;
@@ -75,7 +79,7 @@ describe("T695, the brain's outbox keeps what the disk did", () => {
       call: fc.constantFrom<Call>("pending", "last", "add"),
       failure: failures,
       bad: fc.oneof(
-        fc.constant(JSON.stringify({ _tag: "started", id: 5 })),
+        fc.constant(JSON.stringify(BadStarted.make({ id: 5 }))),
         fc.string().map((s) => `{${s}`),
       ),
     }),

@@ -22,11 +22,13 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
 import { expectTypeOf } from "vitest";
+import { Installed } from "../../runtime/Code.ts";
 import type * as Dev from "./dev.ts";
 import { watchPrograms } from "./watch.ts";
 
@@ -129,6 +131,11 @@ type InstallShape = {
 };
 
 expectTypeOf<Install>().toEqualTypeOf<InstallShape>();
+
+/** The parts of a watcher's answer the laws match: its case, and the program or reason it names. */
+const LoadedProgram = Schema.TaggedStruct("loaded", { program: Schema.String });
+const Loaded = Schema.TaggedStruct("loaded", {});
+const BuildFailed = Schema.TaggedStruct("failed", { reason: Schema.String });
 // L20 (type): the install answer is a closed union a caller must match whole.
 expectTypeOf<Effect.Success<ReturnType<Options["install"]>>["_tag"]>().toEqualTypeOf<"same" | "failed" | "loaded">();
 // The handle `startDev` answers installs over its control socket in the watcher's own shape.
@@ -195,7 +202,7 @@ const brain = Effect.gen(function* () {
         yield* Queue.offer(installs, code);
         const same = running.get(code.program) === code.hash;
         running.set(code.program, code.hash);
-        return same ? { _tag: "same" as const } : { _tag: "loaded" as const, processes: [] };
+        return same ? Installed.cases.same.make({}) : Installed.cases.loaded.make({ processes: [] });
       }),
     failed: (fact: Failed) => Queue.offer(failures, fact).pipe(Effect.asVoid),
   };
@@ -288,7 +295,7 @@ describe("P15 slice 1: the watcher", () => {
                         installs.push(code);
                         const same = running.get(code.program) === code.hash;
                         running.set(code.program, code.hash);
-                        return same ? { _tag: "same" as const } : { _tag: "loaded" as const, processes: [] };
+                        return same ? Installed.cases.same.make({}) : Installed.cases.loaded.make({ processes: [] });
                       }),
                     failed: (fact) =>
                       Effect.sync(() => {
@@ -301,8 +308,8 @@ describe("P15 slice 1: the watcher", () => {
               const answer = yield* Queue.take(answers).pipe(Effect.timeout("10 seconds"));
               expect(answer).toMatchObject(
                 move === "fit"
-                  ? { _tag: "loaded", program: selected.name }
-                  : { _tag: "failed", reason: move === "syntax" ? "bundle" : "compiler" },
+                  ? LoadedProgram.make({ program: selected.name })
+                  : BuildFailed.make({ reason: move === "syntax" ? "bundle" : "compiler" }),
               );
               // Rolldown may already have sent a second START to END cycle for the same bytes: macOS
               // reports the write above after the watcher starts. The plan lets a repeated event
@@ -348,9 +355,9 @@ describe("P15 slice 1: the watcher", () => {
                 ).toHaveLength(move === "fit" ? 0 : 1);
 
                 for (const notification of repeated) {
-                  expect(notification, "unchanged file bytes produced a second change or failure").toMatchObject({
-                    _tag: "same",
-                  });
+                  expect(notification, "unchanged file bytes produced a second change or failure").toMatchObject(
+                    Installed.cases.same.make({}),
+                  );
                 }
               }
 
@@ -448,7 +455,7 @@ describe("P15 slice 1: the watcher", () => {
                     orElse: () => Effect.die(new Error("the watcher did not report the saved module's rebuild")),
                   }),
                 );
-                expect(answer).toMatchObject(broken ? { _tag: "failed", reason: "bundle" } : { _tag: "loaded" });
+                expect(answer).toMatchObject(broken ? BuildFailed.make({ reason: "bundle" }) : Loaded.make({}));
                 const acquired = opened.results.slice(results);
                 expect(acquired.some((result) => result.code === (broken ? "ERROR" : "BUNDLE_END"))).toBe(true);
                 expect(opened.results.slice(firstResult).every((result) => result.closed)).toBe(true);
@@ -456,9 +463,9 @@ describe("P15 slice 1: the watcher", () => {
                 const late = yield* drain(answers, 300);
 
                 for (const repeated of late) {
-                  expect(repeated, "one save produced a second change or failure answer").toMatchObject({
-                    _tag: "same",
-                  });
+                  expect(repeated, "one save produced a second change or failure answer").toMatchObject(
+                    Installed.cases.same.make({}),
+                  );
                 }
 
                 // The plan lets one save run more than one rebuild: "on each END the watcher runs

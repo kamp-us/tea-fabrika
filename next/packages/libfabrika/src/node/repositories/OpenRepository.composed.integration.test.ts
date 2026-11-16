@@ -38,6 +38,7 @@ import {
 } from "../../repositories/Repositories.ts";
 import * as Declarations from "../../settings/Declarations.ts";
 import * as SettingsSnapshot from "../../settings/Snapshot.ts";
+import { Origin } from "../../settings/Sources.ts";
 import { Toml } from "../../settings/Toml.ts";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as OpenRepository from "./OpenRepository.ts";
@@ -150,14 +151,12 @@ describe("T878 composed repository opening", () => {
                   const saved = result.value.settings;
                   const checked = yield* SettingsSnapshot.read(Declarations.all, saved);
                   expect(checked.values.port).toBe(port);
-                  expect(saved.origins["instance.port"]).toEqual({ _tag: "file", file: personName, line: 4 });
+                  expect(saved.origins["instance.port"]).toEqual(Origin.cases.file.make({ file: personName, line: 4 }));
 
                   if (index === 2) {
-                    expect(saved.origins["fabrika-version"]).toEqual({
-                      _tag: "file",
-                      file: document,
-                      line: 3 + padding,
-                    });
+                    expect(saved.origins["fabrika-version"]).toEqual(
+                      Origin.cases.file.make({ file: document, line: 3 + padding }),
+                    );
                   }
 
                   expect(saved.hash).toBe(checked.snapshot.hash);

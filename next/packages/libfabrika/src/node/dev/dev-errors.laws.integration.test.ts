@@ -13,8 +13,10 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
@@ -22,6 +24,7 @@ import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
+import { Written } from "../../telemetry/Records.ts";
 import { bodyText, fetchClient } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
@@ -29,14 +32,14 @@ import { startDev } from "./dev.ts";
 // The brain's two settings as these laws start it: 0292's 500 MB mark and OTP's 5 s grace.
 const BRAIN = { memory: 500_000_000, grace: 5000 };
 
+/** A control failure, cut to the reason a law matches. */
+const ControlFailure = Schema.TaggedStruct("ControlError", { reason: Schema.String });
+
 const failure = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
   expect(Exit.isFailure(exit)).toBe(true);
   const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
   expect(Cause.hasDies(cause)).toBe(false);
-  expect(Cause.findErrorOption(cause)).toMatchObject({
-    _tag: "Some",
-    value: { _tag: "ControlError", reason },
-  });
+  expect(Option.getOrNull(Cause.findErrorOption(cause))).toMatchObject(ControlFailure.make({ reason }));
 };
 
 const deploy = (port: number) => (local: Context.Context<never>) =>
@@ -163,7 +166,7 @@ for (const mode of ["exit", "spawn"] as const) {
         });
         const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
           const call = JSON.parse(bodyText(options));
-          return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
+          return Response.json({ value: call.method === "write" ? Written.cases.written.make({}) : null });
         });
         const kill = vi.spyOn(process, "kill").mockReturnValue(true);
         const spawner = Layer.succeed(

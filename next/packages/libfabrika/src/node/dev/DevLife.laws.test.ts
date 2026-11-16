@@ -594,10 +594,11 @@ describe("T708 dev life laws", () => {
           const listened = message("listened", real, index, prev);
           const [first] = applyCell(devLife, applyCell(devLife, prev, started)[0], listened);
           const [second] = applyCell(devLife, applyCell(devLife, prev, listened)[0], started);
-          const usable = (s: State) => ({ _tag: s._tag, address: address(s), target: target(s), pending: pending(s) });
+          // What a caller can use of a state: which case it is, and what it reaches.
+          const usable = (s: State) => ({ state: s._tag, address: address(s), target: target(s), pending: pending(s) });
           expect(usable(first)).toEqual(usable(second));
           expect(usable(first)).toEqual({
-            _tag: choice.port === 0 ? "spawned" : "online",
+            state: choice.port === 0 ? "spawned" : "online",
             address: known(choice.port),
             target: choice.pid,
             pending: null,

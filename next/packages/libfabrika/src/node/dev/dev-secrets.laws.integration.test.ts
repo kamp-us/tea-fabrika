@@ -32,7 +32,7 @@ import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import * as StartsTest from "../../settings/StartsTest.ts";
 import { recordPart } from "../../telemetry/Records.ts";
 import { Chain, SpanRow } from "../../telemetry/Trace.ts";
-import { Attached } from "../../transport/Wire.ts";
+import { Answer, Attached } from "../../transport/Wire.ts";
 import { bodyText, fetchClient } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
@@ -290,10 +290,10 @@ const flow = async (sample: Flow) => {
           }
 
           if (mode === "refused") {
-            return { _tag: "refused", reason: "not_granted" };
+            return Answer.cases.refused.make({ reason: "not_granted" });
           }
 
-          return { _tag: "ok", result: { accepted: true } };
+          return Answer.cases.ok.make({ result: { accepted: true } });
         },
         info: async () => [],
         leave: async () => {},

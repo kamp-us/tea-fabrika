@@ -42,7 +42,8 @@ import { nodeExecution } from "../runtime/Execution.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import * as IsolateUsageTest from "../runtime/IsolateUsageTest.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
-import { ProgramRunner } from "../runtime/Runner.ts";
+import { Input } from "../runtime/Program.ts";
+import { ProgramRunner, Swapped } from "../runtime/Runner.ts";
 import { mailChunk } from "../settings/Declarations.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import type { Sql } from "../Sql.ts";
@@ -161,7 +162,7 @@ const fixture = (executed: () => void) => {
     msg: Msg,
     view: { data: Model, select: (model: typeof Model.Type) => model },
     refuse: () => null,
-    inputs: { add: { _tag: "write", schema: Msg, description: "Add", personOnly: false } },
+    inputs: { add: Input.cases.write.make({ schema: Msg, description: "Add", personOnly: false }) },
     outputs: {},
     writes: {},
     wake: () => null,
@@ -636,7 +637,7 @@ it.effect(
                     return Promise.resolve();
                   },
                   descriptor: () => Promise.resolve(descriptors.get(object)),
-                  swap: () => Promise.resolve({ _tag: "same" }),
+                  swap: () => Promise.resolve(Swapped.cases.same.make({})),
                 }),
               },
             } as unknown as Env;
