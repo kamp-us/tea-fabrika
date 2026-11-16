@@ -21,7 +21,7 @@ import {
   SpanSink,
   Writer,
 } from "../coordination/index.ts";
-import { nodeExecution, type Execution, type Declaration } from "./Execution.ts";
+import { declaration, nodeExecution, type Execution, type Declaration } from "./Execution.ts";
 import { type Patch } from "./Patch.ts";
 import { ProgramDown, stepper, type Stepper } from "./Program.ts";
 
@@ -149,22 +149,7 @@ export class ProgramLoader extends Context.Service<
             return {
               stepper: loaded,
               execution: nodeExecution(programs[name], build),
-              declaration: {
-                name: loaded.program.name,
-                v: loaded.program.state.v,
-                ...(loaded.program.maxDeliveries === undefined ? {} : { maxDeliveries: loaded.program.maxDeliveries }),
-                ...(loaded.program.policy === undefined ? {} : { policy: loaded.program.policy }),
-                writes: Object.fromEntries(
-                  Object.entries(loaded.program.writes).map(([name, p]) => [name, { personOnly: p.personOnly }]),
-                ),
-                inputs: Object.fromEntries(
-                  Object.entries(loaded.program.inputs).map(([name, p]) => [
-                    name,
-                    { write: p._tag === "write", personOnly: p._tag === "write" && p.personOnly },
-                  ]),
-                ),
-                cmds: (loaded.program.machine.cmds ?? []).map((d) => d.cmdType),
-              },
+              declaration: declaration(loaded.program),
               handler: (cmd: string) => {
                 const owner = CHAOS_ONLY[cmd];
                 const run = Object.hasOwn(handlers, cmd) ? handlers[cmd] : undefined;

@@ -2,7 +2,7 @@
 // machine and its declarations, on P11's `Program.make` until ticket 302 moves it to the decided
 // shape. Time comes in only as the runner's `timer {at, arrivedAt}`, never from a clock here.
 import { Machine } from "@demlik/tea/effect";
-import { Input, Program, type Refusal } from "@kampus/libfabrika";
+import { Input, Output, Program, type Refusal } from "@kampus/libfabrika";
 import { Schema } from "effect";
 
 /** How long an open item waits before it is late: one day. A constant until a pack's settings
@@ -161,7 +161,7 @@ export const checklist = Program.make({
       answer: (view: View) => view.items,
     }),
   },
-  outputs: { done: Done },
+  outputs: { done: Output.make(Done, finished) },
   writes: {},
   wake,
 });

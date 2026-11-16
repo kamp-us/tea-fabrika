@@ -30,6 +30,10 @@ export const Checkpoint = Schema.Struct({
   }),
   turn: Schema.NullOr(Schema.Json),
   cmds: Schema.Array(Schema.Json),
+  /** A reader's values still arriving, by piped input: each one the fold of its chunk messages. */
+  arriving: Schema.optionalKey(Schema.Record(Schema.String, Schema.Json)),
+  /** The life whose first load this checkpoint holds: a later life's first load sends its outputs again. */
+  booted: Schema.optionalKey(Schema.String),
 });
 /**
  * What a process saves between turns, as `Checkpoint` decodes it.

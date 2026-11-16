@@ -247,6 +247,12 @@ export class ProjectClient extends Context.Service<
       programDemonitor: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project programDemonitor RPC enters Effect
         Effect.tryPromise({ try: () => stub.programDemonitor(...args), catch: unreachable }),
+      programPipe: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Project programPipe RPC enters Effect
+        Effect.tryPromise({ try: () => stub.programPipe(...args), catch: unreachable }),
+      programPipesList: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Project programPipesList RPC enters Effect
+        Effect.tryPromise({ try: () => stub.programPipesList(...args), catch: unreachable }),
     };
   }
 }

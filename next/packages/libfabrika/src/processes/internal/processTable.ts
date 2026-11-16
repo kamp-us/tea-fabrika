@@ -121,6 +121,8 @@ const Life = Schema.Struct({
   rev: Schema.Number,
   /** The reason it exited with, kept when a later `down` replaces its state. */
   exited: Schema.optionalKey(ExitReason),
+  /** Its process owner: its first start's member, which a restart keeps from the life it replaces (0531). */
+  member: Schema.optionalKey(Sender),
 });
 /** @internal */
 export type Life = typeof Life.Type;
@@ -200,6 +202,7 @@ export const processTableFor = (by: string) =>
             }),
             from: entry,
             rev: entry.rev,
+            ...(event.member === undefined ? {} : { member: event.member }),
           };
           return [
             {
@@ -247,11 +250,13 @@ export const processTableFor = (by: string) =>
             after: event.after,
             reason: event.reason,
           });
+          // A restarted process keeps the member of the life it replaces (0531).
+          const member = s.lives.get(event.after)?.member;
           const times = [...(s.restarts.get(event.name) ?? []), entry.arrivedAt];
           return [
             {
               ...s,
-              lives: put(s.lives, event.process, { ...life, request }),
+              lives: put(s.lives, event.process, { ...life, request, ...(member === undefined ? {} : { member }) }),
               restarts: put(s.restarts, event.name, times),
             },
             [],

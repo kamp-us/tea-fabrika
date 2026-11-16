@@ -10,12 +10,15 @@ import { Context, Effect, Layer, Option, Result, Schema, Stream } from "effect";
 import { type Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { lineFor } from "../ledger/Log.ts";
+import * as Relation from "../permissions/Relation.ts";
 import type { Sender } from "../permissions/Senders.ts";
 import { Rev } from "../Rev.ts";
 import { short } from "../telemetry/Trace.ts";
 import { decodeExitReason, type ExitReason } from "./ExitReason.ts";
+import { PipeTable } from "./internal/pipeTable.ts";
 import { processMail } from "./internal/processMail.ts";
 import { type From, inbox, type Letter, letterLine, Mailbox } from "./Mailbox.ts";
+import { PipeEvent, STREAM as PIPES } from "./Pipes.ts";
 import {
   Acked,
   acked,
@@ -30,7 +33,7 @@ import {
   ProcessEvent,
   type ProcessInfo,
   ProcessTable,
-  type Recipient,
+  Recipient,
   signalId,
   type Start,
   type StartAnswer,
@@ -54,14 +57,26 @@ type Folded = { readonly table: ProcessTable; readonly rev: Rev };
  * Trusted, and passed only by a brain-side service: the process a watch is for, in place of the
  * wiring's own recipient. `name` is the registered name the watch was asked by, `member` the member
  * it was checked against, and `answer` the watch Cmd's answer letter, written in the watch's own
- * turn before any `noproc` DOWN.
+ * turn before any `noproc` DOWN. A watch the brain writes itself, as a pipe's, has no Cmd to answer.
  */
 type Watcher = {
   readonly to: typeof Recipient.cases.process.Type;
   readonly name: string;
   readonly member?: Sender;
+  readonly answer?: { readonly id: string; readonly m: Schema.Json };
+};
+
+/**
+ * Trusted, and passed only by `PipesLedger`: the `piped` row to write, and the requester's answer
+ * letter, written in the pipe's own turn.
+ */
+type PipeWrite = {
+  readonly piped: typeof PipeEvent.cases.piped.Type;
   readonly answer: { readonly id: string; readonly m: Schema.Json };
 };
+
+/** Trusted, and passed only by `ChildrenLedger`: the process whose `stop_child` ends this life. */
+type Stopper = { readonly requester: string };
 
 const failed = Effect.fnUntraced(function* (error: Failure) {
   yield* Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: error.reason });
@@ -104,9 +119,20 @@ export class ProcessManager extends Context.Service<
     ) => Effect.Effect<StartAnswer, Failure>;
     /**
      * Ends a live process with `reason`, writes a `DOWN` to each of its watchers, and ends the
-     * watches the process itself held.
+     * watches the process itself held. With `stop`, the trusted process whose `stop_child` ends it,
+     * the same turn ends each live pipe that process asked for with this name as an end: its
+     * `unpiped` row, the end of its mail right, and its live watch.
      */
-    readonly exit: (process: string, reason: ExitReason, from: From) => Effect.Effect<void, Failure>;
+    readonly exit: (process: string, reason: ExitReason, from: From, stop?: Stopper) => Effect.Effect<void, Failure>;
+    /**
+     * Writes a pipe in one turn: its `piped` row, the writer name's right to mail the reader's name,
+     * the requester's answer and, if both ends already have live lives, the reader's watch on the
+     * writer's. A pipe saved under the id writes nothing again. A name that went live since the
+     * caller's checks is refused `name_taken`, with nothing written.
+     */
+    readonly pipe: (write: PipeWrite, from: From) => Effect.Effect<void, Failure>;
+    /** The brain's pipe rows inside one ledger turn, trusting only the brain's lines. */
+    readonly pipes: (turn: LedgerTurn) => PipeTable;
     /** Every live process. */
     readonly info: Effect.Effect<ReadonlyArray<ProcessInfo>, LedgerError>;
     /** A name's current state and its restart times, with `at`, the clock when the answer was made. */
@@ -214,6 +240,10 @@ export class ProcessManager extends Context.Service<
         // `asked` keeps the caller's own key. The fold trusts `by` alone and never reads `asked`.
         const line = (from: From, event: Parameters<typeof lineFor>[1]) =>
           lineFor({ ...from, by: caller.by }, { ...event, asked: from.by });
+        // A pipe's rows and relation rows are the brain's facts: they keep the call's person, parent
+        // and trace, and no `asked`, so each body is exactly its schema's.
+        const fact = (from: From, event: Parameters<typeof lineFor>[1]) => lineFor({ ...from, by: caller.by }, event);
+        const encodePipe = Schema.encodeSync(PipeEvent);
         const checked = Effect.fnUntraced(function* <A>(
           step: (table: ProcessTable, turn: LedgerTurn) => Result.Result<A, ProcessError>,
         ) {
@@ -241,6 +271,151 @@ export class ProcessManager extends Context.Service<
 
           const down = Down.make({ ref, process, ...(name === undefined ? {} : { name }), reason, to });
           turn.append(inbox, letter, line(from, Send.make({ m: down })));
+        };
+        /** Writes one watch in a turn already open, on the table folded through that turn. */
+        const watchIn = (
+          turn: LedgerTurn,
+          ref: string,
+          process: string,
+          as: Watcher,
+          from: From,
+        ): Result.Result<void, ProcessError> => {
+          const table = fold(turn);
+          const to = as.to;
+          const round = table.monitor(ref, process, to);
+
+          if (Result.isFailure(round)) {
+            return Result.fail(round.failure);
+          }
+
+          if (Option.isNone(round.success)) {
+            return Result.succeed(undefined);
+          }
+
+          const watch = { ref, round: round.success.value, name: as.name };
+          turn.append(
+            ProcessTable.stream,
+            id("monitored", to, ref, watch.round),
+            line(
+              from,
+              ProcessEvent.cases.monitored.make({
+                ref,
+                process,
+                to,
+                name: as.name,
+                ...(as.member === undefined ? {} : { member: as.member }),
+              }),
+            ),
+          );
+
+          // The answer comes first, so the watcher reads it before any DOWN for this watch.
+          if (as.answer !== undefined) {
+            const watcher = Option.getOrThrow(table.life(as.to.process)).name;
+            turn.append(inbox(watcher), as.answer.id, letterLine(from, as.answer.m));
+          }
+
+          if (!table.isLive(process)) {
+            signal(table, turn, watch, process, NoProc.make({}), to, from);
+          }
+
+          return Result.succeed(undefined);
+        };
+        /**
+         * The watches a start or restart of `name` owes, in that turn: for each live pipe it is an end
+         * of, the reader's live life watches the writer's live life, under a ref that names that
+         * writer life, so a watch binds one life and the pipe follows the name.
+         */
+        const pipeWatches = (turn: LedgerTurn, name: string, from: From): Result.Result<void, ProcessError> => {
+          const table = fold(turn);
+
+          for (const pipe of PipeTable.read(turn, caller.by).touching(name)) {
+            const writer = Option.getOrUndefined(table.whereis(pipe.from.name));
+            const reader = Option.getOrUndefined(table.whereis(pipe.to.name));
+
+            // The other end has no life yet: its own start writes the watch.
+            if (writer?.state._tag !== "live" || reader?.state._tag !== "live") {
+              continue;
+            }
+
+            const watched = watchIn(
+              turn,
+              `${pipe.pipe}/${writer.state.process}`,
+              writer.state.process,
+              {
+                to: Recipient.cases.process.make({ process: reader.state.process }),
+                name: pipe.from.name,
+                member: pipe.member,
+              },
+              from,
+            );
+
+            if (Result.isFailure(watched)) {
+              return watched;
+            }
+          }
+
+          return Result.succeed(undefined);
+        };
+        /**
+         * The pipes a requester's stop of `name` ends, in the stop's own turn: each live one the
+         * requester's name asked for with `name` as an end. Each gets `unpiped` and the end of its mail
+         * right, and, when the reader is the life that ends, its watch is canceled. Answers the refs
+         * canceled here, so the watcher's own end does not write them again.
+         */
+        const unpipe = (table: ProcessTable, turn: LedgerTurn, name: string, stop: Stopper, from: From) => {
+          const requester = Option.getOrUndefined(table.life(stop.requester))?.name;
+          const canceled = new Set<string>();
+
+          if (requester === undefined) {
+            return canceled;
+          }
+
+          for (const pipe of PipeTable.read(turn, caller.by).touching(name)) {
+            if (pipe.requester.name !== requester) {
+              continue;
+            }
+
+            turn.append(
+              PIPES,
+              id("unpiped", pipe.pipe),
+              fact(from, encodePipe(PipeEvent.cases.unpiped.make({ pipe: pipe.pipe, reason: "stopped" }))),
+            );
+            turn.append(
+              Relation.STREAM,
+              id("unrelated", "pipes_to", pipe.pipe),
+              fact(
+                from,
+                Relation.Row.cases.unrelated.make({
+                  subject: `name:${pipe.from.name}`,
+                  relation: "pipes_to",
+                  object: `name:${pipe.to.name}`,
+                }),
+              ),
+            );
+
+            const reader = Option.getOrUndefined(table.whereis(pipe.to.name));
+
+            if (reader?.state._tag !== "live" || pipe.to.name !== name) {
+              continue;
+            }
+
+            const to = Recipient.cases.process.make({ process: reader.state.process });
+
+            for (const watch of table.outbound(reader.state.process)) {
+              if (!watch.ref.startsWith(`${pipe.pipe}/`)) {
+                continue;
+              }
+
+              turn.append(
+                ProcessTable.stream,
+                id("demonitored", to, watch.ref, watch.round),
+                line(from, ProcessEvent.cases.demonitored.make({ ref: watch.ref, to, reason: "canceled" })),
+              );
+              canceled.add(watch.ref);
+            }
+          }
+
+          return canceled;
         };
         // A watcher that ends takes its watches with it, as OTP's monitors go with a dead process.
         const watcherExited = (turn: LedgerTurn, watches: ReturnType<ProcessTable["held"]>, from: From) => {
@@ -346,6 +521,14 @@ export class ProcessManager extends Context.Service<
                     );
                   }
 
+                  // In the very turn of the start, so a writer life that crashes at once still gives
+                  // its own reason, never noproc.
+                  const watched = pipeWatches(turn, request.name, from);
+
+                  if (Result.isFailure(watched)) {
+                    return Result.fail(watched.failure);
+                  }
+
                   return Result.succeed({ process, rev: placed.rev });
                 });
               });
@@ -356,7 +539,12 @@ export class ProcessManager extends Context.Service<
           });
           return answer;
         }, Effect.tapError(failed));
-        const exit = Effect.fn("process.exit")(function* (process: string, input: ExitReason, from: From) {
+        const exit = Effect.fn("process.exit")(function* (
+          process: string,
+          input: ExitReason,
+          from: From,
+          stop?: Stopper,
+        ) {
           yield* Effect.annotateCurrentSpan({ "fab.process": process });
           // The reason is decoded before the turn opens: text, an unknown tag or noproc writes nothing.
           const reason = yield* Effect.fromResult(decodeExitReason(input)).pipe(
@@ -383,7 +571,13 @@ export class ProcessManager extends Context.Service<
               signal(table, turn, watch, process, reason, watch.to, from);
             }
 
-            watcherExited(turn, table.outbound(process), from);
+            const canceled =
+              stop === undefined ? new Set<string>() : unpipe(table, turn, life.success.name, stop, from);
+            watcherExited(
+              turn,
+              table.outbound(process).filter((watch) => !canceled.has(watch.ref)),
+              from,
+            );
             return Result.succeed(undefined);
           });
         }, Effect.tapError(failed));
@@ -401,8 +595,12 @@ export class ProcessManager extends Context.Service<
             "fab.process": process,
             ...short({ [tag("ref")]: ref }),
           });
-          const to = as?.to ?? caller.recipient;
+          const to = caller.recipient;
           yield* checked((table, turn) => {
+            if (as !== undefined) {
+              return watchIn(turn, ref, process, as, from);
+            }
+
             const round = table.monitor(ref, process, to);
 
             if (Result.isFailure(round)) {
@@ -413,33 +611,55 @@ export class ProcessManager extends Context.Service<
               return Result.succeed(undefined);
             }
 
-            const watch = { ref, round: round.success.value, ...(as === undefined ? {} : { name: as.name }) };
+            const watch = { ref, round: round.success.value };
             turn.append(
               ProcessTable.stream,
               id("monitored", to, ref, watch.round),
-              line(
-                from,
-                ProcessEvent.cases.monitored.make({
-                  ref,
-                  process,
-                  to,
-                  ...(as === undefined ? {} : { name: as.name }),
-                  ...(as?.member === undefined ? {} : { member: as.member }),
-                }),
-              ),
+              line(from, ProcessEvent.cases.monitored.make({ ref, process, to })),
             );
-
-            // The answer comes first, so the watcher reads it before any DOWN for this watch.
-            if (as !== undefined) {
-              const watcher = Option.getOrThrow(table.life(as.to.process)).name;
-              turn.append(inbox(watcher), as.answer.id, letterLine(from, as.answer.m));
-            }
 
             if (!table.isLive(process)) {
               signal(table, turn, watch, process, NoProc.make({}), to, from);
             }
 
             return Result.succeed(undefined);
+          });
+        }, Effect.tapError(failed));
+        const pipe = Effect.fn("process.pipe")(function* (write: PipeWrite, from: From) {
+          const { piped, answer } = write;
+          yield* Effect.annotateCurrentSpan(short({ [tag("pipe")]: piped.pipe }));
+          yield* checked((table, turn) => {
+            if (Option.isSome(PipeTable.read(turn, caller.by).saved(piped.pipe))) {
+              return Result.succeed(undefined);
+            }
+
+            const live = (name: string) => Option.exists(table.whereis(name), ({ state }) => state._tag === "live");
+
+            if (live(piped.from.name) || live(piped.to.name)) {
+              return Result.fail(new ProcessError({ reason: "name_taken" }));
+            }
+
+            const requester = Option.getOrUndefined(table.life(piped.requester.process));
+
+            if (requester === undefined || !table.isLive(piped.requester.process)) {
+              return Result.fail(new ProcessError({ reason: "ended" }));
+            }
+
+            turn.append(PIPES, id("piped", piped.pipe), fact(from, encodePipe(piped)));
+            turn.append(
+              Relation.STREAM,
+              id("related", "pipes_to", piped.pipe),
+              fact(
+                from,
+                Relation.Row.cases.related.make({
+                  subject: `name:${piped.from.name}`,
+                  relation: "pipes_to",
+                  object: `name:${piped.to.name}`,
+                }),
+              ),
+            );
+            turn.append(inbox(requester.name), answer.id, letterLine(from, answer.m));
+            return pipeWatches(turn, piped.from.name, from);
           });
         }, Effect.tapError(failed));
         const demonitor = Effect.fn("process.demonitor")(function* (ref: string, from: From, as?: Pick<Watcher, "to">) {
@@ -569,6 +789,8 @@ export class ProcessManager extends Context.Service<
           ack,
           monitor,
           demonitor,
+          pipe,
+          pipes: (turn) => PipeTable.read(turn, caller.by),
           leave,
           down,
           receive,
@@ -600,8 +822,9 @@ export class ProcessManager extends Context.Service<
  */
 export type ProcessCalls = Omit<
   Context.Service.Shape<typeof ProcessManager>,
-  "receive" | "table" | "ackedPos" | "start" | "leave" | "monitor" | "demonitor"
+  "receive" | "table" | "ackedPos" | "start" | "leave" | "monitor" | "demonitor" | "exit" | "pipe" | "pipes"
 > & {
+  readonly exit: (process: string, reason: ExitReason, from: From) => Effect.Effect<void, Failure>;
   readonly start: (
     request: Start,
     from: From,
@@ -636,6 +859,10 @@ export const remoteProcessManager = (calls: ProcessCalls, by: string): Layer.Lay
       as === undefined ? calls.monitor(ref, process, from) : Effect.fail(new ProcessError({ reason: "forbidden" })),
     demonitor: (ref, from, as) =>
       as === undefined ? calls.demonitor(ref, from) : Effect.fail(new ProcessError({ reason: "forbidden" })),
+    exit: (process, reason, from, stop) =>
+      stop === undefined ? calls.exit(process, reason, from) : Effect.fail(new ProcessError({ reason: "forbidden" })),
+    pipe: () => Effect.fail(new ProcessError({ reason: "forbidden" })),
+    pipes: (turn) => PipeTable.read(turn, by),
     leave: () => Effect.fail(new LedgerError({ reason: "refused" })),
     table: (turn) => ProcessTable.read(turn.read, by),
     ackedPos: (turn, name) => ackedPos(turn, name, by),

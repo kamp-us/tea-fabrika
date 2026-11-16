@@ -11,6 +11,7 @@ import type { Child, ChildStop } from "@kampus/libfabrika/processes/Children";
 import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import type { Unwatch, Watch } from "@kampus/libfabrika/processes/Monitors";
+import type { Ask as PipeAsk } from "@kampus/libfabrika/processes/Pipes";
 import type { Start } from "@kampus/libfabrika/processes/Process";
 import { fetch } from "@kampus/libfabrika/workers";
 import type { ProjectBinding } from "@kampus/libfabrika/workers/bindings";
@@ -228,6 +229,18 @@ export class Project extends DurableObject<Env> implements ProjectBinding {
   programDemonitor(unwatch: Unwatch, from: From) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.programDemonitor(unwatch, from)));
+  }
+
+  /** A program's pipe, in the Project's write turn; a refusal is reply data. */
+  programPipe(ask: PipeAsk, from: From) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.programPipe(ask, from)));
+  }
+
+  /** The pipes a name is an end of, as the brain recorded them. */
+  programPipesList(name: string) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.programPipesList(name)));
   }
 
   processExit(pid: string, reason: ExitReason, from: From) {

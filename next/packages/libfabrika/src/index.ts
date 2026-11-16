@@ -50,6 +50,7 @@ export {
   type Binding,
   EventPolicy,
   Input,
+  Output,
   Program,
   ProgramDown,
   Refusal,
@@ -119,6 +120,22 @@ export * as Monitor from "./runtime/Monitor.ts";
  * @stability unstable
  */
 export * as Monitors from "./processes/Monitors.ts";
+/**
+ * @stability unstable
+ */
+export * as Fit from "./processes/Fit.ts";
+/**
+ * @stability unstable
+ */
+export * as Pipe from "./runtime/Pipe.ts";
+/**
+ * @stability unstable
+ */
+export * as Piped from "./runtime/Piped.ts";
+/**
+ * @stability unstable
+ */
+export * as Pipes from "./processes/Pipes.ts";
 /**
  * @stability unstable
  */
