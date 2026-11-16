@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1075-e47-review4",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T23:30:08-08:00",
+  "ended": "2026-11-15T23:33:10-08:00",
+  "parent": "2026-11-16-t1075-e47-tests5",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Third recheck of record of slice E47 of the Effect-checker sweep (ticket 1075) at 80c3a50f, after the merge of origin/main b510ed2e8 (b0f5a9dc, which brings pull request 1366) and the fix of the hits merged code brought: merge-ready, findings 0. The merge resolution in oxlint-plugins/lint.ts is right: #1373's audit import sits with the others, its block runs in the Effect program at the same point as on main (after the stale warn lines, before the ledger prune), its one console.error is yield* Console.error on the same stream with the same text, and the vendored term is in the exit code, so a run whose audit prints a line still answers 1. The merge changes no file outside the slice's own: its diff against b510ed2e8 holds only the slice's files. 80c3a50f: .github/ci/copies.ts (5 hits) and oxlint-plugins/test-kind.ts (all 4 console calls, of which the checker counts 3) each run as one Effect program at the script's edge that answers the exit code, every console call is Console on the same stream and text (test-kind keeps its ternary between Console.log for advice and Console.error for a failure), test-kind's process.exit(2) and (1) become returned codes, and both take Effect by subpath, as the tooling ruling sets. Recount at this head with only the two checks at error through --lspconfig: .agents 0, .github/ci 7, oxlint-plugins 2, next/apps/fabrika 0; the 9 left are changes.mjs:846, gate.mjs:255 and 257, required.mjs:91 and 94, scheduled.mjs:645 and 647, gitignore.mjs:23 and program-package-layout.test.ts:1404. gate.mjs is the same no-install class (scheduled.yaml line 100 says the runner's own Node runs it). Totals: 107 met, 100 fixed by hand, 0 by quick fix, 9 left for the owner, 0 waiting on 1366.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 3,
+  "note": "Read-only on the branch apart from this row. Read git show --cc of b0f5a9dc for lint.ts and the whole of 80c3a50f. Ran at 80c3a50f, one file at a time under nice -n 19 --maxWorkers=1: copies.test.ts 4, test-kind.test.ts 2, plants.test.ts 236 (which runs lint.ts), workflow-lint.test.ts 3, all green. By hand: copies.ts with no base prints its no-base line on stdout and exits 0; test-kind.ts prints its all-clear on stdout, nothing on stderr, and exits 0. origin/main has moved to 797c3c8a8 since the merge: a merge of it is clean (git merge-tree), but #1496 adds .github/ci/proof.ts with two console.log calls, which a later fold of this slice meets as new hits. Not run: pnpm typecheck and pnpm lint, which the tests step ran on this head; the two next/ integration tests that start real instances, untouched since review3.",
+  "step": "review"
+}
