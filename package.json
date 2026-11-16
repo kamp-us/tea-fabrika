@@ -37,6 +37,7 @@
     "@effect/tsgo": "catalog:",
     "@effect/vitest": "catalog:",
     "@kampus/vitest": "workspace:*",
+    "@oxlint/plugins": "catalog:",
     "@tea-fabrika/agents": "workspace:*",
     "@tea-fabrika/tracker": "workspace:*",
     "@types/node": "catalog:",
