@@ -2915,6 +2915,7 @@
         ".agents/**",
         ".github/ci/**",
         "oxlint-plugins/**",
+        "next/apps/fabrika/**",
         "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/ci/**",

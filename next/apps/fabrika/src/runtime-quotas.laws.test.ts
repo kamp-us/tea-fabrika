@@ -42,33 +42,49 @@ import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
+
 vi.mock("./table.ts", () => table);
+
 // Only the platform base class is fake. The box methods run the real programBox.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
+
 vi.mock("virtual:fabrika-built", () => ({ ...table, assets: {} }));
 
 type ProjectCalls = (typeof ProjectService)["Service"];
+
 type ProcessCalls = (typeof ProcessService)["Service"];
+
 type Limits = QuotaRunnerTest.Limits;
 
 const PROJECT = "quota-laws";
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const SENT = "2026-11-13T04:00:00.000Z";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const URL = "http://127.0.0.1:18787";
+
 const NAMES = ["alpha:1", "alpha:2", "beta:1"] as const;
+
 const PROGRAMS = ["quota/alpha", "quota/beta"] as const;
+
 // Where the brain records how far each name's reader has read its inbox. An ack is the brain's own
 // record, so no account pays for one.
 const ACKS: ReadonlyArray<string> = NAMES.map(acked);
+
 const programFor = (name: string) => (name.startsWith("alpha:") ? "quota/alpha" : "quota/beta");
+
 const required = <A>(value: A | undefined): A => Option.getOrThrow(Option.fromUndefinedOr(value));
+
 const live = TestClock.withLive;
 
 const field = (value: Buffer | string) => {
   const body = Buffer.from(value);
   const size = Buffer.alloc(4);
   size.writeUInt32BE(body.length);
+
   return Buffer.concat([size, body]);
 };
 
@@ -78,6 +94,7 @@ const identity = () => {
   const raw = pair.publicKey.export({ format: "jwk" }).x ?? "";
   const bytes = Buffer.from(raw, "base64url");
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -90,8 +107,10 @@ const identity = () => {
         field("sha512"),
         field(createHash("sha512").update(text).digest()),
       ]);
+
       const version = Buffer.alloc(4);
       version.writeUInt32BE(1);
+
       const packet = Buffer.concat([
         Buffer.from("SSHSIG"),
         version,
@@ -101,7 +120,9 @@ const identity = () => {
         field("sha512"),
         field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
       ]);
+
       const lines = packet.toString("base64").match(/.{1,70}/g) ?? [];
+
       return `-----BEGIN SSH SIGNATURE-----\n${lines.join("\n")}\n-----END SSH SIGNATURE-----\n`;
     },
   };
@@ -171,10 +192,15 @@ const View = Schema.Struct({ view: Model });
 
 /** A built program's table row: its hash is the SHA-256 of its source, as the builder's is. */
 const built = (source: string) => ({ hash: createHash("sha256").update(source).digest("hex"), source });
+
 const counterCode = built("counter");
+
 const checklistCode = built("checklist");
+
 const tezgahCode = built("tezgah");
+
 const alphaCode = built("alpha");
+
 const betaCode = built("beta");
 
 /** A recovery allowance as the recovery setting's value holds it once decoded. */
@@ -214,6 +240,7 @@ type Store = {
 const storage = (db: DatabaseSync, alarm: (at: number | null) => void) => {
   const sql = nodeSql(db);
   const values = new Map<string, unknown>();
+
   return {
     values,
     sql: {
@@ -246,19 +273,24 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
   const key = identity();
   // A hands key the person named, which never connects: a hands Cmd's task stays waiting.
   const handsKey = identity();
+
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
     (held) => Effect.sync(() => held.close()),
   );
+
   const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles the real Project service reads
   const ctx = {
     id: { name: PROJECT },
     storage: storage(db, () => {}),
     exports: loopbacks,
   } as unknown as DurableObjectState;
+
   const stores = new Map<string, Store>();
   const runtimes = new Map<Store, ReturnType<typeof processRuntime>>();
+
   const from = {
     by: key.fingerprint,
     for: PERSON,
@@ -268,18 +300,22 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     traceId: TRACE,
     build: "quota-laws",
   };
+
   const everyone = Object.fromEntries(NAMES.map((name) => [name, NAMES.filter((other) => other !== name)]));
   let projectHeld = undefined as ReturnType<typeof projectRuntime> | undefined;
+
   // What the Project class hands off: one service call on the object's runtime.
   const project = <A, E>(use: (p: ProjectCalls) => Effect.Effect<A, E>) =>
     Effect.flatMap(required(projectHeld).contextEffect, (services) =>
       ProjectService.use(use).pipe(Effect.provideContext(services)),
     );
+
   // What the Process class hands off, with the descriptor calls on its own handles.
   const process = <A, E>(store: Store, use: (p: ProcessCalls) => Effect.Effect<A, E>) =>
     Effect.flatMap(required(runtimes.get(store)).contextEffect, (services) =>
       ProcessService.use(use).pipe(Effect.provideContext(services)),
     );
+
   /** The start's whole input, as `INSTANCE` carries it, with these limits under its own start id. */
   const instance = (values: Limits, start?: string) =>
     JSON.stringify(
@@ -296,6 +332,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         values: { ...declared(values), handsTarget: handsKey.fingerprint },
       }),
     );
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but lack workerd's nominal brands
   const env = {
     INSTANCE: instance(limits),
@@ -319,6 +356,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
                           project((p) => {
                             const member = Reflect.get(p, method);
                             const work = typeof member === "function" ? Reflect.apply(member, p, args) : member;
+
                             return method === "sign"
                               ? signingReply(work)
                               : method === "commit"
@@ -334,13 +372,16 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         const [, storageKey] = Schema.decodeUnknownSync(
           Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
         )(name);
+
         let store = stores.get(storageKey);
 
         if (store === undefined) {
           const processDb = new DatabaseSync(":memory:");
+
           const handles = storage(processDb, (at) => {
             made.alarm = at;
           });
+
           // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the SQL, descriptor and alarm handles the real Process reads
           const processCtx = { id: { name }, storage: handles, exports: loopbacks } as unknown as DurableObjectState;
           const made: Store = { db: processDb, ctx: processCtx, values: handles.values, alarm: null };
@@ -350,6 +391,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         }
 
         const current = store;
+
         return new Proxy(
           {},
           {
@@ -369,6 +411,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
                           ? processDescriptor(current.ctx)
                           : process(current, (p): Effect.Effect<unknown, unknown> => {
                               const member = Reflect.get(p, method);
+
                               return typeof member === "function" ? Reflect.apply(member, p, args) : Effect.void;
                             }),
                     ),
@@ -392,7 +435,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
               worker(alpha ? "quota/alpha" : "quota/beta"),
               alpha ? alphaCode.hash : betaCode.hash,
             );
+
             const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
+
             return {
               describe: () => box.describe(),
               init: (saved: unknown) => box.init(saved),
@@ -410,11 +455,13 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
 
           if (id.startsWith(`${checklistCode.hash}/`)) {
             const Box = programBox(checklist, checklistCode.hash);
+
             return Reflect.construct(Box, []);
           }
 
           // The app's own bootstrap, `fabrika/counter`, and the founder's tezgah, which no law here drives.
           const execution = nodeExecution(counter);
+
           return {
             describe: async () => ({
               name: counter.name,
@@ -450,6 +497,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
       }),
     },
   } as unknown as Env;
+
   const boot = Effect.sync(() => {
     projectHeld = projectRuntime(ctx, env);
 
@@ -457,6 +505,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
       runtimes.set(store, processRuntime(store.ctx, env, programs));
     }
   });
+
   const halt = Effect.gen(function* () {
     for (const runtime of runtimes.values()) {
       yield* runtime.disposeEffect;
@@ -464,6 +513,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
 
     yield* required(projectHeld).disposeEffect;
   });
+
   yield* Effect.acquireRelease(boot, () =>
     Effect.andThen(
       halt,
@@ -475,18 +525,23 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     ),
   );
   yield* project((p) => p.info);
+
   // The law's own lookup of a name's process runs with tracing off, so it writes no span rows
   // itself: a count of the Project's rows then holds only what the instance wrote.
   const pid = Effect.fnUntraced(function* (name: string) {
     const info = yield* project((p) => p.info).pipe(Effect.withTracerEnabled(false));
+
     return required(info.find((row) => row.name === name)).process;
   });
+
   /** The store of a registered name, found by the descriptor its Process saved. */
   const storeFor = Effect.fnUntraced(function* (name: string) {
     const current = yield* pid(name);
+
     const named = [...stores.values()].filter(
       (store) => Reflect.get(Object(store.values.get("descriptor")), "name") === name,
     );
+
     return required(
       named.find((store) => Reflect.get(Object(store.values.get("descriptor")), "id") === current) ?? named[0],
     );
@@ -529,10 +584,13 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
       ),
     ),
   ).toMatchObject({ _tag: "online" });
+
   const view = Effect.fnUntraced(function* (name: string) {
     const store = yield* storeFor(name);
+
     return Schema.decodeUnknownSync(View)(yield* process(store, (p) => p.open("audit"))).view;
   });
+
   /** Fires each saved alarm that is due, as the platform would, until `done` holds and none is saved. */
   const settle = Effect.fnUntraced(function* (done: Effect.Effect<boolean, unknown>) {
     for (let n = 0; n < 2_000; n++) {
@@ -562,8 +620,10 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
 
     return yield* Effect.die("the instance did not settle");
   });
+
   const sql = nodeSql(db);
   const quotas = QuotasSql.layer(sql, { brain: `brain:${PROJECT}`, limits });
+
   /** Every account in both stores. A read of an installed account adds no row to either store. */
   const accounts = Effect.gen(function* () {
     const found = yield* Effect.forEach(
@@ -573,7 +633,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         concurrency: 1,
       },
     );
+
     const rows = { project: counts(db), process: found.map(([, store]) => counts(store.db)) };
+
     const program = yield* Effect.forEach(
       PROGRAMS,
       (id) =>
@@ -583,6 +645,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         ),
       { concurrency: 1 },
     ).pipe(Effect.provide(quotas), live);
+
     const recovery = yield* Effect.forEach(
       NAMES,
       (name) =>
@@ -592,6 +655,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         ),
       { concurrency: 1 },
     ).pipe(Effect.provide(quotas), live);
+
     const local = yield* Effect.forEach(
       found,
       ([name, store]) =>
@@ -601,16 +665,19 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         ),
       { concurrency: 1 },
     ).pipe(live);
+
     expect(
       { project: counts(db), process: found.map(([, store]) => counts(store.db)) },
       "the live assembly installs accounting in both stores; a read never creates it",
     ).toEqual(rows);
+
     return {
       program: Object.fromEntries(program),
       recovery: Object.fromEntries(recovery),
       local: Object.fromEntries(local),
     };
   });
+
   return {
     pid,
     view,
@@ -619,6 +686,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     accounts,
     rows: Effect.gen(function* () {
       const found = yield* Effect.forEach(NAMES, storeFor, { concurrency: 1 });
+
       return { project: counts(db), process: found.map((store) => counts(store.db)) };
     }),
     /**
@@ -646,6 +714,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     /** One input through the door, to the name's live process. */
     input: Effect.fnUntraced(function* (name: string, id: string, m: unknown) {
       const to = yield* pid(name);
+
       // `letter` is the door's own key for the message id (0547 keeps saved and wire names).
       return yield* project((p) => p.route(client, "process.send", { pid: to, letter: id, m, sentAt: SENT, seen: 0 }));
     }),
@@ -671,9 +740,13 @@ const Cell = Schema.Struct({
 });
 
 const Tape = Schema.Array(Cell).check(Schema.isMinLength(3), Schema.isMaxLength(10));
+
 const options = { timeout: 300_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } };
+
 const accepted = { _tag: "ok", result: { _tag: "accepted" } };
+
 const refused = { _tag: "refused", reason: "quota" };
+
 const none = { writes: 0, bytes: 0 };
 
 const cost = (entries: ReadonlyArray<Parameters<typeof encodedBytes>[0]>) => ({
@@ -733,12 +806,14 @@ describe("P34c live wiring, both object stores", () => {
             } else {
               const peer = required(NAMES.filter((registered) => registered !== name)[c.amount % 2]);
               const stepped = move === "tell" ? [name, peer] : [name];
+
               const m =
                 move === "tell"
                   ? { type: "tell", to: peer }
                   : move === "ask"
                     ? { type: "ask" }
                     : { type: "inc", text: "é😀".repeat(c.amount % 64) };
+
               expect(yield* w.input(name, `${move}:${n}`, m)).toMatchObject(accepted);
 
               if (move === "tell") {
@@ -752,10 +827,12 @@ describe("P34c live wiring, both object stores", () => {
                 Effect.gen(function* () {
                   const sender = yield* w.view(name);
                   const receiver = yield* w.view(peer);
+
                   // A hands Cmd is done here once its task request points the hands key at it.
                   const requested =
                     move !== "ask" ||
                     (yield* w.entries(head)).some((entry) => entry.stream === targetStream(w.handsKey));
+
                   return (
                     requested &&
                     sender.told === required(told.get(name)) &&
@@ -818,14 +895,17 @@ describe("P34c live wiring, both object stores", () => {
           // An input counts 2 writes, so an odd cap also meets "one write short". A bare input and its
           // step take about 900 bytes in the canonical encoding, so the storage caps hold a few.
           const cap = resource === "writes" ? 2 + (first.amount % 8) : 4_000 + (first.amount % 8) * 2_000;
+
           const limits = {
             ...QuotaRunnerTest.defaults,
             ...(resource === "writes" ? { writes: cap } : { storage: cap }),
           };
+
           const w = yield* world(limits);
           const counted = new Map<string, number>(NAMES.map((name) => [name, 0]));
           let refusals = 0;
           let admitted = 0;
+
           const one = Effect.fnUntraced(function* (name: string, id: string, text: string) {
             const program = programFor(name);
             const before = yield* w.accounts;
@@ -881,6 +961,7 @@ describe("P34c live wiring, both object stores", () => {
             // id as long as the first's, so only its text adds bytes to what the first pair cost.
             const pair = (ids: ReadonlyArray<string>) =>
               Effect.map(w.entries(0), (entries) => cost(entries.filter((e) => ids.includes(e.id))).bytes);
+
             const bare = yield* pair(["first", "step:first"]);
             const left = cap - required((yield* w.accounts).program["quota/alpha"]).bytes;
             const text = "a".repeat(Math.max(0, left - bare - (Math.floor(first.amount / 8) % 12)));
@@ -892,6 +973,7 @@ describe("P34c live wiring, both object stores", () => {
               expect(yield* w.input("alpha:1", "aimed", { type: "inc", text })).toMatchObject(accepted);
               yield* w.settle(Effect.map(w.view("alpha:1"), (view) => view.count === 2));
               expect(yield* pair(["aimed", "step:aimed"])).toBeGreaterThan(left);
+
               return;
             }
           }

@@ -34,6 +34,7 @@ const untracked = (path: string, name: string) =>
 const walk = (dir: string): ReadonlyArray<string> =>
   readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((entry) => {
     const path = dir === "" ? entry.name : `${dir}/${entry.name}`;
+
     return entry.isDirectory() ? (untracked(path, entry.name) ? [] : walk(path)) : entry.isFile() ? [path] : [];
   });
 
