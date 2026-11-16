@@ -181,8 +181,10 @@ export const layer = (options: { readonly person: string }) =>
             });
             const effective = yield* isolated(["ls-remote", "--get-url", "--", remote]).pipe(
               Effect.flatMap(decode),
-              Effect.map((value) => value.replace(/\n$/, "")),
-              Effect.mapError((cause) => failure("origin", cause, true)),
+              Effect.mapBoth({
+                onFailure: (cause) => failure("origin", cause, true),
+                onSuccess: (value) => value.replace(/\n$/, ""),
+              }),
             );
             // Host URL rewrites apply; credentials are authority, never destination identity.
             const identity = effective
