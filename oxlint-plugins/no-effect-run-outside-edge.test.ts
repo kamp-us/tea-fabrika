@@ -1,8 +1,11 @@
 // `no-effect-run-outside-edge` (exam item 2): an Effect runs only on a line under an edge comment.
 // There is no list of edge files (owner, 2026-11-05; Tier 1, P35), so each run fires at every one of
 // the 18 paths that list once named, and passes only where an edge comment stands over it.
+// These plants were the exam's (next/apps/fabrika/src/exam/no-effect-run-outside-edge.integration.test.ts)
+// until 0591 moved them here. Plant: drop `makeRuntimePromise` from the rule's run set, and line 12
+// stops firing at every path.
 import { describe, expect, it } from "vitest";
-import { plant } from "../../../../../oxlint-plugins/plant.ts";
+import { plant } from "./plant.ts";
 
 const CODE = "fabrika(no-effect-run-outside-edge)";
 const FIRES = "next/packages/libfabrika/src/app/fires.ts";
@@ -87,11 +90,11 @@ describe("no-effect-run-outside-edge", async () => {
     "next/packages/libfabrika/src/app/process.test.ts": runs,
   });
 
-  it("fires on each run, a runtime's methods and the runtime makers too", () => {
+  it("scenario: fires on each run, a runtime's methods and the runtime makers too", () => {
     expect(all(CODE, FIRES)).toEqual(RUN_LINES);
   });
 
-  it("fires at each of the 18 paths the old list named: the list is gone", () => {
+  it("scenario: fires at each of the 18 paths the old list named: the list is gone", () => {
     expect(OLD_EDGES).toHaveLength(18);
 
     for (const path of OLD_EDGES) {
@@ -99,7 +102,7 @@ describe("no-effect-run-outside-edge", async () => {
     }
   });
 
-  it("passes each run under an edge comment, and one comment for both rules", () => {
+  it("scenario: passes each run under an edge comment, and one comment for both rules", () => {
     expect(all(CODE, EDGE)).toEqual([]);
     expect(all("fabrika(no-promises)", EDGE)).toEqual([]);
     expect(all("fabrika(edge-comment)", EDGE)).toEqual([]);
@@ -107,7 +110,7 @@ describe("no-effect-run-outside-edge", async () => {
     expect(all("", EDGE)).toEqual([]);
   });
 
-  it("passes NodeRuntime.runMain and tests", () => {
+  it("scenario: passes NodeRuntime.runMain and tests", () => {
     expect(all(CODE, PASSES)).toEqual([]);
     expect(all(CODE, "next/packages/libfabrika/src/app/process.test.ts")).toEqual([]);
   });
