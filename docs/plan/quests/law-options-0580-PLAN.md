@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0580, 0579; body d6c6584f7370
+Approved by the lead agent, builds 0580, 0579; body 6d31e3a40575
 Plancheck-Version: 3
 
 # Plan: a law's plant and label are options of its declaration, on @kalfa/vitest, a CI check holds each plant against its run row, and it.prop replaces our property runner (0580)
