@@ -424,11 +424,13 @@ const browserEntries = (
   });
 
 /** Rolldown refused or failed: the bundle's own failure, with Rolldown's error as its cause. */
-class BundleFailure extends Schema.TaggedError<BundleFailure>()("BundleFailure", { cause: Schema.Unknown }) {}
+class BundleFailure extends Schema.TaggedError<BundleFailure, { readonly brand: unique symbol }>()("BundleFailure", {
+  cause: Schema.Unknown,
+}) {}
 
 /** One call of Rolldown's Promise API, as `Effect.tryPromise` in its object form. */
 const bundling = <A>(run: () => PromiseLike<A>) =>
-  Effect.tryPromise({ try: run, catch: (cause) => new BundleFailure({ cause }) });
+  Effect.tryPromise({ try: run, catch: (cause) => BundleFailure.make({ cause }) });
 
 /** A Rolldown bundle of `file` for a browser, closed when `use` ends, however it ends. */
 const bundled = <A, E>(file: string, plugin: Plugin, use: (bundle: RolldownBuild) => Effect.Effect<A, E>) =>

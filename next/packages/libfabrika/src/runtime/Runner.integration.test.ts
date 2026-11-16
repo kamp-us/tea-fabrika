@@ -142,7 +142,9 @@ const work = Cmd.make("work", {
 class DiskError extends Schema.TaggedError<DiskError>()("disk", {}) {}
 
 // A world that could not be built: the fixture failed, not the runner under test.
-class FixtureError extends Schema.TaggedError<FixtureError>()("FixtureError", { cause: Schema.Defect() }) {}
+class FixtureError extends Schema.TaggedError<FixtureError, { readonly brand: unique symbol }>()("FixtureError", {
+  cause: Schema.Defect(),
+}) {}
 
 class WorkValue extends Schema.Class<WorkValue>("WorkValue")({
   n: Schema.Int,
@@ -1663,7 +1665,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           Effect.flatMap((on) =>
             Effect.tryPromise({
               try: () => worldOn(on),
-              catch: (cause) => new FixtureError({ cause }),
+              catch: (cause) => FixtureError.make({ cause }),
             }),
           ),
         );
@@ -1714,7 +1716,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           Effect.flatMap((on) =>
             Effect.tryPromise({
               try: () => worldOn(on),
-              catch: (cause) => new FixtureError({ cause }),
+              catch: (cause) => FixtureError.make({ cause }),
             }),
           ),
         );
@@ -1765,7 +1767,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
               Effect.flatMap((on) =>
                 Effect.tryPromise({
                   try: () => worldOn(on),
-                  catch: (cause) => new FixtureError({ cause }),
+                  catch: (cause) => FixtureError.make({ cause }),
                 }),
               ),
             );
@@ -1818,7 +1820,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           Effect.flatMap((on) =>
             Effect.tryPromise({
               try: () => worldOn(on),
-              catch: (cause) => new FixtureError({ cause }),
+              catch: (cause) => FixtureError.make({ cause }),
             }),
           ),
         );

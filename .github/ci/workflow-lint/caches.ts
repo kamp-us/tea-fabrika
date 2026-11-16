@@ -2,8 +2,7 @@
 // never saves, full-history checkouts are blobless, and the typecheck's buildinfo cache.
 import { globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import * as Rec from "effect/Record";
-import * as Result from "effect/Result";
+import { Record as Rec, Result } from "effect";
 import { parse } from "yaml";
 import { compact, map, steps, uses } from "./shared.ts";
 

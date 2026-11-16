@@ -4,9 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll } from "@effect/vitest";
-import * as Effect from "effect/Effect";
-import * as Rec from "effect/Record";
-import * as Schema from "effect/Schema";
+import { Effect, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { readers } from "./changes.mjs";
@@ -28,11 +26,13 @@ import { nextFiles, visualFiles } from "./shard-rows.ts";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
-class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
 
 /** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
 const promised = <A>(run: () => PromiseLike<A>) =>
-  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 // Today's CI, next/. Covers legs.ts, which sizes the next job's matrix on the merge line: a pull
 // request, a merge queue group and a push to main (0534). Paths are the real next/ files Vitest

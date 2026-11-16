@@ -3,8 +3,7 @@
 // order their messages print, and is what `pnpm lint` calls.
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import * as Rec from "effect/Record";
-import * as Result from "effect/Result";
+import { Record as Rec, Result } from "effect";
 import { parse } from "yaml";
 import { cacheFiles, lintCaches } from "./workflow-lint/caches.ts";
 import { changesJob } from "./workflow-lint/changes.ts";

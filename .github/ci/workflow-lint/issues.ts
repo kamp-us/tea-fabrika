@@ -1,6 +1,5 @@
-import * as Rec from "effect/Record";
+import { Record as Rec, Result } from "effect";
 // Today's CI, serving both versions. Who may touch issues (0534, 0541).
-import * as Result from "effect/Result";
 import { parse } from "yaml";
 import { VERDICT } from "./scheduled.ts";
 import { isMap, map } from "./shared.ts";

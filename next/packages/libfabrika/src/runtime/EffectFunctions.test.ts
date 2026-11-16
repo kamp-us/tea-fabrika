@@ -819,7 +819,9 @@ const work = Cmd.make("work", {
 });
 
 // The generated handler's own failure, which the runner answers as handler_failed.
-class HandlerFailure extends Schema.TaggedError<HandlerFailure>()("HandlerFailure", { message: Schema.String }) {}
+class HandlerFailure extends Schema.TaggedError<HandlerFailure, { readonly brand: unique symbol }>()("HandlerFailure", {
+  message: Schema.String,
+}) {}
 
 const write = Cmd.make("write", {
   input: Schema.Struct({ stream: Schema.String, write: Schema.Json }),
@@ -1030,7 +1032,7 @@ const runnerWorld = (
       {
         work: Effect.fnUntraced(function* (_cmd: unknown) {
           if (fault.at === "handler_fail") {
-            return yield* new HandlerFailure({ message: "generated handler failure" });
+            return yield* HandlerFailure.make({ message: "generated handler failure" });
           }
 
           if (fault.at === "handler_die") {

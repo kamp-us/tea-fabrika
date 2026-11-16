@@ -17,11 +17,13 @@ import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { noCauseSquash } from "./no-cause-squash.ts";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
-class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
 
 /** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
 const promised = <A>(run: () => PromiseLike<A>) =>
-  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();

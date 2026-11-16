@@ -1,4 +1,4 @@
-import * as Rec from "effect/Record";
+import { Record as Rec } from "effect";
 // Today's CI, serving both versions. TT1 and TT2: each test leg's time table (time-table.ts) and
 // its timings upload, in check.yaml and scheduled.yaml.
 import { fileName, STEP } from "../time-table.ts";

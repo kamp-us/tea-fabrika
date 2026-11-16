@@ -1,4 +1,4 @@
-import * as Rec from "effect/Record";
+import { Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's jobs: what each gated job waits on and when it
 // skips, which jobs may not come back (F3, ticket 985), and every job's time limit (ticket 496).
 import { gated, gates } from "../required.mjs";

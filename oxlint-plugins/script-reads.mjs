@@ -1,7 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, posix, relative } from "node:path";
-import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
+import { Array as Arr, pipe } from "effect";
 import { parseSync } from "oxc-parser";
 
 /**

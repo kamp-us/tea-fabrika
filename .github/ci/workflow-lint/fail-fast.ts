@@ -1,4 +1,4 @@
-import * as Rec from "effect/Record";
+import { Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's fail fast (ticket 990): every job but ci-required
 // ends with the stop step (F1), only ci-required runs on always() (F2), the token may cancel the run
 // and no job sets its own (F3), and no checkout keeps the token in .git/config (F4).

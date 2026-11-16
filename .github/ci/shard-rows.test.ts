@@ -5,8 +5,7 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { it, expect } from "@effect/vitest";
 // Today's CI, about next/. The unusual keys and line breaks exercise the check's edges.
-import { Effect, Schema } from "effect";
-import * as Rec from "effect/Record";
+import { Effect, Schema, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
@@ -14,11 +13,13 @@ import { full, measured } from "../../vitest.shards.ts";
 import { main, nextFiles, stale, visualFiles } from "./shard-rows.ts";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
-class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
 
 /** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
 const promised = <A>(run: () => PromiseLike<A>) =>
-  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 /** A scratch folder under the temp folder, removed when the test's scope closes. */
 const scratch = (prefix: string) =>

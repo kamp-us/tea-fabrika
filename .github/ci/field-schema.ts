@@ -1,12 +1,9 @@
-import * as DateTime from "effect/DateTime";
-import * as Option from "effect/Option";
-import * as Rec from "effect/Record";
+import { DateTime, Option, Record as Rec, Schema } from "effect";
 // Today's field records. Cores measured against 437 notes and the last 500 runs
 // by the approved T342 plan. README drift advises; unknown facts stay unknown.
 // A finding row's core is decision 0035's own: its keys, the closed `rule` list and its proof.
 // Decision 0090: a new row is its own file, field/<log>/<date>-<slug>.json; the old .jsonl files
 // are history. Both hold the same rows, so one schema reads both.
-import * as Schema from "effect/Schema";
 
 const Log = Schema.Literals(["notes", "runs", "findings"]);
 

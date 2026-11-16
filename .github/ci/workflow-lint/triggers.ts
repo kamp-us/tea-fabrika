@@ -1,4 +1,4 @@
-import * as Rec from "effect/Record";
+import { Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's triggers: the events that start a run, the paths
 // a pull request ignores, what cancels a run, and a draft's own check names.
 import { ignored } from "../changes.mjs";

@@ -1,6 +1,5 @@
 // Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC18).
-import * as Rec from "effect/Record";
-import * as Result from "effect/Result";
+import { Record as Rec, Result } from "effect";
 import { parse } from "yaml";
 import {
   allSteps,

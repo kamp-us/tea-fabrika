@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import * as Rec from "effect/Record";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { ignored, jobs } from "../changes.mjs";

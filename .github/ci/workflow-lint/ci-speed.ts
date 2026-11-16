@@ -1,6 +1,5 @@
-import * as Rec from "effect/Record";
+import { Record as Rec, Result } from "effect";
 // Today's CI, serving both versions. ci-speed.yaml's shape (K1 to K7), the daily speed measure.
-import * as Result from "effect/Result";
 import { parse } from "yaml";
 import { allSteps, compact, isMap, map } from "./shared.ts";
 

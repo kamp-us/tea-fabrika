@@ -1,4 +1,4 @@
-import * as Rec from "effect/Record";
+import { Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's Q1: the record a ready pull request run leaves
 // for the merge queue, its one upload, and every job testing the tree the record names.
 import { allSteps, classifier, compact, FLAGS, map, type Rule, sameEntries, steps, uses } from "./shared.ts";

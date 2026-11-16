@@ -1,4 +1,4 @@
-import * as Rec from "effect/Record";
+import { Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's ci-required job, the one required check.
 import { compact, map, type Rule, steps } from "./shared.ts";
 

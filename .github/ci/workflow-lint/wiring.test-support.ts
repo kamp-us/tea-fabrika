@@ -1,4 +1,4 @@
-import * as Rec from "effect/Record";
+import { Record as Rec } from "effect";
 // Today's CI, serving both versions. What the workflow-lint tests share: `wiring`, a generated
 // valid check.yaml, lookups of a step by its name, and `rejects`, which gives each listed plant to
 // every generated valid workflow, one at a time, so an unrelated error cannot mask it.

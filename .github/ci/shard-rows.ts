@@ -1,9 +1,7 @@
 // Today's CI, about next/'s test files.
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import * as Effect from "effect/Effect";
-import * as Rec from "effect/Record";
-import * as Schema from "effect/Schema";
+import { Effect, Record as Rec, Schema } from "effect";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
 import { full, measured } from "../../vitest.shards.ts";
@@ -21,11 +19,13 @@ export const stale = (table: Readonly<Record<string, number>>, files: readonly s
 };
 
 /** Vitest could not start, select or close: the check's own failure, with Vitest's error as its cause. */
-class VitestFailure extends Schema.TaggedError<VitestFailure>()("VitestFailure", { cause: Schema.Defect() }) {}
+class VitestFailure extends Schema.TaggedError<VitestFailure, { readonly brand: unique symbol }>()("VitestFailure", {
+  cause: Schema.Defect(),
+}) {}
 
 /** One call of Vitest's Promise API, as `Effect.tryPromise` in its object form. */
 const vitestCall = <A>(run: () => PromiseLike<A>) =>
-  Effect.tryPromise({ try: run, catch: (cause) => new VitestFailure({ cause }) });
+  Effect.tryPromise({ try: run, catch: (cause) => VitestFailure.make({ cause }) });
 
 /**
  * Test files under `root` as Vitest itself selects them from one project's `include` and

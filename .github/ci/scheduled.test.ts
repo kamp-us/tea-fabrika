@@ -1,19 +1,18 @@
 import { readFileSync } from "node:fs";
 import { it } from "@effect/vitest";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Rec from "effect/Record";
-import * as Schema from "effect/Schema";
+import { DateTime, Effect, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { expect } from "vitest";
 import * as scheduled from "./scheduled.mjs";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
-class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
 
 /** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
 const promised = <A>(run: () => PromiseLike<A>) =>
-  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 type Jobs = Parameters<typeof scheduled.verdict>[0]["jobs"];
 

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import * as Rec from "effect/Record";
+import { Record as Rec } from "effect";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { cacheFiles, lintCaches } from "./caches.ts";
