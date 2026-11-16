@@ -35,8 +35,15 @@ const fires = async (files: Readonly<Record<string, string>>) => {
 };
 
 describe("reading imports", () => {
-  it("finds static, type, re-export, bare, multi-line and dynamic imports, and skips comments", async () => {
-    // built from two strings, so no scan reads it as this file's own import
+  // Each form names a spec that fires (an unlisted package, or a path out of the package), so a form
+  // the rule stops reading loses its line's fire. The names hold a `-`, which no generated package
+  // name has, so none is the package itself.
+  // Plants: drop the visitor of `export ... from`, `export *`, a type's
+  // `import()` or `import = require`, and that line's fire goes missing.
+  it("finds static, type, re-export, export-all, bare, type import(), import-equals, multi-line and dynamic imports, and skips comments", async () => {
+    // built from two strings, so no scan reads them as this file's own imports
+    const typed = `type Typed = ${"import"}("@kampus/typed-only").Typed;`;
+    const required = `import req = ${"require"}("@kampus/required-one");`;
     const dynamic = `const m = ${"import"}("@pierre/highlights");`;
     await fc.assert(
       fc.asyncProperty(
@@ -46,13 +53,14 @@ describe("reading imports", () => {
           const file = `next/${group}/${name}/src/reader.ts`;
           const found = await fires({
             [`next/${group}/${name}/package.json`]: manifest(`@kampus/${name}`),
-            [`next/${group}/${name}/src/wire.ts`]: "export type Wire = 1;\n",
-            [`next/${group}/${name}/src/fold.ts`]: "export const fold = 1;\n",
             [file]: lines(
               'import {Effect} from "effect";',
-              'import type {Wire} from "./wire.ts";',
-              'export {fold} from "./fold.ts";',
-              'import "./style.css";',
+              'import type {Wire} from "@kampus/wire-types";',
+              'export {fold} from "@kampus/fold-out";',
+              'export * from "@kampus/every-name";',
+              'import "../../style.css";',
+              typed,
+              required,
               "import {",
               "\ta,",
               "\tb,",
@@ -67,8 +75,14 @@ describe("reading imports", () => {
           });
           expect(found(file)).toEqual([
             `1 ${MESSAGES.unlisted("effect", "effect")}`,
-            `8 ${MESSAGES.unlisted(LIBRARY, LIBRARY)}`,
-            `9 ${MESSAGES.unlisted("@pierre/highlights", "@pierre/highlights")}`,
+            `2 ${MESSAGES.unlisted("@kampus/wire-types", "@kampus/wire-types")}`,
+            `3 ${MESSAGES.unlisted("@kampus/fold-out", "@kampus/fold-out")}`,
+            `4 ${MESSAGES.unlisted("@kampus/every-name", "@kampus/every-name")}`,
+            `5 ${MESSAGES.relative("../../style.css")}`,
+            `6 ${MESSAGES.unlisted("@kampus/typed-only", "@kampus/typed-only")}`,
+            `7 ${MESSAGES.unlisted("@kampus/required-one", "@kampus/required-one")}`,
+            `11 ${MESSAGES.unlisted(LIBRARY, LIBRARY)}`,
+            `12 ${MESSAGES.unlisted("@pierre/highlights", "@pierre/highlights")}`,
           ]);
         },
       ),
@@ -246,17 +260,18 @@ describe("a module's front files and its internal/ in the exports map", () => {
 
   // The app imports subpaths of the library whose real `exports` is read from the real package. A
   // front file is reached. An internal file is refused even though it exists, and a name no file has
-  // reaches nothing. Each run plants up to ten imports at once, one file each, so the exam's 60 cases
-  // cost six oxlint runs.
+  // reaches nothing. Each run plants ten generated imports at once, one file each, beside the pinned
+  // one, so six oxlint runs judge at least the exam's 60 cases; the law counts them.
   type Case = readonly [(typeof MODULES)[number], "front" | "internal" | "missing", string];
   // pinned: the plan's plant (ticket 477), the ledger's store imported from the app, runs first.
   const pinned: Case = ["ledger", "internal", "ledgerStore"];
   it("each module's front files are reached and its internal/ is refused to other packages", async () => {
     const kinds = new Set<string>();
+    let judged = 0;
     await fc.assert(
       fc.asyncProperty(
         fc.uniqueArray(fc.tuple(module, fc.constantFrom("front", "internal", "missing"), name), {
-          minLength: 1,
+          minLength: 10,
           maxLength: 10,
           selector: ([each, , stem]) => `${each}/${stem.toLowerCase()}`,
         }),
@@ -286,6 +301,7 @@ describe("a module's front files and its internal/ in the exports map", () => {
 
           cases.forEach(([each, kind, stem], i) => {
             kinds.add(kind);
+            judged += 1;
             const subpath = kind === "internal" ? `${each}/internal/${stem}` : `${each}/${stem}`;
             const spec = `${LIBRARY}/${subpath}`;
             expect(found(`next/apps/fabrika/src/use${i}.ts`), spec).toEqual(
@@ -302,5 +318,8 @@ describe("a module's front files and its internal/ in the exports map", () => {
     );
     // Coverage: a front file, an internal one and a missing one were each drawn.
     expect([...kinds].sort()).toEqual(["front", "internal", "missing"]);
+    // Reach: at least the exam's 60 cases were judged (66 at this seed: six runs, each of ten
+    // generated cases and the pinned one). Plant: `minLength: 1` judges 42, and this fails.
+    expect(judged).toBeGreaterThanOrEqual(60);
   });
 });
