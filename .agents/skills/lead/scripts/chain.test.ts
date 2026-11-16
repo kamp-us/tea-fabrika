@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Record as Rec } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Answer, listUsd, NO_SPENT, runTurn, type Spent, stepRow } from "./agents.ts";
@@ -360,7 +360,7 @@ describe("T341 the quest brief is cut into one brief per step, today's tooling",
   it("format: the pr section's first line is the title; a heading's case does not matter", () => {
     const cut = sectionsOf(questBrief.replace("## pr", "## PR"));
     expect(cut.sections.pr?.split("\n")[0]).toBe("# T7 the title");
-    expect(Object.keys(cut.sections).toSorted()).toEqual([...STEPS, "pr"].toSorted());
+    expect(Rec.keys(cut.sections).toSorted()).toEqual([...STEPS, "pr"].toSorted());
   });
 
   // 0066: a brief needs no `## mutation`; an older one that has it is accepted. Plants: demand
@@ -1296,7 +1296,7 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
       redacted: 0,
     });
     expect(String(row.why)).toContain("ticket 485");
-    expect(Object.keys(row)).toContain("date");
+    expect(Rec.keys(row)).toContain("date");
   });
 
   // 0093: a step's plants go from its answer's JSON object to its field row. Plants run once, both

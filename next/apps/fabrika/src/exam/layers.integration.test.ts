@@ -14,7 +14,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Record as Rec } from "effect";
 import type { Row } from "./rows.ts";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
@@ -28,7 +28,7 @@ const planter = Effect.acquireRelease(
       const root = realpathSync(mkdtempSync(join(tmpdir(), "next-exam-")));
       roots.push(root);
 
-      for (const [path, body] of Object.entries({ "package.json": { name: "plant", private: true }, ...files })) {
+      for (const [path, body] of Rec.toEntries({ "package.json": { name: "plant", private: true }, ...files })) {
         mkdirSync(dirname(join(root, path)), { recursive: true });
         writeFileSync(join(root, path), typeof body === "string" ? body : JSON.stringify(body));
       }
@@ -210,7 +210,7 @@ describe("the real rule file on planted trees", () => {
         [`${LIB}/processes/Process.ts`]: lines("export const member = 1;"),
         [`${LIB}/ledger/Log.ts`]: lines("export const log = 1;"),
         [`${LIB}/transport/Wire.ts`]: lines("export const wire = 1;"),
-        ...Object.fromEntries(
+        ...Rec.fromEntries(
           lower.map((module) => [`${LIB}/${module}/Up.ts`, lines('import {Gateway} from "../gateway/Gateway.ts";')]),
         ),
       });
@@ -413,7 +413,7 @@ describe("the real rule file on planted trees", () => {
         .filter((path) => (path.startsWith(`${LIB}/`) || path.startsWith(`${TUVAL}/`)) && !path.includes("*"))
         .map((path) => (/\.tsx?$/.test(path) ? path : `${path}/Probe.ts`));
       const tree = plant({
-        ...Object.fromEntries(claimed.map((path) => [path, lines("export const probe = 1;")])),
+        ...Rec.fromEntries(claimed.map((path) => [path, lines("export const probe = 1;")])),
         [`${LIB}/sync/Merge.ts`]: lines("export const merge = 1;"),
         [`${LIB}/sync/Merge.test.ts`]: lines("export const merge = 1;"),
         [`${LIB}/Loose.ts`]: lines("export const loose = 1;"),
@@ -497,7 +497,7 @@ describe("the real rule file on planted trees", () => {
   const plantedReal = planter.pipe(
     Effect.map(({ plant }) =>
       plant(
-        Object.fromEntries(
+        Rec.fromEntries(
           SRC_ROWS.map((row) => [
             probe(row),
             lines(
@@ -562,7 +562,7 @@ describe("the real rule file on planted trees", () => {
   // T953 moved every row from the processes up by one, to put the permission core on layer 3 between
   // the ledger and the processes.
   it("pinned: the modules are on the layers the plan gives them", () => {
-    expect(Object.fromEntries(layersByName(REAL.layers))).toEqual({
+    expect(Rec.fromEntries(layersByName(REAL.layers))).toEqual({
       "next-node": 10,
       "next-workers": 9,
       "next-libfabrika-entry": 8,
@@ -620,8 +620,8 @@ describe("the real rule file on planted trees", () => {
       "next-shared": 0,
     };
     const now = layersByName(REAL.layers);
-    const changed = Object.entries(main).flatMap(([a, before]) =>
-      Object.entries(main).flatMap(([b, other]) => {
+    const changed = Rec.toEntries(main).flatMap(([a, before]) =>
+      Rec.toEntries(main).flatMap(([b, other]) => {
         const [after, then] = [now.get(a), now.get(b)];
         return after === undefined || then === undefined
           ? [`${a} or ${b} lost its layer`]

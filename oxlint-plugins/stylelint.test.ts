@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
+import { Record as Rec } from "effect";
 import stylelint from "stylelint";
 import { afterAll, assert, describe, expect, it } from "vitest";
 
@@ -220,7 +221,7 @@ const warningPaths = (value: unknown, path = "config"): string[] => {
     return [];
   }
 
-  return Object.entries(value).flatMap(([key, item]) => [
+  return Rec.toEntries(value).flatMap(([key, item]) => [
     ...((key === "severity" || key === "defaultSeverity") && item === "warning" ? [`${path}.${key}`] : []),
     ...warningPaths(item, `${path}.${key}`),
   ]);
@@ -240,7 +241,7 @@ describe("T245 PR 3, laws 27 and 28: the effective config cannot weaken a rule",
   it("law 27 keeps each rule's complete root options in every tracked CSS file", async () => {
     const base = await rootConfig();
     expect(
-      Object.keys(base.rules ?? {})
+      Rec.keys(base.rules ?? {})
         .filter((rule) => rule.startsWith("fabrika/"))
         .sort(),
     ).toEqual(RULES.map(({ name }) => `fabrika/${name}`).sort());
@@ -335,11 +336,11 @@ export default {...base, rules: Object.fromEntries(Object.entries(base.rules).ma
 };
 
 const track = (repo: string, files: Record<string, string>) => {
-  for (const [path, contents] of Object.entries(files)) {
+  for (const [path, contents] of Rec.toEntries(files)) {
     write(repo, path, contents);
   }
 
-  const added = spawnSync("git", ["add", "--", ...Object.keys(files)], {
+  const added = spawnSync("git", ["add", "--", ...Rec.keys(files)], {
     cwd: repo,
     encoding: "utf8",
   });
@@ -474,12 +475,12 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
   it("law 30 reads every tracked scope despite nested configs and ignore files", () => {
     const repo = runnerRepo();
     const paths = ["apps", "packages", "programs", "next"].map((scope) => `${scope}/plant/window.css`);
-    track(repo, Object.fromEntries(paths.map((path) => [path, ".a { color: #fff; }\n"])));
+    track(repo, Rec.fromEntries(paths.map((path) => [path, ".a { color: #fff; }\n"])));
     write(repo, ".stylelintignore", "**/*.css\n");
     write(
       repo,
       "apps/.stylelintrc.json",
-      JSON.stringify({ rules: Object.fromEntries(RULES.map(({ name }) => [`fabrika/${name}`, null])) }),
+      JSON.stringify({ rules: Rec.fromEntries(RULES.map(({ name }) => [`fabrika/${name}`, null])) }),
     );
     write(repo, "apps/untracked.css", ".broken {\n");
     track(repo, { "experiments/plant/ignored.css": ".broken {\n" });

@@ -35,6 +35,7 @@
 import { applyCell, type Cmd } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { fcTypeId } from "../tasks/TasksTest.ts";
 import {
@@ -84,7 +85,7 @@ const step = (s: Model, m: Sent) => applyCell<Model, Sent, Out>(handsMachine, s,
 const boot = (): readonly [Model, ReadonlyArray<Out>] => handsMachine.init(null, {});
 
 const record = (v: unknown): ReadonlyMap<string, unknown> =>
-  typeof v === "object" && v !== null ? new Map(Object.entries(v)) : new Map();
+  typeof v === "object" && v !== null ? new Map(Rec.toEntries(v)) : new Map();
 
 const text = (v: unknown) => (typeof v === "string" ? v : "");
 const tagIn = (v: unknown) => text(record(v).get("_tag"));

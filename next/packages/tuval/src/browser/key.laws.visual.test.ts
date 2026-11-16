@@ -17,6 +17,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { type Browser, chromium, type Page } from "playwright";
 import { rolldown } from "rolldown";
@@ -143,7 +144,7 @@ const stored = (page: Page) =>
             hex: [...new TextEncoder().encode(v)].map((x) => x.toString(16).padStart(2, "0")).join(""),
           });
         } else if (typeof v === "object" && v !== null) {
-          for (const one of Object.values(v)) {
+          for (const one of Rec.values(v)) {
             await walk(one);
           }
         }

@@ -7,6 +7,7 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Context, Effect, Exit, FileSystem, Layer, Path, Schema, Stream } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { ProcessReplies } from "../cloudflare/bindings.ts";
@@ -266,7 +267,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
     const service = yield* ProgramRunner.pipe(Effect.provideContext(context));
     yield* service.open("fixture");
     const snapshot = Effect.sync(() =>
-      Object.fromEntries(
+      Rec.fromEntries(
         ["process_state", "process_letters", "process_recovery", "process_receipts"].map((table) => [
           table,
           state.sql.exec(`SELECT * FROM ${table} ORDER BY rowid`),

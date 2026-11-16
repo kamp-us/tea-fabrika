@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Record as Rec } from "effect";
 import { ROWS, text } from "./ratchet.test-support.ts";
 
 import { LISTS } from "./ratchet.ts";
@@ -48,7 +48,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
 
       git("init", "-q", "-b", "main");
 
-      for (const [file, rows] of Object.entries(ROWS)) {
+      for (const [file, rows] of Rec.toEntries(ROWS)) {
         put(file, rows);
       }
 

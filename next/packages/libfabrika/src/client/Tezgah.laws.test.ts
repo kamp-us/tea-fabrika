@@ -16,6 +16,7 @@ import { applyCell } from "@demlik/tea";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Arbitrary, Result, Schema } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
 import type { Binding } from "../runtime/Program.ts";
@@ -61,7 +62,7 @@ describe("Desk S2a L11: tezgah's view in the window", () => {
       expect(tiles, "L11: one wire tile per tile").toHaveLength(view.tiles.length);
 
       for (const [i, tile] of tiles.entries()) {
-        expect(Object.keys(tile).sort(), "L11: the wire tile keeps every field").toEqual(
+        expect(Rec.keys(tile).sort(), "L11: the wire tile keeps every field").toEqual(
           expect.arrayContaining([...FIELDS].sort()),
         );
         expect(tile["child"], "L11: the wire says whether tezgah started the tile").toBe(view.tiles[i]?.child);
@@ -399,7 +400,7 @@ const letterIn = (p: object): string | null => {
     return own;
   }
 
-  for (const v of Object.values(p)) {
+  for (const v of Rec.values(p)) {
     const inner: unknown = typeof v === "object" && v !== null ? Reflect.get(v, "letter") : undefined;
 
     if (typeof inner === "string") {
@@ -898,7 +899,7 @@ describe("Desk S3 L23: the window stores no optimistic focus", () => {
     expectTypeOf<Extract<keyof NonNullable<WindowModel["tezgah"]>, Stored>>().toEqualTypeOf<never>();
     const fresh = tezgahMachine.init(null, { workspace: 1 })[0];
     expect(
-      Object.keys(fresh).filter((k) => STORED.test(k)),
+      Rec.keys(fresh).filter((k) => STORED.test(k)),
       "L23: the tezgah child stores no drawn focus",
     ).toEqual([]);
     expect(TABLE, "the laws' key table loads").not.toBeNull();
@@ -912,7 +913,7 @@ describe("Desk S3 L23: the window stores no optimistic focus", () => {
           seen[pending.length > 0 ? "pending" : "none"]++;
           expect(
             [next, next.tezgah ?? {}, next.tezgah?.client ?? {}]
-              .flatMap((o) => Object.keys(o))
+              .flatMap((o) => Rec.keys(o))
               .filter((k) => STORED.test(k)),
             `L23: window ${win} stores no drawn focus`,
           ).toEqual([]);
@@ -1099,7 +1100,7 @@ describe("Desk S3 L25: a focus key is drawn on the step that reads it", () => {
       { seed: SEED, numRuns: 200 },
     );
     expect(
-      Object.values(seen).every((n) => n > 0),
+      Rec.values(seen).every((n) => n > 0),
       `L25: the walks reached every case ${JSON.stringify(seen)}`,
     ).toBe(true);
   });

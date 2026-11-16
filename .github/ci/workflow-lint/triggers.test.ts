@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { ignored, jobs } from "../changes.mjs";
@@ -48,8 +49,8 @@ it("ticket 988: every path a pull request ignores runs no heavy job in changes.m
         expect(paths.every(ignoredBy)).toBe(true);
         // Every job but the field rows' is off, whatever jobs changes.mjs grows or drops.
         const { field, ...heavy } = jobs(paths, "pull_request", draft);
-        expect(Object.keys(heavy).length).toBeGreaterThan(0);
-        expect(Object.entries(heavy).filter(([, on]) => on)).toEqual([]);
+        expect(Rec.keys(heavy).length).toBeGreaterThan(0);
+        expect(Rec.toEntries(heavy).filter(([, on]) => on)).toEqual([]);
         expect(field).toBe(paths.some(isFieldPath));
       },
     ),
@@ -80,7 +81,7 @@ it("0546: a quest plan is ignored in docs/plan/quests/ and, for a pull request s
 
     for (const draft of [true, false]) {
       const { field, ...heavy } = jobs([plan], "pull_request", draft);
-      expect(Object.entries(heavy).filter(([, on]) => on)).toEqual([]);
+      expect(Rec.toEntries(heavy).filter(([, on]) => on)).toEqual([]);
       expect(field).toBe(false);
     }
   }

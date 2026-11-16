@@ -5,6 +5,7 @@
 // the day the rule landed, which may only grow.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { RuleTester } from "oxlint/plugins-dev";
@@ -175,7 +176,7 @@ type Tree = any;
 
 const toValue = (node: Tree): unknown => {
   if (node.type === "ObjectExpression") {
-    return Object.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
+    return Rec.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
   }
 
   if (node.type === "ArrayExpression") {
@@ -231,7 +232,7 @@ it("scenario: the real config holds a static layer in each listed folder, and le
     "next/apps/fabrika/src/Planted.test.ts",
     "packages/fabrika/src/Planted.ts",
   ];
-  const linted = await plant(Object.fromEntries([...on, ...off].map((path) => [path, SERVICE])));
+  const linted = await plant(Rec.fromEntries([...on, ...off].map((path) => [path, SERVICE])));
 
   expect(on.map((path) => [path, linted(CODE, path)])).toEqual(on.map((path) => [path, [4]]));
   expect(off.map((path) => [path, linted(CODE, path)])).toEqual(off.map((path) => [path, []]));

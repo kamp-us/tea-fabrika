@@ -32,6 +32,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -232,7 +233,7 @@ it("fires on exactly the tests that are neither a property nor labeled, and on e
           );
           return { path: `next/packages/libfabrika/src/${label}.test.ts`, text, expected };
         });
-        const result = await linted(Object.fromEntries(files.map(({ path, text }) => [path, text])));
+        const result = await linted(Rec.fromEntries(files.map(({ path, text }) => [path, text])));
 
         for (const { path, text, expected } of files) {
           expect(result(path), text).toEqual(expected);
@@ -273,9 +274,9 @@ it("counts expectTypeOf and assertType only from a value import of vitest or @ef
         ].join("\n");
         return { source, path: `next/packages/libfabrika/src/types/Check${i}.test.ts`, text, fires };
       });
-      const result = await linted(Object.fromEntries(files.map(({ path, text }) => [path, text])));
-      const fired = Object.fromEntries(files.map(({ source, path }) => [source, result(path)]));
-      const expected = Object.fromEntries(files.map(({ source, fires }) => [source, fires ? [[3, TYPE_MESSAGE]] : []]));
+      const result = await linted(Rec.fromEntries(files.map(({ path, text }) => [path, text])));
+      const fired = Rec.fromEntries(files.map(({ source, path }) => [source, result(path)]));
+      const expected = Rec.fromEntries(files.map(({ source, fires }) => [source, fires ? [[3, TYPE_MESSAGE]] : []]));
       expect(fired, files[0]?.text).toEqual(expected);
     }),
     { ...runs, numRuns: 2 },
@@ -315,9 +316,9 @@ it("counts the shared runner, property from Testing.test-support.ts, as a proper
         ].join("\n");
         return { source, path: `next/packages/libfabrika/src/processes/Shared${i}Test.ts`, text, fires };
       });
-      const result = await linted(Object.fromEntries(files.map(({ path, text }) => [path, text])));
-      const fired = Object.fromEntries(files.map(({ source, path }) => [source, result(path)]));
-      const expected = Object.fromEntries(files.map(({ source, fires }) => [source, fires ? [[5, MESSAGE]] : []]));
+      const result = await linted(Rec.fromEntries(files.map(({ path, text }) => [path, text])));
+      const fired = Rec.fromEntries(files.map(({ source, path }) => [source, result(path)]));
+      const expected = Rec.fromEntries(files.map(({ source, fires }) => [source, fires ? [[5, MESSAGE]] : []]));
       expect(fired, files[0]?.text).toEqual(expected);
     }),
     { ...runs, numRuns: 2 },
@@ -336,7 +337,7 @@ it("reads next/ and .agents/ tests and shared suites, and leaves today's tests a
       const left = ["next/a.ts", "packages/a.test.ts", "apps/a.test.ts", "programs/a.test.ts", "docs/a.test.ts"];
       const caller = "next/a/sink.test.ts";
       const result = await linted({
-        ...Object.fromEntries([...read, ...left].map((path) => [path, text])),
+        ...Rec.fromEntries([...read, ...left].map((path) => [path, text])),
         [caller]: 'import * as SinkTest from "./SinkTest.ts";\nSinkTest.suite(nodeSql);\n',
       });
 

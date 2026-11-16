@@ -1,3 +1,4 @@
+import { Record as Rec } from "effect";
 // Ticket 688, next/. Decision 0091: a folder of libfabrika is a module and its rank is a layer, so
 // the old words do not come back as names in next/. oxlint's own `eslint/id-denylist` holds it
 // (0040), from `.oxlintrc.json`'s `next/**` override, and this suite plants each edge case of the
@@ -50,7 +51,7 @@ const declared = file("export const room = 1;"); // 2
 
 describe("eslint/id-denylist: the old library words as names in next/", async () => {
   const files = {
-    ...Object.fromEntries(OLD.map((name) => [`${APP}/old-${name}.ts`, named(name)])),
+    ...Rec.fromEntries(OLD.map((name) => [`${APP}/old-${name}.ts`, named(name)])),
     [`${APP}/new.ts`]: file(
       "export const module = 1;",
       "export const modules = [module];",

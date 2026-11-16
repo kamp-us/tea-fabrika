@@ -18,7 +18,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Result, Schema, Scope } from "effect";
+import { Effect, Exit, Result, Schema, Scope, Record as Rec } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { chromium } from "playwright";
@@ -157,18 +157,18 @@ describe("P16 real browser from a copied one-file build", () => {
                 Effect.provide(NodeServices.layer),
               ),
             );
-            const entry = Object.entries(built.assets).find(
+            const entry = Rec.toEntries(built.assets).find(
               ([, a]) => a.type.startsWith("text/javascript") && a.body.includes("__p16Ready"),
             );
             assert(entry, "entry script missing");
             // P40: the window's entry route keeps its qualified program name.
             expect(entry[0]).toContain("fabrika/counter");
-            const scripts = Object.entries(built.assets).filter(([, a]) => a.type.startsWith("text/javascript"));
+            const scripts = Rec.toEntries(built.assets).filter(([, a]) => a.type.startsWith("text/javascript"));
             expect(scripts.length).toBeGreaterThan(1);
             const page = await browser.newPage();
             await page.goto(instance.url);
 
-            for (const [route, asset] of Object.entries(built.assets)) {
+            for (const [route, asset] of Rec.toEntries(built.assets)) {
               const response = await page.request.get(instance.url + route);
               expect(response.status()).toBe(200);
               expect(response.headers()["content-type"]).toBe(asset.type);
@@ -414,7 +414,7 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
     const { stepper } = await import("@kampus/libfabrika");
     const { counter } = await import("@kampus/counter");
     const program = Result.getOrThrow(stepper(counter));
-    const inputs = Object.keys(counter.inputs);
+    const inputs = Rec.keys(counter.inputs);
     const pressedTypes = new Set<string>();
     await Effect.runPromise(
       Effect.scoped(
@@ -436,7 +436,7 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
             const count = page.getByRole("status");
             const button = (input: string) =>
               page.getByRole("button", {
-                name: Object.entries(counter.inputs).find(([name]) => name === input)![1].description,
+                name: Rec.toEntries(counter.inputs).find(([name]) => name === input)![1].description,
               });
             const pressed = () => page.evaluate(() => globalThis.__p14?.pressed ?? []);
             const render = (view: unknown) => page.evaluate((data) => globalThis.__p14?.render(data), view);

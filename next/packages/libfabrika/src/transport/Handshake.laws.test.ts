@@ -24,6 +24,7 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { handshakeMachine } from "./Handshake.ts";
 
 const SEED = 119120;
@@ -296,7 +297,7 @@ describe("P18 L2: the handshake answers only its own request", () => {
       }
 
       expect(
-        Object.values(seen).every((n) => n > 0),
+        Rec.values(seen).every((n) => n > 0),
         JSON.stringify(seen),
       ).toBe(true);
       return true;

@@ -4,6 +4,7 @@
 // pass, one per line. Law 3 is one real oxlint run with the repo's config, since only the config
 // says which paths are tests.
 import { join } from "node:path";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -151,7 +152,7 @@ const LEFT_OUT = [
 ];
 
 it("scenario: one real lint run per path kind, since only the real config holds which paths are tests", async () => {
-  const linted = await plant(Object.fromEntries([...HELD, ...LEFT_OUT].map((path) => [path, BODY])));
+  const linted = await plant(Rec.fromEntries([...HELD, ...LEFT_OUT].map((path) => [path, BODY])));
 
   // Product code: the bare call fires, and the call under its edge comment passes.
   for (const path of HELD) {

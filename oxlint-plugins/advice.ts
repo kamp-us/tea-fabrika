@@ -4,6 +4,7 @@
 // moment its folder reaches zero: `stale` names it, and a whole `pnpm lint` run fails until it is
 // deleted.
 import { matchesGlob } from "node:path";
+import { Record as Rec } from "effect";
 
 /** One fire as oxlint reports it, its filename from the top of the repo. */
 export interface Fire {
@@ -86,7 +87,7 @@ export const warnLines = (printed: unknown): ReadonlyArray<WarnLine> => {
     const globs = override.files.filter(
       (glob: unknown): glob is string => typeof glob === "string" && !FROZEN.has(glob),
     );
-    return Object.entries(override.rules).flatMap(([key, setting]) => {
+    return Rec.toEntries(override.rules).flatMap(([key, setting]) => {
       const rule = CODES.get(key);
       return rule !== undefined && level(setting) === "warn" ? globs.map((glob) => ({ rule, glob })) : [];
     });

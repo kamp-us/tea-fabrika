@@ -1,7 +1,7 @@
 // L17's scan of an instance's home (P14 slice 2, ticket 828), in a file of its own so its law in
 // `stored.test.ts` can run it on a folder that a writer changes under it.
 import { Row as LedgerRow } from "@kampus/libfabrika/ledger/Log";
-import { Effect, FileSystem, Path, type PlatformError, Schema } from "effect";
+import { Effect, FileSystem, Path, type PlatformError, Schema, Record as Rec } from "effect";
 import { instanceDatabase } from "../src/instance-database.test-support.ts";
 
 /** An instance's home, and the stop that ends every process that writes in it. */
@@ -101,8 +101,8 @@ const scan = (
 
           for (const [at, read] of select.all().entries()) {
             // An integer a JavaScript number holds exactly is read as one, as before; a larger one stays whole.
-            const row = Object.fromEntries(
-              Object.entries(read).map(([column, value]) => [
+            const row = Rec.fromEntries(
+              Rec.toEntries(read).map(([column, value]) => [
                 column,
                 typeof value === "bigint" && value >= Number.MIN_SAFE_INTEGER && value <= Number.MAX_SAFE_INTEGER
                   ? Number(value)
@@ -145,7 +145,7 @@ const scan = (
               }
             }
 
-            for (const [column, value] of Object.entries(cells)) {
+            for (const [column, value] of Rec.toEntries(cells)) {
               outputs.push([
                 `${label} table ${name} ${key} column ${column}`,
                 value instanceof Uint8Array ? Buffer.from(value).toString("latin1") : String(value),

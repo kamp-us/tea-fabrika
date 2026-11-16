@@ -16,7 +16,7 @@
 // (`.oxfmtrc.json`).
 import { constants } from "node:os";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Duration, Effect, Fiber, Result, Schema, Stdio, Stream } from "effect";
+import { Console, Duration, Effect, Fiber, Result, Schema, Stdio, Stream, Record as Rec } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** A piece of a part's output, and the stream it went to. */
@@ -47,7 +47,7 @@ const passed = (end: End) => end._tag === "exited" && end.code === 0;
 
 /** A shell's exit code over 128 is 128 + the number of the signal that killed what it ran. */
 const ended = (code: number): End => {
-  const signal = Object.entries(constants.signals).find(([, n]) => code > 128 && n === code - 128)?.[0];
+  const signal = Rec.toEntries(constants.signals).find(([, n]) => code > 128 && n === code - 128)?.[0];
   return signal === undefined ? { _tag: "exited", code } : { _tag: "killed", signal, code };
 };
 

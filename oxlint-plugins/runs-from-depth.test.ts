@@ -5,6 +5,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -71,14 +72,17 @@ const cli = (cases: ReadonlyMap<string, ReadonlyArray<number>>) => {
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{ code: string; filename: string; labels: Array<{ span: { line: number } }> }>;
   };
-  const found = [...cases.keys()].map((file) => [
-    file,
-    report.diagnostics
-      .filter((d) => d.code === "fabrika(runs-from-depth)" && join(root, d.filename) === file)
-      .map((d) => d.labels[0]!.span.line)
-      .sort((a, b) => a - b),
-  ]);
-  expect(Object.fromEntries(found)).toEqual(Object.fromEntries(cases));
+  const found = [...cases.keys()].map(
+    (file) =>
+      [
+        file,
+        report.diagnostics
+          .filter((d) => d.code === "fabrika(runs-from-depth)" && join(root, d.filename) === file)
+          .map((d) => d.labels[0]!.span.line)
+          .sort((a, b) => a - b),
+      ] as const,
+  );
+  expect(Rec.fromEntries(found)).toEqual(Rec.fromEntries(cases));
 };
 
 /** Each way a file can import a name that is real IO, bound as `Real`. */

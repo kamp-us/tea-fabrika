@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -73,7 +74,7 @@ const scheduled = fc
     w.concurrency["group"] = group;
     w.jobs["tests"]!.strategy!["max-parallel"] = most;
 
-    for (const job of Object.values(w.jobs)) {
+    for (const job of Rec.values(w.jobs)) {
       for (const s of job.steps) {
         if (typeof s["if"] === "string") {
           s["if"] = s["if"].replace(/ *(==|!=|&&|\|\|) */g, `${gap}$1${gap}`);

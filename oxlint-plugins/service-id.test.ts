@@ -3,6 +3,7 @@
 // inputs (0093), planted at real libfabrika paths with the repo's config; the replay reads the tree.
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -120,9 +121,9 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
               ['export class Old extends Context.Service<Old, {}>()("old/Old") {}', false],
             ]),
           };
-          const linted = await plant(Object.fromEntries(Object.entries(files).map(([path, f]) => [path, f.text])));
+          const linted = await plant(Rec.fromEntries(Rec.toEntries(files).map(([path, f]) => [path, f.text])));
 
-          for (const [path, f] of Object.entries(files)) {
+          for (const [path, f] of Rec.toEntries(files)) {
             expect(linted(CODE, path), path).toEqual(f.fires);
           }
         },
@@ -200,7 +201,7 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
     }
 
     const planted = [...files].map(([path, lines]) => [`${SRC}/${path}`, file(lines)] as const);
-    const linted = await plant(Object.fromEntries(planted.map(([path, f]) => [path, f.text])));
+    const linted = await plant(Rec.fromEntries(planted.map(([path, f]) => [path, f.text])));
 
     for (const [path, f] of planted) {
       expect(linted(CODE, path), path).toEqual(f.fires);

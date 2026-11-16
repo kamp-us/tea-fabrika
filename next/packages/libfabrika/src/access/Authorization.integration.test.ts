@@ -8,6 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Deferred, Effect, Fiber, Layer, Result, Schema, Stream } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -433,9 +434,9 @@ describe("P17a, appendAdmitted", () => {
                 const rows = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
                 const operations = rows.filter(
                   (row) =>
-                    Object.values(row.attributes).includes(id) &&
-                    Object.values(row.attributes).includes("notes") &&
-                    Object.values(row.attributes).includes(outcome),
+                    Rec.values(row.attributes).includes(id) &&
+                    Rec.values(row.attributes).includes("notes") &&
+                    Rec.values(row.attributes).includes(outcome),
                 );
                 expect(operations, "the operation's own ended span records its id, stream and outcome").toHaveLength(1);
 

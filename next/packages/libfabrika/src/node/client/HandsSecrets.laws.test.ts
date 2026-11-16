@@ -40,6 +40,7 @@ import {
 } from "effect";
 import { Base64, Base64Url, Hex } from "effect/encoding";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { brain, door, type Gate, HelloAnswer } from "../../client/HandsDoor.test-support.ts";
@@ -83,7 +84,7 @@ const text = (value: unknown): string =>
     typeof v === "bigint"
       ? String(v)
       : v instanceof Map
-        ? Object.fromEntries(v)
+        ? Rec.fromEntries(v)
         : v instanceof Error
           ? { ...v, name: v.name, message: v.message, stack: v.stack, cause: v.cause }
           : v,
@@ -421,7 +422,7 @@ describe("P39 slice 4b: the hands key's private half stays in its file", () => {
               };
               expect(secrets.size, "S2: the flow stored at least one key to look for").toBeGreaterThan(0);
 
-              for (const [name, texts] of Object.entries(outputs)) {
+              for (const [name, texts] of Rec.toEntries(outputs)) {
                 for (const secret of secrets) {
                   for (const form of forms(secret)) {
                     const at = texts.findIndex((t) => t.includes(form));

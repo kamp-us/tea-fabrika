@@ -26,6 +26,7 @@ import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Path, Schema, Tracer } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import { parseSync } from "oxc-parser";
@@ -231,7 +232,7 @@ const strings = (source: string) => {
       found.push(x.value);
     }
 
-    for (const child of Object.values(x)) {
+    for (const child of Rec.values(x)) {
       visit(child);
     }
   };
@@ -343,15 +344,15 @@ describe("P16 p33 one-file build", () => {
             built = await build({ ...f.options, chaos });
           const bytes = readFileSync(built.brain, "utf8");
           embedded(bytes, [
-            ...Object.values(built.programs).map((p) => p.source),
-            ...Object.values(built.assets).map((a) => a.body),
+            ...Rec.values(built.programs).map((p) => p.source),
+            ...Rec.values(built.assets).map((a) => a.body),
           ]);
           const inner = actual.slice(0, -1);
           expect(inner.length).toBeGreaterThanOrEqual(count + 3);
           embedded(bytes, inner);
-          expect(Object.keys(built.programs)).toHaveLength(count);
+          expect(Rec.keys(built.programs)).toHaveLength(count);
 
-          for (const p of Object.values(built.programs)) {
+          for (const p of Rec.values(built.programs)) {
             expect(p.hash).toBe(sha(p.source));
           }
 
@@ -710,19 +711,19 @@ const checkCarried = (
   const brain = readFileSync(built.brain);
   expect(sha(brain), "the build is its brain's hash").toBe(built.build);
 
-  for (const [route, asset] of Object.entries(built.assets)) {
+  for (const [route, asset] of Rec.toEntries(built.assets)) {
     expect(asset.hash, `${route}'s hash is its own body's`).toBe(sha(asset.body));
   }
 
   embedded(brain.toString("utf8"), [
-    ...Object.values(built.programs).map((p) => p.source),
-    ...Object.values(built.assets).map((a) => a.body),
+    ...Rec.values(built.programs).map((p) => p.source),
+    ...Rec.values(built.assets).map((a) => a.body),
   ]);
   const tabCalls = calls.filter((c) => c.input === state.entry);
 
   if (state.tab === null) {
-    expect(Object.keys(built.assets), "without a tab there is no page").not.toContain(PAGE);
-    expect(Object.keys(built.assets), "without a tab there is no tab script").not.toContain(SCRIPT);
+    expect(Rec.keys(built.assets), "without a tab there is no page").not.toContain(PAGE);
+    expect(Rec.keys(built.assets), "without a tab there is no tab script").not.toContain(SCRIPT);
     expect(tabCalls).toEqual([]);
   } else {
     const script = built.assets[SCRIPT],
@@ -773,7 +774,7 @@ const checkCarried = (
 
   const emit = spans.find((s) => s.name === "build.emit");
   expect(emit?.attributes.get("window.bytes"), "the published window bytes are every carried file's").toBe(
-    Object.values(built.assets).reduce((total, a) => total + utf8(a.body), 0),
+    Rec.values(built.assets).reduce((total, a) => total + utf8(a.body), 0),
   );
 };
 
@@ -1128,7 +1129,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
               clean(decodeURIComponent(url!), "a decoded page URL");
             }
 
-            for (const [route, asset] of Object.entries(built.assets)) {
+            for (const [route, asset] of Rec.toEntries(built.assets)) {
               clean(route, "a route");
               clean(asset.body, `${route}`);
             }
@@ -1152,7 +1153,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
               RECORD: binding,
             } as unknown as Parameters<typeof fetch>[1];
 
-            for (const route of ["/", ...Object.keys(built.assets)]) {
+            for (const route of ["/", ...Rec.keys(built.assets)]) {
               for (const url of [route, route.split("/").map(encodeURIComponent).join("/")]) {
                 const response = await Effect.runPromise(
                   fetch(
@@ -1279,7 +1280,7 @@ const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
     const built = yield* build({ ...options, programs: selections(selected) });
     builds++;
     // L1: the table holds exactly the selected qualified names, each one pack and one program.
-    expect(Object.keys(built.programs).sort()).toEqual(selected.map((p) => p.name).sort());
+    expect(Rec.keys(built.programs).sort()).toEqual(selected.map((p) => p.name).sort());
 
     for (const p of selected) {
       expect(p.name.split("/")).toHaveLength(2);

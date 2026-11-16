@@ -1,3 +1,4 @@
+import { Record as Rec } from "effect";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 
@@ -86,7 +87,7 @@ describe("P17a, outside input has typed failures", () => {
       "runtime/Runner",
       "runtime/Entry",
     ];
-    const files = Object.fromEntries(
+    const files = Rec.fromEntries(
       paths.map((path) => [
         `next/packages/libfabrika/src/${path}.ts`,
         "declare const raw: unknown, Row: any; Row.make(raw);",
@@ -98,7 +99,7 @@ describe("P17a, outside input has typed failures", () => {
       [other]: "declare const raw: unknown, Row: any; Row.make(raw);",
     });
 
-    for (const path of Object.keys(files)) {
+    for (const path of Rec.keys(files)) {
       expect(linted(code, path)).toEqual([1]);
     }
 

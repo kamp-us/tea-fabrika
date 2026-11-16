@@ -1,3 +1,4 @@
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -73,7 +74,7 @@ it("scenario: U11 is enabled by the real config and leaves only cloudflare/ and 
   const runtime = "next/packages/libfabrika/src/runtime/usage.ts";
   const cloudflare = "next/packages/libfabrika/src/cloudflare/usage.ts";
   const old = "packages/fabrika/src/usage.ts";
-  const result = await plant(Object.fromEntries([runtime, cloudflare, old].map((file) => [file, uses.join("\n")])));
+  const result = await plant(Rec.fromEntries([runtime, cloudflare, old].map((file) => [file, uses.join("\n")])));
   expect(result(CODE, runtime)).toEqual([1, 2, 3, 4, 5, 6]);
   expect(result(CODE, cloudflare)).toEqual([]);
   expect(result(CODE, old)).toEqual([]);

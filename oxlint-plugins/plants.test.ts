@@ -21,6 +21,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import { Record as Rec } from "effect";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -427,7 +428,7 @@ describe("each rule refuses what it is there to refuse", () => {
       // 0535's rule reads only next/'s test files: its scoped plant and its in-memory twin are below.
       "runs-from-depth",
     ];
-    const missing = Object.keys(plugin.rules).filter(
+    const missing = Rec.keys(plugin.rules).filter(
       (rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),
     );
     expect(missing).toEqual([]);
@@ -456,7 +457,7 @@ it("scenario: T877 L10 only the TOML adapter imports the parser and serializer",
     ".agents/skills/lead/scripts/example.ts",
   ];
   const adapter = "next/packages/libfabrika/src/settings/TomlParser.ts";
-  const result = await lintCopies(Object.fromEntries([...banned, adapter].map((file) => [file, imports])));
+  const result = await lintCopies(Rec.fromEntries([...banned, adapter].map((file) => [file, imports])));
 
   for (const file of banned) {
     expect(result("eslint(no-restricted-imports)", file), file).toEqual([1, 2, 3, 4]);
@@ -698,7 +699,7 @@ describe("a plain file cannot take a folder out of the checks", () => {
     const folder = mkdtempSync(join(plant, "hide-"));
     mkdirSync(join(folder, "sub"));
 
-    for (const [name, text] of Object.entries(files)) {
+    for (const [name, text] of Rec.toEntries(files)) {
       writeFileSync(join(folder, name), text);
     }
 

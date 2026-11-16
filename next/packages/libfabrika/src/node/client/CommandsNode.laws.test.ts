@@ -21,6 +21,7 @@
 // an execute bit.
 import { describe, expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Exit, Layer, Path } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { Commands } from "../../client/Commands.ts";
 import { Command, type Result } from "../../tasks/Task.ts";
@@ -276,7 +277,7 @@ describe("P39 slice 4b: the real command layer", () => {
             expect(command.args.map(String), "C2: the argv is exactly --version").toEqual(["--version"]);
             expect(command.options.extendEnv, "C2: the child is not given the hands' environment").toBe(false);
             const childEnv = command.options.env ?? {};
-            expect(Object.keys(childEnv), "C2: the child's environment holds PATH and nothing else").toEqual(["PATH"]);
+            expect(Rec.keys(childEnv), "C2: the child's environment holds PATH and nothing else").toEqual(["PATH"]);
             expect(String(childEnv["PATH"]), "C2: PATH is the hands' own PATH").toBe(PATH);
             // Every named output of the spawn: the executable, the argv and every option, in each form a
             // value could be written.

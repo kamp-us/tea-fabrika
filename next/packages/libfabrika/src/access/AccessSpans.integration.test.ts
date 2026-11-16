@@ -17,6 +17,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Option, Schema, type Scope, Stream, Tracer } from "effect";
+import * as Rec from "effect/Record";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
@@ -148,13 +149,13 @@ const capture = () => {
   return { tracer, spans, ended };
 };
 
-const tags = (span: Tracer.NativeSpan): Record<string, unknown> => Object.fromEntries(span.attributes);
+const tags = (span: Tracer.NativeSpan): Record<string, unknown> => Rec.fromEntries(span.attributes);
 
 /** The tag whose key is `word` or ends in `.word`. */
 const tagged = (span: Tracer.NativeSpan, word: string): unknown =>
-  Object.entries(tags(span)).find(([key]) => key === word || key.endsWith(`.${word}`))?.[1];
+  Rec.toEntries(tags(span)).find(([key]) => key === word || key.endsWith(`.${word}`))?.[1];
 
-const holds = (span: Tracer.NativeSpan, value: unknown): boolean => Object.values(tags(span)).includes(value);
+const holds = (span: Tracer.NativeSpan, value: unknown): boolean => Rec.values(tags(span)).includes(value);
 
 /** Whether `outer` is above `span`, walking its parents. */
 const within = (span: Tracer.NativeSpan, outer: Tracer.NativeSpan): boolean => {
@@ -255,7 +256,7 @@ const write = (event: MemberEvent) => ClientManager.use((clients) => clients.wri
 /** Every tag of every span: no marker, and no text over 128 characters. */
 const clean = (spans: ReadonlyArray<Tracer.NativeSpan>) => {
   for (const span of spans) {
-    for (const [key, value] of Object.entries(tags(span))) {
+    for (const [key, value] of Rec.toEntries(tags(span))) {
       const text = typeof value === "string" ? value : (JSON.stringify(value) ?? "");
 
       for (const mark of MARKS) {

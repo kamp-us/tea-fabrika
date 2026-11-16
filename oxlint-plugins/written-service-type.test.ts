@@ -4,6 +4,7 @@
 // file that fires then proves the repo's own .oxlintrc.json turns the rule on for next/ product
 // code and leaves tests out.
 import { join } from "node:path";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -372,7 +373,7 @@ it("fires exactly on a read service whose type holds ReturnType, Effect.Success 
     "packages/fabrika/src/unit/Unit.ts",
   ];
   const tsx = "next/apps/fabrika/src/unit/Unit.tsx";
-  const linted = await plant(Object.fromEntries([product, tsx, ...off].map((path) => [path, planted.text])));
+  const linted = await plant(Rec.fromEntries([product, tsx, ...off].map((path) => [path, planted.text])));
   expect(linted(CODE, product)).toEqual(planted.fires);
   // The same text as a `.tsx` product file fires, so the `.test.tsx` path below is quiet by the config.
   expect(linted(CODE, tsx)).toEqual(planted.fires);

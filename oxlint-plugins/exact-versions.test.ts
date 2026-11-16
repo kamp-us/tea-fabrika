@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { Record as Rec } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 
 const SCRIPT = join(import.meta.dirname, "exact-versions.ts");
@@ -19,7 +20,7 @@ const run = (files: Readonly<Record<string, string>>, untracked: readonly string
   mkdirSync(tree);
   spawnSync("git", ["init", "-q"], { cwd: tree });
 
-  for (const [path, text] of Object.entries(files)) {
+  for (const [path, text] of Rec.toEntries(files)) {
     mkdirSync(dirname(join(tree, path)), { recursive: true });
     writeFileSync(join(tree, path), text);
 

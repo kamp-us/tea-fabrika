@@ -9,6 +9,7 @@
 // answers the hello and the knock as its gate says, and keeps every socket, so a law can read every
 // frame the client wrote as it was sent (`MemorySocket.sent`), not only what the door kept of it.
 import { Layer, Option, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { Socket } from "effect/socket";
 import type { Request } from "../tasks/Task.ts";
 import { Command, Task, Result, State } from "../tasks/Task.ts";
@@ -130,7 +131,7 @@ export const brain = () => {
 
   /** Answers one call by `key`, and changes what the call changes. `finish` says how a finish is answered. */
   const call = (key: string, method: string, params: unknown, finish: FinishMode = "ok"): Outcome => {
-    const p = typeof params === "object" && params !== null ? new Map(Object.entries(params)) : new Map();
+    const p = typeof params === "object" && params !== null ? new Map(Rec.toEntries(params)) : new Map();
     const text = (name: string) => {
       const value = p.get(name);
       return typeof value === "string" ? value : "";

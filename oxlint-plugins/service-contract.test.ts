@@ -1,5 +1,6 @@
 // L12, next/. The lint rule owns contract shape; behavior lives in the desktop laws.
 import { join } from "node:path";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -69,7 +70,7 @@ it("scenario: L12 the repo config rejects a static Layer at every new contract p
   // The config, not RuleTester, must activate this rule at each approved contract.
   const paths = ["BrainService", "BrainControl", "BrainProbe"].map((name) => `${top}${name}.ts`);
   const result = await plant(
-    Object.fromEntries(paths.map((file) => [file, `${headers}${shape} { static layer = Layer.empty; }\n`])),
+    Rec.fromEntries(paths.map((file) => [file, `${headers}${shape} { static layer = Layer.empty; }\n`])),
   );
 
   for (const file of paths) {

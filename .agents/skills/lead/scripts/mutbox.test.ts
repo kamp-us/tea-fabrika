@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { Clock, Effect, Exit, Fiber, Layer, Schedule, Stream } from "effect";
+import { Clock, Effect, Exit, Fiber, Layer, Schedule, Stream, Record as Rec } from "effect";
 import { TestClock } from "effect/testing";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
@@ -233,7 +233,7 @@ describe("mutbox, the pure parts", () => {
         fc.nat({ max: 40 }),
         (a, b, selected) => {
           const arm = tally(0, "report", b, selected);
-          expect(Object.values(arm.counts).reduce((x, y) => x + y, 0)).toBe(b.length);
+          expect(Rec.values(arm.counts).reduce((x, y) => x + y, 0)).toBe(b.length);
           expect(arm.tested).toBe(b.filter((r) => ["Killed", "Survived", "Timeout"].includes(r.status)).length);
           expect(arm.survivors).toEqual(b.filter((r) => r.status === "Survived"));
           expect(arm.unreached).toBe(Math.max(0, selected - b.length));
@@ -330,7 +330,7 @@ describe("mutbox, the pure parts", () => {
           const key =
             file in map
               ? file
-              : Object.keys(map)
+              : Rec.keys(map)
                   .filter((k) => k.endsWith("/") && file.startsWith(k))
                   .sort((x, y) => y.length - x.length)[0];
           return key !== undefined && map[key] === "build";
@@ -581,7 +581,7 @@ const run = (setup: Setup = {}) => {
     writeFileSync(join(fake, "leftover"), `${setup.leftover}\n`);
   }
 
-  for (const [path, text] of Object.entries(setup.files ?? {})) {
+  for (const [path, text] of Rec.toEntries(setup.files ?? {})) {
     writeFileSync(join(dir, path), text);
   }
 

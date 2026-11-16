@@ -5,6 +5,7 @@
 // table; one oxlint run over every case's file then proves the repo's own `.oxlintrc.json` holds the
 // same table at the same paths.
 import { join } from "node:path";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -94,7 +95,7 @@ const within =
 
 /** What a file at each place may import by a name under the scope; `null` where nothing is judged. */
 const ALLOWS: Readonly<Record<string, ((name: string) => boolean) | null>> = {
-  ...Object.fromEntries(TABLE.parts.map((part) => [part.name, (name: string) => part.may.includes(name)])),
+  ...Rec.fromEntries(TABLE.parts.map((part) => [part.name, (name: string) => part.may.includes(name)])),
   // A library test names the library itself and the test primitives, root or subpath, and nothing
   // else of ours. A test of the test primitives names only that package.
   "library test": within(LIBRARY, VITEST),
@@ -334,9 +335,9 @@ it("each part fires on exactly the names of ours its table refuses, wherever its
   expect([...cases.values()].some((one) => one.lines.length > 0)).toBe(true);
   expect([...cases.values()].some((one) => one.lines.length === 0)).toBe(true);
 
-  const result = await plant(Object.fromEntries([...cases].map(([path, { text }]) => [path, text])));
-  expect(Object.fromEntries([...cases.keys()].map((path) => [path, result(CODE, path)]))).toEqual(
-    Object.fromEntries([...cases].map(([path, { lines }]) => [path, lines])),
+  const result = await plant(Rec.fromEntries([...cases].map(([path, { text }]) => [path, text])));
+  expect(Rec.fromEntries([...cases.keys()].map((path) => [path, result(CODE, path)]))).toEqual(
+    Rec.fromEntries([...cases].map(([path, { lines }]) => [path, lines])),
   );
 });
 
@@ -380,8 +381,8 @@ it("the library's and a program's code may not import the test primitives, and t
   );
   expect([...seen].sort()).toEqual([...CODE_PLACES, ...SUITE_PLACES].sort());
 
-  const result = await plant(Object.fromEntries([...cases].map(([path, { text }]) => [path, text])));
-  expect(Object.fromEntries([...cases.keys()].map((path) => [path, result(CODE, path)]))).toEqual(
-    Object.fromEntries([...cases].map(([path, { lines }]) => [path, lines])),
+  const result = await plant(Rec.fromEntries([...cases].map(([path, { text }]) => [path, text])));
+  expect(Rec.fromEntries([...cases.keys()].map((path) => [path, result(CODE, path)]))).toEqual(
+    Rec.fromEntries([...cases].map(([path, { lines }]) => [path, lines])),
   );
 });

@@ -34,6 +34,7 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
@@ -738,7 +739,7 @@ const keysIn = (v: unknown): ReadonlyArray<string> =>
   Array.isArray(v)
     ? v.flatMap(keysIn)
     : v !== null && typeof v === "object"
-      ? Object.entries(v).flatMap(([k, x]) => [k, ...keysIn(x)])
+      ? Rec.toEntries(v).flatMap(([k, x]) => [k, ...keysIn(x)])
       : [];
 
 /** How many tiles a window of `size` draws as strips, by the plan's rule written here: every tile
@@ -772,7 +773,7 @@ describe("Desk S4 L32: a split's letter never carries a fold", () => {
 
             for (const m of sent.map((x) => x.m)) {
               expect(
-                Object.keys(Object(m)).filter((k) => !DID_KEYS.has(k)),
+                Rec.keys(Object(m)).filter((k) => !DID_KEYS.has(k)),
                 "L32: a letter to tezgah carries only did's keys",
               ).toEqual([]);
               expect(

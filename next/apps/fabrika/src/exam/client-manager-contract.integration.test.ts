@@ -1,6 +1,6 @@
 import { it, expect } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Record as Rec } from "effect";
 import { rolldown } from "rolldown";
 
 const contract = new URL("../../../../packages/libfabrika/src/access/ClientManager.ts", import.meta.url).pathname;
@@ -32,7 +32,7 @@ const inspect = Effect.fnUntraced(function* (names: readonly string[] | null) {
     (bundle) => Effect.promise(() => bundle.close()),
   );
   const result = yield* Effect.tryPromise(() => bundle.generate({ format: "esm" }));
-  const kept = result.output.flatMap((chunk) => (chunk.type === "chunk" ? Object.keys(chunk.modules) : []));
+  const kept = result.output.flatMap((chunk) => (chunk.type === "chunk" ? Rec.keys(chunk.modules) : []));
   expect([...loaded].filter((id) => forbidden.test(id))).toEqual([]);
   expect(kept.filter((id) => forbidden.test(id))).toEqual([]);
 });

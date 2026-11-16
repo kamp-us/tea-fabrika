@@ -18,6 +18,7 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Result } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { type Access, access, admitted, type Folded, type MemberEvent, members, type Reason } from "./Access.ts";
@@ -443,11 +444,11 @@ describe("ticket 706, the access machine's types", () => {
     walks((steps, start) => {
       for (const model of [start, ...steps.map((s) => s.post)]) {
         if (model._tag === "unfounded") {
-          expect(Object.keys(model).sort()).toEqual(["_tag", "reply"]);
+          expect(Rec.keys(model).sort()).toEqual(["_tag", "reply"]);
         }
 
         for (const [name, k] of keysIn(model)) {
-          expect(Object.keys(k).sort(), name).toEqual(["_tag", "rank", "under"]);
+          expect(Rec.keys(k).sort(), name).toEqual(["_tag", "rank", "under"]);
           expect(["live", "revoked", "spent", "replaced"]).toContain(k._tag);
         }
       }

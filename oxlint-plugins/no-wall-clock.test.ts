@@ -1,3 +1,4 @@
+import { Record as Rec } from "effect";
 // `fabrika/no-wall-clock` through the repo's real config: next/'s product code reads the time through
 // Effect's `Clock` or `DateTime`, never the platform's clock. Each planted file sits at a generated
 // path, so the config's globs are under test with the rule.
@@ -36,9 +37,7 @@ it("refuses each clock read in next/ product code, and passes what reads no cloc
         `next/apps/fabrika/${file}.ts`,
         `next/programs/counter/src/${file}.ts`,
       ];
-      const result = await plant(
-        Object.fromEntries(paths.map((path) => [path, [...reads(on), ...kept(at)].join("\n")])),
-      );
+      const result = await plant(Rec.fromEntries(paths.map((path) => [path, [...reads(on), ...kept(at)].join("\n")])));
 
       for (const path of paths) {
         expect([path, result(CODE, path)]).toEqual([path, [1, 2, 3]]);
@@ -59,7 +58,7 @@ it("leaves tests, test helpers, .tsx views and today's paths to their own rules"
         `packages/fabrika/src/${file}.ts`,
         `.agents/skills/x/scripts/${file}.ts`,
       ];
-      const result = await plant(Object.fromEntries(paths.map((path) => [path, reads(on).join("\n")])));
+      const result = await plant(Rec.fromEntries(paths.map((path) => [path, reads(on).join("\n")])));
 
       for (const path of paths) {
         expect([path, result(CODE, path)]).toEqual([path, []]);

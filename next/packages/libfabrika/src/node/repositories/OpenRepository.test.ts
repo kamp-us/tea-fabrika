@@ -22,6 +22,7 @@ import {
 } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcessSpawner } from "effect/process";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as Id from "../../Id.ts";
@@ -525,7 +526,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
           })),
         );
 
-        for (const [name, values] of Object.entries(outputs)) {
+        for (const [name, values] of Rec.toEntries(outputs)) {
           expect(values.length, `${name} must be observed`).toBeGreaterThan(0);
           const output =
             JSON.stringify(values, (_key: string, value: unknown) =>

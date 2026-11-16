@@ -1,3 +1,4 @@
+import { Record as Rec } from "effect";
 // Today's CI, serving both versions. What the merge line runs no more: no tooling test (T1, 0539),
 // in check.yaml and in every other workflow a pull request or the merge queue starts, and nothing of
 // today's app (T2) or today's promise checks (T6, 0525, 0533).
@@ -50,7 +51,7 @@ const shellCommands = (script: string) =>
  */
 const toolingJobs = (workflow: Record<string, unknown>): string[] => {
   const outer = { ...map(workflow["env"]) };
-  return Object.entries(map(workflow["jobs"]))
+  return Rec.toEntries(map(workflow["jobs"]))
     .filter(([, job]) =>
       steps(map(job)).some((step) => {
         if (typeof step["run"] !== "string") {
@@ -89,7 +90,7 @@ const toolingJobs = (workflow: Record<string, unknown>): string[] => {
 export const lintNoTooling = (path: string, text: string): string[] => {
   const workflow = map(parse(text));
   const on = workflow["on"];
-  const events = typeof on === "string" ? [on] : Array.isArray(on) ? on : Object.keys(map(on));
+  const events = typeof on === "string" ? [on] : Array.isArray(on) ? on : Rec.keys(map(on));
   return events.includes("pull_request") || events.includes("merge_group")
     ? toolingJobs(workflow).map((job) => `${path}: T1: ${job} runs no tooling test (0539)`)
     : [];
@@ -105,7 +106,7 @@ export const mergeLine: Rule = ({ workflow, jobs }, require) => {
 
   // T2 (0525, 0533). No job runs today's app, end to end or otherwise. T6 (0533): no step runs
   // today's promise checks.
-  for (const [name, job] of Object.entries(jobs)) {
+  for (const [name, job] of Rec.toEntries(jobs)) {
     for (const step of steps(map(job))) {
       require(![step["run"], step["working-directory"]].some(
         (text) => typeof text === "string" && TODAYS_APP.test(text),

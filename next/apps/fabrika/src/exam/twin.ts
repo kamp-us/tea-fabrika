@@ -1,7 +1,7 @@
 // P12, next/. Read the real stack and the installed provider registrations.
 // This exam fails closed on syntax it cannot follow. It does not keep a second resource list.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, FileSystem, Path } from "effect";
+import { Console, Effect, FileSystem, Path, Record as Rec } from "effect";
 import { parseSync, type ModuleExportName } from "oxc-parser";
 
 type Tree = any;
@@ -35,7 +35,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     visit(node);
 
-    for (const [key, child] of Object.entries(node)) {
+    for (const [key, child] of Rec.toEntries(node)) {
       if (!["comments", "tokens"].includes(key)) {
         nodes(child, visit);
       }
@@ -595,7 +595,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         report(node, "unsupported-case: optional resource or remote call");
       }
 
-      for (const [key, child] of Object.entries(node)) {
+      for (const [key, child] of Rec.toEntries(node)) {
         // The name after a dot, and a literal object's key, are names rather than references.
         if (node.type === "MemberExpression" && !node.computed && key === "property") {
           continue;

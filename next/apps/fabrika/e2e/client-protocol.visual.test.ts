@@ -6,7 +6,7 @@
 // never on a laptop step. Every resource is acquired in the scope of `p14.test-support.ts`'s `suite`.
 import { ClientKeyError } from "@kampus/libfabrika/transport/ClientKey";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Record as Rec } from "effect";
 import type { BrowserContext } from "playwright";
 import { describe, expect, it } from "vitest";
 import {
@@ -101,7 +101,7 @@ const backends = {
 } as const;
 
 describe("P18 L9: one client, two backends, one real round trip", () => {
-  for (const [name, make] of Object.entries(backends)) {
+  for (const [name, make] of Rec.toEntries(backends)) {
     it(
       `scenario: the ${name} client dials, waits, is granted, pings in text, opens the checklist, submits one add and reads it back, through the library's one start`,
       { timeout: LIMIT },
@@ -130,7 +130,7 @@ describe("P18 L9: one client, two backends, one real round trip", () => {
 // Plant: drop the window's DOWN handler; the tile stays `Online` on the dead pid and the wait for
 // `Ended (crashed)` runs out.
 describe("P18 E1: a tile monitors its process and follows the restart, on both backends", () => {
-  for (const [name, make] of Object.entries(backends)) {
+  for (const [name, make] of Rec.toEntries(backends)) {
     it(
       `scenario: the ${name} client's tile says Ended (crashed), opens the successor, sends it one add, and its watch ends when the client closes`,
       { timeout: LIMIT },

@@ -3,7 +3,7 @@
 // given (`next/packages/tuval/src/window/use-model.ts`), so the rules' own edge paths and the config's
 // `next/**` globs meet them as they would meet the real file. Nothing is written inside the repo.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path, Schema, Stream } from "effect";
+import { Effect, FileSystem, Path, Schema, Stream, Record as Rec } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** One fire: the rule's code, as oxlint prints it (`fabrika(no-of)`), where, and what it says. */
@@ -63,7 +63,7 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
   yield* fs.copyFile(path.join(ROOT, ".oxlintrc.json"), path.join(at, ".oxlintrc.json"));
   yield* fs.symlink(path.join(ROOT, "oxlint-plugins"), path.join(at, "oxlint-plugins"));
 
-  for (const [file, text] of Object.entries(files)) {
+  for (const [file, text] of Rec.toEntries(files)) {
     const full = path.join(at, file);
     yield* fs.makeDirectory(path.dirname(full), { recursive: true });
     yield* fs.writeFileString(full, text);
@@ -76,7 +76,7 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
       "--disable-nested-config",
       "--no-ignore",
       "--format=json",
-      ...Object.keys(files),
+      ...Rec.keys(files),
     ],
     { cwd: at },
   );
@@ -90,7 +90,7 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
   );
   const report = readReport(out);
 
-  if (report.number_of_files !== Object.keys(files).length) {
+  if (report.number_of_files !== Rec.keys(files).length) {
     return yield* Effect.die(new Error(`oxlint read ${report.number_of_files} files: ${err}`));
   }
 

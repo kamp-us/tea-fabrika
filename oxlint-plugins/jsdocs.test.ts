@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
@@ -80,7 +81,7 @@ type State =
 const state: fc.Arbitrary<State> = fc.oneof(
   fc.constant({ _tag: "right" } as const),
   fc.constant({ _tag: "missing" } as const),
-  fc.constantFrom(...(Object.keys(WRONG) as Wrong[])).map((way) => ({ _tag: "wrong", way }) as const),
+  fc.constantFrom(...(Rec.keys(WRONG) as Wrong[])).map((way) => ({ _tag: "wrong", way }) as const),
 );
 
 const blockFor = (s: State): string | null => (s._tag === "right" ? RIGHT : s._tag === "missing" ? null : WRONG[s.way]);
@@ -146,7 +147,7 @@ const PIECES = {
 
 type Kind = keyof typeof PIECES;
 
-const KINDS = Object.keys(PIECES) as Kind[];
+const KINDS = Rec.keys(PIECES) as Kind[];
 
 /** A `//` line between a block and its export is skipped (case 16). */
 const GAPS = ["", "// @ts-expect-error planted\n", "// a planted note\n"] as const;
@@ -437,7 +438,7 @@ describe("law 8: on Effect 4.1.3's own source, with since required", () => {
     }
 
     expect(report.number_of_files).toBe(439);
-    expect(Object.fromEntries(fired)).toEqual({
+    expect(Rec.fromEntries(fired)).toEqual({
       "StandardSchema.ts": 6,
       "encoding/Ini.ts": 1,
       "encoding/Yaml.ts": 1,
@@ -498,7 +499,7 @@ describe("law 9: the real config turns the rule on for every next/packages folde
     // An app (case 4).
     "next/apps/fabrika/src/Planted.ts",
   ];
-  const linted = await plant(Object.fromEntries([...on, ...off].map((path) => [path, body])));
+  const linted = await plant(Rec.fromEntries([...on, ...off].map((path) => [path, body])));
 
   // scenario: one real lint run over one planted file per kind, since only the real config holds the scope.
   it("fires in every next/packages folder, at the module block and the export", () => {

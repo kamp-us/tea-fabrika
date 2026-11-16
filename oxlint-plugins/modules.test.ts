@@ -1,3 +1,4 @@
+import { Record as Rec } from "effect";
 // Ticket 477, PR 0: the lint laws of libfabrika's modules (decision 0043), each seen to fire on a
 // planted file before a file moves. All of this is `next/`. Three rules carry them:
 //   - `fabrika/modules`, hand-written, since no existing rule says these four: no module re-exports
@@ -45,7 +46,7 @@ const own = "export const own = 1;";
 describe("fabrika/modules: no module file re-exports another module's names", async () => {
   const pair = (module: string, other: string) => `${SRC}/${module}/From${pascal(other)}.ts`;
   const files = {
-    ...Object.fromEntries(
+    ...Rec.fromEntries(
       PAIRS.map(([module, other]) => [
         pair(module, other),
         file(
@@ -129,7 +130,7 @@ describe("fabrika/modules: src/ holds only the listed modules and top files", as
     "next/packages/tuval/src/utils/x.ts",
     "next/apps/fabrika/src/utils/x.ts",
   ];
-  const linted = await plant(Object.fromEntries([...refused, ...taken].map((path) => [path, file(own)])));
+  const linted = await plant(Rec.fromEntries([...refused, ...taken].map((path) => [path, file(own)])));
 
   // Plants (the plan's): add `src/utils/x.ts`; `src/LedgerError.ts` exists.
   it("fires on a file in a folder or at a top name nobody listed", () => {
@@ -181,7 +182,7 @@ describe("fabrika/modules: every export in an internal/ file is @internal", asyn
     "export const k = 3;", // 33
   );
   const files = {
-    ...Object.fromEntries(MODULES.map((module) => [`${SRC}/${module}/internal/part.ts`, body])),
+    ...Rec.fromEntries(MODULES.map((module) => [`${SRC}/${module}/internal/part.ts`, body])),
     // The plan's real name, and a folder below `internal/`.
     [`${SRC}/ledger/internal/ledgerStore.ts`]: body,
     [`${SRC}/runtime/internal/holder/state.ts`]: body,
@@ -272,7 +273,7 @@ describe("eslint/no-restricted-imports: nobody outside a module imports its inte
   const front = (module: string, other: string) => `${SRC}/${module}/Into${pascal(other)}.ts`;
   const inner = (module: string, other: string) => `${SRC}/${module}/internal/into${pascal(other)}.ts`;
   const files = {
-    ...Object.fromEntries(
+    ...Rec.fromEntries(
       PAIRS.flatMap(([module, other]) => [
         [
           front(module, other),
@@ -401,7 +402,7 @@ describe("unicorn/filename-case: a front file is PascalCase and an internal/ fil
     `${SRC}/telemetry/internal/measurements.test.ts`,
     `${SRC}/Id.test-support.ts`,
   ];
-  const linted = await plant(Object.fromEntries([...refused, ...taken].map((path) => [path, file(own)])));
+  const linted = await plant(Rec.fromEntries([...refused, ...taken].map((path) => [path, file(own)])));
 
   // Plants (the plan's): add `src/ledger/log.ts` and `src/ledger/internal/LedgerStore.ts`.
   it("fires on a front file not in PascalCase and an internal/ file not in camelCase", () => {
@@ -440,9 +441,7 @@ describe("runtime/, access/ and gateway/ never import ledger/", async () => {
     [`${SRC}/${module}/internal/front.ts`, "../../"],
   ]);
   const taken = (["processes", "presence"] as const).map((module) => [`${SRC}/${module}/Front.ts`, "../"]);
-  const linted = await plant(
-    Object.fromEntries([...refused, ...taken].map(([path = "", up = ""]) => [path, body(up)])),
-  );
+  const linted = await plant(Rec.fromEntries([...refused, ...taken].map(([path = "", up = ""]) => [path, body(up)])));
 
   it("refuses an import or re-export of ledger/, a type too, from each of the three, tests too", () => {
     for (const [path = ""] of refused) {

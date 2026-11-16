@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { Record as Rec } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 
 const SCRIPT = join(import.meta.dirname, "workspace-reach.ts");
@@ -19,7 +20,7 @@ const run = (files: Readonly<Record<string, string>>) => {
   mkdirSync(tree);
   spawnSync("git", ["init", "-q"], { cwd: tree });
 
-  for (const [path, text] of Object.entries(files)) {
+  for (const [path, text] of Rec.toEntries(files)) {
     mkdirSync(dirname(join(tree, path)), { recursive: true });
     writeFileSync(join(tree, path), text);
     spawnSync("git", ["add", path], { cwd: tree });
@@ -32,7 +33,7 @@ const run = (files: Readonly<Record<string, string>>) => {
 const WORKSPACE = "packages:\n  - apps/*\n  - packages/*\n  - programs/*\n  - next/packages/*\n";
 
 const pkg = (name: string, deps: readonly string[] = []) =>
-  JSON.stringify({ name, dependencies: Object.fromEntries(deps.map((d) => [d, "workspace:*"])) });
+  JSON.stringify({ name, dependencies: Rec.fromEntries(deps.map((d) => [d, "workspace:*"])) });
 
 describe("a workspace package", () => {
   it("scenario: one an app depends on, and one that package depends on, are reached", () => {

@@ -2,6 +2,7 @@
 // still own root equality and recovery folds. Plants: strip the extension; lose enrollment proof.
 import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { Add, Adds, Signed } from "./Access.ts";
 
@@ -70,8 +71,8 @@ describe("P10 passkey records", () => {
       })
       .chain((full) =>
         fc
-          .subarray(Object.keys(full), { maxLength: 6 })
-          .map((keys) => Object.fromEntries(keys.map((key) => [key, full[key as keyof typeof full]]))),
+          .subarray(Rec.keys(full), { maxLength: 6 })
+          .map((keys) => Rec.fromEntries(keys.map((key) => [key, full[key as keyof typeof full]]))),
       );
     fc.assert(
       fc.property(incomplete, text, text, (passkey, key, window) => {

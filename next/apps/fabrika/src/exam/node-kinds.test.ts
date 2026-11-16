@@ -8,7 +8,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, matchesGlob } from "node:path";
-import { Schema } from "effect";
+import { Schema, Record as Rec } from "effect";
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 
@@ -60,7 +60,7 @@ const problems = (text: string) => {
   const kinds = Schema.decodeUnknownSync(Kinds)(text);
   const found: string[] = [];
 
-  for (const [name, { files, exports }] of Object.entries(kinds.entryExportConventions)) {
+  for (const [name, { files, exports }] of Rec.toEntries(kinds.entryExportConventions)) {
     const homes = tracked.filter((p) => CODE.test(p) && !TEST.test(p) && matchesGlob(inPackage(p), files));
 
     if (homes.length === 0) {
@@ -91,7 +91,7 @@ describe("node-kinds.json (L6)", () => {
   it("L6 scenario: every name is exported by a file its glob matches and bound by that string elsewhere in next/", () => {
     // The real file and the tracked tree: on main, RecordPart and IsolateTail, both from src/brain.ts.
     const text = readFileSync(join(ROOT, "node-kinds.json"), "utf8");
-    expect(Object.keys(Schema.decodeUnknownSync(Kinds)(text).entryExportConventions)).not.toEqual([]);
+    expect(Rec.keys(Schema.decodeUnknownSync(Kinds)(text).entryExportConventions)).not.toEqual([]);
     expect(problems(text)).toEqual([]);
   });
 });

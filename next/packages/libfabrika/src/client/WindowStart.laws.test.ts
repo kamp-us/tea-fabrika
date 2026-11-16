@@ -26,6 +26,7 @@ import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Deferred, Effect, Exit, Fiber, Function, Layer, Option, Random, Schema, Scope, Tracer } from "effect";
 import * as Clock from "effect/Clock";
+import * as Rec from "effect/Record";
 import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -1136,9 +1137,7 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
     (generated) =>
       Effect.gen(function* () {
         // Marked, so a secret is never a word the start writes anyway.
-        const s = Object.fromEntries(
-          Object.entries(generated).map(([k, v]) => [k, `Q9X${k}${v}Z`]),
-        ) as typeof generated;
+        const s = Rec.fromEntries(Rec.toEntries(generated).map(([k, v]) => [k, `Q9X${k}${v}Z`])) as typeof generated;
         const spans: Array<Tracer.AnySpan> = [];
         const tracer = yield* recording(spans);
         const script: Script = {
@@ -1247,9 +1246,9 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
           ),
           urls: JSON.stringify([...urls, ...urls.map((u) => decodeURIComponent(u))]),
         };
-        const secrets = [...Object.values(s).flatMap(forms), ...forms(signed), ...forms(key.raw)];
+        const secrets = [...Rec.values(s).flatMap(forms), ...forms(signed), ...forms(key.raw)];
 
-        for (const [output, text] of Object.entries(outputs)) {
+        for (const [output, text] of Rec.toEntries(outputs)) {
           expect(
             secrets.filter((secret) => text.includes(secret)),
             `${output} holds a secret`,
@@ -1300,7 +1299,7 @@ const recorded = (writes: Array<ReturnType<typeof write>>): typeof window => {
   };
   return {
     ...window,
-    update: Object.fromEntries(Object.keys(window.update).map((type) => [type, step])) as typeof window.update,
+    update: Rec.fromEntries(Rec.keys(window.update).map((type) => [type, step])) as typeof window.update,
   };
 };
 

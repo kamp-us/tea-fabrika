@@ -17,6 +17,7 @@
 // fixed point of its unions, so a loop alone holds nothing.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Option, Result } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, lineFor } from "../ledger/Log.ts";
@@ -210,7 +211,7 @@ const holds = (tuples: ReadonlySet<string>, subject: string, permission: string,
   while (changed) {
     changed = false;
 
-    for (const [name, union] of Object.entries(rules)) {
+    for (const [name, union] of Rec.toEntries(rules)) {
       if (!held.has(name) && union.some(has)) {
         held.add(name);
         changed = true;

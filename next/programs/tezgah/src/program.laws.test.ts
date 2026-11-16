@@ -42,7 +42,7 @@
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { type Stepper, stepper } from "@kampus/libfabrika";
-import { Result, Schema } from "effect";
+import { Result, Schema, Record as Rec } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;
@@ -580,7 +580,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
     // Every case of the law was walked: a split asked, refused, placed, placed after the focused
     // tile once its own tile closed (plan amendment (a)), and a workspace attached.
     expect(
-      Object.values(seen).every((n) => n > 0),
+      Rec.values(seen).every((n) => n > 0),
       `L6: the walks reached every case ${JSON.stringify(seen)}`,
     ).toBe(true);
   });
@@ -632,7 +632,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
       { seed: SEED, numRuns: 200 },
     );
     expect(
-      Object.values(seen).every((n) => n > 0),
+      Rec.values(seen).every((n) => n > 0),
       `L7: the walks reached every case ${JSON.stringify(seen)}`,
     ).toBe(true);
   });
@@ -666,7 +666,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
       { seed: SEED, numRuns: 100 },
     );
     expect(
-      Object.values(seen).every((n) => n > 0),
+      Rec.values(seen).every((n) => n > 0),
       `L8: the walks closed both kinds ${JSON.stringify(seen)}`,
     ).toBe(true);
   });
@@ -756,7 +756,7 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
       { seed: SEED, numRuns: 200 },
     );
     expect(
-      Object.values(seen).every((n) => n > 0),
+      Rec.values(seen).every((n) => n > 0),
       `L9: the walks met every refusal ${JSON.stringify(seen)}`,
     ).toBe(true);
   });
@@ -934,7 +934,7 @@ describe("Desk S3: focus moves at the program", () => {
     const seen = new Set<string>();
     fc.assert(
       fc.property(
-        fc.constantFrom(...Object.keys(want), CLICK),
+        fc.constantFrom(...Rec.keys(want), CLICK),
         fc.array(fc.record({ down: fc.boolean(), at: fc.nat() }), { minLength: 1, maxLength: 4 }),
         fc.nat(),
         fc.nat(),
@@ -967,7 +967,7 @@ describe("Desk S3: focus moves at the program", () => {
       ),
       { seed: SEED, numRuns: 100 },
     );
-    expect(seen.size, "S3: the walk tries every focus move and the click").toBe(Object.keys(want).length + 1);
+    expect(seen.size, "S3: the walk tries every focus move and the click").toBe(Rec.keys(want).length + 1);
   });
 
   it("S3 cursor: a focus move focuses its to, puts it first in recent, and keeps the cursor it left on its from, as a split's letter does, which every later view shows until a letter leaves that tile again", async () => {
@@ -1051,7 +1051,7 @@ describe("Desk S3: focus moves at the program", () => {
       { seed: SEED, numRuns: 200 },
     );
     expect(
-      Object.values(seen).every((n) => n > 0),
+      Rec.values(seen).every((n) => n > 0),
       `S3: the walks reached every case ${JSON.stringify(seen)}`,
     ).toBe(true);
   });

@@ -2,7 +2,7 @@
 // `verdict` on fixed clocks; the read laws write a made-up BOXES folder in a temp folder and set
 // Effect's test clock: no real quest, box or process is read or touched.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Layer, Path, type Scope } from "effect";
+import { Effect, FileSystem, Layer, Path, type Scope, Record as Rec } from "effect";
 import { TestClock } from "effect/testing";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -264,7 +264,7 @@ const boxesWith = (files: Files) =>
       fs.remove(made, { recursive: true, force: true }).pipe(Effect.ignore),
     );
     yield* fs.makeDirectory(path.join(dir, "state"), { recursive: true });
-    yield* Effect.forEach(Object.entries(files), ([name, text]) => fs.writeFileString(path.join(dir, name), text), {
+    yield* Effect.forEach(Rec.toEntries(files), ([name, text]) => fs.writeFileString(path.join(dir, name), text), {
       concurrency: 1,
     });
     return dir;
@@ -284,7 +284,7 @@ const linesAt = (
     const path = yield* Path.Path;
     const boxes = yield* boxesWith(files);
     yield* Effect.forEach(
-      Object.entries(ask.outAt ?? {}),
+      Rec.toEntries(ask.outAt ?? {}),
       ([name, offset]) => fs.utimes(path.join(boxes, name), at(offset), at(offset)),
       { concurrency: 1 },
     );

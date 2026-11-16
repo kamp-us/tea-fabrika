@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import * as scheduled from "./scheduled.mjs";
@@ -111,7 +112,7 @@ it("property: with no failed step, job, test or time-out: red on a failed need, 
   // issue); green past a canceled leg (red: a run stopped by hand closed the issue).
   fc.assert(
     fc.property(fc.option(needs, { nil: null }), calmJobs, (given, jobs) => {
-      const results = given === null ? [] : Object.values(given).map((job) => job.result);
+      const results = given === null ? [] : Rec.values(given).map((job) => job.result);
       const canceled = jobs.some((job) => job.status === "completed" && job.conclusion === "cancelled");
       const expected = results.includes("failure")
         ? "red"
@@ -386,13 +387,11 @@ it("property: the limits are each LIMIT_ variable's positive number, by its job 
       fc.dictionary(fc.stringMatching(/^[A-Z_]{1,8}$/), fc.string()),
       (given, other) => {
         const env = {
-          ...Object.fromEntries(Object.entries(other).filter(([key]) => !key.startsWith("LIMIT_"))),
-          ...Object.fromEntries(Object.entries(given).map(([id, value]) => [`LIMIT_${id}`, value])),
+          ...Rec.fromEntries(Rec.toEntries(other).filter(([key]) => !key.startsWith("LIMIT_"))),
+          ...Rec.fromEntries(Rec.toEntries(given).map(([id, value]) => [`LIMIT_${id}`, value])),
         };
-        const expected = Object.fromEntries(
-          Object.entries(given).flatMap(([id, value]) =>
-            Number(value) > 0 ? [[id.toLowerCase(), Number(value)]] : [],
-          ),
+        const expected = Rec.fromEntries(
+          Rec.toEntries(given).flatMap(([id, value]) => (Number(value) > 0 ? [[id.toLowerCase(), Number(value)]] : [])),
         );
         expect(scheduled.limits(env)).toEqual(expected);
       },

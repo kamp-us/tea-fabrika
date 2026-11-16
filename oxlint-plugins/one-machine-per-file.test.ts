@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -120,8 +121,8 @@ it("L2: only a part whose value is an import or imported member fires", () => {
         update: fc.constantFrom(...PARTS),
       }),
       (parts) => {
-        const lines = Object.entries(parts).map(([key, value]) => `${key}: ${value},`);
-        const errors = Object.entries(parts).flatMap(([key, value], i) =>
+        const lines = Rec.toEntries(parts).map(([key, value]) => `${key}: ${value},`);
+        const errors = Rec.toEntries(parts).flatMap(([key, value], i) =>
           [
             "Imported",
             "Remote.Model",
@@ -384,7 +385,7 @@ it("pinned: L4 the two product blocks enforce the rule; the five test globs leav
     "next/example.test-support.ts",
     ".agents/example.test.ts",
   ];
-  const result = await plant(Object.fromEntries(paths.map((p) => [p, DOUBLE])));
+  const result = await plant(Rec.fromEntries(paths.map((p) => [p, DOUBLE])));
   paths.forEach((p, i) => {
     expect([p, result(CODE, p)]).toEqual([p, i < 2 ? [3] : []]);
   });
@@ -408,7 +409,7 @@ const REAL = [
 
 it("scenario: L5 the 13 measured machine file copies have zero hits", async () => {
   // These are the plan's measured inputs, including both factory forms.
-  const originals = Object.fromEntries(REAL.map((p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]));
+  const originals = Rec.fromEntries(REAL.map((p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]));
   const clean = await plant(originals);
 
   for (const p of REAL) {
@@ -418,15 +419,15 @@ it("scenario: L5 the 13 measured machine file copies have zero hits", async () =
 
 it("scenario: L5 each real file copy refuses one added second export", async () => {
   // Compare with the unchanged copy, so an existing hit cannot hide the planted count failure.
-  const originals = Object.fromEntries(REAL.map((p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]));
+  const originals = Rec.fromEntries(REAL.map((p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]));
   const clean = await plant(originals);
   const broken = await plant(
-    Object.fromEntries(
-      Object.entries(originals).map(([p, s]) => [p, `${s}\nexport const plantedSecond = Machine.make({});\n`]),
+    Rec.fromEntries(
+      Rec.toEntries(originals).map(([p, s]) => [p, `${s}\nexport const plantedSecond = Machine.make({});\n`]),
     ),
   );
 
-  for (const [p, s] of Object.entries(originals)) {
+  for (const [p, s] of Rec.toEntries(originals)) {
     expect([p, broken(CODE, p)]).toEqual([p, [...clean(CODE, p), s.split("\n").length + 1]]);
   }
 });

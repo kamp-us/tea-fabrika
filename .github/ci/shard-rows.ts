@@ -1,6 +1,7 @@
 // Today's CI, about next/'s test files.
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Record as Rec } from "effect";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
 import { full, measured } from "../../vitest.shards.ts";
@@ -11,7 +12,7 @@ import { full, measured } from "../../vitest.shards.ts";
  */
 export const stale = (table: Readonly<Record<string, number>>, files: readonly string[]): string[] => {
   const selected = new Set(files);
-  return Object.keys(table)
+  return Rec.keys(table)
     .filter((path) => path.startsWith("next/") && !selected.has(path))
     .toSorted();
 };

@@ -1,6 +1,7 @@
 // Each generated case runs in process through oxlint's RuleTester, at its next/ path; one oxlint run
 // over every case's files then proves the repo's own .oxlintrc.json wires the rule at those paths.
 import { join } from "node:path";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -32,9 +33,9 @@ const check = (filename: string, { text: code, lines }: Case) => {
 
 /** One oxlint run over every case's files, through the repo's own config. */
 const cli = async (cases: ReadonlyMap<string, Case>) => {
-  const result = await plant(Object.fromEntries([...cases].map(([path, { text }]) => [path, text])));
-  expect(Object.fromEntries([...cases.keys()].map((path) => [path, result(CODE, path)]))).toEqual(
-    Object.fromEntries([...cases].map(([path, { lines }]) => [path, lines])),
+  const result = await plant(Rec.fromEntries([...cases].map(([path, { text }]) => [path, text])));
+  expect(Rec.fromEntries([...cases.keys()].map((path) => [path, result(CODE, path)]))).toEqual(
+    Rec.fromEntries([...cases].map(([path, { lines }]) => [path, lines])),
   );
   return result;
 };

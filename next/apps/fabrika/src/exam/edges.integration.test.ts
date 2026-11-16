@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit, Schema, Record as Rec } from "effect";
 import { asks } from "./edges.ts";
 
 const PRODUCT = "next/packages/libfabrika/src/data/project.ts";
@@ -22,7 +22,7 @@ const PRELUDE = 'import {Effect} from "effect";\ndeclare const p: Promise<number
 const file = (...lines: ReadonlyArray<string>) => [PRELUDE, ...lines, ""].join("\n");
 
 const run = (base: Record<string, string>, head: Record<string, string>) =>
-  Effect.runSync(asks(new Map(Object.entries(base)), new Map(Object.entries(head))));
+  Effect.runSync(asks(new Map(Rec.toEntries(base)), new Map(Rec.toEntries(head))));
 
 describe("asks", () => {
   it.effect.prop(

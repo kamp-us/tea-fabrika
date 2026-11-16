@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Record as Rec } from "effect";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { cacheFiles, lintCaches } from "./caches.ts";
@@ -13,7 +14,7 @@ const realFiles = (): Files => {
   const read = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
   const files = cacheFiles(read);
   return {
-    workflows: Object.fromEntries(Object.entries(files.workflows).map(([path, text]) => [path, parse(text)])),
+    workflows: Rec.fromEntries(Rec.toEntries(files.workflows).map(([path, text]) => [path, parse(text)])),
     action: parse(files.action),
     workspace: parse(files.workspace),
     typecheck: files.typecheck,
@@ -21,7 +22,7 @@ const realFiles = (): Files => {
 };
 
 const text = (files: Files) => ({
-  workflows: Object.fromEntries(Object.entries(files.workflows).map(([path, w]) => [path, JSON.stringify(w)])),
+  workflows: Rec.fromEntries(Rec.toEntries(files.workflows).map(([path, w]) => [path, JSON.stringify(w)])),
   action: JSON.stringify(files.action),
   workspace: JSON.stringify(files.workspace),
   typecheck: files.typecheck,
@@ -64,7 +65,7 @@ for (const [name, plant, error] of [
   [
     "C1b: setup-node's own cache in a workflow that runs on main only",
     (f: Files) => {
-      const jobs = Object.values(
+      const jobs = Rec.values(
         f.workflows[".github/workflows/mutation.yaml"]!["jobs"] as Record<string, { steps: unknown[] }>,
       );
       jobs[0]!.steps.push({ uses: "actions/setup-node@v7", with: { "node-version": "26.13.0", cache: "pnpm" } });
@@ -81,7 +82,7 @@ for (const [name, plant, error] of [
   [
     "C1b: pnpm/action-setup's own cache in a workflow that runs on main only",
     (f: Files) => {
-      const jobs = Object.values(
+      const jobs = Rec.values(
         f.workflows[".github/workflows/mutation.yaml"]!["jobs"] as Record<string, { steps: unknown[] }>,
       );
       jobs[0]!.steps.push({ uses: "pnpm/action-setup@v6", with: { run_install: false, cache: true } });
@@ -91,7 +92,7 @@ for (const [name, plant, error] of [
   [
     "C1b: a main-only save of the pnpm store",
     (f: Files) => {
-      const jobs = Object.values(
+      const jobs = Rec.values(
         f.workflows[".github/workflows/mutation.yaml"]!["jobs"] as Record<string, { steps: unknown[] }>,
       );
       jobs[0]!.steps.push({

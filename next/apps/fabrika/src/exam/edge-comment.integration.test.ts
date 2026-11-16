@@ -5,7 +5,7 @@
 // `next/` file that is not a test, so the list of edge files cannot come back through the config.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Schema } from "effect";
+import { Schema, Record as Rec } from "effect";
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
@@ -60,8 +60,8 @@ const UNUSED = at("unused");
 
 describe("edge-comment", async () => {
   const all = await plant({
-    ...Object.fromEntries(
-      Object.entries(CASES).map(([name, [comment, line]]) => [at(name), [...PRELUDE, comment, line].join("\n")]),
+    ...Rec.fromEntries(
+      Rec.toEntries(CASES).map(([name, [comment, line]]) => [at(name), [...PRELUDE, comment, line].join("\n")]),
     ),
     [UNUSED]: [
       ...PRELUDE,
@@ -71,7 +71,7 @@ describe("edge-comment", async () => {
   });
 
   it("refuses each wrong edge comment, at the top of the file", () => {
-    const refused = Object.entries(CASES).filter(([, [, , no]]) => no);
+    const refused = Rec.toEntries(CASES).filter(([, [, , no]]) => no);
     expect(refused).toHaveLength(8);
 
     for (const [name] of refused) {
@@ -80,7 +80,7 @@ describe("edge-comment", async () => {
   });
 
   it("passes a right one for each rule and for both, and leaves other comments alone", () => {
-    const passed = Object.entries(CASES).filter(([, [, , no]]) => !no);
+    const passed = Rec.toEntries(CASES).filter(([, [, , no]]) => !no);
     expect(passed).toHaveLength(4);
 
     for (const [name] of passed) {
@@ -89,7 +89,7 @@ describe("edge-comment", async () => {
   });
 
   it("speaks alone: the line under each comment is silenced and no comment is unused", () => {
-    for (const name of Object.keys(CASES)) {
+    for (const name of Rec.keys(CASES)) {
       for (const code of [
         "fabrika(no-promises)",
         "fabrika(no-effect-run-outside-edge)",
@@ -125,7 +125,7 @@ type Tree = any;
 
 const toValue = (node: Tree): unknown => {
   if (node.type === "ObjectExpression") {
-    return Object.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
+    return Rec.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
   }
 
   if (node.type === "ArrayExpression") {
@@ -199,7 +199,7 @@ describe(".oxlintrc.json", () => {
       .filter((o) => o.files.some(agents) && !mirror(o))
       .flatMap((o) => {
         const tests = o.files.filter(agents).every(test);
-        return Object.entries(o.rules)
+        return Rec.toEntries(o.rules)
           .filter(
             ([rule, setting]) =>
               !config.overrides.some(
@@ -221,7 +221,7 @@ describe(".oxlintrc.json", () => {
     const offs = config.overrides
       .filter((o) => o.files.some((f) => agents(f) && !test(f)) && !mirror(o))
       .flatMap((o) =>
-        Object.entries(o.rules)
+        Rec.toEntries(o.rules)
           .filter(([, setting]) => off(setting))
           .map(([rule]) => [o.files.join(", "), rule]),
       );

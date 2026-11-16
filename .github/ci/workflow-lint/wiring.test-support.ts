@@ -1,3 +1,4 @@
+import { Record as Rec } from "effect";
 // Today's CI, serving both versions. What the workflow-lint tests share: `wiring`, a generated
 // valid check.yaml, lookups of a step by its name, and `rejects`, which gives each listed plant to
 // every generated valid workflow, one at a time, so an unrelated error cannot mask it.
@@ -236,7 +237,7 @@ const valid = (label: string, extra: string) => ({
       "runs-on": "ubuntu-latest",
       "timeout-minutes": 5,
       outputs: {
-        ...Object.fromEntries(
+        ...Rec.fromEntries(
           ["check", "typecheck", "field", "build"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
         ),
         // The plan for CI paths, slice 2: the parser's pass prints these two again, and the size step
@@ -313,7 +314,7 @@ const valid = (label: string, extra: string) => ({
           env: {
             ...diff.env,
             TESTED: `\${{ github.sha }}`,
-            ...Object.fromEntries(
+            ...Rec.fromEntries(
               ["check", "typecheck", "field", "build"].map((key) => [
                 key.toUpperCase(),
                 `\${{ steps.diff.outputs.${key} }}`,

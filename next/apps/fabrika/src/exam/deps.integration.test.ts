@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Record as Rec } from "effect";
 import fc from "fast-check";
 import { rolldown, type Plugin } from "rolldown";
 
@@ -199,7 +199,7 @@ const plant = (files: Readonly<Record<string, string | object>>) =>
     Effect.sync(() => {
       const root = realpathSync(mkdtempSync(join(tmpdir(), "next-exam-")));
 
-      for (const [path, body] of Object.entries(files)) {
+      for (const [path, body] of Rec.toEntries(files)) {
         mkdirSync(dirname(join(root, path)), { recursive: true });
         writeFileSync(join(root, path), typeof body === "string" ? body : JSON.stringify(body));
       }
@@ -229,7 +229,7 @@ const isPlatform = (spec: string): boolean => spec.includes(":") || builtinModul
 const listed = (m: Package["manifest"]): ReadonlyMap<string, string> =>
   new Map(
     [m.dependencies, m.devDependencies, m.peerDependencies, m.optionalDependencies].flatMap((names) =>
-      Object.entries(names ?? {}),
+      Rec.toEntries(names ?? {}),
     ),
   );
 

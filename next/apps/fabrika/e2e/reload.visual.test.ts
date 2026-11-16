@@ -12,7 +12,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Stream } from "effect";
+import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Stream, Record as Rec } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
@@ -217,7 +217,7 @@ const objects = (value: unknown): ReadonlyArray<Record<string, unknown>> =>
     ? []
     : Array.isArray(value)
       ? value.flatMap(objects)
-      : [value as Record<string, unknown>, ...Object.values(value).flatMap(objects)];
+      : [value as Record<string, unknown>, ...Rec.values(value).flatMap(objects)];
 
 /** The outcome an answer gives for `counter:1`, or its failure's reason. */
 const outcome = (answer: unknown) => {

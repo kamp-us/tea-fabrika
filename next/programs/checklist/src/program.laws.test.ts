@@ -9,7 +9,7 @@ import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Program, Input, stepper } from "@kampus/libfabrika";
 import { syncTest } from "@kampus/libfabrika/testing";
-import { Result, Schema } from "effect";
+import { Result, Schema, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 
@@ -561,14 +561,6 @@ describe("ticket 806 the checklist's laws", () => {
   // pinned: the checklist's input keys, so a renamed or dropped input is seen.
   it("pinned: the checklist's input keys, so a renamed or dropped input is seen", async () => {
     const { checklist } = await load();
-    expect(Object.keys(checklist.inputs).sort()).toEqual([
-      "add",
-      "check",
-      "items",
-      "left",
-      "remove",
-      "rename",
-      "uncheck",
-    ]);
+    expect(Rec.keys(checklist.inputs).sort()).toEqual(["add", "check", "items", "left", "remove", "rename", "uncheck"]);
   });
 });

@@ -1,3 +1,4 @@
+import { Record as Rec } from "effect";
 // `no-effect-run-outside-edge` (exam item 2): an Effect runs only on a line under an edge comment.
 // There is no list of edge files (owner, 2026-11-05; Tier 1, P35), so each run fires at every one of
 // the 18 paths that list once named, and passes only where an edge comment stands over it.
@@ -83,7 +84,7 @@ describe("no-effect-run-outside-edge", async () => {
     [FIRES]: runs,
     [PASSES]: passes,
     [EDGE]: edges,
-    ...Object.fromEntries(OLD_EDGES.map((path) => [path, runs])),
+    ...Rec.fromEntries(OLD_EDGES.map((path) => [path, runs])),
     "next/packages/libfabrika/src/app/process.test.ts": runs,
   });
 

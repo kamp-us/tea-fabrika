@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, SchemaIssue } from "effect";
+import { ConfigProvider, Effect, Exit, SchemaIssue, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";
@@ -56,8 +56,8 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
             ...(omitted[6] ? {} : { rounds: values.rounds }),
           },
         };
-        const defaults = Object.fromEntries(
-          Object.entries(Settings.all.settings).map(([key, setting]) => [key, setting.default]),
+        const defaults = Rec.fromEntries(
+          Rec.toEntries(Settings.all.settings).map(([key, setting]) => [key, setting.default]),
         );
         const empty = read({});
         expect(Exit.isSuccess(empty)).toBe(true);
@@ -74,7 +74,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
         expect(Exit.isSuccess(decoded)).toBe(true);
 
         if (Exit.isSuccess(decoded)) {
-          for (const [key, setting] of Object.entries(Settings.all.settings)) {
+          for (const [key, setting] of Rec.toEntries(Settings.all.settings)) {
             const from = setting.segments.reduce<unknown>(
               (value, segment) =>
                 value !== null && typeof value === "object" ? Reflect.get(value, segment) : undefined,

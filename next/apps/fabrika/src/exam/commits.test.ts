@@ -1,7 +1,7 @@
 // next/, P32 and ticket 251: pure laws p83 to p87 and p89.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Option } from "effect";
+import { Option, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -194,7 +194,7 @@ describe("decoders", () => {
   it("P06: a link missing any required field is refused", () => {
     fc.assert(
       fc.property(anyLink, (value) => {
-        for (const field of Object.keys(value)) {
+        for (const field of Rec.keys(value)) {
           const missing: Record<string, unknown> = { ...value };
           delete missing[field];
           expect(decodeLink(missing)).toEqual(Option.none());
@@ -368,7 +368,7 @@ describe("exam paths and scope", () => {
     fc.assert(
       fc.property(fc.array(fc.record({ glob: filename, reason: fc.string() })), filename, (rows, name) => {
         const encoded = rows.map(({ glob, reason }) =>
-          Object.fromEntries([
+          Rec.fromEntries([
             ["glob", glob],
             ["why", reason],
           ]),

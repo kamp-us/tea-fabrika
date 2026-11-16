@@ -32,6 +32,7 @@ import {
 } from "effect";
 import { Command as Cli } from "effect/cli";
 import { Digest } from "effect/crypto";
+import * as Rec from "effect/Record";
 import { TestConsole } from "effect/testing";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
@@ -221,7 +222,7 @@ const run = (input: Input) => {
 /** The oracle: the library's own load and report for the same inputs. */
 const expected = (input: Input, flags: Readonly<Record<string, string>>, all: boolean) => {
   const at = place(input.env);
-  const env = Object.fromEntries(
+  const env = Rec.fromEntries(
     Declarations.all.declarations.flatMap((d) => (input.env[d.env] === undefined ? [] : [[d.env, input.env[d.env]!]])),
   );
   return Load.load({ person: at, flags, env, version: VERSION }).pipe(
@@ -296,7 +297,7 @@ const shape = (g: Generated) => {
     ...(g.envPort === undefined ? {} : { [Declarations.port.env]: g.envPort }),
     ...(g.envVersion === undefined ? {} : { [Declarations.version.env]: g.envVersion }),
   };
-  const args = [...(g.all ? ["--all"] : []), ...Object.entries(flags).map(([path, v]) => `--${path}=${v}`)];
+  const args = [...(g.all ? ["--all"] : []), ...Rec.toEntries(flags).map(([path, v]) => `--${path}=${v}`)];
   return { input: { args, env, person: g.person }, flags };
 };
 
@@ -376,7 +377,7 @@ describe("L8 [secrets], unrelated environment values and refused file values nev
         async ([word, text], fields, envPort, all) => {
           const env: Record<string, string> = {
             HOME,
-            ...Object.fromEntries(fields.map((f) => [f, word])),
+            ...Rec.fromEntries(fields.map((f) => [f, word])),
             ...(envPort === undefined ? {} : { [Declarations.port.env]: String(envPort) }),
           };
           const ran = await run({ args: all ? ["--all"] : [], env, person: { _tag: "text", text } });

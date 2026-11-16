@@ -2,6 +2,7 @@
 // proves the repo's own .oxlintrc.json wires the rule. The retired path is one path, so each run
 // lints one body: one oxlint run for each of the four body kinds, as the first generated run drew them.
 import { join } from "node:path";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -53,7 +54,7 @@ it("refuses the retired Id module for generated contents and permits other modul
   expect(kinds).toHaveLength(4);
 
   for (const body of kinds) {
-    const linted = await plant(Object.fromEntries([retired, ...allowed].map((path) => [path, body])));
+    const linted = await plant(Rec.fromEntries([retired, ...allowed].map((path) => [path, body])));
     expect(linted("fabrika(one-id-module)", retired)).toEqual([1]);
 
     for (const path of allowed) {

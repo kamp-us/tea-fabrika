@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Path, PlatformError, Tracer } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import type { RolldownOutput, RolldownOptions, OutputOptions } from "rolldown";
@@ -237,11 +238,11 @@ describe("P16 assets and Compiler", () => {
             built = await run(f.options);
           const worker = { serveAsset: await serving() };
           expect(
-            Object.values(built.assets).filter((a) => a.type === "text/javascript; charset=utf-8").length,
+            Rec.values(built.assets).filter((a) => a.type === "text/javascript; charset=utf-8").length,
           ).toBeGreaterThanOrEqual(2);
-          expect(Object.values(built.assets).some((a) => a.type === "text/css; charset=utf-8")).toBe(true);
+          expect(Rec.values(built.assets).some((a) => a.type === "text/css; charset=utf-8")).toBe(true);
 
-          for (const [route, asset] of Object.entries(built.assets)) {
+          for (const [route, asset] of Rec.toEntries(built.assets)) {
             expect(route.startsWith("/")).toBe(true);
             expect(asset.hash).toBe(createHash("sha256").update(asset.body).digest("hex"));
             const response = await Effect.runPromise(
@@ -341,7 +342,7 @@ describe("P16 assets and Compiler", () => {
             const built = await run(f.options);
             const serveAsset = await serving();
             const verify = async (assets: Readonly<Record<string, Asset>>) => {
-              for (const [route, asset] of Object.entries(assets)) {
+              for (const [route, asset] of Rec.toEntries(assets)) {
                 if (asset.type.startsWith("text/css")) {
                   expect(asset.body, "local CSS import must be included").not.toMatch(/@import\b/);
                   continue;
@@ -361,7 +362,7 @@ describe("P16 assets and Compiler", () => {
               }
             };
             // Plant the exact old behavior in real output: retain a CSS import to an absent route.
-            const stylesheet = Object.entries(built.assets).find(([, a]) => a.type.startsWith("text/css"));
+            const stylesheet = Rec.toEntries(built.assets).find(([, a]) => a.type.startsWith("text/css"));
             assert(stylesheet, "window stylesheet must be emitted");
             await expect(
               verify({
@@ -370,7 +371,7 @@ describe("P16 assets and Compiler", () => {
               }),
             ).rejects.toThrow("local CSS import");
             await verify(built.assets);
-            const styles = Object.values(built.assets)
+            const styles = Rec.values(built.assets)
               .filter((a) => a.type.startsWith("text/css"))
               .map((a) => a.body)
               .join("\n");
@@ -423,7 +424,7 @@ describe("P16 assets and Compiler", () => {
             writeFileSync(join(pkg, "window.css"), `${remote}\n@import "./local${id}.css" ${condition};\n${last}`);
             const built = await run(f.options);
             const local = condition === "" ? body : `@media ${condition} {\n${body}\n}`;
-            const stylesheets = Object.values(built.assets).filter((asset) => asset.type === "text/css; charset=utf-8");
+            const stylesheets = Rec.values(built.assets).filter((asset) => asset.type === "text/css; charset=utf-8");
             expect(stylesheets).toHaveLength(1);
             const rules = cssRules(stylesheets[0]!.body);
             const verify = (actual: readonly Rule[]) =>
@@ -958,7 +959,7 @@ describe("P16 cleanup and recording", () => {
             expect(phases.some((s) => s.name === "build.bundle")).toBe(true);
             const data = phases.map((s) => ({
               name: s.name,
-              attributes: Object.fromEntries(s.attributes),
+              attributes: Rec.fromEntries(s.attributes),
               status: s.status,
             }));
             const verifyPhases = (rows: typeof data) => {
@@ -1002,8 +1003,8 @@ describe("P16 cleanup and recording", () => {
 
               const planted = data.map((row) => ({
                 ...row,
-                attributes: Object.fromEntries(
-                  Object.entries(row.attributes).filter(
+                attributes: Rec.fromEntries(
+                  Rec.toEntries(row.attributes).filter(
                     ([key]) => key !== "phase" || (omit === "failed" && row.attributes.outcome !== "failure"),
                   ),
                 ),
@@ -1024,10 +1025,10 @@ describe("P16 cleanup and recording", () => {
                 expect(row.status.endTime >= row.status.startTime).toBe(true);
               }
 
-              expect(Object.values(row.attributes).some((v) => v === "failure" || v === "success")).toBe(true);
+              expect(Rec.values(row.attributes).some((v) => v === "failure" || v === "success")).toBe(true);
             }
 
-            expect(data.some((row) => Object.values(row.attributes).includes(fail ? "failure" : "success"))).toBe(true);
+            expect(data.some((row) => Rec.values(row.attributes).includes(fail ? "failure" : "success"))).toBe(true);
             const recorded = JSON.stringify(data.map(({ name, attributes }) => ({ name, attributes })));
 
             for (const marker of [ROOT, f.home, readFileSync(f.file, "utf8")]) {
@@ -1045,7 +1046,7 @@ describe("P16 cleanup and recording", () => {
               expect(recorded).toMatch(/[a-f0-9]{64}/);
               expect(
                 data
-                  .flatMap((row) => Object.entries(row.attributes))
+                  .flatMap((row) => Rec.toEntries(row.attributes))
                   .some(([key, value]) => /bytes|size/.test(key) && typeof value === "number" && value > 0),
               ).toBe(true);
             }
@@ -1135,7 +1136,7 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
       programs: selected.map((p) => ({ name: p.name, package: `@p40/${p.module}`, export: "program" })),
     });
     builds++;
-    const scripts = Object.entries(built.assets).filter(([, a]) => a.type === "text/javascript; charset=utf-8");
+    const scripts = Rec.toEntries(built.assets).filter(([, a]) => a.type === "text/javascript; charset=utf-8");
     const entries = new Map<string, string>();
 
     for (const p of selected) {
@@ -1151,7 +1152,7 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
 
     expect(new Set(entries.values()).size).toBe(selected.length);
 
-    for (const [route, asset] of Object.entries(built.assets)) {
+    for (const [route, asset] of Rec.toEntries(built.assets)) {
       // A valid route: slash-led segments, none empty, `.` or `..`.
       expect(route).toMatch(/^(?:\/(?!\.\.?(?:\/|$))[\w.-]+)+$/);
       const response = yield* serveAsset(built.assets, new Request(`https://test.invalid${route}`));

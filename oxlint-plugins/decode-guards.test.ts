@@ -5,6 +5,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -55,9 +56,9 @@ describe("T737 G1 a bare JSON.parse in next/ is reported", () => {
           // Not under `oxlint-plugins/`: the planted folder links that one to the real folder.
           "scripts/probe.ts": body(false),
         };
-        const linted = await plant(Object.fromEntries(Object.entries(files).map(([path, f]) => [path, f.text])));
+        const linted = await plant(Rec.fromEntries(Rec.toEntries(files).map(([path, f]) => [path, f.text])));
 
-        for (const [path, f] of Object.entries(files)) {
+        for (const [path, f] of Rec.toEntries(files)) {
           expect(linted(CODE, path), path).toEqual(f.fires);
         }
       }),
@@ -89,12 +90,12 @@ const lint = (files: Readonly<Record<string, string>>, args: ReadonlyArray<strin
   const dir = realpathSync(mkdtempSync(join(root, "next", ".decode-lint-")));
 
   try {
-    for (const [path, text] of Object.entries(files)) {
+    for (const [path, text] of Rec.toEntries(files)) {
       mkdirSync(dirname(join(dir, path)), { recursive: true });
       writeFileSync(join(dir, path), text);
     }
 
-    const ran = spawnSync(process.execPath, [join(root, "oxlint-plugins/lint.ts"), ...args, ...Object.keys(files)], {
+    const ran = spawnSync(process.execPath, [join(root, "oxlint-plugins/lint.ts"), ...args, ...Rec.keys(files)], {
       cwd: dir,
       encoding: "utf8",
       timeout: 60_000,

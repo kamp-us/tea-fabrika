@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, matchesGlob } from "node:path";
+import { Record as Rec } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { advises, type Fire, stale, type WarnLine, warnLines } from "./advice.ts";
@@ -193,7 +194,7 @@ const repo = (config: object | string, files: Readonly<Record<string, string>>) 
   mkdirSync(join(at, ".agents/skills"), { recursive: true });
   writeFileSync(join(at, ".oxlintrc.json"), typeof config === "string" ? config : JSON.stringify(config));
 
-  for (const [path, text] of Object.entries(files)) {
+  for (const [path, text] of Rec.toEntries(files)) {
     mkdirSync(dirname(join(at, path)), { recursive: true });
     writeFileSync(join(at, path), text);
   }
@@ -281,7 +282,7 @@ const PLANTS: Readonly<Record<(typeof FIVE)[number], { readonly file: string; re
 };
 
 const planted = (folder: string) =>
-  Object.fromEntries(Object.values(PLANTS).map(({ file, text }) => [`${folder}/${file}`, text]));
+  Rec.fromEntries(Rec.values(PLANTS).map(({ file, text }) => [`${folder}/${file}`, text]));
 
 describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean folder and advises in a dirty one", () => {
   it.each(FIVE)(
@@ -326,10 +327,10 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
     const { lint, done } = repo(small(), { ...planted("next/clean"), ...planted("next/dirty") });
 
     try {
-      const clean = lint(...Object.values(PLANTS).map(({ file }) => `next/clean/${file}`));
+      const clean = lint(...Rec.values(PLANTS).map(({ file }) => `next/clean/${file}`));
       expect(clean.out).toContain(`oxlint: ${FIVE.length} blocking, 0 advice`);
       expect(clean.status, clean.out).toBe(1);
-      const dirty = lint(...Object.values(PLANTS).map(({ file }) => `next/dirty/${file}`));
+      const dirty = lint(...Rec.values(PLANTS).map(({ file }) => `next/dirty/${file}`));
       expect(dirty.out).toContain(`oxlint: 0 blocking, ${FIVE.length} advice`);
       expect(dirty.status, dirty.out).toBe(0);
     } finally {
@@ -378,7 +379,7 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
     const clean = "next/packages/planted/src";
     const { lint, done } = repo(
       config,
-      Object.fromEntries(
+      Rec.fromEntries(
         [clean, ...folders].flatMap((folder) => [
           [`${folder}/Planted.ts`, text],
           [`${folder}/Planted.test.ts`, text],
@@ -527,7 +528,7 @@ describe("T930 L10 the five stop saying they only advise", () => {
       symlinkSync(join(ROOT, "oxlint-plugins"), join(at, "oxlint-plugins"));
       const files = planted("next/packages/zero/src/clean");
 
-      for (const [path, text] of Object.entries(files)) {
+      for (const [path, text] of Rec.toEntries(files)) {
         mkdirSync(dirname(join(at, path)), { recursive: true });
         writeFileSync(join(at, path), text);
       }
@@ -539,7 +540,7 @@ describe("T930 L10 the five stop saying they only advise", () => {
           "--disable-nested-config",
           "--no-ignore",
           "--format=json",
-          ...Object.keys(files),
+          ...Rec.keys(files),
         ],
         { cwd: at, encoding: "utf8", timeout: 60_000, maxBuffer: 2 ** 28 },
       );
@@ -637,8 +638,8 @@ describe("Reflect ban L3 a Reflect fire does not keep a JSON.parse warn line ali
   // five plants kept, so only the JSON.parse warn line can go stale.
   // Plant: count every warning of the rule as holding the line, and the stale line is not named.
   it("scenario: a whole run names the rule's warn line stale once only Reflect fires are left, and not while JSON.parse is", () => {
-    const others = Object.fromEntries(
-      Object.entries(planted("next/dirty")).filter(([path]) => !path.endsWith("/parse.ts")),
+    const others = Rec.fromEntries(
+      Rec.toEntries(planted("next/dirty")).filter(([path]) => !path.endsWith("/parse.ts")),
     );
     const stuck = repo(banned(), { ...others, "next/dirty/reflect.ts": REFLECTS });
     const held = repo(banned(), { ...planted("next/dirty"), "next/dirty/reflect.ts": REFLECTS });

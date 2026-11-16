@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { NodePath } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Path } from "effect";
+import { Effect, Path, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { API } from "typescript/unstable/sync";
 // `no-promises` (exam item 1): every Promise shape fires in next/, Effect's own Promise calls with
@@ -23,7 +23,7 @@ const typed = (files: Readonly<Record<string, string>>, workers = false) => {
   const api = new API({ cwd: root });
 
   try {
-    for (const [file, body] of Object.entries(files)) {
+    for (const [file, body] of Rec.toEntries(files)) {
       mkdirSync(dirname(join(root, file)), { recursive: true });
       writeFileSync(join(root, file), body);
     }

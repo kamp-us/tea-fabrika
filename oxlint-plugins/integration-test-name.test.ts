@@ -8,6 +8,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -116,7 +117,7 @@ it("scenario: the repo's .oxlintrc.json wires the rule for next/'s test files", 
     }
 
     const found = fires([relative(root, folder)]);
-    expect(Object.fromEntries(found)).toEqual({ [relative(root, plain)]: [2] });
+    expect(Rec.fromEntries(found)).toEqual({ [relative(root, plain)]: [2] });
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
@@ -125,5 +126,5 @@ it("scenario: the repo's .oxlintrc.json wires the rule for next/'s test files", 
 it("scenario: next/'s tree is at zero, so the rule blocks from the start (0523)", () => {
   // The real tree is the input: 73 files fired on experiment 292's tree, 72 of them drive a resource;
   // the one false alarm, exam/node-kinds.test.ts reading `git ls-files`, carries its reasoned line.
-  expect(Object.fromEntries(fires(["next"]))).toEqual({});
+  expect(Rec.fromEntries(fires(["next"]))).toEqual({});
 });

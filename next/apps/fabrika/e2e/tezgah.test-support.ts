@@ -12,7 +12,7 @@ import {
   TezgahView as View,
   tezgahName,
 } from "@kampus/libfabrika/tezgah/Workspace";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Record as Rec } from "effect";
 import type { Page } from "playwright";
 import { expect } from "vitest";
 import { PERSON, type reader } from "./p14.test-support.ts";
@@ -620,7 +620,7 @@ export const statusBar = (on: Page) =>
   promised(() =>
     on.evaluate(() => {
       const bar = document.querySelector(".statusbar");
-      const tiles = Object.fromEntries(
+      const tiles = Rec.fromEntries(
         [...document.querySelectorAll("main [data-tile], main [data-strip]")].map((el) => {
           const box = el.getBoundingClientRect();
           const id = el.getAttribute("data-tile") ?? `strip ${el.getAttribute("data-strip")}`;

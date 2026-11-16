@@ -16,6 +16,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Path, Queue, Stream, Tracer } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
 import { expectTypeOf } from "vitest";
@@ -537,7 +538,7 @@ describe("P15 slice 1: the watcher", () => {
 
               for (let n = 0; n < edits; n++) {
                 // A file from the current set, and an edit: a new value, so the bytes change.
-                const files = Object.keys(reaches);
+                const files = Rec.keys(reaches);
                 const file = files[g(fc.nat, { max: files.length - 1 })]!;
                 const value = (values.get(file) ?? 0) + g(fc.integer, { min: 1, max: 99 });
                 values.set(file, value);

@@ -5,7 +5,7 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import { senderTest } from "@kampus/libfabrika/testing";
-import { Arbitrary, Effect, FileSystem, Schema } from "effect";
+import { Arbitrary, Effect, FileSystem, Schema, Record as Rec } from "effect";
 
 const SEED = 119120;
 const options = { arbitrary: { seed: SEED, runs: 300, size: 4096, concurrency: 1 }, timeout: 60_000 };
@@ -494,7 +494,7 @@ it.prop(
             value = object(properties.value);
           mutations.push({ ...schema, properties: { ...properties, value: { ...value, enum: [null] } } });
 
-          for (const [field, fieldSchema] of Object.entries(object(value.properties ?? {}))) {
+          for (const [field, fieldSchema] of Rec.toEntries(object(value.properties ?? {}))) {
             mutations.push({
               ...schema,
               properties: {

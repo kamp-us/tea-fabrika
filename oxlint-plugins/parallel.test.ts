@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { constants, tmpdir } from "node:os";
 import { join } from "node:path";
+import { Record as Rec } from "effect";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -156,7 +157,7 @@ describe("parallel.ts, the runner pnpm lint goes through", () => {
       fc.property(signal, word, word, (name, out, err) => {
         const command = `echo o-${out}; echo e-${err} >&2; kill -${name} $$`;
         const ran = run([command]);
-        const n = Object.entries(constants.signals).find(([signal]) => signal === `SIG${name}`)?.[1];
+        const n = Rec.toEntries(constants.signals).find(([signal]) => signal === `SIG${name}`)?.[1];
         const code = 128 + (n ?? 0);
         expect(ran.status).toBe(1);
         expect(ran.out).toContain(`o-${out}`);

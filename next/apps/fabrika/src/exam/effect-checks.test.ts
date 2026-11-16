@@ -4,7 +4,7 @@
 // merge of that shared file turns its check off, and nothing else says so.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Schema } from "effect";
+import { Schema, Record as Rec } from "effect";
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 
@@ -42,7 +42,7 @@ type Tree = any;
 
 const toValue = (node: Tree): unknown => {
   if (node.type === "ObjectExpression") {
-    return Object.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
+    return Rec.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
   }
 
   if (node.type === "ArrayExpression") {

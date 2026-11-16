@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { it, expect } from "@effect/vitest";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
@@ -55,7 +56,7 @@ const rows = fc
   .chain((paths) =>
     fc
       .tuple(fc.subarray(paths), fc.subarray(paths))
-      .map(([keys, files]) => ({ table: Object.fromEntries(keys.map((path) => [path, 0])), files })),
+      .map(([keys, files]) => ({ table: Rec.fromEntries(keys.map((path) => [path, 0])), files })),
   );
 
 // L2. Plants, each run once on shard-rows.ts and restored: return [] always (red); list the
@@ -64,7 +65,7 @@ const rows = fc
 it("L2: stale rows are exactly next/ rows whose file Vitest does not select, sorted in either input order", () => {
   fc.assert(
     fc.property(rows, ({ table, files }) => {
-      const expected = Object.keys(table)
+      const expected = Rec.keys(table)
         .filter((path) => path.startsWith("next/") && !files.includes(path))
         .toSorted();
       expect(stale(table, files)).toEqual(expected);

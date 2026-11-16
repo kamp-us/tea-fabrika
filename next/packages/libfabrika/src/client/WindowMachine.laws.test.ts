@@ -47,6 +47,7 @@ import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import type { SchemaAST } from "effect";
 import { Arbitrary, Option, Result, Schema } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace, NoProc, Recipient, signalId } from "../processes/Process.ts";
@@ -663,7 +664,7 @@ describe("L8: the window parent's connection", () => {
     expect(seen.opened).toBeGreaterThan(0);
     expect(seen.missing).toBeGreaterThan(0);
     expect(
-      Object.values(again).every((n) => n > 0),
+      Rec.values(again).every((n) => n > 0),
       `tiles read their name again for each of its three reasons: ${JSON.stringify(again)}`,
     ).toBe(true);
   });
@@ -1073,7 +1074,7 @@ describe("L9: the records the window emits", () => {
       fc.property(walks, (list) => {
         fold(list, ({ cmds }) => {
           for (const c of cmds.filter((c) => c.type === "record")) {
-            expect(Object.keys(c).sort()).toEqual(["record", "type"]);
+            expect(Rec.keys(c).sort()).toEqual(["record", "type"]);
             expect(Schema.is(ClientRecord)(c["record"]), JSON.stringify(c)).toBe(true);
           }
         });
@@ -1230,7 +1231,7 @@ describe("L9: the records the window emits", () => {
             expect(run.get(String(r["pid"])) ?? 0, "a run did not end before its pid's next view row").toBe(0);
           }
 
-          const changed = Object.keys(next.client.views).filter(
+          const changed = Rec.keys(next.client.views).filter(
             (pid) => next.client.views[pid] !== prev.client.views[pid],
           );
 
@@ -2093,15 +2094,15 @@ const FAMILIES: Readonly<Record<string, Family>> = {
 
 /** The params of a notice, or the result of an answer, with one field dropped or of the wrong type. */
 const mutations = (family: Family, sent: Record<string, unknown>) => [
-  ...family.drop.map((k) => Object.fromEntries(Object.entries(sent).filter(([key]) => key !== k))),
-  ...Object.entries(family.wrong).map(([k, v]) => ({ ...sent, [k]: v })),
+  ...family.drop.map((k) => Rec.fromEntries(Rec.toEntries(sent).filter(([key]) => key !== k))),
+  ...Rec.toEntries(family.wrong).map(([k, v]) => ({ ...sent, [k]: v })),
 ];
 
 /** JSON text, the only form a frame's value takes on the wire. */
 const Json = Schema.fromJsonString(Schema.Unknown);
 
 describe("P18 L10: every frame family the parent reads decodes or reaches its typed failure", () => {
-  for (const [name, family] of Object.entries(FAMILIES)) {
+  for (const [name, family] of Rec.toEntries(FAMILIES)) {
     it.prop(
       `format: ${name}, from its schema, reaches its handler, and with one field dropped or mistyped changes nothing`,
       { generated: Arbitrary.schema(family.schema) },
@@ -2792,7 +2793,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
       opts,
     );
 
-    for (const [as, n] of Object.entries(seen)) {
+    for (const [as, n] of Rec.toEntries(seen)) {
       expect(n, `letters seen as ${as}`).toBeGreaterThan(0);
     }
   });
@@ -2954,7 +2955,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
       opts,
     );
 
-    for (const [k, n] of Object.entries(seen)) {
+    for (const [k, n] of Rec.toEntries(seen)) {
       expect(n, `inbox steps seen as ${k}`).toBeGreaterThan(0);
     }
   });
@@ -3214,7 +3215,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
       opts,
     );
 
-    for (const [k, n] of Object.entries(seen)) {
+    for (const [k, n] of Rec.toEntries(seen)) {
       expect(n, `region steps seen as ${k}`).toBeGreaterThan(0);
     }
   });
@@ -4313,7 +4314,7 @@ const keysIn = (v: unknown): ReadonlyArray<string> =>
   Array.isArray(v)
     ? v.flatMap(keysIn)
     : v !== null && typeof v === "object"
-      ? Object.entries(v).flatMap(([k, x]) => [k, ...keysIn(x)])
+      ? Rec.toEntries(v).flatMap(([k, x]) => [k, ...keysIn(x)])
       : [];
 
 /** A key that would hold a fold: the one thing L32 forbids the model and the wire. */
@@ -4506,7 +4507,7 @@ describe("Desk S4: a window folds at its own size, records each change of its fo
               .filter((c) => c.call._tag === "send" && c.call["pid"] === TEZGAH_PID)) {
               seen.letters++;
               expect(
-                Object.keys(Object(c.call["m"])).filter((k) => !DID_KEYS.has(k)),
+                Rec.keys(Object(c.call["m"])).filter((k) => !DID_KEYS.has(k)),
                 "L32: a letter to tezgah carries only did's keys",
               ).toEqual([]);
               expect(

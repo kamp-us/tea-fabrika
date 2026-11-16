@@ -11,6 +11,7 @@ import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Context, Effect, Exit, Layer, Logger, ManagedRuntime, Redacted, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { expect, expectTypeOf, it, vi } from "vitest";
 import { ConnectionService, connectionRuntime } from "../../cloudflare/connection.ts";
@@ -71,7 +72,7 @@ const strings = (value: unknown): Array<string> => {
   }
 
   return value !== null && typeof value === "object"
-    ? Object.entries(value).flatMap(([key, child]) => [key, ...strings(child)])
+    ? Rec.toEntries(value).flatMap(([key, child]) => [key, ...strings(child)])
     : [];
 };
 
@@ -173,7 +174,7 @@ const flow = async (sample: Flow) => {
     )(bodyText(options));
     // The platform send is allowed to hold the bearer; persistent outputs are checked below.
     // It holds no other header but the content type: no trace header rides along.
-    expect(Object.fromEntries(new Headers(options?.headers))).toEqual({
+    expect(Rec.fromEntries(new Headers(options?.headers))).toEqual({
       authorization: `Bearer ${bearer}`,
       "content-type": "application/json",
     });

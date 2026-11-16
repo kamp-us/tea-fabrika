@@ -17,7 +17,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Record as Rec } from "effect";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
 const PBT = "@demlik/tea/pbt";
@@ -128,7 +128,7 @@ describe("planted machines", () => {
     Effect.sync(() => {
       const folder = mkdtempSync(join(tmpdir(), "next-exam-"));
 
-      for (const [path, text] of Object.entries(planted)) {
+      for (const [path, text] of Rec.toEntries(planted)) {
         mkdirSync(dirname(join(folder, path)), { recursive: true });
         writeFileSync(join(folder, path), `${text}\n`);
       }

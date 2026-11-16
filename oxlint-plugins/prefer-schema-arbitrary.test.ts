@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { Record as Rec } from "effect";
 import fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { describe, expect, it } from "vitest";
@@ -63,7 +64,7 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
       symlinkSync(join(root, "oxlint-plugins"), join(dir, "oxlint-plugins"));
     }
 
-    for (const [path, text] of Object.entries(files)) {
+    for (const [path, text] of Rec.toEntries(files)) {
       mkdirSync(dirname(join(dir, path)), { recursive: true });
       writeFileSync(join(dir, path), text);
     }
@@ -71,14 +72,14 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
     const ran = spawnSync(
       runner ? process.execPath : oxlint,
       runner
-        ? [join(root, "oxlint-plugins/lint.ts"), ...args, ...Object.keys(files)]
+        ? [join(root, "oxlint-plugins/lint.ts"), ...args, ...Rec.keys(files)]
         : [
             `--config=${join(dir, ".oxlintrc.json")}`,
             "--disable-nested-config",
             "--no-ignore",
             "--format=json",
             ...args,
-            ...Object.keys(files),
+            ...Rec.keys(files),
           ],
       { cwd: dir, encoding: "utf8", timeout: 10_000 },
     );
@@ -126,7 +127,7 @@ const cases = () => {
   /** One oxlint run over every case's file, through the repo's own config: the same reports. */
   const cli = () => {
     const files = all.map((_, i) => `next/case${i}.test.ts`);
-    const { hits } = lint(Object.fromEntries(all.map(({ text }, i) => [files[i]!, text])));
+    const { hits } = lint(Rec.fromEntries(all.map(({ text }, i) => [files[i]!, text])));
     const found = files.map((file) =>
       hits
         .filter((d) => d.filename === file)

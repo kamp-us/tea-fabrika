@@ -20,6 +20,7 @@
  * @stability unstable
  */
 import { Schema } from "effect";
+import * as Rec from "effect/Record";
 import { parseSync } from "oxc-parser";
 import { type OxcError, transformSync } from "oxc-transform-react";
 
@@ -144,7 +145,7 @@ const functions = (file: string, text: string): readonly Fn[] => {
     if (FUNCTIONS.has(node.type)) {
       const own = { on: false };
 
-      for (const [key, child] of Object.entries(node)) {
+      for (const [key, child] of Rec.toEntries(node)) {
         if (key !== "type") {
           walk(child, null, depth + 1, own);
         }
@@ -163,7 +164,7 @@ const functions = (file: string, text: string): readonly Fn[] => {
       return;
     }
 
-    for (const [key, child] of Object.entries(node)) {
+    for (const [key, child] of Rec.toEntries(node)) {
       if (key === "type" || key === "start" || key === "end") {
         continue;
       }

@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, expect, it } from "vitest";
@@ -102,10 +103,10 @@ const check = ({ text, expected, fixed }: Case) => {
 const cli = (cases: ReadonlyMap<string, Case>) => {
   const files = [...cases.keys()];
   const found = firesIn(files);
-  expect(Object.fromEntries(found)).toEqual(Object.fromEntries([...cases].map(([f, c]) => [f, c.expected])));
+  expect(Rec.fromEntries(found)).toEqual(Rec.fromEntries([...cases].map(([f, c]) => [f, c.expected])));
   spawnSync(OXLINT, ["--fix", ...files.map((f) => relative(ROOT, f))], { cwd: ROOT, encoding: "utf8" });
-  expect(Object.fromEntries(files.map((f) => [f, readFileSync(f, "utf8")]))).toEqual(
-    Object.fromEntries([...cases].map(([f, c]) => [f, c.fixed])),
+  expect(Rec.fromEntries(files.map((f) => [f, readFileSync(f, "utf8")]))).toEqual(
+    Rec.fromEntries([...cases].map(([f, c]) => [f, c.fixed])),
   );
   expect([...firesIn(files).values()].flat()).toEqual([]);
 };
