@@ -4,17 +4,17 @@
   "ticket": "1075",
   "pr": null,
   "started": "2026-11-15T19:00:00-08:00",
-  "ended": "2026-11-15T19:28:00-08:00",
+  "ended": "2026-11-15T19:50:00-08:00",
   "parent": null,
   "active": null,
   "role": "step",
   "model": "claude-sonnet-5-5",
   "effort": null,
   "outcome": "pass",
-  "why": "Tests step for slice E1 of the Effect-check sweep (docs/plan/quests/effect-sweep-PLAN.md, ticket 1075), next/ and our tooling, built on main 9201aeb02. tsconfig.base.json gains one overrides entry that names the 31 unstable Effect modules the tree uses on purpose in allowedUnstableApis and sets unstableApiUsage to error for the 15 folders the plan locks (.agents, libfabrika transport, tezgah, codehost, presence, repositories, ci, schedules and top files, tuval, vitest, programs/tezgah, .github/ci, oxlint-plugins, the app's entry folder). The jsdocs rule (oxlint-plugins/jsdocs.ts and its port effect-jsdocs.ts) no longer asks for @stability, and a tag still there passes until E60; its laws in jsdocs.test.ts and the README row follow. PersonCheckTest.ts, the one exam-path file with a tag, lost it. The 177 product files that hold a tag are the build's: the list is in the PR body. L5 is red now: pnpm typecheck fails in next/packages/vitest with 22 unstableApiUsage errors on our own tags. Checked green by deleting the tags from those 177 files in the worktree, running the whole pnpm typecheck (exit 0), then restoring them with git checkout. E0's lock law (oxlint-plugins/effect-checks.test.ts) is not on main, so E1's LOCKED row waits for it and is named in the PR body.",
+  "why": "Tests step for slice E1 of the Effect-check sweep (docs/plan/quests/effect-sweep-PLAN.md, ticket 1075), next/ and our tooling, built on main 9201aeb02. tsconfig.base.json gains one overrides entry that names the 31 unstable Effect modules the tree uses on purpose in allowedUnstableApis and sets unstableApiUsage to error for the 15 folders the plan locks (.agents, libfabrika transport, tezgah, codehost, presence, repositories, ci, schedules and top files, tuval, vitest, programs/tezgah, .github/ci, oxlint-plugins, the app's entry folder). The jsdocs rule (oxlint-plugins/jsdocs.ts and its port effect-jsdocs.ts) no longer asks for @stability, and a tag still there passes until E60; its laws in jsdocs.test.ts and the README row follow. PersonCheckTest.ts, the one exam-path file with a tag, lost it. The 177 product files that hold a tag are the build's: the list is in the PR body. L5 is red now: pnpm typecheck fails in next/packages/vitest with 22 unstableApiUsage errors on our own tags. Checked green by deleting the tags from those 177 files in the worktree, running the whole pnpm typecheck (exit 0), then restoring them with git checkout. E0's lock law (oxlint-plugins/effect-checks.test.ts) is not on main, so E1's LOCKED row waits for it and is named in the PR body. Round 2, at the lead's word: the build stopped at 1,023 tag lines in 177 files, too many for hand edits. oxlint-plugins/no-stability-tag.ts is a new rule with a safe fix (meta.fixable code, fixer.removeRange, the way padding-line-between-statements.ts does it, in oxlint 1.90.0's plugins-dev.d.ts) that deletes the tag line and the blank ` *` left above ` */`; pnpm format applies it through lint.ts --fix. It is a new rule, not a change to jsdocs, because jsdocs is off in internal/, tests, apps and tooling, where 160 of the files sit. .oxlintrc.json turns it on for next/, .agents/, .github/ci/ and oxlint-plugins/, and off for the 16 tagged files of pull request 1366. pnpm lint now fails on exactly 1,023 no-stability-tag reports in 177 files, which the build clears with pnpm format. The fix was not run over the tree here.",
   "tokens": null,
   "tools": null,
-  "minutes": 28,
+  "minutes": 50,
   "note": "Hits by Effect part, from effect-tsgo diagnostics with every check off but unstableApiUsage at error, one project at a time: 13,399 in libfabrika alone with our tags; the parts outside our own packages are @effect/vitest 1578, effect/Arbitrary 357, effect/FileSystem 291, @effect/platform-node 270, effect/Path 198, effect/process 153, effect/crypto 136, effect/cli 127 and 13 smaller modules. effect/Schema has one unstable export in use, ByteSize, so it is named as effect/Schema#ByteSize. .github/ci/program.test.ts holds the words @stability unstable as generated comment text, not as a tag, and is left.",
   "plants": [
     {
@@ -41,6 +41,26 @@
       "law": "jsdocs-no-stability",
       "plant": "buildTags refuses any @stability tag, as E60 will: 5 of 17 fail (laws 3, 4, 5, 6 and the Effect-source vector)",
       "result": "red"
+    },
+    {
+      "law": "no-stability-tag law 1",
+      "plant": "the blank-line rule dropped from the fix (blankBefore = false): the generated-block law fails, a ` *` stays above ` */`",
+      "result": "red"
+    },
+    {
+      "law": "no-stability-tag law 2",
+      "plant": "the 16-file off override set to error: the waiting-files law fails",
+      "result": "red"
+    },
+    {
+      "law": "no-stability-tag law 2",
+      "plant": "the rule's files narrowed to next/**: the in-scope law fails on .agents and .github/ci",
+      "result": "red"
+    },
+    {
+      "law": "no-stability-tag fix",
+      "plant": "oxlint --fix on one planted file in oxlint-plugins/ with a description, a blank ` *` and the tag: the output is the description and ` */` only",
+      "result": "green"
     }
   ],
   "step": "tests"
