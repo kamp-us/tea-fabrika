@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-l11-speed-review",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1379",
+  "started": "2026-11-15T17:14:35-08:00",
+  "ended": "2026-11-15T17:19:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The one review of def5872bd, in next/: merge-ready, one finding row. Law L11's storage walk still cuts every storage operation: each cut takes one not cut yet while any is left, the 100 walks make exactly 100 * ceil(inventory / 100) cuts, and the remaining-empty and reached-size asserts are unchanged. A scratch replay of the tapes at seed 119120 with fast-check 4.10.2 gave 900 cuts and nothing left uncut for 849 operations (old walk 1318), 700 for 663 and 1000 for 1000. Operations planted with a second secret form drop from 254 to 30; no plan or decision asks for that, and the scan checks all three forms on every output, so no leak class is lost. loosening.sh's two hits do not loosen: line 653 adds walks, and line 731 passes the same 100 runs through it. The row: decision 0036 asks for a ticket and a repeated after-run, and neither is there.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "Read-only on product and test files. No test file run on the laptop: the law is an .integration. file, so full run 43779861624 at 4248a5aac (success) is the proof. The plant commit 43d0a275a (projectStorage keeps String(defect) in LedgerError.message) was read; its run 43782621366 was canceled, and its leg 5 log was not served, so the 59 leaks are the builder's count. git merge-tree with origin/main: no conflict. The T770 plan that first wrote the walk is not in the repo, so the plan's own words for L11 were not read.",
+  "step": "review"
+}
