@@ -1,4 +1,14 @@
 {
   "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    // A library imports each Effect module by its path, `import * as Effect from "effect/Effect"` (0577).
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "namespaceImportPackages": ["effect"],
+        "diagnosticSeverity": { "preferNamespaceImport": "error" }
+      }
+    ]
+  },
   "include": ["src"]
 }

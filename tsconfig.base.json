@@ -108,12 +108,111 @@
           },
           // A library imports each Effect module by its path (E7, 0023). On for the folders
           // at zero, their tests too. Each import slice adds its folder, and the last makes it
-          // all of `next/packages`. `oxlint-plugins/namespace-imports.test.ts` keeps the list.
+          // all of `next/packages`. `oxlint-plugins/effect-checks.test.ts` keeps the list.
           {
             "include": ["next/packages/libfabrika/src/ci/**/*.ts", "next/packages/libfabrika/src/codehost/**/*.ts"],
             "options": {
               "namespaceImportPackages": ["effect"],
               "diagnosticSeverity": { "preferNamespaceImport": "error" }
+            }
+          },
+          // E0 of the Effect-check sweep (0565): every check with 0 hits in `next/` and our
+          // tooling on 2026-11-15, at error there, so a new hit fails the typecheck. A slice
+          // that brings another check to zero adds its own entry below, and
+          // `oxlint-plugins/effect-checks.test.ts` fails if a folder stops ending at error.
+          {
+            "include": [
+              "next/**/*.ts",
+              "next/**/*.tsx",
+              "fixtures/next/**/*.ts",
+              ".agents/**/*.ts",
+              ".github/ci/**/*.ts",
+              ".github/ci/**/*.mjs",
+              "oxlint-plugins/**/*.ts",
+              "oxlint-plugins/**/*.mjs",
+              "stylelint.config.ts"
+            ],
+            "options": {
+              "diagnosticSeverity": {
+                "abortControllerInEffect": "error",
+                "acquireReleaseDisposable": "error",
+                "allOfMapToForEach": "error",
+                "catchAllTagDispatchToCatchTag": "error",
+                "catchAllToMapError": "error",
+                "catchChainToFirstSuccessOf": "error",
+                "catchDieToOrDie": "error",
+                "catchIfTagToCatchTag": "error",
+                "catchRefailToTapError": "error",
+                "catchTagToCatchReason": "error",
+                "catchUnfailableEffect": "error",
+                "classSelfMismatch": "error",
+                "cryptoRandomUUID": "error",
+                "cryptoRandomUUIDInEffect": "error",
+                "duplicatePackage": "error",
+                "effectDoNotation": "error",
+                "effectFnIife": "error",
+                "effectFnImplicitAny": "error",
+                "effectFnOpportunity": "error",
+                "effectGenUsesAdapter": "error",
+                "effectInFailure": "error",
+                "effectInVoidSuccess": "error",
+                "effectMapFlatten": "error",
+                "effectMapVoid": "error",
+                "effectSleepZeroToYieldNow": "error",
+                "errorPayloadShadowsName": "error",
+                "experimentalApiUsage": "error",
+                "failCauseToConstructor": "error",
+                "flatMapIdentityToFlatten": "error",
+                "flatMapToMap": "error",
+                "flatMapToTap": "error",
+                "floatingEffect": "error",
+                "floatingEffectInVitest": "error",
+                "genericEffectServices": "error",
+                "globalRandom": "error",
+                "globalRandomInEffect": "error",
+                "globalTimersInEffect": "error",
+                "layerMergeAllWithDependencies": "error",
+                "lazyPromiseInEffectSync": "error",
+                "leakingRequirements": "error",
+                "manualMetricTapToTrack": "error",
+                "mapConstToAs": "error",
+                "mapSomeToAsSome": "error",
+                "matchEffectToMapBoth": "error",
+                "matchEffectToMatch": "error",
+                "missingEffectContext": "error",
+                "missingEffectError": "error",
+                "missingEffectServiceDependency": "error",
+                "missingLayerContext": "error",
+                "missingReturnYieldStar": "error",
+                "missingStarInYieldEffectGen": "error",
+                "nonObjectEffectServiceType": "error",
+                "obsoleteMatchImport": "error",
+                "obsoleteSchemaImport": "error",
+                "optionMatchToFromOption": "error",
+                "outdatedApi": "error",
+                "overriddenSchemaConstructor": "error",
+                "preferSchemaTaggedError": "error",
+                "preferSchemaTypeProperty": "error",
+                "promiseInEffectSuccess": "error",
+                "provideLayerSucceedToProvideService": "error",
+                "raceFirstWithSleepToTimeout": "error",
+                "redundantMapError": "error",
+                "redundantOrDie": "error",
+                "redundantSchemaTagIdentifier": "error",
+                "schemaClassObjectLiteral": "error",
+                "schemaLiteralNonFinite": "error",
+                "schemaOpaqueInstanceMember": "error",
+                "schemaUnionOfLiterals": "error",
+                "scopeInLayerEffect": "error",
+                "serviceNotAsClass": "error",
+                "syncToSucceed": "error",
+                "timeoutCatchTagToTimeoutOrElse": "error",
+                "tryCatchInEffectGen": "error",
+                "unknownInEffectCatch": "error",
+                "unnecessaryPipe": "error",
+                "unnecessaryPipeChain": "error",
+                "unsafeEffectTypeAssertion": "error"
+              }
             }
           }
         ]
