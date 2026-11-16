@@ -421,9 +421,13 @@ const foldRule = (space: Space, area: Box, strips: ReadonlySet<string>) => {
 
     if (lead >= 0 && (shares[lead] ?? 0) < least) {
       const rest = total - (node.parts[lead]?.percent ?? 0);
-      shares = node.parts.map((p, i) =>
-        i === lead ? least : fixed[i] ? STRIP_ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
-      );
+      shares = node.parts.map((p, i) => {
+        if (i === lead) {
+          return least;
+        }
+
+        return fixed[i] ? STRIP_ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0;
+      });
     }
 
     let at = row ? box.x : box.y;

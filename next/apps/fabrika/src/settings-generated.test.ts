@@ -18,7 +18,7 @@ import * as Files from "@kampus/libfabrika/settings/Files";
 import * as JsonSchema from "@kampus/libfabrika/settings/JsonSchema";
 import * as Reference from "@kampus/libfabrika/settings/Reference";
 import * as Setting from "@kampus/libfabrika/settings/Setting";
-import { Effect, FileSystem, Path, Result, Schema } from "effect";
+import { Effect, FileSystem, Match, Path, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { plant } from "./exam/plant.ts";
 
@@ -235,16 +235,14 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
           const planted = cases
             .filter(([c, t]) => !(c.file === ADAPTER && t !== "parser" && t !== "parser-subpath"))
             .map(([c, t]) => {
-              const spec =
-                t === "package"
-                  ? "@kampus/libfabrika/settings/TomlParser"
-                  : t === "relative"
-                    ? relative(c.file, ADAPTER)
-                    : t === "relative-bare"
-                      ? relative(c.file, ADAPTER).replace(/\.ts$/, "")
-                      : t === "parser"
-                        ? "toml-eslint-parser"
-                        : "toml-eslint-parser/lib/ast";
+              const spec = Match.value(t).pipe(
+                Match.when("package", () => "@kampus/libfabrika/settings/TomlParser"),
+                Match.when("relative", () => relative(c.file, ADAPTER)),
+                Match.when("relative-bare", () => relative(c.file, ADAPTER).replace(/\.ts$/, "")),
+                Match.when("parser", () => "toml-eslint-parser"),
+                Match.when("parser-subpath", () => "toml-eslint-parser/lib/ast"),
+                Match.exhaustive,
+              );
               const allowed = t === "parser" || t === "parser-subpath" ? c.parser : c.adapter;
               return { file: c.file, spec, allowed };
             });

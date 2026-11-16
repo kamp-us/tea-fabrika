@@ -27,21 +27,14 @@ it.prop(
     let held = 0;
 
     for (const pick of choices) {
-      const msg: typeof RevokeHold.Msg.Type =
-        model._tag === "idle"
-          ? { type: "arm", process: `process-${pick}` }
-          : model._tag === "armed"
-            ? pick % 7 === 0
-              ? { type: "release" }
-              : {
-                  type: "arrive",
-                  process: pick % 3 === 0 ? "unrelated" : model.process,
-                }
-            : model._tag === "held"
-              ? pick % 2 === 0
-                ? { type: "release" }
-                : { type: "arrive", process: model.process }
-              : { type: "arm", process: `later-${pick}` };
+      const msg: typeof RevokeHold.Msg.Type = RevokeHold.Model.match(model, {
+        idle: (): typeof RevokeHold.Msg.Type => ({ type: "arm", process: `process-${pick}` }),
+        armed: ({ process }): typeof RevokeHold.Msg.Type =>
+          pick % 7 === 0 ? { type: "release" } : { type: "arrive", process: pick % 3 === 0 ? "unrelated" : process },
+        held: ({ process }): typeof RevokeHold.Msg.Type =>
+          pick % 2 === 0 ? { type: "release" } : { type: "arrive", process },
+        released: (): typeof RevokeHold.Msg.Type => ({ type: "arm", process: `later-${pick}` }),
+      });
       const previous = model;
       [model] = applyCell(RevokeHold.controller, model, msg);
       msgs.push(msg);

@@ -279,15 +279,17 @@ const owned = <A, E, R>(
   Effect.acquireRelease(acquire.pipe(Effect.tap((a) => note({ acquired: at, ...facts(a) }))), (a) =>
     release(a).pipe(Effect.timeout("10 seconds"), Effect.ignore, Effect.andThen(note({ released: at }))),
   ).pipe(
-    Effect.tap(() =>
-      fault?.at !== at
-        ? Effect.void
-        : fault.kind === "setup"
-          ? Effect.fail(new SetupFault({ at }))
-          : fault.kind === "hold"
-            ? note({ holding: at }).pipe(Effect.andThen(Effect.never))
-            : Effect.void,
-    ),
+    Effect.tap(() => {
+      if (fault?.at !== at) {
+        return Effect.void;
+      }
+
+      return fault.kind === "setup"
+        ? Effect.fail(new SetupFault({ at }))
+        : fault.kind === "hold"
+          ? note({ holding: at }).pipe(Effect.andThen(Effect.never))
+          : Effect.void;
+    }),
   );
 
 // The counter's own package provides React and React DOM for its window; the tab links the same copies.

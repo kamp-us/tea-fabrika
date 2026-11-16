@@ -21,7 +21,7 @@ import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey";
 import { type ClientRow, ClientRows } from "@kampus/libfabrika/transport/ClientRows";
-import { Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect";
+import { Effect, Exit, Layer, Match, Option, Schema, Scope, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "../src/build.ts";
 import { localInstance } from "../src/local-instance.ts";
@@ -211,15 +211,13 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
         const reach = s.tiles[0]?.reach;
         const tag: string = reach?._tag ?? "missing";
         const reason = Reflect.get(Object(Reflect.get(Object(reach), "reason")), "_tag");
-        return s.link._tag !== "online"
-          ? "Connecting"
-          : tag === "ended"
-            ? `Ended (${String(reason)})`
-            : tag === "open"
-              ? "Online"
-              : tag === "missing"
-                ? "Missing"
-                : "Opening";
+        const words = Match.value(tag).pipe(
+          Match.when("ended", () => `Ended (${String(reason)})`),
+          Match.when("open", () => "Online"),
+          Match.when("missing", () => "Missing"),
+          Match.orElse(() => "Opening"),
+        );
+        return s.link._tag !== "online" ? "Connecting" : words;
       }),
       body: Effect.succeed(null),
       tab: until(

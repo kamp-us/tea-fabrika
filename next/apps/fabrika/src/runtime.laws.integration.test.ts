@@ -19,7 +19,7 @@ import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Tracer } from "effect";
+import { Cause, Deferred, Effect, Exit, Layer, Match, Option, Schedule, Schema, Scope, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -668,14 +668,13 @@ describe("P12 Project authority", () => {
     law(`the Project releases its write permit before notifying ${operation}`, async ({ write, letter }, open) => {
       const w = await open(),
         pid = w.p.boot.process;
-      const stream =
-        operation === "own"
-          ? "events"
-          : operation === "inbox"
-            ? "counter:1/inbox"
-            : operation === "start"
-              ? "processes/approvals:1"
-              : "processes/counter:1";
+      const stream = Match.value(operation).pipe(
+        Match.when("own", () => "events"),
+        Match.when("inbox", () => "counter:1/inbox"),
+        Match.when("start", () => "processes/approvals:1"),
+        Match.when("exit", () => "processes/counter:1"),
+        Match.exhaustive,
+      );
       const after = (await w.run(w.p.read(stream, 0, "audit"))).at(-1)?.rev ?? 0;
       await w.run(w.p.wait(stream, after, "gateway-test"));
       let reentered = false;
@@ -958,14 +957,13 @@ describe("P12 Connection recording", () => {
       try {
         const gateway = await runtime.runPromise(ConnectionService),
           before = w.recorded.length;
-        const action: Effect.Effect<unknown, unknown> =
-          operation === "ring"
-            ? gateway.ring("events", rev)
-            : operation === "probe"
-              ? gateway.probe("session-test")
-              : operation === "close"
-                ? gateway.close(socket)
-                : gateway.notify(letter, { method: "view.patch", params: {} });
+        const action: Effect.Effect<unknown, unknown> = Match.value(operation).pipe(
+          Match.when("ring", () => gateway.ring("events", rev)),
+          Match.when("probe", () => gateway.probe("session-test")),
+          Match.when("close", () => gateway.close(socket)),
+          Match.when("notify", () => gateway.notify(letter, { method: "view.patch", params: {} })),
+          Match.exhaustive,
+        );
         await runtime.runPromise(Effect.exit(action));
         const rows = w.recorded.slice(before);
         expect(rows.some((row) => row.name === `connection.${operation}`)).toBe(true);

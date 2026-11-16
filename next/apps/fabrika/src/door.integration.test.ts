@@ -49,7 +49,7 @@ import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
+import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Match, Option, Result, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -888,14 +888,12 @@ describe("T843 sender budget, next/", () => {
             ];
             const move: string = moves[pick % moves.length]!;
             const method = move === "read" ? "ledger.read" : move === "unknown" ? "missing.method" : "process.send";
-            const params =
-              move === "read"
-                ? { stream: "empty", after: 0 }
-                : move === "reserved"
-                  ? { ...request("same-letter"), by: "claimed-key" }
-                  : move === "bad"
-                    ? { m: false }
-                    : request("same-letter");
+            const params = Match.value(move).pipe(
+              Match.when("read", () => ({ stream: "empty", after: 0 })),
+              Match.when("reserved", () => ({ ...request("same-letter"), by: "claimed-key" })),
+              Match.when("bad", () => ({ m: false })),
+              Match.orElse(() => request("same-letter")),
+            );
             const before = w.usedInputs.length;
             const sent = w.deliveries.length;
             const answer = yield* d.route(client, method, params);
@@ -909,13 +907,12 @@ describe("T843 sender budget, next/", () => {
               expect(w.deliveries).toHaveLength(sent);
             } else {
               expect(answer).toMatchObject(
-                move === "reserved"
-                  ? { _tag: "refused", reason: "reserved" }
-                  : move === "bad"
-                    ? { _tag: "refused", reason: "bad_input" }
-                    : move === "unknown"
-                      ? { _tag: "refused", reason: "unknown_method" }
-                      : { _tag: "ok" },
+                Match.value(move).pipe(
+                  Match.when("reserved", () => ({ _tag: "refused", reason: "reserved" })),
+                  Match.when("bad", () => ({ _tag: "refused", reason: "bad_input" })),
+                  Match.when("unknown", () => ({ _tag: "refused", reason: "unknown_method" })),
+                  Match.orElse(() => ({ _tag: "ok" })),
+                ),
               );
               passed++;
               delivered ||= move === "send";
@@ -4091,13 +4088,12 @@ describe("P10 passkey roots and recovery", () => {
               : {
                   passkey: {
                     ...p.add.adds.passkey!,
-                    ...(missing === "verification"
-                      ? { proof: noUv.armored }
-                      : missing === "backup state"
-                        ? { bs: false }
-                        : missing === "origin"
-                          ? { origin: "https://other.test" }
-                          : { be: false }),
+                    ...Match.value(missing).pipe(
+                      Match.when("verification", () => ({ proof: noUv.armored })),
+                      Match.when("backup state", () => ({ bs: false })),
+                      Match.when("origin", () => ({ origin: "https://other.test" })),
+                      Match.orElse(() => ({ be: false })),
+                    ),
                   },
                 };
           const text = addText({

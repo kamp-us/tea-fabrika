@@ -4,7 +4,7 @@
 import { expect, it } from "@effect/vitest";
 import { ProgramDown, stepper, type Incoming, type ProgramRunner, type Refusal } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
-import { Arbitrary, Cause, Effect, Exit, Result, Schema } from "effect";
+import { Arbitrary, Cause, Effect, Exit, Match, Result, Schema } from "effect";
 import {
   Body,
   build,
@@ -102,17 +102,12 @@ type BadMsgCase = typeof BadMsgCases extends Arbitrary.Arbitrary<infer C> ? C : 
 
 // A value of the wrong type for the field, whatever Wrong drew.
 const wrongFor = (field: BadMsgCase["field"], wrong: BadMsgCase["wrong"]) =>
-  field === "body"
-    ? typeof wrong === "string"
-      ? wrong.length
-      : wrong
-    : field === "base"
-      ? typeof wrong === "number"
-        ? String(wrong)
-        : wrong
-      : typeof wrong === "boolean"
-        ? Number(wrong)
-        : wrong;
+  Match.value(field).pipe(
+    Match.when("body", () => (typeof wrong === "string" ? wrong.length : wrong)),
+    Match.when("base", () => (typeof wrong === "number" ? String(wrong) : wrong)),
+    Match.when("work", () => (typeof wrong === "boolean" ? Number(wrong) : wrong)),
+    Match.exhaustive,
+  );
 
 const badInput = (c: BadMsgCase, kind: Bad): unknown => {
   // work is true, so a bad input that got through would also run a Cmd.

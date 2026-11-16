@@ -13,7 +13,7 @@ import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
+import { Arbitrary, Effect, FileSystem, Match, Path, Schema } from "effect";
 import { type Hit, machinePaths, Place } from "./port-home.test-support.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -65,14 +65,16 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
   const planted =
     plant === null ? null : { root: roots[plant.kind], full: [roots[plant.kind], ...plant.tail].join("/") };
   // The plant as it lands in a text or a cell, in its generated form.
+  const url = plant?.form === "url" && planted !== null ? (yield* path.toFileUrl(planted.full)).href : "";
   const text =
     plant === null || planted === null
       ? ""
-      : plant.form === "plain"
-        ? planted.full
-        : plant.form === "json"
-          ? JSON.stringify(planted.full).slice(1, -1)
-          : (yield* path.toFileUrl(planted.full)).href;
+      : Match.value(plant.form).pipe(
+          Match.when("plain", () => planted.full),
+          Match.when("json", () => JSON.stringify(planted.full).slice(1, -1)),
+          Match.when("url", () => url),
+          Match.exhaustive,
+        );
   let expected: typeof Hit.Type | null = null;
 
   for (const [n, file] of input.texts.entries()) {

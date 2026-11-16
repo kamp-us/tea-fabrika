@@ -113,15 +113,17 @@ const owned = <A, E, R>(
     release(a).pipe(Effect.timeout("10 seconds"), Effect.ignore, Effect.andThen(note({ released: at }))),
   ).pipe(
     Effect.tap((a) => note({ acquired: at, ...facts(a) })),
-    Effect.tap(() =>
-      fault?.at !== at
-        ? Effect.void
-        : fault.kind === "setup"
-          ? Effect.fail(new SetupFault({ at }))
-          : fault.kind === "hold" || fault.kind === "timeout"
-            ? note({ holding: at }).pipe(Effect.andThen(Effect.never))
-            : Effect.void,
-    ),
+    Effect.tap(() => {
+      if (fault?.at !== at) {
+        return Effect.void;
+      }
+
+      return fault.kind === "setup"
+        ? Effect.fail(new SetupFault({ at }))
+        : fault.kind === "hold" || fault.kind === "timeout"
+          ? note({ holding: at }).pipe(Effect.andThen(Effect.never))
+          : Effect.void;
+    }),
   );
 
 /** The env a child of the suite gets: the person's own, minus anything that could spend or deploy. */
