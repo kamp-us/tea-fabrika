@@ -281,7 +281,11 @@ export const lintScheduled = (text: string, check: string): string[] => {
       ), `SC11: every step that runs ${command.split(" --shard")[0]} sets FABRIKA_TEST_DEPTH: ${DEPTH}`);
   }
 
-  // SC12. The time limit sits on each test step, and the job's own is a backstop BACKSTOP minutes
+  // SC12. SC2's one group holds main's schedule and every hand-started run, so a waiting run is
+  // never replaced: GitHub's default queue keeps one waiting and cancels it when a newer run queues.
+  require(map(workflow["concurrency"])["queue"] === "max", "SC12: a newer run never cancels a waiting one: queue: max");
+
+  // SC13. The time limit sits on each test step, and the job's own is a backstop BACKSTOP minutes
   // past it. A step that runs into its limit ends `failure`, and so does the run; a job that runs
   // into its own ends `cancelled`, and so does the run, even when the report fails after it (probe
   // runs 43778586135 and 43778355238 on a throwaway copy of this workflow).
@@ -292,7 +296,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
       limit > 0 &&
       map(jobs[name])["timeout-minutes"] ===
         limit +
-          BACKSTOP, `SC12: ${name}'s test steps share one timeout-minutes, and the job's own is ${BACKSTOP} minutes more`);
+          BACKSTOP, `SC13: ${name}'s test steps share one timeout-minutes, and the job's own is ${BACKSTOP} minutes more`);
   }
 
   return errors;

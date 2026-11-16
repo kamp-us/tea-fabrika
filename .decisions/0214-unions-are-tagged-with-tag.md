@@ -32,7 +32,7 @@ says the same.
 
 - A union member is a `Schema.TaggedStruct`, wrapped in `Schema.Opaque` where it has helpers
   ([0213](0213-data-is-a-schema-opaque.md)).
-- tea's Msgs and Cmds keep `type`. Third-party shapes keep their own key. Since [0569](0569-tea-msgs-are-keyed-on-tag.md), a tea Msg is keyed on `_tag`; Cmds still keep `type`.
+- tea's Msgs and Cmds keep `type`. Third-party shapes keep their own key. Since [0569](0569-tea-msgs-are-keyed-on-tag.md), a tea Msg, Cmd and Sub and the state table are keyed on `_tag`.
 - In `next/`, `kind` on ledger entries is `_tag` too (ticket 32). Today's code keeps `kind` until
   that code goes.
 

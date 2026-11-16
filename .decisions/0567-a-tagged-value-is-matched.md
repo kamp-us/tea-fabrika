@@ -136,6 +136,8 @@ lint rules hold it, and that the form is the same inside a tea machine's `update
    narrowed to some of its cases: `Match.valueTags(value, {...})`. For a tea Msg, which is keyed
    by `type`: `Match.discriminators("type")({...})`, closed with `Match.exhaustive` or
    `Match.orElse`.
+   Since [0569](0569-tea-msgs-are-keyed-on-tag.md), a tea Msg is keyed on `_tag` once its patch
+   lands, and then point 1 reads it; this line holds only until then.
 3. **Each inner answer is matched by its own union,** inside the case that holds it, such as
    `CodeHost.Updated.match(m.value, {...})` inside the `updating` state's case.
 4. **Never `Predicate.isTagged` on a value whose type is known.** It is for `unknown`. The first
