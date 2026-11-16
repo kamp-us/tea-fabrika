@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e43-tests5",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:05:49-08:00",
+  "ended": "2026-11-16T01:14:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Fifth tests round for judgment slice E43 of the Effect-check sweep (missingPipeableSignature), under the owner ruling that every remaining hit gets Function.dual. Build4 (8d6fa45) left ledger/LedgerSql.ts:26 layer and ledger/LedgerRemote.ts:26 layer, because the type law in next/packages/libfabrika/src/ledger/Ledger.types.test.ts lines 21 to 24 read them through expectTypeOf(...).parameters and .returns, which read every overload, so a dual's piped form broke it. The four checks now read the direct (data-first) form only, as expectTypeOf<Parameters<typeof X.layer>>() and expectTypeOf<ReturnType<typeof X.layer>>(): TypeScript's Parameters and ReturnType read a function's last overload, which a dual written piped first and direct last makes the direct one; for today's single-signature functions they read the same signature as before. The asserted types are unchanged: [Sql, { readonly reader: string }] to Layer<Ledger, never, Doorbell>, and [LedgerCalls, { readonly reader: string }] to Layer<Ledger>. pnpm format then made the LedgerSql import type-only, since the file now uses it only in types. No other law reads those two functions' types: rg for expectTypeOf, typeof, Parameters or ReturnType of LedgerSql or LedgerRemote finds only this file; every other use calls layer(x, { reader }) with both arguments, which a dual keeps.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Proof, product files saved to the scratchpad and restored by copy before commit (git status showed only the test file): with both layers wrapped in Function.dual(2, ...) with written overloads, piped first and direct last, tsc --noEmit -p next/packages/libfabrika passes with the new law, and with the old law put back it fails at Ledger.types.test.ts lines 21 to 24 with TS2344 (Actual: never and Actual: function). Ledger.types.test.ts ran green at 8d6fa45 plus this change on Node 26.13.0 (1 test). pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144, 18 parts passed), the list ratchet against 797c3c8 (exit 0) and one pnpm typecheck pass. No lock line, no tsconfig change, no disable or @effect-diagnostics comment, no ledger entry. Left for the build: the two product hits themselves, LedgerSql.ts:26 and LedgerRemote.ts:26, which can now take Function.dual with data-first callers unchanged.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/ledger/Ledger.types.test.ts: property: the remote sibling layer serves the Ledger contract for any reader, and the class has no static layer (checkTypes, each layer's direct form)",
+      "plant": "LedgerSql.layer and LedgerRemote.layer wrapped in Function.dual(2) with the piped overload first and the direct one last, the new law in place",
+      "result": "green"
+    },
+    {
+      "law": "next/packages/libfabrika/src/ledger/Ledger.types.test.ts: property: the remote sibling layer serves the Ledger contract for any reader, and the class has no static layer (checkTypes, each layer's direct form)",
+      "plant": "the same duals with the old expectTypeOf(...).parameters and .returns lines put back",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/ledger/Ledger.types.test.ts: property: the remote sibling layer serves the Ledger contract for any reader, and the class has no static layer (checkTypes, each layer's direct form)",
+      "plant": "in the duals, LedgerSql's direct form returns Layer<Ledger> without Doorbell, and LedgerRemote's direct form drops its caller argument",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
