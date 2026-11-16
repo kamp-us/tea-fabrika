@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-as-no-unknown-parameters-1-review2",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-16T00:41:40-08:00",
+  "ended": "2026-11-16T00:52:18-08:00",
+  "parent": "2026-11-16-as-no-unknown-parameters-1-build3",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of anti-slop judgment slice AS-no-unknown-parameters-1, in next/, at bb53bfe07 after the merge of origin/main with pull request 1366 (2d438dccd), tests round 3 (8ba6ddba6) and build round 3 (58d11a375): merge-ready, no new finding row. The merge commit changes the same files against main b510ed2e8 as the branch changed against its old base, so it brought in only main. Every line of round 3 was read: the 14 exam fixes take ProcessStore's own service and storage types, State['upgrades'], StandardSchemaV1's validate, the platform's generic put<T>, Schema.Json for a letter body, and cause for a thrown value; the 21 product fixes type Runner.ts's Cmd helpers as Schema.Json (every caller passes Dispatched.cmd, Runner.ts:192) with a real isJsonObject guard in place of two casts, checkpoint's turn as Turn or null (every caller at Runner.ts:1397 to 2862 passes one of those), RecoveryStore's row readers as SqlValue or undefined, ProcessStore's storage.put as Activity (its one call, ProcessStore.ts:288), and cause for the values failed and reserveFault take, which are thrown values and a cause chain. Review1's finding on ErrorCause.test.ts:282 is fixed. Review1's finding on supervisor.laws.test.ts:64 is withdrawn: canon is also syncTest's equals, which next/packages/libfabrika/src/Testing.ts:12 types (a: unknown, b: unknown) and Testing.ts:57 calls on Cmd lists, so canon cannot take Model without changing Testing.ts, outside the slice's folders. The left hits the coordinator named are honestly left: Runner.ts:484 msg is implemented at :2521 by decodeDelivery first, cloudflare/runtime.ts:2451 forwards to it, and runtime.ts:2021 and 2022 are implemented at :1860 and :1861 by install (:1700) and failed (:1559), which decode with Install and the code.failed fields first, so all are 0563's first kind; Patch.ts:28, 41 and 93 compare views that Runner.ts:410 Live.view holds as unknown, and :122 apply decodes first. Counts hold: the rule, forced to error in a scratch config, meets 204 hits at this head, 43 exam and 161 product, as the build3 row says.",
+  "plants": [
+    {
+      "law": "anti-slop/no-unknown-parameters on the build's Runner.ts Cmd helper fix",
+      "plant": "scratch copy of runtime/Runner.ts with withoutInput taking cmd: unknown again: the rule reports Runner.ts:322:28",
+      "result": "red"
+    },
+    {
+      "law": "anti-slop/no-unknown-parameters on the build's RecoveryStore.ts row reader fix",
+      "plant": "scratch copy of runtime/RecoveryStore.ts with textIn taking value: unknown again: the rule reports RecoveryStore.ts:101:24",
+      "result": "red"
+    },
+    {
+      "law": "the rule's cause exemption is by name, so the QuotaRunner rename is what clears the hit",
+      "plant": "scratch copy of runtime/QuotaRunner.ts with reserveFault's parameter named error again: the rule reports QuotaRunner.ts:32:37",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "note": "Read-only apart from this row. Ran at bb53bfe07, one file at a time: cloudflare/ObjectService.test.ts (3), cloudflare/alarm.laws.test.ts (2), runtime/ErrorCause.test.ts (11), node/ErrorCause.test.ts (29), node/QuotaRunner.test.ts (7), runtime/ProcessStore.integration.test.ts (7), runtime/RunnerSupervision.integration.test.ts (60), runtime/RecoveryStore.integration.test.ts (8), runtime/Runner.integration.test.ts (117) and runtime/internal/supervisor.laws.test.ts (9), all passed; the integration files ran in the box under PR 1508's guard, none refused. One whole pnpm typecheck passed. loosening.sh over 2d438dccd..HEAD: 7 unrecognized-change hits, each a parameter annotation, an import or the moved doc line; over the whole range from main, the same one removed-expect hit at runtime/Program.test.ts:876 as review1, a reformat; no law is loosened. No oxlint-disable or @effect-diagnostics line is added anywhere in the range, and .oxlintrc.json, vendor and tsconfig.base.json are unchanged. git merge-tree with origin/main 5c94f12f4: no conflict.",
+  "step": "review"
+}
