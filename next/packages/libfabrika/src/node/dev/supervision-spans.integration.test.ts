@@ -2,7 +2,7 @@
 // Only this file owns content deletion and trace attribution; other laws inspect lifecycle events.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Option, Schema, Stream } from "effect";
+import { Effect, Layer, Option, Schema, Stream, Match } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -214,22 +214,16 @@ const failure = fc
   .map(([kind, id]) => {
     const message = `private-message-${id}`;
     class ProgramError extends Error {}
-    const value =
-      kind === "TypeError"
-        ? new TypeError(message)
-        : kind === "RangeError"
-          ? new RangeError(message)
-          : kind === "SyntaxError"
-            ? new SyntaxError(message)
-            : kind === "custom"
-              ? new ProgramError(message)
-              : kind === "eval"
-                ? evaluated(new Error(message), id)
-                : kind === "Error"
-                  ? new Error(message)
-                  : kind === "object"
-                    ? { message }
-                    : message;
+    const value = Match.value(kind).pipe(
+      Match.when("TypeError", () => new TypeError(message)),
+      Match.when("RangeError", () => new RangeError(message)),
+      Match.when("SyntaxError", () => new SyntaxError(message)),
+      Match.when("custom", () => new ProgramError(message)),
+      Match.when("eval", () => evaluated(new Error(message), id)),
+      Match.when("Error", () => new Error(message)),
+      Match.when("object", () => ({ message })),
+      Match.orElse(() => message),
+    );
     return { value, message, private: [message, ...(value instanceof Error ? [value.stack!] : [])] };
   });
 

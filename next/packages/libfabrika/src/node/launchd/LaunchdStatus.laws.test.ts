@@ -1,6 +1,6 @@
 // L3, next/. launchctl print is deliberately decoded narrowly; unknown text never means absent.
 import { expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Redacted, Schema } from "effect";
+import { Cause, Effect, Exit, Redacted, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import * as Status from "./LaunchdStatus.ts";
 
@@ -190,20 +190,19 @@ it("L3 missing, duplicate, nested, ambiguous and wrong-target fields fail Unsupp
       }),
       ({ mutation, word }) => {
         const text = print(word, 81);
-        const broken =
-          mutation === "missing-program"
-            ? text.replace(/\tprogram = .*\n/, "")
-            : mutation === "duplicate-program"
-              ? text.replace("\ttype =", `\tprogram = /test/${word}/Electron\n\ttype =`)
-              : mutation === "nested-program"
-                ? text.replace(/\tprogram = .*\n/, `\tunrelated = {\n\t\tprogram = /test/${word}/Electron\n\t}\n`)
-                : mutation === "argument"
-                  ? text.replace(`/test/${word}/brain.mjs`, 'unbalanced "argument')
-                  : mutation === "target"
-                    ? text.replace(target, "gui/502/foreign")
-                    : mutation === "duplicate-pid"
-                      ? text.replace("\tpid = 81", "\tpid = 82\n\tpid = 81")
-                      : text.slice(0, -3);
+        const broken = Match.value(mutation).pipe(
+          Match.when("missing-program", () => text.replace(/\tprogram = .*\n/, "")),
+          Match.when("duplicate-program", () =>
+            text.replace("\ttype =", `\tprogram = /test/${word}/Electron\n\ttype =`),
+          ),
+          Match.when("nested-program", () =>
+            text.replace(/\tprogram = .*\n/, `\tunrelated = {\n\t\tprogram = /test/${word}/Electron\n\t}\n`),
+          ),
+          Match.when("argument", () => text.replace(`/test/${word}/brain.mjs`, 'unbalanced "argument')),
+          Match.when("target", () => text.replace(target, "gui/502/foreign")),
+          Match.when("duplicate-pid", () => text.replace("\tpid = 81", "\tpid = 82\n\tpid = 81")),
+          Match.orElse(() => text.slice(0, -3)),
+        );
         const exit = Effect.runSync(decode(0, broken).pipe(Effect.exit));
         expect(error(exit)).toMatchObject({
           _tag: "BrainControlError",

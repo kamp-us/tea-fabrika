@@ -20,7 +20,7 @@
 // Plants, each run once and undone (recorded in the tests step's field row): K1, make a new key when
 // the file does not decode. K2, compute the fingerprint over the key line instead of the raw bytes.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Layer, Option, Path } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Path, Match } from "effect";
 import * as fc from "fast-check";
 import { property } from "../../Testing.test-support.ts";
 import { ClientKey, ClientKeyError, type Identity } from "../../transport/ClientKey.ts";
@@ -78,7 +78,11 @@ const openStep = (rejected: "none" | "stored" | "other"): Step => ({
     const label = `open(${rejected})`;
     return Effect.gen(function* () {
       const before = MemoryFiles.read(r.disk, FILE);
-      const fp = rejected === "stored" ? m.fingerprint : rejected === "other" ? "SHA256:not-this-key" : null;
+      const fp = Match.value(rejected).pipe(
+        Match.when("stored", () => m.fingerprint),
+        Match.when("other", () => "SHA256:not-this-key"),
+        Match.orElse(() => null),
+      );
       const exit = yield* open(r, fp);
 
       if (m.file === null) {
@@ -145,15 +149,17 @@ const damageStep = (form: "bytes" | "truncated" | "empty-object" | "other-key-ty
       }
 
       const text = new TextDecoder().decode(entry.bytes);
-      entry.bytes =
-        form === "truncated"
-          ? entry.bytes.slice(0, Math.max(0, Math.min(entry.bytes.length - 2, bytes.length)))
-          : form === "empty-object"
-            ? new TextEncoder().encode("{}")
-            : form === "other-key-type"
-              ? new TextEncoder().encode(text.replace('"OKP"', '"RSA"').replace('"Ed25519"', '"P-256"'))
-              : // Leading 0xFF: never JSON, whatever follows.
-                new Uint8Array([0xff, ...bytes]);
+      entry.bytes = Match.value(form).pipe(
+        Match.when("truncated", () =>
+          entry.bytes.slice(0, Math.max(0, Math.min(entry.bytes.length - 2, bytes.length))),
+        ),
+        Match.when("empty-object", () => new TextEncoder().encode("{}")),
+        Match.when("other-key-type", () =>
+          new TextEncoder().encode(text.replace('"OKP"', '"RSA"').replace('"Ed25519"', '"P-256"')),
+        ),
+        // Leading 0xFF: never JSON, whatever follows.
+        Match.orElse(() => new Uint8Array([0xff, ...bytes])),
+      );
       m.file.damaged = true;
       return "damage";
     }),

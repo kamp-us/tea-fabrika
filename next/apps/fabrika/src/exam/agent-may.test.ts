@@ -22,7 +22,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream } from "effect";
+import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream, Match } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 
@@ -245,7 +245,11 @@ it.effect.prop(
         expect(result).toMatchObject({ _tag: "online", identity: { as: "agent" } });
         const req = {
           ...request(c.body),
-          letter: `letter_0000000000e00800000000000${role === "person" ? 1 : role === "window" ? 2 : 3}`,
+          letter: `letter_0000000000e00800000000000${Match.value(role).pipe(
+            Match.when("person", () => 1),
+            Match.when("window", () => 2),
+            Match.orElse(() => 3),
+          )}`,
         };
         expect(yield* w.door.route(client, "process.send", req)).toMatchObject({ _tag: "ok" });
         const input = w.delivered.at(-1);

@@ -2,7 +2,7 @@
 // folder they acquire (0061). The laws watch the real handles, files and finalizer order.
 import { NodeFileSystem } from "@effect/platform-node";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, FileSystem, Schema, type Scope } from "effect";
+import { Deferred, Effect, Exit, Fiber, FileSystem, Schema, type Scope, Match } from "effect";
 import type { Sql } from "../Sql.ts";
 import type * as RecordPartTest from "../telemetry/RecordPartTest.ts";
 import * as RecordPartSupport from "./RecordPart.test-support.ts";
@@ -126,11 +126,11 @@ describe("T641 record-part stores on node:sqlite", () => {
                   store.use((sql) =>
                     body(sql).pipe(
                       Effect.andThen(
-                        move.exit === "fail"
-                          ? Effect.fail("planted failure")
-                          : move.exit === "throw"
-                            ? Effect.sync(() => expect(move.row).toBe(`${move.row}!`))
-                            : Effect.void,
+                        Match.value(move.exit).pipe(
+                          Match.when("fail", () => Effect.fail("planted failure")),
+                          Match.when("throw", () => Effect.sync(() => expect(move.row).toBe(`${move.row}!`))),
+                          Match.orElse(() => Effect.void),
+                        ),
                       ),
                     ),
                   ),

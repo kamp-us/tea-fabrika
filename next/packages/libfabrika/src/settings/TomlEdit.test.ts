@@ -1,7 +1,7 @@
 // T877, next/: L1-L8 exercise the public service. Layout hints use fast-check;
 // values come from Effect Schema. The model never reads the adapter's edit index.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Exit, Schema } from "effect";
+import { ByteSize, Effect, Exit, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
@@ -669,8 +669,12 @@ describe("T877 public TOML edits, next/", () => {
         const parent = pick(["scalar", "array", "rows", "table"], hint.pick);
         const path = parent === "table" ? [parent] : [parent, parent === "rows" ? "0" : pick(segments, hint.key)];
         // The explicit parent's own header is the location, even after a child header.
-        const line =
-          parent === "table" ? beforeTable.split(l.eol).length : parent === "rows" ? 4 : parent === "array" ? 3 : 2;
+        const line = Match.value(parent).pipe(
+          Match.when("table", () => beforeTable.split(l.eol).length),
+          Match.when("rows", () => 4),
+          Match.when("array", () => 3),
+          Match.orElse(() => 2),
+        );
         const set = yield* refusal(toml.set(text, path, 2), "Conflict", line);
         expect(set.reason).toMatchObject({ path });
         yield* refusal(toml.remove(text, path), "Conflict", line);

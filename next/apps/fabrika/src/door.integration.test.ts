@@ -49,7 +49,7 @@ import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
+import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream, Match } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -887,15 +887,17 @@ describe("T843 sender budget, next/", () => {
               ...(delivered ? ["retry"] : []),
             ];
             const move: string = moves[pick % moves.length]!;
-            const method = move === "read" ? "ledger.read" : move === "unknown" ? "missing.method" : "process.send";
-            const params =
-              move === "read"
-                ? { stream: "empty", after: 0 }
-                : move === "reserved"
-                  ? { ...request("same-letter"), by: "claimed-key" }
-                  : move === "bad"
-                    ? { m: false }
-                    : request("same-letter");
+            const method = Match.value(move).pipe(
+              Match.when("read", () => "ledger.read"),
+              Match.when("unknown", () => "missing.method"),
+              Match.orElse(() => "process.send"),
+            );
+            const params = Match.value(move).pipe(
+              Match.when("read", () => ({ stream: "empty", after: 0 })),
+              Match.when("reserved", () => ({ ...request("same-letter"), by: "claimed-key" })),
+              Match.when("bad", () => ({ m: false })),
+              Match.orElse(() => request("same-letter")),
+            );
             const before = w.usedInputs.length;
             const sent = w.deliveries.length;
             const answer = yield* d.route(client, method, params);
@@ -909,13 +911,12 @@ describe("T843 sender budget, next/", () => {
               expect(w.deliveries).toHaveLength(sent);
             } else {
               expect(answer).toMatchObject(
-                move === "reserved"
-                  ? { _tag: "refused", reason: "reserved" }
-                  : move === "bad"
-                    ? { _tag: "refused", reason: "bad_input" }
-                    : move === "unknown"
-                      ? { _tag: "refused", reason: "unknown_method" }
-                      : { _tag: "ok" },
+                Match.value(move).pipe(
+                  Match.when("reserved", () => ({ _tag: "refused", reason: "reserved" })),
+                  Match.when("bad", () => ({ _tag: "refused", reason: "bad_input" })),
+                  Match.when("unknown", () => ({ _tag: "refused", reason: "unknown_method" })),
+                  Match.orElse(() => ({ _tag: "ok" })),
+                ),
               );
               passed++;
               delivered ||= move === "send";
@@ -1381,7 +1382,11 @@ describe("T843 sender budget, next/", () => {
             expect(now._tag).toBe("online");
             const moves = now._tag === "online" && !now.busy ? ["send", "read", "stamped", "unknown"] : ["send"];
             const move = moves[choices[n % choices.length]! % moves.length]!;
-            const method = move === "read" ? "ledger.wait" : move === "unknown" ? "missing.method" : "process.send";
+            const method = Match.value(move).pipe(
+              Match.when("read", () => "ledger.wait"),
+              Match.when("unknown", () => "missing.method"),
+              Match.orElse(() => "process.send"),
+            );
             const params =
               move === "read"
                 ? { stream: markerValue, after: 0 }
@@ -2477,7 +2482,11 @@ describe("P10 door admission and waiting", () => {
                 });
                 expect(answer).toMatchObject({
                   _tag: "refused",
-                  reason: kind === "unknown" ? "not_granted" : kind === "no version" ? "no_version" : "bad_signature",
+                  reason: Match.value(kind).pipe(
+                    Match.when("unknown", () => "not_granted"),
+                    Match.when("no version", () => "no_version"),
+                    Match.orElse(() => "bad_signature"),
+                  ),
                 });
                 expect((yield* d.knock(client, { label: "Pending" }))._tag).toBe(kind === "unknown" ? "ok" : "refused");
                 expect(rawRows(w.db, "gateway/access")).toEqual([]);
@@ -3095,38 +3104,43 @@ describe("P10 signed membership changes", () => {
               ).pipe(Layer.provide(w.env));
               yield* Effect.gen(function* () {
                 const d = yield* Gateway;
-                const text =
-                  kind === "granted"
-                    ? grantText({
-                        id: "wrong-to",
-                        key: w.otherWindow.raw,
-                        for: PERSON,
-                        to: value,
-                        as: "window",
-                        saw: SAW,
-                        sentAt: SENT,
-                      })
-                    : kind === "revoked"
-                      ? revokeText({
-                          id: "wrong-to",
-                          key: w.window.raw,
-                          for: PERSON,
-                          to: value,
-                          saw: TOOK,
-                          sentAt: SENT,
-                        })
-                      : addText({
-                          id: "wrong-to",
-                          for: PERSON,
-                          to: value,
-                          adds: Adds.cases.person.make({
-                            key: w.otherRoot.line,
-                            window: w.otherWindow.raw,
-                          }),
-                          drops: [],
-                          saw: ADD_SAW,
-                          sentAt: SENT,
-                        });
+                const text = Match.value(kind).pipe(
+                  Match.when("granted", () =>
+                    grantText({
+                      id: "wrong-to",
+                      key: w.otherWindow.raw,
+                      for: PERSON,
+                      to: value,
+                      as: "window",
+                      saw: SAW,
+                      sentAt: SENT,
+                    }),
+                  ),
+                  Match.when("revoked", () =>
+                    revokeText({
+                      id: "wrong-to",
+                      key: w.window.raw,
+                      for: PERSON,
+                      to: value,
+                      saw: TOOK,
+                      sentAt: SENT,
+                    }),
+                  ),
+                  Match.orElse(() =>
+                    addText({
+                      id: "wrong-to",
+                      for: PERSON,
+                      to: value,
+                      adds: Adds.cases.person.make({
+                        key: w.otherRoot.line,
+                        window: w.otherWindow.raw,
+                      }),
+                      drops: [],
+                      saw: ADD_SAW,
+                      sentAt: SENT,
+                    }),
+                  ),
+                );
                 expect(yield* d.grant({ text, armored: yield* w.root.sign(text) })).toMatchObject({
                   _tag: "refused",
                   reason: "wrong_ledger",
@@ -4091,13 +4105,12 @@ describe("P10 passkey roots and recovery", () => {
               : {
                   passkey: {
                     ...p.add.adds.passkey!,
-                    ...(missing === "verification"
-                      ? { proof: noUv.armored }
-                      : missing === "backup state"
-                        ? { bs: false }
-                        : missing === "origin"
-                          ? { origin: "https://other.test" }
-                          : { be: false }),
+                    ...Match.value(missing).pipe(
+                      Match.when("verification", () => ({ proof: noUv.armored })),
+                      Match.when("backup state", () => ({ bs: false })),
+                      Match.when("origin", () => ({ origin: "https://other.test" })),
+                      Match.orElse(() => ({ be: false })),
+                    ),
                   },
                 };
           const text = addText({

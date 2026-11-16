@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { afterEach, describe, expect, it, vi } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Effect, Layer, Option, Schema, Match } from "effect";
 import * as ChecksTest from "../ci/ChecksTest.ts";
 import * as Merge from "./Merge.ts";
 import * as PullRequestsGh from "./PullRequestsGh.ts";
@@ -28,13 +28,12 @@ const hit = new LeakGrepRefused({ reason: "leakgrep.sh exited 1" });
 
 /** The one leak check that refuses, with the error it refuses with. */
 const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
-  leak === "clean"
-    ? {}
-    : leak === "leakChange"
-      ? { leakChange: hit }
-      : leak === "leakGrep"
-        ? { leakGrep: hit }
-        : { leakText: hit };
+  Match.value(leak).pipe(
+    Match.when("clean", () => ({})),
+    Match.when("leakChange", () => ({ leakChange: hit })),
+    Match.when("leakGrep", () => ({ leakGrep: hit })),
+    Match.orElse(() => ({ leakText: hit })),
+  );
 
 const Files = Schema.Literals(["docs", "code", "none"]);
 

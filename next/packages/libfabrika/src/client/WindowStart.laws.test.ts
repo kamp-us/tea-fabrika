@@ -24,7 +24,7 @@
 // real run under TestClock, so a Cmd that waits for an answer, or a timer that never fires, shows.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, Function, Layer, Option, Random, Schema, Scope, Tracer } from "effect";
+import { Deferred, Effect, Exit, Fiber, Function, Layer, Option, Random, Schema, Scope, Tracer, Match } from "effect";
 import * as Clock from "effect/Clock";
 import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
@@ -572,7 +572,11 @@ describe("L9: failure classes through the real runtime", () => {
           let injected = 0;
           let writes = 0;
           let failedRecord: ClientRow["record"] | undefined;
-          const op = operation === "sign" ? "key" : operation === "claim" ? "persist" : operation;
+          const op = Match.value(operation).pipe(
+            Match.when("sign", () => "key"),
+            Match.when("claim", () => "persist"),
+            Match.orElse(() => operation),
+          );
           const provided = Layer.mergeAll(
             // The first dial's constructor throws, as a browser's refuses a URL, with the platform's class.
             Layer.succeed(Socket.WebSocketConstructor, (url: string) => {

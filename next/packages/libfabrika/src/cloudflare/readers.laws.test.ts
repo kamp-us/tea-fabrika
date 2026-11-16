@@ -10,7 +10,7 @@ import {
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Cause, Effect, Exit, Option, Redacted, Schema } from "effect";
+import { Cause, Effect, Exit, Option, Redacted, Schema, Match } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
@@ -116,12 +116,11 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
               ...w.ctx,
               id: {
                 ...w.ctx.id,
-                name:
-                  path === "Process"
-                    ? JSON.stringify(["settings-law", "worker"])
-                    : path === "RecordPart"
-                      ? JSON.stringify(["settings-law", "spans/0"])
-                      : "settings-law",
+                name: Match.value(path).pipe(
+                  Match.when("Process", () => JSON.stringify(["settings-law", "worker"])),
+                  Match.when("RecordPart", () => JSON.stringify(["settings-law", "spans/0"])),
+                  Match.orElse(() => "settings-law"),
+                ),
               },
               getWebSockets: () => {
                 consumers++;

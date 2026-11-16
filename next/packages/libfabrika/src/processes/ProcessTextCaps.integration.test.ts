@@ -2,7 +2,7 @@
 // in the schema, small enough that no brain line can reach the ledger's per-line limit. The cap is
 // the lead's lean, 256 characters, counted as `string.length`, as Schema's max length counts.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Exit, Schema } from "effect";
+import { Arbitrary, Effect, Exit, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import {
   A,
@@ -451,11 +451,11 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
   ).pipe(Arbitrary.map(([unit, length]) => unit.repeat(Math.ceil(length / unit.length))));
   const unicodeRef = Arbitrary.schema(Schema.Literals([0, 1, 2])).pipe(
     Arbitrary.flatMap((kind) =>
-      kind === 0
-        ? graphemes("grapheme", 1, 40)
-        : kind === 1
-          ? graphemes("grapheme-composite", CAP - 4, CAP + 4)
-          : repeated,
+      Match.value(kind).pipe(
+        Match.when(0, () => graphemes("grapheme", 1, 40)),
+        Match.when(1, () => graphemes("grapheme-composite", CAP - 4, CAP + 4)),
+        Match.orElse(() => repeated),
+      ),
     ),
   );
   it.effect.prop(

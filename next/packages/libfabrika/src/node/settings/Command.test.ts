@@ -29,6 +29,7 @@ import {
   References,
   Sink,
   Tracer,
+  Match,
 } from "effect";
 import { Command as Cli } from "effect/cli";
 import { Digest } from "effect/crypto";
@@ -99,18 +100,20 @@ const files = (at: string, person: Person, sunk: Array<string>) =>
     FileSystem.makeNoop({
       readFileString: (path) => {
         if (path === at) {
-          return person._tag === "text"
-            ? Effect.succeed(person.text)
-            : person._tag === "unreadable"
-              ? Effect.fail(
-                  PlatformError.systemError({
-                    _tag: "PermissionDenied",
-                    module: "FileSystem",
-                    method: "readFileString",
-                    pathOrDescriptor: path,
-                  }),
-                )
-              : Effect.fail(missing("readFileString", path));
+          return Match.value(person).pipe(
+            Match.tag("text", (person) => Effect.succeed(person.text)),
+            Match.tag("unreadable", () =>
+              Effect.fail(
+                PlatformError.systemError({
+                  _tag: "PermissionDenied",
+                  module: "FileSystem",
+                  method: "readFileString",
+                  pathOrDescriptor: path,
+                }),
+              ),
+            ),
+            Match.orElse(() => Effect.fail(missing("readFileString", path))),
+          );
         }
 
         return path.endsWith(".fabrika/fabrika.toml")

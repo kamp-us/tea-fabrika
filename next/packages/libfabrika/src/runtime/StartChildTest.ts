@@ -48,6 +48,7 @@ import {
   Result,
   Schema,
   Scope,
+  Match,
 } from "effect";
 import * as fc from "fast-check";
 import { InputId, NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
@@ -956,41 +957,44 @@ const walk = (
           const name = choose(starters(), cell.pick);
           const target = fresh();
           const kind = cell.shape % 8;
-          const bad: { ask: Ask; reason: string; tag: string } =
-            kind === 0
-              ? { ask: { program: "merger", name: target, drop: ["program"] }, reason: "bad_cmd", tag: "missing" }
-              : kind === 1
-                ? { ask: { program: "merger", name: target, drop: ["name"] }, reason: "bad_cmd", tag: "missing" }
-                : kind === 2
-                  ? { ask: { program: 5, name: target }, reason: "bad_cmd", tag: "typed" }
-                  : kind === 3
-                    ? { ask: { program: "merger", name: ["x"] }, reason: "bad_cmd", tag: "typed" }
-                    : kind === 4
-                      ? {
-                          ask: { program: `nope${cell.alt % 9}`, name: target },
-                          reason: "no_program",
-                          tag: "no_program",
-                        }
-                      : kind === 5
-                        ? // The loader answers before the name is judged.
-                          { ask: { program: "nope", name: "Bad Name" }, reason: "no_program", tag: "no_program" }
-                        : kind === 6
-                          ? {
-                              ask: {
-                                program: "merger",
-                                name: choose(
-                                  ["", "processes", "Merger:1", "merger/1", "client:x", "m".repeat(257)],
-                                  cell.alt,
-                                ),
-                              },
-                              reason: "bad_name",
-                              tag: "bad_name",
-                            }
-                          : {
-                              ask: { program: "merger", name: target, inputBytes: ROW_LIMIT + 1 },
-                              reason: "bad_input",
-                              tag: "bad_input",
-                            };
+          const bad: { ask: Ask; reason: string; tag: string } = Match.value(kind).pipe(
+            Match.when(0, () => ({
+              ask: { program: "merger", name: target, drop: ["program"] },
+              reason: "bad_cmd",
+              tag: "missing",
+            })),
+            Match.when(1, () => ({
+              ask: { program: "merger", name: target, drop: ["name"] },
+              reason: "bad_cmd",
+              tag: "missing",
+            })),
+            Match.when(2, () => ({ ask: { program: 5, name: target }, reason: "bad_cmd", tag: "typed" })),
+            Match.when(3, () => ({ ask: { program: "merger", name: ["x"] }, reason: "bad_cmd", tag: "typed" })),
+            Match.when(4, () => ({
+              ask: { program: `nope${cell.alt % 9}`, name: target },
+              reason: "no_program",
+              tag: "no_program",
+            })),
+            // The loader answers before the name is judged.
+            Match.when(5, () => ({
+              ask: { program: "nope", name: "Bad Name" },
+              reason: "no_program",
+              tag: "no_program",
+            })),
+            Match.when(6, () => ({
+              ask: {
+                program: "merger",
+                name: choose(["", "processes", "Merger:1", "merger/1", "client:x", "m".repeat(257)], cell.alt),
+              },
+              reason: "bad_name",
+              tag: "bad_name",
+            })),
+            Match.orElse(() => ({
+              ask: { program: "merger", name: target, inputBytes: ROW_LIMIT + 1 },
+              reason: "bad_input",
+              tag: "bad_input",
+            })),
+          );
           const before = (yield* answers(name)).length;
           const revBefore = yield* head;
           yield* door(name, { type: "start", ask: bad.ask });
@@ -1691,7 +1695,11 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
 
       if (Exit.isFailure(outcome)) {
         for (const reason of outcome.cause.reasons) {
-          const error = reason._tag === "Fail" ? reason.error : reason._tag === "Die" ? reason.defect : undefined;
+          const error = Match.value(reason).pipe(
+            Match.tag("Fail", (reason) => reason.error),
+            Match.tag("Die", (reason) => reason.defect),
+            Match.orElse(() => undefined),
+          );
 
           if (error instanceof Error) {
             outputs.push(error.message);

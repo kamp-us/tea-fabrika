@@ -9,7 +9,7 @@ import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Program, Input, stepper } from "@kampus/libfabrika";
 import { syncTest } from "@kampus/libfabrika/testing";
-import { Result, Schema } from "effect";
+import { Result, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 
@@ -218,7 +218,11 @@ const reached = (machine: ChecklistMachine) =>
       .record({ type: fc.constantFrom("add", "rename", "remove", "check", "uncheck"), name, to: any })
       .map(({ type, name, to }): { model: Model; msg: Fresh } => ({
         model,
-        msg: type === "rename" ? { type, name, to } : type === "add" ? { type, name: to } : { type, name },
+        msg: Match.value(type).pipe(
+          Match.when("rename", (type) => ({ type, name, to })),
+          Match.when("add", (type) => ({ type, name: to })),
+          Match.orElse((type) => ({ type, name })),
+        ),
       }));
   });
 

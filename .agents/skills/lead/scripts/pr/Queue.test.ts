@@ -3,7 +3,7 @@
 // a job moved here: the state gate, the one pinned squash, and the ticket close of 0015 (T410).
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
-import { Effect, Fiber, Layer, Option, Schema } from "effect";
+import { Effect, Fiber, Layer, Option, Schema, Match } from "effect";
 import { TestClock } from "effect/testing";
 import { ChecksError, type Job } from "../ci/Checks.ts";
 import * as ChecksTest from "../ci/ChecksTest.ts";
@@ -30,13 +30,12 @@ const refused = new LeakGrepRefused({ reason: "private_word" });
 
 /** The one leak check that refuses, with the error it refuses with. */
 const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
-  leak === "clean"
-    ? {}
-    : leak === "leakChange"
-      ? { leakChange: refused }
-      : leak === "leakGrep"
-        ? { leakGrep: refused }
-        : { leakText: refused };
+  Match.value(leak).pipe(
+    Match.when("clean", () => ({})),
+    Match.when("leakChange", () => ({ leakChange: refused })),
+    Match.when("leakGrep", () => ({ leakGrep: refused })),
+    Match.orElse(() => ({ leakText: refused })),
+  );
 
 const job = (stands: typeof Required.Type): Option.Option<Job> =>
   stands === "none"
@@ -379,7 +378,11 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
         expect(done._tag).toBe("merged");
         expect(m.sweeps.kicks).toBe(1);
         expect(closes(m).map((p) => p._tag)).toEqual(
-          failing === "open" ? [] : failing === "comment" ? ["comment"] : ["comment", "close"],
+          Match.value(failing).pipe(
+            Match.when("open", () => []),
+            Match.when("comment", () => ["comment"]),
+            Match.orElse(() => ["comment", "close"]),
+          ),
         );
         expect(done.lines.slice(1)).toEqual(
           {

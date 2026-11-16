@@ -4,7 +4,7 @@
 // last start's file), `:99` (an event to add that does not decode). An `id_reused` refusal has no
 // cause. `dev.ts`'s sites run inside `startDev`, against the local runtime's socket: a container's job.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, FileSystem, Layer, Match, Path, Schema } from "effect";
 import * as fc from "fast-check";
 import { brainOutbox } from "./local-dev.ts";
 
@@ -55,11 +55,11 @@ const brokenPending = (read: Read, failure: unknown, bad: string) =>
 const run = (call: Call) =>
   Effect.gen(function* () {
     const outbox = yield* brainOutbox(HOME);
-    return call === "pending"
-      ? yield* outbox.pending
-      : call === "last"
-        ? yield* outbox.last
-        : yield* outbox.add(started("e-1"));
+    return yield* Match.value(call).pipe(
+      Match.when("pending", () => outbox.pending),
+      Match.when("last", () => outbox.last),
+      Match.orElse(() => outbox.add(started("e-1"))),
+    );
   });
 
 describe("T695, the brain's outbox keeps what the disk did", () => {

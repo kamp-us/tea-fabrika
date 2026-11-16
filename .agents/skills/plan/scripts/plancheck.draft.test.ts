@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Match } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { estimateIn } from "../../lead/scripts/chain.ts";
@@ -141,12 +142,11 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
         ),
         fc.constantFrom("prose", "list", "code"),
         (path, place) => {
-          const mention =
-            place === "code"
-              ? `\n\`\`\`text\n${path}\n\`\`\``
-              : place === "list"
-                ? `\n- \`${path}\``
-                : `\nChange \`${path}\` here.`;
+          const mention = Match.value(place).pipe(
+            Match.when("code", () => `\n\`\`\`text\n${path}\n\`\`\``),
+            Match.when("list", () => `\n- \`${path}\``),
+            Match.orElse(() => `\nChange \`${path}\` here.`),
+          );
           const body = complete(mention);
           const bad = modeCheck(`\nPlancheck-Version: 3\n${body}`, "--draft");
           expect(bad.code, bad.text).toBe(1);

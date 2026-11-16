@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous S
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Context, Effect, FileSystem, Layer, Path, Schema, Stream, Tracer } from "effect";
+import { Arbitrary, Context, Effect, FileSystem, Layer, Path, Schema, Stream, Tracer, Match } from "effect";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -272,7 +272,11 @@ NemesisTest.suite({
     } else {
       sql.exec(
         "UPDATE entries SET pos=? WHERE stream=? AND id=?",
-        kind === "zero" ? 0 : kind === "negative" ? -1 : 1.5,
+        Match.value(kind).pipe(
+          Match.when("zero", () => 0),
+          Match.when("negative", () => -1),
+          Match.orElse(() => 1.5),
+        ),
         inbox("checklist:1"),
         key,
       );

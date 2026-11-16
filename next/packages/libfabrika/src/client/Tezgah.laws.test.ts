@@ -15,7 +15,7 @@
 import { applyCell } from "@demlik/tea";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Arbitrary, Result, Schema } from "effect";
+import { Arbitrary, Result, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
 import type { Binding } from "../runtime/Program.ts";
@@ -157,16 +157,18 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
       for (const { kind, skew, to } of walk) {
         const target = wires[to % wires.length];
         const rev = m.rev;
-        const msg =
-          kind === "whole"
-            ? { type: "server", rev: rev + skew, view: target }
-            : kind === "next"
-              ? { type: "patch", base: rev, rev: rev + 1, patch: diff(shown, target) }
-              : kind === "gap_base"
-                ? { type: "patch", base: rev - skew, rev: rev + 1, patch: diff(shown, target) }
-                : kind === "gap_rev"
-                  ? { type: "patch", base: rev, rev: rev + 1 + skew, patch: diff(shown, target) }
-                  : { type: "patch", base: rev - skew - 1, rev: rev - skew + 1, patch: diff(shown, target) };
+        const msg = Match.value(kind).pipe(
+          Match.when("whole", () => ({ type: "server", rev: rev + skew, view: target })),
+          Match.when("next", () => ({ type: "patch", base: rev, rev: rev + 1, patch: diff(shown, target) })),
+          Match.when("gap_base", () => ({ type: "patch", base: rev - skew, rev: rev + 1, patch: diff(shown, target) })),
+          Match.when("gap_rev", () => ({ type: "patch", base: rev, rev: rev + 1 + skew, patch: diff(shown, target) })),
+          Match.orElse(() => ({
+            type: "patch",
+            base: rev - skew - 1,
+            rev: rev - skew + 1,
+            patch: diff(shown, target),
+          })),
+        );
         const [next, cmds] = both(m, msg);
         const asks = cmds.filter((c) => c.type === "ask").length;
 
@@ -423,14 +425,12 @@ const target = (s: WindowModel, to: (typeof FOCUS_KEYS)[number]["to"]): string |
 
   const tiles = Layout.order(space.layout);
   const i = tiles.indexOf(space.focus);
-  const found =
-    to === "next"
-      ? tiles[(i + 1) % tiles.length]
-      : to === "previous"
-        ? tiles[(i - 1 + tiles.length) % tiles.length]
-        : to === "last"
-          ? space.recent[1]
-          : (Layout.neighbor(space.layout, space.focus, to) ?? undefined);
+  const found = Match.value(to).pipe(
+    Match.when("next", () => tiles[(i + 1) % tiles.length]),
+    Match.when("previous", () => tiles[(i - 1 + tiles.length) % tiles.length]),
+    Match.when("last", () => space.recent[1]),
+    Match.orElse((side) => Layout.neighbor(space.layout, space.focus, side) ?? undefined),
+  );
   return found === undefined || found === space.focus ? null : found;
 };
 

@@ -6,7 +6,7 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Change, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { Saved } from "@kampus/libfabrika/runtime/State";
-import { Arbitrary, ConfigProvider, Effect, Schema } from "effect";
+import { Arbitrary, ConfigProvider, Effect, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import * as ChangeKind from "./Change.ts";
 import * as Mail from "./Mail.ts";
@@ -296,13 +296,12 @@ const guided = (p: Program, w: World) => {
 const service = (cmd: Command) => cmd.type !== "send" && cmd.type !== "exit";
 
 const stateCmd = (model: Model) =>
-  model._tag === "reading"
-    ? "change"
-    : model._tag === "updating"
-      ? "update"
-      : model._tag === "checking"
-        ? "checks"
-        : "merge";
+  Match.value(model).pipe(
+    Match.tag("reading", () => "change"),
+    Match.tag("updating", () => "update"),
+    Match.tag("checking", () => "checks"),
+    Match.orElse(() => "merge"),
+  );
 
 // Each invariant reads a complete tea fold. A cut-off job is checked for its prefix, never for a
 // reply it has not sent yet.
@@ -326,7 +325,11 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
     if (law === "L9") {
       const own = Mail.Abandon.make({ type: "abandon", ref: prev._tag === "idle" ? w.ref : prev.job.ref });
       expect(p.refuse(prev, own)?.reason ?? null).toBe(
-        prev._tag === "idle" ? "idle" : prev._tag === "merging" ? "merging" : null,
+        Match.value(prev).pipe(
+          Match.tag("idle", () => "idle"),
+          Match.tag("merging", () => "merging"),
+          Match.orElse(() => null),
+        ),
       );
     }
 
@@ -693,20 +696,19 @@ describe("the merger, next/", () => {
                   }
 
                   const msg = moves[cell.move % moves.length]!();
-                  const refused =
-                    msg.type === "land"
-                      ? prev._tag !== "idle"
-                        ? "busy"
-                        : null
-                      : msg.type === "abandon"
-                        ? prev._tag === "idle"
-                          ? "idle"
-                          : prev._tag === "merging"
-                            ? "merging"
-                            : msg.ref !== prev.job.ref
-                              ? "other_job"
-                              : null
-                        : null;
+                  const refused = Match.value(msg).pipe(
+                    Match.discriminator("type")("land", () => (prev._tag !== "idle" ? "busy" : null)),
+                    Match.discriminator("type")("abandon", (abandon) =>
+                      prev._tag === "idle"
+                        ? "idle"
+                        : prev._tag === "merging"
+                          ? "merging"
+                          : abandon.ref !== prev.job.ref
+                            ? "other_job"
+                            : null,
+                    ),
+                    Match.orElse(() => null),
+                  );
 
                   if (msg.type === "land" || msg.type === "abandon") {
                     expect(p.refuse(prev, msg)?.reason ?? null).toBe(refused);

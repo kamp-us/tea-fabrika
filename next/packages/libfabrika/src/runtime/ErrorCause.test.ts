@@ -9,7 +9,7 @@
 // `Program.ts:379`, a ProgramDown's class, reads as it did before the cause was kept.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Result, Schema } from "effect";
+import { Effect, Result, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import { BuildError, decodeBuilt } from "./Built.ts";
 import { ProgramLoader } from "./Entry.ts";
@@ -123,12 +123,11 @@ describe("T695, a step's ProgramDown keeps what failed", () => {
       Effect.gen(function* () {
         const run = nodeExecution(program({}));
         const saved = { count: bad };
-        const work =
-          call === "init"
-            ? run.init(saved)
-            : call === "step"
-              ? run.step(saved, { type: "inc" })
-              : run.fold(saved, { type: "inc" });
+        const work = Match.value(call).pipe(
+          Match.when("init", () => run.init(saved)),
+          Match.when("step", () => run.step(saved, { type: "inc" })),
+          Match.orElse(() => run.fold(saved, { type: "inc" })),
+        );
         const error = yield* Effect.flip(work);
         expect(error).toBeInstanceOf(ProgramDown);
         expect(error.reason).toBe("saved_state");

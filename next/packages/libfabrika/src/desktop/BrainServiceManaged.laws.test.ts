@@ -1,6 +1,6 @@
 // P19 next/. L1/L2/L4/L5 drive the real service through held native replies and TestClock.
 import { expect, it } from "@effect/vitest";
-import { Cause, Context, Effect, Exit, Fiber, Formatter, Layer, Logger, Schema, Tracer } from "effect";
+import { Cause, Context, Effect, Exit, Fiber, Formatter, Layer, Logger, Schema, Tracer, Match } from "effect";
 import { TestClock } from "effect/testing";
 import * as Outside from "./BrainControl.test-support.ts";
 import { BrainService } from "./BrainService.ts";
@@ -76,15 +76,14 @@ it.effect.prop(
   [schedule],
   ([v]) =>
     Effect.gen(function* () {
-      const job =
-        v.initial === "absent"
-          ? Outside.absent
-          : v.initial === "foreign"
-            ? {
-                ...Outside.foreign,
-                args: v.sameArity ? Outside.spec.args.map((arg) => `${arg}.foreign`) : Outside.foreign.args,
-              }
-            : Outside.loaded(Outside.spec, v.initial === "starting" ? null : 81);
+      const job = Match.value(v.initial).pipe(
+        Match.when("absent", () => Outside.absent),
+        Match.when("foreign", () => ({
+          ...Outside.foreign,
+          args: v.sameArity ? Outside.spec.args.map((arg) => `${arg}.foreign`) : Outside.foreign.args,
+        })),
+        Match.orElse(() => Outside.loaded(Outside.spec, v.initial === "starting" ? null : 81)),
+      );
       const outside = yield* Outside.make({
         job,
         file: v.initial === "absent" ? "absent" : "matching",

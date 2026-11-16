@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
 import { nameOf } from "@kampus/pipeline/stages/outcome";
-import { Effect, Exit, Schema, Stream } from "effect";
+import { Effect, Exit, Schema, Stream, Match } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type Answer, answerFor, NO_SPENT, sendsFrom } from "./agents.ts";
@@ -1652,12 +1652,11 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         fc.constantFrom("line", "exit", "silent"),
         fc.constantFrom(0, 1, 30, 137),
         (name, reason, detail, method, exit) => {
-          const said =
-            method === "line"
-              ? { code: exit, out: `noise\n${line("stuck", reason, detail)}\n` }
-              : method === "exit"
-                ? { code: 30, out: `${line("done", "", "")}\n` }
-                : { code: exit, out: "not a line" };
+          const said = Match.value(method).pipe(
+            Match.when("line", () => ({ code: exit, out: `noise\n${line("stuck", reason, detail)}\n` })),
+            Match.when("exit", () => ({ code: 30, out: `${line("done", "", "")}\n` })),
+            Match.orElse(() => ({ code: exit, out: "not a line" })),
+          );
           return drafted(
             (args) =>
               Effect.sync(() => {

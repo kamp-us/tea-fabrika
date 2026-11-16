@@ -25,6 +25,7 @@ import {
   Schedule,
   Schema,
   Tracer,
+  Match,
 } from "effect";
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -182,12 +183,11 @@ for (const flow of [
           rev: fields.rev,
           pos: fields.pos,
         };
-        const rejection =
-          rejected === "error"
-            ? new Error(secret)
-            : rejected === "text"
-              ? secret
-              : { message: secret, mail: receipt.m };
+        const rejection = Match.value(rejected).pipe(
+          Match.when("error", () => new Error(secret)),
+          Match.when("text", () => secret),
+          Match.orElse(() => ({ message: secret, mail: receipt.m })),
+        );
         const spans: Array<Tracer.Span> = [];
         const captured = RepliesTest.capture();
         const outputs: Array<string> = [];
@@ -330,31 +330,33 @@ it.effect(
           PROJECT: {
             getByName: () => ({
               mail: async () =>
-                choice === "full"
-                  ? FullReply.make({ unread, cap })
-                  : choice === "ok"
-                    ? MailOk.make({
-                        receipt: {
-                          id: `${delivery.command}/mail`,
-                          command: delivery.command,
-                          source: delivery.source,
-                          to: {
-                            name: delivery.to,
-                            state: State.cases.live.make({
-                              process: "process_01jc9q4w7zfm8s5r2t6v0xkb4d",
-                              code: { program: "responder", hash: "mail-test" },
-                            }),
-                          },
-                          m: delivery.m,
-                          ref: "r1",
-                          grant: { source: delivery.source.name, to: delivery.to },
-                          from: delivery.from,
-                          arrivedAt: 1,
-                          rev: unread + 1,
-                          pos: unread + 1,
+                Match.value(choice).pipe(
+                  Match.when("full", () => FullReply.make({ unread, cap })),
+                  Match.when("ok", () =>
+                    MailOk.make({
+                      receipt: {
+                        id: `${delivery.command}/mail`,
+                        command: delivery.command,
+                        source: delivery.source,
+                        to: {
+                          name: delivery.to,
+                          state: State.cases.live.make({
+                            process: "process_01jc9q4w7zfm8s5r2t6v0xkb4d",
+                            code: { program: "responder", hash: "mail-test" },
+                          }),
                         },
-                      })
-                    : Refused.make({ reason: choice }),
+                        m: delivery.m,
+                        ref: "r1",
+                        grant: { source: delivery.source.name, to: delivery.to },
+                        from: delivery.from,
+                        arrivedAt: 1,
+                        rev: unread + 1,
+                        pos: unread + 1,
+                      },
+                    }),
+                  ),
+                  Match.orElse(() => Refused.make({ reason: choice })),
+                ),
             }),
           },
           PROCESS: {

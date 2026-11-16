@@ -1,7 +1,7 @@
 // P13 slice 2, next/. Selection is exercised through the same execution entry used by a box.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Cause, Effect, Exit, Schema } from "effect";
+import { Arbitrary, Cause, Effect, Exit, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import * as Audit from "./Audit.ts";
 import { nodeExecution, workerExecution } from "./Execution.ts";
@@ -120,14 +120,12 @@ describe("P13 safe audit", () => {
                 const modes = ["decode", "selector", "output", "json", "rpc", "reply"] as const;
                 const mode = modes[cell.move % modes.length]!;
                 reached.add(mode);
-                const program =
-                  mode === "selector"
-                    ? declared(() => raised(body))
-                    : mode === "output"
-                      ? declared(() => ({ type: "save", note, base: body }))
-                      : mode === "json"
-                        ? declared(() => ({ hidden: 1n }), Schema.Unknown)
-                        : declared(metadata);
+                const program = Match.value(mode).pipe(
+                  Match.when("selector", () => declared(() => raised(body))),
+                  Match.when("output", () => declared(() => ({ type: "save", note, base: body }))),
+                  Match.when("json", () => declared(() => ({ hidden: 1n }), Schema.Unknown)),
+                  Match.orElse(() => declared(metadata)),
+                );
                 const node = nodeExecution(program);
 
                 if (mode !== "rpc" && mode !== "reply") {

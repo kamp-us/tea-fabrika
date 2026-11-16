@@ -16,7 +16,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Result, Schema, Stream } from "effect";
+import { Effect, Layer, Result, Schema, Stream, Match } from "effect";
 import * as fc from "fast-check";
 
 const PROCESS: string = Effect.runSync(
@@ -469,7 +469,11 @@ describe("P40 the counter under its qualified identity", () => {
                         seen: 0,
                         span: { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" },
                       });
-                      count = type === "inc" ? count + 1 : type === "dec" ? count - 1 : 0;
+                      count = Match.value(type).pipe(
+                        Match.when("inc", () => count + 1),
+                        Match.when("dec", () => count - 1),
+                        Match.orElse(() => 0),
+                      );
                       expect((yield* r.open(`after-${sent}`)).view).toEqual({ count });
                     }
 

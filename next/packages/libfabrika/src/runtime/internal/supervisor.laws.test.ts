@@ -23,7 +23,7 @@
 import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Result, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { A, ExitReason, fcErrorClass, from } from "../../processes/Process.test-support.ts";
@@ -190,14 +190,12 @@ const moves = (w: World, cell: Cell, swaps = false): ReadonlyArray<Move> => {
 
   // A swap names the process the journal holds, or one it does not, with a build the fold makes.
   const j = w.model.journal;
-  const own =
-    j._tag === "idle"
-      ? j.process
-      : j._tag === "stepping"
-        ? j.attempt.process
-        : j._tag === "writing_exit"
-          ? j.process
-          : w.process;
+  const own = Match.value(j).pipe(
+    Match.tag("idle", (j) => j.process),
+    Match.tag("stepping", (j) => j.attempt.process),
+    Match.tag("writing_exit", (j) => j.process),
+    Match.orElse(() => w.process),
+  );
   const build = `build-swap-${cell.pick % 4}`;
   return [
     ...base,

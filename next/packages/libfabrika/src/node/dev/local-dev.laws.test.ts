@@ -5,7 +5,7 @@
 // its moment and what the state said as it went out. No law here reaches the real `process.kill`:
 // the signals are a stand-in, and L6's `signal` runs against a spy.
 import { describe, expect, it } from "@effect/vitest";
-import { Clock, Effect, Exit, Fiber, Schema, SubscriptionRef } from "effect";
+import { Clock, Effect, Exit, Fiber, Schema, SubscriptionRef, Match } from "effect";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";
 import { lifeCell, signal, terminate } from "./local-dev.ts";
@@ -174,12 +174,11 @@ describe("the memory restart's bounded stop, next/", () => {
     ({ pid, grace, event, point, share, stale }) =>
       Effect.gen(function* () {
         const w = yield* running(pid);
-        const msg =
-          event === "exited"
-            ? ({ type: "exited", replacement: "start-1" } as const)
-            : event === "stop"
-              ? ({ type: "stop" } as const)
-              : ({ type: "started", start: "start-2", pid: pid + 1, build: "build-1", at: 0 } as const);
+        const msg = Match.value(event).pipe(
+          Match.when("exited", () => ({ type: "exited", replacement: "start-1" }) as const),
+          Match.when("stop", () => ({ type: "stop" }) as const),
+          Match.orElse(() => ({ type: "started", start: "start-2", pid: pid + 1, build: "build-1", at: 0 }) as const),
+        );
         const landed: Array<Fiber.Fiber<unknown>> = [];
         // It lands as the runtime's event fiber or the scope's close sends it: in a fiber of its own,
         // which waits its turn on the life state.

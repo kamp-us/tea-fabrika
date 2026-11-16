@@ -6,7 +6,7 @@ import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Cause, type Context, Effect, Exit, type Layer as LayerType, Layer, Schema, Stream } from "effect";
+import { Cause, type Context, Effect, Exit, type Layer as LayerType, Layer, Schema, Stream, Match } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Archive, Mailbox, ProcessStore, RecordManager, SessionManager, Writer } from "../coordination/index.ts";
@@ -724,7 +724,11 @@ describe("P34 runner supervision", () => {
           (id, time, delay) =>
             Effect.runPromise(
               Effect.gen(function* () {
-                const wakeAt = path === "due ready" ? time : path === "due early" ? time + delay : null;
+                const wakeAt = Match.value(path).pipe(
+                  Match.when("due ready", () => time),
+                  Match.when("due early", () => time + delay),
+                  Match.orElse(() => null),
+                );
                 const w = world(false, true, wakeAt);
                 const process = path === "restart" ? B : A;
                 const request = { id: `restart-${id}`, build: BUILD };

@@ -37,7 +37,7 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import { tezgah } from "@kampus/tezgah";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Schema } from "effect";
+import { Cause, Effect, Exit, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -245,11 +245,11 @@ const world = (options: { readonly lacks?: string } = {}) =>
 
         return project.run((p) => {
           const work = Reflect.apply(Reflect.get(p, method), p, args) as Effect.Effect<unknown, unknown>;
-          return method === "sign"
-            ? signingReply(work as never)
-            : method === "commit"
-              ? commitReply(work as never)
-              : work;
+          return Match.value(method).pipe(
+            Match.when("sign", () => signingReply(work as never)),
+            Match.when("commit", () => commitReply(work as never)),
+            Match.orElse(() => work),
+          );
         });
       };
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but lack workerd's nominal brands

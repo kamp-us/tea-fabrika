@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Match } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { checkTracked } from "../../oxlint-plugins/gitignore.mjs";
@@ -1399,7 +1400,11 @@ const world = (paths: readonly string[], ran: ci.Selection, fault: Fault) => {
   const run = {
     event: "pull_request",
     status: fault === "unfinished" ? "in_progress" : "completed",
-    conclusion: fault === "conclusion" ? "failure" : fault === "unfinished" ? null : "success",
+    conclusion: Match.value(fault).pipe(
+      Match.when("conclusion", () => "failure"),
+      Match.when("unfinished", () => null),
+      Match.orElse(() => "success"),
+    ),
     path: fault === "workflow" ? ".github/workflows/host.yaml" : ".github/workflows/check.yaml",
     html_url: "https://github.com/owner/repo/actions/runs/11",
     repository: { id: 1 },

@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import { checkSshsig, verifySshsig } from "./Sshsig.ts";
 import { line, realArmor, SPACE, text } from "./SshsigWebauthn.test-support.ts";
@@ -542,7 +542,14 @@ describe("P10 WebAuthn SSHSIG", () => {
             let bytes = blob();
 
             if (kind === "version") {
-              bytes.writeUInt32BE(change === 0 ? 2 : change === 1 ? 0 : change, 6);
+              bytes.writeUInt32BE(
+                Match.value(change).pipe(
+                  Match.when(0, () => 2),
+                  Match.when(1, () => 0),
+                  Match.orElse(() => change),
+                ),
+                6,
+              );
             }
 
             if (kind === "key length") {

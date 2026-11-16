@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Match } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -180,11 +181,11 @@ describe("parseNumstat", () => {
       fc.property(fc.array(NUMSTAT, { maxLength: 12 }), (entries) => {
         const out = entries
           .map((entry) =>
-            entry.shape === "binary"
-              ? `-\t-\t${entry.path}\0`
-              : entry.shape === "renamed"
-                ? `${entry.added}\t${entry.deleted}\t\0${entry.from}\0${entry.path}\0`
-                : `${entry.added}\t${entry.deleted}\t${entry.path}\0`,
+            Match.value(entry.shape).pipe(
+              Match.when("binary", () => `-\t-\t${entry.path}\0`),
+              Match.when("renamed", () => `${entry.added}\t${entry.deleted}\t\0${entry.from}\0${entry.path}\0`),
+              Match.orElse(() => `${entry.added}\t${entry.deleted}\t${entry.path}\0`),
+            ),
           )
           .join("");
         const rows = parseNumstat(out);

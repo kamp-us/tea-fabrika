@@ -7,7 +7,7 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
+import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Scope, Stream, Match } from "effect";
 import { Writer } from "../access/SessionManager.ts";
 import { SinkError } from "../coordination/index.ts";
 import { InputId } from "../Id.ts";
@@ -540,18 +540,17 @@ const walk = (
         const json = JSON.parse(value) as Record<string, unknown>;
         const kind = nth(DAMAGE, step.kind);
         const fields = ["parent", "by", "for", "digest", "answer"] as const;
-        const cell =
-          kind === "json"
-            ? `${value.slice(0, -1)}${step.secret}`
-            : kind === "missing"
-              ? JSON.stringify(
-                  Object.fromEntries(Object.entries(json).filter(([f]) => f !== fields[n % fields.length])),
-                )
-              : kind === "key"
-                ? JSON.stringify({ ...json, id: `${prior.letter.id}-other` })
-                : kind === "accepted"
-                  ? JSON.stringify({ ...json, answer: Sent.cases.accepted.make({ rev: n + 1, pos: n + 1 }) })
-                  : JSON.stringify({ ...json, answer: Malformed.make({ reason: { text: step.secret } }) });
+        const cell = Match.value(kind).pipe(
+          Match.when("json", () => `${value.slice(0, -1)}${step.secret}`),
+          Match.when("missing", () =>
+            JSON.stringify(Object.fromEntries(Object.entries(json).filter(([f]) => f !== fields[n % fields.length]))),
+          ),
+          Match.when("key", () => JSON.stringify({ ...json, id: `${prior.letter.id}-other` })),
+          Match.when("accepted", () =>
+            JSON.stringify({ ...json, answer: Sent.cases.accepted.make({ rev: n + 1, pos: n + 1 }) }),
+          ),
+          Match.orElse(() => JSON.stringify({ ...json, answer: Malformed.make({ reason: { text: step.secret } }) })),
+        );
         secrets.push(step.secret);
         live.inbox.exec(`UPDATE "${table}" SET "${column}"=? WHERE "${column}"=?`, cell, value);
         damaged.set(prior.letter.id, cell);

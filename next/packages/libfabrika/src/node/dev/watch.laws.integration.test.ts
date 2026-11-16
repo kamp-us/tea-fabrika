@@ -15,7 +15,7 @@
 // box) builds once and never sees a save: L10 and L18's save-driven runs then wait for the lead.
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Deferred, Effect, Fiber, FileSystem, Option, Path, Queue, Stream, Tracer } from "effect";
+import { Deferred, Effect, Fiber, FileSystem, Option, Path, Queue, Stream, Tracer, Match } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
 import { expectTypeOf } from "vitest";
@@ -555,7 +555,13 @@ describe("P15 slice 1: the watcher", () => {
                   hashes.set(i.program, i.hash);
                 }
 
-                seen.add(reaches[file]!.length === 2 ? "shared" : reaches[file]!.length === 1 ? "own" : "outside");
+                seen.add(
+                  Match.value(reaches[file]!.length).pipe(
+                    Match.when(2, () => "shared"),
+                    Match.when(1, () => "own"),
+                    Match.orElse(() => "outside"),
+                  ),
+                );
               }
             }),
           ).pipe(Effect.provide(NodeServices.layer)),

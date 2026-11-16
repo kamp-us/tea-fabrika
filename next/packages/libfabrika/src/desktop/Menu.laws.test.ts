@@ -1,7 +1,7 @@
 // next/, ticket 887, P21 slice 1. Each plant named here runs after Menu.ts exists.
 import { arbGuidedSequence, foldEvents, propertyInvariant, propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Schema } from "effect";
+import { ConfigProvider, Effect, Schema, Match } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "../settings/Declarations.ts";
@@ -379,11 +379,19 @@ it.effect.prop(
       const hash = yield* digest.digestHex(Digest.sha256, raw);
       const flows = Test.walks.map((messages) =>
         messages.map((msg) =>
-          msg.type === "opened"
-            ? { ...msg, digest: hash, secret, bytes: Array.from(raw) }
-            : msg.type === "rows"
-              ? { ...msg, rows: msg.rows.map((r) => ({ ...r, pass: r.pass === null ? null : hash })) }
-              : msg,
+          Match.value(msg).pipe(
+            Match.discriminator("type")("opened", (opened) => ({
+              ...opened,
+              digest: hash,
+              secret,
+              bytes: Array.from(raw),
+            })),
+            Match.discriminator("type")("rows", (rows) => ({
+              ...rows,
+              rows: rows.rows.map((r) => ({ ...r, pass: r.pass === null ? null : hash })),
+            })),
+            Match.orElse(() => msg),
+          ),
         ),
       );
       propertyTrace(
@@ -506,11 +514,14 @@ it("L9: prompts and items keep the code and the safe label within the pinned 256
   const flows = hostile.chain(({ label }) =>
     Test.walks.map((messages) =>
       messages.map((msg) =>
-        msg.type === "rows"
-          ? { ...msg, rows: msg.rows.map((r) => ({ ...r, label })) }
-          : msg.type === "clients"
-            ? { ...msg, clients: msg.clients.map((c) => ({ ...c, label })) }
-            : msg,
+        Match.value(msg).pipe(
+          Match.discriminator("type")("rows", (rows) => ({ ...rows, rows: rows.rows.map((r) => ({ ...r, label })) })),
+          Match.discriminator("type")("clients", (clients) => ({
+            ...clients,
+            clients: clients.clients.map((c) => ({ ...c, label })),
+          })),
+          Match.orElse(() => msg),
+        ),
       ),
     ),
   );
@@ -524,12 +535,11 @@ it("L9: prompts and items keep the code and the safe label within the pinned 256
           return "control or bidi characters reached item words";
         }
 
-        const shown =
-          item._tag === "waiting"
-            ? next.rows.find((r) => r.key === item.key)
-            : item._tag === "client"
-              ? next.clients.find((c) => c.key === item.key)
-              : undefined;
+        const shown = Match.value(item).pipe(
+          Match.tag("waiting", (item) => next.rows.find((r) => r.key === item.key)),
+          Match.tag("client", (item) => next.clients.find((c) => c.key === item.key)),
+          Match.orElse(() => undefined),
+        );
 
         if (shown !== undefined && !hasLabel(item.words, shown.label)) {
           return "an item lost the shown label, exceeded its limit or split a surrogate pair";

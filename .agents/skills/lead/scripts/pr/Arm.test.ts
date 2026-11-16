@@ -6,7 +6,7 @@ import { NodeServices } from "@effect/platform-node";
 // step canceled the other nine, so the run's own conclusion reads `cancelled`.
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Schema, Match } from "effect";
 import { FileSystem } from "effect";
 import * as ChecksTest from "../ci/ChecksTest.ts";
 import type { Job, Run } from "../ci/Runs.ts";
@@ -113,13 +113,12 @@ const hit = new LeakGrepRefused({ reason: "leakgrep.sh exited 1" });
 
 /** The one leak check that refuses, with the error it refuses with. */
 const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
-  leak === "clean"
-    ? {}
-    : leak === "leakChange"
-      ? { leakChange: hit }
-      : leak === "leakGrep"
-        ? { leakGrep: hit }
-        : { leakText: hit };
+  Match.value(leak).pipe(
+    Match.when("clean", () => ({})),
+    Match.when("leakChange", () => ({ leakChange: hit })),
+    Match.when("leakGrep", () => ({ leakGrep: hit })),
+    Match.orElse(() => ({ leakText: hit })),
+  );
 
 const armedAt = [{ _tag: "arm", number: 1092, oid }];
 

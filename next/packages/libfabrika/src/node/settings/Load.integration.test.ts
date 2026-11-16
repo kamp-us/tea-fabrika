@@ -14,7 +14,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, FileSystem, Layer, Path, Ref, Schema } from "effect";
+import { Effect, Exit, FileSystem, Layer, Path, Ref, Schema, Match } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
@@ -294,11 +294,11 @@ describe("T730, a load keeps the repo file's own minimum, and invents none witho
             Effect.scoped(
               Effect.gen(function* () {
                 const places = yield* lay(
-                  repo._tag === "stated"
-                    ? text(`fabrika-version = "${repo.minimum}"\n`)
-                    : repo._tag === "unstated"
-                      ? text("# no version\n")
-                      : { _tag: "missing" },
+                  Match.value(repo).pipe(
+                    Match.tag("stated", (repo) => text(`fabrika-version = "${repo.minimum}"\n`)),
+                    Match.tag("unstated", () => text("# no version\n")),
+                    Match.orElse((): File => ({ _tag: "missing" })),
+                  ),
                   text(""),
                 );
                 const exit = yield* Load.load({
@@ -352,8 +352,12 @@ it.effect.prop(
         flags: source === "flag" ? { [d.path]: String(value + 2) } : {},
         env: source === "env" || source === "flag" ? { [d.env]: String(value + 1) } : {},
       }).pipe(Effect.provide(Layer.mergeAll(fs, TomlParser.layer, Digest.layerWebCrypto)));
-      const want =
-        source === "default" ? d.default : source === "flag" ? value + 2 : source === "env" ? value + 1 : value;
+      const want = Match.value(source).pipe(
+        Match.when("default", () => d.default),
+        Match.when("flag", () => value + 2),
+        Match.when("env", () => value + 1),
+        Match.orElse(() => value),
+      );
       expect(loaded.values.desktopLinkTtl).toBe(want);
       expect(loaded.snapshot.values[d.path]).toBe(want);
       expect(loaded.snapshot.origins[d.path]?._tag).toBe(source);

@@ -19,6 +19,7 @@ import {
   Sink,
   Stream,
   Tracer,
+  Match,
 } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcessSpawner } from "effect/process";
@@ -376,16 +377,13 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                 const selection = requests[index * 2]!;
                 const request = requests[index * 2 + 1]!;
                 const source = c.pick % 9;
-                const body =
-                  source === 0
-                    ? `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${JSON.stringify(secret)}\n`
-                    : source === 3
-                      ? `fabrika-version = ${JSON.stringify(secret)}\n`
-                      : source === 4
-                        ? `[${JSON.stringify(secret)}]\nvalue = true\n`
-                        : source === 5
-                          ? `fabrika-version = ${JSON.stringify(secret)} [\n`
-                          : 'fabrika-version = "0.0.0"\n';
+                const body = Match.value(source).pipe(
+                  Match.when(0, () => `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${JSON.stringify(secret)}\n`),
+                  Match.when(3, () => `fabrika-version = ${JSON.stringify(secret)}\n`),
+                  Match.when(4, () => `[${JSON.stringify(secret)}]\nvalue = true\n`),
+                  Match.when(5, () => `fabrika-version = ${JSON.stringify(secret)} [\n`),
+                  Match.orElse(() => 'fabrika-version = "0.0.0"\n'),
+                );
                 const fs = FileSystem.layerNoop({
                   realPath: (location) => Effect.succeed(location),
                   makeTempDirectoryScoped: () => Effect.succeed(`${folder}/temporary`),

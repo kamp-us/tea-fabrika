@@ -10,7 +10,7 @@
 // Every other request goes to the real `Control` untouched. The product's list gains nothing.
 import { Command } from "@kampus/libfabrika/tasks/Task";
 import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
-import { Cause, Effect, Option, Schema } from "effect";
+import { Cause, Effect, Option, Schema, Match } from "effect";
 import { Control as RealControl, Project as RealProject } from "./brain.ts";
 import { projectTasksLayer } from "./runtime.ts";
 
@@ -114,14 +114,16 @@ export class Project extends RealProject {
       Effect.tryPromise(() => request.json()).pipe(
         Effect.flatMap(Schema.decodeUnknownEffect(Call)),
         Effect.flatMap((call): Effect.Effect<unknown, unknown> =>
-          call.method === "requestHandsTask"
-            ? Schema.decodeUnknownEffect(Schema.NonEmptyString)(call.args[0]).pipe(
+          Match.value(call.method).pipe(
+            Match.when("requestHandsTask", () =>
+              Schema.decodeUnknownEffect(Schema.NonEmptyString)(call.args[0]).pipe(
                 Effect.flatMap((target) => this.requestHandsTask(target)),
                 Effect.asVoid,
-              )
-            : call.method === "readHandsTask"
-              ? this.readHandsTask()
-              : Effect.sync(() => this.allRows()),
+              ),
+            ),
+            Match.when("readHandsTask", () => this.readHandsTask()),
+            Match.orElse(() => Effect.sync(() => this.allRows())),
+          ),
         ),
         Effect.map((value) => Response.json({ value: value ?? null })),
         // The whole cause is the reason, so a red run says why the brain refused.

@@ -4,7 +4,7 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import * as CodeHost from "@kampus/libfabrika/codehost/CodeHost";
 import * as CodeHostTest from "@kampus/libfabrika/codehost/CodeHostTest";
 import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
-import { Cause, Context, Effect, Exit, Layer, Redacted, Schema } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Redacted, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import { handlers } from "./handlers.ts";
 
@@ -25,22 +25,21 @@ describe("L12: handlers map faults", () => {
           const reason = cell.method === "checks" && cell.reason === "refused" ? "unavailable" : cell.reason;
           const cause = cell.cause === undefined ? undefined : new Error(cell.cause);
           const hostFault = new CodeHost.CodeHostError({
-            reason:
-              reason === "refused"
-                ? new CodeHost.Refused({ cause })
-                : reason === "rate_limited"
-                  ? new CodeHost.RateLimited({ cause })
-                  : new CodeHost.Unavailable({ cause }),
+            reason: Match.value(reason).pipe(
+              Match.when("refused", () => new CodeHost.Refused({ cause })),
+              Match.when("rate_limited", () => new CodeHost.RateLimited({ cause })),
+              Match.orElse(() => new CodeHost.Unavailable({ cause })),
+            ),
           });
           const ciFault = new Ci.CiError({
             reason: reason === "rate_limited" ? new Ci.RateLimited({ cause }) : new Ci.Unavailable({ cause }),
           });
           const fail = <E>(fault: E): Effect.Effect<never, E> =>
-            cell.kind === "interrupt"
-              ? Effect.interrupt
-              : cell.kind === "defect"
-                ? Effect.die(new Error(cell.cause ?? "defect"))
-                : Effect.fail(fault);
+            Match.value(cell.kind).pipe(
+              Match.when("interrupt", () => Effect.interrupt),
+              Match.when("defect", () => Effect.die(new Error(cell.cause ?? "defect"))),
+              Match.orElse(() => Effect.fail(fault)),
+            );
           const host = Layer.succeed(CodeHost.CodeHost, {
             change: () => fail(hostFault),
             update: () => fail(hostFault),

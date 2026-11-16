@@ -10,6 +10,9 @@ import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Schema } from "effect";
 import * as RevokeHold from "../e2e/chaos-revoke.test-support.ts";
 
+/** One Msg of the hold controller. */
+type Msg = typeof RevokeHold.Msg.Type;
+
 RunnerTest.suite(ChaosTest.open, checklist);
 TargetsTest.suite(ChaosTest.open, checklist);
 
@@ -27,21 +30,18 @@ it.prop(
     let held = 0;
 
     for (const pick of choices) {
-      const msg: typeof RevokeHold.Msg.Type =
-        model._tag === "idle"
-          ? { type: "arm", process: `process-${pick}` }
-          : model._tag === "armed"
-            ? pick % 7 === 0
-              ? { type: "release" }
-              : {
-                  type: "arrive",
-                  process: pick % 3 === 0 ? "unrelated" : model.process,
-                }
-            : model._tag === "held"
-              ? pick % 2 === 0
-                ? { type: "release" }
-                : { type: "arrive", process: model.process }
-              : { type: "arm", process: `later-${pick}` };
+      const msg: Msg = RevokeHold.Model.match(model, {
+        idle: (): Msg => ({ type: "arm", process: `process-${pick}` }),
+        armed: (state): Msg =>
+          pick % 7 === 0
+            ? { type: "release" }
+            : {
+                type: "arrive",
+                process: pick % 3 === 0 ? "unrelated" : state.process,
+              },
+        held: (state): Msg => (pick % 2 === 0 ? { type: "release" } : { type: "arrive", process: state.process }),
+        released: (): Msg => ({ type: "arm", process: `later-${pick}` }),
+      });
       const previous = model;
       [model] = applyCell(RevokeHold.controller, model, msg);
       msgs.push(msg);

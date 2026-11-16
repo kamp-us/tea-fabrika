@@ -5,7 +5,7 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import { senderTest } from "@kampus/libfabrika/testing";
-import { Arbitrary, Effect, FileSystem, Schema } from "effect";
+import { Arbitrary, Effect, FileSystem, Schema, Match } from "effect";
 
 const SEED = 119120;
 const options = { arbitrary: { seed: SEED, runs: 300, size: 4096, concurrency: 1 }, timeout: 60_000 };
@@ -88,8 +88,11 @@ const DeclarationCases = Arbitrary.array(
     inputs.map((input, i) => ({
       name: `extra${i}`,
       schema: Schema.Struct({
-        [input.field]:
-          input.type === "string" ? Schema.String : input.type === "number" ? Schema.Number : Schema.Boolean,
+        [input.field]: Match.value(input.type).pipe(
+          Match.when("string", () => Schema.String),
+          Match.when("number", () => Schema.Number),
+          Match.orElse(() => Schema.Boolean),
+        ),
       }),
       readOnly: input.readOnly,
       personOnly: input.personOnly,

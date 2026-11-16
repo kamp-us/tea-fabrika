@@ -5,7 +5,7 @@ import { Outcome } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Chaos, type Handler, type Incoming, Nemesis, type ProgramRunner, type Update } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Fiber, Schema, type Scope } from "effect";
+import { Arbitrary, Deferred, Effect, Fiber, Schema, type Scope, Match } from "effect";
 import { chaos } from "./program.ts";
 
 const SEED = 119120;
@@ -804,21 +804,27 @@ export const suite = (open: Open, checklist: unknown) =>
               const handlers: Readonly<Record<string, Handler<never>>> = {
                 now,
                 fire: () =>
-                  mode === "off"
-                    ? Effect.succeed(
+                  Match.value(mode).pipe(
+                    Match.when("off", () =>
+                      Effect.succeed(
                         Outcome.err(
                           new Nemesis.NemesisError({ reason: new Nemesis.Off({ cause: new Error(marker) }) }),
                         ),
-                      )
-                    : mode === "failed"
-                      ? Effect.die(new URIError(`https://invalid.test/?private=${encodeURIComponent(marker)}`))
-                      : Effect.succeed(
-                          Outcome.ok(
-                            mode === "refused"
-                              ? Chaos.Fired.cases.refused.make({ reason: "stale" })
-                              : Chaos.Fired.cases.fired.make({ hit: null }),
-                          ),
+                      ),
+                    ),
+                    Match.when("failed", () =>
+                      Effect.die(new URIError(`https://invalid.test/?private=${encodeURIComponent(marker)}`)),
+                    ),
+                    Match.orElse(() =>
+                      Effect.succeed(
+                        Outcome.ok(
+                          mode === "refused"
+                            ? Chaos.Fired.cases.refused.make({ reason: "stale" })
+                            : Chaos.Fired.cases.fired.make({ hit: null }),
                         ),
+                      ),
+                    ),
+                  ),
                 inspect: read(world, binding),
               };
               const { runner, recorded } = yield* world.session(NAME, chaos.name, chaos, handlers);

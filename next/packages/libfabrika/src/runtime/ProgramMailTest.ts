@@ -37,6 +37,7 @@ import {
   Scope,
   Stream,
   Tracer,
+  Match,
 } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -849,13 +850,18 @@ const walk = (
               : move === "start_forbidden"
                 ? "forbidden"
                 : "missing";
-          const input =
-            kind === "normal"
-              ? { type: "start", ref, value: cell.value }
-              : kind === "forbidden"
-                ? // Aimed at the other requester, claiming to be that requester's own responder.
-                  { type: "start", ref, value: cell.value, to: requesterName(other), claim: responderName(other) }
-                : { type: "start", ref, value: cell.value, to: GHOST };
+          const input = Match.value(kind).pipe(
+            Match.when("normal", () => ({ type: "start", ref, value: cell.value })),
+            // Aimed at the other requester, claiming to be that requester's own responder.
+            Match.when("forbidden", () => ({
+              type: "start",
+              ref,
+              value: cell.value,
+              to: requesterName(other),
+              claim: responderName(other),
+            })),
+            Match.orElse(() => ({ type: "start", ref, value: cell.value, to: GHOST })),
+          );
           const incoming: Incoming = {
             id: `letter-${world.n}`,
             envelope: { id: inputId(world.n), by: person, arrivedAt: 1794099600000 + world.n, input },
@@ -955,7 +961,11 @@ const walk = (
           }
 
           if ((yield* letters(requesterName(k))).some((l) => l.id === incoming.id)) {
-            const to = kind === "normal" ? responderName(k) : kind === "forbidden" ? requesterName(other) : GHOST;
+            const to = Match.value(kind).pipe(
+              Match.when("normal", () => responderName(k)),
+              Match.when("forbidden", () => requesterName(other)),
+              Match.orElse(() => GHOST),
+            );
             world.current.set(k, { ref, value: cell.value, kind, to });
             world.history.get(k)?.push(ref);
 

@@ -1,7 +1,7 @@
 // P12, next/. The real command is captured at its NodeRuntime edge; no process or socket starts.
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer, Option, Schema, Sink, Stream } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Schema, Sink, Stream, Match } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
@@ -228,7 +228,13 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
             return new Response("{");
           }
 
-          return Response.json(mode === "target" ? data.badTarget : mode === "waiting" ? null : data.target);
+          return Response.json(
+            Match.value(mode).pipe(
+              Match.when("target", () => data.badTarget),
+              Match.when("waiting", () => null),
+              Match.orElse(() => data.target),
+            ),
+          );
         });
         const argv = process.argv;
         const log = vi.spyOn(console, "log").mockImplementation(() => {});

@@ -10,7 +10,7 @@
 // there must be none.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Schema, type Scope } from "effect";
+import { Effect, Exit, Schema, type Scope, Match } from "effect";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { property } from "../Testing.test-support.ts";
@@ -284,7 +284,11 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
               });
               const possible = (): ReadonlyArray<Move> =>
                 MOVES.filter((move) =>
-                  move === "retry" ? failed !== null : move === "again" ? mine.last !== null : true,
+                  Match.value(move).pipe(
+                    Match.when("retry", () => failed !== null),
+                    Match.when("again", () => mine.last !== null),
+                    Match.orElse(() => true),
+                  ),
                 );
 
               for (const cell of tape) {

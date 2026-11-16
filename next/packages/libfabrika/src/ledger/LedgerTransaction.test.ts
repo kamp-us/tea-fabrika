@@ -2,7 +2,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema, Stream, Tracer } from "effect";
+import { Effect, Layer, Schema, Stream, Tracer, Match } from "effect";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
@@ -173,12 +173,11 @@ describe("p79, LedgerTransaction", () => {
                 const ledger = yield* Ledger;
                 const tx = yield* LedgerTransaction;
                 yield* ledger.append("a", "one", line(1));
-                const refused =
-                  reason === "seen_ahead"
-                    ? { ...line(3), seen: 900 }
-                    : reason === "bad_trace"
-                      ? { ...line(3), traceId: "wrong" }
-                      : line(3);
+                const refused = Match.value(reason).pipe(
+                  Match.when("seen_ahead", () => ({ ...line(3), seen: 900 })),
+                  Match.when("bad_trace", () => ({ ...line(3), traceId: "wrong" })),
+                  Match.orElse(() => line(3)),
+                );
                 expect(
                   (yield* Effect.flip(
                     tx.transact((turn) => {

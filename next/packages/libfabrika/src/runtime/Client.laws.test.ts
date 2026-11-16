@@ -24,7 +24,7 @@
 // move that state allows; stale and malformed input is built from what the walk delivered.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Result, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import { ProcessId } from "../ProcessId.ts";
 import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";
@@ -386,13 +386,16 @@ const brainStep = (b: Brain, c: ViewChoice): unknown => {
 const corrupt = (b: Brain, c: ViewChoice): unknown => {
   const rev = b.rev;
   const next = (patch: unknown) => ({ type: "patch", base: rev, rev: rev + 1, patch });
-  const wrongType =
-    b.kind === "list"
-      ? [{ op: "replace", path: "/left", value: "three" }]
-      : b.kind === "tags"
-        ? [{ op: "add", path: "/-", value: 3 }]
-        : [{ op: "replace", path: "/n", value: "x" }];
-  const pastEnd = b.kind === "list" ? "/items/99" : b.kind === "tags" ? "/99" : "/rows/99";
+  const wrongType = Match.value(b.kind).pipe(
+    Match.when("list", () => [{ op: "replace", path: "/left", value: "three" }]),
+    Match.when("tags", () => [{ op: "add", path: "/-", value: 3 }]),
+    Match.orElse(() => [{ op: "replace", path: "/n", value: "x" }]),
+  );
+  const pastEnd = Match.value(b.kind).pipe(
+    Match.when("list", () => "/items/99"),
+    Match.when("tags", () => "/99"),
+    Match.orElse(() => "/rows/99"),
+  );
   const other = KINDS.find((k) => k !== b.kind && !Schema.is(SHAPES[b.kind])(START[k]))!;
   return [
     next([{ op: "move", from: "/x", path: "/y" }]),
@@ -708,14 +711,12 @@ const stream = (facts: ReadonlyArray<typeof fact extends fc.Arbitrary<infer F> ?
   let rev = 0;
   return facts.map((f) => {
     rev += f.gap;
-    const body =
-      f.tag === "started"
-        ? { process: f.pid, name: f.name, program: "fabrika/checklist", hash: "h" }
-        : f.tag === "restarted"
-          ? { process: f.pid, after: f.after, name: f.name, reason: "crashed", build: "h" }
-          : f.tag === "exited"
-            ? { process: f.pid, reason: f.reason }
-            : { process: f.pid, reason: "too_many", crashes: 1, until: 0 };
+    const body = Match.value(f.tag).pipe(
+      Match.when("started", () => ({ process: f.pid, name: f.name, program: "fabrika/checklist", hash: "h" })),
+      Match.when("restarted", () => ({ process: f.pid, after: f.after, name: f.name, reason: "crashed", build: "h" })),
+      Match.when("exited", () => ({ process: f.pid, reason: f.reason })),
+      Match.orElse(() => ({ process: f.pid, reason: "too_many", crashes: 1, until: 0 })),
+    );
     return { _tag: f.tag, by: f.writer, id: `${f.tag}:${rev}`, rev, arrivedAt: rev, body };
   });
 };
