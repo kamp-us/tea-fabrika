@@ -1,0 +1,2364 @@
+diff --git a/dist/chunk-5HWE6CAZ.js b/dist/chunk-5HWE6CAZ.js
+index 7416fcbaa97d9c5bca377c3c2c04407db1cd8a93..1abd45490a76fad3a293451ec198cee2f60434be 100644
+--- a/dist/chunk-5HWE6CAZ.js
++++ b/dist/chunk-5HWE6CAZ.js
+@@ -193,7 +193,7 @@ function start(machine, opts, runEffect, fork, closeScope) {
+   const defined = new Set((machine.cmds ?? []).map((def) => def.cmdType));
+   const interruption = new AbortController();
+   async function settle(cell, cmd) {
+-    const type = cmd.type;
++    const type = cmd._tag;
+     const exit = await runEffect(cellResult(cell(cmd)), {
+       signal: interruption.signal
+     });
+diff --git a/dist/chunk-AOVUU5NF.js b/dist/chunk-AOVUU5NF.js
+index dcbc0f524677aa2a384a590cc533b6d0e67faa18..924fc0314793b58ea2f3c8eba1dcf3ff6258c233 100644
+--- a/dist/chunk-AOVUU5NF.js
++++ b/dist/chunk-AOVUU5NF.js
+@@ -75,9 +75,9 @@ async function driveLoop(machine, initial, msg, ctx, maxRounds, engine) {
+       }
+       for (const cmd of emitted) {
+         trace.push({ kind: "cmd", cmd });
+-        const cell = cellFor(cmd.type);
++        const cell = cellFor(cmd._tag);
+         if (cell === void 0) {
+-          throw new DriveNoHandlerError(cmd.type, trace);
++          throw new DriveNoHandlerError(cmd._tag, trace);
+         }
+         let refused;
+         const dispatch = (fired) => {
+diff --git a/dist/chunk-BSGN3CEF.js b/dist/chunk-BSGN3CEF.js
+index 165fab2af575d23413da7d3d763af08f7427c3a0..5cca7311644b7225f18fc3f00992a3fd406d5e7b 100644
+--- a/dist/chunk-BSGN3CEF.js
++++ b/dist/chunk-BSGN3CEF.js
+@@ -298,9 +298,9 @@ function defineManagedResource(opts) {
+     };
+   };
+   return {
+-    type: opts.name,
++    _tag: opts.name,
+     depKeyed: (when) => ({
+-      type: opts.name,
++      _tag: opts.name,
+       deps: when
+     }),
+     subscribe,
+@@ -355,9 +355,9 @@ function fromTransport(opts) {
+     };
+   };
+   return {
+-    type: opts.name,
++    _tag: opts.name,
+     depKeyed: (when) => ({
+-      type: opts.name,
++      _tag: opts.name,
+       deps: when
+     }),
+     subscribe,
+diff --git a/dist/chunk-BXLD374W.js b/dist/chunk-BXLD374W.js
+index 8e7583b214a929d201b8c7a22fa3c3b33b5c7837..697172bfb518735955223c2f476a60167e59518f 100644
+--- a/dist/chunk-BXLD374W.js
++++ b/dist/chunk-BXLD374W.js
+@@ -203,7 +203,7 @@ function startLoop(config) {
+         if (sub !== null) desired.set(sub.id, sub);
+       } catch (err) {
+         remember(err);
+-        unreadTypes.add(entry.type);
++        unreadTypes.add(entry._tag);
+       }
+     }
+     stopSubs(
+@@ -214,16 +214,16 @@ function startLoop(config) {
+     const starting = gate === "open" ? desired : /* @__PURE__ */ new Map();
+     for (const [id, sub] of starting) {
+       if (subRegistry.has(id)) continue;
+-      const runner = config.runnerFor(sub.type);
++      const runner = config.runnerFor(sub._tag);
+       if (runner === void 0) {
+         remember(
+           new Error(
+-            `@demlik/tea: no subscribe runner for Sub type "${sub.type}". Pass one to run in \`subscribe\`.`
++            `@demlik/tea: no subscribe runner for Sub _tag "${sub._tag}". Pass one to run in \`subscribe\`.`
+           )
+         );
+         continue;
+       }
+-      const running = new RunningSub(sub.type);
++      const running = new RunningSub(sub._tag);
+       const begin = (use) => use(
+         sub,
+         config.ctx,
+@@ -232,7 +232,7 @@ function startLoop(config) {
+       );
+       try {
+         running.dispose = config.gate === void 0 ? begin(runner) : config.gate.admit(
+-          () => begin(config.runnerFor(sub.type) ?? runner)
++          () => begin(config.runnerFor(sub._tag) ?? runner)
+         );
+       } catch (err) {
+         remember(err);
+@@ -289,7 +289,7 @@ function startLoop(config) {
+     });
+   }
+   function callHandler(cmd, dispatch) {
+-    const { type } = cmd;
++    const { _tag: type } = cmd;
+     const handler = config.handlerFor(type);
+     if (handler === void 0) return Promise.resolve(void 0);
+     return trackInFlight(handler(cmd, handlerCtx, dispatch), type);
+@@ -340,17 +340,17 @@ function startLoop(config) {
+   function enqueueDispatch(msg, origin = "caller") {
+     if (gate !== "open") {
+       return Promise.reject(
+-        gate === "draining" || gate === "abandoned" && origin === "loop" ? new DispatchDiscardedError(msg.type) : new RuntimeStoppedError(msg.type)
++        gate === "draining" || gate === "abandoned" && origin === "loop" ? new DispatchDiscardedError(msg._tag) : new RuntimeStoppedError(msg._tag)
+       );
+     }
+     return enqueueStep(msg, origin, stepDispatch);
+   }
+   function enqueueStep(msg, origin, step) {
+-    line.joined(msg.type);
++    line.joined(msg._tag);
+     const next = tail.then(() => {
+-      line.reachedTurn(msg.type);
++      line.reachedTurn(msg._tag);
+       if (gate === "abandoned") {
+-        if (origin === "caller") throw new DispatchDiscardedError(msg.type);
++        if (origin === "caller") throw new DispatchDiscardedError(msg._tag);
+         return;
+       }
+       if (bootError !== null) throw bootError;
+diff --git a/dist/chunk-E3NGRQDB.js b/dist/chunk-E3NGRQDB.js
+index b69a80f61111f82259c723164b61df9a36c5b492..9748cfdfe188f1e6f470af981e30e6067e3aa837 100644
+--- a/dist/chunk-E3NGRQDB.js
++++ b/dist/chunk-E3NGRQDB.js
+@@ -40,7 +40,7 @@ function identityFilter(identity) {
+     return {
+       update: (next) => (state, msg) => {
+         if (!misaddressed(msg, state)) return next(state, msg);
+-        loop.report(new IdentityDropNotice(msg.type), "identity-drop");
++        loop.report(new IdentityDropNotice(msg._tag), "identity-drop");
+         return null;
+       }
+     };
+@@ -57,7 +57,7 @@ function cmdDefinitions(defs, clock) {
+     const defined = new Set(defs.map((d) => d.cmdType));
+     return {
+       interpret: (next) => async (cmd, dispatch) => {
+-        const type = cmd.type;
++        const type = cmd._tag;
+         const checked = defined.has(type) ? (msg) => {
+           try {
+             check(cmd, msg);
+@@ -284,7 +284,7 @@ function telemetry(sink, clock) {
+       commit(msg) {
+         if (msg === void 0) return;
+         seq += 1;
+-        const event = { seq, msgType: msg.type, at: clock() };
++        const event = { seq, msgType: msg._tag, at: clock() };
+         try {
+           Promise.resolve(sink(event)).catch(
+             (err) => loop.report(err, "observer")
+@@ -322,7 +322,7 @@ function tellRun(machine, runtime, msg) {
+   }
+   return postable(
+     msg,
+-    (state) => acceptedTypes(machine, state).includes(msg.type)
++    (state) => acceptedTypes(machine, state).includes(msg._tag)
+   );
+ }
+ 
+diff --git a/dist/chunk-HKWLAXAI.js b/dist/chunk-HKWLAXAI.js
+index ea3668d5dfb5e772eeb85f3b9c6b1075560124e5..898ca4bef3d950c0408ec8236751310ee928bfb1 100644
+--- a/dist/chunk-HKWLAXAI.js
++++ b/dist/chunk-HKWLAXAI.js
+@@ -60,11 +60,11 @@ function resolveGuided(machine, ctx, loaded, answerers, events) {
+     }
+     const at = event.pick % waiting2.length;
+     const cmd = waiting2[at];
+-    const cell = index.get(cmd.type);
++    const cell = index.get(cmd._tag);
+     const answerer = answerers[cell];
+     return { msg: answerer.make(cmd, event.values[cell]), answers: at };
+   };
+-  const answerable = (cmds) => cmds.filter((cmd) => index.has(cmd.type));
++  const answerable = (cmds) => cmds.filter((cmd) => index.has(cmd._tag));
+   const msgs = [];
+   const waiting = [];
+   let state;
+@@ -79,7 +79,7 @@ function resolveGuided(machine, ctx, loaded, answerers, events) {
+     const meant = read(event, waiting);
+     if (meant === null) continue;
+     const { msg, answers } = meant;
+-    if (!acceptedTypes(machine, state).includes(msg.type)) continue;
++    if (!acceptedTypes(machine, state).includes(msg._tag)) continue;
+     if (answers !== null) waiting.splice(answers, 1);
+     msgs.push(msg);
+     try {
+diff --git a/dist/chunk-I4WVPPC4.js b/dist/chunk-I4WVPPC4.js
+index 99c8b1acf9e56a6acf3fafc9694d5b9c5438a1fc..61f72d969a3a630214a115e0195a648a16df7a69 100644
+--- a/dist/chunk-I4WVPPC4.js
++++ b/dist/chunk-I4WVPPC4.js
+@@ -138,7 +138,7 @@ function breadcrumbsFromTrace(trace, opts) {
+       category: "tea",
+       type: "default",
+       level: "info",
+-      message: serialize ? serialize(msg) : msg.type,
++      message: serialize ? serialize(msg) : msg._tag,
+       // Full msg kept verbatim so the structured payload survives even when
+       // `message` is a terse one-liner. Cast: a Msg is a `{ type: string }`
+       // record, which is a `Record<string, unknown>` for Sentry's `data`.
+diff --git a/dist/chunk-LDWEQ22Q.js b/dist/chunk-LDWEQ22Q.js
+index 8b5d3c27b0ec13c800e72f0166d6fe0721c92b8b..417700e3d2cbc700c5a835db53f638b2582ca045 100644
+--- a/dist/chunk-LDWEQ22Q.js
++++ b/dist/chunk-LDWEQ22Q.js
+@@ -6,10 +6,10 @@ function deadlines(list) {
+   return list.length === 0 ? null : list;
+ }
+ function deadlinesSub(select) {
+-  return { type: "deadline", deps: (state) => deadlines(select(state)) };
++  return { _tag: "deadline", deps: (state) => deadlines(select(state)) };
+ }
+ function deadlineSub(id, atMs, opts) {
+-  return { ...opts, id: subId(id), type: "deadline", atMs };
++  return { ...opts, id: subId(id), _tag: "deadline", atMs };
+ }
+ function subscribeWith(armTimer) {
+   return (sub, _ctx, dispatch) => {
+@@ -37,7 +37,7 @@ function setTimeoutArmTimer() {
+ }
+ var subscribeDeadline = (sub, ctx, dispatch) => subscribeWith(setTimeoutArmTimer())(sub, ctx, dispatch);
+ function deadlineExceeded(id, atMs, name) {
+-  return { type: deadlineMsgType(name), id, atMs };
++  return { _tag: deadlineMsgType(name), id, atMs };
+ }
+ function deadlineMsgType(name) {
+   return name === void 0 ? "deadline_exceeded" : `${name}_deadline`;
+@@ -92,10 +92,10 @@ function evictExpired(cache, nowMs) {
+   return { ...cache, entries: nextEntries };
+ }
+ function cacheEvictMsg(id) {
+-  return { type: "cache_evict", id };
++  return { _tag: "cache_evict", id };
+ }
+ function cacheEvictionSub(name, everyMs) {
+-  return { type: "cache", deps: () => ({ name, intervalMs: everyMs }) };
++  return { _tag: "cache", deps: () => ({ name, intervalMs: everyMs }) };
+ }
+ var cacheEvictionSubscribe = fromInterval((sub) => cacheEvictMsg(sub.deps.name));
+ 
+diff --git a/dist/chunk-LNJSAPQV.js b/dist/chunk-LNJSAPQV.js
+index 19ae44d15a2f373a2e1108f9b6adbb858fd111c7..7811d540ffa25ebb549630c27052680c6316a8e7 100644
+--- a/dist/chunk-LNJSAPQV.js
++++ b/dist/chunk-LNJSAPQV.js
+@@ -223,7 +223,7 @@ function requireAwaiting(s, kind) {
+ }
+ function toCompactRunCmd(cmd) {
+   return {
+-    type: MsgType.CompactRun,
++    _tag: MsgType.CompactRun,
+     key: COMPACTION_PURPOSE,
+     input: cmd.input
+   };
+@@ -295,10 +295,10 @@ function status(s) {
+ 
+ // src/agent/machine.ts
+ function agentBootMsg(at) {
+-  return { type: MsgType.AgentBoot, at };
++  return { _tag: MsgType.AgentBoot, at };
+ }
+ function agentCancelMsg(at) {
+-  return { type: MsgType.AgentCancel, at };
++  return { _tag: MsgType.AgentCancel, at };
+ }
+ var AGENT_EVENT_TYPES = [
+   "BrainStarted",
+@@ -392,7 +392,7 @@ function ended(state) {
+   return s.kind === "done" || s.kind === "failed" || s.kind === "cancelled" ? s : null;
+ }
+ function projectOwn(msg, runId, events, refused) {
+-  switch (msg.type) {
++  switch (msg._tag) {
+     case MsgType.ResilientOk:
+       events.push(turnSettled(msg.value.output, runId, msg.at));
+       break;
+@@ -575,14 +575,14 @@ function toolRouter(tools) {
+   for (const t of tools) handlers[t.cmdType] = t.interpret;
+   const interpret = handlers;
+   const outcomeOf = (msg) => {
+-    if (okTypes.has(msg.type)) {
++    if (okTypes.has(msg._tag)) {
+       const ok = msg;
+       return {
+         callId: ok.cmd.callId,
+         outcome: { kind: "ok", result: ok.value }
+       };
+     }
+-    if (errTypes.has(msg.type)) {
++    if (errTypes.has(msg._tag)) {
+       const err = msg;
+       return {
+         callId: err.cmd.callId,
+@@ -1083,7 +1083,7 @@ function summarizeWith(model, partsOf) {
+     const payload = cmd.input.payload;
+     const turn = await model(renderPrompt(payload, partsOf).map(withoutMedia));
+     return {
+-      type: MsgType.CompactOk,
++      _tag: MsgType.CompactOk,
+       key: COMPACTION_PURPOSE,
+       result: {
+         key: COMPACTION_PURPOSE,
+@@ -1153,7 +1153,7 @@ function forwardEvents(handle, onEvent) {
+ function forwardLadderErrors(handle, router, onToolError) {
+   const fired = /* @__PURE__ */ new Set();
+   handle.observe((msg, state) => {
+-    const seeding = msg.type === MsgType.AgentStart || msg.type === MsgType.AgentBoot;
++    const seeding = msg._tag === MsgType.AgentStart || msg._tag === MsgType.AgentBoot;
+     for (const record of state.conversation?.toolRecords ?? []) {
+       const { outcome, call } = record;
+       if (outcome.kind !== "error") continue;
+@@ -1200,14 +1200,14 @@ function withToolErrorHook(router, onToolError) {
+   };
+ }
+ function ownedByLadder(router, cmd, callId) {
+-  return router.resilienceOf({ name: cmd.type, callId, args: {} }) !== null;
++  return router.resilienceOf({ name: cmd._tag, callId, args: {} }) !== null;
+ }
+ function calledName(cmd) {
+   const rejection = cmd.error;
+-  return typeof rejection?.name === "string" ? rejection.name : cmd.type;
++  return typeof rejection?.name === "string" ? rejection.name : cmd._tag;
+ }
+ function startMsg(runId, at) {
+-  return { type: MsgType.AgentStart, runId, at };
++  return { _tag: MsgType.AgentStart, runId, at };
+ }
+ function isMidRun(s) {
+   const { kind } = status(s);
+diff --git a/dist/chunk-LPWPPBU2.js b/dist/chunk-LPWPPBU2.js
+index 70a75bdaf22457918fa48e2d3f75c5169ae94891..4cd6f32ed98fbbcabdc52f0329fbb24554378c9d 100644
+--- a/dist/chunk-LPWPPBU2.js
++++ b/dist/chunk-LPWPPBU2.js
+@@ -8,7 +8,7 @@ function senderOf(target, report) {
+     const line = target[post];
+     return (msg) => {
+       if (line(msg, everyState) === "stopped")
+-        report(new DispatchDiscardedError(msg.type), { phase: "discard" });
++        report(new DispatchDiscardedError(msg._tag), { phase: "discard" });
+     };
+   }
+   return (msg) => {
+diff --git a/dist/chunk-SKI5V64W.js b/dist/chunk-SKI5V64W.js
+index 43479539a3b8658557b1bd253154c0e64c3be304..a2e82a0fd39f7bf2b23caa8ae7977fe21a1d6fd2 100644
+--- a/dist/chunk-SKI5V64W.js
++++ b/dist/chunk-SKI5V64W.js
+@@ -49,7 +49,7 @@ function assertPureResult(result, msgType) {
+     const fnField = hasFunctionValues(cmd);
+     if (fnField !== null) {
+       throw new Error(
+-        `@demlik/tea: Cmd "${cmd.type}" has function field "${fnField}". Cmds must be plain data, not closures.`
++        `@demlik/tea: Cmd "${cmd._tag}" has function field "${fnField}". Cmds must be plain data, not closures.`
+       );
+     }
+   }
+@@ -135,7 +135,7 @@ function cmdContractOver(defs, clock) {
+   const minted = /* @__PURE__ */ new WeakSet();
+   return {
+     settle: (cmd, returned) => {
+-      const def = byType.get(cmd.type);
++      const def = byType.get(cmd._tag);
+       if (def === void 0) return returned;
+       if (returned === void 0 || returned === null) return void 0;
+       if (!isOutcome(returned)) {
+@@ -149,19 +149,19 @@ function cmdContractOver(defs, clock) {
+       return msg;
+     },
+     checkDispatch: (cmd, msg) => {
+-      const def = byType.get(cmd.type);
++      const def = byType.get(cmd._tag);
+       if (def === void 0) return;
+-      if (msg.type !== def.okType && msg.type !== def.errType) return;
++      if (msg._tag !== def.okType && msg._tag !== def.errType) return;
+       if (minted.has(msg)) return;
+       throw new OutcomeContractError(
+         def.cmdType,
+-        `dispatched its own "${msg.type}" Msg`
++        `dispatched its own "${msg._tag}" Msg`
+       );
+     }
+   };
+ }
+ function describeReturn(def, returned) {
+-  const type = typeof returned === "object" ? returned.type : void 0;
++  const type = typeof returned === "object" ? returned._tag : void 0;
+   if (typeof type !== "string") {
+     return "returned a value that is not an outcome";
+   }
+@@ -176,7 +176,7 @@ function mint(def, cmd, outcome, at) {
+     if (typeof tag !== "string" || !def.errTags.includes(tag)) {
+       throw new UndeclaredFailureError(def.cmdType, outcome.error, def.errTags);
+     }
+-    return { type: def.errType, cmd, error: outcome.error, at };
++    return { _tag: def.errType, cmd, error: outcome.error, at };
+   }
+   const parsed = validateSync(
+     def.schema.ok,
+@@ -185,13 +185,13 @@ function mint(def, cmd, outcome, at) {
+   );
+   if (parsed.issues !== void 0) {
+     return {
+-      type: def.errType,
++      _tag: def.errType,
+       cmd,
+       error: malformedResult(parsed.issues),
+       at
+     };
+   }
+-  return { type: def.okType, cmd, value: parsed.value, at };
++  return { _tag: def.okType, cmd, value: parsed.value, at };
+ }
+ function cmdEdgeOf(ctx) {
+   const edge = typeof ctx === "object" && ctx !== null ? ctx[cmdEdge] : void 0;
+@@ -209,13 +209,13 @@ function detachWorkOf(ctx) {
+ function defineCmd(name, spec) {
+   const okType = `${name}_ok`;
+   const errType = `${name}_err`;
+-  const build = (input) => ({ ...input, type: name });
++  const build = (input) => ({ ...input, _tag: name });
+   return Object.assign(build, {
+     cmdType: name,
+     okType,
+     errType,
+-    ok: (cmd, value, at) => stamp({ type: okType, cmd, value }, at),
+-    err: (cmd, error, at) => stamp({ type: errType, cmd, error }, at),
++    ok: (cmd, value, at) => stamp({ _tag: okType, cmd, value }, at),
++    err: (cmd, error, at) => stamp({ _tag: errType, cmd, error }, at),
+     schema: { input: spec.input, ok: spec.ok },
+     errTags: spec.err
+   });
+@@ -237,7 +237,7 @@ var NoCellError = class extends Error {
+     super(
+       // The pre-#14 text is kept VERBATIM as a prefix: a caller matching on it
+       // keeps matching, and the new clause only ever appends.
+-      `@demlik/tea: no update cell for msg.type "${msgType}" in state "${stateName}" \u2014 the machine's update does not handle this Msg (an unknown wire msg.type, or a missing cell reached by bypassing the mapped types).` + (acceptedTypes2.length === 0 ? ` This state accepts no Msg at all.` : ` This state accepts: ${acceptedTypes2.map((t) => `"${t}"`).join(", ")}.`)
++      `@demlik/tea: no update cell for msg._tag "${msgType}" in state "${stateName}" \u2014 the machine's update does not handle this Msg (an unknown wire msg._tag, or a missing cell reached by bypassing the mapped types).` + (acceptedTypes2.length === 0 ? ` This state accepts no Msg at all.` : ` This state accepts: ${acceptedTypes2.map((t) => `"${t}"`).join(", ")}.`)
+     );
+     this.msgType = msgType;
+     this.stateName = stateName;
+@@ -251,8 +251,8 @@ var NoCellError = class extends Error {
+ };
+ function stateNameOf(state) {
+   if (state === void 0 || state === null) return "(no state)";
+-  if (typeof state === "object" && "type" in state) {
+-    const t = state.type;
++  if (typeof state === "object" && "_tag" in state) {
++    const t = state._tag;
+     if (typeof t === "string") return t;
+   }
+   return "(untagged state)";
+@@ -263,7 +263,7 @@ function acceptedTypes(machine, state) {
+     return cellKeysOf(machine.update);
+   }
+   const table = machine.update;
+-  const row = table[state.type];
++  const row = table[state._tag];
+   return row === void 0 || row === null ? [] : cellKeysOf(row);
+ }
+ function cellKeysOf(row) {
+@@ -281,7 +281,7 @@ function lookupCell(machine, state, msg) {
+   }
+   if (formOf(machine) === "reducer") {
+     const record = machine.update;
+-    const cell2 = record[msg.type];
++    const cell2 = record[msg._tag];
+     const stateName2 = stateNameOf(state);
+     return typeof cell2 === "function" ? { cell: cell2, stateName: stateName2 } : {
+       cell: void 0,
+@@ -290,8 +290,8 @@ function lookupCell(machine, state, msg) {
+     };
+   }
+   const table = machine.update;
+-  const stateKey = state.type;
+-  const cell = table[stateKey]?.[msg.type];
++  const stateKey = state._tag;
++  const cell = table[stateKey]?.[msg._tag];
+   const stateName = String(stateKey);
+   return typeof cell === "function" ? { cell, stateName } : {
+     cell: void 0,
+@@ -302,14 +302,14 @@ function lookupCell(machine, state, msg) {
+ function applyCell(machine, state, msg) {
+   const found = lookupCell(machine, state, msg);
+   if (found.cell === void 0) {
+-    throw new NoCellError(msg.type, found.stateName, found.acceptedTypes);
++    throw new NoCellError(msg._tag, found.stateName, found.acceptedTypes);
+   }
+   return found.cell(state, msg);
+ }
+ function checkedStep(state, msg, step) {
+   if (__DEV__) deepFreeze(state);
+   const result = step(state, msg);
+-  if (__DEV__ && result !== null) assertPureResult(result, msg.type);
++  if (__DEV__ && result !== null) assertPureResult(result, msg._tag);
+   return result;
+ }
+ function applyCellChecked(machine, state, msg) {
+@@ -491,7 +491,7 @@ function subEntriesOf(machine) {
+ function desiredSub(entry, state) {
+   const deps = entry.deps(state);
+   if (depsInactive(deps)) return null;
+-  return { id: subIdOf(entry.type, deps), type: entry.type, deps };
++  return { id: subIdOf(entry._tag, deps), _tag: entry._tag, deps };
+ }
+ function foldUpdates(machine, initialState, msgs) {
+   let state = initialState;
+@@ -749,7 +749,7 @@ function tryApplyCell(machine, state, msg) {
+   const found = lookupCell(machine, state, msg);
+   if (found.cell === void 0) {
+     return Outcome.err(
+-      new NoCellError(msg.type, found.stateName, found.acceptedTypes)
++      new NoCellError(msg._tag, found.stateName, found.acceptedTypes)
+     );
+   }
+   return Outcome.ok(found.cell(state, msg));
+@@ -762,7 +762,7 @@ function tryFoldMsgs(machine, base, msgs) {
+     if (stepped._tag === "Err") {
+       return Outcome.err({ index, msg, error: stepped.error });
+     }
+-    if (__DEV__) assertPureResult(stepped.value, msg.type);
++    if (__DEV__) assertPureResult(stepped.value, msg._tag);
+     state = stepped.value[0];
+   }
+   return Outcome.ok(state);
+diff --git a/dist/core-CDR1i78K.d.ts b/dist/core-CDR1i78K.d.ts
+index c079a58375aa3f8fa69dfa88522a8d7e18e2236b..dd881738d82c5ac7c24a16d3a454075ee30041c1 100644
+--- a/dist/core-CDR1i78K.d.ts
++++ b/dist/core-CDR1i78K.d.ts
+@@ -126,7 +126,7 @@ declare class OutcomeContractError extends Error {
+  * `type` key is refused at the type level — it would overwrite the discriminant.
+  */
+ type CmdInput = {
+-    readonly type?: never;
++    readonly _tag?: never;
+ } & Record<string, unknown>;
+ /** The value `Cmd.define("fetch", …)` builds: `{ type: "fetch", ...input }`. */
+ type CmdValue<Name extends string, Input extends CmdInput, Ok, E extends Tagged> = Cmd<Name, Ok, E | MalformedResult> & Readonly<Input>;
+@@ -136,7 +136,7 @@ type CmdValue<Name extends string, Input extends CmdInput, Ok, E extends Tagged>
+  * the result into state.
+  */
+ type SettledOk<Name extends string, C, Ok> = {
+-    readonly type: `${Name}_ok`;
++    readonly _tag: `${Name}_ok`;
+     readonly cmd: C;
+     readonly value: Ok;
+     /** Stamped by the runtime at the interpret edge (`run`'s `clock`). */
+@@ -148,7 +148,7 @@ type SettledOk<Name extends string, C, Ok> = {
+  * decide what a failure means.
+  */
+ type SettledErr<Name extends string, C, E extends Tagged> = {
+-    readonly type: `${Name}_err`;
++    readonly _tag: `${Name}_err`;
+     readonly cmd: C;
+     readonly error: E | MalformedResult;
+     /** Stamped by the runtime at the interpret edge (`run`'s `clock`). */
+@@ -274,7 +274,7 @@ declare function acceptedTypes<S>(machine: {
+  * `NoCellError` when no cell matches.
+  */
+ declare function applyCell<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd>(machine: {
+     update: object;
+     __form?: UpdateForm;
+@@ -284,7 +284,7 @@ declare function applyCell<S, M extends {
+  * input state is frozen and the result is asserted to be plain data.
+  */
+ declare function applyCellChecked<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd>(machine: {
+     update: object;
+     __form?: UpdateForm;
+@@ -337,10 +337,10 @@ declare function acceptsOf(machine: {
+  * returning `[nextState, cmds]`. Leaving a Msg type out is a compile error.
+  */
+ type Reducer<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd> = {
+-    [K in M["type"]]: (state: S, msg: Extract<M, {
+-        type: K;
++    [K in M["_tag"]]: (state: S, msg: Extract<M, {
++        _tag: K;
+     }>) => SyncReturn<S, C>;
+ };
+ /**
+@@ -350,11 +350,11 @@ type Reducer<S, M extends {
+  * naming `acceptedTypes`. `ExhaustiveTransitions` requires every cell instead.
+  */
+ type Transitions<S extends {
+-    type: string;
++    _tag: string;
+ }, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd> = {
+-    [P in S["type"]]: Partial<ExhaustiveTransitions<S, M, C>[P]>;
++    [P in S["_tag"]]: Partial<ExhaustiveTransitions<S, M, C>[P]>;
+ };
+ /**
+  * `Transitions<S, M, C>` with every cell REQUIRED — the opt-in floor for a
+@@ -363,15 +363,15 @@ type Transitions<S extends {
+  * `defineMachine` takes the annotated table unchanged.
+  */
+ type ExhaustiveTransitions<S extends {
+-    type: string;
++    _tag: string;
+ }, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd> = {
+-    [P in S["type"]]: {
+-        [K in M["type"]]: (state: Extract<S, {
+-            type: P;
++    [P in S["_tag"]]: {
++        [K in M["_tag"]]: (state: Extract<S, {
++            _tag: P;
+         }>, msg: Extract<M, {
+-            type: K;
++            _tag: K;
+         }>) => SyncReturn<S, C>;
+     };
+ };
+@@ -384,7 +384,7 @@ type ExhaustiveTransitions<S extends {
+  * services from the plain `ctx` handed to `run`.
+  */
+ type Cmd<T extends string = string, Ok = unknown, E = unknown> = {
+-    readonly type: T;
++    readonly _tag: T;
+     /** Phantom — the value this Cmd settles with. Never assigned. */
+     readonly __ok?: Ok;
+     /** Phantom — the `_tag` union this Cmd can settle with. Never assigned. */
+@@ -506,7 +506,7 @@ declare function subId(s: string): SubId;
+  */
+ type Sub<T extends string = string, D = unknown> = {
+     readonly id: SubId;
+-    readonly type: T;
++    readonly _tag: T;
+     readonly deps: D;
+ };
+ /**
+@@ -544,7 +544,7 @@ declare function structuralHash(deps: unknown): string;
+  * returns the data the runner needs, or `null` to keep the Sub off.
+  */
+ type DepKeyedSub<S, U extends Sub = Sub> = U extends Sub<infer T, infer D> ? {
+-    readonly type: T;
++    readonly _tag: T;
+     /**
+      * The slice of state this Sub depends on. `null` or `undefined` ⇒ off in
+      * this state (see `depsInactive`), so `(s) => s.optionalRunId` gates
+@@ -603,10 +603,10 @@ type HandlerCtx<Ctx> = (0 extends 1 & Ctx ? Ctx : [
+  * Leaving a Cmd type out is a compile error.
+  */
+ type Interpret<M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, Ctx> = {
+-    [K in C["type"]]: InterpretCell<M, Extract<C, {
+-        type: K;
++    [K in C["_tag"]]: InterpretCell<M, Extract<C, {
++        _tag: K;
+     }>, Ctx>;
+ };
+ /**
+@@ -616,7 +616,7 @@ type Interpret<M extends {
+  * declared (not `unknown`). A returned list is dispatched in order.
+  */
+ type InterpretCell<M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, Ctx> = unknown extends ErrorsOf<C> ? (cmd: C, ctx: HandlerCtx<Ctx>, dispatch?: (msg: M) => void) => Promise<M | readonly M[] | void> : (cmd: C, ctx: HandlerCtx<Ctx> & OutcomeHelpers<OkOfCmd<C>, DeclaredErrorsOf<C>>, dispatch?: (msg: M) => void) => Promise<Outcome<OkOfCmd<C>, DeclaredErrorsOf<C>> | void>;
+ /** The value a Cmd settles with; `unknown` for a hand-written Cmd. */
+ type OkOfCmd<C> = C extends {
+@@ -637,7 +637,7 @@ type DeclaredErrorsOf<C> = Exclude<ErrorsOf<C>, MalformedResult>;
+  * or mistyped terminal Msg fails to compile.
+  */
+ type InterpretDetached<C extends Cmd, Allowed extends {
+-    type: string;
++    _tag: string;
+ }, Ctx> = (cmd: C, ctx: HandlerCtx<Ctx>, dispatch: (msg: Allowed) => void) => Promise<void>;
+ /**
+  * The Sub runner table an engine is handed: one runner per Sub type. Leaving a
+@@ -647,10 +647,10 @@ type InterpretDetached<C extends Cmd, Allowed extends {
+  * Sub stops.
+  */
+ type Subscribe<M extends {
+-    type: string;
++    _tag: string;
+ }, U extends Sub, Ctx> = {
+-    [K in U["type"]]: (sub: Extract<U, {
+-        type: K;
++    [K in U["_tag"]]: (sub: Extract<U, {
++        _tag: K;
+     }>, ctx: Ctx, dispatch: (msg: M) => void) => Dispose;
+ };
+ /**
+@@ -658,7 +658,7 @@ type Subscribe<M extends {
+  * emits no Cmd, required — one handler per Cmd variant — for one that does.
+  */
+ type InterpretArg<M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, Ctx> = [
+     C
+ ] extends [Cmd<never>] ? {
+@@ -673,14 +673,14 @@ type InterpretArg<M extends {
+  * built-in replaces it (#270 R2.1), which is how a test drives time.
+  */
+ type SubscribeArg<M extends {
+-    type: string;
++    _tag: string;
+ }, U extends Sub, Ctx> = [
+-    Exclude<U["type"], BuiltinSubType>
++    Exclude<U["_tag"], BuiltinSubType>
+ ] extends [never] ? {
+     readonly subscribe?: Partial<Subscribe<M, Exclude<U, Sub<never>> | BuiltinSub<M>, Ctx>>;
+ } : {
+     readonly subscribe: Subscribe<M, Exclude<U, {
+-        readonly type: BuiltinSubType;
++        readonly _tag: BuiltinSubType;
+     }>, Ctx> & Partial<Subscribe<M, BuiltinSub<M>, Ctx>>;
+ };
+ /**
+@@ -689,7 +689,7 @@ type SubscribeArg<M extends {
+  * neither — it is data, and one machine file runs under any engine.
+  */
+ type RunHandlers<M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx> = InterpretArg<M, C, Ctx> & SubscribeArg<M, U, Ctx>;
+ /**
+  * A machine beside the handlers it runs under — what a wrapper, a battery's
+@@ -697,7 +697,7 @@ type RunHandlers<M extends {
+  * `run(wired.machine, { ...wired, ctx })`.
+  */
+ type Wired<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx> = {
+     readonly machine: Machine<S, M, C, U, Ctx>;
+ } & RunHandlers<M, C, U, Ctx>;
+@@ -706,7 +706,7 @@ type Wired<S, M extends {
+  * `identity`. Build one with `defineMachine` and hand it to an engine's `run`.
+  */
+ type Machine<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx> = {
+     /**
+      * Boot the runtime. Called once by `run(...)` with whatever `Store.load()`
+@@ -731,7 +731,7 @@ type Machine<S, M extends {
+      */
+     readonly cmds?: readonly AnyCmdDef[];
+     update: Reducer<S, M, C> | ([S] extends [{
+-        type: string;
++        _tag: string;
+     }] ? Transitions<S, M, C> : never);
+     /**
+      * The machine's Subs, as data: each entry names a Sub `type` and the state
+@@ -788,7 +788,7 @@ type Machine<S, M extends {
+  * the Cmds from a state of your choosing.
+  */
+ declare function foldUpdates<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd>(machine: {
+     update: object;
+     __form?: UpdateForm;
+@@ -802,7 +802,7 @@ declare function foldUpdates<S, M extends {
+  * unacknowledged inputs on top of a server snapshot without running any effect.
+  */
+ declare function foldMsgs<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, base: S, msgs: readonly M[]): S;
+ 
+ export { applyCell as $, type AnyCmdDef as A, type BuiltinSub as B, Cmd as C, type Dispose as D, type ErrorsOf as E, type InterpretCell as F, type MachineShape as G, type HandlerCtx as H, type Interpret as I, type NoCtx as J, OutcomeContractError as K, type OutcomeHelpers as L, type Machine as M, NoCellError as N, Outcome as O, type Port as P, type PortEmitter as Q, type RunHandlers as R, type Subscribe as S, type TimerDeps as T, type UpdateForm as U, type SubscribeArg as V, type Wired as W, type SyncReturn as X, UndeclaredFailureError as Y, acceptedTypes as Z, acceptsOf as _, type CmdOf as a, applyCellChecked as a0, describeMachine as a1, detectUpdateForm as a2, foldMsgs as a3, foldUpdates as a4, formOf as a5, msgKeysOf as a6, structuralHash as a7, subId as a8, subIdOf as a9, type CmdDef as b, type Sub as c, type SettledOk as d, type SettledErr as e, type TaggedError as f, type Reducer as g, type Settled as h, type Transitions as i, type InterpretDetached as j, type SubId as k, type DepKeyedSub as l, type TimerSub as m, type MalformedResult as n, type OkOfCmd as o, type DeclaredErrorsOf as p, type BuiltinSubType as q, type CmdInput as r, type Tagged as s, type OkOf as t, type ErrOf as u, type CmdValue as v, AsyncSchemaError as w, type ExhaustiveTransitions as x, type Identity as y, type InterpretArg as z };
+diff --git a/dist/devtools/index.js b/dist/devtools/index.js
+index 34b5592cf182cc704f29f806fef5cd572a35b49c..08a40c5f7707d91da1f1e21502ace797db3cc2d0 100644
+--- a/dist/devtools/index.js
++++ b/dist/devtools/index.js
+@@ -184,7 +184,7 @@ function useMsgHistory(dispatch, opts = {}) {
+   const max = opts.max ?? 60;
+   const now = opts.now ?? nowTs;
+   const derive = opts.derive ?? ((msg) => {
+-    const tag = msg && typeof msg === "object" && "type" in msg ? String(msg.type) : String(msg);
++    const tag = msg && typeof msg === "object" && "_tag" in msg ? String(msg._tag) : String(msg);
+     return { ts: now(), kind: "msg", text: tag };
+   });
+   const [history, setHistory] = useState([]);
+diff --git a/dist/do/index.d.ts b/dist/do/index.d.ts
+index 755aa318fb7b2fb88312dce2198753af6e916d75..811672d0c163aba09d01ced9d8726ad975db8b71 100644
+--- a/dist/do/index.d.ts
++++ b/dist/do/index.d.ts
+@@ -754,7 +754,7 @@ interface EventSourcedStore<S, M> {
+  * belong to the runtime's subsequent init over the recovered State.
+  */
+ declare function doEventSourcedStore<S, M extends {
+-    type: string;
++    _tag: string;
+ }, Ctx, C extends Cmd = Cmd, U extends Sub = Sub>(storage: DurableObjectStorage, machine: Machine<S, M, C, U, Ctx>, ctx: Ctx, opts?: EventSourcedOptions<S, M>): EventSourcedStore<S, M>;
+ 
+ /**
+@@ -855,7 +855,7 @@ interface ProjectionUpdate<Model, Msg> {
+  * @typeParam View  The read model this projection derives.
+  */
+ interface Projection<Model, Msg extends {
+-    type: string;
++    _tag: string;
+ }, View> {
+     /** This projection's id (offset-isolation unit). */
+     readonly id: ProjectionId;
+@@ -882,7 +882,7 @@ interface Projection<Model, Msg extends {
+  * (or a rebuild) calls.
+  */
+ interface ProjectionRunner<Model, Msg extends {
+-    type: string;
++    _tag: string;
+ }, View> {
+     readonly id: ProjectionId;
+     /** The current derived view (the read model). */
+@@ -923,7 +923,7 @@ interface ProjectionRunner<Model, Msg extends {
+  * when a strictly-newer update is folded.
+  */
+ declare function runProjection<Model, Msg extends {
+-    type: string;
++    _tag: string;
+ }, View>(projection: Projection<Model, Msg, View>, startOffset?: number): ProjectionRunner<Model, Msg, View>;
+ /**
+  * A driver over a set of projections sharing one write-model stream. Holds the
+@@ -931,7 +931,7 @@ declare function runProjection<Model, Msg extends {
+  * runner independently.
+  */
+ interface ProjectionRegistry<Model, Msg extends {
+-    type: string;
++    _tag: string;
+ }> {
+     /** Register a projection; returns its live runner. */
+     register<View>(projection: Projection<Model, Msg, View>, startOffset?: number): ProjectionRunner<Model, Msg, View>;
+@@ -955,7 +955,7 @@ interface ProjectionRegistry<Model, Msg extends {
+  * substrate's `run(machine, { onError })` is the natural source to forward).
+  */
+ declare function projectionRegistry<Model, Msg extends {
+-    type: string;
++    _tag: string;
+ }>(onError?: ProjectionOnError): ProjectionRegistry<Model, Msg>;
+ /**
+  * Wire a {@link ProjectionRegistry} to a runtime's transition stream. The boot
+@@ -971,7 +971,7 @@ declare function projectionRegistry<Model, Msg extends {
+  * boundary).
+  */
+ declare function driveProjections<Model, Msg extends {
+-    type: string;
++    _tag: string;
+ }>(registry: ProjectionRegistry<Model, Msg>, runtime: {
+     observe(observer: (msg: Msg, model: Model) => void): () => void;
+     onBoot(handler: (model: Model) => void): () => void;
+@@ -995,7 +995,7 @@ declare function driveProjections<Model, Msg extends {
+  * stream equals the live view.
+  */
+ declare function rebuildProjection<Model, Msg extends {
+-    type: string;
++    _tag: string;
+ }, View>(projection: Projection<Model, Msg, View>, updates: readonly {
+     readonly msg: Msg | null;
+     readonly model: Model;
+@@ -1065,7 +1065,7 @@ declare function sseHub<E>(): SseHub<E>;
+  * ```
+  */
+ declare function sseProjection<Model, Msg extends {
+-    type: string;
++    _tag: string;
+ }, E>(hub: SseHub<E>, toEvent: (msg: Msg | null, model: Model) => E | null, id?: {
+     name?: string;
+     key?: string;
+@@ -1475,7 +1475,7 @@ declare function durableCommandCarrier<R>(inner: DeferredGateway<R>, recorder: P
+  *   non-agent grain supplies its own boot Msg constructor.
+  */
+ interface ResumePort<S, M extends {
+-    type: string;
++    _tag: string;
+ }> {
+     readonly isResumable: (state: S) => boolean;
+     readonly resumeMsg: (now: number) => M;
+@@ -1498,7 +1498,7 @@ interface ResumePort<S, M extends {
+  * it. Takes any engine's {@link RunHandle}. `now` is injected (the sole boot clock read) so a test can pin it.
+  */
+ declare function bootResume<S, M extends {
+-    type: string;
++    _tag: string;
+ }, E extends {
+     type: string;
+ } = never>(booting: RunHandle<S, M, E>, port: ResumePort<S, M>, now?: () => number): Promise<void>;
+diff --git a/dist/do/index.js b/dist/do/index.js
+index 01eefc929b1982e84093dd008f60935a37d7c921..c786c02c48bdf669452b70da1d8af3b612d581bc 100644
+--- a/dist/do/index.js
++++ b/dist/do/index.js
+@@ -43,7 +43,7 @@ function eventKey(prefix, seq) {
+   return prefix + String(seq).padStart(SEQ_WIDTH, "0");
+ }
+ var defaultParse = (raw) => raw !== null && typeof raw === "object" && !Array.isArray(raw) ? raw : null;
+-var defaultParseEvent = (raw) => raw !== null && typeof raw === "object" && !Array.isArray(raw) && typeof raw.type === "string" ? raw : null;
++var defaultParseEvent = (raw) => raw !== null && typeof raw === "object" && !Array.isArray(raw) && typeof raw._tag === "string" ? raw : null;
+ function doEventSourcedStore(storage, machine, ctx, opts = {}) {
+   const snapshotEvery = opts.snapshotEvery ?? 100;
+   if (snapshotEvery < 1 || !Number.isInteger(snapshotEvery)) {
+@@ -624,7 +624,7 @@ function stepHost(ctx, engine, config = {}) {
+         );
+         intakeState = nextIntake;
+         for (const cmd of cmds) {
+-          if (cmd.type === "intake:process") {
++          if (cmd._tag === "intake:process") {
+             await engine.resume(request.runId, posted);
+             const [completed] = intake.complete(
+               intakeState,
+diff --git a/dist/effect/index.d.ts b/dist/effect/index.d.ts
+index 6d88c98fbb844aaeee67c24e012fd9c8358691bd..6e1840581739956a3ff17c22a33cfed7cafb5300 100644
+--- a/dist/effect/index.d.ts
++++ b/dist/effect/index.d.ts
+@@ -54,7 +54,7 @@ import 'effect/Types';
+  * ```
+  */
+ declare const tell: <S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd$1, U extends Sub, Ctx, E extends {
+     type: string;
+ } = never, Err = never>(machine: Machine$1<S, M, C, U, Ctx>, runtime: EffectRun<S, M, E, Err>, msg: NoInfer<M>) => Effect.Effect<TellAnswer>;
+@@ -217,7 +217,7 @@ declare const Cmd: {
+ };
+ 
+ declare function make<S, M extends {
+-    type: string;
++    _tag: string;
+ }, D extends AnyCmdDef, U extends Sub = Sub<never>, Ctx = unknown>(spec: NoInfer<Omit<Machine$1<S, M | Settled<D>, CmdOf<D>, U, Ctx>, "cmds">> & {
+     readonly model: Schema.Schema<S>;
+     readonly msg: Schema.Schema<M>;
+@@ -229,7 +229,7 @@ declare function make<S, M extends {
+ };
+ /** A core tea machine, with the same init, update and engine contracts. */
+ type Machine<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd$1, U extends Sub, Ctx> = Machine$1<S, M, C, U, Ctx>;
+ /**
+  * Build a tea machine with readonly `model` and `msg` schema references for
+@@ -309,7 +309,7 @@ interface EffectHandlers<R> extends HandlerFamily {
+ }
+ /** The `interpret` and `subscribe` options of `run`, for a runtime providing `R`. */
+ type EffectHandlerTables<M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd$1, U extends Sub, R> = InterpretOption<C, EffectInterpret<M, C, R>> & SubscribeOption<U, EffectSubscribe<M, U, R>>;
+ /**
+  * The `run` that {@link runIn} gives `useMachine`: any machine in, a handle out
+@@ -317,7 +317,7 @@ type EffectHandlerTables<M extends {
+  * service the runtime does not provide does not compile.
+  */
+ type BridgedRun<R> = (<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd$1, U extends Sub, Ctx>(machine: Machine$1<S, M, C, U, Ctx>, opts: RunOptions<S, M, C, U, Ctx, never, EffectHandlers<R>>) => RunHandle<S, M>) & {
+     readonly "~demlik/tea/handlers"?: EffectHandlers<R>;
+ };
+diff --git a/dist/effect/index.js b/dist/effect/index.js
+index 706d7f620e0792d4e8dd1fe51530aad5827b6f3b..98def4e01d6b0bc3ec2355c7438fb0e7e78a6f99 100644
+--- a/dist/effect/index.js
++++ b/dist/effect/index.js
+@@ -145,7 +145,7 @@ var HostedRun = class {
+   }
+   discard(held) {
+     for (const msg of held)
+-      this.report(new DispatchDiscardedError(msg.type), { phase: "discard" });
++      this.report(new DispatchDiscardedError(msg._tag), { phase: "discard" });
+   }
+   /**
+    * Make `register` on the run as soon as there is one. Returns the undo, which
+diff --git a/dist/extension/index.d.ts b/dist/extension/index.d.ts
+index c1437d6da515ab4622af253888c9011ef631e9e8..5f39b9dc25a8d8a3ec27dfef352498e1193d5d66 100644
+--- a/dist/extension/index.d.ts
++++ b/dist/extension/index.d.ts
+@@ -115,7 +115,7 @@ interface BridgeRuntimeOpts<S, M, V = S> {
+  *   sees it and we reply `{ ok: false }`.
+  */
+ declare function bridgeRuntime<S, M extends {
+-    type: string;
++    _tag: string;
+ }, V = S>(runtime: Runtime<S, M>, { channel, parseMsg, serialize, historySize }: BridgeRuntimeOpts<S, M, V>): () => void;
+ /**
+  * The explicit opt-out of inbound msg parsing: an identity pass-through that
+@@ -186,7 +186,7 @@ interface BridgeClientOpts<S, M> {
+  * talks to the background runtime over `chrome.runtime` messages.
+  */
+ declare function bridgeClient<S, M extends {
+-    type: string;
++    _tag: string;
+ }>({ channel, parseState, parseMsg, }: BridgeClientOpts<S, M>): BridgeClient<S, M>;
+ /**
+  * Options for `bridgeTabClient`: the target `tabId`, the `channel` name, and
+@@ -225,7 +225,7 @@ interface BridgeTabClientOpts<S, M> {
+  *   per-tab content-script runtimes).
+  */
+ declare function bridgeTabClient<S, M extends {
+-    type: string;
++    _tag: string;
+ }>({ tabId, channel, parseState, parseMsg, }: BridgeTabClientOpts<S, M>): BridgeClient<S, M>;
+ 
+ /**
+@@ -315,7 +315,7 @@ interface UseBackgroundRuntimeResult<S, M> {
+  * the click handler waits for nothing. Read state for the outcome.
+  */
+ declare function useBackgroundRuntime<S, M extends {
+-    type: string;
++    _tag: string;
+ }>({ channel, parseState, onError, }: UseBackgroundRuntimeOpts<S>): UseBackgroundRuntimeResult<S, M>;
+ /**
+  * What `createBackgroundRuntimeContext` returns: a `Provider`, plus the
+@@ -370,7 +370,7 @@ interface BackgroundRuntimeContext<S, M> {
+  * components.
+  */
+ declare function createBackgroundRuntimeContext<S, M extends {
+-    type: string;
++    _tag: string;
+ }>(): BackgroundRuntimeContext<S, M>;
+ 
+ type AlarmSubData = {
+diff --git a/dist/flow/index.d.ts b/dist/flow/index.d.ts
+index 5e592c57fd4e6d89d7f99e27ccf8c9dea9778600..a6e94ed3875244aa5081b94853286cc3aadae110 100644
+--- a/dist/flow/index.d.ts
++++ b/dist/flow/index.d.ts
+@@ -88,7 +88,7 @@ interface AwaitTerminalOptions {
+  * @param opts       optional bounded `timeoutMs` deadline (see {@link AwaitTerminalOptions}).
+  */
+ declare function awaitTerminal<S, M extends {
+-    type: string;
++    _tag: string;
+ }, E extends {
+     type: string;
+ } = never>(runtime: Runtime<S, M, E>, isTerminal: (state: S) => boolean, opts?: AwaitTerminalOptions): Promise<S>;
+@@ -115,7 +115,7 @@ declare function awaitTerminal<S, M extends {
+  * @param opts       optional bounded `timeoutMs` deadline (see {@link AwaitTerminalOptions}).
+  */
+ declare function runToTerminal<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, seed: CtxArg<Ctx> & NoInfer<RunHandlers<M, C, U, Ctx>> & {
+     readonly msgs: readonly M[];
+ }, isTerminal: (state: S) => boolean, opts?: AwaitTerminalOptions): Promise<S>;
+@@ -1157,7 +1157,7 @@ type WorkflowCmd<A> = ActivityCmd<A> | CompensationCmd<A>;
+  *  reducer matches it against `current.id`, records the completed step, and
+  *  advances. */
+ interface ActivityOk<R> {
+-    readonly type: "activity_ok";
++    readonly _tag: "activity_ok";
+     readonly id: DeliveryId;
+     readonly result: R;
+ }
+@@ -1166,7 +1166,7 @@ interface ActivityOk<R> {
+  *  the reducer begins compensation (or settles `failed` when nothing has
+  *  completed). */
+ interface ActivityErr<F> {
+-    readonly type: "activity_err";
++    readonly _tag: "activity_err";
+     readonly id: DeliveryId;
+     readonly failure: F;
+ }
+@@ -1177,7 +1177,7 @@ interface ActivityErr<F> {
+  *  `failed_compensated` when the unwind is complete. A compensation produces no
+  *  result the workflow carries — its only signal is "the undo took". */
+ interface CompensationOk {
+-    readonly type: "compensation_ok";
++    readonly _tag: "compensation_ok";
+     readonly id: DeliveryId;
+ }
+ /** A compensation itself failed (#125): the inverse activity bounced (a refund
+@@ -1185,7 +1185,7 @@ interface CompensationOk {
+  *  halts the rollback at the terminal `compensation_failed` state — never wedged
+  *  in `compensating` forever. */
+ interface CompensationErr<F> {
+-    readonly type: "compensation_err";
++    readonly _tag: "compensation_err";
+     readonly id: DeliveryId;
+     readonly failure: F;
+ }
+@@ -1193,7 +1193,7 @@ interface CompensationErr<F> {
+  *  compensation results. */
+ type WorkflowMsg<R, F> = ActivityOk<R> | ActivityErr<F> | CompensationOk | CompensationErr<F>;
+ /** Every `type` discriminant tag of the {@link WorkflowMsg} union. */
+-type WorkflowMsgType = WorkflowMsg<unknown, unknown>["type"];
++type WorkflowMsgType = WorkflowMsg<unknown, unknown>["_tag"];
+ /**
+  * The runtime accept-set of every {@link WorkflowMsgType} — the single source of
+  * truth the boundary replay parse keys off (see `do.ts`). Built from an
+diff --git a/dist/flow/index.js b/dist/flow/index.js
+index 5c13c02c9e4ca346260c7278ee301abd2115cc8a..a3609edb1051786844762fe78e579e78434483bb 100644
+--- a/dist/flow/index.js
++++ b/dist/flow/index.js
+@@ -490,7 +490,7 @@ function createSaga(config) {
+ 
+ // src/internal/flow/workflow/route.ts
+ function routeWorkflowMsg(wf, state, msg) {
+-  switch (msg.type) {
++  switch (msg._tag) {
+     case "activity_ok":
+       return wf.onActivityOk(state, msg);
+     case "activity_err":
+diff --git a/dist/index-BdV785AK.d.ts b/dist/index-BdV785AK.d.ts
+index 4c49619bef61ae48a1a3731a7661d29bc019435c..bd4d54d8569b0fed22220770c60c3ef5181108bc 100644
+--- a/dist/index-BdV785AK.d.ts
++++ b/dist/index-BdV785AK.d.ts
+@@ -68,7 +68,7 @@ import { S as SubscribeHandler } from './types-3iziWxH0.js';
+  */
+ type DeadlineSub<N extends string | undefined = undefined> = {
+     readonly id: SubId;
+-    readonly type: "deadline";
++    readonly _tag: "deadline";
+     readonly atMs: number;
+ } & DeadlineOpts<N>;
+ /**
+@@ -131,7 +131,7 @@ type DeadlineOpts<N extends string | undefined = undefined> = {
+  * consumer's local dialect.
+  */
+ type DeadlineExceeded<N extends string | undefined = undefined> = {
+-    readonly type: DeadlineMsgType<N>;
++    readonly _tag: DeadlineMsgType<N>;
+     readonly id: string;
+     readonly atMs: number;
+ };
+@@ -369,7 +369,7 @@ declare function evictExpired<V>(cache: TtlCache<V>, nowMs: number): TtlCache<V>
+  * `cache_evict: (s) => [{ ...s, cache: evictExpired(s.cache, nowMs) }, []]`.
+  */
+ interface CacheEvictMsg {
+-    readonly type: "cache_evict";
++    readonly _tag: "cache_evict";
+     readonly id: string;
+ }
+ /** Construct a `cache_evict` Msg for the cache identified by `id`. */
+diff --git a/dist/index-I-rewcm9.d.ts b/dist/index-I-rewcm9.d.ts
+index 8b550415f26f1db91a9f450baf91891c5d8d3457..1ec7da9fbd8720bb32992fa8f12ca68e5dbfd588 100644
+--- a/dist/index-I-rewcm9.d.ts
++++ b/dist/index-I-rewcm9.d.ts
+@@ -559,7 +559,7 @@ type RunCmd<I, N extends string = DefaultResilientName, R = unknown> = CmdOf<Run
+  * `LlmErr`, jev-ask's `JevAskErr`) can hand `settle` its Msg with `E` widened.
+  */
+ type SucceedMsg<R, N extends string = DefaultResilientName, I = unknown> = {
+-    readonly type: ResilientOkType<N>;
++    readonly _tag: ResilientOkType<N>;
+     readonly cmd: RunCmd<I, N>;
+     readonly value: R;
+     readonly at: number;
+@@ -569,7 +569,7 @@ type SucceedMsg<R, N extends string = DefaultResilientName, I = unknown> = {
+  * `<name>_run_err`, carrying the Cmd and the error.
+  */
+ type FailMsg<N extends string = DefaultResilientName, I = unknown, E = RunErr | MalformedResult> = {
+-    readonly type: ResilientErrType<N>;
++    readonly _tag: ResilientErrType<N>;
+     readonly cmd: RunCmd<I, N>;
+     readonly error: E;
+     readonly at: number;
+@@ -582,14 +582,14 @@ type FailMsg<N extends string = DefaultResilientName, I = unknown, E = RunErr |
+  * compaction summary) builds the record without inventing a whole run Cmd.
+  */
+ type SettleMsg<R, N extends string = DefaultResilientName> = {
+-    readonly type?: ResilientOkType<N>;
++    readonly _tag?: ResilientOkType<N>;
+     readonly cmd: {
+         readonly key: string;
+     };
+     readonly value: R;
+     readonly at: number;
+ } | {
+-    readonly type?: ResilientErrType<N>;
++    readonly _tag?: ResilientErrType<N>;
+     readonly cmd: {
+         readonly key: string;
+     };
+diff --git a/dist/index-nVnUjxUB.d.ts b/dist/index-nVnUjxUB.d.ts
+index 18ce2dd48696b94819bd897c51106c3bbc18ec7e..805055d616a30f35c7d1bcdb6ac2cce685992ba0 100644
+--- a/dist/index-nVnUjxUB.d.ts
++++ b/dist/index-nVnUjxUB.d.ts
+@@ -172,7 +172,7 @@ interface Recorder<S, M> {
+  *                  no step retention.
+  */
+ declare function recorder<S, M extends {
+-    type: string;
++    _tag: string;
+ }>(runtime: BootingRuntime<S, M>, opts?: RecorderOptions): Recorder<S, M>;
+ /**
+  * Re-hydrate a {@link Trace} from the JSONL produced by
+@@ -234,7 +234,7 @@ interface TraceAttachment {
+  * @typeParam M - the machine's Msg union.
+  */
+ declare function traceAttachment<S, M extends {
+-    type: string;
++    _tag: string;
+ }>(trace: Trace<S, M>): TraceAttachment;
+ /** A Sentry-shaped breadcrumb. Matches the fields of Sentry's `Breadcrumb`. */
+ interface TraceBreadcrumb {
+@@ -292,7 +292,7 @@ interface BreadcrumbsOptions<M> {
+  * @typeParam M - the machine's Msg union.
+  */
+ declare function breadcrumbsFromTrace<S, M extends {
+-    type: string;
++    _tag: string;
+ }>(trace: Trace<S, M>, opts?: BreadcrumbsOptions<M>): TraceBreadcrumb[];
+ 
+ export { type BreadcrumbsOptions as B, type RecorderOptions as R, type Trace as T, type Recorder as a, type TraceAttachment as b, type TraceBreadcrumb as c, type TraceStep as d, breadcrumbsFromTrace as e, parseJSONL as p, recorder as r, traceAttachment as t };
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 0118176afa18f0debc3c14341f54d6b763f7a526..70e395884ec1549e8aa77450ccf47214058b3fdc 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -74,7 +74,7 @@ declare function readInOrder<In, Out>(input: In, order: readonly ReadStep<In, Ou
+  * `historyTracker`. Use it to feed a debug inspector.
+  */
+ interface HistoryTracker<S, M extends {
+-    type: string;
++    _tag: string;
+ }> {
+     /**
+      * Snapshot of recorded transitions, oldest first. Each entry is
+@@ -116,7 +116,7 @@ interface HistoryTracker<S, M extends {
+  *                 always `[]`, and `stop()` is a no-op.
+  */
+ declare function historyTracker<S, M extends {
+-    type: string;
++    _tag: string;
+ }>(runtime: BootingRuntime<S, M>, size: number): HistoryTracker<S, M>;
+ 
+ /**
+@@ -245,7 +245,7 @@ declare const nextSeq: <T>(buffer: readonly SeqTagged<T>[]) => Seq;
+  * umbrella without dragging `run` into a client bundle.
+  */
+ declare function reconcile<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, authoritativeState: S, lastAppliedSeq: Ack | Seq, pending: readonly SeqTagged<M>[]): S;
+ 
+ /**
+@@ -367,9 +367,9 @@ declare function fromInterval<S extends Sub<string, IntervalSubData>, M>(msgFn:
+  * to another's announcements.
+  */
+ declare function fromPort<S extends Sub, M, Ctx, T, RS = unknown, RM extends {
+-    type: string;
++    _tag: string;
+ } = {
+-    type: string;
++    _tag: string;
+ }>(selectRuntime: (ctx: Ctx) => Runtime<RS, RM>, port: Port<T>, msgFn: (value: T, sub: S) => M | null): SubscribeHandler<S, M, Ctx>;
+ 
+ /** The `deps` a WebSocket Sub carries: the `wsUrl` to connect to. */
+@@ -482,7 +482,7 @@ interface DefineManagedResourceOpts<N extends string, TKey, Handle, Ctx> {
+  */
+ interface ManagedResourceBattery<N extends string, TKey, Handle, Ctx> {
+     /** The battery's Sub type — its `name`. */
+-    readonly type: N;
++    readonly _tag: N;
+     /**
+      * The `subs` entry. `when(state)` returns the resource's KEY when it should
+      * be held, or `null` when it should be torn down. The key is the Sub's
+@@ -656,7 +656,7 @@ interface FromTransportOpts<N extends string, TKey, Inbound, Outbound, M, Ctx> {
+  */
+ interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
+     /** The seam's Sub type — its `name`. */
+-    readonly type: N;
++    readonly _tag: N;
+     /**
+      * The `subs` entry. `when(state)` returns the seam's KEY when it should be
+      * open, or `null` when it should be torn down. The key is the Sub's `deps`,
+diff --git a/dist/jev/index.js b/dist/jev/index.js
+index 2f789ef552f545554a60d399ca9e6bd7507f1f66..1a4cfa6b69fd888b95166dcd9389233d7e92433b 100644
+--- a/dist/jev/index.js
++++ b/dist/jev/index.js
+@@ -383,7 +383,7 @@ function createClassifyBatch(config) {
+   const window = createBatchWindow({
+     maxItems,
+     maxMs: config.maxMs,
+-    flush: (items) => ({ type: "classify_batch_flush", items })
++    flush: (items) => ({ _tag: "classify_batch_flush", items })
+   });
+   function init() {
+     return {
+@@ -493,7 +493,7 @@ function createClassifyBatch(config) {
+   }
+   function subEntries(select, id = "jev-classify-batch") {
+     const flush = {
+-      type: "timer",
++      _tag: "timer",
+       deps: (model) => window.timer(select(model).window, id)
+     };
+     if (config.evictEveryMs === void 0) return [flush];
+diff --git a/dist/laws-ewbbQ8K8.d.ts b/dist/laws-ewbbQ8K8.d.ts
+index 48e82e466a67239c673a163f4367944e3f2bd7cb..117093f2419832bb55b0d0721a05bd366eded47c 100644
+--- a/dist/laws-ewbbQ8K8.d.ts
++++ b/dist/laws-ewbbQ8K8.d.ts
+@@ -55,7 +55,7 @@ interface Fold<S, M, C> {
+  * ```
+  */
+ declare function foldEvents<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, ctx: NoInfer<Ctx>, loaded: NoInfer<S> | null, msgs: readonly NoInfer<M>[]): Fold<S, M, C>;
+ 
+ /**
+diff --git a/dist/machine-BblDmW8H.d.ts b/dist/machine-BblDmW8H.d.ts
+index 68f9d62f1edd8790e12579bb56ecf5e3dff0f4f0..8c13500e616021cf04b00f86df0a6714bc68abce 100644
+--- a/dist/machine-BblDmW8H.d.ts
++++ b/dist/machine-BblDmW8H.d.ts
+@@ -1091,14 +1091,14 @@ type AgentCompactRunCmd = Cmd<typeof MsgType.CompactRun> & {
+ };
+ /** The compaction round-trip success settle Msg — carries the parsed {@link CompactionSummary}. */
+ type AgentCompactOkMsg = {
+-    readonly type: typeof MsgType.CompactOk;
++    readonly _tag: typeof MsgType.CompactOk;
+     readonly key: CompactionPurpose;
+     readonly result: LlmOk<CompactionPurpose, CompactionOutputs>;
+     readonly at: number;
+ };
+ /** The compaction round-trip failure settle Msg — carries the typed {@link LlmErr}. */
+ type AgentCompactErrMsg = {
+-    readonly type: typeof MsgType.CompactErr;
++    readonly _tag: typeof MsgType.CompactErr;
+     readonly key: CompactionPurpose;
+     readonly error: LlmErr<CompactionPurpose>;
+     readonly at: number;
+@@ -1120,7 +1120,7 @@ type AgentCompactErrMsg = {
+  * EXACTLY when the Cmd can fire, never as a silent gap the agent backfills.
+  */
+ type CompactInterpret<M extends {
+-    type: string;
++    _tag: string;
+ }, Compact extends boolean, Ctx> = Compact extends true ? Interpret<M, AgentCompactRunCmd, Ctx> : {
+     readonly compact_run?: never;
+ };
+@@ -1513,7 +1513,7 @@ interface ToolRouter<T extends AnyToolDef> {
+      * its payload ride beside that rendering, never instead of it (#115).
+      */
+     readonly outcomeOf: (msg: {
+-        readonly type: string;
++        readonly _tag: string;
+     }) => ToolSettlement<ToolResult<T>, ToolError<T>> | null;
+ }
+ /**
+@@ -1625,7 +1625,7 @@ type AgentCmd<P extends string, TC extends Cmd = Cmd, Snap extends boolean = tru
+  * fire, never as a silent gap the agent backfills.
+  */
+ type SnapshotInterpret<M extends {
+-    type: string;
++    _tag: string;
+ }, Snap extends boolean, Ctx> = Snap extends true ? Interpret<M, MonitoredRunCmd<unknown>, Ctx> : {
+     readonly snapshot_write?: never;
+ };
+@@ -1743,7 +1743,7 @@ type AgentLlmErrMsg<P extends string> = LlmFailMsg<P>;
+ type AgentTimerMsg = LlmTimerMsg;
+ /** The Msg `do/host`'s `autoBoot` fires to re-enter the agent's `boot` verb on rehydrate. */
+ type AgentBootMsg = {
+-    readonly type: typeof MsgType.AgentBoot;
++    readonly _tag: typeof MsgType.AgentBoot;
+     readonly at: number;
+ };
+ /**
+@@ -1761,7 +1761,7 @@ declare function agentBootMsg(at: number): AgentBootMsg;
+  * constructor rather than a literal duplicated across the seam.
+  */
+ type AgentCancelMsg = {
+-    readonly type: typeof MsgType.AgentCancel;
++    readonly _tag: typeof MsgType.AgentCancel;
+     readonly at: number;
+ };
+ /** Construct the `agent_cancel` Msg an abort dispatches. `at` stamps the outcome. */
+@@ -1785,16 +1785,16 @@ declare function agentCancelMsg(at: number): AgentCancelMsg;
+  * (manual wiring), but it is not part of the one wired machine's Msg surface.
+  */
+ type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> = {
+-    readonly type: typeof MsgType.AgentStart;
++    readonly _tag: typeof MsgType.AgentStart;
+     readonly runId: string;
+     readonly at: number;
+ } | {
+-    readonly type: typeof MsgType.AgentToolOk;
++    readonly _tag: typeof MsgType.AgentToolOk;
+     readonly callId: string;
+     readonly result: R;
+     readonly at: number;
+ } | {
+-    readonly type: typeof MsgType.AgentToolErr;
++    readonly _tag: typeof MsgType.AgentToolErr;
+     readonly callId: string;
+     readonly reason: string;
+     readonly at: number;
+@@ -1947,7 +1947,7 @@ declare function agentEvents<Stage, P extends string, O extends Record<P, AgentT
+  * through `as unknown as Interpret<...>` at every wiring site. Pure.
+  */
+ declare function mergeInterpret<M extends {
+-    type: string;
++    _tag: string;
+ }, A extends Cmd, B extends Cmd, Ctx>(a: Interpret<M, A, Ctx> | undefined, b: Interpret<M, B, Ctx>): Interpret<M, A | B, Ctx>;
+ /**
+  * Lift an agent result `[slice, cmds]` into a host `[State, cmds]` where the slice
+diff --git a/dist/machine-viz/index.d.ts b/dist/machine-viz/index.d.ts
+index 9e4e05b3309ddbf2342b9fce2c193efdad7c0997..83971975d675c8c544ff4ab0fe77710ad1394341 100644
+--- a/dist/machine-viz/index.d.ts
++++ b/dist/machine-viz/index.d.ts
+@@ -91,7 +91,7 @@ interface MachineVizOptions<S, M> {
+  * no clocks, no randomness).
+  */
+ declare function toMermaid<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, opts?: MachineVizOptions<NoInfer<S>, NoInfer<M>>): string;
+ 
+ export { type MachineVizOptions, safeId, safeLabel, toMermaid };
+diff --git a/dist/machine-viz/index.js b/dist/machine-viz/index.js
+index 1996f5638601ee2182138eb47b5ffb90858a757b..acec5c02c20387e7358184b0c12f6b0890029f14 100644
+--- a/dist/machine-viz/index.js
++++ b/dist/machine-viz/index.js
+@@ -50,7 +50,7 @@ function emitReducer(machine, lines) {
+   }
+   lines.push("  }");
+   lines.push("  note right of ReducerMachine");
+-  lines.push("    Reducer-form machine: flat dispatch keyed by msg.type.");
++  lines.push("    Reducer-form machine: flat dispatch keyed by msg._tag.");
+   lines.push(
+     "    No phase graph \u2014 state is not a discriminated union over phases."
+   );
+@@ -65,7 +65,7 @@ function emitTransitions(machine, lines, ctx) {
+   }
+   if (ctx.hasCtx) {
+     const [initState] = machine.init(null, ctx.ctx);
+-    const initType = initState.type;
++    const initType = initState._tag;
+     lines.push(`  [*] --> ${safeId(initType)}`);
+   } else {
+     lines.push(
+@@ -110,7 +110,7 @@ function resolveEdge(row, stateType, msgType, ctx) {
+   }
+   try {
+     const [next] = cell(sampleState, sampleMsg);
+-    const to = next.type;
++    const to = next._tag;
+     return { kind: "resolved", from: stateType, to, msg: msgType };
+   } catch {
+     return { kind: "structural", from: stateType, msg: msgType };
+@@ -126,7 +126,7 @@ function emitSubscriptions(machine, lines, stateSamples) {
+     if (sample === void 0) continue;
+     const subTypes = entries.flatMap((entry) => {
+       const sub = desiredSub(entry, sample);
+-      return sub === null ? [] : [sub.type];
++      return sub === null ? [] : [sub._tag];
+     });
+     const body = subTypes.length === 0 ? "(no active subs)" : `subs: ${subTypes.map(safeLabel).join(", ")}`;
+     lines.push(`  note left of ${safeId(st)}`);
+diff --git a/dist/parity/index.d.ts b/dist/parity/index.d.ts
+index b6c611aa0a2e402d68b703d5fa0270dfa37dc351..9a39c4a52bd9efcd1209c421fadfddc3993e22ca 100644
+--- a/dist/parity/index.d.ts
++++ b/dist/parity/index.d.ts
+@@ -63,7 +63,7 @@ interface Recording<S, M> {
+  * only for the per-step / resume-cache-prefix inspection, not for replay).
+  */
+ declare function recordRun<S, M extends {
+-    type: string;
++    _tag: string;
+ }>(runtime: BootingRuntime<S, M>, opts?: RecorderOptions): Recording<S, M>;
+ /**
+  * Reproduce a recording's final State by folding from its captured post-init
+@@ -73,7 +73,7 @@ declare function recordRun<S, M extends {
+  * `ctx` is an optional legacy argument; recorded replay needs no init context.
+  */
+ declare function goldenReplay<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, recording: Recording<S, M> | Trace<S, M>, ctx?: Ctx): S;
+ /** Configuration for {@link normalizeForParity}. */
+ interface ParitySchema {
+diff --git a/dist/pbt/index.d.ts b/dist/pbt/index.d.ts
+index 3d94be94247c7a038a123fc9dc231226d7041e5d..de65da9f3f517a6c34cd4a56493ed66ed4852b0f 100644
+--- a/dist/pbt/index.d.ts
++++ b/dist/pbt/index.d.ts
+@@ -44,7 +44,7 @@ declare function stubCtxThrowingProxy<Ctx>(): Ctx;
+ 
+ /**
+  * Strict per-variant Msg arbitrary table. Mapped type: every key in
+- * `M["type"]` MUST have an arbitrary entry whose `T` is the narrowed
++ * `M["_tag"]` MUST have an arbitrary entry whose `T` is the narrowed
+  * variant. Adding a new Msg variant without an entry is a compile error
+  * (same load-bearing discipline as `Reducer<S, M, C>` in the substrate).
+  *
+@@ -65,10 +65,10 @@ declare function stubCtxThrowingProxy<Ctx>(): Ctx;
+  * ```
+  */
+ type MsgArbitraryTable<M extends {
+-    type: string;
++    _tag: string;
+ }> = {
+-    [K in M["type"]]: fc.Arbitrary<Extract<M, {
+-        type: K;
++    [K in M["_tag"]]: fc.Arbitrary<Extract<M, {
++        _tag: K;
+     }>>;
+ };
+ /**
+@@ -77,7 +77,7 @@ type MsgArbitraryTable<M extends {
+  * bias the distribution (default uniform).
+  *
+  * @param table   Per-variant arbitrary table (strict — every variant required).
+- * @param opts    Optional bias: `weights` is a `Partial<Record<M["type"], number>>`.
++ * @param opts    Optional bias: `weights` is a `Partial<Record<M["_tag"], number>>`.
+  *                Variants without an explicit weight default to 1.
+  *
+  * @example
+@@ -94,9 +94,9 @@ type MsgArbitraryTable<M extends {
+  * ```
+  */
+ declare function arbMsg<M extends {
+-    type: string;
++    _tag: string;
+ }>(table: MsgArbitraryTable<M>, opts?: {
+-    weights?: Partial<Record<M["type"], number>>;
++    weights?: Partial<Record<M["_tag"], number>>;
+ }): fc.Arbitrary<M>;
+ /**
+  * Build a payload-free Msg variant arbitrary. Sugar for
+@@ -111,7 +111,7 @@ declare function arbMsg<M extends {
+  * ```
+  */
+ declare function arbConstantMsg<T extends string>(type: T): fc.Arbitrary<{
+-    type: T;
++    _tag: T;
+ }>;
+ /**
+  * Build a record-shaped Msg variant arbitrary. Sugar for
+@@ -130,7 +130,7 @@ declare function arbConstantMsg<T extends string>(type: T): fc.Arbitrary<{
+ declare function arbRecordMsg<T extends string, R>(type: T, fields: {
+     [K in keyof R]: fc.Arbitrary<R[K]>;
+ }): fc.Arbitrary<{
+-    type: T;
++    _tag: T;
+ } & R>;
+ 
+ /**
+@@ -160,7 +160,7 @@ declare function arbRecordMsg<T extends string, R>(type: T, fields: {
+  * ```
+  */
+ declare function arbMsgSequence<M extends {
+-    type: string;
++    _tag: string;
+ }>(msgArb: fc.Arbitrary<M>, opts?: {
+     readonly minLength?: number;
+     readonly maxLength?: number;
+@@ -191,18 +191,18 @@ interface AnswerCell<K extends Cmd, V, M> {
+  * cell is never answered. A Msg type in neither table is never drawn.
+  */
+ interface GuidedCells<M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, A extends {
+-    readonly [K in C["type"]]?: unknown;
++    readonly [K in C["_tag"]]?: unknown;
+ }> {
+     readonly outside?: {
+-        readonly [K in M["type"]]?: fc.Arbitrary<Extract<M, {
+-            type: K;
++        readonly [K in M["_tag"]]?: fc.Arbitrary<Extract<M, {
++            _tag: K;
+         }>>;
+     };
+     readonly answers?: {
+-        readonly [K in keyof A]: K extends C["type"] ? AnswerCell<Extract<C, {
+-            type: K;
++        readonly [K in keyof A]: K extends C["_tag"] ? AnswerCell<Extract<C, {
++            _tag: K;
+         }>, A[K], M> : never;
+     };
+ }
+@@ -280,9 +280,9 @@ interface GuidedCells<M extends {
+  * ```
+  */
+ declare function arbGuidedSequence<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx, A extends {
+-    readonly [K in C["type"]]?: unknown;
++    readonly [K in C["_tag"]]?: unknown;
+ }>(machine: Machine<S, M, C, U, Ctx>, ctx: NoInfer<Ctx>, cells: GuidedCells<M, C, A>, opts?: {
+     readonly maxLength?: number;
+     readonly size?: fc.SizeForArbitrary;
+@@ -478,7 +478,7 @@ declare class PropertyFailure extends Error {
+  * ```
+  */
+ declare function propertyTerminates<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, ctx: NoInfer<Ctx>, seqArb: fc.Arbitrary<readonly NoInfer<M>[]>, terminal: (state: NoInfer<S>, initCmds: readonly NoInfer<C>[]) => boolean, opts?: NoInfer<PropertyOpts<S>>): PropertyRun;
+ /**
+  * Assert a predicate holds on EVERY transition step in a generated
+@@ -523,7 +523,7 @@ declare function propertyTerminates<S, M extends {
+  * ```
+  */
+ declare function propertyInvariant<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, ctx: NoInfer<Ctx>, seqArb: fc.Arbitrary<readonly NoInfer<M>[]>, invariant: (step: Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>, initCmds: readonly NoInfer<C>[]) => boolean | string | null, opts?: NoInfer<PropertyOpts<S>>): PropertyRun;
+ /**
+  * Assert a predicate over the full trace plus the final state. Use when
+@@ -560,7 +560,7 @@ declare function propertyInvariant<S, M extends {
+  * ```
+  */
+ declare function propertyTrace<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, ctx: NoInfer<Ctx>, seqArb: fc.Arbitrary<readonly NoInfer<M>[]>, predicate: (steps: readonly Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>[], finalState: NoInfer<S>, initCmds: readonly NoInfer<C>[]) => boolean | string | null, opts?: NoInfer<PropertyOpts<S>>): PropertyRun;
+ 
+ /**
+@@ -592,10 +592,10 @@ declare function propertyTrace<S, M extends {
+  * ```
+  */
+ declare function msgTypeKeys<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd>(machine: {
+     update: Reducer<S, M, C> | ([S] extends [{
+-        type: string;
++        _tag: string;
+     }] ? Transitions<S, M, C> : never);
+     __form?: UpdateForm;
+ }): readonly string[];
+diff --git a/dist/pbt/index.js b/dist/pbt/index.js
+index 442686e47989a0646283e464abf2294d7fc6cebb..66621b91acd3f2b5baa70c219d3f5a0a591c81c5 100644
+--- a/dist/pbt/index.js
++++ b/dist/pbt/index.js
+@@ -38,11 +38,11 @@ function arbMsg(table, opts) {
+   return fc3.oneof(...weighted);
+ }
+ function arbConstantMsg(type) {
+-  return fc3.constant({ type });
++  return fc3.constant({ _tag: type });
+ }
+ function arbRecordMsg(type, fields) {
+   const recordArbitraries = {
+-    type: fc3.constant(type),
++    _tag: fc3.constant(type),
+     ...fields
+   };
+   return fc3.record(recordArbitraries);
+@@ -155,8 +155,8 @@ var MsgTally = class {
+     if (this.#closed) return;
+     for (const step of steps) {
+       const { acted, refusal } = classify(step);
+-      const count = this.#counts.get(step.msg.type) ?? { drawn: 0, acted: 0 };
+-      this.#counts.set(step.msg.type, {
++      const count = this.#counts.get(step.msg._tag) ?? { drawn: 0, acted: 0 };
++      this.#counts.set(step.msg._tag, {
+         drawn: count.drawn + 1,
+         acted: count.acted + (acted ? 1 : 0)
+       });
+@@ -220,9 +220,9 @@ function assertLaw(runner, broken) {
+   throw broken.reason === null ? new Error(report) : new BrokenLaw(report, broken.reason);
+ }
+ function cmdFault(cmd, declared) {
+-  const { type } = Object(cmd);
++  const { _tag: type } = Object(cmd);
+   if (typeof cmd !== "object" || typeof type !== "string") {
+-    return `${fc3.stringify(cmd)} isn't a Cmd: it has no string \`type\``;
++    return `${fc3.stringify(cmd)} isn't a Cmd: it has no string \`_tag\``;
+   }
+   if (declared === null || declared.has(type)) return null;
+   return `${fc3.stringify(cmd)} isn't in machine.cmds: [${[...declared].join(", ")}]`;
+diff --git a/dist/persistence/index.d.ts b/dist/persistence/index.d.ts
+index ddc99aea44de667d9c0bdb5773281db3bbab29b2..73d2511fe0bc24408f2ccedaba95f9cbae31b8e0 100644
+--- a/dist/persistence/index.d.ts
++++ b/dist/persistence/index.d.ts
+@@ -97,7 +97,7 @@ interface ReplayResult<S, M = unknown> {
+  * @param _ctx    - optional legacy argument; recorded replay needs no init context.
+  */
+ declare function replayTrace<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, trace: Trace<S, M>, _ctx?: Ctx): ReplayResult<S, M>;
+ /**
+  * Order-insensitive structural deep-equality — the comparator the
+diff --git a/dist/promise/index.d.ts b/dist/promise/index.d.ts
+index 78f4e1ec680b2faea7d2bfa5fdac7ed6b48d03e6..9128eda54c772bfd54a7e81b6c1b19eb612e9f6a 100644
+--- a/dist/promise/index.d.ts
++++ b/dist/promise/index.d.ts
+@@ -15,7 +15,7 @@ import '@standard-schema/spec';
+ 
+ /** The options of the Promise engine's `run`. */
+ type PromiseRunOptions<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx, E extends {
+     type: string;
+ }> = CtxArg<Ctx> & NoInfer<RunHandlers<M, C, U, Ctx>> & StoreAndOnError<S> & {
+@@ -96,7 +96,7 @@ type PromiseRunOptions<S, M extends {
+  * {@link Run}. It does not compile as `tell`'s argument: wait for `ready`.
+  */
+ interface BootingRun<S, M extends {
+-    type: string;
++    _tag: string;
+ }, E extends {
+     type: string;
+ } = never> extends BootingRuntime<S, M, E> {
+@@ -110,7 +110,7 @@ interface BootingRun<S, M extends {
+  * argument. It fits anywhere a `Runtime` is asked for.
+  */
+ interface Run<S, M extends {
+-    type: string;
++    _tag: string;
+ }, E extends {
+     type: string;
+ } = never> extends Runtime<S, M, E>, Postable<S, M> {
+@@ -126,7 +126,7 @@ interface Run<S, M extends {
+  * (ADR 0031).
+  */
+ declare function run<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx, E extends {
+     type: string;
+ } = never>(machine: Machine<S, M, C, U, Ctx>, opts: PromiseRunOptions<S, M, C, U, Ctx, E>): BootingRun<S, M, E>;
+@@ -163,7 +163,7 @@ type DriveCancellation<S, M> = {
+ };
+ /** Options for `driveToDone`. */
+ type DriveToDoneOptions<S, M extends {
+-    type: string;
++    _tag: string;
+ } = never> = DriveCancellation<S, M> & {
+     /**
+      * Marks a terminal State as a FAILURE. A State this holds for ends the drive
+@@ -242,7 +242,7 @@ type DriveToDoneOptions<S, M extends {
+  *                   `{ signal, cancel }` pair (see {@link DriveToDoneOptions}).
+  */
+ declare function driveToDone<S, M extends {
+-    type: string;
++    _tag: string;
+ }, E extends {
+     type: string;
+ } = never>(handle: BootingRuntime<S, M, E>, start: M | ((booted: S) => M), isTerminal: (state: S) => boolean, opts?: DriveToDoneOptions<S, M>): Promise<S>;
+@@ -280,7 +280,7 @@ declare function driveToDone<S, M extends {
+  * ```
+  */
+ declare function tell<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx, E extends {
+     type: string;
+ } = never>(machine: Machine<S, M, C, U, Ctx>, runtime: Run<S, M, E>, msg: NoInfer<M>): TellAnswer;
+diff --git a/dist/react/index.d.ts b/dist/react/index.d.ts
+index bbe6174e56a2fb923a2ec0d73f22474e02ca8f97..bde19817d55ace4cf87f5d0c8011a3e7aa4016c1 100644
+--- a/dist/react/index.d.ts
++++ b/dist/react/index.d.ts
+@@ -13,7 +13,7 @@ import '@standard-schema/spec';
+ 
+ /** What a `send` can be built on: a run with a line to post to, or only its own `dispatch`. */
+ type SendTarget<S, M extends {
+-    type: string;
++    _tag: string;
+ }> = Postable<S, M> | {
+     dispatch(msg: M): Promise<void>;
+ };
+@@ -70,7 +70,7 @@ type SendTarget<S, M extends {
+  * flight, which the substrate's default sink warns about (issue #365).
+  */
+ type UseMachineOpts<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx, F extends HandlerFamily = PromiseHandlers> = {
+     run: EngineRun<S, M, C, U, Ctx, never, F>;
+     ctx: Ctx;
+@@ -111,7 +111,7 @@ type UseMachineOpts<S, M extends {
+  * Read the rendered State for the outcome; there is no Promise to await.
+  */
+ declare function useMachine<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx, F extends HandlerFamily = PromiseHandlers>(machine: Machine<S, M, C, U, Ctx>, opts: NoInfer<UseMachineOpts<S, M, C, U, Ctx, F>> & FamilyOfRun<F>): [S, (msg: M) => void];
+ /**
+  * The `run` of `UseMachineOpts`, seen only for the family it says it takes. A
+@@ -151,10 +151,10 @@ type FamilyOfRun<F extends HandlerFamily> = {
+  * to the default sink and is read fresh without replacing `send`.
+  */
+ declare function useRuntime<S, M extends {
+-    type: string;
++    _tag: string;
+ }>(runtime: ViewHandle<S, M>, opts?: UseRuntimeOpts): [S, (msg: M) => void];
+ declare function useRuntime<S, M extends {
+-    type: string;
++    _tag: string;
+ }, V>(runtime: ViewHandle<S, M>, select: (state: S) => V, opts?: UseRuntimeOpts): [V, (msg: M) => void];
+ /** Options for `useRuntime`: the sink for a Msg that never reached the run. */
+ type UseRuntimeOpts = {
+@@ -163,7 +163,7 @@ type UseRuntimeOpts = {
+ };
+ /** What `useRuntime` reads: a booted run from either engine's `run`, or a hand-built handle. */
+ type ViewHandle<S, M extends {
+-    type: string;
++    _tag: string;
+ }> = {
+     subscribe(listener: () => void): () => void;
+     getState(): S;
+diff --git a/dist/react/index.js b/dist/react/index.js
+index 952c32ab6b3c3331d7c060177a9a885952de3cea..6b64b7969ba9fa5f99e092a28e507d36b64b7fc5 100644
+--- a/dist/react/index.js
++++ b/dist/react/index.js
+@@ -142,7 +142,7 @@ var MountedRun = class {
+     }
+   };
+   discard(msg) {
+-    this.report(new DispatchDiscardedError(msg.type), { phase: "discard" });
++    this.report(new DispatchDiscardedError(msg._tag), { phase: "discard" });
+   }
+   /** The effect ran: the component is on screen. */
+   connect() {
+diff --git a/dist/resilience/index.d.ts b/dist/resilience/index.d.ts
+index 3d73c5f0d2e711e6941fb7c9c2b0671088a7b68e..3480b8c07d9eb718649a9b0a29aaf64a632c3aeb 100644
+--- a/dist/resilience/index.d.ts
++++ b/dist/resilience/index.d.ts
+@@ -176,7 +176,7 @@ type AuthedCmd<I> = RunCmd<I> | RefreshTokenCmd;
+  * when a guarded call comes back unauthorized.
+  */
+ type Unauthorized = {
+-    readonly type: typeof MsgType.Unauthorized;
++    readonly _tag: typeof MsgType.Unauthorized;
+     readonly key: string;
+     readonly at: number;
+ };
+diff --git a/dist/run-u711x9Iv.d.ts b/dist/run-u711x9Iv.d.ts
+index e18f1f24667362a8da7e5620902874d2ca20f8cc..cc9c62fe6d6c502ccc5a657d9f4a83b568dd66ec 100644
+--- a/dist/run-u711x9Iv.d.ts
++++ b/dist/run-u711x9Iv.d.ts
+@@ -67,7 +67,7 @@ declare class SubFailed extends SubFailed_base<{
+  * that `ready` succeeds with.
+  */
+ interface EffectBootingRuntime<S, M extends {
+-    type: string;
++    _tag: string;
+ }, E extends {
+     type: string;
+ } = never, Err = never> {
+@@ -125,7 +125,7 @@ interface EffectBootingRuntime<S, M extends {
+  * {@link EffectRun}, which is one of these and carries what `tell` asks for.
+  */
+ interface EffectRuntime<S, M extends {
+-    type: string;
++    _tag: string;
+ }, E extends {
+     type: string;
+ } = never, Err = never> extends EffectBootingRuntime<S, M, E, Err> {
+@@ -161,7 +161,7 @@ interface EffectRuntime<S, M extends {
+  * `ready`.
+  */
+ interface EffectBootingRun<S, M extends {
+-    type: string;
++    _tag: string;
+ }, E extends {
+     type: string;
+ } = never, Err = never> extends EffectBootingRuntime<S, M, E, Err> {
+@@ -176,7 +176,7 @@ interface EffectBootingRun<S, M extends {
+  * `EffectRuntime` is asked for.
+  */
+ interface EffectRun<S, M extends {
+-    type: string;
++    _tag: string;
+ }, E extends {
+     type: string;
+ } = never, Err = never> extends EffectRuntime<S, M, E, Err>, Postable<S, M> {
+@@ -212,17 +212,17 @@ interface EffectRun<S, M extends {
+  * handle (see {@link CellErrors}). `R` is whatever services it reads.
+  */
+ type EffectInterpretCell<M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, R = unknown> = unknown extends ErrorsOf<C> ? (cmd: C) => Effect.Effect<M | readonly M[] | void, unknown, R> : (cmd: C) => Effect.Effect<OkOfCmd<C>, DeclaredErrorsOf<C>, R>;
+ /**
+  * The Effect engine's `interpret` map: one cell per Cmd variant, each reading
+  * services within `R`.
+  */
+ type EffectInterpret<M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, R = unknown> = {
+-    readonly [K in C["type"]]: EffectInterpretCell<M, Extract<C, {
+-        type: K;
++    readonly [K in C["_tag"]]: EffectInterpretCell<M, Extract<C, {
++        _tag: K;
+     }>, R>;
+ };
+ /**
+@@ -235,7 +235,7 @@ type EffectInterpret<M extends {
+  * `"sub"` and stops the run (#309), and `done()` fails with `SubFailed`.
+  */
+ type EffectRunner<M extends {
+-    type: string;
++    _tag: string;
+ }, U extends Sub, R = unknown> = (sub: U) => Stream.Stream<M, unknown, R>;
+ /**
+  * The Effect engine's `subscribe` map: a runner for every Sub type the machine
+@@ -243,14 +243,14 @@ type EffectRunner<M extends {
+  * replaces the engine's own (#270 R2.1).
+  */
+ type EffectSubscribe<M extends {
+-    type: string;
++    _tag: string;
+ }, U extends Sub, R = unknown> = {
+-    readonly [K in Exclude<U["type"], BuiltinSubType>]: EffectRunner<M, Extract<U, {
+-        type: K;
++    readonly [K in Exclude<U["_tag"], BuiltinSubType>]: EffectRunner<M, Extract<U, {
++        _tag: K;
+     }>, R>;
+ } & {
+     readonly [K in BuiltinSubType]?: EffectRunner<M, Extract<BuiltinSub<M>, {
+-        type: K;
++        _tag: K;
+     }>, R>;
+ };
+ /** The services every cell of an `interpret` map reads. */
+@@ -264,10 +264,10 @@ type ServicesOfCell<F> = F extends (cmd: never) => Effect.Effect<unknown, unknow
+  * declared failure settles its `_err` Msg instead, so it adds nothing here.
+  */
+ type CellErrors<C extends Cmd, I> = {
+-    [K in keyof I & C["type"]]: unknown extends ErrorsOf<Extract<C, {
+-        type: K;
++    [K in keyof I & C["_tag"]]: unknown extends ErrorsOf<Extract<C, {
++        _tag: K;
+     }>> ? ErrorOfCell<I[K]> : never;
+-}[keyof I & C["type"]];
++}[keyof I & C["_tag"]];
+ type ErrorOfCell<F> = F extends (cmd: never) => Effect.Effect<unknown, infer Err, unknown> ? Err : never;
+ /** The services every runner of a `subscribe` map reads. */
+ type SubscribeServices<B> = {
+@@ -280,7 +280,7 @@ type InterpretOption<C extends Cmd, I> = [C] extends [Cmd<never>] ? {
+     readonly interpret: I;
+ };
+ type SubscribeOption<U extends Sub, B> = [
+-    Exclude<U["type"], BuiltinSubType>
++    Exclude<U["_tag"], BuiltinSubType>
+ ] extends [never] ? {
+     readonly subscribe?: B;
+ } : {
+@@ -292,7 +292,7 @@ type SubscribeOption<U extends Sub, B> = [
+  * in `@demlik/tea/promise` for each one's contract.
+  */
+ type EffectRunOptions<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx, E extends {
+     type: string;
+ }, I, B> = CtxArg<Ctx> & InterpretOption<C, I> & SubscribeOption<U, B> & StoreAndOnError<S> & {
+@@ -366,7 +366,7 @@ type EffectRunOptions<S, M extends {
+  * ```
+  */
+ declare function run<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx, I extends EffectInterpret<M, C> = EffectInterpret<M, C, never>, B extends EffectSubscribe<M, U> = EffectSubscribe<M, U, never>, E extends {
+     type: string;
+ } = never>(machine: Machine<S, M, C, U, Ctx>, opts: EffectRunOptions<S, M, C, U, Ctx, E, I, B>): Effect.Effect<EffectBootingRun<S, M, E, CellErrors<C, I>>, never, Scope.Scope | InterpretServices<I> | SubscribeServices<B>>;
+diff --git a/dist/runtime-types-C11LhO_3.d.ts b/dist/runtime-types-C11LhO_3.d.ts
+index feac63a21bbc7a0f2561c6f7d9830b991e83d137..88c99418c50e2a8fe9572f7498f155b4f8191dd6 100644
+--- a/dist/runtime-types-C11LhO_3.d.ts
++++ b/dist/runtime-types-C11LhO_3.d.ts
+@@ -171,7 +171,7 @@ type SupervisionStrategy = "stop" | "escalate" | "restart";
+  * recovery is too — no suspension across the single-writer slot).
+  */
+ type Supervision<S, M extends {
+-    type: string;
++    _tag: string;
+ }> = "stop" | "escalate" | {
+     /**
+      * The default. A reducer throw stops the run by itself, the same stop a
+@@ -591,7 +591,7 @@ type DispatchSettle = "quiescent" | "once";
+  * runtime holds in order to send Msgs to another.
+  */
+ interface RuntimeRef<M extends {
+-    type: string;
++    _tag: string;
+ }> {
+     /**
+      * Put a Msg in the runtime's inbox and resolve once processed. Runs to
+@@ -623,7 +623,7 @@ interface RuntimeRef<M extends {
+  * semantic event union (see `on`); `never` when the run projects none.
+  */
+ interface RunHandle<S, M extends {
+-    type: string;
++    _tag: string;
+ }, E extends {
+     type: string;
+ } = never> {
+@@ -652,7 +652,7 @@ interface RunHandle<S, M extends {
+ }
+ /** A {@link RunHandle} whose boot has completed, so its State exists. */
+ interface BootedRunHandle<S, M extends {
+-    type: string;
++    _tag: string;
+ }, E extends {
+     type: string;
+ } = never> extends RunHandle<S, M, E> {
+@@ -679,7 +679,7 @@ interface BootedRunHandle<S, M extends {
+  */
+ interface HandlerFamily {
+     readonly M: {
+-        type: string;
++        _tag: string;
+     };
+     readonly C: Cmd;
+     readonly U: Sub;
+@@ -706,7 +706,7 @@ interface PromiseHandlers extends HandlerFamily {
+  * Promise engine's unless said otherwise.
+  */
+ type RunOptions<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx, E extends {
+     type: string;
+ } = never, F extends HandlerFamily = PromiseHandlers> = CtxArg<Ctx> & HandlersFor<F, M, C, U, Ctx> & StoreAndOnError<S> & {
+@@ -722,7 +722,7 @@ type RunOptions<S, M extends {
+  * default {@link PromiseHandlers}. The property is a type and is never set.
+  */
+ type EngineRun<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx, E extends {
+     type: string;
+ } = never, F extends HandlerFamily = PromiseHandlers> = ((machine: Machine<S, M, C, U, Ctx>, opts: RunOptions<S, M, C, U, Ctx, E, F>) => RunHandle<S, M, E>) & {
+@@ -746,7 +746,7 @@ type EngineRun<S, M extends {
+  * uncallable).
+  */
+ interface BootingRuntime<S, M extends {
+-    type: string;
++    _tag: string;
+ }, E extends {
+     type: string;
+ } = never> extends RuntimeRef<M>, RunHandle<S, M, E> {
+@@ -832,7 +832,7 @@ interface BootingRuntime<S, M extends {
+  * unrepresentable rather than merely discouraged.
+  */
+ interface Runtime<S, M extends {
+-    type: string;
++    _tag: string;
+ }, E extends {
+     type: string;
+ } = never> extends BootingRuntime<S, M, E> {
+@@ -898,7 +898,7 @@ interface Runtime<S, M extends {
+  * reads a `Ctx` or whose handlers are typed against one.
+  */
+ type MachineTypes<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx> = {
+     readonly model: S;
+     readonly msg: M;
+@@ -912,39 +912,39 @@ type MachineTypes<S, M extends {
+  * starts here; the result is plain data you hand to an engine's `run`.
+  */
+ declare function defineMachine<S, M extends {
+-    type: string;
++    _tag: string;
+ }, D extends AnyCmdDef, U extends Sub = Sub<never>, Ctx = unknown>(m: NoInfer<Omit<Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>, "cmds">> & {
+     readonly types: MachineTypes<S, M, Cmd<never>, U, Ctx>;
+     readonly cmds: readonly D[];
+ }): Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>;
+ declare function defineMachine<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd = Cmd<never>, U extends Sub = Sub<never>, Ctx = unknown>(m: NoInfer<Machine<S, M, C, U, Ctx>> & {
+     readonly types: MachineTypes<S, M, C, U, Ctx>;
+ }): Machine<S, M, C, U, Ctx>;
+ declare function defineMachine<S, M extends {
+-    type: string;
++    _tag: string;
+ }, D extends AnyCmdDef, U extends Sub, Ctx>(m: Omit<Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>, "update" | "cmds"> & {
+     readonly cmds: readonly D[];
+     update: [S] extends [{
+-        type: string;
++        _tag: string;
+     }] ? Transitions<S, M | Settled<D>, CmdOf<D>> : never;
+ }): Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>;
+ declare function defineMachine<S, M extends {
+-    type: string;
++    _tag: string;
+ }, D extends AnyCmdDef, U extends Sub, Ctx>(m: Omit<Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>, "update" | "cmds"> & {
+     readonly cmds: readonly D[];
+     update: Reducer<S, M | Settled<D>, CmdOf<D>>;
+ }): Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>;
+ declare function defineMachine<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(m: Omit<Machine<S, M, C, U, Ctx>, "update"> & {
+     update: [S] extends [{
+-        type: string;
++        _tag: string;
+     }] ? Transitions<S, M, C> : never;
+ }): Machine<S, M, C, U, Ctx>;
+ declare function defineMachine<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(m: Omit<Machine<S, M, C, U, Ctx>, "update"> & {
+     update: Reducer<S, M, C>;
+ }): Machine<S, M, C, U, Ctx>;
+@@ -953,7 +953,7 @@ declare function defineMachine<S, M extends {
+  * write `update` apart from `defineMachine`.
+  */
+ declare function asReducer<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd>(reducer: Reducer<S, M, C>): Branded<Reducer<S, M, C>>;
+ /**
+  * The `ctx` field of an engine's options: optional when the machine's `Ctx` is
+@@ -980,7 +980,7 @@ type CtxArg<Ctx> = [Record<never, never>] extends [Ctx] ? {
+  * asserts "the retry timer is armed in `waiting`" without wiring a runner.
+  */
+ declare function replay<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, opts: {
+     msgs: readonly M[];
+     ctx: Ctx;
+@@ -996,7 +996,7 @@ declare function replay<S, M extends {
+  * through `dispatch`.
+  */
+ declare function wrapDetached<C extends Cmd, M extends {
+-    type: string;
++    _tag: string;
+ }, Allowed extends M, Ctx>(handler: InterpretDetached<C, Allowed, Ctx>): (cmd: C, ctx: HandlerCtx<Ctx>, dispatch?: (msg: M) => void) => Promise<void>;
+ /**
+  * `applyCell`, with "no handler for this Msg" moved into the return type
+@@ -1009,7 +1009,7 @@ declare function wrapDetached<C extends Cmd, M extends {
+  * step a machine themselves.
+  */
+ declare function tryApplyCell<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd>(machine: {
+     update: object;
+     __form?: UpdateForm;
+@@ -1045,7 +1045,7 @@ interface FoldRefusal<M> {
+  * `assertPureResult` the handler's return. Both compile out of production.
+  */
+ declare function tryFoldMsgs<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd>(machine: {
+     update: object;
+     __form?: UpdateForm;
+diff --git a/dist/testing/effect/index.d.ts b/dist/testing/effect/index.d.ts
+index c35533705b1cb7575f156ff9e5454135f4c6eaa7..08cb850aeddd5f93ddc536e1b0b37a6fcd8032b5 100644
+--- a/dist/testing/effect/index.d.ts
++++ b/dist/testing/effect/index.d.ts
+@@ -62,15 +62,15 @@ type SchemaAnswersError = NoCmdsError | NotEffectSchemaError | NothingToDrawErro
+  * @experimental
+  */
+ interface SchemaGuidedOptions<S, M extends {
+-    type: string;
++    _tag: string;
+ }> {
+     /**
+      * The Msgs nothing sends a Cmd for, by Msg type: a user's click, a timer. A
+      * Msg type here and in no Cmd's answers is drawn only from here.
+      */
+     readonly outside?: {
+-        readonly [K in M["type"]]?: Arbitrary.Arbitrary<Extract<M, {
+-            type: K;
++        readonly [K in M["_tag"]]?: Arbitrary.Arbitrary<Extract<M, {
++            _tag: K;
+         }>>;
+     };
+     /**
+@@ -158,7 +158,7 @@ interface SchemaGuidedOptions<S, M extends {
+  * @experimental
+  */
+ declare function arbSchemaGuidedSequence<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, ctx: NoInfer<Ctx>, opts?: SchemaGuidedOptions<NoInfer<S>, M>): Result.Result<Arbitrary.Arbitrary<readonly M[]>, SchemaAnswersError>;
+ 
+ /**
+@@ -212,7 +212,7 @@ type EffectDriveError<M, C extends Cmd, I> = DriveRoundsExceededError<M, C> | Dr
+  * the partial trace, readable via `driveTraceOf`.
+  */
+ declare function drive<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx, I extends EffectInterpret<M, C> = EffectInterpret<M, C, never>, B extends EffectSubscribe<M, U> = EffectSubscribe<M, U, never>>(machine: Machine<S, M, C, U, Ctx>, initial: S, msg: M, interpret: I, ...[opts]: Record<never, never> extends EffectDriveOptions<U, Ctx, B> ? [opts?: EffectDriveOptions<U, Ctx, B>] : [opts: EffectDriveOptions<U, Ctx, B>]): Effect.Effect<DriveResult<S, M, C>, EffectDriveError<M, C, I>, InterpretServices<I> | SubscribeServices<B>>;
+ 
+ export { DriveNoHandlerError, DriveOptions, DriveResult, DriveRoundsExceededError, type EffectDriveError, type EffectDriveOptions, NoCmdsError, NotEffectSchemaError, NothingToDrawError, type SchemaAnswersError, type SchemaGuidedOptions, arbSchemaGuidedSequence, drive };
+diff --git a/dist/testing/effect/index.js b/dist/testing/effect/index.js
+index 755b3e53d90ab5ad71458fd0642a63be863b675b..79674a6851e05f830123d2cdf5a4cfef1190420c 100644
+--- a/dist/testing/effect/index.js
++++ b/dist/testing/effect/index.js
+@@ -190,10 +190,10 @@ function effectSubs(machine, subscribe, fork, signal) {
+       }
+       for (const [id, sub] of desired) {
+         if (started.has(id)) continue;
+-        const make = subscribe[sub.type] ?? builtins[sub.type];
++        const make = subscribe[sub._tag] ?? builtins[sub._tag];
+         if (make === void 0) {
+           throw new Error(
+-            `@demlik/tea: no subscribe runner for Sub type "${sub.type}". Pass one to drive in \`subscribe\`.`
++            `@demlik/tea: no subscribe runner for Sub _tag "${sub._tag}". Pass one to drive in \`subscribe\`.`
+           );
+         }
+         const entry = { stopped: false, ended: false };
+diff --git a/dist/testing/index.d.ts b/dist/testing/index.d.ts
+index ad26bbbf08ceecb37a6c85eef1962fcab0219873..8c876ad4182513a680872b96873239ef67059e8c 100644
+--- a/dist/testing/index.d.ts
++++ b/dist/testing/index.d.ts
+@@ -26,7 +26,7 @@ interface ReplayOpts<S, M, Ctx> {
+  * `expectFinalState` is the "exact match" tool.
+  */
+ declare function expectFinalState<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, opts: NoInfer<ReplayOpts<S, M, Ctx>>, expected: NoInfer<S>): void;
+ /**
+  * Assert that `cmd` appears at least once in the cmds array produced by
+@@ -40,7 +40,7 @@ declare function expectFinalState<S, M extends {
+  *   expect(cmds).toContainEqual(cmd);
+  */
+ declare function expectCmdEmitted<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, opts: NoInfer<ReplayOpts<S, M, Ctx>>, cmd: NoInfer<C>): void;
+ /**
+  * Assert the exact ordered sequence of cmds emitted by replaying
+@@ -54,7 +54,7 @@ declare function expectCmdEmitted<S, M extends {
+  *   expect(cmds).toEqual(expected);
+  */
+ declare function expectCmdSequence<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, opts: NoInfer<ReplayOpts<S, M, Ctx>>, expected: NoInfer<readonly C[]>): void;
+ /**
+  * Assert the exact set of subs desired at the final state after
+@@ -66,7 +66,7 @@ declare function expectCmdSequence<S, M extends {
+  *   expect(subs).toEqual(expected);
+  */
+ declare function expectActiveSubs<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, opts: NoInfer<ReplayOpts<S, M, Ctx>>, expected: NoInfer<readonly U[]>): void;
+ /**
+  * Single-msg step helper — feeds `loaded → msg → next state + cmds emitted by
+@@ -83,7 +83,7 @@ declare function expectActiveSubs<S, M extends {
+  * `expectFinalState`.
+  */
+ declare function step<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, loaded: NoInfer<S>, msg: NoInfer<M>, _ctx: NoInfer<Ctx>): readonly [S, readonly C[]];
+ 
+ /**
+@@ -106,7 +106,7 @@ interface BoundOpts<S, M> {
+  * `never` and reject the machine.
+  */
+ interface BoundMachine<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx> {
+     /**
+      * Single-msg step — feeds `loaded → msg → [next state, cmds emitted by
+@@ -155,7 +155,7 @@ interface BoundMachine<S, M extends {
+  * with the free helpers from `./assertions.ts`.
+  */
+ declare function bindMachine<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, ctx: Ctx): BoundMachine<S, M, C, U, Ctx>;
+ 
+ /**
+@@ -174,7 +174,7 @@ declare function bindMachine<S, M extends {
+  * that matches yields the same Subs.
+  */
+ declare function expectReplayDeterministic<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, opts: NoInfer<ReplayOpts<S, M, Ctx>>): void;
+ 
+ /**
+@@ -187,26 +187,26 @@ declare function expectReplayDeterministic<S, M extends {
+  *   tests only need the type-level slot filled.
+  */
+ declare function noopRuntime<S, M extends {
+-    type: string;
++    _tag: string;
+ }>(opts?: {
+     initialState?: S;
+ }): Runtime<S, M>;
+ 
+ /** A factory-constructed phase: `S` narrowed to the arm whose discriminator equals `K`. */
+ type StateOf<S, K> = Extract<S, {
+-    type: K;
++    _tag: K;
+ }>;
+ /** A factory-constructed phase with the `type` discriminator removed — the "fields the caller cares about" half. */
+-type RequiredFields<T> = Omit<T, "type">;
++type RequiredFields<T> = Omit<T, "_tag">;
+ /**
+  * Defaults shape passed to `stateFactory`. Mapped type over the discriminant
+  * set: every phase MUST have an entry, and that entry MUST match the phase's
+  * required fields minus the `type` discriminator.
+  */
+ type StateFactoryDefaults<S extends {
+-    type: string;
++    _tag: string;
+ }> = {
+-    readonly [K in S["type"]]: RequiredFields<StateOf<S, K>>;
++    readonly [K in S["_tag"]]: RequiredFields<StateOf<S, K>>;
+ };
+ /**
+  * The API returned by `stateFactory`. One method per phase; calling it with
+@@ -215,9 +215,9 @@ type StateFactoryDefaults<S extends {
+  * stripUndefined below).
+  */
+ type StateFactoryAPI<S extends {
+-    type: string;
++    _tag: string;
+ }> = {
+-    readonly [K in S["type"]]: (overrides?: Partial<RequiredFields<StateOf<S, K>>>) => StateOf<S, K>;
++    readonly [K in S["_tag"]]: (overrides?: Partial<RequiredFields<StateOf<S, K>>>) => StateOf<S, K>;
+ };
+ /**
+  * Build a typed phase-constructor API from per-phase defaults. The defaults
+@@ -237,7 +237,7 @@ type StateFactoryAPI<S extends {
+  * ```
+  */
+ declare function stateFactory<S extends {
+-    type: string;
++    _tag: string;
+ }>(defaults: StateFactoryDefaults<S>): StateFactoryAPI<S>;
+ 
+ export { type BoundMachine, type ReplayOpts, type StateFactoryAPI, type StateFactoryDefaults, bindMachine, expectActiveSubs, expectCmdEmitted, expectCmdSequence, expectFinalState, expectReplayDeterministic, noopRuntime, stateFactory, step };
+diff --git a/dist/testing/index.js b/dist/testing/index.js
+index 1c7dee33be1f96260b95659214fda1931d7b7f97..66eabfbd726c623323deacc4cc0853452cf5f0d9 100644
+--- a/dist/testing/index.js
++++ b/dist/testing/index.js
+@@ -96,7 +96,7 @@ function stateFactory(defaults) {
+     const phaseDefaults = defaults[key];
+     api[key] = (overrides) => {
+       const cleanedOverrides = overrides ? stripUndefined(overrides) : {};
+-      return { type: key, ...phaseDefaults, ...cleanedOverrides };
++      return { _tag: key, ...phaseDefaults, ...cleanedOverrides };
+     };
+   }
+   return api;
+diff --git a/dist/testing/promise/index.d.ts b/dist/testing/promise/index.d.ts
+index a1204fc28e8ff6baeff7b45e87a7f05c463b65a9..0972ad2a3d3e01518f7b3220fffe23cee51f9c42 100644
+--- a/dist/testing/promise/index.d.ts
++++ b/dist/testing/promise/index.d.ts
+@@ -35,7 +35,7 @@ import '@standard-schema/spec';
+  *   partial trace, readable via `driveTraceOf`.
+  */
+ declare function drive<S, M extends {
+-    type: string;
++    _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, initial: S, msg: M, handlers: Interpret<M, C, Ctx>, ...[opts]: Record<never, never> extends DriveOptions<Ctx> ? [opts?: DriveOptions<Ctx>] : [opts: DriveOptions<Ctx>]): Promise<DriveResult<S, M, C>>;
+ 
+ export { DriveOptions, DriveResult, drive };

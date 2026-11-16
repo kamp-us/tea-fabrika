@@ -1,6 +1,8 @@
 // P11 real counter, next/. The pure contract uses inc/dec/reset and view {count}.
 // No window export exists until P14. No copied counter implementation lives in the library.
-import { propertyInvariant } from "@demlik/tea/pbt";
+// K9 (ticket 1061, slice 2): these laws draw `_tag` Msgs through tea's own pbt. Plant: tea's lookup
+// left on `msg.type` (`chunk-SKI5V64W.js`), and every law here goes red.
+import { arbConstantMsg, arbMsg, arbMsgSequence, propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
@@ -11,15 +13,21 @@ const SEED = 119120;
 const LIBRARY = "@kampus/libfabrika";
 const TESTING = "@kampus/libfabrika/testing";
 
-const msgs = fc.array(fc.constantFrom({ type: "inc" }, { type: "dec" }, { type: "reset" }), {
-  maxLength: 30,
-});
+/** The counter's Msg, restated by the exam and pinned to the machine's own below (0135). */
+const Msg = Schema.TaggedUnion({ inc: {}, dec: {}, reset: {} });
+type Msg = typeof Msg.Type;
+
+const msgs = arbMsgSequence(
+  arbMsg<Msg>({ inc: arbConstantMsg("inc"), dec: arbConstantMsg("dec"), reset: arbConstantMsg("reset") }),
+  { maxLength: 30 },
+);
 
 describe("P11 real counter laws", () => {
   it("Program.make keeps the exported machine and uses its own schemas", async () => {
     const { counter, counterMachine } = await import("./program.ts");
     fc.assert(
       fc.property(fc.integer(), fc.constantFrom("inc", "dec", "reset"), (count, type) => {
+        expectTypeOf<Msg>().toEqualTypeOf<typeof counterMachine.msg.Type>();
         expect(counter.machine).toBe(counterMachine);
         expect(counter.state.schema).toBe(counterMachine.model);
         expect(counter.msg).toBe(counterMachine.msg);
@@ -30,7 +38,8 @@ describe("P11 real counter laws", () => {
         const port = counter.inputs[type];
         expect(port.personOnly).toBe(false);
         expect(port.description.trim().length).toBeGreaterThan(0);
-        expect(Schema.decodeUnknownSync(port.schema)({ type })).toEqual({ type });
+        const made = Msg.cases[type].make({});
+        expect(Schema.decodeUnknownSync(port.schema)(made)).toEqual(made);
       }),
       { seed: SEED, numRuns: 100 },
     );
@@ -68,11 +77,11 @@ describe("P11 real counter laws", () => {
         cmds,
       }: {
         prev: { count: number };
-        msg: { type: string };
+        msg: Msg;
         next: { count: number };
         cmds: ReadonlyArray<unknown>;
       }) => {
-        const expected = msg.type === "inc" ? prev.count + 1 : msg.type === "dec" ? prev.count - 1 : 0;
+        const expected = Msg.match(msg, { inc: () => prev.count + 1, dec: () => prev.count - 1, reset: () => 0 });
         return next.count === expected && cmds.length === 0;
       },
       { seed: SEED, numRuns: 100 },
@@ -103,14 +112,14 @@ describe("P11 real counter laws", () => {
             expect(boot).toMatchObject({ _tag: "stepped", view: { count: 0 }, cmds: [] });
 
             for (const type of ["inc", "dec", "reset"] as const) {
-              expect(counter.refuse({ count: value }, { type })).toBeNull();
+              expect(counter.refuse({ count: value }, Msg.cases[type].make({}))).toBeNull();
             }
 
-            expect(p.step({ count: value }, { type: "inc", value: "wrong" })).toMatchObject({
+            expect(p.step({ count: value }, { ...Msg.cases.inc.make({}), value: "wrong" })).toMatchObject({
               _tag: "stepped",
               view: { count: value + 1 },
             });
-            expect(p.step({ count: value }, { type: "unknown" })).toMatchObject({
+            expect(p.step({ count: value }, Schema.TaggedStruct("unknown", {}).make({}))).toMatchObject({
               _tag: "refused",
               reason: "bad_msg",
             });
