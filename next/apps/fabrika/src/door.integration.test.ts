@@ -4557,7 +4557,7 @@ describe("P10 span reader and recording", () => {
               RecordManager.pipe(
                 Effect.map((real: typeof RecordManager.Service) => ({
                   ...real,
-                  read: (chain: typeof Chain.Type) =>
+                  read: (chain: Chain) =>
                     real.read(chain).pipe(
                       Stream.take(256),
                       Stream.concat(

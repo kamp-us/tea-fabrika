@@ -1,4 +1,14 @@
 {
   "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    // A `typeof X.Type` query is the schema's own type name (E7, `unnecessaryTypeofType`). All of
+    // chaos is at zero.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": { "unnecessaryTypeofType": "error" }
+      }
+    ]
+  },
   "include": ["src"]
 }

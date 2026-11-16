@@ -245,7 +245,7 @@ const PROJECT = "p18-follow";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 /** One entry of a stream as the suite reads it: its tag, its place in the whole log and its body. */
-type Fact = typeof Entry.Type;
+type Fact = Entry;
 
 const field = (body: unknown, key: string): unknown => Reflect.get(Object(body), key);
 

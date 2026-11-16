@@ -139,7 +139,7 @@ const POOL = ["merger:1", "merger:2", "merger:3", "worker:1", "worker:2"] as con
 /** The ledger's row limit (`ledger/Log.ts`): a first letter over it is refused whole. */
 const ROW_LIMIT = 2_000_000;
 
-type Answer = Result.Result<typeof Started.Type, ChildrenError>;
+type Answer = Result.Result<Started, ChildrenError>;
 type Reason = ChildrenError["reason"];
 
 /** The first letter's entry id in `<name>/inbox`. */

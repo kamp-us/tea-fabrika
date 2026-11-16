@@ -276,7 +276,7 @@ const rightsOn = (thing: Thing): ReadonlyArray<Right> => RIGHTS.filter((r) => r.
 const check = (
   right: Right,
   tuples: Relation.Tuples,
-  sender: typeof Sender.Type,
+  sender: Sender,
   thing: Thing,
 ): Result.Result<unknown, Rebac.Denied> =>
   right.on === "fabrika" && thing.type === "fabrika"

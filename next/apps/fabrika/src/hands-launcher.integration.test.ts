@@ -122,8 +122,8 @@ type Seen = {
   readonly stderr: Array<string>;
   readonly d: string;
   readonly fingerprints: ReadonlyArray<string>;
-  readonly task: typeof Task.Type;
-  readonly taskAfterRestart: typeof Task.Type;
+  readonly task: Task;
+  readonly taskAfterRestart: Task;
   readonly journal: Record<string, unknown>;
   readonly brain: unknown;
 };
