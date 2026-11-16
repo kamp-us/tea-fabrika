@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-law-options-0580-plan-fix",
+  "ticket": null,
+  "pr": 1497,
+  "started": "2026-11-15T21:59:52-08:00",
+  "ended": "2026-11-15T22:06:38-08:00",
+  "parent": "2026-11-15-law-options-0580-plan",
+  "active": null,
+  "role": "plan",
+  "step": "plan",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Fix round on the plan for decision 0580 (docs/plan/quests/law-options-0580-PLAN.md), four fixes from the merge session in one commit: the plant check blocks from its first pull request, as 0580 says, with law bodies compared as parsed code, git mv pairing and a notice only for files still on @effect/vitest; open question 2 is dropped, since slice 2 keeps seed 119120 and its fast-check inputs so 0579's same-first-failing-case rule holds as written; the kept-input reason line says keeping fast-check is an ordering step before 0579's Schema sweep, not 0411's case; and a Stacking part shows the combined options type with 0591's reads: key, built by the exam-to-lint plan's slice C, with 0580's label form winning over 0591's sketch. No open questions remain. plancheck --draft passes.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Read only, apart from one pnpm install --frozen-lockfile so plancheck could load its scripts. No test or typecheck ran. The end time is the time just before the commit."
+}

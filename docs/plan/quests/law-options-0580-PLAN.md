@@ -32,16 +32,15 @@ it.effect.prop("the log reads back as written", { log: Log }, ({ log }) => law(l
 
 ## Doubts first
 
-- **The CI check advises before it blocks** (open question 1). 0580 says the check is red; AGENTS.md
-  says a check that can block needs its false alarms measured first, and no law on main carries a
-  `plant` option yet, so there is nothing to measure on. The plan builds it advising, with the one
-  constant that flips it.
-- **0579's "same first failing case before and after the move" cannot hold** for a law whose input
-  becomes a Schema (open question 2). Effect 4.1.3's `Arbitrary` is its own engine, not fast-check
-  (read below), so the same seed draws other values.
-- **`it.prop` at 4.1.3 takes no fast-check input.** 0579 keeps a fast-check arbitrary where Effect
-  cannot generate the data (`fc.commands`, which two of the 13 files use). So the package's
-  `it.prop` takes one: my call, 80%, below.
+- **The plant check blocks from its first pull request,** because 0580 says the check is red. That
+  is an owner decision, so it is in force; AGENTS.md's "measure false alarms before a check
+  blocks" is held down by how the check reads, not by an advise phase: law bodies compared as
+  parsed code, `git mv` pairs, and a notice only for files still on `@effect/vitest`
+  ([The plant check](#the-plant-check)). The round-1 advise path and its open question are gone.
+- **`it.prop` at 4.1.3 takes no fast-check input,** and slice 2 keeps every fast-check input as it
+  is, as an ordering step: the move keeps seed 119120 and the inputs, so 0579's "same first failing
+  case before and after the move" holds as written, and the Schema rewrite comes later, in 0579's
+  folder sweep. So the package's `it.prop` takes fast-check inputs: my call, 80%, below.
 
 ## Searched first
 
@@ -56,8 +55,11 @@ it.effect.prop("the log reads back as written", { log: Log }, ({ log }) => law(l
   [0557](../../../.decisions/0557-kalfa-vitest-is-the-test-toolbox.md),
   [0585](../../../.decisions/0585-kalfa-is-six-domain-packages.md),
   [0556](../../../.decisions/0556-kalfa-holds-our-tooling-packages.md),
-  [0470](../../../.decisions/0470-a-ui-check-advises-until-measured.md) (a check advises until its own
-  record shows about 0 false alarms) and [0523](../../../.decisions/0523-advice-rules-block-where-clean.md).
+  [0591](../../../.decisions/0591-exam-shape-checks-become-lint-rules-and-text-reads-are-declared.md)
+  (a text-reading law declares `reads:` beside 0580's options),
+  [0470](../../../.decisions/0470-a-ui-check-advises-until-measured.md) (a UI check advises until its
+  own record shows about 0 false alarms; 0580 decides this check is red, so 0470 does not set its
+  level) and [0523](../../../.decisions/0523-advice-rules-block-where-clean.md).
 - The code on main at `d3a444edf`: `next/packages/vitest/src/` (`Depth.ts`, `Recorder.ts`,
   `index.ts`; it has no property runner of its own), libfabrika's
   `src/Testing.test-support.ts` (`property` and `stopOnAbort`), `oxlint-plugins/law-shape.ts`,
@@ -71,7 +73,9 @@ it.effect.prop("the log reads back as written", { log: Log }, ({ log }) => law(l
 - Pull request 1366's 63 files: `next/packages/libfabrika/src/settings/StartsTest.ts` is one of
   them, so it waits for slice 3. No other file here is in it.
 - The `@kalfa/config` plan, `docs/plan/quests/kalfa-config-PLAN.md` on
-  `fabrikalfa/kalfa-config` (pull request 1427). See [Stacking](#stacking).
+  `fabrikalfa/kalfa-config` (pull request 1427), and the exam-to-lint plan,
+  `docs/plan/quests/exam-to-lint-PLAN.md` on `fabrikalfa/exam-to-lint` at `0dca05f`, which stacks on
+  this one. See [Stacking](#stacking).
 
 ## How others do it
 
@@ -170,9 +174,13 @@ type FastCheckInputs = { readonly [k: string]: fc.Arbitrary<any> };
 - **The fast-check path.** With fast-check inputs, the package runs the cases with
   `fc.asyncProperty` from the shared seed, each case in its own `Scope`, and stops on the law's
   abort before a shrink opens anything: our `property` runner's body moves here as
-  `src/internal/fastCheck.ts`, unchanged in what it does. 0579 keeps fast-check "for that input",
-  and 0557 builds a mechanism in the package rather than reach around it, so this is how the
-  package keeps it. My call, 80%: the other way, a raw `fc.assert`, 0579 rules out.
+  `src/internal/fastCheck.ts`, unchanged in what it does. The inputs' values, in key order, are the
+  property's arbitraries, so one input `{ log: Log }` runs `fc.asyncProperty(Log, ...)` exactly as
+  the runner did, and the same seed draws the same cases. Two needs use it: slice 2 keeps every
+  fast-check input for now (an ordering step, [below](#what-each-property-runner-law-becomes)), and
+  0579 keeps fast-check for data Effect cannot generate, which its later sweep decides case by case.
+  0557 builds a mechanism in the package rather than reach around it. My call, 80%: the other way,
+  a raw `fc.assert`, 0579 rules out.
 - **The seed is set once,** where the package defines `it`: `Arbitrary.configureGlobal({ check: {
   seed: 119120 } })` and `fc.configureGlobal({ seed: 119120 })` run when `Law.ts` loads, so it holds
   in every file that imports `it` and nowhere else. 0579 left the place open. My call, 85%: a root
@@ -183,8 +191,8 @@ type FastCheckInputs = { readonly [k: string]: fc.Arbitrary<any> };
   adds or changes. My call, 80%.
 - **Is any of this a setting?** No. The seed is one value 0579 fixes for every law, and a failing
   case is reproduced from Effect's replay token or fast-check's printed seed, not by changing it; a
-  setting would let two machines run different cases of the same law. The advise-or-block switch is
-  a constant in the check's source, flipped by a reviewed pull request, as 0470's kinds are.
+  setting would let two machines run different cases of the same law. Whether the plant check
+  blocks is not a setting either: 0580 decides it is red, so there is no switch to set.
 
 ### How a plant is run and recorded
 
@@ -223,7 +231,9 @@ const Plant = Schema.Struct({
 
 ```ts
 // .github/ci/plant-check.ts, a sketch. Runs in the field step of check.yaml beside the row check.
-type Law = { readonly file: string; readonly line: number; readonly title: string; readonly body: string; readonly plant: string | null; readonly ours: boolean };
+// body: the law's body as parsed code (oxc-parser's tree, with positions and comments left out),
+// so a change that is only formatting or comments is no changed law.
+type Law = { readonly file: string; readonly line: number; readonly title: string; readonly body: Ast; readonly plant: string | null; readonly ours: boolean };
 type Refusal =
   | { readonly _tag: "no_plant"; readonly law: Law }       // a changed law names no plant
   | { readonly _tag: "not_recorded"; readonly law: Law }   // no added run row records its plant as red
@@ -231,6 +241,10 @@ type Refusal =
   | { readonly _tag: "unclaimed"; readonly row: string; readonly plant: string }; // a row plant no changed law names
 
 export const check = (laws: { base: readonly Law[]; head: readonly Law[] }, rows: readonly Plant[]): readonly Refusal[] => ...
+
+// It blocks (0580: "the check is red"). Any refusal is an `::error` annotation and exit 1;
+// a file still on @effect/vitest gets one `::notice` and never fails the step.
+const BLOCKS = true;
 ```
 
 - **What it reads.** The pull request's changed test files (`*.test.ts`, `*.test.tsx`, shared
@@ -239,20 +253,28 @@ export const check = (laws: { base: readonly Law[]; head: readonly Law[] }, rows
   each file with `oxc-parser` (the catalog already holds it, 0040), never a regex, and finds each
   call rooted at `it` or `test` as `law-shape.ts` does.
 - **What a changed law is.** A law is keyed by its file and its title with any old label prefix
-  taken off. It changed when it is new or its body's source differs. Its options argument and the
-  comments above it are not part of it, so moving a plant from a comment to an option, or a label
-  from the title to an option, changes no law: the sweep is not asked for 594 new plant runs. A file
-  moved with `git mv` is paired by git's rename detection. 0580 left this reading to the plan.
+  taken off. It changed when it is new or its body differs as parsed code: both sides are parsed
+  with `oxc-parser`, and the trees are compared with positions, comments and the source text left
+  out, so `pnpm format` moving a line or a comment changing is no changed law. Its options argument
+  and the comments above it are not part of it, so moving a plant from a comment to an option, a
+  label from the title to an option, or adding 0591's `reads:` changes no law: the sweep is not
+  asked for 594 new plant runs. A file moved with `git mv` is paired by git's rename detection.
+  0580 left this reading to the plan ("a parse of the calls, not a regex").
 - **What makes it refuse,** each naming the law with `file:line` and citing 0093 and 0580: the four
   refusals above. A law the pull request did not touch is never read. Only laws declared with the
   package's `it` are held: a file still on `@effect/vitest` cannot take a `plant` option, so its
   changed laws get one notice ("this file's laws move to the package's it") and no refusal, until
   the sweep moves the file. My call, 80%.
-- **Advise, then block.** Each refusal prints as a GitHub `::warning` annotation and the step passes,
-  until the record shows it clean (open question 1). The lead rates each warning it sees on a pull
-  request as a real fault or a false alarm in a field note (`kind: friction`, `primitive:
-  plant-check`), so the count is in the repo. Blocking is one constant, `BLOCKS`, in
-  `plant-check.ts`.
+- **It blocks.** Each refusal prints as a GitHub `::error` annotation and the field step fails.
+  Why blocking is in force before any count: 0580, an owner decision, says the check is red and
+  binds it to the `plant` option in one pull request, and AGENTS.md's "measure first" rule gives no
+  agent the call to soften an owner's ruling. How false alarms are held down instead: only laws the
+  pull request adds or changes are read; a body is compared as parsed code, so formatting and
+  comments never count; `git mv` pairs a moved file with its old self; and a file still on
+  `@effect/vitest`, which cannot take the option, gets a notice and no refusal. A false alarm the
+  lead sees is one field note (`kind: friction`, `primitive: plant-check`) and a fix to the check
+  that day, as a flaky test is ([0036](../../../.decisions/0036-a-flaky-test-is-fixed.md)), never a
+  softer level. My call on that last part, 85%.
 - **The flag.** `changes.mjs` sets `field` when a pull request changes such a test file, so a code
   pull request runs the check (0580 asks how). The full install that `check` already does covers
   `oxc-parser`.
@@ -298,7 +320,7 @@ ledger/LedgerTurnReads.test.ts               1  it.effect.prop
 ledger/LedgerTurnEndTest.ts                  1  it.effect.prop (endOnFailure), inside the shared suite
 permissions/RelationsTest.ts                 1  it.effect.prop (endOnFailure), inside the shared suite
 node/client/HandsSecrets.laws.test.ts        1  it.effect.prop
-node/client/JournalSqlite.laws.test.ts       1  it.effect.prop, fc.commands kept (its reason line is there)
+node/client/JournalSqlite.laws.test.ts       1  it.effect.prop, fc.commands kept (its two older reason lines stay as written)
 node/client/JournalSqlite.integration.test.ts 1 it.live.prop
 node/client/KeyFile.laws.test.ts             2  it.effect.prop, fc.commands kept
 node/client/KeyFile.integration.test.ts      1  it.live.prop (one fc example kept in fastCheck.examples)
@@ -307,11 +329,20 @@ runtime/RecoveryStoreReadsTest.ts            3  it.effect.prop, inside the share
 settings/StartsTest.ts                       1  slice 3: in pull request 1366's diff
 ```
 
-- The inputs stay fast-check in this move: a move that also rewrites a generator cannot be told
-  apart from a weaker law. Each kept input gets 0411's reason line, "moved unchanged from the
-  property runner; its Schema is the folder sweep's". The Schema rewrite is 0579's sweep. My call,
-  75%: the doubt is whether the owner wants the rewrite in the same move; nothing is lost by
-  waiting, since the plant proves the law either way.
+- **The inputs stay fast-check in this move, and seed 119120 stays,** so 0579's "the sweep checks
+  that each law draws the same first failing case before and after the move" holds as written:
+  same engine, same seed, same arbitrary, passed as the property's one arbitrary. The tests step
+  runs each law's plant on the old call and on the moved one and compares fast-check's
+  counterexample and its replay path; it writes both into its run row's `note`. A move that also
+  rewrote a generator could not be told apart from a weaker law.
+- **Keeping the inputs is an ordering step, not 0411's "Effect cannot generate this".** The Schema
+  rewrite comes later, in 0579's folder sweep. So the reason line beside each kept input says so,
+  as a plain comment: `// fast-check kept: moved unchanged from the property runner; the Schema
+  rewrite comes later in 0579's sweep`. It is never written in `prefer-schema-arbitrary`'s
+  `fast-check: unsupported Effect -- ...` form, which claims the 0411 case. That rule fires only on
+  a fast-check input with Schema evidence, and none of the 13 files fires on main, so no kept input
+  needs the rule's form. The two older `unsupported Effect` lines in `JournalSqlite.laws.test.ts`
+  are that file's own claim and are not this move's to change.
 - The app's runtime laws file (`runtime.laws.integration`, in `next/apps/fabrika/src/`) imports only `stopOnAbort` for its own
   hand runners. It is the app folder's sweep, so `stopOnAbort` stays in libfabrika until then.
 
@@ -324,6 +355,52 @@ glob, no setting, no `kalfa` command. Its code lives in `next/packages/vitest`, 
 to `kalfa/vitest` is 0585's vitest build, after config, ci and records, and that build changes one
 import line in each file this plan touches. 0580's own sketch says `@kalfa/vitest` because that is
 the package this one becomes.
+
+**With 0591's `reads:` option.** [0591](../../../.decisions/0591-exam-shape-checks-become-lint-rules-and-text-reads-are-declared.md)
+puts a `reads:` option on the law "beside the plant and label options from 0580". The exam-to-lint
+plan (`docs/plan/quests/exam-to-lint-PLAN.md` on `fabrikalfa/exam-to-lint`, `0dca05f`) builds it in
+its slice C, which "waits on 0580's slice 1 on main". So this plan's slice 1 lands first and adds no
+`reads` key; slice C then adds one key to `LawOptions` and one to the `TaskMeta` widening, in the
+`Law.ts` this plan makes. The combined type, once both are on main:
+
+```ts
+// next/packages/vitest/src/Law.ts after both plans, a sketch.
+export type LawOptions = Omit<V.TestOptions, "meta" | "skip" | "only" | "todo" | "fails"> &
+  Labeled & {                                  // 0580: at most one of vector, format, scenario, type, pinned
+    readonly plant?: string;                   // 0580: the break that turns the law red (this plan)
+    readonly reads?: ReadonlyArray<string>;    // 0591: files read as text, repo-root globs (exam-to-lint, slice C)
+  };
+declare module "vitest" {
+  interface TaskMeta {
+    plant?: string;                            // this plan
+    label?: Label;                             // this plan: { _tag: "scenario", reason: "..." }
+    reads?: ReadonlyArray<string>;             // exam-to-lint, slice C
+  }
+}
+
+// One call with all three, options last as Effect's it takes them.
+it.effect("the bundle holds no node: import", body, {
+  plant: "an import of node:fs in a browser file",
+  scenario: "one real build of the app",
+  reads: ["next/apps/fabrika/dist/**"],
+});
+```
+
+- **0580's label form wins over 0591's sketch.** 0591's code block is marked a sketch and writes
+  `law(name, { label: "bundle", plant, reads }, body)`: a free `label` string and the options before
+  the body. 0580 decides the label: one of five keys, each with its required reason
+  (`{ scenario: "…" }`), and "bundle" is none of the five. 0591 decides only `reads:`, and says it
+  sits beside 0580's options. So the law is the package's `it`, options last, with `{ scenario:
+  "…" }`; the exam-to-lint plan already writes it that way.
+- **The two plans' readers do not collide.** The plant check leaves the options argument out of a
+  law's body, so adding `reads:` to a law is no changed law. `law-shape` reads only the five label
+  keys from the options, and the exam-to-lint plan's `lawReads` plugin reads only `reads`. Both
+  parse the options as an object literal at the call, so the options are written inline: an
+  options value passed by name hides its label from `law-shape`, which then reads the law as
+  unlabeled, the safe side.
+- **Names.** The exam-to-lint plan's slice A moves the exam's lint harness, also named `plant.ts`,
+  into the lint plugins folder. This plan's script is `.agents/skills/tests/scripts/plant.ts`. Two files, two folders, two jobs: no
+  import crosses, so neither renames.
 
 ## One value traced through
 
@@ -339,8 +416,10 @@ the package this one becomes.
    parses the file at base and head: the law is new, so it is changed; its `plant` is set; the added
    row has a record with the same file, title and plant, `red`. No refusal.
 5. A later build round edits the law's body and nobody reruns the plant: the law changed, no added
-   row records it, so the check prints `::warning file=...LedgerTurnReads.test.ts,line=142::the law's
-   plant is not recorded red in a run row this pull request adds (0093, 0580)`.
+   row records it, so the check prints `::error file=...LedgerTurnReads.test.ts,line=142::the law's
+   plant is not recorded red in a run row this pull request adds (0093, 0580)` and the field step
+   fails. Had the round only run `pnpm format` on the file, the parsed bodies would match and the
+   check would say nothing.
 
 ## Laws
 
@@ -358,13 +437,15 @@ the package this one becomes.
 | The plant check's refusals equal a model's: no plant, not recorded, green, unclaimed; an untouched law and a moved-only law (comment to option, title prefix to option) give none | test | fc.record: base and head law lists and added rows, 200 runs | compare a row's plant by prefix |
 | A file moved with `git mv` keeps its laws: unchanged bodies give no refusal | test | scenario: one rename through git, which the generator cannot make | read the pair as a delete and an add |
 | A file still on `@effect/vitest` gets one notice and no refusal | test | fc.record: files on either import, 100 runs | refuse every changed law, whatever its import |
-| The check prints warnings and exits 0 while `BLOCKS` is false, and exits 1 on a refusal when it is true | test | fc.array: refusal lists, 50 runs | exit 1 while advising |
+| A law whose body changes only in formatting or comments is no changed law, and a change to its parsed code is | test | fc.record: law bodies, each printed with generated whitespace, line breaks and comments, and a generated one-token edit; 100 runs | compare the bodies' source text, not their parsed trees |
+| The check prints one `::error` per refusal, naming `file:line`, and exits 1 on any refusal; with only notices it exits 0 | test | fc.array: refusal and notice lists, 50 runs | print refusals as `::warning` and exit 0 |
 | `changes.mjs` sets `field` for a changed test file in `next/` or a tooling folder, and not for today's version | test | fc.constantFrom: paths by folder and suffix, 200 runs | drop the `*Test.ts` suffix |
 | Every run row on main still decodes with the widened `Plant` | test | vector: the run rows in field/runs/ on main | make `file` required |
 | `law-shape` accepts an option label in a file on the package's `it`, and refuses a title label there, with a message that names the option | lint | lint | read the title prefix in every file |
 | `law-shape` holds 0527's body rule on the `type` option | lint | lint | skip the body rule when the label is an option |
 | A file on `@effect/vitest` keeps its title labels | lint | lint | report every title label as an error |
-| Slice 2: each of the 22 moved properties keeps its claim and turns red under its recorded plant | test | fc.commands: and each file's own fast-check inputs, default runs as before | each law's own plant, run with `plant.ts` |
+| Slice 2: each of the 22 moved properties keeps its claim and turns red under its recorded plant | test | fc.commands: and each file's own fast-check inputs, seed 119120, default runs as before | each law's own plant, run with `plant.ts` |
+| Slice 2: under its plant, each moved property reports the same counterexample and replay path as the old `property` call (0579's same first failing case) | test | fc.commands: and each file's own fast-check inputs, kept unchanged, seed 119120, default runs as before | wrap the one input in `fc.record` in the fast-check path, so the draws shift |
 | Slice 3: a call of `property` from `Testing.test-support.ts` no longer counts as a property | lint | lint | keep `SHARED` in `law-shape.ts` |
 
 No law here needs a real resource: the moved `.integration.` files were integration before, and
@@ -385,7 +466,7 @@ any of it.
 | `next/packages/vitest/src/Law.types.test.ts` | tests | the type law | tests |
 | `next/packages/vitest/src/Plants.test.ts` | tests | the record law | tests |
 | `.agents/skills/tests/scripts/plant.test.ts` | tests | the script's refusals | tests |
-| `.github/ci/plant-check.ts` | tests | new: the check (an exam path, so the tests step owns it) | 250 |
+| `.github/ci/plant-check.ts` | tests | new: the check, its parsed-code compare included (an exam path, so the tests step owns it) | 280 |
 | `.github/ci/plant-check.test.ts` | tests | its laws | tests |
 | `.github/ci/field-schema.ts` | tests | `Plant` gains `file` | 3 |
 | `.github/ci/field-check.test.ts` | tests | the old rows still decode | tests |
@@ -429,8 +510,10 @@ The libfabrika test files' new dependency is already there: 110 files in `next/`
 2. **Build** (slice 1): the package's `Law.ts`, `fastCheck.ts`, `Plants.ts`, its exports, and
    `plant.ts`, until every law is green; the skill and doc lines.
 3. **One review** by an Opus agent of the whole slice-1 diff against this plan, 0580 and 0579.
-4. **Slice 2**, its own pull request: the tests step moves the 22 calls in 13 files and records each
-   plant with `plant.ts`; the plant check runs on its own first real pull request. One review.
+4. **Slice 2**, its own pull request: the tests step moves the 22 calls in 13 files, keeping each
+   fast-check input and seed 119120 with the ordering reason line, runs each plant on the old call
+   and the moved one, checks the counterexamples match (0579), and records each plant with
+   `plant.ts`; the plant check blocks on its own first real pull request. One review.
 5. **Slice 3**, after pull request 1366 merges: `StartsTest.ts` moves, `property` and `SHARED` go.
    One review.
 
@@ -439,13 +522,14 @@ the typecheck.
 
 ## Size
 
-1. Slice 1, the options, the record and the check: 740 lines (builder 370, tests-owned code 370),
-   plus about 700 test lines; 18 files; about 3 agent hours.
-2. Slice 2, the property runner's 13 files: 250 lines, all tests; 14 files; about 1.5 agent hours.
+1. Slice 1, the options, the record and the check: 770 lines (builder 370, tests-owned code 400,
+   the parsed-code compare included), plus about 720 test lines; 18 files; about 3 agent hours.
+2. Slice 2, the property runner's 13 files: 260 lines, all tests, the reason lines included; 14
+   files; about 1.5 agent hours, with the before-and-after plant runs.
 3. Slice 3, after 1366: 60 lines; 3 files; about 0.5 agent hours.
 
 Sure of slice 2's and 3's size at 80%: each call site is about ten lines. Slice 1 at 65%: the
-check's parse and its rename pairing are the doubt, and a send-back is likely there. Priced from
+check's parsed-code compare and its rename pairing are the doubt, and a send-back is likely there. Priced from
 the recent rows in `field/runs/`: a tests step about $6, a build about $2.30, a review about $3.60,
 a fix round about $4.20, at list price.
 
@@ -455,29 +539,31 @@ Estimate: 8 steps, $36
 
 - No glossary row: `plant` and the five labels keep their meanings (0580 says so).
 - `field/README.md` gains the `file` key of a plant record.
-- 0579 gets a dated amendment line only if the owner answers open question 2.
-- This step's own row: `field/runs/2026-11-15-law-options-0580-plan.json`.
+- No amendment to 0579: slice 2 keeps its "same first failing case" rule as written.
+- This step's own rows: `field/runs/2026-11-15-law-options-0580-plan.json` (round 1) and
+  `field/runs/2026-11-15-law-options-0580-plan-fix.json` (this fix round).
 
 ## What this cannot tell
 
-- How many false alarms the check gives. Nothing on main carries a `plant` option, so its record
-  starts with slice 2, and 30 clean pull requests bound the rate under 10% at 95% (the rule of three,
-  Hanley and Lippman-Hand, JAMA 1983, as I know it; not fetched), not at about 0%.
+- How many false alarms the check gives. It blocks from slice 1 (0580), and nothing on main carries
+  a `plant` option, so its first real record is slice 2. The parsed-code compare, the rename pairing
+  and the notice for old files hold the known sources down; an unknown one shows as a blocked pull
+  request, and is fixed in the check that day.
 - Whether the parse finds every law. `law-shape`'s own reach (a helper that wraps `it`, a title not
   written out) is the check's reach too: under-reporting, the safe side.
 - Whether the fast-check path's timeout behavior matches `@effect/vitest`'s exactly. Both stop at the
   timeout; only the laws above test ours.
-- Whether a moved law draws the same cases. The fast-check inputs keep their engine and seed, so they
-  should; the plant run, not a case comparison, is what proves each.
+- Whether every moved law draws the same cases on every run. Same engine, seed and arbitrary say it
+  should, and slice 2 checks the first failing case under each plant, as 0579 asks; it does not
+  compare the passing cases one by one.
 
 ## Open questions
 
-1. Does the plant check advise until its record is clean, as AGENTS.md and 0470 ask of any blocking
-   check, or block at once, as 0580 says "red"? My lean: advise, then block after 30 pull requests
-   that touch a law with no false alarm, 75%.
-2. 0579 asks each moved law to draw "the same first failing case before and after the move", which a
-   law whose input becomes a Schema cannot do, since Effect's Arbitrary is another engine. Replace it
-   with "the law's plant turns it red before and after"? My lean: yes, 85%.
+None.
+
+Round 1's two are settled: the plant check blocks, as 0580 says; and slice 2 keeps
+seed 119120 and its fast-check inputs, so 0579's same-first-failing-case rule holds as written and
+the Schema rewrite is 0579's later sweep.
 
 ## Findings
 
