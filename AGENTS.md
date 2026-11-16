@@ -363,8 +363,12 @@ these caps. Each one came from a laptop that became unusable.
 - `gh pr edit` fails here with a classic Projects error. Use `gh api -X PATCH`.
 - In `claude -p`, `--allowedTools` only pre-approves. `--tools` is what limits an agent; without it
   the agent keeps a shell and can read what you meant to hide, git history included.
-- `rg <subfolder>` skips tracked files when a root `.gitignore` re-includes them with `!path`.
-  `rg .` is fine.
+- A plain `rg` (or `rg .`) from the repo root searches our dot folders, `.decisions/` and
+  `.agents/` included, because the root `.ignore` lists them; a new dot folder needs its line
+  there. It still skips `node_modules`, `dist` and `runs`. `.claude/skills/` holds links into
+  `.agents/skills/`, which rg does not follow, so each skill is searched once.
+- `rg field` skips `field/runs/`, which the root `.gitignore` re-includes with `!/field/runs/`
+  (ripgrep 13). Plain `rg`, `rg .` and `rg field/runs` find those files.
 
 ## This repo is public
 
