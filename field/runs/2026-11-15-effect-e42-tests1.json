@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e42-tests1",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T20:35:49-08:00",
+  "ended": "2026-11-15T21:00:21-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E42 of the Effect-checker sweep, check nodeBuiltinImport, in next/ and our tooling, with no lock line and no pull request (owner ruling). Counted with only nodeBuiltinImport at error through --lspconfig: 320 hits in the row's 14 folders (plan said 321), 312 in exam paths, 8 in .agents/ product files, 0 in pull request 1366's files. Fixed 38, all by hand edits, in 17 test files of seven libfabrika folders: lib:access 6, lib:gateway 3, lib:ledger 10, lib:packs 2, lib:telemetry 8, lib:transport 9 of 11. Temp folders moved to FileSystem.makeTempDirectoryScoped, paths to the Path service, file reads and writes and stat to FileSystem, ssh-keygen runs to effect/process ChildProcess, and SHA digests to effect/crypto Digest on WebCrypto. Left 282: lib:transport 2 and lib:processes 2 in test support that hands plain values to many callers (Sshsig.test-support.ts:4-5, Process.test-support.ts:4,6), where no-promises refuses a top-level await and the fix reshapes every caller; prog:counter 2, where next/programs/counter has no @effect/platform-node dependency and adding it changes the lockfile; and whole folders not reached in this run: lib:node 44, app:exam 50, app:e2e 19, oxlint-plugins 83, .github/ci 51, .agents 21 in exam paths plus 8 product. Every changed law keeps its assertions; one law's setup moved: Ledger.integration's runSync wait law now makes its temp folder before the sync run, and still opens the file, builds the ledger and waits inside Effect.runSync.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 25,
+  "note": "ssh-keygen was missing in the box, so openssh-client was installed with apt to run Sshsig.integration and SshsigWebauthn.integration; both pass before and after the change. Tests run at the commit's tree: each of the 17 changed files one at a time, the five Process.test-support consumers, and vitest --changed origin/main (17 files, 280 tests, all passing). pnpm lint passes, the ratchet exits 0, and tsc --noEmit -p next/packages/libfabrika passes.",
+  "plants": [
+    {
+      "law": "Ledger.integration: Sql.size answers the file's bytes, read now through FileSystem.stat",
+      "plant": "NodeSqlite.ts size() answers one byte more: expected 28673 to be 28672",
+      "result": "red"
+    },
+    {
+      "law": "Ledger.integration: Effect.runSync of a parking wait answers parked, with its temp folder made first",
+      "plant": "LedgerSql.ts wait sleeps 1 ms before the referee's wait: AsyncFiberError, an asynchronous Effect was executed with Effect.runSync",
+      "result": "red"
+    },
+    {
+      "law": "Sink.integration: a link's secret is never written, with bytes() now an Effect over FileSystem",
+      "plant": "the marker looked for changed to follows-from, text the sink does write: expected [ 'object.db' ] to deeply equal []",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

@@ -19,14 +19,12 @@
 // - `RecordManager.remote(stub)` asks `stub(name)` for the part's object; a call that fails is
 //   `unreachable`, an answer that does not decode `bad_row`. Its calls' names are the builder's, so
 //   the stub here answers any method.
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { RpcCallError } from "alchemy/Rpc";
 import type { Layer, Scope } from "effect";
-import { Effect, Option, Schema, Stream } from "effect";
+import { Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { processId } from "../Id.test-support.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -41,26 +39,27 @@ type Row = typeof SpanRow.Type;
 /** A folder of its own, and every part file opened in it. `RecordManager.sql` asks for a part's
  *  file with a plain call, so a file cannot be acquired one by one: the folder holds them, and the
  *  scope that asked for the folder closes each one, then removes it (0061). */
-const folder = Effect.acquireRelease(
-  Effect.sync(() => ({
-    dir: mkdtempSync(join(tmpdir(), "p37-records-")),
-    dbs: new Map<string, DatabaseSync>(),
-  })),
-  ({ dir, dbs }) =>
-    Effect.sync(() => {
-      for (const db of dbs.values()) {
-        if (db.isOpen) {
-          db.close();
+const folder = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  // Finalizers run last in, first out: every file closes, then the folder goes.
+  const dir = yield* fs.makeTempDirectoryScoped({ prefix: "p37-records-" });
+  const dbs = yield* Effect.acquireRelease(
+    Effect.sync(() => new Map<string, DatabaseSync>()),
+    (dbs) =>
+      Effect.sync(() => {
+        for (const db of dbs.values()) {
+          if (db.isOpen) {
+            db.close();
+          }
         }
-      }
-
-      rmSync(dir, { recursive: true, force: true });
-    }),
-);
+      }),
+  );
+  return { dir, dbs, paths: yield* Path.Path };
+}).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
 /** One home of part files: `open(name)` gives the same node:sqlite file each time it is asked. */
 const home = folder.pipe(
-  Effect.map(({ dir, dbs }) => {
+  Effect.map(({ dir, dbs, paths }) => {
     const asked: Array<string> = [];
     const db = (name: string): DatabaseSync => {
       const known = dbs.get(name);
@@ -69,7 +68,7 @@ const home = folder.pipe(
         return known;
       }
 
-      const made = new DatabaseSync(join(dir, `${name.replaceAll("/", "_")}.db`));
+      const made = new DatabaseSync(paths.join(dir, `${name.replaceAll("/", "_")}.db`));
       dbs.set(name, made);
       return made;
     };

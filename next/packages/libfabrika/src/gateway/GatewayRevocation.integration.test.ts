@@ -5,14 +5,12 @@
 // answering a cached placing without checking membership after hashing a settled retry;
 // rebuilding a pre-P17 input row with new door and n fields before comparing a duplicate.
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { NodeServices } from "@effect/platform-node";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Deferred, Effect, Fiber, Layer, Redacted, Result, Schema, Stream } from "effect";
+import { Deferred, Effect, Fiber, FileSystem, Layer, Path, Redacted, Result, Schema, Stream } from "effect";
+import { Digest } from "effect/crypto";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -52,9 +50,14 @@ const checks = { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }) };
 
 // Each world keeps its ledger file in its own temp folder. The law's scope closes every connection
 // the world opened, then removes the folder (0061).
-const folder = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(join(tmpdir(), "p17-revoke-"))),
-  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+const folder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ prefix: "p17-revoke-" })).pipe(
+  Effect.provide(NodeServices.layer),
+  Effect.orDie,
+);
+
+/** The ledger's file, in a fresh folder of its own. */
+const ledgerFile = Effect.flatMap(folder, (dir) => Path.Path.useSync((path) => path.join(dir, "ledger.db"))).pipe(
+  Effect.provide(NodeServices.layer),
 );
 
 const openDb = (path: string) =>
@@ -109,6 +112,12 @@ const field = (value: string | Uint8Array) => {
   return Buffer.concat([u32(bytes.length), bytes]);
 };
 
+/** A SHA digest through Effect's Digest, on the platform's WebCrypto. Text is hashed as UTF-8. */
+const sha = (algorithm: Digest.Algorithm, data: string | Uint8Array) =>
+  Digest.Digest.use((digest) => digest.digest(algorithm, Buffer.from(data))).pipe(
+    Effect.provide(Digest.layerWebCrypto),
+  );
+
 const web = <A>(call: () => Promise<A>) =>
   Effect.tryPromise({ try: call, catch: () => new Error("test crypto failed") });
 
@@ -116,26 +125,28 @@ const key = Effect.fnUntraced(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
   const bytes = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-  const fp = (raw: Uint8Array) => `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`;
+  const fp = (raw: Uint8Array) =>
+    sha(Digest.sha256, raw).pipe(
+      Effect.map((hash) => `SHA256:${Buffer.from(hash).toString("base64").replace(/=+$/, "")}`),
+    );
+  const fingerprint = yield* fp(bytes);
+  const sshFingerprint = yield* fp(blob);
   return {
     raw: Buffer.from(bytes).toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: fp(bytes),
-    sshFingerprint: fp(blob),
+    fingerprint,
+    sshFingerprint,
     sign: (text: string) =>
-      web(() =>
-        crypto.subtle.sign(
-          "Ed25519",
-          pair.privateKey,
-          Buffer.concat([
-            Buffer.from("SSHSIG"),
-            field("fabrika-client"),
-            field(""),
-            field("sha512"),
-            field(createHash("sha512").update(text).digest()),
-          ]),
+      sha(Digest.sha512, text).pipe(
+        Effect.flatMap((hash) =>
+          web(() =>
+            crypto.subtle.sign(
+              "Ed25519",
+              pair.privateKey,
+              Buffer.concat([Buffer.from("SSHSIG"), field("fabrika-client"), field(""), field("sha512"), field(hash)]),
+            ),
+          ),
         ),
-      ).pipe(
         Effect.map((signature) => {
           const packed = Buffer.concat([
             Buffer.from("SSHSIG"),
@@ -159,7 +170,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
   const root = yield* key(),
     old = yield* key(),
     other = yield* key();
-  const path = join(yield* folder, "ledger.db");
+  const path = yield* ledgerFile;
   const founder = {
     name: "P17",
     person,
@@ -838,7 +849,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                 process: params.pid,
                 name: params.m._tag,
                 personOnly: false,
-                digest: createHash("sha256").update(JSON.stringify(params)).digest("base64url"),
+                digest: Buffer.from(yield* sha(Digest.sha256, JSON.stringify(params))).toString("base64url"),
                 arrivedAt,
                 span: { traceId, spanId },
                 sentAt,

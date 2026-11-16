@@ -5,12 +5,10 @@
 //
 // p44 runs the real `ssh-keygen`. With no `ssh-keygen` on the machine it fails loudly, never
 // skips: a skipped law is a hole. Its keys are made in a fresh temp folder, removed after.
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, FileSystem, Path, Stream } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import {
   SPACE,
   refused,
@@ -31,27 +29,40 @@ import {
 
 // p44: one signature shape, against the real `ssh-keygen`.
 // Each scenario makes its keys in its own temp folder, and the test's scope removes it (0061).
-const folder = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(join(tmpdir(), "p44-"))),
-  (home) => Effect.sync(() => rmSync(home, { recursive: true, force: true })),
+const folder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ prefix: "p44-" })).pipe(
+  Effect.provide(NodeServices.layer),
+  Effect.orDie,
 );
 
+/** One run of the real `ssh-keygen`, through Effect's ChildProcess, `input` on its stdin. A missing
+ *  `ssh-keygen` is a defect, so the law fails loudly and never skips. */
 const keygen = (args: ReadonlyArray<string>, input?: string) =>
-  Effect.sync(() => {
-    const run = spawnSync("ssh-keygen", args, { input, encoding: "utf8" });
+  Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const handle = yield* spawner.spawn(
+      ChildProcess.make("ssh-keygen", args, {
+        stdin: Stream.make(new TextEncoder().encode(input ?? "")),
+      }),
+    );
+    const [stderr, , code] = yield* Effect.all(
+      [Stream.mkString(Stream.decodeText(handle.stderr)), Stream.runDrain(handle.stdout), handle.exitCode],
+      { concurrency: "unbounded" },
+    );
+    return { status: Number(code), stderr };
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer), Effect.orDie);
 
-    if (run.error !== undefined) {
-      throw new Error(`p44 needs ssh-keygen and it did not run: ${run.error.message}`);
-    }
+/** Writes `body` to `name` in `home`, with `mode`, and answers its path. */
+const file = (home: string, name: string, body: string, mode = 0o644) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = (yield* Path.Path).join(home, name);
+    yield* fs.writeFileString(path, body, { mode });
+    return path;
+  }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
-    return run;
-  });
-
-const file = (home: string, name: string, body: string, mode = 0o644): string => {
-  const path = join(home, name);
-  writeFileSync(path, body, { mode });
-  return path;
-};
+/** A file's text, read through Effect's FileSystem. */
+const read = (path: string) =>
+  FileSystem.FileSystem.use((fs) => fs.readFileString(path)).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
 /** An unencrypted `openssh-key-v1` private key file, so `ssh-keygen` can sign with a WebCrypto key. */
 const opensshPrivate = (key: Key): string => {
@@ -84,8 +95,8 @@ describe("p44, one signature shape, with real ssh-keygen", () => {
       const key = yield* freshKey("ours@fabrika.test");
       const body = "grant: a window key\nfor: a person\n";
       const armored = yield* write(key, body);
-      const allowed = file(home, "ours.allowed", `ours@fabrika.test ${key.line}\n`);
-      const sig = file(home, "ours.sig", armored);
+      const allowed = yield* file(home, "ours.allowed", `ours@fabrika.test ${key.line}\n`);
+      const sig = yield* file(home, "ours.sig", armored);
       const run = yield* keygen(
         ["-Y", "verify", "-f", allowed, "-I", "ours@fabrika.test", "-n", SPACE, "-s", sig],
         body,
@@ -103,18 +114,21 @@ describe("p44, one signature shape, with real ssh-keygen", () => {
   it.effect("scenario: what ssh-keygen -Y sign makes passes checkSshsig, sha512 and sha256", () =>
     Effect.gen(function* () {
       const home = yield* folder;
-      const made = join(home, "made");
+      const made = (yield* Path.Path.pipe(Effect.provide(NodeServices.layer))).join(home, "made");
       const keys = yield* keygen(["-q", "-t", "ed25519", "-N", "", "-C", "made@fabrika.test", "-f", made]);
       expect(keys.status, keys.stderr).toBe(0);
-      const line = readFileSync(`${made}.pub`, "utf8").trim();
+      const line = (yield* read(`${made}.pub`)).trim();
       const body = "made by ssh-keygen\nä ü ş\n";
 
       for (const options of [[], ["-O", "hashalg=sha256"]]) {
-        const msg = file(home, "made.msg", body);
+        const msg = yield* file(home, "made.msg", body);
         const run = yield* keygen(["-Y", "sign", "-f", made, "-n", SPACE, ...options, msg]);
         expect(run.status, run.stderr).toBe(0);
-        const armored = readFileSync(`${msg}.sig`, "utf8");
-        rmSync(`${msg}.sig`);
+        const armored = yield* read(`${msg}.sig`);
+        yield* FileSystem.FileSystem.use((fs) => fs.remove(`${msg}.sig`)).pipe(
+          Effect.provide(NodeServices.layer),
+          Effect.orDie,
+        );
         expect(yield* check(armored, [other, line], body)).toStrictEqual({ signer: line });
         expect(yield* check(armored, [other], body)).toStrictEqual(refused);
       }
@@ -128,11 +142,11 @@ describe("p44, one signature shape, with real ssh-keygen", () => {
       const key = yield* freshKey();
       const body = text;
       const ours = yield* write(key, body);
-      const keyFile = file(home, "same", opensshPrivate(key), 0o600);
-      const msg = file(home, "same.msg", body);
+      const keyFile = yield* file(home, "same", opensshPrivate(key), 0o600);
+      const msg = yield* file(home, "same.msg", body);
       const run = yield* keygen(["-Y", "sign", "-f", keyFile, "-n", SPACE, msg]);
       expect(run.status, run.stderr).toBe(0);
-      expect(ours).toBe(readFileSync(`${msg}.sig`, "utf8"));
+      expect(ours).toBe(yield* read(`${msg}.sig`));
     }),
   );
 });

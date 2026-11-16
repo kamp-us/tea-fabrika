@@ -18,14 +18,12 @@
 //   through `Archive.put`. Only when the stored SHA-256 (hex) matches its own does it write
 //   `archived (day, key, sha256, rows)` and delete that day's rows. Summaries, sizes and `archived`
 //   rows are never deleted. R2 here is a memory fake behind our own `BucketCalls`.
-import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId } from "../../Id.test-support.ts";
@@ -39,9 +37,14 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
 // Every object is a fresh node:sqlite file in its own temp folder. The scope that asked for it
 // closes the connection, then removes the folder (0061).
-const folder = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(join(tmpdir(), "p37-health-"))),
-  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+const folder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ prefix: "p37-health-" })).pipe(
+  Effect.provide(NodeServices.layer),
+  Effect.orDie,
+);
+
+/** The file object.db, in a fresh folder of its own. */
+const objectFile = Effect.flatMap(folder, (dir) => Path.Path.useSync((path) => path.join(dir, "object.db"))).pipe(
+  Effect.provide(NodeServices.layer),
 );
 
 const openDb = (path: string) =>
@@ -55,8 +58,8 @@ const openDb = (path: string) =>
       }),
   );
 
-const fresh = folder.pipe(
-  Effect.flatMap((path) => openDb(join(path, "object.db"))),
+const fresh = objectFile.pipe(
+  Effect.flatMap(openDb),
   Effect.map((db) => ({ db, sql: nodeSql(db) })),
 );
 
@@ -70,7 +73,12 @@ const hourStart = (at: number) => Math.floor(at / H) * H;
 const utcDay = (at: number) => new Date(at).toISOString().slice(0, 10);
 const fileKey = (day: string) => `measurements/${OBJECT}/${day}.jsonl`;
 
-const hex = (body: Uint8Array) => createHash("sha256").update(body).digest("hex");
+/** SHA-256 as hex, through Effect's Digest on the platform's WebCrypto. */
+const sha256Hex = (body: Uint8Array) =>
+  Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, body)).pipe(Effect.provide(Digest.layerWebCrypto));
+
+/** The same, for the bucket's Promise calls. */
+const hex = (body: Uint8Array) => Effect.runPromise(sha256Hex(body));
 
 /** R2 in memory, as its binding behaves: `put` fails when the body does not match its SHA-256.
  *  `lie` makes `head` answer another hash, as a bad copy would. */
@@ -80,17 +88,21 @@ const bucket = (lie = false) => {
   const calls: BucketCalls = {
     put: (key, body, sha256) => {
       puts.push(key);
+      const copy = body.slice();
+      return hex(copy).then((made) => {
+        if (made !== sha256) {
+          return Promise.reject(new Error("checksum mismatch"));
+        }
 
-      if (hex(body) !== sha256) {
-        return Promise.reject(new Error("checksum mismatch"));
-      }
-
-      stored.set(key, body.slice());
-      return Promise.resolve();
+        stored.set(key, copy);
+        return undefined;
+      });
     },
     head: (key) => {
       const body = stored.get(key);
-      return Promise.resolve(body === undefined ? null : { sha256: lie ? "0".repeat(64) : hex(body) });
+      return body === undefined
+        ? Promise.resolve(null)
+        : hex(body).then((sha256) => ({ sha256: lie ? "0".repeat(64) : sha256 }));
     },
   };
   const lines = (key: string): Array<Record<string, unknown>> =>
@@ -399,7 +411,7 @@ describe("p101, no raw row is ever lost", () => {
           );
           const archived = db.prepare(`SELECT day, key, sha256, rows FROM archived`).all();
           expect(archived).toEqual([
-            { day: "2026-10-23", key, sha256: hex(r2.stored.get(key) ?? new Uint8Array()), rows: 8 },
+            { day: "2026-10-23", key, sha256: yield* sha256Hex(r2.stored.get(key) ?? new Uint8Array()), rows: 8 },
           ]);
           expect(count(db, "measurements", inDay(D))).toBe(0);
           expect(count(db, "measurements", `piece != '${ARCHIVE}'`), "the younger days stay local").toBe(2);
@@ -830,13 +842,13 @@ describe("p101, late rows of an archived day leave as a further part", () => {
             {
               day: "2026-10-23",
               key: first,
-              sha256: hex(r2.stored.get(first) ?? new Uint8Array()),
+              sha256: yield* sha256Hex(r2.stored.get(first) ?? new Uint8Array()),
               rows: 8,
             },
             {
               day: "2026-10-23",
               key: second,
-              sha256: hex(r2.stored.get(second) ?? new Uint8Array()),
+              sha256: yield* sha256Hex(r2.stored.get(second) ?? new Uint8Array()),
               rows: 1,
             },
           ].sort((x, y) => x.key.localeCompare(y.key)),

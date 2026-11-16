@@ -14,13 +14,24 @@
 //   with the stream's newest rev, or `{_tag: "parked"}`.
 // - Failures are `LedgerError` with `reason`: `unreachable` and `bad_row` from `Ledger.remote`,
 //   `storage` when the Sql throws. No Layer fails when it is built.
-import { mkdtempSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Duration, Effect, Layer, ManagedRuntime, References, Schema, type Scope, Stream, Tracer } from "effect";
+import {
+  Duration,
+  Effect,
+  Exit,
+  FileSystem,
+  Layer,
+  ManagedRuntime,
+  Path,
+  References,
+  Schema,
+  Scope,
+  Stream,
+  Tracer,
+} from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
@@ -39,12 +50,22 @@ const OTHER_TRACE = "5bf92f3577b34da6a3ce929d0e0e4737";
 
 // Every ledger is a fresh node:sqlite file in its own temp folder. The scope it is opened in closes
 // the connection, then removes the folder (0061).
-const folder = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(join(tmpdir(), "p6-ledger-"))),
-  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+const folder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ prefix: "p6-ledger-" })).pipe(
+  Effect.provide(NodeServices.layer),
+  Effect.orDie,
 );
 
-const freshPath = folder.pipe(Effect.map((path) => join(path, "ledger.db")));
+const freshPath = Effect.flatMap(folder, (dir) => Path.Path.useSync((path) => path.join(dir, "ledger.db"))).pipe(
+  Effect.provide(NodeServices.layer),
+);
+
+/** The file's bytes on disk, as Effect's FileSystem reads them. */
+const bytesOnDisk = (path: string) =>
+  FileSystem.FileSystem.use((fs) => fs.stat(path)).pipe(
+    Effect.map((info) => Number(info.size)),
+    Effect.provide(NodeServices.layer),
+    Effect.orDie,
+  );
 
 const openDb = (path: string) =>
   Effect.acquireRelease(
@@ -735,8 +756,14 @@ describe("p20, failures are typed, and pass", () => {
     { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
-  it("a wait leaves nothing running: Effect.runSync of a parking wait answers parked", () => {
-    const answer = Effect.runSync(Ledger.use((ledger) => ledger.wait("a", 0)).pipe(Effect.provide(onSql(fresh()))));
+  it("a wait leaves nothing running: Effect.runSync of a parking wait answers parked", async ({ onTestFinished }) => {
+    // The temp folder is made first, outside the sync run: Effect's FileSystem is asynchronous.
+    // Opening the file, building the ledger and the wait all stay inside Effect.runSync.
+    const scope = Scope.makeUnsafe();
+    onTestFinished(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+    const path = await Effect.runPromise(Scope.provide(scope)(freshPath));
+    const store = openDb(path).pipe(Effect.map(nodeSql));
+    const answer = Effect.runSync(Ledger.use((ledger) => ledger.wait("a", 0)).pipe(Effect.provide(onSql(store))));
     expect(answer).toEqual({ _tag: "parked" });
   });
 });
@@ -754,7 +781,7 @@ describe("Sql.size on node:sqlite, the object's bytes for P37's size row", () =>
         const first = sql.size();
         expect(first).toBeGreaterThan(0);
         // With SQLite's default rollback journal, the file holds exactly page_count pages.
-        expect(first).toBe(statSync(path).size);
+        expect(first).toBe(yield* bytesOnDisk(path));
 
         for (let n = 1; n <= 50; n++) {
           yield* ledger.append("a", `w-${n}`, line({ body: { note: "x".repeat(4_000) } }));
@@ -762,7 +789,7 @@ describe("Sql.size on node:sqlite, the object's bytes for P37's size row", () =>
 
         const after = sql.size();
         expect(after).toBeGreaterThan(first + 50 * 4_000);
-        expect(after).toBe(statSync(path).size);
+        expect(after).toBe(yield* bytesOnDisk(path));
       }).pipe(Effect.provide(onSql(Effect.succeed(sql))));
     }),
   );

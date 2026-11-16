@@ -13,13 +13,11 @@
 // - `answer` on an append is `placed`, `resent` or `refused`; on a wait, `ready` or `parked`.
 // - `lag` is how many of the stream's entries sit past `after`. A wait's `head` is its stream's newest
 //   rev. `visible_ms` is the referee's clock at the answer minus the oldest returned `arrivedAt`.
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Duration, Effect, Exit, Layer, Schema, type Scope, Stream, Tracer } from "effect";
+import { Duration, Effect, Exit, FileSystem, Layer, Path, Schema, type Scope, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
@@ -35,15 +33,20 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
 // Every ledger is a fresh node:sqlite file in its own temp folder. The scope it is opened in closes
 // the connection, then removes the folder (0061).
-const folder = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(join(tmpdir(), "p6-spans-"))),
-  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+const folder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ prefix: "p6-spans-" })).pipe(
+  Effect.provide(NodeServices.layer),
+  Effect.orDie,
 );
 
-const freshDb = folder.pipe(
-  Effect.flatMap((path) =>
+/** The file ledger.db, in a fresh folder of its own. */
+const ledgerFile = Effect.flatMap(folder, (dir) => Path.Path.useSync((path) => path.join(dir, "ledger.db"))).pipe(
+  Effect.provide(NodeServices.layer),
+);
+
+const freshDb = ledgerFile.pipe(
+  Effect.flatMap((file) =>
     Effect.acquireRelease(
-      Effect.sync(() => new DatabaseSync(join(path, "ledger.db"))),
+      Effect.sync(() => new DatabaseSync(file)),
       (db) =>
         Effect.sync(() => {
           if (db.isOpen) {

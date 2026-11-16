@@ -11,12 +11,10 @@
 //   calls `Doorbell.ring(to, stream, rev)` once. A ring is at most once: one whose delivery fails is
 //   gone all the same, and the append still answers `placed`. A resend or a refused line rings
 //   nothing.
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, Layer, type Scope } from "effect";
+import { Deferred, Effect, Fiber, FileSystem, Layer, Path, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
@@ -28,12 +26,14 @@ import * as RefereeSql from "./RefereeSql.ts";
 
 // Every ledger is a fresh node:sqlite file in its own temp folder. The test's scope closes the
 // connection, then removes the folder (0061).
-const folder = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(join(tmpdir(), "p6-rings-"))),
-  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+const folder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ prefix: "p6-rings-" })).pipe(
+  Effect.provide(NodeServices.layer),
+  Effect.orDie,
 );
 
-const freshPath = folder.pipe(Effect.map((path) => join(path, "ledger.db")));
+const freshPath = Effect.flatMap(folder, (dir) => Path.Path.useSync((path) => path.join(dir, "ledger.db"))).pipe(
+  Effect.provide(NodeServices.layer),
+);
 
 const openDb = (path: string) =>
   Effect.acquireRelease(

@@ -11,13 +11,11 @@
 //   `{_tag: "refused", reason: "bad_line"}`; a bad `parent` is `bad_parent`, a bad trace is `bad_trace`.
 //   Either way nothing is written.
 // - P17a exports the checked `InputId` schema; saved parents still accept legacy text.
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { NodeServices } from "@effect/platform-node";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema, type Scope, Stream } from "effect";
+import { Effect, FileSystem, Layer, Path, Schema, type Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { inputParents, processId } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
@@ -86,9 +84,14 @@ const badParents = (good: string): ReadonlyArray<string> => [
 
 // Every ledger is a fresh node:sqlite file in its own temp folder. The layer's scope closes the
 // connection, then removes the folder (0061).
-const folder = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(join(tmpdir(), "p6-log-"))),
-  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+const folder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ prefix: "p6-log-" })).pipe(
+  Effect.provide(NodeServices.layer),
+  Effect.orDie,
+);
+
+/** The file ledger.db, in a fresh folder of its own. */
+const ledgerFile = Effect.flatMap(folder, (dir) => Path.Path.useSync((path) => path.join(dir, "ledger.db"))).pipe(
+  Effect.provide(NodeServices.layer),
 );
 
 const openDb = (path: string) =>
@@ -102,11 +105,7 @@ const openDb = (path: string) =>
       }),
   );
 
-const fresh = () =>
-  folder.pipe(
-    Effect.flatMap((path) => openDb(join(path, "ledger.db"))),
-    Effect.map(nodeSql),
-  );
+const fresh = () => ledgerFile.pipe(Effect.flatMap(openDb), Effect.map(nodeSql));
 
 // Each takes the store as a scoped Effect, so the layer's own scope holds the open file.
 type Store = Effect.Effect<Sql, never, Scope.Scope>;

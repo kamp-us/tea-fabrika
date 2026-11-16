@@ -17,13 +17,11 @@
 // - Reasons: `not_member` (a key nobody let in), `not_allowed` (a window or agent key signing),
 //   `used` (a spent sheet), `replaced` (a sheet a newer one ended), `revoked` (a key that was let in
 //   and then removed). The last two are this test's reading of flag 6's list.
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, References, Schema, type Scope, Stream, Tracer } from "effect";
+import { Effect, FileSystem, Layer, Path, References, Schema, type Scope, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -64,19 +62,24 @@ const FOUNDED: MemberEvent = { _tag: "founded", id: P, name: NAME, keys: ["pA"],
 
 // Every ledger is a fresh node:sqlite file in its own temp folder. The scope that opens it closes
 // the connection, then removes the folder (0061).
-const folder = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(join(tmpdir(), "p9-clients-"))),
-  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+const folder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ prefix: "p9-clients-" })).pipe(
+  Effect.provide(NodeServices.layer),
+  Effect.orDie,
+);
+
+/** The ledger's file, in a fresh folder of its own. */
+const ledgerFile = Effect.flatMap(folder, (dir) => Path.Path.useSync((path) => path.join(dir, "ledger.db"))).pipe(
+  Effect.provide(NodeServices.layer),
 );
 
 // A store is a scoped Effect, so the layer built on it holds the open file in its own scope.
 type Store = Effect.Effect<Sql, never, Scope.Scope>;
 
 const fresh = (): Store =>
-  folder.pipe(
-    Effect.flatMap((path) =>
+  ledgerFile.pipe(
+    Effect.flatMap((file) =>
       Effect.acquireRelease(
-        Effect.sync(() => new DatabaseSync(join(path, "ledger.db"))),
+        Effect.sync(() => new DatabaseSync(file)),
         (db) =>
           Effect.sync(() => {
             if (db.isOpen) {

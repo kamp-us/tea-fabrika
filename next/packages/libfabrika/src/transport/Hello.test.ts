@@ -2,9 +2,9 @@
 // checkHello takes trusted upgrade values, an atomic nonce consumer and admission.
 // It answers online {who,version,ping} or refused {reason}; capability claims grant no rank.
 // Plants: accept the first version; omit one signed binding; consume before checking; admit verify.
-import { createHash } from "node:crypto";
 import { assert, describe, expect, it, vi } from "@effect/vitest";
 import { Effect, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { checkHello, sameOrigin, selectVersion } from "./Hello.ts";
 import { Admission, type Who } from "./Wire.ts";
@@ -30,17 +30,21 @@ const armor = (bytes: Uint8Array) =>
     .match(/.{1,70}/g)
     ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
 
+/** A SHA digest through Effect's Digest, on the platform's WebCrypto. Text is hashed as UTF-8. */
+const sha = (algorithm: Digest.Algorithm, data: string | Uint8Array) =>
+  Digest.Digest.use((digest) => digest.digest(algorithm, Buffer.from(data))).pipe(
+    Effect.provide(Digest.layerWebCrypto),
+  );
+
 const fingerprint = (bytes: Uint8Array) =>
-  `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+  sha(Digest.sha256, bytes).pipe(
+    Effect.map((hash) => `SHA256:${Buffer.from(hash).toString("base64").replace(/=+$/, "")}`),
+  );
 
 const signedBytes = (text: string, space: string = SPACE) =>
-  Buffer.concat([
-    Buffer.from("SSHSIG"),
-    field(space),
-    field(""),
-    field("sha512"),
-    field(createHash("sha512").update(text).digest()),
-  ]);
+  sha(Digest.sha512, text).pipe(
+    Effect.map((hash) => Buffer.concat([Buffer.from("SSHSIG"), field(space), field(""), field("sha512"), field(hash)])),
+  );
 
 const pack = (blob: Uint8Array, signature: Uint8Array, space: string = SPACE) =>
   armor(
@@ -65,10 +69,11 @@ const key = Effect.fn("test.key")(function* () {
   return {
     raw: Buffer.from(bytes).toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: fingerprint(bytes),
-    sshFingerprint: fingerprint(blob),
+    fingerprint: yield* fingerprint(bytes),
+    sshFingerprint: yield* fingerprint(blob),
     sign: (text: string, space: string = SPACE) =>
-      web(() => crypto.subtle.sign("Ed25519", pair.privateKey, signedBytes(text, space))).pipe(
+      signedBytes(text, space).pipe(
+        Effect.flatMap((data) => web(() => crypto.subtle.sign("Ed25519", pair.privateKey, data))),
         Effect.map((raw) => pack(blob, Buffer.concat([field("ssh-ed25519"), field(new Uint8Array(raw))]), space)),
       ),
   };

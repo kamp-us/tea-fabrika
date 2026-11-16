@@ -6,18 +6,23 @@
 // grows or replaces one of its segments, staying valid, and an odd step breaks the current name in
 // one way and must be refused. Shrinking a tape recomputes every move from the shortened prefix.
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Option, Schema } from "effect";
+import { NodeServices } from "@effect/platform-node";
+import { Effect, FileSystem, Option, Path, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 
 type Api = { readonly ProgramName: Schema.Codec<string> };
 
 const load = async () => {
-  const file = join(import.meta.dirname, "ProgramName.ts");
-  assert(existsSync(file), "P40 not built: packs/ProgramName.ts, the qualified name schema, is absent");
+  const { file, built } = await Effect.runPromise(
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const file = (yield* Path.Path).join(import.meta.dirname, "ProgramName.ts");
+      return { file, built: yield* fs.exists(file) };
+    }).pipe(Effect.provide(NodeServices.layer), Effect.orDie),
+  );
+  assert(built, "P40 not built: packs/ProgramName.ts, the qualified name schema, is absent");
   vi.resetModules();
   return vi.importActual<Api>(pathToFileURL(file).href);
 };

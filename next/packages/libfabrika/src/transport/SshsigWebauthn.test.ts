@@ -2,10 +2,10 @@
 // Plants: DER treated as P1363; challenge only the text hash; UP accepted without UV; a prefix
 // match admits ordinary ECDSA; JSON reserialized before verification; BE always refused.
 // Its independent OpenSSH control runs a process, so it is in SshsigWebauthn.integration.test.ts (0536).
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, FileSystem, Path, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { checkSshsig, verifySshsig } from "./Sshsig.ts";
 import { line, realArmor, SPACE, text } from "./SshsigWebauthn.test-support.ts";
@@ -30,17 +30,21 @@ const armor = (bytes: Uint8Array) =>
     .match(/.{1,70}/g)
     ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
 
+/** A SHA digest through Effect's Digest, on the platform's WebCrypto. Text is hashed as UTF-8. */
+const sha = (algorithm: Digest.Algorithm, data: string | Uint8Array) =>
+  Digest.Digest.use((digest) => digest.digest(algorithm, Buffer.from(data))).pipe(
+    Effect.provide(Digest.layerWebCrypto),
+  );
+
 const fingerprint = (bytes: Uint8Array) =>
-  `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+  sha(Digest.sha256, bytes).pipe(
+    Effect.map((hash) => `SHA256:${Buffer.from(hash).toString("base64").replace(/=+$/, "")}`),
+  );
 
 const signedBytes = (text: string, space: string = SPACE) =>
-  Buffer.concat([
-    Buffer.from("SSHSIG"),
-    field(space),
-    field(""),
-    field("sha512"),
-    field(createHash("sha512").update(text).digest()),
-  ]);
+  sha(Digest.sha512, text).pipe(
+    Effect.map((hash) => Buffer.concat([Buffer.from("SSHSIG"), field(space), field(""), field("sha512"), field(hash)])),
+  );
 
 const pack = (blob: Uint8Array, signature: Uint8Array, space: string = SPACE) =>
   armor(
@@ -65,10 +69,11 @@ const key = Effect.fn("test.key")(function* () {
   return {
     raw: Buffer.from(bytes).toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: fingerprint(bytes),
-    sshFingerprint: fingerprint(blob),
+    fingerprint: yield* fingerprint(bytes),
+    sshFingerprint: yield* fingerprint(blob),
     sign: (text: string, space: string = SPACE) =>
-      web(() => crypto.subtle.sign("Ed25519", pair.privateKey, signedBytes(text, space))).pipe(
+      signedBytes(text, space).pipe(
+        Effect.flatMap((data) => web(() => crypto.subtle.sign("Ed25519", pair.privateKey, data))),
         Effect.map((raw) => pack(blob, Buffer.concat([field("ssh-ed25519"), field(new Uint8Array(raw))]), space)),
       ),
   };
@@ -95,7 +100,7 @@ const passkey = Effect.fn("test.passkey")(function* () {
   const blob = Buffer.concat([field("sk-ecdsa-sha2-nistp256@openssh.com"), field("nistp256"), field(point), field(rp)]);
   return {
     line: `sk-ecdsa-sha2-nistp256@openssh.com ${blob.toString("base64")}`,
-    fingerprint: fingerprint(blob),
+    fingerprint: yield* fingerprint(blob),
     sign: Effect.fnUntraced(function* (
       text: string,
       over: {
@@ -115,19 +120,19 @@ const passkey = Effect.fn("test.passkey")(function* () {
       const clientDataJSON = utf8(
         JSON.stringify({
           type: over.type ?? "webauthn.get",
-          challenge: Buffer.from(over.challenge ?? signedBytes(text, space)).toString("base64url"),
+          challenge: Buffer.from(over.challenge ?? (yield* signedBytes(text, space))).toString("base64url"),
           origin: over.origin ?? origin,
           crossOrigin: over.crossOrigin ?? false,
         }),
       );
       const extensions = over.extensions ?? new Uint8Array();
       const authenticatorData = Buffer.concat([
-        createHash("sha256").update(rp).digest(),
+        yield* sha(Digest.sha256, rp),
         Buffer.from([flags]),
         u32(counter),
         extensions,
       ]);
-      const bytes = Buffer.concat([authenticatorData, createHash("sha256").update(clientDataJSON).digest()]);
+      const bytes = Buffer.concat([authenticatorData, yield* sha(Digest.sha256, clientDataJSON)]);
       const raw = new Uint8Array(
         yield* web(() => crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, pair.privateKey, bytes)),
       );
@@ -355,8 +360,14 @@ describe("P10 WebAuthn SSHSIG", () => {
   it.effect("vector: p27: the independent ordinary ECDSA vector stays refused by the shared verifier", () =>
     Effect.gen(function* () {
       const read = (file: string) =>
-        readFileSync(new URL(`../../../../../fixtures/next/sshsig/${file}`, import.meta.url), "utf8");
-      expect(yield* check(read("ecdsa.sig"), read("ecdsa.pub").trim(), read("text.txt"))).toEqual(refused);
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          return yield* fs.readFileString(path.join(import.meta.dirname, "../../../../../fixtures/next/sshsig", file));
+        }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
+      const signature = yield* read("ecdsa.sig");
+      const key = (yield* read("ecdsa.pub")).trim();
+      expect(yield* check(signature, key, yield* read("text.txt"))).toEqual(refused);
     }),
   );
   it.effect("vector: p27: the exact real assertion passes, with signed backup flags and counter zero", () =>

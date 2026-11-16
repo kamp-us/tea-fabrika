@@ -1,13 +1,11 @@
 // P17a, next/. The real SQLite turn decides membership and the append together.
 // Plants: cached admission, check then append in another turn, duplicate before admission,
 // dropped corrupt known events, and a missing refusal span. No replacement writer lives here.
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { NodeServices } from "@effect/platform-node";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Deferred, Effect, Fiber, Layer, Result, Schema, Stream } from "effect";
+import { Deferred, Effect, Fiber, FileSystem, Layer, Path, Result, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -34,9 +32,14 @@ const checks = { seed: 119120, numRuns: runsFor({ fast: 4, full: 35 }) };
 
 // Every world is a node:sqlite file in its own temp folder. The scope of one property run closes
 // the connection, then removes the folder (0061).
-const folder = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(join(tmpdir(), "p17-auth-"))),
-  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+const folder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ prefix: "p17-auth-" })).pipe(
+  Effect.provide(NodeServices.layer),
+  Effect.orDie,
+);
+
+/** The home's file, in a fresh folder of its own. */
+const homeFile = Effect.flatMap(folder, (dir) => Path.Path.useSync((paths) => paths.join(dir, "home.db"))).pipe(
+  Effect.provide(NodeServices.layer),
 );
 
 const open = (path: string) =>
@@ -188,7 +191,7 @@ const worldOn = (db: DatabaseSync, path: string, fail: boolean) => {
 /** A world on a fresh file, or on `path` opened again after a test closed it by hand. */
 const world = (path?: string, fail = false) =>
   Effect.gen(function* () {
-    const file = path ?? join(yield* folder, "home.db");
+    const file = path ?? (yield* homeFile);
     return worldOn(yield* open(file), file, fail);
   });
 

@@ -17,15 +17,26 @@
 //   and booleans; a `Redacted` is `"<redacted>"`; anything else is dropped and counted in
 //   `fab.sink.dropped`. A failed span's class is `error.type`; `Cause.pretty` goes only to content.
 // - Words: "run" is an agent run only. A program start is a process, and its tag is `fab.process`.
-import { createHash } from "node:crypto";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
+import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Layer, Option, Redacted, Schema, Stream, Tracer } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Effect,
+  Exit,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Redacted,
+  Schema,
+  Stream,
+  Tracer,
+} from "effect";
+import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
@@ -45,25 +56,29 @@ type Row = typeof SpanRow.Type;
 /** A folder of its own, and every file opened in it. The sink asks for a part's file with a plain
  *  call, so a file cannot be acquired one by one: the folder holds them, and the scope that asked
  *  for the folder closes each one, then removes it (0061). */
-const folder = Effect.acquireRelease(
-  Effect.sync(() => ({ dir: mkdtempSync(join(tmpdir(), "p37-sink-")), opened: new Array<DatabaseSync>() })),
-  ({ dir, opened }) =>
-    Effect.sync(() => {
-      for (const db of opened.splice(0)) {
-        if (db.isOpen) {
-          db.close();
+const folder = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  // Finalizers run last in, first out: every file closes, then the folder goes.
+  const dir = yield* fs.makeTempDirectoryScoped({ prefix: "p37-sink-" });
+  const opened = yield* Effect.acquireRelease(
+    Effect.sync(() => new Array<DatabaseSync>()),
+    (opened) =>
+      Effect.sync(() => {
+        for (const db of opened.splice(0)) {
+          if (db.isOpen) {
+            db.close();
+          }
         }
-      }
-
-      rmSync(dir, { recursive: true, force: true });
-    }),
-);
+      }),
+  );
+  return { dir, opened, paths: yield* Path.Path };
+}).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
 /** A folder of its own: the object's file, and any part files, so a test can read every byte. */
 const home = folder.pipe(
-  Effect.map(({ dir, opened }) => {
+  Effect.map(({ dir, opened, paths }) => {
     const open = (file: string): DatabaseSync => {
-      const db = new DatabaseSync(join(dir, file));
+      const db = new DatabaseSync(paths.join(dir, file));
       opened.push(db);
       return db;
     };
@@ -83,7 +98,20 @@ const home = folder.pipe(
       sqls.set(name, sql);
       return sql;
     };
-    const bytes = (marker: string) => readdirSync(dir).filter((file) => readFileSync(join(dir, file)).includes(marker));
+    /** The files in the folder whose bytes hold `marker`, read through Effect's FileSystem. */
+    const bytes = (marker: string) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const holding: Array<string> = [];
+
+        for (const file of yield* fs.readDirectory(dir)) {
+          if (Buffer.from(yield* fs.readFile(paths.join(dir, file))).includes(marker)) {
+            holding.push(file);
+          }
+        }
+
+        return holding;
+      }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
     return { dir, db, sql: nodeSql(db), open, part, parts, bytes };
   }),
 );
@@ -172,23 +200,30 @@ const filling = (inner: Sql) => {
   return { sql, arm: (times: number) => (armed = times) };
 };
 
-const hex = (body: Uint8Array) => createHash("sha256").update(body).digest("hex");
+/** SHA-256 as hex, through Effect's Digest on the platform's WebCrypto. */
+const hex = (body: Uint8Array) =>
+  Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, body)).pipe(Effect.provide(Digest.layerWebCrypto)),
+  );
 
 /** R2 in memory, as its binding behaves: `put` fails when the body does not match its SHA-256. */
 const bucket = () => {
   const files = new Map<string, Uint8Array>();
   const calls: BucketCalls = {
     put: (key, body, sha256) => {
-      if (hex(body) !== sha256) {
-        return Promise.reject(new Error("checksum mismatch"));
-      }
+      const copy = body.slice();
+      return hex(copy).then((made) => {
+        if (made !== sha256) {
+          return Promise.reject(new Error("checksum mismatch"));
+        }
 
-      files.set(key, body.slice());
-      return Promise.resolve();
+        files.set(key, copy);
+        return undefined;
+      });
     },
     head: (key) => {
       const body = files.get(key);
-      return Promise.resolve(body === undefined ? null : { sha256: hex(body) });
+      return body === undefined ? Promise.resolve(null) : hex(body).then((sha256) => ({ sha256 }));
     },
   };
   return { calls, files };
@@ -446,7 +481,7 @@ describe("p98, a span that ends is never dropped", () => {
           },
           { traceId: "5bf92f3577b34da6a3ce929d0e0e4737", spanId: "10f067aa0ba902b8", attributes: {} },
         ]);
-        expect(bytes("sk-p98-link"), "a link's secret is never written").toEqual([]);
+        expect(yield* bytes("sk-p98-link"), "a link's secret is never written").toEqual([]);
       }).pipe(Effect.provide(world(sql)));
     }),
   );
@@ -1244,7 +1279,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
             }
           }
 
-          expect(h.bytes(SECRET), "no file holds the Redacted text, in any byte").toEqual([]);
+          expect(yield* h.bytes(SECRET), "no file holds the Redacted text, in any byte").toEqual([]);
         }).pipe(Effect.provide(world(h.sql, RecordManager.sql(h.part, BIG), Archive.bucket(r2.calls))));
       }),
   );
@@ -1467,18 +1502,16 @@ const callsFrom = (seen: Seen): ReadonlyArray<Public> => {
 
 /** One walk's own object file, in a folder of its own, closed and removed when the walk's scope
  *  ends (0061), so 100 runs never hold 100 open files. */
-const walkHome = Effect.acquireRelease(
-  Effect.sync(() => {
-    const dir = mkdtempSync(join(tmpdir(), "t705-sink-"));
-    const db = new DatabaseSync(join(dir, "object.db"));
-    return { dir, db, sql: nodeSql(db) };
-  }),
-  ({ dir, db }) =>
-    Effect.sync(() => {
-      db.close();
-      rmSync(dir, { recursive: true, force: true });
-    }),
-);
+const walkHome = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t705-sink-" });
+  const file = (yield* Path.Path).join(dir, "object.db");
+  const db = yield* Effect.acquireRelease(
+    Effect.sync(() => new DatabaseSync(file)),
+    (db) => Effect.sync(() => db.close()),
+  );
+  return { dir, db, sql: nodeSql(db) };
+}).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
 describe("T705, the sink's public calls keep their order through one machine", () => {
   it.effect.prop(
@@ -1590,7 +1623,11 @@ const TypedInput = Schema.Struct({
 });
 
 /** The repo root, and the forms a stored text could copy it in: plain, JSON-escaped and as URLs. */
-const repoRoot = join(import.meta.dirname, "..", "..", "..", "..", "..");
+const repoRoot = Effect.runSync(
+  Path.Path.useSync((path) => path.join(import.meta.dirname, "..", "..", "..", "..", "..")).pipe(
+    Effect.provide(NodeServices.layer),
+  ),
+);
 
 const rootForms = [
   repoRoot,
