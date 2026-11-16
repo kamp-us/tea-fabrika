@@ -104,7 +104,7 @@ export const split = (files: readonly string[], count: number, table = measured)
 };
 
 /** The seconds of a leg's files, a file with no row at the table's median. */
-const seconds = (files: readonly string[], table: Readonly<Record<string, number>>) => {
+export const seconds = (files: readonly string[], table: Readonly<Record<string, number>>) => {
   const unmeasured = median(Object.values(table));
   return files.reduce((sum, path) => sum + (rowOf(table, path) ?? unmeasured), 0);
 };
@@ -200,7 +200,7 @@ export const outputs = (run: Run, legs: Legs, selected: Selected): string[] => {
 };
 
 /** The test files `vitest list` picks with `args`, as a run with them would, from the repo root. */
-const list = (root: string, args: readonly string[]): string[] => {
+export const list = (root: string, args: readonly string[]): string[] => {
   const out = join(mkdtempSync(join(tmpdir(), "legs-")), "list.json");
   // CI=true, as on a runner: the config's local guard refuses a broad list without it.
   const done = spawnSync(
