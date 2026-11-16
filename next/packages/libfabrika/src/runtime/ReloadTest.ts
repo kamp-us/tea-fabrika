@@ -1482,11 +1482,9 @@ export const suite = (rig: Rig): void => {
                   const before = yield* history(w, NAME);
                   const pending = Option.getOrThrow(Option.fromNullishOr(before.checkpoint)).cmds;
                   expect(pending).toHaveLength(1);
-
-                  const job = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String, build: Schema.String }))(
-                    pending[0],
-                  );
-
+                  const job = yield* Schema.decodeUnknownEffect(
+                    Schema.Struct({ id: Schema.String, build: Schema.String }),
+                  )(pending[0]);
                   expect(job.build).toBe(a.build);
                   expect(w.durable.attempts).toContain(job.id);
                   expect(w.durable.completed.has(job.id)).toBe(false);
@@ -1590,11 +1588,9 @@ export const suite = (rig: Rig): void => {
                   const before = yield* history(w, NAME);
                   const pending = Option.getOrThrow(Option.fromNullishOr(before.checkpoint)).cmds;
                   expect(pending).toHaveLength(1);
-
-                  const job = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String, build: Schema.String }))(
-                    pending[0],
-                  );
-
+                  const job = yield* Schema.decodeUnknownEffect(
+                    Schema.Struct({ id: Schema.String, build: Schema.String }),
+                  )(pending[0]);
                   expect(job.build).toBe(a.build);
                   expect(w.durable.attempts).toContain(job.id);
                   expect(w.durable.completed.has(job.id)).toBe(false);

@@ -139,7 +139,7 @@ it.live.prop(
       });
       // The quota values ride in the settings snapshot, each as its declared schema encodes it.
       const values: Record<string, Schema.Json> = { ...fixture.settings.values };
-      const recovery = Schema.decodeUnknownSync(Schema.toEncoded(Declarations.recovery.schema))(
+      const recovery = yield* Schema.decodeUnknownEffect(Schema.toEncoded(Declarations.recovery.schema))(
         values[Declarations.recovery.path],
       );
       const invalid = `invalid:${suffix}`;

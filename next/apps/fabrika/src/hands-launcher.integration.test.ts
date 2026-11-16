@@ -298,7 +298,7 @@ const flow = Effect.fnUntraced(
         const one = yield* launcher(script, app, hands, lines, stderr);
         const waiting = yield* one.next("waiting");
         expect(waiting._tag).toBe("waiting");
-        const stored = Schema.decodeSync(Stored)(yield* fs.readFileString(path.join(hands, "hands", "key.json")));
+        const stored = yield* Schema.decodeEffect(Stored)(yield* fs.readFileString(path.join(hands, "hands", "key.json")));
         expect(keyFingerprint(stored.jwk.x), "E2: the waiting line names the key file's own key").toBe(
           waiting.fingerprint,
         );
@@ -332,14 +332,13 @@ const flow = Effect.fnUntraced(
         const online = yield* one.next("online");
         expect(online.fingerprint, "E2: online is the same key").toBe(waiting.fingerprint);
         yield* call("task request failed", () => method(project, "requestHandsTask")(waiting.fingerprint));
-
-        let task = Schema.decodeUnknownSync(Task)(
+        let task = yield* Schema.decodeUnknownEffect(Task)(
           yield* call("task read failed", () => method(project, "readHandsTask")()),
         );
 
         for (let i = 0; i < 120 && task.state._tag !== "finished"; i++) {
           yield* Effect.sleep("500 millis");
-          task = Schema.decodeUnknownSync(Task)(
+          task = yield* Schema.decodeUnknownEffect(Task)(
             yield* call("task read failed", () => method(project, "readHandsTask")()),
           );
         }
@@ -359,8 +358,7 @@ const flow = Effect.fnUntraced(
         const online = yield* two.next("online");
         // Time for a client that would take or run the task again to do so.
         yield* Effect.sleep("5 seconds");
-
-        const task = Schema.decodeUnknownSync(Task)(
+        const task = yield* Schema.decodeUnknownEffect(Task)(
           yield* call("task read failed", () => method(project, "readHandsTask")()),
         );
 

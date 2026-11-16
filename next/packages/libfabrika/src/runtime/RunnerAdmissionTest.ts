@@ -217,7 +217,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
     } else if (j._tag === "checking") {
       const input = pending.get(j.attempt.letter);
       expect(input).toBeDefined();
-      const delivery = Schema.decodeUnknownSync(Schema.Json)(input);
+      const delivery = yield* Schema.decodeUnknownEffect(Schema.Json)(input);
 
       if (move === "admit" || move === "fail_receipt" || move === "fail_journal") {
         message = {
@@ -259,7 +259,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
       message = { type: move, seq: j.attempt.seq };
     }
 
-    const msg = Schema.decodeUnknownSync(Schema.toType(supervisor.msg))(message);
+    const msg = yield* Schema.decodeUnknownEffect(Schema.toType(supervisor.msg))(message);
     const before = model;
     const next = applyCell(supervisor, model, msg)[0];
 
@@ -676,8 +676,7 @@ const walk = Effect.fnUntraced(function* (
 
     if (move === "legacy_refuse" || move === "invalid") {
       const original = yield* input(cell, true);
-      const message = Schema.decodeUnknownSync(Save)(original.envelope.input);
-
+      const message = yield* Schema.decodeUnknownEffect(Save)(original.envelope.input);
       const delivery =
         move === "legacy_refuse"
           ? { ...original, envelope: { ...original.envelope, id: `in-${yield* ids.next(Id.Process)}-${serial}` } }
@@ -712,7 +711,7 @@ const walk = Effect.fnUntraced(function* (
     if (move === "refuse_failed") {
       const prior = nth(unansweredFailures, cell.pick);
       const old = yield* live.journal.receipt(prior.id);
-      const message = Schema.decodeUnknownSync(Save)(prior.envelope.input);
+      const message = yield* Schema.decodeUnknownEffect(Save)(prior.envelope.input);
       const advance = yield* input({ ...cell, pick: Number(Str.slice(1)(message.note)) }, false);
       control.expected = advance;
       const advanced = yield* live.runner.msg(advance);
@@ -747,7 +746,7 @@ const walk = Effect.fnUntraced(function* (
                   envelope: {
                     ...prior.input.envelope,
                     input: {
-                      ...Schema.decodeUnknownSync(Save)(prior.input.envelope.input),
+                      ...(yield* Schema.decodeUnknownEffect(Save)(prior.input.envelope.input)),
                       body: `changed-${cell.pick}`,
                     },
                   },
@@ -797,7 +796,7 @@ const walk = Effect.fnUntraced(function* (
                       : "";
 
     if (refusing) {
-      refusedBodies.push(Schema.decodeUnknownSync(Save)(fresh.envelope.input).body);
+      refusedBodies.push((yield* Schema.decodeUnknownEffect(Save)(fresh.envelope.input)).body);
     }
 
     const exit = yield* Effect.exit(live.runner.msg(fresh));
@@ -965,7 +964,7 @@ const walk = Effect.fnUntraced(function* (
         answers.push({ input: fresh, first: answer });
 
         if (!refusing) {
-          const m = Schema.decodeUnknownSync(Save)(fresh.envelope.input);
+          const m = yield* Schema.decodeUnknownEffect(Save)(fresh.envelope.input);
           versions.set(m.note, (versions.get(m.note) ?? 0) + 1);
         }
       }
@@ -979,7 +978,7 @@ const walk = Effect.fnUntraced(function* (
       answers.push({ input: fresh, first: answer });
 
       if (!refusing) {
-        const m = Schema.decodeUnknownSync(Save)(fresh.envelope.input);
+        const m = yield* Schema.decodeUnknownEffect(Save)(fresh.envelope.input);
         versions.set(m.note, (versions.get(m.note) ?? 0) + 1);
       }
     }

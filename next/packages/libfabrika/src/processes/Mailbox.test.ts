@@ -403,7 +403,7 @@ describe("p21, receive", () => {
           yield* send("notes:1", "letter_a", 1);
           yield* raw("notes:1/inbox", "x-1", {
             _tag: "send",
-            body: Schema.decodeUnknownSync(Schema.Json)(body),
+            body: yield* Schema.decodeUnknownEffect(Schema.Json)(body),
           });
           const failed = yield* Effect.flip(receive("notes:1"));
           expect(failed).toBeInstanceOf(LedgerError);

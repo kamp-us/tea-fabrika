@@ -57,8 +57,7 @@ it("U2 a usage span lasts its CPU time and keeps wall time separately, including
                   return span;
                 },
               });
-
-              const usage = Schema.decodeUnknownSync(IsolateUsage.Usage)({
+              const usage = yield* Schema.decodeUnknownEffect(IsolateUsage.Usage)({
                 process: PROCESS,
                 method,
                 cpuMs,

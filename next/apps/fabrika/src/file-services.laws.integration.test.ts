@@ -904,7 +904,7 @@ it.effect.prop(
             );
           }
 
-          const saved = Schema.decodeSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(
+          const saved = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(
             w.files.get(file) ?? "{}",
           );
 

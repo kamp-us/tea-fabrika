@@ -137,8 +137,7 @@ const failed = Effect.fnUntraced(function* <A>(
 const readReport = Effect.fnUntraced(function* (nemesis: Service, binding = target) {
   const report = yield* nemesis.check(binding);
   const codec = Schema.toCodecJson(Chaos.Report);
-  expect(Schema.decodeUnknownSync(codec)(Schema.encodeSync(codec)(report))).toEqual(report);
-
+  expect(yield* Schema.decodeUnknownEffect(codec)(yield* Schema.encodeEffect(codec)(report))).toEqual(report);
   return report;
 });
 
@@ -363,8 +362,7 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
             // Each service owns its error. Nemesis retains ProcessHistory's error, which retains Ledger's.
             expect(translated.reason.cause).toHaveProperty("_tag", "ProcessHistoryError");
             expect(translated.reason.cause).toHaveProperty("reason.cause._tag", "LedgerError");
-
-            const chain = Schema.decodeUnknownSync(
+            const chain = yield* Schema.decodeUnknownEffect(
               Schema.Struct({ reason: Schema.Struct({ cause: Schema.Struct({ cause: Schema.Unknown }) }) }),
             )(translated.reason.cause);
 

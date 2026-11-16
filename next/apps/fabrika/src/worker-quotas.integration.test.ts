@@ -269,17 +269,17 @@ const world = Effect.fnUntraced(function* (mode: "writes" | "storage" | "reserve
   const from = { ...FROM, by: key.fingerprint, build: built.build };
   const start = Effect.fnUntraced(function* (name: string, program: string) {
     const code = built.programs[program]!;
-    return Schema.decodeUnknownSync(started)(
+    return (yield* Schema.decodeUnknownEffect(started)(
       yield* rpc(
         project,
         "start",
         { _tag: "first", id: `start:${name}`, name, code: { program, hash: code.hash } },
         from,
       ),
-    ).process;
+    )).process;
   });
   const facts = Effect.fnUntraced(function* (stream: string) {
-    return Schema.decodeUnknownSync(Rows)(yield* rpc(project, "read", stream, 0, "audit"));
+    return yield* Schema.decodeUnknownEffect(Rows)(yield* rpc(project, "read", stream, 0, "audit"));
   });
   // A restart names the build of the program it reloads: that program's code hash, never the brain file's.
   const hash = (program: string) => built.programs[program]!.hash;
@@ -407,7 +407,7 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
             expect(yield* w.facts(`${alpha}/dead`)).toHaveLength(1);
 
             if (mode === "writes") {
-              const info = Schema.decodeUnknownSync(
+              const info = yield* Schema.decodeUnknownEffect(
                 Schema.Array(Schema.Struct({ name: Schema.String, process: Schema.String })),
               )(yield* rpc(w.project, "info"));
               const successor = info.find((r) => r.name === "alpha:1")!.process;
@@ -424,9 +424,9 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
                 "a checked person restart must complete at the program cap",
               );
               expect(restarted.filter((r) => r._tag === "restarted")).toHaveLength(2);
-              const current = Schema.decodeUnknownSync(
+              const current = (yield* Schema.decodeUnknownEffect(
                 Schema.Array(Schema.Struct({ name: Schema.String, process: Schema.String })),
-              )(yield* rpc(w.project, "info")).find((r) => r.name === "alpha:1")!.process;
+              )(yield* rpc(w.project, "info"))).find((r) => r.name === "alpha:1")!.process;
               // Plant: a restart that loses the program's quota state answers this input accepted.
               expect(yield* w.send(current, "excess", { type: "inc", text: "" })).toMatchObject({
                 error: { data: { reason: "quota" } },

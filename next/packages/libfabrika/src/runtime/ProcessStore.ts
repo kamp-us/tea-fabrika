@@ -219,10 +219,9 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                 Effect.flatMap((raw) =>
                   raw === undefined
                     ? Effect.succeed(undefined)
-                    : Effect.try({
-                        try: () => Schema.decodeUnknownSync(Activity)(raw),
-                        catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
-                      }),
+                    : Schema.decodeUnknownEffect(Activity)(raw).pipe(
+                        Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+                      ),
                 ),
               );
         // One marker write: its text against the old one, and the key it is kept under the first time.

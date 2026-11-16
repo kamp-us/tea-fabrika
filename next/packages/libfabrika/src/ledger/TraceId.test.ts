@@ -58,7 +58,7 @@ describe("T518, TraceId generation", () => {
         expect(values).toHaveLength(200);
 
         for (const value of values) {
-          expect(Schema.decodeSync(TraceId)(value)).toBe(value);
+          expect(yield* Schema.decodeEffect(TraceId)(value)).toBe(value);
           expect(value).toMatch(/^[0-9a-f]{32}$/);
           const zero = Str.replace(/[0-9a-f]/g, "0")(value);
           expect(() => Schema.decodeSync(TraceId)(zero)).toThrow();

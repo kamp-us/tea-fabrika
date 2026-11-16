@@ -111,19 +111,20 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             const w = yield* open(defaults);
             yield* w.input("alpha:1", "first", { type: "inc" });
             yield* w.drain("alpha:1");
-            const encode = Schema.encodeSync(Schema.fromJsonString(Checkpoint));
-            let previous = Schema.decodeUnknownSync(Checkpoint)(yield* w.checkpoint("alpha:1"));
+            const encode = Schema.encodeEffect(Schema.fromJsonString(Checkpoint));
+            let previous = yield* Schema.decodeUnknownEffect(Checkpoint)(yield* w.checkpoint("alpha:1"));
 
             for (const c of tape) {
               const old = yield* w.local("alpha:1");
               const model = c.pick % 3 === 0 ? previous.saved.model : { payload: Str.repeat(c.amount % 120)("😀é\n") };
               const next = { ...previous, saved: { ...previous.saved, model } };
-              const delta =
-                new TextEncoder().encode(encode(next)).length - new TextEncoder().encode(encode(previous)).length;
+              const nextText = yield* encode(next);
+              const previousText = yield* encode(previous);
+              const delta = new TextEncoder().encode(nextText).length - new TextEncoder().encode(previousText).length;
               yield* w.replace("alpha:1", next);
               const use = yield* w.local("alpha:1");
               expect(use.program.bytes - old.program.bytes).toBe(delta);
-              expect(use.program.writes - old.program.writes).toBe(encode(next) === encode(previous) ? 0 : 1);
+              expect(use.program.writes - old.program.writes).toBe(nextText === previousText ? 0 : 1);
               expect(use.recovery).toEqual(old.recovery);
               yield* w.reopen;
               expect(yield* w.checkpoint("alpha:1")).toEqual(next);
@@ -246,7 +247,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             let terminal = false;
 
             for (const c of tape) {
-              const saved = Schema.decodeUnknownSync(Schema.NullOr(supervision))(yield* w.journal(name));
+              const saved = yield* Schema.decodeUnknownEffect(Schema.NullOr(supervision))(yield* w.journal(name));
 
               if (saved !== null && saved.journal._tag !== "idle") {
                 yield* w.drain(name);

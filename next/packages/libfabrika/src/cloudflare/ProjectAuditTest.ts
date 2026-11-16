@@ -100,8 +100,7 @@ const projectWalk = Effect.fnUntraced(function* (
 
     return Buffer.concat([n, bytes]);
   };
-
-  const line = Schema.decodeUnknownSync(KeyLine)(
+  const line = yield* Schema.decodeUnknownEffect(KeyLine)(
     `ssh-ed25519 ${Buffer.concat([field(Buffer.from("ssh-ed25519")), field(raw)]).toString("base64")}`,
   );
   const fingerprint = `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(raw).digest("base64"))}`;
@@ -300,9 +299,11 @@ const projectWalk = Effect.fnUntraced(function* (
 
     if (usage) {
       const key = `${CODE.hash}/${project.boot.process}`;
-      const loaded = Schema.decodeUnknownSync(Schema.Struct({ tails: Schema.Array(Schema.Unknown) }))(loads.get(key));
+      const loaded = yield* Schema.decodeUnknownEffect(Schema.Struct({ tails: Schema.Array(Schema.Unknown) }))(
+        loads.get(key),
+      );
       expect(loaded.tails).toHaveLength(1);
-      const props = Schema.decodeUnknownSync(Props)(bound.get(loaded.tails[0]));
+      const props = yield* Schema.decodeUnknownEffect(Props)(bound.get(loaded.tails[0]));
       expect(props).toEqual({ project: "p13-project", name: NAME, process: project.boot.process });
       const cpuMs = accepted + (entropy % 100);
       const wallMs = cpuMs + 1;
@@ -340,7 +341,7 @@ const projectWalk = Effect.fnUntraced(function* (
     }
 
     if (selector !== "plain") {
-      const binding = Schema.decodeUnknownSync(Schema.Struct({ id: InputId }))(
+      const binding = yield* Schema.decodeUnknownEffect(Schema.Struct({ id: InputId }))(
         sql.exec("SELECT id FROM gateway_bindings WHERE letter=?", `${project.boot.process}/${letter}`)[0],
       );
 
@@ -353,7 +354,7 @@ const projectWalk = Effect.fnUntraced(function* (
       if (prior !== undefined) {
         expect(rows).toEqual(records.get(letter));
       } else {
-        const recorded = Schema.decodeUnknownSync(Recorded)(rows.at(0)?.body);
+        const recorded = yield* Schema.decodeUnknownEffect(Recorded)(rows.at(0)?.body);
 
         if (move === "valid") {
           expect(recorded.input).toEqual(

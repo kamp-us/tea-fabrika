@@ -153,7 +153,7 @@ const keyFrom = Effect.fnUntraced(function* (seed: Uint8Array) {
 
   return {
     raw: Base64Url.encode(raw),
-    line: Schema.decodeSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`),
+    line: yield* Schema.decodeEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`),
     fingerprint: yield* fingerprint(raw),
     sshFingerprint: yield* fingerprint(blob),
     sign,

@@ -132,7 +132,7 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
         const declaration =
           adapter === "node"
             ? loaded.declaration
-            : Schema.decodeUnknownSync(Declaration)(
+            : yield* Schema.decodeUnknownEffect(Declaration)(
                 yield* Effect.tryPromise({
                   try: () => box.describe(),
                   catch: (cause) => new ProgramDown({ reason: "load", cause }),

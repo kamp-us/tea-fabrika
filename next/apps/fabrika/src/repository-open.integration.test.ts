@@ -58,7 +58,7 @@ const entries = Effect.fnUntraced(function* (home: string) {
 
         if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='entries'").get() !== undefined) {
           for (const row of db.prepare("SELECT * FROM entries ORDER BY rev").all()) {
-            rows.push(Schema.decodeUnknownSync(Row)(row));
+            rows.push(yield* Schema.decodeUnknownEffect(Row)(row));
           }
         }
       }),

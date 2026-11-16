@@ -1252,7 +1252,7 @@ StartsTest.law(
           pid = successor.process;
           restarts++;
           const view = yield* Effect.promise(() => owner.object.open("settings-audit"));
-          count = Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Int }))(view.view).count;
+          count = (yield* Schema.decodeUnknownEffect(Schema.Struct({ count: Schema.Int }))(view.view)).count;
         } else if (move === "alarm") {
           yield* Effect.promise(() => owner.object.due(0));
           yield* Effect.promise(() => owner.object.alarm());

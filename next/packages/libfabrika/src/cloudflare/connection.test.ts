@@ -394,10 +394,12 @@ it.effect.prop(
 
         for (let i = 0; i < count; i++) {
           yield* send(i + 2, { by: `t844-forged-${i}`, m: { _tag: "comment" } });
-          expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
+          expect(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject(
+            {
             id: i + 2,
             error: { data: { reason: "reserved" } },
-          });
+            },
+          );
           const rows = tableCounts(db);
           first ??= rows;
           expect(rows).toEqual(first);
@@ -436,7 +438,7 @@ it.effect("scenario: reserved is counted, other refusals and ok keep rpc spans, 
       const params = { by: "t844-forged", m: { _tag: "comment" } };
       yield* service.message(socket, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "process.send", params }));
       expect(calls).toEqual([{ method: "process.send", params }]);
-      expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
+      expect(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
         id: 1,
         error: { data: { reason: "reserved" } },
       });
@@ -456,13 +458,13 @@ it.effect("scenario: reserved is counted, other refusals and ok keep rpc spans, 
 
       w.answer(Answer.cases.refused.make({ reason: "bad_input" }));
       yield* service.message(socket, JSON.stringify({ jsonrpc: "2.0", id: 2, method: "process.send", params: {} }));
-      expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
+      expect(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
         id: 2,
         error: { data: { reason: "bad_input" } },
       });
       w.answer(Answer.cases.ok.make({ result: { delivered: true } }));
       yield* service.message(socket, JSON.stringify({ jsonrpc: "2.0", id: 3, method: "process.send", params: {} }));
-      expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
+      expect(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
         id: 3,
         result: { delivered: true },
       });
@@ -837,7 +839,7 @@ it.effect.prop(
             expect(w.frames, "a parked call with room gets no reply yet").toHaveLength(replies);
           } else {
             expect(w.frames).toHaveLength(replies + 1);
-            const reply = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!);
+            const reply = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!);
             expect(reply).toMatchObject(
               answer._tag === "ok"
                 ? { id: request.id, result: answer.result }
@@ -891,7 +893,9 @@ it.effect.prop(
                 const replies = w.frames.length;
                 yield* service.message(w.socket, JSON.stringify(request));
                 expect(w.frames).toHaveLength(replies + 1);
-                expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
+                expect(
+                  yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!),
+                ).toMatchObject({
                   id: request.id,
                   error: { data: { reason: "no_hello" } },
                 });
@@ -908,7 +912,9 @@ it.effect.prop(
               w.answer(answer);
               yield* service.message(w.socket, JSON.stringify(request));
               expect(w.calls).toEqual([{ method: request.method, params: request.params }]);
-              expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
+              expect(
+                yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!),
+              ).toMatchObject({
                 id: request.id,
                 result: answer.result,
               });
@@ -997,7 +1003,7 @@ it.effect.prop(
 
         // A ring past `after` answers the parked call on this socket.
         yield* service.ring(stream, after + 1);
-        expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
+        expect(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
           id: "j1.1",
           result: { rev: after + 1 },
         });

@@ -73,7 +73,7 @@ it(
           ).toMatchObject({ result: { _tag: "accepted" } });
           yield* Effect.sleep("100 millis");
           const second = yield* reader(h, dev);
-          const opened = Schema.decodeUnknownSync(View)(yield* second.call("view.open", { pid }));
+          const opened = yield* Schema.decodeUnknownEffect(View)(yield* second.call("view.open", { pid }));
           expect(Arr.map(opened.result.view.items, (row) => row.name)).toEqual(["milk", "bread"].slice(0, n + 1));
         }
 

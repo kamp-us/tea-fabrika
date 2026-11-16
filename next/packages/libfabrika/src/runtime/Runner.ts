@@ -993,18 +993,13 @@ export class ProgramRunner extends Context.Service<
 
             if (supervision === null) {
               const loaded = yield* loader.load(status.state.code.program, status.state.code.hash);
-              const policy = yield* Effect.try({
-                try: () => {
                   const wiring = options.policy ?? defaultPolicy;
-                  return Schema.decodeUnknownSync(Policy)(
+              const policy = yield* Schema.decodeUnknownEffect(Policy)(
                     loaded.declaration.policy ?? {
                       ...wiring,
                       maxDeliveries: wiring.maxDeliveries ?? defaultPolicy.maxDeliveries,
                     },
-                  );
-                },
-                catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
-              });
+              ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
               const started = supervisor.init(null, {
                 policy,
                 process: status.state.process,
@@ -1799,7 +1794,7 @@ export class ProgramRunner extends Context.Service<
             m: input.success.m,
           });
           return Result.isSuccess(queued)
-            ? yield* ok(job, Schema.encodeSync(Queued)(queued.success))
+            ? yield* ok(job, yield* Schema.encodeEffect(Queued)(queued.success).pipe(Effect.orDie))
             : yield* err(job, queued.failure);
         });
 
@@ -1846,9 +1841,10 @@ export class ProgramRunner extends Context.Service<
             }
           }
 
-          return Option.some(
-            yield* ok(job, Schema.encodeSync(Chunked)(Chunked.make({ id: job.id, letters: cut.success.length }))),
-          );
+          const chunked = yield* Schema.encodeEffect(Chunked)(
+            Chunked.make({ id: job.id, letters: cut.success.length }),
+          ).pipe(Effect.orDie);
+          return Option.some(yield* ok(job, chunked));
         });
 
         /** Saves a hands Cmd's waiting task on its dispatched entry, so this life owes it nothing until
@@ -1980,7 +1976,7 @@ export class ProgramRunner extends Context.Service<
             .pipe(Effect.result);
 
           if (Result.isSuccess(started)) {
-            return yield* ok(job, Schema.encodeSync(Started)(started.success));
+            return yield* ok(job, yield* Schema.encodeEffect(Started)(started.success).pipe(Effect.orDie));
           }
 
           const { reason } = started.failure;
@@ -2220,10 +2216,12 @@ export class ProgramRunner extends Context.Service<
                 const answer = `${job.id}/answer`;
 
                 if (origin.id !== process.id || recovering(supervision)) {
+                  // The answer is one this runner built or its box encoded, so one that is not JSON is a bug.
+                  const json = yield* Schema.decodeUnknownEffect(Schema.Json)(m).pipe(Effect.orDie);
                   yield* originStore.record(
                     answer,
                     RuntimeRecord.cases["cmd.answered"].make({
-                      m: Schema.decodeUnknownSync(Schema.Json)(m),
+                      m: json,
                       cmd: job.id,
                       build: origin.build,
                     }),

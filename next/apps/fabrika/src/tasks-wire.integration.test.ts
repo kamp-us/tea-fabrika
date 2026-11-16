@@ -162,8 +162,7 @@ const socket = Effect.fnUntraced(function* (
     challenge = frame;
   } while (challenge.method !== "challenge");
 
-  const { nonce } = Schema.decodeUnknownSync(Schema.Struct({ nonce: Schema.String }))(challenge.params);
-
+  const { nonce } = yield* Schema.decodeUnknownEffect(Schema.Struct({ nonce: Schema.String }))(challenge.params);
   const answer = yield* call("initialize", {
     versions: [1],
     has: ["git"],
@@ -317,7 +316,7 @@ it.live(
       expect(
         Arr.filter(first.frames, (f) => f.method !== undefined && Str.startsWith("tasks.")(f.method) === true),
       ).toEqual([]);
-      const taken = Schema.decodeUnknownSync(Schema.TaggedStruct("assigned", { task: Task }))(
+      const taken = yield* Schema.decodeUnknownEffect(Schema.TaggedStruct("assigned", { task: Task }))(
         ok(yield* first.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 })),
       );
 
@@ -353,7 +352,7 @@ it.live(
       expect(
         ok(yield* resumed.call("tasks.finish", { ...resource, execution, result, sentAt: "retry", seen: 0 })),
       ).toEqual(finished);
-      const read = Schema.decodeUnknownSync(Task)(ok(yield* resumed.call("tasks.read", resource)));
+      const read = yield* Schema.decodeUnknownEffect(Task)(ok(yield* resumed.call("tasks.read", resource)));
       expect(read.state).toMatchObject({ _tag: "finished", result, assignment: taken.task.state.assignment });
       expect(Arr.map(read.events, (e) => e.event)).toEqual(["requested", "taken", "started", "finished"]);
       expect(ok(yield* resumed.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 }))).toEqual({

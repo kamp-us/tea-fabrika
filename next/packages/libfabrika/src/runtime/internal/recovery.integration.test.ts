@@ -131,7 +131,7 @@ const seeded = Effect.fnUntraced(function* (h: History) {
 
   for (const row of disk.rows()) {
     if (row._tag === "started" && row.by === BRAIN) {
-      starts.push(Schema.decodeUnknownSync(ProcessEvent.cases.started)(valueFor(row)));
+      starts.push(yield* Schema.decodeUnknownEffect(ProcessEvent.cases.started)(valueFor(row)));
     }
   }
 

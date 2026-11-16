@@ -131,8 +131,7 @@ const pendingReply = Effect.fnUntraced(function* (
 
 const resumedReply = Effect.fnUntraced(function* (home: string) {
   const db = yield* recovery(home);
-
-  const saved = Schema.decodeUnknownSync(Schema.fromJsonString(Journal))(
+  const saved = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Journal))(
     db.prepare("SELECT value FROM process_recovery WHERE name=?").get(NAME)?.value,
   );
 
@@ -152,7 +151,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
   const pair = generateKeyPairSync("ed25519");
   const raw = pair.publicKey.export({ format: "der", type: "spki" }).subarray(-32);
 
-  const line = Schema.decodeSync(KeyLine)(
+  const line = yield* Schema.decodeEffect(KeyLine)(
     `ssh-ed25519 ${Buffer.concat([field(Buffer.from("ssh-ed25519")), field(raw)]).toString("base64")}`,
   );
 
@@ -211,12 +210,10 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     }),
     from,
   ]);
-
-  const pid = Schema.decodeUnknownSync(Started)(started).process;
-
+  const pid = (yield* Schema.decodeUnknownEffect(Started)(started)).process;
   const connect = Effect.fnUntraced(function* (n: number) {
     const client = yield* invoke(project, "connect", []);
-    const nonce = Schema.decodeUnknownSync(Schema.String)(yield* invoke(project, "challenge", [client]));
+    const nonce = yield* Schema.decodeUnknownEffect(Schema.String)(yield* invoke(project, "challenge", [client]));
     const tab = `recording-${n}`;
 
     const signed = yield* writeSshsig({
@@ -337,7 +334,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     }
 
     const page = yield* invoke(project, "read", ["gateway/inputs", 0, "p13-check"]);
-    const rows = Schema.decodeUnknownSync(Schema.Array(Stored))(page);
+    const rows = yield* Schema.decodeUnknownEffect(Schema.Array(Stored))(page);
     const selected = Arr.map(
       rows,
       (row) => Schema.decodeUnknownSync(Schema.Struct({ input: Metadata }))(row.body).input,

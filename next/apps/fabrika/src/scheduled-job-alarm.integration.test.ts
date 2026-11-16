@@ -153,13 +153,11 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
             from,
           ),
         );
-
-        const pid = Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
-
+        const pid = (yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(started)).process;
         const beats = yield* until(
           "three beat facts",
           Effect.promise(() => Reflect.get(instance.project(PROJECT), "read")("beats", 0, "audit")).pipe(
-            Effect.map(Schema.decodeUnknownSync(Schema.Array(Beat))),
+            Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Beat))),
           ),
           (rows) => rows.length >= 3,
         );
@@ -174,7 +172,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
           expect(beat.body.period).toBeGreaterThan(0);
         }
 
-        const rows = Schema.decodeUnknownSync(Schema.Array(Letter))(
+        const rows = yield* Schema.decodeUnknownEffect(Schema.Array(Letter))(
           yield* Effect.promise(() => Reflect.get(instance.project(PROJECT), "read")(`${NAME}/inbox`, 0, "audit")),
         );
         const timers = Arr.filter(rows, (row) => Schema.is(Timer)(row.body.m));
@@ -182,7 +180,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
         expect(new Set(Arr.map(timers, (row) => row.id)).size).toBe(timers.length);
 
         for (const row of timers) {
-          const timer = Schema.decodeUnknownSync(Timer)(row.body.m);
+          const timer = yield* Schema.decodeUnknownEffect(Timer)(row.body.m);
           // format: the runner writes a timer letter's id as `<process>/due/<at>/<pos>`, with the inbox
           // position whose model asked for this wake, so the same wake asked for again is a new
           // letter (P14 slice 2, plan amendment A-Timer-4). The letter itself lands next, at `pos + 1`.
@@ -197,13 +195,12 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
         const stable = yield* until(
           "stable idle view around saved alarm",
           Effect.gen(function* () {
-            const before = Schema.decodeUnknownSync(View)(
+            const before = yield* Schema.decodeUnknownEffect(View)(
               yield* Effect.promise(() => Reflect.get(instance.process(pid), "open")("scheduled-job-observer")),
             );
 
             const alarm = yield* Effect.promise(() => Reflect.get(instance.process(pid), "savedAlarm")());
-
-            const after = Schema.decodeUnknownSync(View)(
+            const after = yield* Schema.decodeUnknownEffect(View)(
               yield* Effect.promise(() => Reflect.get(instance.process(pid), "open")("scheduled-job-observer")),
             );
 

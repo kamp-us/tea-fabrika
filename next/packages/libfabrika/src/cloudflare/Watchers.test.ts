@@ -85,7 +85,9 @@ describe("watcher delivery evidence, next/", () => {
             }
 
             expect(Cause.hasFails(exit.cause)).toBe(true);
-            const error = Schema.decodeUnknownSync(Schema.toType(WatcherManagerError))(Cause.squash(exit.cause));
+            const error = yield* Schema.decodeUnknownEffect(Schema.toType(WatcherManagerError))(
+              Cause.squash(exit.cause),
+            );
             expect(error._tag).toBe("WatcherManagerError");
             expect(error.reason.cause).toBeDefined();
 

@@ -734,7 +734,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         done.add("ambiguous");
       } else {
         const selected = pick(candidates, 0);
-        const task = Schema.decodeUnknownSync(Schema.TaggedStruct("assigned", { task: Task }))(result).task;
+        const task = (yield* Schema.decodeUnknownEffect(Schema.TaggedStruct("assigned", { task: Task }))(result)).task;
         expect(task).toEqual(yield* w.j((j) => j.read(selected.request.id)));
 
         if (phase(selected) === "requested") {
@@ -1194,10 +1194,9 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
           outputs.ledger = rows;
 
           for (const row of Arr.filter(rows, (row) => row._tag === "initialized")) {
-            const { url } = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ url: Schema.String })))(
-              row.body,
-            );
-
+            const { url } = yield* Schema.decodeUnknownEffect(
+              Schema.fromJsonString(Schema.Struct({ url: Schema.String })),
+            )(row.body);
             outputs.urls = [outputs.urls, url, encodeURIComponent(url), decodeURIComponent(url)];
           }
         } else if (table === "gateway_state") {
@@ -1370,10 +1369,9 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
 
     /** `tasks.list` by a hands key: exactly its open tasks as pointers, and a cursor that moved only for its own requests. */
     const list = Effect.fnUntraced(function* (c: Client) {
-      const listed = Schema.decodeUnknownSync(Listed)(accepted(yield* w.door(c, "tasks.list", {})));
+      const listed = yield* Schema.decodeUnknownEffect(Listed)(accepted(yield* w.door(c, "tasks.list", {})));
       const wanted = Arr.map(mine(c), (a) => ({ id: a.request.id, process: a.request.process }));
-      const order = (all: ReadonlyArray<{ readonly id: string }>) =>
-        [...all].sort((a, b) => Str.localeCompare(b.id)(a.id));
+      const order = (all: ReadonlyArray<{ readonly id: string }>) => [...all].sort((a, b) => Str.localeCompare(b.id)(a.id));
       expect(order(listed.tasks), "G1: tasks.list answers exactly the caller's open tasks, as pointers").toEqual(
         order(wanted),
       );
@@ -1480,7 +1478,8 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
 
         if (a.phase === "requested") {
           const answer = accepted(yield* w.door(c, "tasks.take", { process: a.request.process, ...meta }));
-          const task = Schema.decodeUnknownSync(Schema.TaggedStruct("assigned", { task: Task }))(answer).task;
+          const task = (yield* Schema.decodeUnknownEffect(Schema.TaggedStruct("assigned", { task: Task }))(answer))
+            .task;
           a.phase = "assigned";
           a.execution = assignment({ request: a.request, task }).execution;
         } else {
@@ -1529,7 +1528,7 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
 
         if (after < rev) {
           expect(
-            Schema.decodeUnknownSync(Ready)(accepted(answer)),
+            yield* Schema.decodeUnknownEffect(Ready)(accepted(answer)),
             "G2: a stream past `after` answers at once",
           ).toEqual({
             rev,

@@ -261,7 +261,7 @@ export const suite = (
             expect(Exit.isSuccess(started), "a start answers although its program's init threw").toBe(true);
             const deadline = lastAlarm(w.alarms);
             expect(deadline, "the crash is observed: supervision's wait is armed").toBeTypeOf("number");
-            const at = Schema.decodeUnknownSync(Schema.Number)(deadline);
+            const at = yield* Schema.decodeUnknownEffect(Schema.Number)(deadline);
             w.controls.throws = false;
             yield* TestClock.setTime(at);
             yield* r.due(at);

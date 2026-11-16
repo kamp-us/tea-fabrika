@@ -444,7 +444,7 @@ describe("p79, cancellation, replay and stale delivery", () => {
         store.reopen();
         const old = yield* fresh(store);
         expect(old).toHaveLength(1);
-        expect(Schema.decodeUnknownSync(Down)(old[0]!.m).process).toBe(A);
+        expect((yield* Schema.decodeUnknownEffect(Down)(old[0]!.m)).process).toBe(A);
         yield* exit(store, B);
         const later = yield* fresh(store, W, old[0]!.rev);
         expect(later.map((letter) => Schema.decodeUnknownSync(Down)(letter.m).process)).toEqual([B]);
@@ -487,7 +487,9 @@ describe("p79, cancellation, replay and stale delivery", () => {
           const owed = later.filter((letter) => letter.id !== "delayed-old");
           expect(owed).toHaveLength(1);
           expect(owed[0]!.id).not.toBe(old.id);
-          expect(Schema.decodeUnknownSync(Down)(owed[0]!.m).to).toEqual(Recipient.cases.process.make({ process: B }));
+          expect((yield* Schema.decodeUnknownEffect(Down)(owed[0]!.m)).to).toEqual(
+            Recipient.cases.process.make({ process: B }),
+          );
         });
       },
     ),

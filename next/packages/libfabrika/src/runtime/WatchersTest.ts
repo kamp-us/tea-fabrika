@@ -51,7 +51,7 @@ const fails = Effect.fnUntraced(function* <A, E, R>(
 
   if (Exit.isFailure(exit)) {
     expect(Cause.hasFails(exit.cause)).toBe(true);
-    const error = Schema.decodeUnknownSync(Schema.toType(WatchersError))(Cause.squash(exit.cause));
+    const error = yield* Schema.decodeUnknownEffect(Schema.toType(WatchersError))(Cause.squash(exit.cause));
     expect(error._tag).toBe("WatchersError");
     expect(error.reason._tag).toBe(reason);
     expect(error.reason.cause).toBeDefined();
