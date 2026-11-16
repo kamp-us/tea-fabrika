@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-as-no-unknown-parameters-1-build2",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T22:55:37-08:00",
+  "ended": "2026-11-15T23:02:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Small build fix round for anti-slop judgment slice AS-no-unknown-parameters-1, in next/, from head 789599c43 (after the tests step retyped next/programs/pipeline/src/handlers.test.ts:50 to a JSON record). In next/packages/libfabrika/src/runtime/Entry.ts the Cmd handler's Cmd is now typed Schema.Json in three places: the Handler type (:90), Loaded.handler's answer (:103) and the wrapper ProgramLoader.layer hands out (:178). A Cmd handler is given the dispatched Cmd, which the runner holds as Schema.Json (Runner.ts Dispatched.cmd), so this is its honest type. Both anti-slop/no-unknown-parameters hits in the file (:103 cmd and :176 value) are fixed by hand edits (no quick fix exists for this rule); counted with the rule forced to error in a scratch config outside the repo, the file went from 2 hits to 0. pnpm format then wrapped the :103 line. Nothing else was touched: no exam path, no PR 1366 file, no .oxlintrc.json lock line, no disable line, no assertion changed. With the first build's 6 fixes, the build now fixes 8 of the 120 product hits; the other 112 stay as that row lists them.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "note": "Ran at the working tree on 789599c43 plus this edit: tsc --noEmit in next/packages/libfabrika and next/programs/pipeline (0 errors each); vitest on next/packages/libfabrika/src/runtime/Entry.test.ts (1 test) and next/programs/pipeline/src/handlers.test.ts (2 tests), and the 9 plain test files that use ProgramLoader.layer or Handler (cloudflare/mail, leave.laws, runner-reply.laws, reload.laws, runtime/Program, EffectFunctions, ErrorCause, Program.types, next/programs/counter program.laws), all passed; one whole pnpm typecheck passed. pnpm format and pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) fail only on the expected line .oxlintrc.json: anti-slop/no-unknown-parameters has no hit left in next/packages/libfabrika/src/tezgah/**: add the folder to its block (0563); the owner ruling holds lock lines for one later pull request. The list ratchet exits 0; loosening.sh from 789599c43 finds 0 hits. vitest --changed origin/main was not run: the first build found it refused whole by the 0178 guard (PR 1508 is not on this branch), and no integration law is reached by this change beyond those.",
+  "step": "build"
+}
