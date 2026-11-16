@@ -1,0 +1,39 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-law-options-0580-review2",
+  "ticket": "580",
+  "pr": "kamp-us/tea-fabrika#1497",
+  "started": "2026-11-16T00:04:02-08:00",
+  "ended": "2026-11-16T00:08:40-08:00",
+  "parent": "2026-11-16-law-options-0580-review",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send_back",
+  "why": "The recheck (0177) of slice 1 of docs/plan/quests/law-options-0580-PLAN.md, next/ and tooling, fix diff 2795856..8c6aebcdd: both faults the review named are fixed, and one new blocking fault comes from the fix. Fixed: the members' meta law (next/packages/vitest/src/Law.test.ts) now covers every member and input kind, and both escaping plants go red; the four laws now have plant records on the real code; plant.ts compiles. The merge's two resolutions keep both sides. The rename of Law.integration.test.ts to Law.runner.test.ts follows 0584 (an in-process nested vitest reaches no real thing), with no law changed. New fault: the plant check, run as CI runs it on pull_request at 8c6aebcdd against origin/main b490a3203, exits 1 with three unclaimed refusals, because the build row and the first review row record plants for next/packages/vitest/src/Law.integration.test.ts, a path the head no longer has, and .github/ci/plant-check.ts:267-276 skips a record only when its file is a changed head file not on the package's it. So the field step of this pull request is red. Fix for tests: an unclaimed refusal only for a record whose file is a head law file on the package's it, and a law case for a record naming a file absent from the head, with its plant.",
+  "plants": [
+    {
+      "file": "next/packages/vitest/src/Law.test.ts",
+      "law": "scenario: a law registered through each member reads its own plant and label from ctx.task.meta",
+      "plant": "drop the law's options in effectLaw's Effect-input prop branch, in a scratch copy of Law.ts",
+      "result": "red"
+    },
+    {
+      "file": "next/packages/vitest/src/Law.test.ts",
+      "law": "scenario: a law registered through each member reads its own plant and label from ctx.task.meta",
+      "plant": "drop the law's options in it.prop's fast-check branch, in a scratch copy of Law.ts",
+      "result": "red"
+    },
+    {
+      "file": "next/packages/vitest/src/Law.test.ts",
+      "law": "toTestOptions puts the plant and the label in meta, with its tag and reason, and passes every other vitest option through unchanged",
+      "plant": "make the rewritten labelIn answer undefined for a pinned label, in a scratch copy of Law.ts",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Read-only apart from this row; plants ran in a scratch git worktree outside the repo. Ran at 8c6aebcdd on Node 26.13.0: Law.test.ts, Plants.test.ts, Law.types.test.ts, Law.runner.test.ts, plant.test.ts, plant-check.test.ts, workflow-lint/check-job.test.ts and law-shape.test.ts (96 passed); plant-check.ts with BASE origin/main, HEAD 8c6aebcdd, EVENT pull_request (exit 1, three unclaimed refusals on field/runs/2026-11-15-law-options-0580-build.json and field/runs/2026-11-16-law-options-0580-review.json); pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (18 parts passed) and one pnpm typecheck (exit 0). loosening.sh e0bf07e97..8c6aebcdd: three removed laws in Law.integration.test.ts are the rename, present unchanged in Law.runner.test.ts; the rest of 2795856..8c6aebcdd's hits are main's own merged changes. Commit 34ecf4ca4's subject says plant.ts compiles in the agents typecheck, which 8c6aebcdd corrects; history stays as it is."
+}
