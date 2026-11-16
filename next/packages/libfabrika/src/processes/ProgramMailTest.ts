@@ -23,11 +23,13 @@ import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { valueFor } from "../ledger/Log.ts";
 import { Model } from "../permissions/Model.ts";
 import * as RelationsMemory from "../permissions/RelationsMemory.ts";
-import { Senders } from "../permissions/Senders.ts";
+import { Sender, Senders } from "../permissions/Senders.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { Children } from "./Children.ts";
 import * as ChildrenLedger from "./ChildrenLedger.ts";
 import { type From, Mailbox } from "./Mailbox.ts";
+// Types only: erased at run time, so this file's other laws load before the build writes Pipes.ts.
+import type { Pipes as PipesService } from "./Pipes.ts";
 import { brainOnly, Owner, Recipient, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 import { type Grants, type MailRefusal, ProgramMail, ProgramMailError, type Receipt } from "./ProgramMail.ts";
@@ -1265,6 +1267,319 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               ].sort(),
             ),
           );
+        }),
+      600_000,
+    );
+  });
+
+// --- Pipe slice 1 (docs/plan/quests/pipe-PLAN.md), law P4: the mail right a pipe gives, and its end ---
+//
+// Written before the build. A pipe is the right of its writer's name to mail its reader's name, a
+// `related pipes_to` row (0526), and it lasts while the pipe is live. The contract this law pins:
+//   ProgramMailLedger: a send from a name to a name passes when a live pipe runs that way, with no
+//     host grant and no related pair; never the other way.
+//   ChildrenLedger: a `stop_child` by the pipe's requester of either end writes `unpiped
+//     {reason: "stopped"}` and removes the right in the stop's turn; a stop by any other process
+//     writes no `unpiped`. A crash and a restart under the name keep the pipe.
+//   PipesLedger, Pipes and Fit as in `PipesTest.ts`.
+// The new modules are imported inside the law, so this file's other laws keep running before the
+// build. The walk reads the state it reached and picks a move possible there; its oracle is its own
+// record of the pipe, never the mail ledger's fold.
+
+const PIPE_LAB = "lab:1";
+const PIPE_W = "tracker:1";
+const PIPE_R = "outline:1";
+/** A process that started neither end: its stop is `not_child` and must end no pipe. */
+const PIPE_OTHER = "other:1";
+const PIPE_FOUNDER = "person_01jcfounder0000000000000000";
+const PIPE_FABRIKA = Model.ref("fabrika", "pipe-mail");
+
+type PipeMove = "pipe" | "start" | "send" | "reverse" | "stop" | "stop_other" | "crash";
+const PIPE_MOVES: ReadonlyArray<PipeMove> = ["pipe", "start", "send", "reverse", "stop", "stop_other", "crash"];
+
+const PipeCell = fc.record({ move: fc.nat(), end: fc.boolean() });
+const PipeWalk = fc.array(PipeCell, { minLength: 4, maxLength: 24 });
+
+/** P4: the writer's name may mail the reader's name only while the pipe is live. */
+const pipeMail = (open: Effect.Effect<Store, never, Scope.Scope>) =>
+  Effect.fnUntraced(function* (
+    cells: ReadonlyArray<typeof PipeCell extends fc.Arbitrary<infer A> ? A : never>,
+    seen: Set<string>,
+  ) {
+    // oxlint-disable-next-line fabrika/no-promises -- edge: a module the build writes, loaded inside the law so this file's other laws run before it exists
+    const PipesLedger = yield* Effect.promise(() => import("./PipesLedger.ts"));
+    // oxlint-disable-next-line fabrika/no-promises -- edge: as above
+    const { Pipes } = yield* Effect.promise(() => import("./Pipes.ts"));
+    // oxlint-disable-next-line fabrika/no-promises -- edge: as above
+    const Fit = yield* Effect.promise(() => import("./Fit.ts"));
+    // oxlint-disable-next-line fabrika/no-promises -- edge: a module on main, loaded beside the ones above
+    const Relation = yield* Effect.promise(() => import("../permissions/Relation.ts"));
+    const store = yield* open;
+    const next = ids(...PIDS);
+    const founder = Senders.of({
+      sender: () => Effect.succeed(Option.some(Sender.cases.person.make({ key: "SHA256:founder", for: PIPE_FOUNDER }))),
+    });
+    const owner = Relation.Row.cases.related.make({
+      subject: `person:${PIPE_FOUNDER}`,
+      relation: "owner",
+      object: PIPE_FABRIKA,
+    });
+    const services = Layer.mergeAll(
+      ProgramMailLedger.layer({ grants: {}, cap: OPEN }),
+      ChildrenLedger.layer({ grants: [], fabrika: PIPE_FABRIKA }),
+      PipesLedger.layer({ fabrika: PIPE_FABRIKA }),
+    ).pipe(
+      Layer.provideMerge(RelationsMemory.layer([{ id: "owner", row: owner }])),
+      Layer.provideMerge(Layer.succeed(Senders, founder)),
+      Layer.provideMerge(
+        ProcessManager.layer({ ...brain(), by: BRAIN }, next.next).pipe(
+          Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data(store.sql)))),
+        ),
+      ),
+    );
+    const context = yield* Layer.build(services);
+    const run = <A, E>(effect: Effect.Effect<A, E, ProgramMail | ProcessManager | Children | Ledger | PipesService>) =>
+      effect.pipe(Effect.provideContext(context), Effect.result);
+    let n = 0;
+    const boot = (name: string) =>
+      run(
+        ProcessManager.use((p) =>
+          p.start(
+            Start.cases.first.make({
+              id: `boot:${name}`,
+              name,
+              code: { program: `fabrika/${name.split(":")[0]}`, hash: "build-a" },
+            }),
+            from(),
+          ),
+        ),
+      ).pipe(Effect.map((answer) => Result.getOrThrow(answer).process));
+    const lab = yield* boot(PIPE_LAB);
+    const other = yield* boot(PIPE_OTHER);
+    /** What the walk knows: each end's life, whether the pipe is live, and whether it was ever made. */
+    const ends = new Map<string, { pid: string; live: boolean }>();
+    let pipe: "none" | "live" | "ended" = "none";
+    let crashes = 0;
+    const tracker = Fit.shape(Schema.Array(Schema.Struct({ id: Schema.String })));
+    const relationRows = () =>
+      run(Ledger.use((l) => Stream.runCollect(l.read(Relation.STREAM, 0)))).pipe(
+        Effect.map((answer) => [...Result.getOrThrow(answer)].map((e) => ({ tag: e._tag, body: e.body }))),
+      );
+    const unpiped = () =>
+      run(Ledger.use((l) => Stream.runCollect(l.read("pipes", 0)))).pipe(
+        Effect.map((answer) => [...Result.getOrThrow(answer)].filter((e) => e._tag === "unpiped").length),
+      );
+    const mail = (source: string, to: string) => {
+      const pid = ends.get(source)?.pid ?? "";
+      return run(
+        ProgramMail.use((m) =>
+          m.deliver({
+            command: `${pid}/${++n}/0`,
+            source: { name: source, process: pid },
+            to,
+            m: { type: "rows", n },
+            from: from({ parent: null }),
+          }),
+        ),
+      );
+    };
+
+    for (const cell of cells) {
+      const live = (name: string) => ends.get(name)?.live === true;
+      const possible = PIPE_MOVES.filter(
+        (move) =>
+          (move !== "pipe" || (pipe === "none" && !live(PIPE_W) && !live(PIPE_R))) &&
+          (move !== "start" || [PIPE_W, PIPE_R].some((e) => !ends.has(e))) &&
+          // A send needs a live source and a name the target has; the target need not be live.
+          (move !== "send" || (live(PIPE_W) && ends.has(PIPE_R))) &&
+          (move !== "reverse" || (live(PIPE_R) && ends.has(PIPE_W))) &&
+          ((move !== "stop" && move !== "stop_other" && move !== "crash") || live(PIPE_W) || live(PIPE_R)),
+      );
+      const move = possible[cell.move % possible.length] ?? "start";
+      const end = cell.end ? PIPE_W : PIPE_R;
+      const liveEnd = live(end) ? end : live(PIPE_W) ? PIPE_W : PIPE_R;
+
+      switch (move) {
+        case "pipe": {
+          const asked = yield* run(
+            Pipes.use((p) =>
+              p.pipe(
+                {
+                  id: `${lab}/${++n}/0`,
+                  from: { name: PIPE_W, program: "fabrika/tracker", output: "rows", hash: "h-w", shape: tracker },
+                  to: { name: PIPE_R, program: "fabrika/outline", input: "rows", hash: "h-r", shape: tracker },
+                  requester: { name: PIPE_LAB, process: lab },
+                },
+                from({ parent: `in-${lab}-${n}` }),
+              ),
+            ),
+          );
+          expect(Result.isSuccess(asked), "P4: the pipe is made").toBe(true);
+          pipe = "live";
+          seen.add("pipe");
+          break;
+        }
+        case "start": {
+          const name = [PIPE_W, PIPE_R].find((e) => !ends.has(e)) ?? PIPE_W;
+          const started = yield* run(
+            Children.use((c) =>
+              c.start(
+                {
+                  id: `${lab}/${++n}/0`,
+                  name,
+                  code: { program: `fabrika/${name.split(":")[0]}`, hash: "build-a" },
+                  requester: Recipient.cases.process.make({ process: lab }),
+                },
+                from({ parent: `in-${lab}-${n}` }),
+              ),
+            ),
+          );
+          const placed = Result.getOrThrow(started);
+          ends.set(name, { pid: placed.process, live: true });
+          seen.add(pipe === "none" ? "start:unpiped" : "start");
+          break;
+        }
+        case "send":
+        case "reverse": {
+          const [source, to] = move === "send" ? [PIPE_W, PIPE_R] : [PIPE_R, PIPE_W];
+          const sent = yield* mail(source, to);
+          const may = move === "send" && pipe === "live";
+          const reason =
+            Result.isFailure(sent) && sent.failure instanceof ProgramMailError ? sent.failure.reason._tag : "queued";
+          expect(reason, `P4: ${move} with the pipe ${pipe}, after ${crashes} crashes`).toBe(
+            may ? "queued" : "forbidden",
+          );
+          seen.add(`${move}:${pipe}${move === "send" && crashes > 0 && pipe === "live" ? ":restarted" : ""}`);
+          break;
+        }
+        case "stop":
+        case "stop_other": {
+          const by = move === "stop" ? lab : other;
+          const before = yield* unpiped();
+          const stopped = yield* run(
+            Children.use((c) =>
+              c.stop(
+                { name: liveEnd, requester: Recipient.cases.process.make({ process: by }) },
+                from({ parent: null }),
+              ),
+            ),
+          );
+          const after = yield* unpiped();
+
+          if (move === "stop") {
+            expect(Result.isSuccess(stopped), "P4: the requester stops its child").toBe(true);
+            ends.set(liveEnd, { pid: ends.get(liveEnd)?.pid ?? "", live: false });
+            expect(after - before, "P4: the requester's stop of a live pipe's end writes one unpiped").toBe(
+              pipe === "live" ? 1 : 0,
+            );
+            seen.add(pipe === "live" ? "stop:ended" : "stop:unpiped");
+            pipe = pipe === "live" ? "ended" : pipe;
+          } else {
+            expect(Result.isFailure(stopped), "P4: another process's stop is refused").toBe(true);
+            expect(after - before, "P4: another process's stop writes no unpiped").toBe(0);
+            seen.add("stop_other");
+          }
+
+          break;
+        }
+        case "crash": {
+          // Supervision: the end crashes and restarts under its name; the pipe follows the name.
+          const held = ends.get(liveEnd) ?? expect.fail("a live end");
+          Result.getOrThrow(
+            yield* run(
+              ProcessManager.use((p) =>
+                p.exit(held.pid, Reasons.cases.crashed.make({ phase: "step", error: "planted" }), from()),
+              ),
+            ),
+          );
+          const again = yield* run(
+            ProcessManager.use((p) =>
+              p.start(
+                Start.cases.again.make({
+                  id: `again:${liveEnd}:${++n}`,
+                  name: liveEnd,
+                  code: { program: `fabrika/${liveEnd.split(":")[0]}`, hash: "build-a" },
+                  after: held.pid,
+                  reason: "crashed",
+                }),
+                from(),
+              ),
+            ),
+          );
+          ends.set(liveEnd, { pid: Result.getOrThrow(again).process, live: true });
+          crashes++;
+          seen.add("crash");
+          break;
+        }
+      }
+
+      // The right exists exactly while the pipe is live: one pipes_to row and no unrelated after it.
+      const rel = (yield* relationRows()).filter((r) =>
+        Schema.is(Schema.Struct({ relation: Schema.Literal("pipes_to") }))(r.body),
+      );
+      const held = rel.at(-1)?.tag === "related";
+      expect(held, `P4: the pipes_to right is ${pipe === "live" ? "held" : "not held"} with the pipe ${pipe}`).toBe(
+        pipe === "live",
+      );
+    }
+  });
+
+export const pipeSuite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
+  describe("Pipe slice 1: a pipe is the writer's right to mail its reader, while it is live", () => {
+    // Plants: (a) keep the right after unpiped; (b) grant both ways; (c) end the pipe on a crash: P4 red.
+    it.effect(
+      "P4: the writer's name may mail the reader's name only while the pipe is live; before piped, after the requester's stop of either end and from reader to writer a send is forbidden; a stop by any other process writes no unpiped",
+      () =>
+        Effect.gen(function* () {
+          const seen = new Set<string>();
+          const walk = pipeMail(open);
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each walk
+          const property = fc.asyncProperty(PipeWalk, (c) => Effect.runPromise(Effect.scoped(walk(c, seen))));
+          const cells = (moves: ReadonlyArray<readonly [number, boolean]>) =>
+            moves.map(([move, end]) => ({ move, end }));
+          const examples: Array<[ReadonlyArray<{ move: number; end: boolean }>]> = [
+            // pinned: pipe, start both ends, send, crash the writer, send, reverse, another's stop,
+            // the requester stops the reader, then the writer sends to a pipe that ended.
+            [
+              cells([
+                [0, true],
+                [0, true],
+                [0, true],
+                [0, true],
+                [4, true],
+                [0, true],
+                [1, true],
+                [3, false],
+                [2, false],
+                [0, true],
+              ]),
+            ],
+            // pinned: both ends started with no pipe, then a send.
+            [
+              cells([
+                [1, true],
+                [0, true],
+                [0, true],
+              ]),
+            ],
+          ];
+          const options = { seed: SEED, numRuns: runsFor({ fast: 25, full: 100 }), endOnFailure: true, examples };
+          // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
+          yield* Effect.promise(() => fc.assert(property, options));
+
+          // Coverage: each side of the right was reached.
+          for (const required of [
+            "send:live",
+            "send:live:restarted",
+            "send:none",
+            "send:ended",
+            "reverse:live",
+            "stop:ended",
+            "stop_other",
+            "crash",
+          ]) {
+            expect(seen, `P4 reached ${required}`).toContain(required);
+          }
         }),
       600_000,
     );

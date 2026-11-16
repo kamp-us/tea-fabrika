@@ -571,4 +571,26 @@ describe("ticket 806 the checklist's laws", () => {
       "uncheck",
     ]);
   });
+
+  // Pipe slice 1 (docs/plan/quests/pipe-PLAN.md): F5's checklist case. The plan names the checklist
+  // in F5, and libfabrika's tests may not import a program, so this case sits with the program. The
+  // build turns `outputs: { done: Done }` into `Output.make(Done, finished)`.
+  // Plants, each run once after the build: record `done`'s shape as a list of it, or read its type
+  // side: red.
+  it("F5 scenario: the checklist's done output loads with its declared shape, a struct and no list, and its selector is finished", async () => {
+    const { checklist, Done, finished } = await load();
+    const { ProgramLoader } = await import("@kampus/libfabrika");
+    const { Effect, SchemaRepresentation } = await import("effect");
+    const loaded = Effect.runSync(
+      ProgramLoader.use((loader) => loader.load("fabrika/checklist")).pipe(
+        Effect.provide(ProgramLoader.layer({ "fabrika/checklist": checklist }, {})),
+      ),
+    );
+    expect(loaded.declaration.outputs.done?.shape).toEqual({
+      doc: SchemaRepresentation.toJson(SchemaRepresentation.toRepresentation(Done.ast)),
+      decodes: null,
+    });
+    expect(checklist.outputs.done.select).toBe(finished);
+    expect(checklist.outputs.done.schema).toBe(Done);
+  });
 });
