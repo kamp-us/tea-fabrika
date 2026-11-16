@@ -24,6 +24,8 @@ import {
   Stream,
   Tracer,
 } from "effect";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import { type SessionManagerError } from "../access/SessionManager.ts";
 import {
   Activity,
@@ -219,10 +221,10 @@ const decodeDispatched = Schema.decodeUnknownResult(Schema.Array(Dispatched));
 const Turn = Schema.TaggedUnion({ prepared: { id: Schema.NonEmptyString } });
 
 /** The runtime's own events and lifecycle events a program may never write, even if declared. */
-const RESERVED = new Set([
-  ...Object.keys(ProcessEvent.cases),
-  ...Object.keys(MemberEvent.cases),
-  ...Object.keys(RuntimeRecord.cases),
+const RESERVED = new Set<string>([
+  ...Rec.keys(ProcessEvent.cases),
+  ...Rec.keys(MemberEvent.cases),
+  ...Rec.keys(RuntimeRecord.cases),
 ]);
 
 /** The Cmd the runner itself performs: a checked write, signed for its parent or the owner. */
@@ -288,13 +290,13 @@ const behind = (cmds: ReadonlyArray<Dispatched>, job: Dispatched): boolean => {
  * A Cmd's operands, without the `type` its maker adds, when its input schema names every one. The
  * names are checked before the strict decode, since an empty struct takes any field.
  */
-const operands = (cmd: unknown, fields: object): Option.Option<Record<string, unknown>> => {
-  if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd)) {
+const operands = (cmd: unknown, fields: Readonly<Record<string, unknown>>): Option.Option<Record<string, unknown>> => {
+  if (!Predicate.isObject(cmd)) {
     return Option.none();
   }
 
-  const { type: _type, ...rest } = cmd as Record<string, unknown>;
-  return Object.keys(rest).every((key) => Object.hasOwn(fields, key)) ? Option.some(rest) : Option.none();
+  const { type: _type, ...rest } = cmd;
+  return Rec.keys(rest).every((key) => Rec.has(fields, key)) ? Option.some(rest) : Option.none();
 };
 
 const strictStartChild = Schema.decodeUnknownOption(StartChildInput, { onExcessProperty: "error" });
@@ -316,11 +318,11 @@ const encoder = new TextEncoder();
 /** A start_child's operands without its input: what every `ok` answer echoes, so no row holds the
  *  first letter twice. */
 const withoutInput = (cmd: unknown): unknown => {
-  if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd) || !Object.hasOwn(cmd, "input")) {
+  if (!Predicate.isObject(cmd) || !Rec.has(cmd, "input")) {
     return cmd;
   }
 
-  const { input: _input, ...rest } = cmd as Record<string, unknown>;
+  const { input: _input, ...rest } = cmd;
   return rest;
 };
 
@@ -1181,7 +1183,7 @@ export class ProgramRunner extends Context.Service<
               return yield* wrapped;
             }
 
-            const original = Object.hasOwn(wrapped, "cause") ? wrapped.cause : wrapped;
+            const original = "cause" in wrapped ? wrapped.cause : wrapped;
             const error = wrapped.errorClass;
             const failure = (reason === "step" ? Failure.cases.fresh : Failure.cases.saved).make({ ...attempt, error });
             const msg: SupervisorMsg =
@@ -1249,7 +1251,7 @@ export class ProgramRunner extends Context.Service<
                 yield* observed(
                   { type: "threw", seq: attempt.seq, error, reason: fromFailure(failure), from: meta },
                   attempt.process,
-                  { failure, content: Object.hasOwn(down, "cause") ? down.cause : down },
+                  { failure, content: "cause" in down ? down.cause : down },
                 ).pipe(Effect.mapError(() => down));
                 return yield* down;
               }),
@@ -1670,7 +1672,7 @@ export class ProgramRunner extends Context.Service<
           const event = asked.event;
           const kind = typeof event._tag === "string" ? event._tag : null;
           const writes = state.loaded.declaration.writes;
-          const policy = kind !== null && Object.hasOwn(writes, kind) ? writes[kind] : undefined;
+          const policy = kind !== null && Rec.has(writes, kind) ? writes[kind] : undefined;
 
           if (kind === null || RESERVED.has(kind) || policy === undefined || !isEvent(event)) {
             return yield* err(job, "bad_cmd");
@@ -2928,7 +2930,7 @@ const inputPort = (state: Live, m: unknown) =>
     onNone: () => undefined,
     onSome: ({ type }) => {
       const inputs = state.loaded.declaration.inputs;
-      return Object.hasOwn(inputs, type) ? inputs[type] : undefined;
+      return Rec.has(inputs, type) ? inputs[type] : undefined;
     },
   });
 

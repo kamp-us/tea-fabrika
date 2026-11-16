@@ -7,6 +7,7 @@
  * tag, only its record part's `content`, the one thing a person may delete.
  */
 import { Cause, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { ProcessId } from "../ProcessId.ts";
 
 /**
@@ -337,8 +338,8 @@ const cut = (text: string): string => {
  * @category constructors
  */
 export const short = (texts: Readonly<Record<string, string>>): Record<string, string | number> =>
-  Object.fromEntries(
-    Object.entries(texts).flatMap(([key, text]) =>
+  Rec.fromEntries(
+    Rec.toEntries(texts).flatMap(([key, text]) =>
       text.length <= MOST_CHARS
         ? [[key, text]]
         : [

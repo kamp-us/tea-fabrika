@@ -24,6 +24,7 @@ import {
   Schema,
   Tracer,
 } from "effect";
+import * as Rec from "effect/Record";
 import type { Sql } from "../Sql.ts";
 import type { Archive } from "./Archive.ts";
 import {
@@ -129,7 +130,7 @@ const findProcess = (span: Tracer.AnySpan): Option.Option<string> => {
 
 /** The largest numeric tag whose key ends in `.lag`, such as P6's `fab.ledger.lag`. */
 const largestLag = (tags: Readonly<Record<string, Tag>>): number | null => {
-  const lags = Object.entries(tags).flatMap(([key, value]) =>
+  const lags = Rec.toEntries(tags).flatMap(([key, value]) =>
     key.endsWith(".lag") && typeof value === "number" ? [value] : [],
   );
   return lags.length === 0 ? null : Math.max(...lags);
@@ -245,12 +246,12 @@ const ended = (span: Tracer.NativeSpan, endTime: bigint, exit: Exit.Exit<unknown
   const kept = span.events.map(([name, time, attributes]) => ({
     name,
     time,
-    ...keep(Object.entries(attributes)),
+    ...keep(Rec.toEntries(attributes)),
   }));
   const links = span.links.map(({ span: linked, attributes }) => ({
     traceId: linked.traceId,
     spanId: linked.spanId,
-    ...keep(Object.entries(attributes)),
+    ...keep(Rec.toEntries(attributes)),
   }));
   const dropped = [...kept, ...links].reduce((n, one) => n + one.dropped, own.dropped);
   const failure = Exit.isFailure(exit) ? Option.some(exit.cause) : Option.none();

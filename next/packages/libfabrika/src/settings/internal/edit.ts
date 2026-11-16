@@ -1,4 +1,5 @@
 import { Equal, Predicate, Result } from "effect";
+import * as Rec from "effect/Record";
 
 /** @internal */
 export type Path = ReadonlyArray<string | number>;
@@ -59,7 +60,8 @@ const same = (left: Path, right: Path): boolean => left.length === right.length 
 /** @internal */
 export const read = (value: unknown, path: Path): unknown =>
   path.reduce<unknown>(
-    (parent, key) => (Predicate.hasProperty(parent, key) && Object.hasOwn(parent, key) ? parent[key] : undefined),
+    (parent, key) =>
+      Predicate.hasProperty(parent, key) && Rec.has<string, unknown>(parent, String(key)) ? parent[key] : undefined,
     value,
   );
 
@@ -73,11 +75,10 @@ const equal = (left: unknown, right: unknown): boolean => {
   }
 
   if (Predicate.isObject(left) && Predicate.isObject(right)) {
-    const keys = Object.keys(left);
+    const keys = Rec.keys(left);
 
     return (
-      keys.length === Object.keys(right).length &&
-      keys.every((key) => Object.hasOwn(right, key) && equal(left[key], right[key]))
+      keys.length === Rec.keys(right).length && keys.every((key) => Rec.has(right, key) && equal(left[key], right[key]))
     );
   }
 

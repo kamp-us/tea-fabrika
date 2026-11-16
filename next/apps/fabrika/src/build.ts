@@ -4,7 +4,7 @@
  */
 import { BuildError, build as buildOne, type Selection } from "@kampus/libfabrika/build";
 import type { Row } from "@kampus/libfabrika/compiler";
-import { Effect, FileSystem, Path } from "effect";
+import { Effect, FileSystem, Path, Record as Rec } from "effect";
 import { programs as selected } from "./table.ts";
 
 export type {
@@ -51,8 +51,8 @@ export const build = Effect.fn("build.app")(function* (options: Options) {
   const extra = options.programs ?? {};
 
   const programs: ReadonlyArray<Selection> = [
-    ...selected.filter((p) => !Object.hasOwn(extra, p.name)),
-    ...Object.entries(extra).map(([name, module]) => ({ name, package: module, export: "program" })),
+    ...selected.filter((p) => !Rec.has(extra, p.name)),
+    ...Rec.toEntries(extra).map(([name, module]) => ({ name, package: module, export: "program" })),
   ];
 
   const files =

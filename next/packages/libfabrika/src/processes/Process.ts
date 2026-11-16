@@ -7,6 +7,7 @@
  */
 import { applyCell } from "@demlik/tea";
 import { Equal, Option, Result, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { LedgerError } from "../ledger/Ledger.ts";
 import type { LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
@@ -120,7 +121,7 @@ export const brainOnly = (write: { readonly stream: string; readonly id: string;
   write.stream.startsWith(`${PROCESSES}/`) ||
   write.stream.endsWith("/dead") ||
   write.tag === "dead" ||
-  Object.hasOwn(ProcessEvent.cases, write.tag) ||
+  Rec.has<string, unknown>(ProcessEvent.cases, write.tag) ||
   inSignalSpace(write.id) ||
   inNoticeSpace(write.id) ||
   inRunnerSpace(write.id);

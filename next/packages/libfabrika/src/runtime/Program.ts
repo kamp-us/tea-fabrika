@@ -5,6 +5,7 @@
  */
 import { applyCell, msgKeysOf, type AnyCmdDef } from "@demlik/tea";
 import { Effect, Option, Predicate, Result, Schema, type SchemaIssue } from "effect";
+import * as Rec from "effect/Record";
 import { ParentText } from "../coordination/index.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
 
@@ -186,7 +187,7 @@ export type EventPolicy = typeof EventPolicy.Type;
 const downDeclared = Schema.makeFilter(
   (program: { readonly machine: Steps; readonly inputs: Readonly<Record<string, unknown>> }) =>
     !(program.machine.cmds ?? []).some((cmd) => cmd.cmdType === "monitor") ||
-    Object.hasOwn(program.inputs, "DOWN") ||
+    Rec.has(program.inputs, "DOWN") ||
     "a program whose cmds hold monitor must declare a DOWN input",
 );
 
@@ -384,8 +385,8 @@ const construct = (raw: unknown) =>
       state: { ...spec.state, schema: spec.machine.model },
       msg: spec.machine.msg,
       view: { data: Schema.Json, select: spec.view },
-      inputs: Object.fromEntries(
-        Object.entries(spec.inputs).map(([key, port]) => [
+      inputs: Rec.fromEntries(
+        Rec.toEntries(spec.inputs).map(([key, port]) => [
           key,
           typeof port !== "string" && "_tag" in port
             ? port
@@ -561,7 +562,7 @@ export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown"
       return this.error;
     }
 
-    const original = Object.hasOwn(this, "cause") ? this.cause : this;
+    const original = "cause" in this ? this.cause : this;
 
     return original instanceof Error ? original.constructor.name : original === null ? "null" : typeof original;
   }

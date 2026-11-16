@@ -4,6 +4,7 @@
  * tail callback.
  */
 import { Effect, Option, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { BuiltProgram } from "../runtime/Built.ts";
 import { Declaration, workerExecution, type ExecutionCalls, type ProgramSource } from "../runtime/Execution.ts";
 import { ProgramDown } from "../runtime/Program.ts";
@@ -92,12 +93,12 @@ export const workerLoader = (
     tail?: Effect.Success<ReturnType<typeof bind>>,
     hash?: string,
   ) {
-    const built = Object.hasOwn(programs, name) ? programs[name] : undefined;
+    const built = Rec.has(programs, name) ? programs[name] : undefined;
 
     const found =
       hash === undefined
         ? built
-        : (Object.values(programs).find((p) => p.hash === hash) ??
+        : (Rec.values(programs).find((p) => p.hash === hash) ??
           (lookup === undefined
             ? null
             : yield* lookup(hash).pipe(Effect.mapError((cause) => new ProgramDown({ reason: "load", cause })))));

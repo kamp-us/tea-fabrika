@@ -1,4 +1,5 @@
 import { Context, Effect, Layer } from "effect";
+import * as Rec from "effect/Record";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
 import { GatewayClient, ProjectClient } from "./platform.ts";
@@ -47,7 +48,7 @@ export const serveAsset = Effect.fn("brain.asset")(function* (
   request: Request,
   route = new URL(request.url).pathname,
 ) {
-  const asset = Object.hasOwn(assets, route) ? assets[route] : undefined;
+  const asset = Rec.has(assets, route) ? assets[route] : undefined;
   yield* Effect.annotateCurrentSpan({
     "asset.found": asset !== undefined,
     "http.method": request.method,
@@ -116,7 +117,7 @@ export const fetch = Effect.fn("workers.fetch")(function* (
       return yield* serveAsset(assets, request);
     }
 
-    if (Object.hasOwn(assets, PAGE)) {
+    if (Rec.has(assets, PAGE)) {
       return yield* serveAsset(assets, request, PAGE);
     }
   }

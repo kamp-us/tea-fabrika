@@ -6,6 +6,7 @@
  * The Config keeps Effect's own prototype, so `yield*` and `parse(provider)` behave as Effect's do. The declaration's fields are added to that same object, never copied beside it. `group` joins declarations into one Config and refuses a set that cannot be read together.
  */
 import { Config, Schema, String as Str } from "effect";
+import * as Rec from "effect/Record";
 
 /**
  * The two settings files: the person's own, and the repo's.
@@ -173,7 +174,7 @@ export type Values<R extends Record<string, Setting<any>>> = Readonly<Config.Suc
  * @category constructors
  */
 export const group = <const R extends Record<string, Setting<any>>>(settings: R): Group<Values<R>, R> => {
-  const declarations = Object.values(settings);
+  const declarations = Rec.values(settings);
   const refused = conflict(declarations);
 
   if (refused !== undefined) {

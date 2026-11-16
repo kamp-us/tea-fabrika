@@ -3,6 +3,7 @@
  */
 import { stringify } from "@decimalturn/toml-patch";
 import { Effect, Layer, Predicate, Result, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { type AST, getStaticTOMLValue, ParseError, parseTOML } from "toml-eslint-parser";
 import * as Edit from "./internal/edit.ts";
 import { Conflict, Syntax, Toml, type TomlDocument, TomlError, Value } from "./Toml.ts";
@@ -22,7 +23,7 @@ const put = (table: object, path: Edit.Path, value: unknown): void => {
     if (i === path.length - 1) {
       Object.defineProperty(parent, segment, { value, enumerable: true, writable: true, configurable: true });
     } else {
-      if (!Object.hasOwn(parent, segment)) {
+      if (!(Predicate.hasProperty(parent, segment) && Rec.has<string, unknown>(parent, String(segment)))) {
         Object.defineProperty(parent, segment, {
           value: typeof path[i + 1] === "number" ? [] : {},
           enumerable: true,
@@ -32,7 +33,9 @@ const put = (table: object, path: Edit.Path, value: unknown): void => {
       }
 
       const next =
-        Predicate.hasProperty(parent, segment) && Object.hasOwn(parent, segment) ? parent[segment] : undefined;
+        Predicate.hasProperty(parent, segment) && Rec.has<string, unknown>(parent, String(segment))
+          ? parent[segment]
+          : undefined;
 
       // An array of tables is a step too. The parser refuses a document that writes through a
       // scalar, so a scalar here is a bug in this walk, and it fails as main's defineProperty did.
@@ -181,7 +184,7 @@ const encoded = (value: unknown, ancestors: ReadonlySet<object> = new Set()): un
 
     if (Array.isArray(value)) {
       for (let i = 0; i < value.length; i++) {
-        if (!Object.hasOwn(value, i)) {
+        if (!Predicate.hasProperty(value, i)) {
           throw new TypeError("A TOML array cannot contain a missing element.");
         }
       }
@@ -196,7 +199,7 @@ const encoded = (value: unknown, ancestors: ReadonlySet<object> = new Set()): un
       throw new TypeError("A TOML table must be a plain record with string keys.");
     }
 
-    return Object.fromEntries(Object.entries(value).map(([name, child]) => [name, encoded(child, next)]));
+    return Rec.fromEntries(Rec.toEntries(value).map(([name, child]) => [name, encoded(child, next)]));
   }
 
   const result = scalar(value);
@@ -222,7 +225,7 @@ const render = Effect.fnUntraced(function* (path: ReadonlyArray<string>, value: 
       }
 
       const keys = path.map((segment) => {
-        const text = stringify(Object.fromEntries([[segment, 0]]), format);
+        const text = stringify(Rec.fromEntries([[segment, 0]]), format);
         const node = syntax(text).body[0].body[0];
 
         if (node?.type !== "TOMLKeyValue") {

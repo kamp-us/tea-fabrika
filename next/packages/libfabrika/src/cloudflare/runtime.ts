@@ -23,6 +23,7 @@ import {
   Tracer,
 } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import { admitted } from "../access/Access.ts";
 import { ClientManager } from "../access/ClientManager.ts";
@@ -973,7 +974,7 @@ const projectLogic = Effect.fn("project.init")(function* (
   };
   const codes = yield* CodeStore.pipe(Effect.provide(CodeStoreSql.layer(sql)));
 
-  for (const source of Object.values(programs)) {
+  for (const source of Rec.values(programs)) {
     const built = yield* Schema.decodeUnknownEffect(BuiltProgram)(source);
     yield* codes.put(built);
   }
@@ -1024,7 +1025,7 @@ const projectLogic = Effect.fn("project.init")(function* (
           : (yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(row.value).pipe(
               Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
             )).build;
-      const target = Object.hasOwn(programs, process.program) ? programs[process.program] : undefined;
+      const target = Rec.has(programs, process.program) ? programs[process.program] : undefined;
 
       for (const was of new Set([process.build, ...(recorded === undefined ? [] : [recorded])])) {
         if (target === undefined || moved.has(was) || Option.isSome(yield* codes.get(was))) {
@@ -1106,10 +1107,10 @@ const projectLogic = Effect.fn("project.init")(function* (
   const policies = new Map<string, InputPolicy>();
   const remember = (owner: string, declaration: Declaration): InputPolicy => {
     const policy = {
-      inputs: Object.entries(declaration.inputs)
+      inputs: Rec.toEntries(declaration.inputs)
         .filter(([, p]) => p.personOnly)
         .map(([name]) => name),
-      events: Object.entries(declaration.writes)
+      events: Rec.toEntries(declaration.writes)
         .filter(([, p]) => p.personOnly)
         .map(([name]) => name),
     };
@@ -1337,7 +1338,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
     );
 
-    if (!Object.hasOwn(programs, request.code.program)) {
+    if (!Rec.has(programs, request.code.program)) {
       return yield* new LedgerError({ reason: "refused" });
     }
 
@@ -1729,7 +1730,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     Effect.tap((answer) => Effect.annotateCurrentSpan("outcome", answer._tag)),
   );
 
-  for (const [program, built] of Object.entries(programs)) {
+  for (const [program, built] of Rec.toEntries(programs)) {
     if (selected[program] === undefined) {
       yield* accept({ id: `code.boot:${program}:${built.hash}`, program, ...built, from: "boot" });
     }

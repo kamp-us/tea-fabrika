@@ -47,10 +47,10 @@ export class SnapshotError extends Schema.TaggedError<SnapshotError, { readonly 
 ) {}
 
 const hashValues = Effect.fnUntraced(function* (values: Snapshot["values"]) {
-  const sorted = Object.entries(values).sort(([a], [b]) => (a < b ? -1 : 1));
+  const sorted = Rec.toEntries(values).sort(([a], [b]) => (a < b ? -1 : 1));
 
   const text = JSON.stringify(sorted, (_key, value: unknown) =>
-    Predicate.isObject(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1))) : value,
+    Predicate.isObject(value) ? Rec.fromEntries(Rec.toEntries(value).sort(([a], [b]) => (a < b ? -1 : 1))) : value,
   );
 
   const digest = yield* Digest.Digest;
@@ -105,8 +105,8 @@ export const make = Effect.fnUntraced(function* <A, R extends Record<string, Set
     Effect.orDie,
   );
 
-  const values = Object.fromEntries(
-    Object.entries(group.settings).map(([name, d]) => [d.path, Option.getOrThrow(Rec.get(encoded, name))]),
+  const values = Rec.fromEntries(
+    Rec.toEntries(group.settings).map(([name, d]) => [d.path, Option.getOrThrow(Rec.get(encoded, name))]),
   );
 
   const snapshot: Snapshot = {
@@ -137,12 +137,12 @@ export const read = Effect.fnUntraced(function* <A, R extends Record<string, Set
   const fields = <S extends Schema.Top>(schema: S) =>
     paths.length === 0
       ? Schema.Record(Schema.String, Schema.Never)
-      : Schema.Struct(Object.fromEntries(paths.map((path) => [path, schema])));
+      : Schema.Struct(Rec.fromEntries(paths.map((path) => [path, schema])));
 
   const origins =
     paths.length === 0
       ? fields(Origin)
-      : Schema.Struct(Object.fromEntries(group.declarations.map((d) => [d.path, declaredOrigin(d)])));
+      : Schema.Struct(Rec.fromEntries(group.declarations.map((d) => [d.path, declaredOrigin(d)])));
 
   const envelope = Schema.Struct({ values: fields(Schema.Json), origins, hash: Schema.String });
 
@@ -154,12 +154,12 @@ export const read = Effect.fnUntraced(function* <A, R extends Record<string, Set
 
   const saved = yield* Schema.decodeUnknownEffect(envelope)(input, strict).pipe(Effect.mapError(refused));
   const codec = Codec.values(group);
-  const named = Object.fromEntries(Object.entries(group.settings).map(([name, d]) => [name, saved.values[d.path]]));
+  const named = Rec.fromEntries(Rec.toEntries(group.settings).map(([name, d]) => [name, saved.values[d.path]]));
   const values = yield* Schema.decodeUnknownEffect(codec)(named, strict).pipe(Effect.mapError(refused));
   const encoded: Snapshot["values"] = yield* Schema.encodeEffect(codec)(values).pipe(Effect.mapError(refused));
 
-  const canonical = Object.fromEntries(
-    Object.entries(group.settings).map(([name, d]) => [d.path, Option.getOrThrow(Rec.get(encoded, name))]),
+  const canonical = Rec.fromEntries(
+    Rec.toEntries(group.settings).map(([name, d]) => [d.path, Option.getOrThrow(Rec.get(encoded, name))]),
   );
 
   const hash = yield* hashValues(canonical);
