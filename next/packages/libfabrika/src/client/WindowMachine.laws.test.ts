@@ -50,7 +50,7 @@ import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as SchemaAST from "effect/SchemaAST";
+import type * as SchemaAST from "effect/SchemaAST";
 import * as fc from "fast-check";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace, NoProc, Recipient, signalId } from "../processes/Process.ts";
@@ -401,15 +401,16 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
     const f = w.old[c.pick % w.old.length]!;
     const on = { id: f.id, dial: f.dial };
     out.push(() =>
-      Written.isAnyOf(["open"])(f.call)
-        ? { type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms }
-        : Written.isAnyOf(["send"])(f.call)
-          ? { type: "send_ok", ...on, value: { _tag: "accepted", rev: 1, pos: 1 }, ms: c.ms }
-          : Written.isAnyOf(["wait"])(f.call)
-            ? answerMsg({ type: "wait_ok", ...on, value: { rev: c.ms }, ms: c.ms })
-            : Written.isAnyOf(["monitor"])(f.call)
-              ? answerMsg({ type: "monitor_ok", ...on, value: null, ms: c.ms })
-              : { type: "read_ok", ...on, value: [], ms: c.ms },
+      Written.matchOrElse(
+        f.call,
+        {
+          open: (): WindowMsg => ({ type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms }),
+          send: (): WindowMsg => ({ type: "send_ok", ...on, value: { _tag: "accepted", rev: 1, pos: 1 }, ms: c.ms }),
+          wait: () => answerMsg({ type: "wait_ok", ...on, value: { rev: c.ms }, ms: c.ms }),
+          monitor: () => answerMsg({ type: "monitor_ok", ...on, value: null, ms: c.ms }),
+        },
+        (): WindowMsg => ({ type: "read_ok", ...on, value: [], ms: c.ms }),
+      ),
     );
     const current = w.flights[c.aux % Math.max(1, w.flights.length)];
     const oldDial = w.old.find((old) => old.dial !== current?.dial)?.dial;
@@ -417,11 +418,26 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
     if (current !== undefined && oldDial !== undefined) {
       // A current id on an ended dial must not match. Ids alone are insufficient.
       out.push(() =>
-        Written.isAnyOf(["open"])(current.call)
-          ? { type: "open_ok", id: current.id, dial: oldDial, value: { rev: 0, view: EMPTY }, ms: c.ms }
-          : Written.isAnyOf(["send"])(current.call)
-            ? { type: "send_ok", id: current.id, dial: oldDial, value: { _tag: "accepted", rev: 1, pos: 1 }, ms: c.ms }
-            : { type: "read_ok", id: current.id, dial: oldDial, value: [], ms: c.ms },
+        Written.matchOrElse(
+          current.call,
+          {
+            open: (): WindowMsg => ({
+              type: "open_ok",
+              id: current.id,
+              dial: oldDial,
+              value: { rev: 0, view: EMPTY },
+              ms: c.ms,
+            }),
+            send: (): WindowMsg => ({
+              type: "send_ok",
+              id: current.id,
+              dial: oldDial,
+              value: { _tag: "accepted", rev: 1, pos: 1 },
+              ms: c.ms,
+            }),
+          },
+          (): WindowMsg => ({ type: "read_ok", id: current.id, dial: oldDial, value: [], ms: c.ms }),
+        ),
       );
     }
   }
@@ -4364,7 +4380,11 @@ const stripsNow = (s: WindowModel): ReadonlyArray<string> | null => {
 
 /** The record and Msg fields a law reads by their schema: every object case of a union. */
 const objectsIn = (ast: SchemaAST.AST): ReadonlyArray<SchemaAST.Objects> =>
-  SchemaAST.isUnion(ast) ? ast.types.flatMap(objectsIn) : SchemaAST.isObjects(ast) ? [ast] : [];
+  Match.value(ast).pipe(
+    Match.tag("Union", (u): ReadonlyArray<SchemaAST.Objects> => u.types.flatMap(objectsIn)),
+    Match.tag("Objects", (o): ReadonlyArray<SchemaAST.Objects> => [o]),
+    Match.orElse((): ReadonlyArray<SchemaAST.Objects> => []),
+  );
 
 const fieldIn = (o: SchemaAST.Objects | undefined, name: string) =>
   o?.propertySignatures.find((p) => p.name === name)?.type;
