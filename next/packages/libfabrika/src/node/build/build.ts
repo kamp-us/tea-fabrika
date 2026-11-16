@@ -5,8 +5,6 @@
  * last good file.
  *
  * Disk and paths go through Effect's `FileSystem` and `Path`, which the caller provides.
- *
- * @stability unstable
  */
 import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
 import { Context, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
@@ -21,7 +19,6 @@ export {
   /**
    * Error for a build that stopped, re-exported from the runtime's build tables.
    *
-   * @stability unstable
    * @category errors
    */
   BuildError,
@@ -31,7 +28,6 @@ export {
  * One program an app selects for its build: its `pack/program` name, its package, and the export
  * that holds its declaration.
  *
- * @stability unstable
  * @category models
  */
 export type Selection = { readonly name: string; readonly package: string; readonly export: string };
@@ -40,7 +36,6 @@ export type Selection = { readonly name: string; readonly package: string; reado
  * What a finished build answers: the published brain file and its hash, and the tables that file
  * carries, each program's compiled source by name and each window file by route.
  *
- * @stability unstable
  * @category models
  */
 export type Built = {
@@ -56,7 +51,6 @@ export type Built = {
  * What a build is given: where to publish, the repo root, the brain's entry module, the selected
  * programs and, when there is one, the tab's window.
  *
- * @stability unstable
  * @category models
  */
 export type Options = {
@@ -410,7 +404,6 @@ const publish = Effect.fn("build.emit")(function* (
  * `inputs` receives every module's text by its id, and `reached`, once the check passes, each
  * checked `.tsx` file's text by its path from the root.
  *
- * @stability unstable
  * @category constructors
  */
 export const buildPrograms = Effect.fn("build.programs")(function* (
@@ -495,7 +488,6 @@ export const buildPrograms = Effect.fn("build.programs")(function* (
  * One finding fails the whole build as `compiler`, and the error does not list the findings: run
  * the check alone to read them.
  *
- * @stability unstable
  * @category constructors
  */
 export const build = Effect.fn("build.build")(function* (options: Options) {

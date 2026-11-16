@@ -7,8 +7,6 @@
  * A window's stylesheet is served from the brain's table, which holds scripts and stylesheets only,
  * so any other local file a stylesheet names stops the build instead of answering 404 later.
  * Every file is found and read through Effect's `FileSystem` and `Path`, which the caller provides.
- *
- * @stability unstable
  */
 import { Effect, FileSystem, Path } from "effect";
 import { bundleAsync, transform } from "lightningcss";
@@ -154,7 +152,6 @@ const cyclic = (edges: ReadonlyMap<string, ReadonlySet<string>>) => {
  * It refuses a `url()` that names a local file, an `@import` with a `layer` or a `supports()`
  * condition, and a sheet that imports itself through any chain.
  *
- * @stability unstable
  * @category constructors
  */
 export const inlineStylesheet = Effect.fn("build.css")(function* (file: string) {

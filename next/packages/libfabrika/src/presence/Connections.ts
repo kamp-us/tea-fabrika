@@ -1,7 +1,5 @@
 /**
  * Which clients of a key are connected now, kept in the project's Sql.
- *
- * @stability unstable
  */
 import { Context, Effect, Layer, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -45,7 +43,6 @@ const AWAY = 75_000;
  * adapter and marks it `online`, `away` (the last reply is at least 75 seconds old) or `unknown`
  * (the probe failed). A connection with no reply time counts from its join time.
  *
- * @stability unstable
  * @category services
  */
 export class Connections extends Context.Service<

@@ -1,8 +1,6 @@
 /**
  * Source folders for an opened repository: a path from a settings file, resolved to the commit or
  * to disk.
- *
- * @stability unstable
  */
 import { Effect, FileSystem, Path, Redacted } from "effect";
 import type { ObjectId } from "../../repositories/Repositories.ts";
@@ -40,7 +38,6 @@ const missing = (cause: unknown) =>
  * that does not exist fails as `MissingPath`; a link cycle, an empty link, a parent that is not a
  * folder or a source that is not a folder fails as `ReadFailed`.
  *
- * @stability unstable
  * @category constructors
  */
 export const resolver = Effect.fn("repositorySources.resolver")(function* (options: {

@@ -1,7 +1,5 @@
 /**
  * Effect driver for the single brain lifecycle machine.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
 import * as Clock from "effect/Clock";
@@ -246,7 +244,6 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 /**
  * Serializes complete operations and captures lower services once.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (spec: BrainSpec, settings: Snapshot.Snapshot) =>

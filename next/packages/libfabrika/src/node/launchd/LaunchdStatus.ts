@@ -1,7 +1,5 @@
 /**
  * Narrow decoding of launchctl's non-API print output.
- *
- * @stability unstable
  */
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -18,7 +16,6 @@ const Response = Schema.Struct({
 /**
  * A job value that print can represent without ambiguous quoting or whitespace.
  *
- * @stability unstable
  * @category schemas
  */
 export const Scalar = Schema.NonEmptyString.check(Schema.isPattern(/^[^"\\{}\p{Cc}]+$/u), Schema.isTrimmed());
@@ -28,7 +25,6 @@ const scalar = Schema.is(Scalar);
 /**
  * Accepts exact absence or a complete, unambiguous job description.
  *
- * @stability unstable
  * @category decoding
  */
 export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) {

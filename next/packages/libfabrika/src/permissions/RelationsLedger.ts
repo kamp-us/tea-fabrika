@@ -1,7 +1,5 @@
 /**
  * The relation store on the ledger stream `permissions/relations`.
- *
- * @stability unstable
  */
 import { Effect, Layer, Result, Schema } from "effect";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
@@ -24,7 +22,6 @@ const isRow = (entry: Entry): boolean => Object.hasOwn(Row.cases, entry._tag);
  * as `by`, whatever the writer it is given says; the referee keeps a resend as one row. A ledger
  * failure is `storage`, with its cause kept.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (config: { readonly by: string }): Layer.Layer<Relations, never, LedgerTransaction> =>

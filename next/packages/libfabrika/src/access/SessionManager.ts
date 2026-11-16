@@ -6,8 +6,6 @@
  *
  * State lives in three tables of the given `Sql`: `gateway_sessions`, `gateway_ended` and
  * `gateway_receipts`. They are created on first use.
- *
- * @stability unstable
  */
 import { Context, Effect, Layer, Result, Schema } from "effect";
 import { type InputId } from "../Id.ts";
@@ -19,7 +17,6 @@ import { type Sql } from "../Sql.ts";
 /**
  * Schema for who wrote an input: a person or an agent, with its key and the person it works for.
  *
- * @stability unstable
  * @category models
  */
 export const Writer = Schema.TaggedUnion({
@@ -29,7 +26,6 @@ export const Writer = Schema.TaggedUnion({
 /**
  * The decoded type of `Writer`.
  *
- * @stability unstable
  * @category models
  */
 export type Writer = typeof Writer.Type;
@@ -37,7 +33,6 @@ export type Writer = typeof Writer.Type;
 /**
  * An input as it arrived: its id, who wrote it, when it arrived, and the input itself.
  *
- * @stability unstable
  * @category models
  */
 export interface Envelope<A> {
@@ -53,7 +48,6 @@ const Span = Schema.Struct({ traceId: Schema.String, spanId: Schema.String });
  * Schema for what a signature stands for: the writer, the parent input id, and the trace and span
  * of the input.
  *
- * @stability unstable
  * @category models
  */
 export const Session = Schema.Struct({
@@ -65,7 +59,6 @@ export const Session = Schema.Struct({
 /**
  * The decoded type of `Session`.
  *
- * @stability unstable
  * @category models
  */
 export type Session = typeof Session.Type;
@@ -83,7 +76,6 @@ export type Session = typeof Session.Type;
  * receipt without all matching it. `signal` means the request id is in the signal, runner or
  * notice space, which only the brain uses.
  *
- * @stability unstable
  * @category errors
  */
 export class SigningRefused extends Schema.TaggedError<SigningRefused>()("SigningRefused", {
@@ -101,7 +93,6 @@ export class SigningRefused extends Schema.TaggedError<SigningRefused>()("Signin
  * it for a client that is not online, a parent id that does not decode, a binding that does not
  * match, or a destination that is not live.
  *
- * @stability unstable
  * @category errors
  */
 export class NotGranted extends Schema.TaggedError<NotGranted>()("NotGranted", {}) {}
@@ -110,7 +101,6 @@ export class NotGranted extends Schema.TaggedError<NotGranted>()("NotGranted", {
  * Reason for a session table that could not be read or written: the `Sql` threw. The throw is
  * kept as `cause`.
  *
- * @stability unstable
  * @category errors
  */
 export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
@@ -119,7 +109,6 @@ export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: S
  * Reason for a saved input or receipt that does not decode. The decoder's failure is kept as
  * `cause`.
  *
- * @stability unstable
  * @category errors
  */
 export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Schema.Defect() }) {}
@@ -128,7 +117,6 @@ export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Sche
  * Reason for a membership check that failed for any cause but `NotGranted`, such as the access
  * store below it. That failure is kept as `cause`.
  *
- * @stability unstable
  * @category errors
  */
 export class Membership extends Schema.TaggedError<Membership>()("Membership", { cause: Schema.Defect() }) {}
@@ -138,7 +126,6 @@ export class Membership extends Schema.TaggedError<Membership>()("Membership", {
  * membership check it was given. A refusal by the rules is `SigningRefused` or `NotGranted`
  * instead.
  *
- * @stability unstable
  * @category errors
  */
 export class SessionManagerError extends Schema.TaggedError<SessionManagerError>()("SessionManagerError", {
@@ -157,7 +144,6 @@ const storageFault = (cause: unknown) =>
  * `SessionManager.signer` reads it. Asking again with the same id for the same parent, process and
  * kind returns the same session, and any other use of that id is refused as `spent`.
  *
- * @stability unstable
  * @category services
  */
 export class SignRequest extends Context.Service<SignRequest, { readonly id: string }>()(
@@ -188,7 +174,6 @@ const State = Schema.TaggedUnion({ recorded: {}, delivered: {} });
  * unless the input is delivered and belongs to the given process, and with `person_only` when the
  * kind needs a person and the input was not written by a person or is not person-only.
  *
- * @stability unstable
  * @category models
  */
 export class SavedInput extends Schema.Opaque<SavedInput>()(
@@ -238,7 +223,6 @@ const decodeSession = Schema.decodeUnknownSync(Schema.fromJsonString(Session));
  * The membership check in `signer` and `sender` runs before the transaction, so a key removed in
  * between is not seen by that call. `receipt` runs `signer` again, so it checks membership again.
  *
- * @stability unstable
  * @category services
  */
 export class SessionManager extends Context.Service<

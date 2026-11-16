@@ -1,8 +1,6 @@
 /**
  * The hands' journal file: Effect's `KeyValueStore` over one SQLite file, one row per key. SQLite
  * commits each write whole or not at all, so a crash or a power cut never leaves a torn entry.
- *
- * @stability unstable
  */
 import { DatabaseSync } from "node:sqlite"; // edge: no Effect SQL client for Node's SQLite is installed; the repo's node:sqlite handle is the existing one
 import { Effect, Layer, Predicate } from "effect";
@@ -64,7 +62,6 @@ const store = (sql: Sql) => {
  * A file that cannot be opened is a defect, not an error: the hands cannot keep their promise of
  * running a task at most once without their journal, so the start stops with its cause.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (options: { readonly file: string }) =>

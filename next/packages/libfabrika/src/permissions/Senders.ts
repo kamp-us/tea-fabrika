@@ -2,8 +2,6 @@
  * Who sent the input behind a write, as a right's check takes it. This file holds the contract only
  * (0095): the gateway's one signing service answers it (0262), through
  * `access/SessionSenders.ts`.
- *
- * @stability unstable
  */
 import { Context, Schema } from "effect";
 import type { Effect, Option } from "effect";
@@ -12,7 +10,6 @@ import type { Effect, Option } from "effect";
  * Schema for the sender of an input, both its ids kept (0261): a person's window, or an agent let
  * in for a person. Both are checked as `person:<for>`, so an agent is capped by its person (0526).
  *
- * @stability unstable
  * @category schemas
  */
 export const Sender = Schema.TaggedUnion({
@@ -22,7 +19,6 @@ export const Sender = Schema.TaggedUnion({
 /**
  * The decoded type of `Sender`.
  *
- * @stability unstable
  * @category models
  */
 export type Sender = typeof Sender.Type;
@@ -35,7 +31,6 @@ export type Sender = typeof Sender.Type;
  * `removed`: the sender's key no longer belongs. `ended`: the process the input was delivered to is
  * over. `storage`: the gateway's store failed, with its cause kept.
  *
- * @stability unstable
  * @category errors
  */
 export class SendersError extends Schema.TaggedError<SendersError>()("SendersError", {
@@ -52,7 +47,6 @@ export class SendersError extends Schema.TaggedError<SendersError>()("SendersErr
  * `process`, and none when no member's input delivered there is behind it: a `null` parent, or an
  * input delivered to another process. It writes nothing.
  *
- * @stability unstable
  * @category services
  */
 export class Senders extends Context.Service<

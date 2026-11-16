@@ -2,8 +2,6 @@
  * The local brain's driver on Node: it starts the local runtime through a deploy the caller
  * gives, follows its starts, exits and restarts, and hands back stand-ins for its bindings that
  * call it over a private control socket.
- *
- * @stability unstable
  */
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { SystemError } from "@alchemy.run/cloudflare-runtime/core/RuntimeError";
@@ -39,7 +37,6 @@ import { brainOutbox, checkMemory, lifeCell, signal, terminate } from "./local-d
  * Error for a call on the local runtime that failed: its `reason` names how, such as `offline`,
  * `unreachable`, `bad_row`, `start_timeout` or `install`.
  *
- * @stability unstable
  * @category errors
  */
 export class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
@@ -134,7 +131,6 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
  * The brain's own flushes never wait: they fail as `offline` at once and retry on their schedule.
  * A call made while no port is known fails as `offline`.
  *
- * @stability unstable
  * @category constructors
  */
 export const startDev = Effect.fn("brain.instance")(function* <E, R>(

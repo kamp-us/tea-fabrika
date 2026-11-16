@@ -1,7 +1,5 @@
 /**
  * `Repositories` on Node, through the `git` command.
- *
- * @stability unstable
  */
 import { Effect, Fiber, FileSystem, Layer, Path, Redacted, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
@@ -58,7 +56,6 @@ const safeConfig = [
  * as `DefaultUnknown`. A root `fabrika.toml`, or a `.fabrika.jsonc` with no new settings file
  * beside it, fails with a message that says where the file moved.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (options: { readonly person: string }) =>

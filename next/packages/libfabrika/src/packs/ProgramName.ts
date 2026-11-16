@@ -1,8 +1,6 @@
 /**
  * A program's identity (0083): its pack and its name in that pack, as `pack/program`. Pure data, no
  * platform, so the Node builder, the built tables and a browser client read one schema.
- *
- * @stability unstable
  */
 import { Schema } from "effect";
 
@@ -11,7 +9,6 @@ import { Schema } from "effect";
  * underscore and go on with letters, digits, underscores or dashes. At most 256 characters in all,
  * the cap a process's `code.program` has.
  *
- * @stability unstable
  * @category schemas
  */
 export const ProgramName = Schema.String.check(
@@ -21,7 +18,6 @@ export const ProgramName = Schema.String.check(
 /**
  * A program's name, `pack/program`.
  *
- * @stability unstable
  * @category models
  */
 export type ProgramName = typeof ProgramName.Type;

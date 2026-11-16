@@ -1,7 +1,5 @@
 /**
  * Scoped native commands and exclusive home-owned plist publication.
- *
- * @stability unstable
  */
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
@@ -354,7 +352,6 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 /**
  * Controls the exact GUI-domain job derived from the canonical home.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (spec: BrainSpec, settings: Snapshot.Snapshot) => Layer.effect(BrainControl, make(spec, settings));

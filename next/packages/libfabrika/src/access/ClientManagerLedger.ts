@@ -6,8 +6,6 @@
  * Every call reads the whole stream from the start and folds it, so the view is always what the
  * log says now. Entries whose tag is not a membership event are skipped, and an entry that does
  * not decode fails the call with a `LedgerError` of reason `bad_row`.
- *
- * @stability unstable
  */
 import { Effect, Layer, Result, Schema, Stream } from "effect";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -107,7 +105,6 @@ const view = (replayed: Replayed) => {
  * If the founding is refused for any reason but `id_reused`, the call fails with a `LedgerError`
  * of reason `refused`, since a stream with no `founded` would start with no members.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (

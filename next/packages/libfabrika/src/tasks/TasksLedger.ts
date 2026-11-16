@@ -2,8 +2,6 @@
  * Tasks on the ledger (0095): each task is its own stream, named from its command id. One call is one
  * transaction: read the stream, fold it through the task machine, step the call, and append it only
  * when the machine accepts it. A repeat answers the first event's receipt; a refusal writes nothing.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
 import { Effect, Layer, Result as R, Schema, Stream } from "effect";
@@ -111,7 +109,6 @@ const saved = (turn: LedgerTurn, id: string): Task => {
  * A ledger refusal of a line becomes a `bad_input` error and any other ledger failure becomes
  * `storage`, each keeping its cause.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = Layer.effect(

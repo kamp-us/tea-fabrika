@@ -1,7 +1,5 @@
 /**
  * `RepositoryTrust` on the ledger: one stream per person and clone.
- *
- * @stability unstable
  */
 import { Effect, Layer, Option, Redacted, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
@@ -43,7 +41,6 @@ const invalid = (cause: unknown) =>
  * `history` reads at most 4096 entries. Past that it fails as `InvalidHistory`: it never answers a
  * cut-off history, and old decisions are never dropped to make room.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = Layer.effect(

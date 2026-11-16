@@ -1,8 +1,6 @@
 /**
  * The hands client's journal on Effect's own `KeyValueStore`, one key per task id. Memory, a file and
  * a browser's `localStorage` are each one existing store layer, so a browser tab can keep it too.
- *
- * @stability unstable
  */
 import { Effect, Layer, Option, Schema } from "effect";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
@@ -20,7 +18,6 @@ const translated = (cause: KeyValueStore.KeyValueStoreError | Schema.SchemaError
  * Each entry is its schema's JSON under the task's id. A store error becomes `storage` and a value
  * that is no entry becomes `bad_entry`, each keeping its cause.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = Layer.effect(

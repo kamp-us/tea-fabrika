@@ -1,8 +1,6 @@
 /**
  * Hot reload on Node: one Rolldown watcher per selected program, which rebuilds the program after
  * each save and hands the checked build to the brain.
- *
- * @stability unstable
  */
 import { run } from "@demlik/tea/effect";
 import type { Scope } from "effect";
@@ -78,7 +76,6 @@ const details = (raw: unknown, root: string, path: Path.Path) => {
  * `Installed` answer with the program and hash; an install that fails gives `failed` with reason
  * `load`. Each watcher is closed with the scope.
  *
- * @stability unstable
  * @category constructors
  */
 export const watchPrograms = (options: {

@@ -1,8 +1,6 @@
 /**
  * Opening a selected repository on Node: read and check it before the instance starts, then record
  * the selection and the person's trust answer once there is a ledger.
- *
- * @stability unstable
  */
 import { DateTime, Effect, Redacted, Schema } from "effect";
 import * as Id from "../../Id.ts";
@@ -83,7 +81,6 @@ const documentFailed = (cause: Files.SettingsError) => {
  * It resolves no source folder and loads no code. A failure carries a message for the person. A
  * settings failure names the file, the line and the key, never the rejected value.
  *
- * @stability unstable
  * @category constructors
  */
 export const prepare = Effect.fn("repositoryOpen.prepare")(function* (
@@ -122,7 +119,6 @@ export const prepare = Effect.fn("repositoryOpen.prepare")(function* (
  * selection ends with an `opened` event. Who is asking (`actor`, `by` and `build`) comes from the
  * instance's options, never from the repository's document or the terminal answer.
  *
- * @stability unstable
  * @category constructors
  */
 export const open = Effect.fn("repositoryOpen.open")(function* <R>(

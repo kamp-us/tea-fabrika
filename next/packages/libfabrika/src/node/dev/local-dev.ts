@@ -2,8 +2,6 @@
  * The local brain driver's helpers on Node: the local runtime's life state and the one way to
  * change it, the memory check that replaces a brain that grew too big, the bounded stop that ends
  * it, the signal it sends, and the durable outbox for its lifecycle events.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
 import {
@@ -43,7 +41,6 @@ type Signal = Replacing["signal"];
  * Every fold waits for a `then` in flight, so `then` does only what must not be overtaken: the
  * fact a signal follows, and the signal.
  *
- * @stability unstable
  * @category constructors
  */
 export const lifeCell = Effect.fnUntraced(function* (last: string | null) {
@@ -99,7 +96,6 @@ const PendingEvent = Schema.declare<typeof BrainEvent.Type>((raw): raw is typeof
  * `sample` answers the bytes a pid holds. `replace` gets the reason, the pid and the bytes, and is
  * the one that ends the process. `limit` is the `desktop.brain-memory` setting, in bytes.
  *
- * @stability unstable
  * @category combinators
  */
 export const checkMemory = Effect.fn("brain.checkMemory")(function* <E, R>(options: {
@@ -137,7 +133,6 @@ class SignalError extends Schema.TaggedError<SignalError>()("SignalError", {
  *
  * It checks nothing about the pid: send it only from a `lifeCell` step whose state holds that pid.
  *
- * @stability unstable
  * @category combinators
  */
 export const signal = (pid: number, name: Signal): Effect.Effect<void> =>
@@ -177,7 +172,6 @@ const Ended = Schema.TaggedUnion({ refused: {}, itself: {}, killed: {} });
  * No signal follows a folded exit. A process that Node has reaped but whose exit is not folded yet
  * can still get one: only a signal through Node's own child handle would close that gap.
  *
- * @stability unstable
  * @category combinators
  */
 export const terminate = Effect.fn("brain.terminate")(function* <E, R>(options: {
@@ -242,7 +236,6 @@ export const terminate = Effect.fn("brain.terminate")(function* <E, R>(options: 
  * Every write goes to a temporary file that is synced and renamed, and then the folder is synced,
  * so a crash leaves the old file or the new one, never half of one.
  *
- * @stability unstable
  * @category constructors
  */
 export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
