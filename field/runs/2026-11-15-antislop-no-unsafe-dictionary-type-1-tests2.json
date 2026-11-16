@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-no-unsafe-dictionary-type-1-tests2",
+  "ticket": "1057",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-15T23:47:58-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Round 2 of the tests step for slice AS-no-unsafe-dictionary-type-1 of the anti-slop judgment sweep (ticket 1057, decision 0563 and its amendment), on branch fabrikalfa/antislop-no-unsafe-dictionary-type-1, no pull request (owner ruling). First the merge of origin/main the coordinator started was finished (merge commit e2d7de607, no rebase): .github/ci/workflow-lint/scheduled.ts keeps main's moved commandsOf, typed YamlMap; next/apps/fabrika/e2e/one-file.visual.test.ts and p14.test-support.ts keep main's new undo parameter and this slice's Schema.Json facts; next/programs/pipeline/src/Settings.test.ts keeps main's Predicate import and this slice's Schema import. PR 1366 is merged, so its files are in the slice. anti-slop/no-unsafe-dictionary-type, forced to error in a scratch config outside the repo, met 52 hits at e2d7de607 over next, .agents, .github and oxlint-plugins: 43 in exam paths and 9 in product files. 37 exam hits are fixed by hand edits (no quick-fix tool): 36 by a type and 1 by a disable line. The types: parsed YAML takes YamlMap (.github/ci/proof.test.ts); the Handshake and WindowMachine walks take the machine's own Cmds, inferred from its Machine type as HandsMachine's laws do, a socket write read as Cmd & Write so its call stays readable as JSON fields, a Msg of JSON fields and the Cmd it settles, and a named() check for a Cmd type the window never declares (law L8); probes take the named fields they build (Program.test.ts answer and inherited fields, supervision.laws.integration and Program.test.ts P1 raw declarations as machine plus policy, Connection.test.ts and runtime.decode.test.ts fields as reason or type); the JSON-RPC frame takes fc.JsonValue; the [secrets] scan bags take their own inferred object types (hands-client.test.ts, hands-launcher.integration.test.ts) or their named outputs (gateway/TasksTest.ts); QuotaRunnerTest.ts reads a LedgerRow view (runtime/ may not import ledger/); QuotaSettings.test.ts names the encoded recovery allowance; Stub.test.ts stubs Method | undefined; pipeline Settings.test.ts reads the decoded settings through a Map; ObjectService.test.ts damages a JSON setting; checklist-instance.laws.integration.test.ts reads params by its own Notice schema's type. The TOML laws now pin the parsed document as internal/edit.ts's Table: Toml.types.test.ts asserts TomlDocument is exactly { value: Table; spans }, and TomlEdit.test.ts's model is a Tree of Content, JSON (L9's generated values) or Tree. Both are red in typecheck until the build makes Toml.ts:17 `readonly value: Table`: 17 errors, all where a parsed value meets the model. The one disable line, allowed by 0563 part C for a right line: next/packages/libfabrika/src/runtime/Program.test.ts:1064, D4's probe, whose own bag mixes generated JSON keys with machine fields holding functions, tables, numbers or text on purpose. Left in exam paths (6): next/packages/libfabrika/src/runtime/internal/supervisor.laws.test.ts:41,139,147, whose Msg waits on the product's CodeChange.view in runtime/internal/supervisor.ts being unknown (a product edit for the build step); next/apps/fabrika/src/start-child.laws.integration.test.ts:54, start-member.laws.integration.test.ts:61 and tezgah-runner.laws.integration.test.ts:104, Record<string, any> views of a local instance whose project() is an RPC stub no product type names (instance.ts's startDev result has no project member, and the folder's other suites type the instance as any); the right fix is a product type for that stub, so they are stopped. Product hits left for the build (9): next/packages/libfabrika/src/runtime/Entry.ts:133, runtime/Patch.ts:23, runtime/Runner.ts:291,296,323, settings/Toml.ts:17, gateway/Gateway.ts:79,80, next/packages/vitest/src/Stub.ts:19.",
+  "plants": [
+    {
+      "law": "L9 type: Toml's complete contract and tagged reasons are typechecked (next/packages/libfabrika/src/settings/Toml.types.test.ts), and the TomlEdit.test.ts laws' model",
+      "plant": "settings/Toml.ts as it stands, value Readonly<Record<string, unknown>>: tsc --noEmit for libfabrika gives 17 errors, the first Toml.types.test.ts(26,46) TS2344; with Toml.ts set to `readonly value: Table` (imported from internal/edit.ts) it gives none and TomlEdit, Toml.types and QuotaSettings tests pass (22); Toml.ts was then restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "anti-slop/no-unsafe-dictionary-type over next/packages/libfabrika/src/client/WindowMachine.laws.test.ts (scratch config)",
+      "plant": "the file's old loose Cmd type put back by copy: the rule gave 8 hits; the new file restored by copy gave 0",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Ran at 9c82527a6 or its parent edits: tsc --noEmit for .github/ci, next/packages/vitest, next/programs/pipeline and next/apps/fabrika, clean; for next/packages/libfabrika, clean except the 17 intended TOML errors. Vitest, all green: .github/ci/proof.test.ts, .github/ci/workflow-lint/scheduled.test.ts, next/packages/vitest/src/Stub.test.ts, next/programs/pipeline/src/Settings.test.ts, next/packages/libfabrika/src/cloudflare/ObjectService.test.ts, settings/TomlEdit.test.ts, settings/Toml.types.test.ts, settings/QuotaSettings.test.ts, transport/Handshake.laws.test.ts, client/WindowMachine.laws.test.ts, runtime/Program.test.ts, transport/Connection.test.ts, node/QuotaRunner.test.ts, next/apps/fabrika/src/runtime.decode.test.ts and hands-client.test.ts; the 0178 guard (PR 1508 is in main) let these integration laws run here: cloudflare/supervision.laws.integration.test.ts (6 passed), node/gateway/Tasks.integration.test.ts (11 passed) and next/apps/fabrika/src/checklist-instance.laws.integration.test.ts (6 passed). Not run: next/apps/fabrika/src/hands-launcher.integration.test.ts, which sends a real SIGTERM; the .visual. files from the merge. The guard refused none. pnpm format ran; ratchet.ts exits 0; pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) has no anti-slop hit but fails on main's own next/packages/libfabrika/src/cloudflare/objects.ts:35 fabrika(jsdocs), a file this branch does not change (a finding). No pnpm typecheck: per-package tsc instead.",
+  "step": "tests"
+}
