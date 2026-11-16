@@ -211,6 +211,13 @@ export class RetriesExhausted extends Schema.TaggedError<RetriesExhausted>()("Re
   reason: Schema.String,
 }) {}
 
+/** The same failure as tea's err channel takes it: a plain tagged record, not the class. */
+const RetriesExhaustedRecord = Schema.TaggedStruct("RetriesExhausted", {
+  schedule: Schema.String,
+  times: Schema.Number,
+  reason: Schema.String,
+});
+
 /** Whether a drive outcome is a slot refusal, the one kind the schedule retries. */
 export const slotRefusal = (outcome: string): string | null => {
   const [verb, check = ""] = outcome.split(":");
@@ -1341,12 +1348,9 @@ const handlers = (s: Setup) => {
             }),
           ),
           // tea's err channel takes a plain tagged record; the class stays inside the handler.
-          Effect.mapError((e) => ({
-            _tag: "RetriesExhausted" as const,
-            schedule: e.schedule,
-            times: e.times,
-            reason: e.reason,
-          })),
+          Effect.mapError((e) =>
+            RetriesExhaustedRecord.make({ schedule: e.schedule, times: e.times, reason: e.reason }),
+          ),
         );
         saveStep({ ...entry, endedAt: new Date().toISOString(), line });
         return line;

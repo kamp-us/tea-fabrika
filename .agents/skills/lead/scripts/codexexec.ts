@@ -119,14 +119,22 @@ export const execArgs = (a: ExecAsk): string[] => [
 const ErrorEvent = Schema.Struct({ type: Schema.Literal("error"), message: Schema.String });
 const readError = Schema.decodeUnknownOption(Schema.fromJsonString(ErrorEvent));
 
-// Today's library's `Raw` is a plain union with no Schema maker, so its two values here are written out.
+// Today's library's `Raw` is a plain union with no Schema maker, so the two cases made here are
+// restated as schemas on its own field schemas, and each value comes from a maker.
+const Ended = Schema.TaggedStruct("ended", {
+  stop: Agent.Stop,
+  structured: Schema.Unknown,
+  usd: Schema.NullOr(Schema.Number),
+  requests: Schema.NullOr(Schema.Number),
+});
+
+const Said = Schema.TaggedStruct("said", { text: Schema.String });
+
 /** The end of a turn whose last message exists but whose stream said no `turn.completed`. */
-// oxlint-disable-next-line fabrika/no-hand-tag -- edge: today's `Agent.Raw` is a plain union, with no maker to call
-const ENDED: Agent.Raw = { _tag: "ended", stop: "end_turn", structured: undefined, usd: null, requests: null };
+const ENDED: Agent.Raw = Ended.make({ stop: "end_turn", structured: undefined, usd: null, requests: null });
 
 /** The last message file's text, as the turn's last word. */
-// oxlint-disable-next-line fabrika/no-hand-tag -- edge: today's `Agent.Raw` is a plain union, with no maker to call
-const lastWord = (text: string): Agent.Raw => ({ _tag: "said", text });
+const lastWord = (text: string): Agent.Raw => Said.make({ text });
 
 /** The tail kept of what Codex said went wrong, for a failure's message and the capacity check. */
 const TAIL = 2_000;
