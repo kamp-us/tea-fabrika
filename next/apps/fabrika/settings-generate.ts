@@ -26,6 +26,5 @@ NodeRuntime.runMain(
     const [before = "", rest = ""] = text.split(BEGIN);
     const after = rest.split(END)[1] ?? "\n";
     yield* fs.writeFileString(reference, `${before}${BEGIN}\n${Reference.markdown(Declarations.all)}${END}${after}`);
-    // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
   }).pipe(Effect.provide(NodeServices.layer)),
 );

@@ -106,7 +106,6 @@ const hands = Effect.gen(function* () {
       Stream.runForEach((text) => Effect.sync(() => process.stdout.write(`${text}\n`))),
     );
     // The run's scope closes first, then the layers': the journal stays open while the run stops.
-    // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
   }).pipe(Effect.scoped, Effect.provide(layers));
 });
 

@@ -340,7 +340,6 @@ export class IsolateTail extends makeWorkerBridge(WorkerEntrypoint, meta) {}
 export class Control extends WorkerEntrypoint<Env, { token: string }> {
   fetch(request: Request) {
     const work = control(request, this.env, Redacted.make(this.ctx.props.token), programs).pipe(
-      // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
       Effect.provide(Digest.layerWebCrypto),
     );
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the private local control socket enters Effect

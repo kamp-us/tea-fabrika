@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e30-build5",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:23:50-08:00",
+  "ended": "2026-11-16T01:27:48-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Build step, round 5, for judgment slice E30 (strictEffectProvide), in next/. Lead ruling after 0589 (no lock lines): take an @effect-diagnostics ignore line out only where pnpm typecheck reports TS377000 'directive has no effect' for it. No tsconfig on this branch turns strictEffectProvide on, so the 7 ignore lines left in app source were all reported, and this step removed them, the comment line only, with the Edit tool. Each sat above a code line inside a larger pipe, so no block was left empty and no other line moved or changed (git diff: 6 files, 7 deletions). No code line changed, so no law changed and no plant was run. Hits: met 7 ignore lines in product files, fixed by quick fix 0, hand edits 7, left 0, waiting on 1366 0.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 4,
+  "note": "Lines to put back in the judgment sweep's final lock PR, together with the strictEffectProvide lock. They join the 8 exam-path lines listed in field/runs/2026-11-16-effect-e30-tests6.json, 15 in all. Each is the same ignore line, re-added on the line it sat on before removal (line numbers at head c210a5000), directly above the code line given, indented as that code line. Ignore line, with its reason: '// @effect-diagnostics-next-line strictEffectProvide:off -- entry point: \"If this is an entry point, you can safely disable this diagnostic.\"'. (1) next/apps/fabrika/build.ts:16, above 'Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),'. (2) next/apps/fabrika/dev.ts:110, above 'Effect.provide(RepositoriesGit.layer({ person: home })),' in the OpenRepository.prepare pipe. (3) next/apps/fabrika/dev.ts:182 (181 once line 110 is gone; 182 again once it is put back), above 'Effect.provide(' that wraps RepositoryTrustLedger.layer in the OpenRepository.open pipe. (4) next/apps/fabrika/hands.ts:109, above '}).pipe(Effect.scoped, Effect.provide(layers));', below the comment 'The run's scope closes first, then the layers': ...', which stays. (5) next/apps/fabrika/settings-generate.ts:29, above '}).pipe(Effect.provide(NodeServices.layer)),'. (6) next/apps/fabrika/src/brain.ts:343, above 'Effect.provide(Digest.layerWebCrypto),' in the Control Worker entrypoint's fetch. (7) next/apps/fabrika/src/entry/browser.tsx:26, above 'Effect.provide(Layer.mergeAll(browserKey, browserRows, Socket.layerWebSocketConstructorGlobal, Id.Generator.layer)),'. A grep of next/apps/fabrika for strictEffectProvide found exactly these 7 before the edit and none after. Checks at head c210a5000 plus this change: pnpm format changed nothing beyond the 7 deletions; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 passed, 18 parts; the exam ratchet against merge base b510ed2e8 exited 0; tsc --noEmit -p next/apps/fabrika exited 0 with no output, so no TS377000 is left in the app and no other diagnostic; next/apps/fabrika/src/error-cause.test.ts passed 2 of 2 (nice -n 15, --maxWorkers=3, TYPESAFE_API_KEY unset); loosening.sh c210a5000..HEAD found 0 hits. Not run: a whole pnpm typecheck (only comments changed, and the app's own tsc covers the 6 files). What this cannot tell us: the line numbers hold only if nothing else in those files moves before the lock PR.",
+  "plants": [],
+  "step": "build"
+}
