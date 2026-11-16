@@ -15,18 +15,18 @@
   "plants": [
     {
       "law": "anti-slop/no-unknown-parameters on tezgah, forced to error in a scratch config",
-      "plant": "scratch copy of tezgah/Layout.laws.test.ts with encode's parameter given back as unknown",
-      "result": "red: Layout.laws.test.ts:55:20 reported"
+      "plant": "scratch copy of tezgah/Layout.laws.test.ts with encode's parameter given back as unknown: the rule reports Layout.laws.test.ts:55:20",
+      "result": "red"
     },
     {
       "law": "anti-slop/no-unknown-parameters on the build's processes/Process.ts deliver fix",
-      "plant": "scratch copy of processes/Process.ts with deliver's m typed unknown again",
-      "result": "red: Process.ts:763:28 reported, beside the known door hit at :265"
+      "plant": "scratch copy of processes/Process.ts with deliver's m typed unknown again: the rule reports Process.ts:763:28, beside the known door hit at :265",
+      "result": "red"
     },
     {
       "law": "the rule's cause exemption is by name only, so the renames to cause are what keep the build's fixes",
-      "plant": "scratch copy of processes/internal/programMail.ts with businessRef taking failure: unknown",
-      "result": "red: programMail.ts:22:38 reported"
+      "plant": "scratch copy of processes/internal/programMail.ts with businessRef taking failure: unknown: the rule reports programMail.ts:22:38",
+      "result": "red"
     }
   ],
   "tokens": null,
