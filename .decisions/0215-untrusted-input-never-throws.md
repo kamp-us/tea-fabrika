@@ -1,7 +1,7 @@
 ---
 id: 0215
 title: In next/, make and decodeSync take trusted input only, and saved state, the wire and disk go through makeEffect or decodeUnknownEffect, never the throwing one
-status: accepted
+status: amended-in-part by [0575](0575-schema-sync-error-result-in-plain-code.md)
 date: 2026-11-08
 tags: [schema, effect-schema, errors, decode, saved-state, next]
 ---
@@ -43,3 +43,7 @@ trusted input, the typed error for untrusted input.**
 
 - `runtime/State.ts` still throws `ProgramDown` when a saved row does not fit. Making it a typed
   error is its own ticket.
+
+## Amendments
+
+- 2026-11-15: [0575](0575-schema-sync-error-result-in-plain-code.md) makes the Effect checker's `schemaSync` an error in `next/` and our tooling, so `decodeSync`, `decodeUnknownSync`, `encodeSync` and `encodeUnknownSync` no longer pass, even for trusted input. A plain function uses `decodeResult`, `decodeUnknownResult` or `encodeResult` and handles the failure; Effect code uses the Effect form. The rest holds.
