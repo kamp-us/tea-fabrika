@@ -18,7 +18,7 @@ flowchart LR
 ```
 
 ```ts
-// next/packages/libfabrika/src/settings/Snapshot.ts:11 and :55-56
+// next/packages/libfabrika/src/settings/Snapshot.ts:9 and :50-51
 import { Digest } from "effect/crypto";
 
   const digest = yield* Digest.Digest;
@@ -27,7 +27,7 @@ import { Digest } from "effect/crypto";
 // next/apps/fabrika/cli.ts:16: the edge picks the implementation.
     Effect.provide([NodeServices.layer, TomlParser.layer, Digest.layerWebCrypto]),
 
-// next/packages/libfabrika/src/telemetry/Archive.ts:42-45: a hash whose failure stays typed.
+// next/packages/libfabrika/src/telemetry/Archive.ts:38-41: a hash whose failure stays typed.
   const fail = (cause: unknown) => new SinkError({ reason: "storage", held: 0, cause });
   const crypto = yield* WebCrypto.WebCrypto;
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto answers only with a Promise
@@ -64,15 +64,15 @@ release. We use them anyway, and a bump re-reads them.
 Rules:
 
 - **Ask for the service; let the edge provide it.** `Snapshot.make` yields `Digest.Digest`
-  (`Snapshot.ts:55`), so its type says it needs one, and `cli.ts:16` and `dev.ts:111` provide
+  (`Snapshot.ts:50`), so its type says it needs one, and `cli.ts:16` and `dev.ts:111` provide
   `Digest.layerWebCrypto`.
 - **A hash whose failure must stay typed reads `crypto.subtle` through the `WebCrypto` reference,
-  not `Digest`.** `Digest` would turn a rejection into a defect. `Archive.ts:40-48` (`sha256`, a
+  not `Digest`.** `Digest` would turn a rejection into a defect. `Archive.ts:36-44` (`sha256`, a
   `SinkError` `storage`) and `Gateway.ts:2111-2135` (`fingerprint` and `hash`, a `LedgerError`
   `crypto`) yield `WebCrypto.WebCrypto` and hash under one `Effect.tryPromise` whose `catch` makes
   the typed error, its `fabrika/no-promises` edge comment directly above. A reference needs no
   provide, so the callers do not change. A law hands in a stand-in with `WebCrypto.layer`
-  (`next/packages/libfabrika/src/crypto.test-support.ts:27` and `:56`, read at
+  (`next/packages/libfabrika/src/crypto.test-support.ts:29` and `:59`, read at
   `telemetry/ErrorCause.test.ts:40-41`).
 - **Random bytes and ids come from `SecureRandom`.** `grant.ts:69` makes a grant id with
   `SecureRandom.SecureRandom.use((random) => random.uuidV4())`, and `grant.ts:126` provides
@@ -92,11 +92,11 @@ its own UUIDv7 layout; whether `SecureRandom.uuidV7` can replace it is not check
 
 ## Not yet
 
-- `next/packages/libfabrika/src/runtime/Built.ts:34-35` uses `Digest` but provides
+- `next/packages/libfabrika/src/runtime/Built.ts:30-31` uses `Digest` but provides
   `Digest.layerWebCrypto` inside `hash` itself, so its callers cannot pick the layer.
 - `next/packages/libfabrika/src/gateway/Gateway.ts:732` and `:2109` call the global
   `crypto.getRandomValues`.
-- `next/packages/libfabrika/src/gateway/GatewayNonce.ts:40`, `:64`, `:71`, `:74` and `:101` make a
+- `next/packages/libfabrika/src/gateway/GatewayNonce.ts:37`, `:61`, `:68`, `:71` and `:98` make a
   key and salt with `crypto.getRandomValues`, and import an HMAC key, sign and verify with
   `crypto.subtle`. The stateless nonce itself stays (a SYN cookie); only the calls move to `Mac` and
   `SecureRandom`.
@@ -114,10 +114,15 @@ test, so a law patches the global with `vi.spyOn`. The opposite mistake is to mo
 - Effect's checker, on at `error`: `globalRandomInEffect` (`tsconfig.base.json:47`), which refuses
   `Math.random` inside an Effect. `cryptoRandomUUID` and `cryptoRandomUUIDInEffect` are off and found
   0 hits in the study's run, so they could block at no cost.
-- `vitest/no-restricted-vi-methods` in `.oxlintrc.json` refuses `vi.fn`, `vi.mock`, `vi.doMock`,
-  `vi.spyOn` and `vi.stubEnv` in `libfabrika/src/gateway/**` and `telemetry/**`, so a law there
-  cannot patch `crypto.subtle` and must hand in a stand-in through `WebCrypto.layer`. Its plants are
-  `VI_METHODS` in `oxlint-plugins/builtin-plants.ts:83`, run by `oxlint-plugins/plants.test.ts:634`.
+- The mock lock in `.oxlintrc.json`, a pair of oxlint's own rules over `libfabrika/src/gateway/**`
+  and `telemetry/**`, refuses `vi.fn`, `vi.mock`, `vi.doMock`, `vi.spyOn` and `vi.stubEnv`, so a law
+  there cannot patch `crypto.subtle` and must hand in a stand-in through `WebCrypto.layer`.
+  `vitest/no-restricted-vi-methods` follows a renamed `vi` import, and
+  `eslint/no-restricted-properties`, with one `vi` entry per member, refuses a call chained onto the
+  `vi` call, such as `vi.fn().mockReturnValue(1)`, which the vitest rule misses
+  ([oxc#29656](https://github.com/oxc-project/oxc/issues/29656)). Their plants are `VI_METHODS` and
+  `VI_PROPERTIES` in `oxlint-plugins/builtin-plants.ts:87` and `:107`, run by
+  `oxlint-plugins/plants.test.ts:680`.
 - The laws that pass only through the reference: `telemetry/ErrorCause.test.ts` C1 (the rejected
   digest is `storage`, and the stand-in saw exactly the body) and the three paused-hash laws of
   `gateway/GatewayRevocation.integration.test.ts`.
