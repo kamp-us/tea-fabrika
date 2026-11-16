@@ -69,7 +69,6 @@ const Commit = Schema.Struct({
  * Each schema needs no service and its encoded side is JSON. A method with no arguments takes the
  * empty tuple. The keys are the only names the door calls.
  *
- * @stability unstable
  * @category schemas
  */
 export const Payloads = {

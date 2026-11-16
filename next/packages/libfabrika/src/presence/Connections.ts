@@ -13,7 +13,6 @@ import { short } from "../telemetry/Trace.ts";
 /**
  * Schema for one client's connection: its key, client, Connection object, session and join time.
  *
- * @stability unstable
  * @category schemas
  */
 export const Connection = Schema.Struct({
