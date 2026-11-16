@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mutation-cache-review1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1378",
+  "started": "2026-11-15T16:15:57-08:00",
+  "ended": "2026-11-15T16:24:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Mutation cache fix, review of 4da5e2cdc, in today's CI tooling: sent to build, one blocking class, no finding rows. The swap to .github/actions/pnpm keeps Node 26.13.0, pnpm from packageManager and the fetch-depth 0 checkout, and the container's offline install never read the host store. The setup-node rule now reads every workflow, a true tightening: on the old rule a setup-node cache in scheduled.yaml, ci-speed.yaml or a second mutation.yaml job passed, on the new one each is named. The blocker: the pull request says the lint holds no pnpm store cache for every workflow, but pnpm/action-setup's own cache input (v6, default false) passes the lint in the shared action and in mutation.yaml, and an actions/cache/save of the pnpm store on main in scheduled.yaml passes too.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Ran alone with the pinned Node: caches.test.ts (15 passed), from the worktree with a node_modules symlink, removed after. Plants in a scratch copy of the lint, never the branch: setup-node cache in scheduled.yaml's last job, in a second mutation.yaml job and in ci-speed.yaml (each named on the new rule, each passing on the old one); pnpm/action-setup cache true in the shared action and in mutation.yaml, and an actions/cache/save of ~/.local/share/pnpm/store on main in scheduled.yaml (all three pass the new rule). loosening.sh: three unrecognized changes and one removed law, the C0 state check, renamed and tightened, not a loosening. Main's two newer commits touch none of these files. Not run: the mutation workflow, pnpm typecheck.",
+  "step": "review"
+}
