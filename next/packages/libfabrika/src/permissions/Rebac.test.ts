@@ -48,13 +48,47 @@ const Test = Rebac.make("t953-test")
     permissions: { edit: (p) => p.union("editor"), view: (p) => p.union("viewer", "edit") },
   });
 
-class Start extends Rebac.Permission<Start>()("t953/Start", { model: Test, on: "fabrika", permission: "start" }) {}
-class Manage extends Rebac.Permission<Manage>()("t953/Manage", { model: Test, on: "fabrika", permission: "manage" }) {}
-class Enter extends Rebac.Permission<Enter>()("t953/Enter", { model: Test, on: "fabrika", permission: "enter" }) {}
-class LoopA extends Rebac.Permission<LoopA>()("t953/LoopA", { model: Test, on: "fabrika", permission: "a" }) {}
-class LoopB extends Rebac.Permission<LoopB>()("t953/LoopB", { model: Test, on: "fabrika", permission: "b" }) {}
-class Edit extends Rebac.Permission<Edit>()("t953/Edit", { model: Test, on: "board", permission: "edit" }) {}
-class View extends Rebac.Permission<View>()("t953/View", { model: Test, on: "board", permission: "view" }) {}
+class Start extends Rebac.Permission<Start>()("@kampus/libfabrika/permissions/Rebac.test/Start", {
+  model: Test,
+  on: "fabrika",
+  permission: "start",
+}) {}
+
+class Manage extends Rebac.Permission<Manage>()("@kampus/libfabrika/permissions/Rebac.test/Manage", {
+  model: Test,
+  on: "fabrika",
+  permission: "manage",
+}) {}
+
+class Enter extends Rebac.Permission<Enter>()("@kampus/libfabrika/permissions/Rebac.test/Enter", {
+  model: Test,
+  on: "fabrika",
+  permission: "enter",
+}) {}
+
+class LoopA extends Rebac.Permission<LoopA>()("@kampus/libfabrika/permissions/Rebac.test/LoopA", {
+  model: Test,
+  on: "fabrika",
+  permission: "a",
+}) {}
+
+class LoopB extends Rebac.Permission<LoopB>()("@kampus/libfabrika/permissions/Rebac.test/LoopB", {
+  model: Test,
+  on: "fabrika",
+  permission: "b",
+}) {}
+
+class Edit extends Rebac.Permission<Edit>()("@kampus/libfabrika/permissions/Rebac.test/Edit", {
+  model: Test,
+  on: "board",
+  permission: "edit",
+}) {}
+
+class View extends Rebac.Permission<View>()("@kampus/libfabrika/permissions/Rebac.test/View", {
+  model: Test,
+  on: "board",
+  permission: "view",
+}) {}
 
 type Type = "fabrika" | "board";
 

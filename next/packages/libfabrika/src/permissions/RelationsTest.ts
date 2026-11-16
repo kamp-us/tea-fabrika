@@ -44,15 +44,19 @@ const Mirror = Rebac.make("t953-mirror")
     },
   });
 
-class Owns extends Rebac.Permission<Owns>()("t953/Owns", { model: Mirror, on: "fabrika", permission: "owns" }) {}
+class Owns extends Rebac.Permission<Owns>()("@kampus/libfabrika/permissions/RelationsTest/Owns", {
+  model: Mirror,
+  on: "fabrika",
+  permission: "owns",
+}) {}
 
-class Admins extends Rebac.Permission<Admins>()("t953/Admins", {
+class Admins extends Rebac.Permission<Admins>()("@kampus/libfabrika/permissions/RelationsTest/Admins", {
   model: Mirror,
   on: "fabrika",
   permission: "admins",
 }) {}
 
-class Belongs extends Rebac.Permission<Belongs>()("t953/Belongs", {
+class Belongs extends Rebac.Permission<Belongs>()("@kampus/libfabrika/permissions/RelationsTest/Belongs", {
   model: Mirror,
   on: "fabrika",
   permission: "belongs",

@@ -29,4 +29,4 @@ export class Shelf extends Context.Service<
     /** A Sink method, which the Recorder does not watch. */
     readonly drain: (name: string) => Sink.Sink<void, number>;
   }
->()("@kampus/vitest/Shelf") {}
+>()("@kampus/vitest/Shelf.test-support/Shelf") {}

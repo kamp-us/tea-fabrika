@@ -17,7 +17,11 @@ type Passed<R> = R extends Result.Result<infer A, unknown> ? A : never;
 type Refused<R> = R extends Result.Result<unknown, infer E> ? E : never;
 
 /** A second right on the same permission and object type: only its id tells it apart. */
-class Other extends Rebac.Permission<Other>()("t953/Other", { model: Model, on: "fabrika", permission: "start" }) {}
+class Other extends Rebac.Permission<Other>()("@kampus/libfabrika/permissions/Rebac.types.test/Other", {
+  model: Model,
+  on: "fabrika",
+  permission: "start",
+}) {}
 
 type StartProof = Passed<ReturnType<typeof StartProgram.within>>;
 type OtherProof = Passed<ReturnType<typeof Other.within>>;
@@ -53,10 +57,18 @@ const undeclared = () => {
       // @ts-expect-error "robot" is not an object type this model declares.
       relations: { owner: ["robot"] },
     });
-  // @ts-expect-error the fabrika type declares no permission "view".
-  class View extends Rebac.Permission<View>()("t/View", { model: Model, on: "fabrika", permission: "view" }) {}
-  // @ts-expect-error the model declares no object type "window" to put a right on.
-  class Drive extends Rebac.Permission<Drive>()("t/Drive", { model: Model, on: "window", permission: "start" }) {}
+  class View extends Rebac.Permission<View>()("@kampus/libfabrika/permissions/Rebac.types.test/View", {
+    model: Model,
+    on: "fabrika",
+    // @ts-expect-error the fabrika type declares no permission "view".
+    permission: "view",
+  }) {}
+  class Drive extends Rebac.Permission<Drive>()("@kampus/libfabrika/permissions/Rebac.types.test/Drive", {
+    model: Model,
+    // @ts-expect-error the model declares no object type "window" to put a right on.
+    on: "window",
+    permission: "start",
+  }) {}
   return [window, model, robots, View, Drive];
 };
 
