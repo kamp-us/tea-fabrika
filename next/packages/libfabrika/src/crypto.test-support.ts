@@ -3,7 +3,9 @@
 // laws both read it, so it sits at the top of src/, beside Id.test-support.ts. Each stand-in is a
 // `Stub.make` (decision 0554): a member a law did not give throws, naming it.
 import { Stub } from "@kampus/vitest";
-import { Deferred, Effect } from "effect";
+import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
 
 type Crypto = typeof globalThis.crypto;
 type Subtle = Crypto["subtle"];
@@ -28,7 +30,9 @@ export const paused = Effect.fnUntraced(function* (marker: string) {
   const entered = yield* Deferred.make<void>(),
     release = yield* Deferred.make<void>();
   let reached = false;
-  const fail = (cause: unknown) => new Error("the real digest failed", { cause });
+  // A shared top file holds no error of its own (0043), so the real digest's rejection is Effect's
+  // own tagged UnknownError, with WebCrypto's failure kept as its cause.
+  const fail = (cause: unknown) => new Cause.UnknownError(cause, "the real digest failed");
   const real = (algorithm: Parameters<Digest>[0], data: Parameters<Digest>[1]) =>
     // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
     Effect.tryPromise({ try: () => globalThis.crypto.subtle.digest(algorithm, data), catch: fail });
@@ -46,7 +50,6 @@ export const paused = Effect.fnUntraced(function* (marker: string) {
   };
   const crypto = Stub.make<Crypto>(unexpected, {
     getRandomValues: (array) => globalThis.crypto.getRandomValues(array),
-    randomUUID: () => globalThis.crypto.randomUUID(),
     subtle: Stub.make<Subtle>(unexpected, { digest }),
   });
   return { crypto, entered, release };
