@@ -2,6 +2,7 @@
  * Fault requests and bounded history checks, without outside effects.
  * @stability unstable
  */
+import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Id from "../Id.ts";
@@ -234,7 +235,7 @@ const decodeRestart = Schema.decodeUnknownOption(RecordedRestart);
  * @category checking
  */
 export const restarts = (entries: ReadonlyArray<RestartEntry>): ReadonlyArray<typeof Restart.Type> =>
-  entries.flatMap((entry) => {
+  Arr.flatMap(entries, (entry) => {
     const event = decodeRestart(entry);
 
     if (Option.isNone(event) || entry.stream !== `processes/${event.value.body.name}`) {
@@ -264,9 +265,10 @@ export const recovery = (hit: Hit | null, entries: ReadonlyArray<RestartEntry>):
     return null;
   }
 
-  const first = restarts(entries)
-    .filter((row) => row.name === hit.name && row.after === hit.process && row.rev > hit.after)
-    .sort((left, right) => left.rev - right.rev)[0];
+  const first = Arr.filter(
+    restarts(entries),
+    (row) => row.name === hit.name && row.after === hit.process && row.rev > hit.after,
+  ).sort((left, right) => left.rev - right.rev)[0];
   return first === undefined
     ? null
     : { ref: first.ref, rev: first.rev, arrivedAt: first.arrivedAt, process: first.process };

@@ -4,6 +4,7 @@
  * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
+import * as Arr from "effect/Array";
 import * as Schema from "effect/Schema";
 import * as Chaos from "./Chaos.ts";
 import * as ChaosSchedule from "./ChaosSchedule.ts";
@@ -12,7 +13,7 @@ const Count = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: Number.MA
 const Positive = Count.check(Schema.isGreaterThanOrEqualTo(1));
 const Errors = ["NemesisError", "handler_failed", "bad_cmd"] as const;
 const SettledErrors = [...Errors, "malformed_result"] as const;
-const Error = Schema.Union(SettledErrors.map((tag) => Schema.TaggedStruct(tag, {})));
+const Error = Schema.Union(Arr.map(SettledErrors, (tag) => Schema.TaggedStruct(tag, {})));
 const Request = Schema.Struct({ id: Chaos.ExperimentId });
 const Inspect = Schema.Struct({ ...Request.fields, target: Chaos.Target });
 
@@ -162,8 +163,8 @@ const receive = (m: Model, msg: Extract<Msg, { type: "fire_ok" | "fire_err" }>):
 
   if (
     history.start.id !== msg.cmd.id ||
-    !history.asked.some((a) => a.ordinal === msg.cmd.ordinal) ||
-    history.answers.some((a) => a.ordinal === msg.cmd.ordinal)
+    !Arr.some(history.asked, (a) => a.ordinal === msg.cmd.ordinal) ||
+    Arr.some(history.answers, (a) => a.ordinal === msg.cmd.ordinal)
   ) {
     return m;
   }
@@ -257,7 +258,7 @@ export const chaosMachine = Machine.make({
       return [
         e.answers.length !== e.asked.length
           ? incomplete(m, e, "unanswered")
-          : e.answers.some((a) => a.result._tag === "failed")
+          : Arr.some(e.answers, (a) => a.result._tag === "failed")
             ? incomplete(m, e, "fire")
             : { ...m, phase: Phase.cases.done.make({ experiment: e, report: msg.value }) },
         [],

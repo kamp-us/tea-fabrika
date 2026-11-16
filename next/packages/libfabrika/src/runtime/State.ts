@@ -5,7 +5,8 @@
  *
  * @stability unstable
  */
-import { Result, Schema } from "effect";
+import { Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { Rev } from "../coordination/index.ts";
 import { ProgramDown, type State } from "./Program.ts";
 
@@ -62,7 +63,7 @@ export class Saved extends Schema.Opaque<Saved>()(Row) {
       throw down();
     }
 
-    const froms = state.upgrades.map((u) => u.from);
+    const froms = Arr.map(state.upgrades, (u) => u.from);
 
     if (new Set(froms).size !== froms.length) {
       throw down();
@@ -72,7 +73,7 @@ export class Saved extends Schema.Opaque<Saved>()(Row) {
     const ran: Array<string> = [];
 
     for (let v = row.success.v; v < state.v; v++) {
-      const upgrade = state.upgrades.find((u) => u.from === v);
+      const upgrade = Option.getOrUndefined(Arr.findFirst(state.upgrades, (u) => u.from === v));
 
       if (upgrade === undefined) {
         throw down();

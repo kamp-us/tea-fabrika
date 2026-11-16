@@ -5,6 +5,7 @@
  * @stability unstable
  */
 import { Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 
 /**
  * One RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs.
@@ -22,17 +23,19 @@ const token = (key: string | number): string => String(key).replaceAll("~", "~0"
 
 type Plain = { [key: string]: unknown };
 
-const isPlain = (u: unknown): u is Plain => typeof u === "object" && u !== null && !Array.isArray(u);
+const isPlain = (u: unknown): u is Plain => typeof u === "object" && u !== null && !Arr.isArray(u);
 
 /** Same JSON value: `Object.is` for leaves, so `0` and `-0` differ as they do to a watcher. */
 const same = (a: unknown, b: unknown): boolean => {
-  if (Array.isArray(a) && Array.isArray(b)) {
-    return a.length === b.length && a.every((one, i) => same(one, b[i]));
+  if (Arr.isArray(a) && Arr.isArray(b)) {
+    return a.length === b.length && Arr.every(a, (one, i) => same(one, b[i]));
   }
 
   if (isPlain(a) && isPlain(b)) {
     const keys = Object.keys(a);
-    return keys.length === Object.keys(b).length && keys.every((key) => Object.hasOwn(b, key) && same(a[key], b[key]));
+    return (
+      keys.length === Object.keys(b).length && Arr.every(keys, (key) => Object.hasOwn(b, key) && same(a[key], b[key]))
+    );
   }
 
   return Object.is(a, b);
@@ -43,7 +46,7 @@ const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>):
     return;
   }
 
-  if (Array.isArray(before) && Array.isArray(after)) {
+  if (Arr.isArray(before) && Arr.isArray(after)) {
     const common = Math.min(before.length, after.length);
 
     for (let i = 0; i < common; i++) {
@@ -136,13 +139,13 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
 
     const encoded = op.path === "" ? [] : op.path.slice(1).split("/");
 
-    if (encoded.some((p) => /~(?![01])/.test(p))) {
+    if (Arr.some(encoded, (p) => /~(?![01])/.test(p))) {
       return invalid();
     }
 
-    const path = encoded.map((p) => p.replaceAll("~1", "/").replaceAll("~0", "~"));
+    const path = Arr.map(encoded, (p) => p.replaceAll("~1", "/").replaceAll("~0", "~"));
 
-    if (path.some((p) => unsafe.has(p))) {
+    if (Arr.some(path, (p) => unsafe.has(p))) {
       return invalid();
     }
 
@@ -154,7 +157,7 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
     let parent: unknown = root;
 
     for (const part of path.slice(0, -1)) {
-      if (Array.isArray(parent)) {
+      if (Arr.isArray(parent)) {
         if (!/^(0|[1-9][0-9]*)$/.test(part) || Number(part) >= parent.length) {
           return invalid();
         }
@@ -169,7 +172,7 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
 
     const key = path.at(-1) ?? "";
 
-    if (Array.isArray(parent)) {
+    if (Arr.isArray(parent)) {
       const index = key === "-" && op.op === "add" ? parent.length : /^(0|[1-9][0-9]*)$/.test(key) ? Number(key) : -1;
 
       if (index < 0 || index >= parent.length + (op.op === "add" ? 1 : 0)) {

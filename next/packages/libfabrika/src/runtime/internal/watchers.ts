@@ -14,7 +14,7 @@ export const Model = Schema.TaggedUnion({
   watching: {
     clients: Schema.NonEmptyArray(Client).check(
       Schema.isMaxLength(1024),
-      Schema.makeFilter((clients) => new Set(clients.map((c) => c.client)).size === clients.length),
+      Schema.makeFilter((clients) => new Set(Array.map(clients, (c) => c.client)).size === clients.length),
     ),
   },
 });
@@ -32,7 +32,7 @@ export const watchers = Machine.make({
   init: (saved) => [saved ?? Model.cases.empty.make({}), []],
   update: {
     open: (model, msg) => {
-      const held = model._tag === "empty" ? [] : model.clients.filter((c) => c.client !== msg.watch.client);
+      const held = model._tag === "empty" ? [] : Array.filter(model.clients, (c) => c.client !== msg.watch.client);
       return [Model.cases.watching.make({ clients: Array.append(held.slice(-1023), msg.watch) }), []];
     },
     end: (model, msg) => {
@@ -40,7 +40,7 @@ export const watchers = Machine.make({
         return [model, []];
       }
 
-      const clients = model.clients.filter((c) => c.client !== msg.client);
+      const clients = Array.filter(model.clients, (c) => c.client !== msg.client);
       const [first, ...rest] = clients;
       return [
         first === undefined ? Model.cases.empty.make({}) : Model.cases.watching.make({ clients: [first, ...rest] }),
