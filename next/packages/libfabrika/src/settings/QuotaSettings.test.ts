@@ -1,6 +1,6 @@
 // P34c slice 4, next/. Calibration is copied from A-Numbers, never read from product defaults.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Option, Schema } from "effect";
+import { ByteSize, Effect, Formatter, Option, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Setting.ts";
@@ -138,7 +138,7 @@ describe("P34c Q11 settings", () => {
             const resolved = yield* resolve(text);
             const g = group();
             const saved = yield* Snapshot.make(g, resolved);
-            const transport = Schema.decodeSync(Schema.fromJsonString(Snapshot.Snapshot))(JSON.stringify(saved));
+            const transport = Schema.decodeSync(Schema.fromJsonString(Snapshot.Snapshot))(Formatter.formatJson(saved));
             const restored = yield* Snapshot.read(g, transport);
             expect(numeric(restored.values)).toEqual({
               writes: selected.get("writes"),
