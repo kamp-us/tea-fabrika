@@ -378,7 +378,7 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
                 Schema.is(
                   Schema.Struct({
                     process: Schema.Struct({
-                      fault: Schema.Struct({ _tag: Schema.Literal("RecoveryReserveExhausted") }),
+                      fault: Schema.TaggedStruct("RecoveryReserveExhausted", {}),
                     }),
                   }),
                 )(use),

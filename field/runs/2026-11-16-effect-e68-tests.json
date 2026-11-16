@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e68-tests",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:33:25-08:00",
+  "ended": "2026-11-16T01:55:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix step for slice E68 (schemaStructWithTag), in next/ and our tooling, on a branch built from 891075e7a on the effect-mechanical fold (PR 1366 is merged). Recount with only the check at error, one effect-tsgo diagnostics run per tsconfig (12 projects; the .github/ci one could not be run from here because its path holds a word the worktree guard refuses, and it is already locked at error): 4 hits, all in next/apps/fabrika/src (the folder with a hit): runtime-quotas.laws.test.ts:837, runtime-recovery.laws.integration.test.ts:1460 and :1465, worker-quotas.integration.test.ts:381. The fold had already fixed the rest of the plan's 9. Fixed all 4 by hand (Edit): Schema.Struct({ _tag: Schema.Literal(x) }) became Schema.TaggedStruct(x, {}). Left 0, waiting on 1366 0. No lock entry added and no L1 planted, as the brief says; the integrator adds locks. Proved zero with pnpm typecheck (exit 0) with schemaStructWithTag temporarily at error in the top-level diagnosticSeverity of all 12 package and tooling tsconfigs; those edits were then restored, and no tsconfig change is committed. Not fixed, out of scope: today's version apps/fabrika/src/messages.ts:207,211 and projects.ts:70,80 (4 Schema.Struct with a _tag Literal), which is not next/ or tooling.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Tests run at the branch head before this commit (891075e7a plus the 4 edits): runtime-quotas.laws.test.ts 2 passed; worker-quotas.integration.test.ts 3 passed; runtime-recovery.laws.integration.test.ts failed once (1 of 13, the law at line 1137 failed, cause not read, not the edited helpers at 1460 and 1465) and passed 13 of 13 when rerun alone. No .integration. law was refused by the 0178 guard. pnpm lint: all parts pass except lint:kind (existing test-kind advice, none from this change) and lint:promise-types, which died in the full run and reported 0 findings when run alone; I did not compare lint:kind against the base commit. The checker quick-fix client was not used.",
+  "plants": [],
+  "step": "tests"
+}

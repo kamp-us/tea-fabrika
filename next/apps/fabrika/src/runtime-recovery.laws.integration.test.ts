@@ -1457,12 +1457,12 @@ const runFlow = async (flow: RecoveryFlow) => {
   const restarts = async () =>
     (await w.project.read(`processes/${NAME}`, 0, "audit"))
       .map((row) => ({ ...Object(row.body), _tag: row._tag }))
-      .filter((body) => Schema.is(Schema.Struct({ _tag: Schema.Literal("restarted") }))(body));
+      .filter((body) => Schema.is(Schema.TaggedStruct("restarted", {}))(body));
   const live = async () => (await w.project.info()).find((row) => row.name === NAME)?.process;
   const downs = async () =>
     (await w.project.read(`processes/${NAME}`, 0, "audit"))
       .map((row) => ({ ...Object(row.body), _tag: row._tag }))
-      .filter((body) => Schema.is(Schema.Struct({ _tag: Schema.Literal("down") }))(body));
+      .filter((body) => Schema.is(Schema.TaggedStruct("down", {}))(body));
   const deadRows = async (pids: ReadonlyArray<string>) =>
     (await Promise.all(pids.map((pid) => w.project.read(`${pid}/dead`, 0, "audit")))).flat();
   const limit = flow.limit ?? 3;

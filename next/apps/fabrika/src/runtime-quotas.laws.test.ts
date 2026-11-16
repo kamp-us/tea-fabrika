@@ -834,7 +834,7 @@ describe("P34c live wiring, both object stores", () => {
             const used = required(before.program[program]);
             const reply = yield* w.input(name, id, { type: "inc", text });
 
-            if (Schema.is(Schema.Struct({ _tag: Schema.Literal("refused") }))(reply)) {
+            if (Schema.is(Schema.TaggedStruct("refused", {}))(reply)) {
               // The typed answer, before an envelope, a binding, a reply or a local step is saved.
               expect(reply).toMatchObject(refused);
               expect(yield* w.rows).toEqual(rows);
