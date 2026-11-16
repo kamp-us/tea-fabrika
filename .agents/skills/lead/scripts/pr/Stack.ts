@@ -37,6 +37,7 @@ export const Landed = Schema.TaggedUnion({
   asked: { top: Schema.Finite, base: Schema.String, prs: Schema.Array(Schema.Finite) },
   merged: { top: Schema.Finite, commit: Schema.String },
 });
+
 export type Landed = typeof Landed.Type;
 
 /** Why one layer below the top may not land as it stands, or `null` when it may. A merged one is done. */
@@ -104,6 +105,7 @@ export const land = Effect.fn("Stack.land")(function* (a: Ask) {
     a.top,
     open.map((layer) => ({ number: layer.number, oid: layer.oid })),
   );
+
   return Landed.cases.asked.make({ top: a.top, base: stack.value.base, prs: numbers });
 });
 

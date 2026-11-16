@@ -36,6 +36,7 @@ const memory = (w: World = {}) => {
       draft: false,
     })),
   );
+
   github.stacks.push({ number: 1522, base: "main", prs: [11, 12, 13] });
 
   if (w.build !== undefined) {
@@ -59,14 +60,17 @@ const memory = (w: World = {}) => {
 
   // A Layer.mock stand-in that refuses only the leaky layer's head, as leakgrep.sh would.
   const leakyHead = w.leaky === undefined ? "" : head(w.leaky);
+
   const refuse = (at: string) =>
     at === leakyHead ? Effect.fail(new LeakGrepRefused({ reason: "leakgrep.sh exited 1" })) : Effect.void;
+
   const pushes = Recorder.layer(Pushes, {
     leakGrep: (_dir, at) => refuse(at),
     leakChange: (_dir, at) => refuse(at),
     leakText: () => Effect.void,
     push: () => Effect.void,
   });
+
   return { github, layer: Layer.mergeAll(PullRequestsTest.layer(github), pushes) };
 };
 
@@ -171,6 +175,7 @@ describe("Stack.land: a stack lands only if it fits one merge group (ticket 1115
       { number: 11, oid: head(11) },
       { number: 12, oid: head(12) },
     ];
+
     expect(PullRequestsGh.moved(pinned, pinned)).toBeNull();
     expect(
       PullRequestsGh.moved(

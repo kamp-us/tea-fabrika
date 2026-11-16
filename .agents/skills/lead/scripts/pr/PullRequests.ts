@@ -60,6 +60,7 @@ export const Stack = Schema.Struct({
   base: Schema.String,
   prs: Schema.Array(Schema.Finite),
 });
+
 export type Stack = typeof Stack.Type;
 
 /**
@@ -68,6 +69,7 @@ export type Stack = typeof Stack.Type;
  * `max_entries_to_merge`, the most it merges in one group.
  */
 export const MergeQueue = Schema.Struct({ build: Schema.Finite, merge: Schema.Finite });
+
 export type MergeQueue = typeof MergeQueue.Type;
 
 /** One layer of a stack merge, pinned: its number and the head its gates read. */

@@ -81,6 +81,7 @@ const stackMergeArgs = (top: number): ReadonlyArray<string> => ["stack", "merge"
 /** Why a stack's layers are not at the heads that were checked, or `null` when every one is. */
 export const moved = (layers: ReadonlyArray<Pin>, pinned: ReadonlyArray<Pin>): string | null => {
   const off = pinned.filter((pin) => layers.find((layer) => layer.number === pin.number)?.oid !== pin.oid);
+
   return off.length === 0
     ? null
     : `layers not at the head their gates read, so nothing was merged: ${off.map((pin) => `pr ${pin.number}`).join(", ")}`;
@@ -273,6 +274,7 @@ export const layer = (
       /** Each open stack of the repo, its layers bottom first, each with the head GitHub holds. */
       const stacks = Effect.fn("PullRequestsGh.stacks")(function* () {
         const out = yield* gh(["api", "--paginate", `repos/${repo}/stacks`, "--jq", STACKS_JQ]);
+
         return yield* Effect.forEach(
           out.split("\n").filter((row) => row !== ""),
           (row) =>
@@ -299,6 +301,7 @@ export const layer = (
       const mergeQueue = Effect.fn("PullRequestsGh.mergeQueue")(function* (branch: string) {
         const out = yield* gh(["api", "--paginate", `repos/${repo}/rules/branches/${branch}`, "--jq", QUEUE_JQ]);
         const row = out.split("\n").find((line) => line !== "");
+
         return row === undefined
           ? Option.none()
           : Option.some(

@@ -740,10 +740,12 @@ const stackCommand = Command.make(
   { top: Argument.Int("top-pr") },
   Effect.fn("land.stackCommand")(function* ({ top }) {
     const env = yield* loadEnv;
+
     const landed = yield* Stack.land({ dir: env.MAIN, top }).pipe(
       Effect.provide(Layer.mergeAll(PullRequestsGh.layer(env.GH_REPO, env.MAIN), PushesProcess.layer(HERE))),
       Effect.mapError(refusedAt("stack")),
     );
+
     yield* Console.log(Stack.line(landed));
   }),
 );
