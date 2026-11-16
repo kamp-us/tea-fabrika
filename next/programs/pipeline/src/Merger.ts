@@ -1,7 +1,7 @@
 import type { Settled } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { Ci, CodeHost, Program, Send, StartChild } from "@kampus/libfabrika";
-import { Array as Arr, Schema } from "effect";
+import { Array as Arr, Match, Schema } from "effect";
 import * as Change from "./Change.ts";
 import { Abandon, Land, Reply } from "./Mail.ts";
 import type { Values } from "./Settings.ts";
@@ -132,11 +132,25 @@ const Msg = Schema.Union([
 const clamp = (at: number) => Math.min(at, 8.64e15);
 
 const commandFor = (s: Working) =>
-  s._tag === "reading" ? "change" : s._tag === "updating" ? "update" : s._tag === "checking" ? "checks" : "merge";
+  Match.valueTags(s, {
+    reading: () => "change",
+    updating: () => "update",
+    checking: () => "checks",
+    merging: () => "merge",
+  });
 
 const progress = (s: Working) => ({ attempt: s.attempt, late: s.late, job: s.job });
 
 const identity = (s: Working) => ({ ref: s.job.ref, change: s.job.change });
+
+// A job is landing: only an idle merger takes a new one.
+const landRefused = (s: Model) => (Model.guards.idle(s) ? null : { reason: "busy" });
+
+// An abandon needs a job to drop that is still this one and not yet merging.
+const abandonRefused = (s: Model, ref: string) =>
+  Model.matchOrElse(s, { idle: () => ({ reason: "idle" }), merging: () => ({ reason: "merging" }) }, (w) =>
+    w.job.ref === ref ? null : { reason: "other_job" },
+  );
 
 const finish = (s: Working, reply: typeof Reply.Type): Cell => [
   Model.cases.idle.make({ attempt: s.attempt, late: s.late }),
@@ -155,14 +169,12 @@ export const merger = (settings: Values) => {
   const ask = (s: Working, at: number, tries: number, start: boolean): Cell => {
     const attempt = s.attempt + 1;
     const next = { ...s, attempt, step: asking(at, tries) };
-    const cmd =
-      s._tag === "reading"
-        ? change({ attempt, change: s.job.change })
-        : s._tag === "updating"
-          ? update({ attempt, change: s.job.change, head: s.head })
-          : s._tag === "checking"
-            ? checks({ attempt, head: s.head, start })
-            : merge({ attempt, change: s.job.change, head: s.head });
+    const cmd = Match.valueTags(s, {
+      reading: (r): Command => change({ attempt, change: r.job.change }),
+      updating: (u): Command => update({ attempt, change: u.job.change, head: u.head }),
+      checking: (c): Command => checks({ attempt, head: c.head, start }),
+      merging: (g): Command => merge({ attempt, change: g.job.change, head: g.head }),
+    });
     return [next, [cmd]];
   };
   type Message =
@@ -406,19 +418,13 @@ export const merger = (settings: Values) => {
       late: s.late,
     }),
     refuse: (s, m) =>
-      m.type === "land"
-        ? s._tag === "idle"
-          ? null
-          : { reason: "busy" }
-        : m.type !== "abandon"
-          ? null
-          : s._tag === "idle"
-            ? { reason: "idle" }
-            : s._tag === "merging"
-              ? { reason: "merging" }
-              : m.ref !== s.job.ref
-                ? { reason: "other_job" }
-                : null,
+      Match.value(m).pipe(
+        Match.discriminators("type")({
+          land: () => landRefused(s),
+          abandon: (a) => abandonRefused(s, a.ref),
+        }),
+        Match.orElse(() => null),
+      ),
     inputs: { land: "Land this change at its pinned head", abandon: "Abandon this job before merging" },
     outputs: {},
     writes: {},

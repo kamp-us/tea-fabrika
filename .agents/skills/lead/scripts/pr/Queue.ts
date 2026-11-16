@@ -80,16 +80,17 @@ export const Added = Schema.TaggedUnion({
 export type Added = typeof Added.Type;
 
 /** Why a pull request may not enter the queue as it stands, or `null` when it may. */
-export const refusal = (found: Detail): string | null =>
-  found.state === "CLOSED"
-    ? "closed, not merged"
-    : found.state !== "OPEN"
-      ? `in state ${found.state}, not merged; refused`
-      : found.draft
-        ? "draft, not merged; refused until it is ready for review"
-        : found.base !== "main"
-          ? `merges into ${found.base}, not main; refused`
-          : null;
+export const refusal = (found: Detail): string | null => {
+  if (found.state !== "OPEN") {
+    return found.state === "CLOSED" ? "closed, not merged" : `in state ${found.state}, not merged; refused`;
+  }
+
+  return found.draft
+    ? "draft, not merged; refused until it is ready for review"
+    : found.base !== "main"
+      ? `merges into ${found.base}, not main; refused`
+      : null;
+};
 
 export const add = Effect.fn("Queue.add")(function* (a: Ask) {
   const prs = yield* PullRequests;

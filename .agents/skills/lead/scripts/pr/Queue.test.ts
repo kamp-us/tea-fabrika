@@ -3,7 +3,7 @@
 // a job moved here: the state gate, the one pinned squash, and the ticket close of 0015 (T410).
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
-import { Effect, Fiber, Layer, Option, Schema } from "effect";
+import { Effect, Fiber, Layer, Match, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { ChecksError, type Job } from "../ci/Checks.ts";
 import * as ChecksTest from "../ci/ChecksTest.ts";
@@ -30,13 +30,14 @@ const refused = new LeakGrepRefused({ reason: "private_word" });
 
 /** The one leak check that refuses, with the error it refuses with. */
 const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
-  leak === "clean"
-    ? {}
-    : leak === "leakChange"
-      ? { leakChange: refused }
-      : leak === "leakGrep"
-        ? { leakGrep: refused }
-        : { leakText: refused };
+  Match.value(leak).pipe(
+    Match.withReturnType<PushesTest.Failing>(),
+    Match.when("clean", () => ({})),
+    Match.when("leakChange", () => ({ leakChange: refused })),
+    Match.when("leakGrep", () => ({ leakGrep: refused })),
+    Match.when("leakText", () => ({ leakText: refused })),
+    Match.exhaustive,
+  );
 
 const job = (stands: typeof Required.Type): Option.Option<Job> =>
   stands === "none"

@@ -40,7 +40,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs
 import { isAbsolute, join, resolve } from "node:path";
 import { Result, Schema } from "effect";
 import { GC_SECONDS } from "./mutbox.ts";
-import { type PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
+import { PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
 import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipOf } from "./quest.ts";
 
 const HOUR = 3_600_000;
@@ -96,13 +96,16 @@ export const deadFacts = (files: readonly string[], boxes: ReadonlySet<string>):
  * IDLE old; a process list pgrep cannot read keeps it, never reads as none running.
  */
 export const decidePin = (holders: PgrepAnswer, idle: number): PinVerdict =>
-  holders._tag === "refused"
-    ? PinVerdict.cases.keep.make({ reason: "pgrep cannot list processes, so a quest may still run from it" })
-    : holders.count > 0
-      ? PinVerdict.cases.keep.make({ reason: `${holders.count} running processes name it` })
-      : idle < IDLE
-        ? PinVerdict.cases.keep.make({ reason: "made less than 2 h ago" })
-        : PinVerdict.cases.remove.make({ reason: "no running process names it" });
+  PgrepAnswer.match(holders, {
+    refused: () =>
+      PinVerdict.cases.keep.make({ reason: "pgrep cannot list processes, so a quest may still run from it" }),
+    listed: (listed) =>
+      listed.count > 0
+        ? PinVerdict.cases.keep.make({ reason: `${listed.count} running processes name it` })
+        : idle < IDLE
+          ? PinVerdict.cases.keep.make({ reason: "made less than 2 h ago" })
+          : PinVerdict.cases.remove.make({ reason: "no running process names it" }),
+  });
 
 /** The Check, pure. */
 export const decide = (s: Seen): Verdict => {

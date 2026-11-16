@@ -120,16 +120,17 @@ export const Supervision = Schema.Struct({
     }
 
     // The process this journal replaces, which a crash origin's failure must name.
-    const replaced =
-      j._tag === "writing_exit"
-        ? j.process
-        : j._tag === "writing_down" || j._tag === "waiting_recovery"
-          ? j.recovery.process
-          : j._tag === "waiting_start"
-            ? j.request.after
-            : j._tag === "checkpointing"
-              ? j.after
-              : null;
+    const replaced = Journal.matchOrElse(
+      j,
+      {
+        writing_exit: (w) => w.process,
+        writing_down: (w) => w.recovery.process,
+        waiting_recovery: (w) => w.recovery.process,
+        waiting_start: (w) => w.request.after,
+        checkpointing: (c) => c.after,
+      },
+      () => null,
+    );
 
     if (replaced === null || !("origin" in j)) {
       return true;

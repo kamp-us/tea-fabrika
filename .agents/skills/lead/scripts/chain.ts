@@ -1616,8 +1616,13 @@ export const providers = (
  * `--claude` names, plain `codex exec` for one `--codex-exec` names, and Codex through ACP for the
  * rest. `--claude` wins a step both name.
  */
-export const stepAgent = (step: StepName, claude: ReadonlySet<StepName>, exec: ReadonlySet<StepName>): AgentName =>
-  step === "mutation" ? MUTATION_AGENT : claude.has(step) ? "claude" : exec.has(step) ? "codex-exec" : "codex";
+export const stepAgent = (step: StepName, claude: ReadonlySet<StepName>, exec: ReadonlySet<StepName>): AgentName => {
+  if (step === "mutation") {
+    return MUTATION_AGENT;
+  }
+
+  return claude.has(step) ? "claude" : exec.has(step) ? "codex-exec" : "codex";
+};
 
 /** One table row per step the quest ran, with its list-price dollars from the rows file. */
 export const stepsTable = (

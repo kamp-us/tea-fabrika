@@ -26,7 +26,7 @@ import { fold } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
 import { Button, useClipboard } from "@manti-ui/react";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Match, Option, Schema } from "effect";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { landing, question, Layout, tileName } from "./Layout.tsx";
@@ -318,19 +318,12 @@ const Desk = (props: PageProps) => {
     layout: space === undefined ? "" : JSON.stringify(space.layout),
   });
   const asked = prefix._tag === "asking" ? view?.tiles.find((t) => t.id === prefix.tile) : undefined;
-  const line = none ? (
-    NO_TEZGAH
-  ) : asked !== undefined ? (
-    question(asked)
-  ) : prefix._tag === "armed" ? (
-    <PrefixLine table={props.keys} />
-  ) : roomless !== undefined ? (
-    noRoom(roomless)
-  ) : focused === undefined ? (
-    ""
-  ) : (
-    tileName(focused)
-  );
+  // What the prefix key shows, if anything: its question, or its table once armed.
+  const prefixed =
+    asked !== undefined ? question(asked) : prefix._tag === "armed" ? <PrefixLine table={props.keys} /> : null;
+  // What the tiles say otherwise: a tile with no room to split, else the focused tile's name.
+  const tiled = roomless !== undefined ? noRoom(roomless) : focused === undefined ? "" : tileName(focused);
+  const line = none ? NO_TEZGAH : (prefixed ?? tiled);
   const said = typeof line === "string" ? <span className="says">{line}</span> : line;
   return (
     <>
@@ -393,10 +386,12 @@ const Page = (props: PageProps) => {
     ...(roomless === undefined ? [] : [noRoom(roomless)]),
   ].join(" ");
   const asked = prefix._tag === "asking" ? named(prefix.tile) : undefined;
-  const content =
-    link._tag === "waiting_grant" ? (
-      <Waiting code={link.code} fingerprint={link.fingerprint} origin={props.origin} />
-    ) : link._tag === "removed" ? (
+  // The screen a link shows in place of the frame while it waits for a grant, was removed or is blocked.
+  const screen = Match.value(link).pipe(
+    Match.tag("waiting_grant", (waiting) => (
+      <Waiting code={waiting.code} fingerprint={waiting.fingerprint} origin={props.origin} />
+    )),
+    Match.tag("removed", () => (
       <main className="screen">
         <h1>Removed</h1>
         <p>This window was removed</p>
@@ -405,12 +400,18 @@ const Page = (props: PageProps) => {
           Ask again
         </Button>
       </main>
-    ) : link._tag === "blocked" ? (
+    )),
+    Match.tag("blocked", (blocked) => (
       <main className="screen">
         <h1>Blocked</h1>
-        <p>The browser could not keep or use this window's key. {link.reason}</p>
+        <p>The browser could not keep or use this window's key. {blocked.reason}</p>
       </main>
-    ) : link._tag !== "online" && Object.keys(views).length === 0 ? (
+    )),
+    Match.orElse(() => null),
+  );
+  const content =
+    screen ??
+    (link._tag !== "online" && Object.keys(views).length === 0 ? (
       <main className="screen">
         <p>Connecting</p>
       </main>
@@ -424,7 +425,7 @@ const Page = (props: PageProps) => {
         </header>
         <Desk {...props} />
       </div>
-    );
+    ));
   return (
     <>
       {content}

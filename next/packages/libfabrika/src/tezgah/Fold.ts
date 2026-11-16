@@ -82,9 +82,11 @@ export const lengths = (
   }
 
   const rest = total - held.percent;
-  return node.parts.map((p, i) =>
-    i === lead ? least : fixed[i] ? STRIP[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
-  );
+  // A part beside the lead: a strip keeps its strip, and the others share what the lead leaves.
+  const beside = (p: (typeof node.parts)[number], i: number) =>
+    fixed[i] ? STRIP[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0;
+
+  return node.parts.map((p, i) => (i === lead ? least : beside(p, i)));
 };
 
 /**

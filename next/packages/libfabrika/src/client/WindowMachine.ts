@@ -9,7 +9,7 @@
  */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Option, Predicate, Result, Schema } from "effect";
+import { Match, Option, Predicate, Result, Schema } from "effect";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace } from "../processes/Process.ts";
 import * as C from "../runtime/Client.ts";
@@ -940,14 +940,13 @@ const AIMS: Readonly<Record<string, Aim>> = {
 const aimed = (space: Workspace, aim: Aim): TileId | null => {
   const tiles = order(space.layout);
   const at = tiles.indexOf(space.focus);
-  const found =
-    aim === "next"
-      ? tiles[(at + 1) % tiles.length]
-      : aim === "previous"
-        ? tiles[(at - 1 + tiles.length) % tiles.length]
-        : aim === "last"
-          ? space.recent[1]
-          : neighbor(space.layout, space.focus, aim);
+  const found = Match.value(aim).pipe(
+    Match.when("next", () => tiles[(at + 1) % tiles.length]),
+    Match.when("previous", () => tiles[(at - 1 + tiles.length) % tiles.length]),
+    Match.when("last", () => space.recent[1]),
+    Match.when(Match.is("left", "right", "up", "down"), (side) => neighbor(space.layout, space.focus, side)),
+    Match.exhaustive,
+  );
   return found === undefined || found === null || found === space.focus ? null : found;
 };
 
@@ -1147,6 +1146,9 @@ const dated = (
   return [next, [...rows, ...cmds]];
 };
 
+/** How a connect record says the link's new state was reached. */
+type ConnectResult = (typeof ClientRecord.cases.connect.Type)["result"];
+
 const linked = (s: WindowModel, m: LinkMsg): Step => {
   const input = m.type === "ask_again" ? { ...m, dial: Math.max(s.dials + 1, m.dial) } : m;
   const [link, cmds] = applyCell(linkMachine, s.link, input);
@@ -1171,18 +1173,18 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
   const [knocked, writes] = wrote(next, open ?? 0, knocks);
   next = knocked;
   out.push(...writes);
-  const result =
-    s.link._tag !== "online" && link._tag === "online"
-      ? "online"
-      : s.link._tag !== "waiting_grant" && link._tag === "waiting_grant"
-        ? "waiting"
-        : s.link._tag !== "removed" && link._tag === "removed"
-          ? "removed"
-          : s.link._tag !== "retrying" && link._tag === "retrying"
-            ? m.type === "closed"
-              ? "closed"
-              : "stalled"
-            : null;
+  // A connect record is due when this step moves the link into one of these states.
+  const entered = Link.matchOrElse(
+    link,
+    {
+      online: (): ConnectResult => "online",
+      waiting_grant: (): ConnectResult => "waiting",
+      removed: (): ConnectResult => "removed",
+      retrying: (): ConnectResult => (m.type === "closed" ? "closed" : "stalled"),
+    },
+    () => null,
+  );
+  const result = s.link._tag === link._tag ? null : entered;
 
   if (result !== null && "ms" in m) {
     out.push(

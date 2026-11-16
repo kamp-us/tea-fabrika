@@ -99,6 +99,10 @@ const textLines = (text: string) => {
 
 const hex = (code: number, width: number) => code.toString(16).padStart(width, "0");
 
+/** A code point as Python's repr() escapes it: \x for one byte, \u for four hex digits, else \U. */
+const escaped = (code: number) =>
+  code <= 0xff ? `\\x${hex(code, 2)}` : code <= 0xffff ? `\\u${hex(code, 4)}` : `\\U${hex(code, 8)}`;
+
 /** A name as Python's repr() showed it: quoted, with control characters escaped. */
 const pythonRepr = (name: string) => {
   const quote = name.includes("'") && !name.includes('"') ? '"' : "'";
@@ -113,15 +117,7 @@ const pythonRepr = (name: string) => {
 
   for (const char of name) {
     const code = char.codePointAt(0) ?? 0;
-    out +=
-      escapes[char] ??
-      (char !== " " && /[\p{C}\p{Z}]/u.test(char)
-        ? code <= 0xff
-          ? `\\x${hex(code, 2)}`
-          : code <= 0xffff
-            ? `\\u${hex(code, 4)}`
-            : `\\U${hex(code, 8)}`
-        : char);
+    out += escapes[char] ?? (char !== " " && /[\p{C}\p{Z}]/u.test(char) ? escaped(code) : char);
   }
 
   return `${quote}${out}${quote}`;
