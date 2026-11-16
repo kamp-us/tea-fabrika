@@ -17,6 +17,7 @@ import {
   Effect,
   Exit,
   Layer,
+  Match,
   Option,
   Result,
   Schema,
@@ -2159,24 +2160,16 @@ export class ProgramRunner extends Context.Service<
               : yield* settle(job, origin);
           }
 
-          const answered: Option.Option<unknown> =
-            type === SEND_CHUNKS
-              ? yield* cmdSpan(job, chunks(state, job))
-              : Option.some(
-                  yield* type === WRITE
-                    ? cmdSpan(job, write(state, job))
-                    : type === SEND
-                      ? cmdSpan(job, mail(state, job))
-                      : type === START_CHILD
-                        ? cmdSpan(job, startChild(state, job))
-                        : type === STOP_CHILD
-                          ? cmdSpan(job, stopChild(state, job))
-                          : type === DEMONITOR
-                            ? cmdSpan(job, unwatch(state, job))
-                            : type === EXIT
-                              ? cmdSpan(job, stop(state, job))
-                              : handle(state, job),
-                );
+          const answered: Option.Option<unknown> = yield* Match.value(type).pipe(
+            Match.when(SEND_CHUNKS, () => cmdSpan(job, chunks(state, job))),
+            Match.when(WRITE, () => Effect.asSome(cmdSpan(job, write(state, job)))),
+            Match.when(SEND, () => Effect.asSome(cmdSpan(job, mail(state, job)))),
+            Match.when(START_CHILD, () => Effect.asSome(cmdSpan(job, startChild(state, job)))),
+            Match.when(STOP_CHILD, () => Effect.asSome(cmdSpan(job, stopChild(state, job)))),
+            Match.when(DEMONITOR, () => Effect.asSome(cmdSpan(job, unwatch(state, job)))),
+            Match.when(EXIT, () => Effect.asSome(cmdSpan(job, stop(state, job)))),
+            Match.orElse(() => Effect.asSome(handle(state, job))),
+          );
 
           // A chunked send waiting on a full inbox has no answer yet: its owed entry's alarm tries again.
           if (Option.isNone(answered)) {

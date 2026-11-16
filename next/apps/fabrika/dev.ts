@@ -204,7 +204,7 @@ const command = Command.make("dev", flags, (options) => {
                 }
 
                 if (answer._tag === "failed") {
-                  const why = Match.value(answer.reason).pipe(
+                  const problem = Match.value(answer.reason).pipe(
                     Match.when("bundle", () => "syntax error"),
                     Match.when("compiler", () => "compiler check failed"),
                     Match.when("name", () => "the program name changed"),
@@ -213,7 +213,7 @@ const command = Command.make("dev", flags, (options) => {
                     Match.exhaustive,
                   );
                   process.stdout.write(
-                    `${answer.program} did not load: ${why}${answer.path === undefined ? "" : ` at ${answer.path}${answer.line === undefined ? "" : `:${answer.line}`}`}\n`,
+                    `${answer.program} did not load: ${problem}${answer.path === undefined ? "" : ` at ${answer.path}${answer.line === undefined ? "" : `:${answer.line}`}`}\n`,
                   );
                   return;
                 }

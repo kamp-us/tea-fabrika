@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-max-ternary-depth-1-build-2",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T23:36:39-08:00",
+  "ended": "2026-11-15T23:53:17-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Anti-slop judgment slice AS-max-ternary-depth-1 (decisions 0563 and its amendment, 0567), second build step, in next/, after pull request 1366 merged to main. The branch fabrikalfa/antislop-max-ternary-depth-1 was brought up from fa5525ccf with a merge of origin/main. The rule anti-slop/max-ternary-depth, forced to error with maxDepth 2 in a scratch config outside the repo, found one hit over next/, .agents/, oxlint-plugins/ and .github/ci/: next/packages/libfabrika/src/runtime/Runner.ts:2166, depth 6, in dispatch, which picked the work for one saved Cmd by its type. It was fixed by hand with the Edit tool. The chain compared one value, the Cmd's type string, with the runner's own Cmd names, so it became one Effect Match (0567): Match.value(type) with Match.when for send_chunks, write, send, start_child, stop_child, demonitor and exit, and Match.orElse for a program's own Cmd. The answer is unchanged: send_chunks keeps its Option (none while the inbox is full), and every other branch is wrapped in Option.some by Effect.asSome, as the old Option.some(yield* ...) did. Hits met: 1, fixed by hand: 1, fixed by quick fix: 0, left: 0, waiting on 1366: 0. The recount after the fix finds no hit in those four folders. Also fixed: next/apps/fabrika/dev.ts:207 and :216, where the first build step of this slice named a local value why, which eslint/id-denylist refuses; it is now problem. No assertion was deleted or narrowed, no law loosened, no disable line, no lock line and no .oxlintrc.json change.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 17,
+  "note": "Laws run one file at a time at the working tree on 0e262be44 plus this change, under nice -n 15 vitest --maxWorkers=3, all green: libfabrika runtime/Runner.integration (117), RunnerOptions.integration (2), RunnerSupervision.integration (60), RunnerRecovery.laws (4), RecoveryGaps.integration (12, one skipped in the file), Entry (1), EffectFunctions (11); node/runtime/RunnerHands (10), RunnerInit.integration (3), RunnerHands.integration (10); node/Replies.integration (15), Watchers.integration (5), RunnerAdmission.integration (11), QuotaRunner (7); cloudflare alarm.laws (2), mail (8), runner-reply.laws (7), supervision.laws.integration (6). The 0178 guard allowed the integration laws here (CLAUDE_CODE_REMOTE on Linux); none was refused. None of these files sends a signal or calls launchctl. pnpm format and pnpm lint exit 1. Seventeen lines are the zero-lock 'add the folder to its block' lines for max-ternary-depth and one for prefer-effect-match in libfabrika tezgah, which the owner defers. Six more are blocking errors in test files this slice's tests step changed, which the build may not touch: fabrika/no-raw-try-catch at .agents/skills/step-commit/scripts/stepcommit.test.ts:21, oxlint-plugins/program-package-layout.test.ts:123 and .agents/skills/lead/scripts/redact.test.ts:23 (each file now imports effect for Match, which turns that rule on for its older try/catch), and fabrika/padding-line-between-statements at next/packages/libfabrika/src/client/HandsDoor.test-support.ts:83, next/packages/libfabrika/src/client/WindowMachine.laws.test.ts:2576 and next/programs/pipeline/src/Change.test.ts:54. pnpm format adds the three blank lines itself; they were put back, as the brief asks, since those are tests-step files. The first build row said lint did not flag them; that was wrong. The list ratchet exits 0. One pnpm typecheck exits 0.",
+  "step": "build"
+}
