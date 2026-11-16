@@ -9,9 +9,11 @@ import { expect, it } from "vitest";
 
 const ROOT = resolve(import.meta.dirname, "../../../..");
 const FIXTURE = ".agents/skills/tests/scripts/fixtures/plant/laws.fixture.ts";
+const SHARED = ".agents/skills/tests/scripts/fixtures/plant/shared.fixture.ts";
+const RUNS_SHARED = ".agents/skills/tests/scripts/fixtures/plant/runs-shared.fixture.ts";
 
-const plant = (title: string) => {
-  const ran = spawnSync(process.execPath, [".agents/skills/tests/scripts/plant.ts", FIXTURE, title], {
+const plant = (title: string, file = FIXTURE) => {
+  const ran = spawnSync(process.execPath, [".agents/skills/tests/scripts/plant.ts", file, title], {
     cwd: ROOT,
     encoding: "utf8",
     timeout: 60_000,
@@ -42,3 +44,22 @@ it("scenario: plant.ts prints one record for a law that matches once, red or gre
     expect(ran.stdout).not.toMatch(/"result"/);
   }
 }, 300_000);
+
+// scenario: where a law is declared is one fact of the module graph, not a value to generate. A
+// shared suite declares its law in one file (shared.fixture.ts) and a runner file runs it
+// (runs-shared.fixture.ts), as libfabrika's `*Test.ts` suites are run from their
+// `*.integration.test.ts` files. plant.ts is given the runner, and its record names the file that
+// declares the law, which is the file the CI plant check keys a law by (0580, the plan's slice 2
+// amendment).
+// Plant, after build: record the running file in place of the declaring one (`Plants.records` reads
+// `file.filepath` and leaves `meta.file` unread).
+it("scenario: plant.ts, run on a file that runs a shared suite, records the suite's law under the file that declares it, not the file it ran", () => {
+  const ran = plant("the shared law breaks", RUNS_SHARED);
+  expect(ran.status, ran.said).toBe(0);
+  expect(JSON.parse(ran.stdout.trim())).toEqual({
+    file: SHARED,
+    law: "the shared law breaks",
+    plant: "add one too many in the suite",
+    result: "red",
+  });
+}, 120_000);
