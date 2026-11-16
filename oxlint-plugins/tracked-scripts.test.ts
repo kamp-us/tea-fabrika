@@ -49,7 +49,9 @@ describe("a tracked shell or Python file", () => {
           const sibling = `${path}${other}`;
           fc.pre(!LISTED.includes(script));
           reached.add(extension);
-          const findings = check([...LISTED, script, sibling], reader({ [script]: text, [sibling]: text }));
+          // A sibling with no extension is read by its `#!` line, so it starts with a non-shell one.
+          const near = other === "" ? text.replace(/^#!\/bin\/sh/, "#!/usr/bin/env node") : text;
+          const findings = check([...LISTED, script, sibling], reader({ [script]: text, [sibling]: near }));
           expect(findings).toEqual([{ _tag: "new_script", path: script }]);
           expect(findings.map(line).join("\n")).toContain(script);
         },
@@ -57,6 +59,62 @@ describe("a tracked shell or Python file", () => {
       runs,
     );
     expect([...reached].toSorted()).toEqual([".py", ".sh"]);
+  });
+
+  /** A `#!` line naming a shell or Python, directly or through `env`, with how it names it. */
+  const scriptBang = fc
+    .tuple(
+      fc.constantFrom("sh", "bash", "zsh", "dash", "ksh", "python", "python3", "python3.12"),
+      fc.constantFrom("/bin/", "/usr/bin/", "/usr/local/bin/"),
+      fc.constantFrom("direct", "env", "env -S"),
+      fc.constantFrom("", " ", " -e", " -eu"),
+    )
+    .map(([name, folder, how, args]) => ({
+      name,
+      how,
+      bang: how === "direct" ? `#!${folder}${name}${args}` : `#!/usr/bin/${how} ${name}${args}`,
+    }));
+
+  /** A `#!` line naming an interpreter that is neither a shell nor Python. */
+  const otherBang = fc
+    .tuple(
+      fc.constantFrom("node", "tsx", "deno", "bun", "ruby", "perl", "shellcheck", "pythonish"),
+      fc.constantFrom("/usr/bin/", "/usr/local/bin/"),
+      fc.boolean(),
+    )
+    .map(([name, folder, env]) => (env ? `#!/usr/bin/env ${name}` : `#!${folder}${name}`));
+
+  // The lead's ruling on the review's finding
+  // (field/findings/2026-11-16-extensionless-shell-scripts-escape-hold.json): a file with no
+  // extension is a script under 0113 when its `#!` line names a shell or Python. Red first on the
+  // hold at 8e5c817, which read extensions only: the planted `#!/bin/sh` file gave no finding.
+  // Plant, run once on the new hold: `env` read as the interpreter, so `#!/usr/bin/env bash`
+  // passed. Red: the env form gave no finding.
+  it("with no extension and a `#!` line naming a shell or Python fails lint unless listed or marked, and one naming node or tsx passes", () => {
+    const reached = new Set<string>();
+    fc.assert(
+      fc.property(base, scriptBang, otherBang, plainHead, (path, script, other, rest) => {
+        const fine = `${path}-run`;
+        fc.pre(!LISTED.includes(path) && !LISTED.includes(fine));
+        reached.add(script.how);
+        reached.add(script.name.startsWith("python") ? "python" : "shell");
+        const body = rest.split("\n").slice(1).join("\n");
+        const findings = check(
+          [...LISTED, path, fine],
+          reader({ [path]: `${script.bang}\n${body}`, [fine]: `${other}\n${body}` }),
+        );
+        expect(findings).toEqual([{ _tag: "new_script", path }]);
+        expect(findings.map(line).join("\n")).toContain(path);
+        // A marked edge passes, as a `.sh` file does.
+        const marked = `${script.bang}\n# edge: runs before Node exists (0113)\n${body}`;
+        expect(check([...LISTED, path], reader({ [path]: marked }))).toEqual([]);
+      }),
+      runs,
+    );
+    expect([...reached].toSorted()).toEqual(["direct", "env", "env -S", "python", "shell"]);
+    // A listed file passes whatever its `#!` line says.
+    const heads = Object.fromEntries(LISTED.map((path) => [path, "#!/bin/sh\necho hi"]));
+    expect(check(LISTED, reader(heads))).toEqual([]);
   });
 });
 
@@ -78,8 +136,10 @@ describe("the NOT_YET_PORTED list", () => {
     expect(stale).toBeGreaterThan(0);
   });
 
-  // The 16 scripts the plan names (its "What is there today" table and scripts/typecheck.sh): the
-  // list may lose lines as ports land, never gain one (0113's binding constraint).
+  // The 16 scripts the plan names (its "What is there today" table and scripts/typecheck.sh), and
+  // the three tsh launchers of today's version, which is frozen and deletes them with it (0525), listed
+  // by the lead's ruling that the plan's S1 row records: the list may lose lines as ports land,
+  // never gain one (0113's binding constraint).
   const PLANNED = [
     ".agents/skills/lead/scripts/box.sh",
     ".agents/skills/lead/scripts/env.sh",
@@ -97,6 +157,9 @@ describe("the NOT_YET_PORTED list", () => {
     ".agents/skills/step-commit/scripts/exam.py",
     ".agents/skills/step-commit/scripts/stepcommit.sh",
     "scripts/typecheck.sh",
+    "bin/tsh",
+    "packages/fabrika/bin/tsh-small",
+    "packages/pipeline/bin/tsh",
   ];
 
   // Plant, run once: a 17th entry, `.agents/skills/lead/scripts/catchup.sh`, added to the list. Red:

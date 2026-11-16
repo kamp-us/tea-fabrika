@@ -1,5 +1,7 @@
 // `pnpm lint`'s hold on 0113: no tracked shell or Python file, except one 0113 ordered ported that
-// has not been yet, or a marked edge. It is a lint step, not an oxlint rule, since oxlint reads only
+// has not been yet, or a marked edge. A file is one by its `.sh` or `.py` name, or, with no
+// extension, by a `#!` line naming a shell or Python (the lead's ruling on S1's review, recorded in
+// the plan's S1 row). It is a lint step, not an oxlint rule, since oxlint reads only
 // JavaScript and TypeScript and never sees a `.sh` file; it reads git's tracked files, so a person's
 // untracked scratch script is left alone (docs/plan/quests/port-scripts-0113-PLAN.md, "The lint
 // hold").
@@ -9,7 +11,7 @@
 //
 // Exit 0 when clean, 1 on a finding, 2 when git listed nothing, which must never read as clean.
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -34,10 +36,43 @@ export const NOT_YET_PORTED: ReadonlyArray<string> = [
   ".agents/skills/step-commit/scripts/exam.py",
   ".agents/skills/step-commit/scripts/stepcommit.sh",
   "scripts/typecheck.sh",
+  // today's version, deleted with it (0525)
+  "bin/tsh",
+  "packages/fabrika/bin/tsh-small",
+  "packages/pipeline/bin/tsh",
 ];
 
 /** A file that runs as shell or Python, by its name. */
 const SCRIPT = /\.(?:sh|py)$/;
+
+/** A file name with no extension, whose `#!` line says what runs it. */
+const BARE = /(?:^|\/)\.?[^./]+$/;
+
+/** The `#!` line's interpreter and the words after it. */
+const BANG = /^#!\s*(\S+)(.*)/;
+
+/** An interpreter that makes a file shell or Python: `sh`, `bash`, `zsh`, `python3.12` and kin. */
+const RUNS_AS_SCRIPT = /^(?:(?:a|ba|da|k|mk|z|c|tc|y|fi)?sh|python[\d.]*|pypy[\d.]*)$/;
+
+/**
+ * Whether a file with no extension is shell or Python by its first line. Through `env`, the first
+ * word that is not a flag or a `NAME=value` is the interpreter, so `#!/usr/bin/env -S bash -e`
+ * reads as bash.
+ */
+const runsAsScript = (text: string): boolean => {
+  const bang = BANG.exec(text.split("\n", 1)[0] ?? "");
+
+  if (bang === null) {
+    return false;
+  }
+
+  const first = bang[1]?.split("/").at(-1) ?? "";
+  const name =
+    first === "env"
+      ? ((bang[2] ?? "").split(/\s+/).find((word) => word !== "" && !word.startsWith("-") && !word.includes("=")) ?? "")
+      : first;
+  return RUNS_AS_SCRIPT.test(name.split("/").at(-1) ?? "");
+};
 
 /** How many lines from the top an edge line may sit in, so it is seen beside the shebang. */
 const HEAD = 5;
@@ -68,8 +103,10 @@ const edges = (text: string): { readonly marked: boolean; readonly broken: boole
 };
 
 /**
- * Every finding for these tracked paths: `head` gives a tracked script's text, of which only the
- * first lines are read. Listed paths come first, in the list's order, then the tracked ones.
+ * Every finding for these tracked paths: `head` gives the text of a tracked `.sh` or `.py` file,
+ * or of one with no extension, of which only the first lines are read. A file with no extension
+ * is a script when its `#!` line names a shell or Python. Listed paths come first, in the list's
+ * order, then the tracked ones.
  */
 export const check = (tracked: ReadonlyArray<string>, head: (path: string) => string): ReadonlyArray<Finding> => {
   const present = new Set(tracked);
@@ -78,9 +115,12 @@ export const check = (tracked: ReadonlyArray<string>, head: (path: string) => st
     _tag: "stale_entry",
     path,
   }));
-  const scripts = tracked.filter((path) => SCRIPT.test(path) && !listed.has(path));
-  const found = scripts.flatMap((path): ReadonlyArray<Finding> => {
-    const { marked, broken } = edges(head(path));
+  const scripts = tracked
+    .filter((path) => !listed.has(path) && (SCRIPT.test(path) || BARE.test(path)))
+    .map((path) => ({ path, text: head(path) }))
+    .filter(({ path, text }) => SCRIPT.test(path) || runsAsScript(text));
+  const found = scripts.flatMap(({ path, text }): ReadonlyArray<Finding> => {
+    const { marked, broken } = edges(text);
 
     if (broken) {
       return [{ _tag: "edge_unmarked", path }];
@@ -115,7 +155,11 @@ if (import.meta.main) {
     process.exit(2);
   }
 
-  const findings = check(tracked, (path) => readFileSync(join(root, path), "utf8"));
+  // A symbolic link (`.claude/skills/<name>`, into `.agents/skills/`) has no text of its own: the
+  // file it points at is tracked and read in its own right.
+  const findings = check(tracked, (path) =>
+    lstatSync(join(root, path)).isFile() ? readFileSync(join(root, path), "utf8") : "",
+  );
 
   for (const finding of findings) {
     console.error(line(finding));

@@ -348,7 +348,7 @@ callers that are not exam paths.
 
 | Slice | Script | Services | Callers changed here |
 |---|---|---|---|
-| S1 | the lint hold, plus `apt.sh`'s edge line | `Git.tracked` (or one `git ls-files -z`) | `package.json` lint list |
+| S1 | the lint hold, plus `apt.sh`'s edge line. 2026-11-16, the lead's ruling on S1's review: the hold also reads the `#!` line of a file with no extension, and one naming a shell or Python is a script; the three tsh launchers (`bin/tsh`, `packages/pipeline/bin/tsh`, `packages/fabrika/bin/tsh-small`) are today's version, frozen and deleted with it (0525), so they go on `NOT_YET_PORTED` and the list law's 16 files become those 16 plus these three | `Git.tracked` (or one `git ls-files -z`) | `package.json` lint list |
 | S2 | `governance.sh` | `Git` (first), `FileSystem` | `flow/landing.ts`; adr, lead, review skills |
 | S3 | `fieldrow.py` | `FileSystem`, `Clock` | `box.sh`'s one call line; `agents.ts`'s comments; lead skill |
 | S4 | `keepruns.sh` | `box/Runs` real layer on `FileSystem` (`RunsFs`) | `box.ts`, `gc.ts`, `box/RunsProcess.ts` (deleted), `box/BoxTestGit.ts` |
