@@ -328,5 +328,6 @@ const main = Effect.gen(function* () {
 });
 
 if (import.meta.main) {
+  // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
   NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer)));
 }

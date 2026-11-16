@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e30-tests2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:59:01-08:00",
+  "ended": "2026-11-15T21:03:22-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step, round 2, for judgment slice E30 of the Effect-check sweep (strictEffectProvide), in next/ and its exam tooling, under decision 0565 as amended by pull request 1484. The 8 exam entry-point hits each got one line directly above them, `// @effect-diagnostics-next-line strictEffectProvide:off -- entry point: \"If this is an entry point, you can safely disable this diagnostic.\"`, which quotes the checker's own sentence (the diagnostic message shipped in the installed @effect/tsgo 0.63.0, and the rule page 0565 cites). The 8: next/apps/fabrika/src/exam/commits.ts, compiler.ts, edges.ts, promise-types.ts, ratchet.ts and twin.ts, and fixtures/next/p19-launchd/brain.ts, each an Effect.provide(NodeServices.layer) handed to NodeRuntime.runMain; and next/apps/fabrika/src/exam/plant.ts, whose provide is handed to Effect.runPromise at the test helper's run edge, not to runMain. The 757 hits in test files are outside the lock by the ruling and are not fixed. The 6 app entry points (build.ts, dev.ts twice, hands.ts, settings-generate.ts, src/entry/browser.tsx) and the 4 library hits (client/Headless.ts, node/build/bundle.ts, node/dev/watch.ts, node/repositories/OpenRepository.ts) are left for the build. No lock line was added.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 4.4,
+  "note": "Recount: effect-tsgo diagnostics --format json --project next/apps/fabrika/tsconfig.json with an --lspconfig setting only strictEffectProvide to error and includeSuggestionsInTsc true went from 287 strictEffectProvide hits to 279, with none left in the exam scripts or the fixture. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) and the exam ratchet passed; the narrow law next/apps/fabrika/src/exam/no-of.integration.test.ts, which runs plant.ts, passed. Only comment lines changed, so no law was written and no plant was run.",
+  "plants": [],
+  "step": "tests"
+}

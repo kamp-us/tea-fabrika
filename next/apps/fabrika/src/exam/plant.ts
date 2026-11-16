@@ -49,6 +49,7 @@ export function plant(files: Files, show: (fire: Fire) => unknown = (f) => f.lin
             .sort((a, b) => a.line - b.line)
             .map(show),
       ),
+      // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
       Effect.provide(NodeServices.layer),
     ),
   );

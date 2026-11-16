@@ -239,6 +239,7 @@ if (import.meta.main) {
   NodeRuntime.runMain(
     main.pipe(
       Effect.tapError((e) => Console.error(`ratchet: ${JSON.stringify(e)}`)),
+      // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
       Effect.provide(NodeServices.layer),
     ),
     {

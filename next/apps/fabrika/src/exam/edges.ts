@@ -178,6 +178,7 @@ if (import.meta.main) {
   NodeRuntime.runMain(
     main.pipe(
       Effect.tapError((e) => Console.error(`edges: could not read: ${JSON.stringify(e)}`)),
+      // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
       Effect.provide(NodeServices.layer),
     ),
     { teardown: (exit, onExit) => onExit(Exit.isSuccess(exit) ? 0 : 2) },
