@@ -270,7 +270,7 @@ it.effect.prop(
   opts,
 );
 
-const terminalAnswer = <A>(actual: A) => expect(actual).toEqual({ _tag: "refused", reason: "dead" });
+const terminalAnswer = (actual: object) => expect(actual).toEqual({ _tag: "refused", reason: "dead" });
 
 it.effect.prop(
   "p25: the real Gateway answers dead on terminal delivery and its saved settled retry",

@@ -140,7 +140,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
       Effect.flatMap((frame) => (frame === undefined ? Effect.die("the signed client closed") : Effect.succeed(frame))),
     );
   let serial = 0;
-  const call = Effect.fnUntraced(function* (method: string, params: unknown) {
+  const call = Effect.fnUntraced(function* (method: string, params: Schema.Json) {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
     return yield* next((frame) => frame.id === id);
@@ -161,7 +161,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
   });
   expect(hello.error, "the signed client must be admitted before any program input").toBeUndefined();
   // `letter` is the door's own key for the message id (0547 keeps wire names).
-  return Effect.fnUntraced(function* (process: string, id: string, input: unknown) {
+  return Effect.fnUntraced(function* (process: string, id: string, input: Schema.Json) {
     const reply = yield* call("process.send", { pid: process, letter: id, m: input, sentAt: FROM.sentAt, seen: 0 });
     return reply;
   });

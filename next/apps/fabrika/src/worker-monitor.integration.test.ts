@@ -390,7 +390,7 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
     await send(reader, "watch-1", { type: "watch", name: "writer:1" });
     await send(reader, "watch-2", { type: "watch", name: "writer:1" });
     const answered = await until("the reader folds both monitor answers", log, (rows) => rows.length > 2);
-    const watched = <R>(ref: R) => ({ type: "monitor_ok", ref, process: writer, name: "writer:1" });
+    const watched = (ref: string) => ({ type: "monitor_ok", ref, process: writer, name: "writer:1" });
     expect(answered, "M13: each watch is answered monitor_ok, bound to the writer's life").toEqual([
       ...refused,
       watched(expect.stringMatching(new RegExp(`^${reader}/`))),

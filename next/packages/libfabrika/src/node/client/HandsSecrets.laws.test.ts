@@ -78,7 +78,7 @@ const forms = (d: string): ReadonlyArray<string> => {
 };
 
 /** Any value as text, Maps, bigints and errors included, so a scan reads every field. */
-const text = <A>(value: A): string =>
+const text = (value: unknown): string =>
   JSON.stringify(value, (_k, v: unknown) =>
     typeof v === "bigint"
       ? String(v)

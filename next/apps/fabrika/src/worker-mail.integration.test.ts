@@ -165,7 +165,7 @@ const mailDiagnostics = () => {
   const frames: Array<{ at: number; elapsed: number; raw: string }> = [];
   const events: Array<{ at: number; elapsed: number; event: string; value: unknown }> = [];
   const stamp = () => ({ at: Date.now(), elapsed: performance.now() });
-  const note = <A>(event: string, value: A | null = null) => events.push({ ...stamp(), event, value });
+  const note = (event: string, value: object | null = null) => events.push({ ...stamp(), event, value });
   note("start");
   const read = async (label: string, call: () => Promise<unknown>) => {
     const start = stamp();

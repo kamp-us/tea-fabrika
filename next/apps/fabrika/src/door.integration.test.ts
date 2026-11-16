@@ -3836,7 +3836,7 @@ describe("P10 inputs, retries and signer", () => {
                 const expected =
                   reason === "dead" ? { _tag: "refused", reason: "dead" } : { _tag: "ok", result: answered };
                 // These are JSON replies: -0 and 0 have the same wire representation.
-                const wire = <A>(value: A) => JSON.parse(JSON.stringify(value));
+                const wire = (value: object) => JSON.parse(JSON.stringify(value));
                 expect(wire(yield* d.route(client, "process.send", params))).toEqual(wire(expected));
                 const delivered = w.deliveries.length;
                 // A settled retry must use the saved result rather than call the program again.

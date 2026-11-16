@@ -260,7 +260,7 @@ const world = (kib: (pid: number) => number | null) =>
   });
 
 /** The facts of one start, in the order the brain wrote them. */
-const sequence = (facts: ReadonlyArray<Fact>, start: Fact["body"]["start"]) =>
+const sequence = (facts: ReadonlyArray<Fact>, start: unknown) =>
   facts.filter((fact) => fact.body.start === start && fact._tag !== "started").map((fact) => fact._tag);
 
 describe("the memory restart on real workerd, next/", () => {

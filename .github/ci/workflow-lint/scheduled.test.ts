@@ -65,7 +65,7 @@ const step = (w: Workflow, job: string, name: string): Step => {
 // concurrency group's name, how many legs run at once within the cap, and the spacing in an `if`,
 // a job's or a step's. Each is varied only where the real workflow has it, so a part it lacks stays
 // missing.
-const spaced = <V>(value: V, gap: string) =>
+const spaced = (value: unknown, gap: string) =>
   typeof value === "string" ? value.replace(/ *(==|!=|&&|\|\|) */g, `${gap}$1${gap}`) : value;
 
 const scheduled = fc

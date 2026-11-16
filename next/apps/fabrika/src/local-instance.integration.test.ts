@@ -7,11 +7,13 @@ import { expect, it } from "@effect/vitest";
 import type { BrainEvent } from "@kampus/libfabrika/brain-event";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
+import type { settings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
 import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { FetchHttpClient } from "effect/http";
 import { vi } from "vitest";
+import type { Built } from "./build.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { rssStandIn } from "./rss.fixture.ts";
 
@@ -21,7 +23,11 @@ import { rssStandIn } from "./rss.fixture.ts";
 // The deployment reports a made-up pid, 27001, so nothing here may sample or signal it for real:
 // the memory sample answers 0 KiB for every pid, and `process.kill` is a spy each law checks.
 vi.mock("../alchemy.run.ts", () => ({
-  stack: (_built: unknown, _config: unknown, local: Context.Context<never>) => local,
+  stack: (
+    _built: Pick<Built, "brain">,
+    _config: Effect.Success<ReturnType<typeof settings>>,
+    local: Context.Context<never>,
+  ) => local,
 }));
 
 vi.mock("alchemy/Deploy", () => ({

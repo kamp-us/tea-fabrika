@@ -85,7 +85,7 @@ const throwingRecord = (cause: Error) =>
 const get = (v: Tree, path: Path): unknown =>
   path.reduce<unknown>((parent, key) => (record(parent) && Object.hasOwn(parent, key) ? parent[key] : undefined), v);
 
-const put = <A>(tree: Tree, path: Path, value: A): Tree => {
+const put = (tree: Tree, path: Path, value: unknown): Tree => {
   const [key, ...rest] = path;
 
   if (key === undefined) {

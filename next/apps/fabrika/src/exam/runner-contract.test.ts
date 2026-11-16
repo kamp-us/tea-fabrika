@@ -21,7 +21,7 @@ import {
   writer,
 } from "./runner-contract.test-support.ts";
 
-const refusal = <A>(actual: A, want: Refusal) => expect(actual).toEqual({ _tag: "refused", ...want });
+const refusal = (actual: unknown, want: Refusal) => expect(actual).toEqual({ _tag: "refused", ...want });
 
 const replayRefuse = (spy: { calls: number }): never => {
   spy.calls++;
@@ -146,7 +146,7 @@ const badInput = (c: BadMsgCase, kind: Bad): unknown => {
   return missing;
 };
 
-const fresh = <I>(n: number, input: I, by: Incoming["envelope"]["by"] = writer): Incoming => ({
+const fresh = (n: number, input: unknown, by: Incoming["envelope"]["by"] = writer): Incoming => ({
   ...incoming(n, ""),
   envelope: { ...incoming(n, "").envelope, by, input },
 });

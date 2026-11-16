@@ -179,7 +179,7 @@ describe("P12 durable brain outbox", () => {
             const files = new Map<string, string>();
             const calls: Array<unknown> = [];
             const joins: Array<ReadonlyArray<string>> = [];
-            const note = <A>(call: A) =>
+            const note = (call: readonly [string, string]) =>
               Effect.sync(() => {
                 calls.push(call);
               });

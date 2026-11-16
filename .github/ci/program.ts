@@ -2,7 +2,7 @@
 // comment-only change under next/ runs only the reader tests (the plan for CI paths, slice 2).
 // changes.mjs imports this file only after the parser's install, and a failed import runs every
 // next/ test, so nothing here may be needed by its first pass.
-import { parseSync } from "oxc-parser";
+import { parseSync, type Program } from "oxc-parser";
 
 /** How CI runs git: the arguments, then the exit status and what it printed. */
 export type Runner = (args: string[]) => { status: number | null; stdout: string };
@@ -40,7 +40,7 @@ const tool = (comment: Comment) =>
   (comment.type === "Block" && declares.test(comment.value));
 
 /** The tree as text with every position dropped. `raw` stays, so `16` and `0x10` differ. */
-const shape = <P>(program: P) =>
+const shape = (program: Program) =>
   JSON.stringify(program, (key, value: unknown) =>
     key === "start" || key === "end" || key === "range" || key === "loc"
       ? undefined

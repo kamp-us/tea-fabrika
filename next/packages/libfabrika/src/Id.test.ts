@@ -124,7 +124,7 @@ const accepts = (input: string, type?: string): boolean => {
 const canonical = fc.tuple(prefix, uuid).map(([type, bytes]) => wire(type, bytes));
 const unknown = fc.oneof(fc.anything(), fc.string(), canonical);
 
-const expectDecoded = <A, E, I>(exit: Exit.Exit<A, E>, ok: boolean, input: I, error: (value: E) => boolean) => {
+const expectDecoded = <A, E>(exit: Exit.Exit<A, E>, ok: boolean, input: unknown, error: (value: E) => boolean) => {
   expect(Exit.isSuccess(exit)).toBe(ok);
 
   if (Exit.isSuccess(exit)) {

@@ -477,7 +477,7 @@ describe("P16 stack and sealed loader", () => {
           });
           expect(calls).toHaveLength(1);
           const config = calls[0]!.config;
-          const sealed = <A>(value: A) => assert.deepEqual(value, config);
+          const sealed = (value: typeof config) => assert.deepEqual(value, config);
 
           for (const plant of [
             { ...Object(config), env: { PLANTED: source } },
@@ -713,7 +713,8 @@ describe("P16 copied-file real instance, serial", () => {
                               model = (await turn(SealedTurn, program, "step", [model, { type: "read" }])).model;
                             }
 
-                            const closed = <M>(model: M) => assert.deepEqual(model, { keys: [], outbound: "denied" });
+                            const closed = (seen: typeof model) =>
+                              assert.deepEqual(seen, { keys: [], outbound: "denied" });
 
                             if (mode === "sealed") {
                               closed(model);

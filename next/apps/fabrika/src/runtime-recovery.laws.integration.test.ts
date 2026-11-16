@@ -1063,7 +1063,7 @@ const world = (
       const runtime = connectionRuntime(doorCtx, env);
       await project.register(client, "gateway-test", session);
       let id = 0;
-      const call = async (method: string, params: unknown) => {
+      const call = async (method: string, params: Schema.Json) => {
         id++;
         await runtime.runPromise(
           ConnectionService.use((door) => door.message(socket, JSON.stringify({ jsonrpc: "2.0", id, method, params }))),
@@ -1266,7 +1266,7 @@ describe("P12 Project configure recovery", () => {
       const w = world(fault);
       const first = w.project.info().then(
         (value) => ({ value }),
-        (error: unknown) => ({ error }),
+        (cause: unknown) => ({ error: cause }),
       );
       await w.entered;
       const result = await first;
@@ -1364,7 +1364,7 @@ describe("P12 Process RPC refusal answers", () => {
         })
         .then(
           (answer) => ({ answer }),
-          (error: unknown) => ({ error }),
+          (cause: unknown) => ({ error: cause }),
         );
       // A policy refusal completes the input. An infrastructure error must not replace it.
       expect.soft(result).toMatchObject({ answer: { _tag: "ok", result: { _tag: "accepted" } } });
@@ -1447,10 +1447,10 @@ const runFlow = async (flow: RecoveryFlow) => {
   await w.project.info();
   const original = await w.startPoison(NAME);
   const client = await w.admit();
-  const route = (method: string, params: unknown) =>
+  const route = (method: string, params: Schema.Json) =>
     w.project.route(client, method, params).then(
       (answer) => ({ answer }),
-      (error: unknown) => ({ error: String(error) }),
+      (cause: unknown) => ({ error: String(cause) }),
     );
   const send = (pid: string, letter: string, type: "throw" | "inc") =>
     route("process.send", { pid, letter, m: { type }, sentAt: SENT, seen: 0 });
@@ -1653,7 +1653,7 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
         expect(rows.at(-1)).toMatchObject({ process: next });
         // The restart starts the new init and re-folds the accepted letters (P34, as
         // runner-supervision.test.ts requires): the healthy letters, never the throws.
-        expect(await route("view.open", { pid: next })).toMatchObject({
+        expect(await route("view.open", { pid: next ?? null })).toMatchObject({
           answer: { _tag: "ok", result: { view: { count: flow.healthy } } },
         });
         expect(w.newCalls()).toBeGreaterThan(0);
@@ -1665,7 +1665,7 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
           .object.restart({ id: NAME, build: poisonCode.hash })
           .then(
             () => ({ answer: "ok" }),
-            (error: unknown) => ({ error }),
+            (cause: unknown) => ({ error: cause }),
           );
         expect(reused).toMatchObject({ error: { _tag: "ProcessError", reason: "id_reused" } });
       }),
@@ -1759,7 +1759,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
               const before = await exited(target.name);
               const reply = await w.project
                 .processExit(target.process, cell.bad as ExitReason, FROM)
-                .catch((error: unknown) => ({ _tag: Object(error)._tag }));
+                .catch((cause: unknown) => ({ _tag: Object(cause)._tag }));
               expect(reply, `invalid input is a typed refusal: ${JSON.stringify(cell.bad)}`).toMatchObject({
                 _tag: "ProcessError",
               });

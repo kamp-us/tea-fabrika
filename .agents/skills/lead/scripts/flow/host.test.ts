@@ -92,7 +92,11 @@ describe("the quest brief's host commands", () => {
     ran(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const node = <P>(pkg: P) =>
+        const node = (pkg: {
+          readonly name?: string;
+          readonly volta?: { readonly node: string };
+          readonly engines?: { readonly node: string };
+        }) =>
           Effect.gen(function* () {
             const dir = yield* temp;
             yield* fs.writeFileString(`${dir}/package.json`, JSON.stringify(pkg));

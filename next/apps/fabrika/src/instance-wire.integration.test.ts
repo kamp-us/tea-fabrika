@@ -895,7 +895,7 @@ describe("P12 real dev.ts wire", () => {
       ...keys.flatMap((key) => [key.raw, key.fingerprint]),
       ...connections.map((row) => String(row.client)),
     ];
-    const attributed = <A>(row: A) => identities.some((id) => JSON.stringify(row).includes(id));
+    const attributed = (row: object) => identities.some((id) => JSON.stringify(row).includes(id));
     expect(after.result.spans.filter(attributed)).toEqual([]);
     // A planted unauthorized record with either identity must be found by this same predicate.
     expect(attributed({ attributes: { "fab.client": connections[0]!.client } })).toBe(true);
