@@ -11,7 +11,7 @@ issue open: changes still land, and fixes go first. The script does what code ca
 the judgment ([0408](../../../.decisions/0408-skills-keep-only-judgment.md)).
 
 ```text
-none --(3-hour run red, or a speed number over goal: its issue opens)--> sev1
+none --(full run red, or a speed number over goal: its issue opens)--> sev1
 sev1 --(that issue closes)--> none
 none or sev1 --(the owner says sev0: open 0)--> sev0
 sev0 --(every fix merged, or the owner calls it off: close)--> sev1 if an issue is open, else none
@@ -19,12 +19,12 @@ sev0 --(every fix merged, or the owner calls it off: close)--> sev1 if an issue 
 
 | | sev0 | sev1 |
 |---|---|---|
-| What is broken | Nothing can land, or every run makes it worse | Changes land, but the 3-hour run is red or a speed number is over its goal ([0541](../../../.decisions/0541-ci-speed-has-a-goal-and-a-daily-check.md)) |
+| What is broken | Nothing can land, or every run makes it worse | Changes land, but the full run is red or a speed number is over its goal ([0541](../../../.decisions/0541-ci-speed-has-a-goal-and-a-daily-check.md)) |
 | Merge line | Stopped; the owner empties the queue | Runs as normal ([0544](../../../.decisions/0544-every-reviewed-pull-request-is-armed.md)) |
 | CI runs | All canceled, except the one fix's | All run |
 | How a fix lands | One at a time, by admin merge | Through the merge line, ahead of other changes |
 | Other work | Stops; every agent saves and waits | Keeps going |
-| Who calls it | Only the owner | Nobody: the 3-hour run or the daily speed check opens its issue |
+| Who calls it | Only the owner | Nobody: the full run or the daily speed check opens its issue |
 | Ends when | Every fix has merged, or the owner calls it off; it then becomes a sev1 or ends | That issue closes, which the same check does when it is green or inside the goal again |
 
 The sev0 rule is [0532](../../../.decisions/0532-a-sev0-freezes-ci.md); the two levels and the
@@ -98,7 +98,7 @@ a sev1, so a check that cries wolf is itself a fix that goes first.
   head gets its fresh run with its next push.
 - **After a big rename on main,** GitHub may mark pull requests as conflicting that a local merge
   resolves. Merge main locally and push.
-- **Start the 3-hour full run by hand** after close, as it prints: the freeze canceled it, and
+- **Start the full run by hand** after close, as it prints: the freeze canceled it, and
   nothing starts it again until its next slot.
 - **Tell the owner:** one line at open (the fixes, in order), one at each fix that goes red, one at
   close (how many pull requests to walk, and the level now).
