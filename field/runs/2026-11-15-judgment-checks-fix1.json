@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-judgment-checks-fix1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1454",
+  "started": "2026-11-15T21:00:00-08:00",
+  "ended": "2026-11-15T21:20:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Fix round on the judgment checks pull request, in today's lead tooling. CI full run 43806742227, leg tests (tooling-1), ran on the branch head 436173dfd itself, with no merge of main, and failed law 'T652 scenario: behind main with no conflict' in .agents/skills/lead/scripts/land.test.ts:259: seven calls where six were expected. The seventh is 'gh api --paginate repos/owner/repo/pulls/77/files', the new PullRequests.patches read that this pull request adds to Queue.add for the names check of decision 0587, after the leak grep and before the ci-required read. So the red was the pull request's own, not main moving under it: main's ten new commits since the branch base change nothing under .agents/skills/lead/scripts. The code is right and the law's exact call list was stale, so the list gains the names read in its place. That is not a loosening: the list still pins every call, in order, and now also pins that the names read happens and comes before the ci-required read.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 20,
+  "note": "land.test.ts spawns git and the land script, so it was not run on the laptop; CI's next full run proves it. pnpm lint and one pnpm typecheck passed on the branch with origin/main merged in.",
+  "step": "build"
+}

@@ -1060,6 +1060,7 @@ describe("host-only laws stay off the laptop", () => {
       env: {
         ...process.env,
         CI: undefined,
+        CLAUDE_CODE_REMOTE: undefined,
         FABRIKA_HOST_RUN_OWNER_APPROVED: undefined,
         TYPESAFE_API_KEY: undefined,
         ...env,
@@ -1069,6 +1070,7 @@ describe("host-only laws stay off the laptop", () => {
     expect(ran.status, ran.stdout).not.toBe(0);
     expect(ran.stderr).toContain("Local host-only test run refused (decision 0178)");
     expect(ran.stderr).toContain(`  ${path}\n`);
+    expect(ran.stderr).toContain("Prove the law in a cloud box");
     expect(ran.stderr).toContain("gh workflow run scheduled.yaml --ref <branch>");
     expect(ran.stderr).toContain("FABRIKA_HOST_RUN_OWNER_APPROVED=1");
     expect(ran.stdout).not.toContain(path);
