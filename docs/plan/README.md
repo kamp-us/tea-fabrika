@@ -84,7 +84,7 @@ on the laptop, which the owner accepts. The merge line is decided
 [0162](../../.decisions/0162-no-friction-before-a-merge.md),
 [0164](../../.decisions/0164-the-bot-stays-without-signing.md)): what is left is the queue's
 trigger in CI ([PR 1120](https://github.com/kamp-us/tea-fabrika/pull/1120)), the queue turned on,
-and the bot's plain tooling. Nothing in `next/` names `fabsh`, `summon` or a room yet. Open pull
+and the bot's plain tooling. *2026-11-15:* main's full run now starts on a push when the last one is over an hour old, plus an hourly catch-up, and a gate that cannot answer fails loudly ([0581](../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md), [PR 1404](https://github.com/kamp-us/tea-fabrika/pull/1404)). A branch's proof run now runs only the tests its change reaches, the full set when it touches a rerun trigger, and `land.ts arm` takes either one at the head ([0590](../../.decisions/0590-a-branch-proof-run-runs-only-what-its-change-reaches.md)). Nothing in `next/` names `fabsh`, `summon` or a room yet. Open pull
 requests on Tier 1 rows: [1012](https://github.com/usirin/tea-fabrika/pull/1012) (P15),
 [1032](https://github.com/usirin/tea-fabrika/pull/1032) (P36), and drafts
 [1079](https://github.com/usirin/tea-fabrika/pull/1079) (P19),

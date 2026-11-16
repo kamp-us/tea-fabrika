@@ -103,7 +103,22 @@ const defaults = {
   origins: Object.fromEntries(Declarations.all.declarations.map((d) => [d.path, Origin.cases.default.make({})])),
 };
 
-export const input = Effect.fnUntraced(function* (r: Recipe): Effect.fn.Return<Input, never, Digest.Digest> {
+/** Declared values a fixture sets in place of their defaults, by each setting's key. */
+export type Values = Partial<Config.Success<typeof Declarations.all>>;
+
+/** A flag origin for each value a fixture sets, so the snapshot never says a chosen value is a default. */
+const chosen = (values: Values) =>
+  Object.fromEntries(
+    Object.keys(values).map((key) => {
+      const path = Declarations.all.settings[key as keyof Values].path;
+      return [path, Origin.cases.flag.make({ name: `--${path}` })];
+    }),
+  );
+
+export const input = Effect.fnUntraced(function* (
+  r: Recipe,
+  values: Values = {},
+): Effect.fn.Return<Input, never, Digest.Digest> {
   const origin =
     r.origin === "flag"
       ? Origin.cases.flag.make({ name: "--instance.port" })
@@ -123,6 +138,7 @@ export const input = Effect.fnUntraced(function* (r: Recipe): Effect.fn.Return<I
       gatewayWindow: rateLimit.window,
       // P39 slice 3: no hands key is set, the person's default.
       handsTarget: null,
+      ...values,
     },
     origins: {
       // Every declared setting this recipe does not name comes from its default.
@@ -130,6 +146,7 @@ export const input = Effect.fnUntraced(function* (r: Recipe): Effect.fn.Return<I
       "instance.port": origin,
       "gateway.limit": Origin.cases.flag.make({ name: "--gateway.limit" }),
       "gateway.window": Origin.cases.flag.make({ name: "--gateway.window" }),
+      ...chosen(values),
     },
   });
   return {
@@ -153,6 +170,8 @@ export interface Fixture {
   readonly limits?: { readonly recordBytes: number };
   readonly mail?: { readonly grants: Readonly<Record<string, ReadonlyArray<string>>> };
   readonly starts?: ReadonlyArray<{ readonly source: string; readonly to: string }>;
+  /** Declared values this start sets in place of their defaults, such as a law's tight quota. */
+  readonly values?: Values;
 }
 
 // The calling platform supplies its synchronous hash driver. Snapshot.make still owns the encoding.
@@ -160,13 +179,16 @@ export const fixture = (config: Fixture, hash: (algorithm: Digest.Algorithm, dat
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: synchronous Vitest fixture setup needs a plain snapshot value
   Effect.runSync(
     Effect.gen(function* () {
-      const base = yield* input({
-        port: config.port,
-        start: config.start ?? `${config.name}-fixture`,
-        build: config.build ?? "fixture-build",
-        revision: null,
-        origin: "flag",
-      });
+      const base = yield* input(
+        {
+          port: config.port,
+          start: config.start ?? `${config.name}-fixture`,
+          build: config.build ?? "fixture-build",
+          revision: null,
+          origin: "flag",
+        },
+        config.values,
+      );
       return {
         ...base,
         name: config.name,
