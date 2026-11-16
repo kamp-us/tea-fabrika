@@ -9,15 +9,18 @@
 // These laws run the real tool on planted trees, with the real rule file where the rule data is the
 // subject, so each wall is seen to fire before it is trusted on `next/` (ticket 987). Written by the
 // exam (Tier 1, P1).
+// They were the exam's (next/apps/fabrika/src/exam/layers.integration.test.ts) until 0591 moved them here,
+// beside the other lint rules' tests. Plants: drop `roots` from the patched tool's reading, and the
+// unclaimed-file laws fail; move `next-node` to layer 11 in `layer-rules.json`, and the pinned layer
+// table fails.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
-import type { Row } from "./rows.ts";
 
-const NEXT = resolve(import.meta.dirname, "../../../..");
+const NEXT = resolve(import.meta.dirname, "../next");
 const bin = resolve(NEXT, "..", "node_modules", ".bin", "code-graph");
 
 // A planter owns every tree its test plants. The test's scope removes them when the test ends (0061).
@@ -61,6 +64,9 @@ const RuleFile = Schema.Struct({
 });
 
 type Rules = typeof RuleFile.Type;
+
+/** One row of the rule file, as the probes below read it. */
+type Row = Rules["layers"][number];
 
 /** Each row that has a layer, by its name. */
 const layersByName = (rows: Rules["layers"]): ReadonlyMap<string, number> =>
