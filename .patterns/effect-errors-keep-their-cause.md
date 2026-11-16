@@ -139,9 +139,12 @@ cause is a dropped fact.
 
 ## Holds it
 
-- Lint, on: `fabrika/no-data-taggederror`, `fabrika/no-throw-in-effect-gen` and
-  `fabrika/no-cause-squash` (`.oxlintrc.json:30`, `:36`, `:642`).
-- Effect's checker, on in `next/`: `errorPayloadShadowsName` (`tsconfig.base.json:81`). Not yet on:
+- Lint, on: `no-restricted-properties` on `Data.TaggedError`, `fabrika/no-throw-in-effect-gen` and
+  `fabrika/no-cause-squash` (`.oxlintrc.json:54`, `:43`, `:665`). The first and the checker's
+  `preferSchemaTaggedError` took over from a rule of our own
+  ([0573](../.decisions/0573-trusted-lint-rule-replaces-ours.md)).
+- Effect's checker, on in `next/`: `preferSchemaTaggedError` (`tsconfig.base.json:55`) and
+  `errorPayloadShadowsName` (`tsconfig.base.json:81`). Not yet on:
   `anyUnknownInErrorContext` and `instanceOfSchema`; [0565](../.decisions/0565-effects-own-checks-block.md)
   turns every check on, one at a time.
 - No check holds the cause's form. Whether a lint rule or a checker check holds "no `optionalKey`
