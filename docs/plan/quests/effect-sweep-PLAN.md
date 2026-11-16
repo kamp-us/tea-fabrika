@@ -28,9 +28,10 @@ amended by [0574](../../../.decisions/0574-no-stability-tag-and-unstable-api-is-
 - **39,768 hits from 57 checks on main today,** with every one of the 135 checks at error. 78
   checks have 0 hits. Under the import form this plan takes for tooling (barrel, call 2), it is
   39,456. Main's last total was 39,888; "How I counted" says why the numbers differ.
-- **101 slices.** E0 turns on the 78 checks at zero, for the whole scope, in one config pull
-  request. Then 25 mechanical and 34 judgment slices start now, 40 slices wait for the quotas
-  branch, and the last recounts `apiStabilityLeak` as 0574 says.
+- **102 slices.** E0 turns on the 78 checks at zero, for the whole scope, in one config pull
+  request. Then 25 mechanical and 34 judgment slices start now, 41 slices wait for the quotas
+  branch (E99b, added on 2026-11-16, builds on E99), and the last recounts `apiStabilityLeak` as
+  0574 says.
 - **The count drops fast.** E1 alone takes out 12,815 hits: it deletes our `@stability` tags
   outside the quotas branch's files and names the unstable Effect parts we use, as 0574 rules. The
   25 mechanical slices that start now take out 14,995 hits, 38% of the total.
@@ -437,6 +438,7 @@ per folder. Steps: "tests, review" means no product file has a hit.
 | E97 | after 1366 | `globalTimers` | app:src 18 | 18 | judgment | Opus | tests, review |
 | E98 | after 1366 | `globalErrorInEffectCatch`, `globalErrorInEffectFailure` | lib:runtime 9 | 9 | judgment | Opus | tests, review |
 | E99 | after 1366 | `lazyEffect` | lib:cloudflare 6, lib:gateway 1, lib:runtime 1 | 8 | judgment | Opus | tests, build, review |
+| E99b | after E99 | `lazyEffect` | the 8 hits E99 left (lib:cloudflare 6, lib:gateway 1, lib:runtime 1) and every caller, in lib:cloudflare, lib:gateway, lib:runtime, lib:node, app:src, app:e2e and app:exam | 8 | judgment | Opus | tests, build, review |
 | E100 | after E60 | `apiStabilityLeak` | recount once every tag is gone (0574) | 242 | judgment | Opus | tests, build, review |
 
 - **Mechanical** means the checker's message names one replacement and nothing else changes: the
@@ -462,6 +464,180 @@ per folder. Steps: "tests, review" means no product file has a hit.
 - **E100** recounts `apiStabilityLeak` once no tag is left. 0574: at zero it goes on; if hits
   remain from Effect's unstable types, it stays off and those are not swept. 242 is today's count,
   tags included.
+
+## E99b: the lazyEffect follow-up, across folders
+
+Added on 2026-11-16, after E99's review. The id is E99b, not the next plain number (E101), so the
+slice sorts beside the slice it finishes. Branch `fabrikalfa/effect-lazyeffect-callers`, cut from
+`fabrikalfa/effect-e99` at `e916456f1`. It keeps the judgment brief's rules: it fixes code only and
+adds no lock line, no `overrides` entry and no `LOCKED` row. Steps: tests, build, one review, all
+Opus.
+
+```ts
+// The whole slice, a sketch: a member that is a call with no arguments, answering an Effect,
+// becomes the Effect itself. Effect is already lazy, so each run still does the work afresh.
+// before, next/packages/libfabrika/src/gateway/Gateway.ts:2008
+readonly connect: () => Effect.Effect<ConnectionId>;
+connect,                      // the Effect.fnUntraced at Gateway.ts:495
+// after
+readonly connect: Effect.Effect<ConnectionId>;
+connect: connect(),           // fnUntraced suspends its body, so each run mints a new id
+// A Durable Object RPC method stays a call; only the type it is read from changes:
+clientConnect: RemoteCall<() => DoorService["connect"]>; // as `mailed` and `info` are typed today
+```
+
+**Why it crosses folders.** Each fix changes the type of a service member, and TypeScript makes
+every caller change in the same commit, or the typecheck is red. The callers of these 8 members sit
+in lib:cloudflare, lib:gateway, lib:runtime, lib:node and the app (`src`, `e2e`, `exam`). A
+signature cannot be split by folder, so this is the smallest slice the code allows (0565). E99 left
+these hits on purpose, as its brief's step 2 says, because no other `lazyEffect` slice owns those
+folders: `next/packages/libfabrika/src/cloudflare` and its neighbors cannot lock `lazyEffect` until
+this lands. The three `connect` members also move as one: `ProjectService.connect` forwards
+`Gateway.connect`, and `ProjectBinding.clientConnect` is typed from `GatewayCalls.connect`.
+
+**Counted** at `e916456f1` (E99's head), in a second worktree, with only `lazyEffect` at error
+through an `--lspconfig`, as "How I counted" says: `next/packages/libfabrika/tsconfig.json` (which
+holds lib:node; it has no tsconfig of its own) printed exactly these 8, and
+`next/apps/fabrika/tsconfig.json` printed 0. Each member was then planted in its value form, types
+only, and `tsc` run on libfabrika and the app, to find every caller; the plants were undone. A
+search of `next/programs`, tuval, vitest, `fixtures/next` and the tooling folders found no caller.
+
+**The fix, the same for all 8,** keeps what the code answers. A member that is a function with no
+arguments returning an Effect becomes that Effect. Sources, read in the installed effect 4.1.3:
+`FileSystem.File` declares `readonly stat: Effect.Effect<...>` and `readonly sync:
+Effect.Effect<...>` (`FileSystem.ts:954`, `:959`); `ProgramRunner.mailed` is already a value in the
+same interface (`Runner.ts:482`); and `Effect.fnUntraced` wraps its body in `suspend`
+(`internal/effect.ts:1325`), so a value built once from `connect()` or `init(...)` reruns the body on
+each run. Effect's `AGENTS.md` ("Writing Effect services") says nothing on zero-argument members.
+The checker's own page (`docs/rules/lazy-effect.md` in Effect-TS/tsgo) was not fetched. Two limits
+hold for every hit:
+
+- **A Durable Object RPC method stays a call.** Cloudflare RPC calls methods on a stub, so
+  `Project.clientConnect()`, `Process.alarm()` and `Process.recover()` stay methods; only the
+  service member each one runs changes. The binding types read the value as `mailed` and `info`
+  already do (`bindings.ts:235`, `:296`).
+- **A stand-in that swaps its behavior at run time is wrapped in `Effect.suspend`,** never captured
+  once: `nextProcess: () => controls.next()` in `next/apps/fabrika/src/door.integration.test.ts:434`
+  becomes `nextProcess: Effect.suspend(() => controls.next())`, because laws p67 and the rate-limit
+  law swap `controls.next` at `:3762` and `:1033`.
+
+| Hit, at `e916456f1` | Fix | Product callers | Exam-path callers |
+|---|---|---|---|
+| `cloudflare/bindings.ts:155` `GatewayCalls.connect`, with `cloudflare/runtime.ts:2016` `ProjectService.connect` and `gateway/Gateway.ts:1997` `Gateway.connect` | All three become `Effect.Effect<ConnectionId>` (ProjectService's keeps `ProjectFailure`). `Gateway.ts:1914` gives `connect()`; `runtime.ts:1898` gives `wrapped(door.connect)`; `bindings.ts:230` reads `RemoteCall<() => DoorService["connect"]>` | `bindings.ts`, `runtime.ts`, `Gateway.ts`; the app's `src/brain.ts:56` yields `p.connect`. Reached and unchanged: `cloudflare/platform.ts:119`, `cloudflare/connection.ts:330` | lib: `cloudflare/ProjectAuditTest.ts:211`, `gateway/GatewayRevocation.integration.test.ts:268`, `gateway/TasksTest.ts:364`, `node/IsolateUsage.integration.test.ts:654`. App: `door.integration.test.ts` (21 calls, 1012 to 5532, and the review 3.3 cast at 2020), `door-recovery.integration.test.ts:418`, `door-spans.test.ts:472`, `hands-client.test.ts:353`, `runtime-quotas.laws.test.ts:509`, `runtime-recovery.laws.integration.test.ts:66`, `runtime.laws.integration.test.ts:344`, `start-member.laws.integration.test.ts:247`, `checklist-instance.laws.integration.test.ts:430`, `exam/agent-may.test.ts:149`, `exam/runner-contract-replay.test.ts:128` |
+| `cloudflare/runtime.ts:347` `ProjectDoorOptions.nextProcess` | `Effect.Effect<string>`, and the door's own option at `gateway/Gateway.ts:310` with it, since the app spreads `ProjectDoorOptions` into `Gateway.layer`. `runtime.ts:1234` gives `ids.next`; `Gateway.ts:803` yields `options.nextProcess` | `runtime.ts`, `Gateway.ts`. Reached and unchanged: the app's `src/runtime.ts:58` spread | lib: `gateway/GatewayRevocation.integration.test.ts:239`, `gateway/TasksTest.ts:315`; unchanged spread in `node/RunnerAdmission.integration.test.ts:150`. App: `door.integration.test.ts:434` (with `Effect.suspend`), `door-recovery.integration.test.ts:378`, `door-spans.test.ts:251`, `hands-client.test.ts:217`, `exam/agent-may.test.ts:137`, `exam/runner-contract-replay.test.ts:111`; unchanged spread in `e2e/chaos-revoke.worker.test-support.ts:42` |
+| `cloudflare/runtime.ts:2511` `ProcessService.init`, `alarm` and `recover` (3 hits) | Three values. `runtime.ts:2470` gives `attributed(runner.init)`, whose `Effect.suspend` still reads the live process at run time; `:2480` gives the wake read piped to `due`; `:2486` gives `store.readActivity` piped. `runtime.ts:613` yields `p.init` | `runtime.ts`; `cloudflare/ProcessObject.ts:80` and `:93` yield `process.alarm` and `process.recover` inside the object's methods | lib: `cloudflare/entry-flows.laws.test.ts:407`. App: `runtime-quotas.laws.test.ts:544` and its Process stub at `:370`, `runtime-recovery.laws.integration.test.ts:122` and `:124`, `start-child.laws.integration.test.ts:875` to `:879` (a fake: `init: Effect.void`, and `alarm`, `recover` as an Effect that dies with the same message `unused` gives), `checklist-instance.laws.integration.test.ts:186` (a call by name, reached by `call("alarm", [])` at `:298`) |
+| `runtime/Runner.ts:471` `ProgramRunner.init` | `Effect.Effect<void, RunnerFailure>`, as `mailed` beside it. `Runner.ts:2640` gives `init(Effect.gen(...))`, the `call("runner.init")` helper, an `Effect.fnUntraced`, so each run takes a fresh turn | `Runner.ts`, `runtime/QuotaRunner.ts:74` (`checked(runner.init)`), `cloudflare/runtime.ts:2470` | lib: `node/Chaos.test-support.ts:216`, `cloudflare/ObjectService.test.ts:310`, `cloudflare/alarm.laws.test.ts:154` and `:357`, `runtime/MonitorTest.ts:856`, `runtime/RunnerInitTest.ts:157` to `:238` |
+
+Paths in the table are under `next/packages/libfabrika/src/` for lib and `next/apps/fabrika/` for
+the app (the app's tests sit in its `src/`). The files table below spells each one out.
+
+- **Exam paths and product files.** The product files are `cloudflare/bindings.ts`,
+  `cloudflare/runtime.ts`, `cloudflare/ProcessObject.ts`, `gateway/Gateway.ts`, `runtime/Runner.ts`,
+  `runtime/QuotaRunner.ts` and the app's `src/brain.ts`, about 30 lines, all the build's. Every
+  other caller is an exam path, the tests step's. lib:node has callers only in exam paths.
+- **PR 1366's files among them,** now in scope since 1366 is merged: `cloudflare/runtime.ts`,
+  `gateway/Gateway.ts`, `runtime/Runner.ts`, `runtime/QuotaRunner.ts`,
+  `cloudflare/ObjectService.test.ts`, `cloudflare/alarm.laws.test.ts`, and the app's
+  `src/runtime-quotas.laws.test.ts` and `src/runtime-recovery.laws.integration.test.ts`.
+- **Two callers the types do not see.** The app's Process stub in
+  `next/apps/fabrika/src/runtime-quotas.laws.test.ts:370` answers `Effect.void` for a member that is
+  not a function, and `next/apps/fabrika/src/checklist-instance.laws.integration.test.ts:186` calls
+  a member by name with `Reflect.apply`, whose throw `:298` swallows. Once `alarm` and `recover` are
+  values, both would go quiet in place of failing. The tests step types them with E99's `Member`
+  shape (a call, or an Effect that needs no service): an Effect member runs as it is, and any other
+  member dies.
+- **Left as it is:** `ProcessStore.layer`'s `sync` option (`runtime/ProcessStore.ts:164`) stays a
+  call, as E99 left it, and so the handoff at `cloudflare/runtime.ts:2299` keeps `sync: () =>
+  storage.sync`. The checker does not flag it.
+
+**One value traced through:** `Gateway.connect`. The build writes `connect: connect()` at
+`Gateway.ts:1914`, which builds one suspended Effect. `ProjectService.connect` is
+`wrapped(door.connect)`. A socket arrives: `connection.ts:330` calls the stub's `clientConnect()`,
+the Project object's method in the app's `brain.ts:54` runs `ProjectService.use((p) => p.connect)`,
+the suspended body runs and mints `client_1`. A second socket runs the same value again and mints
+`client_2`: the new law below holds that the two differ.
+
+**Laws.** These laws keep asserting the same behavior with the new shape, and the tests step changes
+only how each reaches the member: review 3.3, "two connections receive different door-minted ids",
+and p67, "a new door start retries an injected id collision" (both in
+`next/apps/fabrika/src/door.integration.test.ts`); A1 and A2 in
+`next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts`; L8 and L9 in
+`next/packages/libfabrika/src/runtime/RunnerInitTest.ts`; the runtime-quotas and runtime-recovery
+laws that fire the alarm and read `recover`. The two door laws are `.integration.`, so they run
+only in the full run (0584); the plain twins below run on every pull request (0581). Every new law
+is plain: it runs on in-memory stand-ins and starts nothing.
+
+| Law | Lint, type or test | Generator | Plant |
+|---|---|---|---|
+| B1. Each Durable Object RPC method stays a call: `ProjectBinding.clientConnect` answers `() => Promise<ConnectionId>`, held by `Project implements ProjectBinding` in the app's `src/brain.ts` | type | type | Leave `bindings.ts:230` as `RemoteCall<DoorService["connect"]>`: it reads as `never` and `brain.ts` fails the typecheck |
+| B2. Running `Gateway.connect` n times answers n distinct, non-empty ids, each of which takes a challenge (new, in `next/apps/fabrika/src/door-reruns.laws.test.ts`) | test | fc.integer: n from 2 to 8, 50 runs | `Gateway.ts:1914` as `connect: Effect.succeed(<one id minted at layer build>)`: the second run answers the first id, red |
+| B3. A door start whose first k drawn process ids are taken draws again each time and starts on id k+1 (new, in the same file) | test | fc.integer: k from 0 to 4, 50 runs | `allocateStart` at `Gateway.ts:800` reads `options.nextProcess` once, before its loop: the start never gets a free id, red |
+| B4. The Process object's `alarm` delivers the wake saved when it runs: a wake changed between two alarms reaches `due` with the new time (new, in `next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts`) | test | fc.array: of fc.integer wake times, 2 to 6, 50 runs | `alarm` built from a wake read once when the layer is built: the second alarm delivers the first time, red |
+| B5. `recover` answers the activity marker saved when it runs (new, in the same file) | test | Effect Arbitrary: Activity | `recover` built from one `readActivity` result taken at layer build: a later marker is not seen, red |
+| B6. Every `activity` call on the Cloudflare process runtime puts the marker and then calls the object's `storage.sync`, before it answers (new, in the same file; finding 2026-11-16-cloudflare-process-sync-has-no-law) | test | Effect Arbitrary: Activity | `runtime.ts:2299` as `sync: () => Effect.void`: the storage fake records no sync, red. Also `ProcessStore.ts:288` and `:289` swapped, sync before put: red |
+| B7. With a saved reserve fault, `QuotaRunner.guard`'s `init` runs no turn and fails as its `msg` does (new, in `next/packages/libfabrika/src/runtime/QuotaRunnerTest.ts`) | test | scenario: a name stopped under its reserve, then init | `QuotaRunner.ts:74` as `init: runner.init`, unguarded: the turn runs, red |
+| B8. `recover` asked through the app's Process stub stand-in answers the saved marker, never `undefined` (new, in `next/apps/fabrika/src/runtime-quotas.laws.test.ts`) | test | Effect Arbitrary: Activity | The stub at `:370` keeps its `Effect.void` fallback for a member that is not a function: `recover` answers `undefined`, red |
+
+- **B6 is the law the finding asks for.** Lint or type cannot see it: both shapes typecheck, and the
+  difference is whether a call reaches the platform. It is a test, plain by 0584: its storage is a
+  recording fake and its SQL the in-memory fake `alarm.laws.test.ts` already has. Its storage fake
+  records `put` and `sync` in one ordered list, so the law reads the order, not a count.
+- **The recount** at the end (only `lazyEffect` at error over libfabrika's and the app's tsconfig)
+  must print 0. It is a check, not a law: no lock line holds it until the judgment lock pull
+  request.
+- **`.integration.` laws the change reaches,** run in the box under PR 1508's guard as the step
+  rules say: the door, door-recovery, runtime, runtime-recovery, start-member, start-child and
+  checklist-instance laws in the app, and GatewayRevocation, IsolateUsage and RunnerAdmission in
+  libfabrika. None is host-only.
+
+| File | Owner | Product lines expected | What changes |
+|---|---|---|---|
+| `next/packages/libfabrika/src/cloudflare/bindings.ts` | build | 3 | `GatewayCalls.connect` and `clientConnect`'s type |
+| `next/packages/libfabrika/src/cloudflare/runtime.ts` | build | 10 | `ProjectService.connect`, `ProjectDoorOptions.nextProcess`, `ProcessService`'s three members and their callers |
+| `next/packages/libfabrika/src/cloudflare/ProcessObject.ts` | build | 2 | Yields `alarm` and `recover` as values |
+| `next/packages/libfabrika/src/gateway/Gateway.ts` | build | 6 | `Gateway.connect`, the door's `nextProcess` option and its read |
+| `next/packages/libfabrika/src/runtime/Runner.ts` | build | 3 | `ProgramRunner.init` |
+| `next/packages/libfabrika/src/runtime/QuotaRunner.ts` | build | 1 | `init: checked(runner.init)` |
+| `next/apps/fabrika/src/brain.ts` | build | 1 | `p.connect` |
+| `next/apps/fabrika/src/door-reruns.laws.test.ts` | tests | tests | New: B2, B3 |
+| `next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts` | tests | tests | B4, B5, B6; the fakes at `:154`, `:357` |
+| `next/packages/libfabrika/src/runtime/QuotaRunnerTest.ts` | tests | tests | B7 |
+| `next/apps/fabrika/src/runtime-quotas.laws.test.ts` | tests | tests | B8; the stub at `:370`; calls at `:509`, `:544` |
+| `next/apps/fabrika/src/checklist-instance.laws.integration.test.ts` | tests | tests | The call by name at `:186`; `:430` |
+| `next/apps/fabrika/src/door.integration.test.ts` | tests | tests | 21 connect calls, the review 3.3 cast, `nextProcess` with `Effect.suspend` |
+| `next/apps/fabrika/src/door-recovery.integration.test.ts` | tests | tests | Callers |
+| `next/apps/fabrika/src/door-spans.test.ts` | tests | tests | Callers |
+| `next/apps/fabrika/src/hands-client.test.ts` | tests | tests | Callers |
+| `next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts` | tests | tests | Callers |
+| `next/apps/fabrika/src/runtime.laws.integration.test.ts` | tests | tests | Callers |
+| `next/apps/fabrika/src/start-member.laws.integration.test.ts` | tests | tests | Callers |
+| `next/apps/fabrika/src/start-child.laws.integration.test.ts` | tests | tests | The ProcessService fake |
+| `next/apps/fabrika/src/exam/agent-may.test.ts` | tests | tests | Callers |
+| `next/apps/fabrika/src/exam/runner-contract-replay.test.ts` | tests | tests | Callers |
+| `next/apps/fabrika/e2e/chaos-revoke.worker.test-support.ts` | tests | tests | Reached by the spread; no change expected |
+| `next/packages/libfabrika/src/cloudflare/ProjectAuditTest.ts` | tests | tests | Callers |
+| `next/packages/libfabrika/src/cloudflare/entry-flows.laws.test.ts` | tests | tests | Callers |
+| `next/packages/libfabrika/src/cloudflare/ObjectService.test.ts` | tests | tests | The ProgramRunner fake |
+| `next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts` | tests | tests | Callers |
+| `next/packages/libfabrika/src/gateway/TasksTest.ts` | tests | tests | Callers |
+| `next/packages/libfabrika/src/node/IsolateUsage.integration.test.ts` | tests | tests | The binding fake |
+| `next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts` | tests | tests | Reached by the spread; no change expected |
+| `next/packages/libfabrika/src/node/Chaos.test-support.ts` | tests | tests | The runner wrapper |
+| `next/packages/libfabrika/src/runtime/MonitorTest.ts` | tests | tests | Callers |
+| `next/packages/libfabrika/src/runtime/RunnerInitTest.ts` | tests | tests | Callers |
+
+## Existing tools
+
+- `next/apps/fabrika/src/door-reruns.laws.test.ts`, a new law file. Searched the app's and
+  libfabrika's plain door tests (`door-spans.test.ts`, `hands-client.test.ts`,
+  `exam/agent-may.test.ts`, `gateway/TasksTest.ts`) for a two-connect or id-collision law: none
+  holds one. The two that do sit in `door.integration.test.ts`, an `.integration.` file. The new
+  file builds its door the way `next/apps/fabrika/src/door-spans.test.ts` builds its own, in memory.
+- B4 to B6 go in `next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts`, which already runs
+  `processRuntime` over a platform fake with its `processSql` and `accounting` stand-ins, so no new
+  helper is written. B7 goes in the QuotaRunner suite that exists, B8 in the file that holds the
+  stub.
+- No new product helper: each fix uses Effect's own value form and `Effect.suspend`.
 
 ## What waits, and what clashes
 
@@ -523,7 +699,9 @@ mechanical slice redoes its fix on the new base, and the lead may fix what CI na
 3. **Then the judgment "now" slices, E26 to E59, biggest first.**
 4. **When 1366 lands:** E60 (the last tags), E61 (the last imports), the other mechanical ones,
    then the judgment ones, E60 to E99.
-5. **E100 last,** after E60.
+5. **E99b right after E99,** on its own branch cut from E99's head, since it changes the members
+   E99 left.
+6. **E100 last,** after E60.
 
 ## Pipeline steps for a mechanical slice
 
@@ -620,6 +798,10 @@ This one plan covers every slice; the lead approves it once, and each slice's br
 - **Main moves.** The counts are from one commit. Each slice counts again before it starts.
 - **Whether the checker's directive parser takes the ` -- reason` tail.** L4 in E0 proves it
   first.
+- **E99b: whether a caller reaches a member some way neither the types nor a search can see.** The
+  plants found two such callers by reading (a stub by name, a call by name); a third would only
+  show as a red law. No new law holds that `ProcessService.init`'s span names the live process at
+  run time; `attributed`'s `Effect.suspend` keeps it, and the review reads that line.
 
 ## Open questions
 
@@ -732,6 +914,10 @@ $3.06), with judgment slices of 800 hits priced higher, at about $18 each.
 98. E97, `globalTimers` (after 1366): 36 lines
 99. E98, `globalErrorInEffectCatch` and its pair (after 1366): 18 lines
 100. E99, `lazyEffect` (after 1366): 16 lines
-101. E100, `apiStabilityLeak` (after E60): 484 lines
+101. E99b, `lazyEffect` callers (after E99): 300 lines
+102. E100, `apiStabilityLeak` (after E60): 484 lines
 
-Estimate: 300 steps, $1400
+E99b adds 4 steps (tests, build, review, and one likely send-back, as E99 had) and about $18 at
+the Opus prices above.
+
+Estimate: 304 steps, $1418
