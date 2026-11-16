@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-lint-dead-test-support-review1",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T23:54:50-08:00",
+  "ended": "2026-11-16T00:02:55-08:00",
+  "parent": "2026-11-15-lint-dead-test-support-tests1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Review of lead tooling slice lint-dead-test-support, branch fabrikalfa/lint-dead-test-support, head 716de99e18e898e290ebf8797a8e9fd77ac826a5, base origin/main 701a651: send back (answer send plan, to the lead for the owner call), two blocking classes, one finding row. What holds: the two groups node-kinds.json writes again match @demlik/code-graph 0.15.0's NodeKindRulesSchema defaults exactly (node_modules/@demlik/code-graph/dist/index.js lines 2095-2105; the local patch does not touch them); loadOverrides spreads the file over the defaults by top-level key (line 2783), so writing them again is needed; law 1 is red on main's node-kinds.json (a reviewer plant: next/lib/a.test-support.ts:haa = only-called-from-tests) and green at the head; law 2's over-wide plant and law 3's only-new-group plant both bite; the file is rightly .integration. (child process and temp folders, 0584); the tests step was right to commit node-kinds.json, since stepcommit.sh refuses an exam path from a build. Blocking class 1, real loosening of AGENTS.md's 'An unused export fails lint' (0006): code-graph's judge (line 8516) and isCandidate (line 8619) withhold every export of a test-like file before any reference is counted, so at the head an export of a .test-support.ts file that no file uses is no longer flagged; on main it was 'dead'. This reaches all 57 tracked *.test-support.ts files, repo-wide. Law 2 covers dead exports in product files only, so the escaping case is untested and unnamed. Real loosening waits on the owner: accept and record it (an amendment to 0006 with /adr, and law 2's comment names the case), or pnpm patch code-graph so a test-support export referenced by no file stays dead, file the upstream issue, and extend law 2 to plant such exports. Blocking class 2, law 3 covers the default groups by a hand list of seven folder names: the three file-name defaults ((^|/)test-helper\\.tsx?$, (^|/)test-db\\.tsx?$, \\.fixture\\.tsx?$) and the singular folders test/, test-helper/, test-util/ are never planted, so dropping them from node-kinds.json leaves law 3 green (reviewer plant: with the three file-name patterns removed, test-helper.ts, test-db.ts and x.fixture.ts helpers each become only-called-from-tests).",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Ran at 716de99 after pnpm install --frozen-lockfile (code-graph 0.15.0 with patch hash 9642ccde). NODE_OPTIONS=--max-old-space-size=6144 pnpm lint:dead: exit 0, 'unreachable ledger: PASS, scope ., 3 recorded finding(s), none new'; unreachable-ledger.json unchanged (same md5 before and after), so no prune to commit. nice -n 15 pnpm exec vitest run --maxWorkers=3 on next/apps/fabrika/src/exam/unreachable.integration.test.ts and next/apps/fabrika/src/exam/node-kinds.test.ts: 2 files, 4 tests passed, at the fast depth. NODE_OPTIONS=--max-old-space-size=6144 pnpm lint: exit 0, 18 parts passed. loosening.sh 701a651..HEAD: one hit, 'node-kinds.json: unrecognized change: line 7', the added testSupportFilePatterns; it is real loosening for the dead and unused-export case above, and the intended change for only-called-from-tests. governance.sh: only word matches, none of them about code-graph, exports or test support. git merge-tree with origin/main b490a32: no conflict. No pnpm typecheck: the box rules allow one at most, and the diff adds one test file the lint run covers; CI runs it. Reviewer plants ran in a scratch folder with copies of node-kinds.json, on trees planted in temp folders, never in the branch.",
+  "step": "review"
+}
