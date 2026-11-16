@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e69-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:55:12-08:00",
+  "ended": "2026-11-16T02:08:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E69 of the Effect-check sweep (unnecessaryFailYieldableError, after PR 1366 merged). The four hits that E19 left waiting are fixed by hand edit: yield* Effect.fail(x) became yield* x in next/packages/libfabrika src/runtime/Runner.ts and src/telemetry/Sink.ts. The plan row said 5 hits; effect-tsgo diagnostics found 4, and a pnpm typecheck with the check temporarily at error in every plugin tsconfig reached zero. No lock entry added and no L1 planted, as the brief says; the integrator adds locks.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 13,
+  "note": "Branch fabrikalfa/effect-e69 was created from 891075e7a because fabrikalfa/effect-mechanical is no longer on origin. Temporary tsconfig edits (check at error in all 13 plugin tsconfigs) were reverted and are not committed. Folders that had a hit: next/packages/libfabrika/src/runtime (1), next/packages/libfabrika/src/telemetry (3). No hit in tuval, vitest, apps/fabrika, programs, .agents, .github/ci or oxlint-plugins. pnpm lint: all parts passed; lint:promise-types died with EPIPE in the parallel run and passed alone. Tests run at the base head 891075e7a plus these edits, one file at a time: telemetry/Sink.integration (41), telemetry/P12Readers.laws (9), telemetry/Records.integration (22), runtime/RunnerRecovery.laws (4), runtime/Runner.integration (117), runtime/RunnerSupervision.integration (60), runtime/RunnerOptions.integration (2); all green, none refused by the 0178 guard.",
+  "plants": [],
+  "step": "tests",
+  "report": {
+    "check": "unnecessaryFailYieldableError",
+    "met": 4,
+    "fixedByQuickFix": 0,
+    "handEdits": 4,
+    "left": 0,
+    "waitingOn1366": 0,
+    "handEditFiles": [
+      "next/packages/libfabrika/src/runtime/Runner.ts:2840",
+      "next/packages/libfabrika/src/telemetry/Sink.ts:575",
+      "next/packages/libfabrika/src/telemetry/Sink.ts:623",
+      "next/packages/libfabrika/src/telemetry/Sink.ts:634"
+    ],
+    "foldersWithHit": [
+      "next/packages/libfabrika/src/runtime",
+      "next/packages/libfabrika/src/telemetry"
+    ],
+    "pr": "none; slices open no pull request"
+  }
+}

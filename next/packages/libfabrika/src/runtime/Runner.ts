@@ -2837,7 +2837,7 @@ export class ProgramRunner extends Context.Service<
                 return { answer: Sent.cases.refused.make({ reason: "dead" }), jobs: [] };
               }
 
-              return yield* Effect.fail(preparation.failure);
+              return yield* preparation.failure;
             }
 
             const prepared = preparation.success;

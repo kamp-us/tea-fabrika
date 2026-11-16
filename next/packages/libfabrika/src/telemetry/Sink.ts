@@ -572,7 +572,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     state = applyCell(machine, state, { type: "flush_checked" })[0];
 
     if (before._tag !== "clean") {
-      return yield* Effect.fail(new SinkError({ reason: "storage", held: held(before).length }));
+      return yield* new SinkError({ reason: "storage", held: held(before).length });
     }
 
     if (counts.size > 0) {
@@ -620,7 +620,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     const done = commit([], yield* Clock.currentTimeMillis, false);
 
     if (Result.isFailure(done)) {
-      return yield* Effect.fail(new SinkError({ reason: "storage", held: held(state).length, cause: done.failure }));
+      return yield* new SinkError({ reason: "storage", held: held(state).length, cause: done.failure });
     }
 
     return yield* attempt(() => readSummaries(sql, from, to));
@@ -631,7 +631,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     const done = commit([], now, false);
 
     if (Result.isFailure(done)) {
-      return yield* Effect.fail(new SinkError({ reason: "storage", held: held(state).length, cause: done.failure }));
+      return yield* new SinkError({ reason: "storage", held: held(state).length, cause: done.failure });
     }
 
     return yield* attempt(() => readSums(sql, piece, from, Math.min(to, hourStart(now))));
