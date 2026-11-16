@@ -124,6 +124,16 @@ Effect mechanical round 2 bases on `fabrikalfa/effect-mechanical`, and any anti-
 follow-up on `fabrikalfa/antislop-mechanical`, never on main. A judgment slice keeps its own branch,
 and folds onto the stack's top only once the stack lands, never onto a stale main.
 
+**A branch takes main once (2026-11-16).** Merge `origin/main` into a branch only right before its
+proof run or its fold, never as a habit and never to stay current. To check for conflicts, fetch
+main and run `git merge-tree` without merging. A step whose brief says "merge origin/main first"
+reads that as: only when this step is the proof run or the fold. Otherwise it works on the branch
+as it is.
+
+**No slice opens a pull request (one PR per sweep, 0589).** A slice pushes its branch and ends with
+its RESULT. Its integrator folds it into the sweep's one PR. A slice brief that says to open or
+update a PR is overridden by this line.
+
 **After a worktree agent moves its checkout to the branch head,** check `git status`. If the index
 or files still hold the old content, restore them with `git checkout HEAD -- <paths>` before you
 read or test anything (seen twice on 2026-11-16).
