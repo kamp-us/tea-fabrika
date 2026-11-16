@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Schema, Array as Arr } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import * as Beat from "./Beat.ts";
@@ -110,7 +110,7 @@ describe("Beat.says", () => {
 
 describe("Beat.spoken", () => {
   it("format: hours and minutes, minutes, or seconds", () => {
-    const spans = [30_000, 12 * 60_000, 110 * 60_000].map(Beat.spoken);
+    const spans = Arr.map([30_000, 12 * 60_000, 110 * 60_000], Beat.spoken);
     expect(spans).toEqual(["30s", "12m", "1h50m"]);
   });
 });

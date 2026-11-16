@@ -9,7 +9,7 @@
 // The log is `runs/sev/log.jsonl` in the checkout (git ignores `runs/`): one line per fact, never
 // rewritten. The sev0 is folded from it, so two sev0s open at once cannot be written: `open` is
 // refused while one is open, and a log that holds two fails to fold.
-import { DateTime, Effect, FileSystem, Path, Result, Schema } from "effect";
+import { DateTime, Effect, FileSystem, Path, Result, Schema, Array as Arr } from "effect";
 import { Run } from "./WorkflowRuns.ts";
 
 /** A command was refused: the level does not stand the way it needs. The reason says how it does. */
@@ -153,8 +153,7 @@ export const log = Effect.fn("Level.log")(function* (home: string) {
     return [];
   }
 
-  const lines = (yield* fs.readFileString(at)).split("\n").filter((line) => line !== "");
-
+  const lines = Arr.filter((yield* fs.readFileString(at)).split("\n"), (line) => line !== "");
   return yield* Effect.forEach(
     lines,
     (line, index) =>

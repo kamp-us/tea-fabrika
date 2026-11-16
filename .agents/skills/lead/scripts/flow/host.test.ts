@@ -2,7 +2,7 @@
 // time limit, what a failed command answers, and the quest's state file. Commands here are plain
 // `sh` lines; no git, Electron, network or agent runs.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Fiber, FileSystem, Option, Ref, type Scope } from "effect";
+import { Effect, Fiber, FileSystem, Option, Ref, type Scope, Array as Arr } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { repoNode } from "../boxnode.ts";
@@ -53,7 +53,8 @@ describe("the quest brief's host commands", () => {
   it("property: only the lines inside a fence run, in order, without blanks and comments; prose never runs", () => {
     fc.assert(
       fc.property(fc.array(command, { maxLength: 6 }), fc.array(command, { maxLength: 4 }), (inside, prose) => {
-        const section = [...prose, "```sh", "# a comment", ...inside.flatMap((c) => [c, ""]), "```", ...prose].join(
+        const section = Arr.join(
+          [...prose, "```sh", "# a comment", ...Arr.flatMap(inside, (c) => [c, ""]), "```", ...prose],
           "\n",
         );
 

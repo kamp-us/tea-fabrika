@@ -1,7 +1,7 @@
 // runFlow on the real tea engine and tea's own file store, in a temp folder, with fake runners
 // through `Runners.layer`: no git, network or agent.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Schema, type Scope } from "effect";
+import { Effect, FileSystem, Schema, type Scope, Array as Arr } from "effect";
 import { describe, expect, it } from "vitest";
 import * as Flow from "./Flow.ts";
 import { landDecision } from "./flows/land-decision.ts";
@@ -20,13 +20,12 @@ const fakes = (answers: Readonly<Record<string, (n: number) => Outcome.Outcome>>
   const calls: string[] = [];
 
   const table = Object.fromEntries(
-    Object.entries(answers).map(([name, answer]) => [
+    Arr.map(Object.entries(answers), ([name, answer]) => [
       name,
       (step: Step.Step) =>
         Effect.sync(() => {
           calls.push(step.name);
-
-          return Outcome.answer(answer(calls.filter((c) => c === name).length));
+          return Outcome.answer(answer(Arr.filter(calls, (c) => c === name).length));
         }),
     ]),
   );
@@ -68,7 +67,7 @@ describe("runFlow", () => {
         expect(calls).toEqual(["a", "b", "c"]);
         const saved = yield* readModel(state);
         expect(saved).toEqual(model);
-        expect(saved.history.map((h) => h.outcome?._tag)).toEqual(["done", "skip", "done"]);
+        expect(Arr.map(saved.history, (h) => h.outcome?._tag)).toEqual(["done", "skip", "done"]);
       }),
     ));
 
@@ -153,7 +152,7 @@ const decision = landDecision({
 
 describe("the land-decision flow", () => {
   it("pinned: its steps, kinds and lead marks, in order, since the lead reads this list to know what it lands", () => {
-    expect(decision.steps.map((s) => [s._tag, s.name, s.lead])).toEqual([
+    expect(Arr.map(decision.steps, (s) => [s._tag, s.name, s.lead])).toEqual([
       ["act", "format", false],
       ["check", "lint", false],
       ["gather", "governance", false],
@@ -171,13 +170,13 @@ describe("the land-decision flow", () => {
       Effect.gen(function* () {
         const state = yield* tempState;
         const ok = () => Outcome.done("ok");
-        const { calls, layer } = fakes(Object.fromEntries(decision.steps.map((s) => [s.name, ok])));
+        const { calls, layer } = fakes(Object.fromEntries(Arr.map(decision.steps, (s) => [s.name, ok])));
         const model = yield* runFlow(decision, { state, resume: false, lead: false }).pipe(Effect.provide(layer));
         expect(calls).toEqual(["format", "lint", "governance"]);
         expect(model._tag === "parked" ? model.position : -1).toBe(3);
         const led = yield* runFlow(decision, { state, resume: true, lead: true }).pipe(Effect.provide(layer));
         expect(led._tag).toBe("done");
-        expect(calls.slice(3)).toEqual(decision.steps.slice(3).map((s) => s.name));
+        expect(calls.slice(3)).toEqual(Arr.map(decision.steps.slice(3), (s) => s.name));
       }),
     ));
 });

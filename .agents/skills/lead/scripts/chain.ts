@@ -116,7 +116,7 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
+import { Context, Duration, Effect, Layer, Result, Schedule, Schema, Array as Arr, pipe, Option } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -259,7 +259,7 @@ const isFault = Schema.is(FaultS);
 
 /** The last JSON line of drive's output, read loosely; `null` when there is none. */
 export const lineOf = (out: string, exit: number): Line | null => {
-  for (const raw of out.trim().split("\n").toReversed()) {
+  for (const raw of Arr.reverse(out.trim().split("\n"))) {
     const parsed = Result.try((): unknown => JSON.parse(raw));
 
     if (Result.isFailure(parsed)) {
@@ -395,7 +395,7 @@ export const moveFrom = (text: string): Judged => {
 
 /** What the judgment agent said on its last `answer:` line; none is a park. */
 export const judgedOf = (text: string): Judged => {
-  for (const line of text.split("\n").toReversed()) {
+  for (const line of Arr.reverse(text.split("\n"))) {
     const m = JUDGED.exec(line.trim());
 
     if (m === null) {
@@ -441,10 +441,10 @@ export const sectionsOf = (text: string): { head: string; sections: Record<strin
   }
 
   for (const [k, v] of Object.entries(bodies)) {
-    sections[k] = v.join("\n").trim();
+    sections[k] = Arr.join(v, "\n").trim();
   }
 
-  return { head: head.join("\n").trim(), sections };
+  return { head: Arr.join(head, "\n").trim(), sections };
 };
 
 /**
@@ -452,7 +452,7 @@ export const sectionsOf = (text: string): { head: string; sections: Record<strin
  * `## mutation` is needed only to start at mutation; an older brief that has one is still accepted.
  */
 export const lacks = (quest: ReturnType<typeof sectionsOf>, start: StepName): string[] =>
-  [...QUEST_STEPS, ...(start === "mutation" ? ["mutation"] : []), "pr"].filter((k) => !quest.sections[k]);
+  Arr.filter([...QUEST_STEPS, ...(start === "mutation" ? ["mutation"] : []), "pr"], (k) => !quest.sections[k]);
 
 /** What one step is told about the quest: the brief's shared head, its section and the facts. */
 export type Facts = {
@@ -490,24 +490,28 @@ export const committedLine = (commits: ReadonlyArray<StepCommit> | null): string
     return "No step has committed yet.";
   }
 
-  const steps = [...new Set(commits.map((c) => c.step))];
-
-  const by = steps.map(
+  const steps = [...new Set(Arr.map(commits, (c) => c.step))];
+  const by = Arr.map(
+    steps,
     (s) =>
-      `${s} ${commits
-        .filter((c) => c.step === s)
-        .map((c) => c.sha.slice(0, 8))
-        .join(" ")}`,
+      `${s} ${pipe(
+        commits,
+        Arr.filter((c) => c.step === s),
+        Arr.map((c) => c.sha.slice(0, 8)),
+        Arr.join(" "),
+      )}`,
   );
-
-  return `Step commits since the quest left main, oldest first: ${by.join("; ")}.`;
+  return `Step commits since the quest left main, oldest first: ${Arr.join(by, "; ")}.`;
 };
 
 // The parameter keeps the name `lane`: agents-ledger.json holds this line word for word.
 export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: Facts): string => {
   const short = (s: string) => s.slice(0, 8);
-  const heads = STEPS.filter((s) => f.heads[s]).map((s) => `${s} ${short(f.heads[s] ?? "")}`);
-
+  const heads = pipe(
+    STEPS,
+    Arr.filter((s) => (f.heads[s] ?? "") !== ""),
+    Arr.map((s) => `${s} ${short(f.heads[s] ?? "")}`),
+  );
   const lines = [
     lane.head,
     "",
@@ -517,7 +521,7 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
     `Quest facts, written by chain.ts, round ${f.round}: ticket ${f.ticket}, branch ${f.branch}, approved plan ${f.plan}.`,
     `This step starts at ${short(f.head)}; the quest left main at ${short(f.root)}.`,
     committedLine(f.commits),
-    ...(heads.length > 0 ? [`Heads so far: ${heads.join(", ")}.`] : []),
+    ...(heads.length > 0 ? [`Heads so far: ${Arr.join(heads, ", ")}.`] : []),
     ...(f.note ? [`Last round: ${f.note}`] : []),
   ];
 
@@ -542,7 +546,7 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
     );
   }
 
-  return `${lines.join("\n")}\n`;
+  return `${Arr.join(lines, "\n")}\n`;
 };
 
 // ---------------------------------------------------------------- the budget
@@ -563,8 +567,8 @@ export const markFrom = (line: Line): Mark => {
 
 /** The marks the intensity counts against the quest: sends and work stucks. */
 const counted = (window: readonly Mark[]) => ({
-  sends: window.filter((m) => m === "send").length,
-  work: window.filter((m) => m === "work").length,
+  sends: Arr.filter(window, (m) => m === "send").length,
+  work: Arr.filter(window, (m) => m === "work").length,
 });
 
 /** A quest's size in steps and dollars: the estimate a plan or brief gives, or the backstop from it. */
@@ -622,8 +626,7 @@ export const stopReason = (stop: Stop): string => {
 
   if (stop._tag === "intensity") {
     const { sends, work } = counted(stop.window);
-    const tools = stop.window.filter((m) => m === "tool").length;
-
+    const tools = Arr.filter(stop.window, (m) => m === "tool").length;
     return `intensity: ${sends + work} of the last ${stop.window.length} steps were sent back or stuck on the work (${sends} sent back, ${work} stuck on the work; ${tools} stuck on a tool, not counted; the limit is ${stop.count} in ${stop.within}). ${spent} ${ask}`;
   }
 
@@ -706,7 +709,8 @@ export type ChainRecord = typeof ChainRecord.Type;
  * The rounds a quest's record already holds. A quest started again (`--start`) counts on from here,
  * so a new round never takes an older round's record.
  */
-export const roundsIn = (record: ChainRecord): number => record.steps.reduce((most, e) => Math.max(most, e.round), 0);
+export const roundsIn = (record: ChainRecord): number =>
+  Arr.reduce(record.steps, 0, (most, e) => Math.max(most, e.round));
 
 const judge = Cmd.make("judge", {
   input: Schema.Struct({ step: Schema.Literals(STEPS), line: LineS, round: Schema.Finite }),
@@ -1063,8 +1067,7 @@ export const makeMachine = (limits: Limits) =>
         }
 
         const said = `CI's typecheck job at ${quest.head.slice(0, 8)} (PR ${s.pr}) answered send:${verdict.to}`;
-
-        return next(quest, verdict.to, `${said}:\n${verdict.lines.join("\n")}`, limits);
+        return next(quest, verdict.to, `${said}:\n${Arr.join(verdict.lines, "\n")}`, limits);
       },
       typecheck_read_err: (s): Step =>
         s.phase === "typechecking"
@@ -1123,7 +1126,9 @@ type Setup = {
 
 /** The last `n` lines of a file, or a line saying it is not there. */
 const lastLines = (path: string | null, n: number): string =>
-  path !== null && existsSync(path) ? readFileSync(path, "utf8").trim().split("\n").slice(-n).join("\n") : "(none)";
+  path !== null && existsSync(path)
+    ? Arr.join(readFileSync(path, "utf8").trim().split("\n").slice(-n), "\n")
+    : "(none)";
 
 const JUDGE_TAIL = (quest: string, step: StepName, line: Line, state: string, report: string) => `
 You are the lead's judgment for quest ${quest}, started by chain.ts because the ${step} step
@@ -1241,9 +1246,8 @@ const handlers = (s: Setup) => {
   /** Replace this round's record (one per round), or add it. */
   const saveStep = (entry: StepRecord) => {
     const r = readRecord();
-
-    const steps = r.steps.some((e) => e.round === entry.round)
-      ? r.steps.map((e) => (e.round === entry.round ? entry : e))
+    const steps = Arr.some(r.steps, (e) => e.round === entry.round)
+      ? Arr.map(r.steps, (e) => (e.round === entry.round ? entry : e))
       : [...r.steps, entry];
 
     writeRecord({ ...r, steps });
@@ -1275,14 +1279,15 @@ const handlers = (s: Setup) => {
 
     return listed.code !== 0
       ? null
-      : listed.out
-          .split("\n")
-          .filter(Boolean)
-          .map((sha) => {
+      : pipe(
+          listed.out.split("\n"),
+          Arr.filter(Boolean),
+          Arr.map((sha) => {
             const r = sh("git", ["-C", env.MAIN, "notes", "--ref=fabrika", "show", sha]);
 
             return { sha, step: (r.code === 0 ? stepOf(r.out)[0] : undefined) ?? "unsigned" };
-          });
+          }),
+        );
   };
 
   return {
@@ -1486,10 +1491,10 @@ const handlers = (s: Setup) => {
         const answer = move._tag === "step" ? `send ${move.step}: ${move.note}` : `park: ${move.reason}`;
         note(`judgment: ${answer}`);
         const r = readRecord();
-        const last = r.steps.find((e) => e.round === earlier + cmd.round);
+        const last = Arr.findFirst(r.steps, (e) => e.round === earlier + cmd.round);
 
-        if (last) {
-          saveStep({ ...last, judged: { box, answer } });
+        if (Option.isSome(last)) {
+          saveStep({ ...last.value, judged: { box, answer } });
         }
 
         return { text: JSON.stringify(move), listUsd: listUsd("codex-read", env.CODEX_MODEL, turned.spent) };
@@ -1521,20 +1526,22 @@ const handlers = (s: Setup) => {
           return { pr: null, detail: "the quest brief has no `## pr` section with a title line" };
         }
 
-        const body = [
-          (s.brief.sections.pr ?? "").split("\n").slice(1).join("\n").trim(),
+        const body = Arr.join(
+          [
+            Arr.join((s.brief.sections.pr ?? "").split("\n").slice(1), "\n").trim(),
           "",
           "## Steps",
           "",
           `Ran end to end by \`chain.ts ${s.quest}\`: no lead agent held the quest. Each step was its own agent through the fabrika agents package on ACP (${providers(
-            saved().steps.map((e) => e.step),
+              Arr.map(saved().steps, (e) => e.step),
             s.claude,
             s.exec,
           )}); the lead agent wrote no step's work. Steps and dollars:`,
           "",
           ...stepsTable(join(env.BOXES, `${s.quest}-rows.jsonl`), saved().steps),
-        ].join("\n");
-
+          ],
+          "\n",
+        );
         // The draft opened at the quest's first commit (drive's pushing phase, 0134) takes the brief's
         // words and is marked ready; a quest started before that gets its pull request here.
         note(`review said merge-ready at ${cmd.head.slice(0, 8)}; pushing ${s.branch} and marking its PR ready`);
@@ -1575,13 +1582,14 @@ const handlers = (s: Setup) => {
 
         const from = base.out.trim();
         const ran = sh("sh", [join(HERE, "loosening.sh"), from, cmd.head], env.MAIN);
-        const text = [ran.out.trim(), ran.err.trim()].filter(Boolean).join("\n");
+        const text = pipe([ran.out.trim(), ran.err.trim()], Arr.filter(Boolean), Arr.join("\n"));
         note(
           `loosening.sh ${from.slice(0, 8)} ${cmd.head.slice(0, 8)} exited ${ran.code}: ${text.split("\n")[0] ?? ""}`,
         );
         const bodyFile = join(env.BOXES, `${s.quest}-loosening.md`);
         writeFileSync(
           bodyFile,
+          Arr.join(
           [
             `\`loosening.sh ${from} ${cmd.head}\`, run by \`chain.ts ${s.quest}\` after review and before the merge queue (exit ${ran.code}):`,
             "",
@@ -1589,7 +1597,9 @@ const handlers = (s: Setup) => {
             text || "(no output)",
             "```",
             "",
-          ].join("\n"),
+            ],
+            "\n",
+          ),
         );
         const posted = sh("gh", ["pr", "comment", String(cmd.pr), "-R", env.GH_REPO, "--body-file", bodyFile]);
 
@@ -1706,15 +1716,17 @@ export const providers = (
   claude: ReadonlySet<StepName>,
   exec: ReadonlySet<StepName> = new Set(),
 ): string => {
-  const on = (agent: AgentName) => STEPS.filter((s) => ran.includes(s) && stepAgent(s, claude, exec) === agent);
+  const on = (agent: AgentName) => Arr.filter(STEPS, (s) => ran.includes(s) && stepAgent(s, claude, exec) === agent);
   const onExec = on("codex-exec");
   const onClaude = on("claude");
-
-  return [
+  return Arr.join(
+    [
     "Codex in a box",
-    ...(onExec.length === 0 ? [] : [`plain codex exec for ${onExec.join(", ")}`]),
-    ...(onClaude.length === 0 ? [] : [`or Claude for ${onClaude.join(", ")}`]),
-  ].join(", ");
+      ...(onExec.length === 0 ? [] : [`plain codex exec for ${Arr.join(onExec, ", ")}`]),
+      ...(onClaude.length === 0 ? [] : [`or Claude for ${Arr.join(onClaude, ", ")}`]),
+    ],
+    ", ",
+  );
 };
 
 /**
@@ -1743,12 +1755,12 @@ export const stepsTable = (
     }
   }
 
-  const total = steps.reduce((sum, e) => sum + (dollars.get(e.run ?? "") ?? 0), 0);
-
+  const total = Arr.reduce(steps, 0, (sum, e) => sum + (dollars.get(e.run ?? "") ?? 0));
   return [
     "| Step | Box | Outcome | List $ |",
     "|---|---|---|---|",
-    ...steps.map(
+    ...Arr.map(
+      steps,
       (e) =>
         `| ${e.step} | ${e.box ?? ""} | ${e.outcome} | ${dollars.has(e.run ?? "") ? (dollars.get(e.run ?? "") ?? 0).toFixed(2) : ""} |`,
     ),
@@ -1766,10 +1778,11 @@ const flag = (args: string[], name: string) => {
 
 const stepSet = (text: string | undefined): Set<StepName> =>
   new Set(
-    (text ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(isStep),
+    pipe(
+      (text ?? "").split(","),
+      Arr.map((s) => s.trim()),
+      Arr.filter(isStep),
+    ),
   );
 
 export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
@@ -1813,7 +1826,7 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     const start = flag(args, "--start") ?? "tests";
 
     if (!isStep(start)) {
-      console.error(`chain.ts: --start takes one of ${STEPS.join(", ")}`);
+      console.error(`chain.ts: --start takes one of ${Arr.join(STEPS, ", ")}`);
       process.exit(2);
     }
 
@@ -1821,7 +1834,13 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     const missing = lacks(brief, start);
 
     if (missing.length > 0) {
-      console.error(`chain.ts: the quest brief lacks sections: ${missing.map((m) => `## ${m}`).join(", ")}`);
+      console.error(
+        `chain.ts: the quest brief lacks sections: ${pipe(
+          missing,
+          Arr.map((m) => `## ${m}`),
+          Arr.join(", "),
+        )}`,
+      );
       process.exit(2);
     }
 
@@ -1923,8 +1942,7 @@ const backstopFor = (plan: string, brief: string) =>
   Effect.gen(function* () {
     const times = yield* BackstopTimes;
     const maxSteps = yield* MaxSteps;
-
-    const found = [plan, brief].flatMap((path) => {
+    const found = Arr.flatMap([plan, brief], (path) => {
       const estimate = existsSync(path) ? estimateIn(readFileSync(path, "utf8")) : null;
 
       return estimate === null ? [] : [{ path, estimate }];

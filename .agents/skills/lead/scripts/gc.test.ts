@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Array as Arr, pipe } from "effect";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 import {
@@ -160,14 +161,15 @@ describe("box gc, today's tooling", () => {
     const name = fc.stringMatching(/^[a-z][a-z0-9-]{0,10}$/);
     fc.assert(
       fc.property(fc.uniqueArray(name), fc.uniqueArray(name), (facts, dirs) => {
-        const files = [...facts.map((f) => `${f}.box`), ...facts.map((f) => `${f}.rows.jsonl`)];
+        const files = [...Arr.map(facts, (f) => `${f}.box`), ...Arr.map(facts, (f) => `${f}.rows.jsonl`)];
         const live = new Set(dirs);
         const dead = deadFacts(files, live);
         expect(dead.sort()).toEqual(
-          facts
-            .filter((f) => !live.has(f))
-            .map((f) => `${f}.box`)
-            .sort(),
+          pipe(
+            facts,
+            Arr.filter((f) => !live.has(f)),
+            Arr.map((f) => `${f}.box`),
+          ).sort(),
         );
       }),
       options,
@@ -231,17 +233,16 @@ describe("worktree gc, today's tooling", () => {
 
           const w = wip ? "-wip" : "";
           // One tip is always a branch some pull request has, so the lookup is exercised.
-          const at = [...tips, ...refs.slice(0, 1).map(([r]) => r)];
-
+          const at = [...tips, ...Arr.map(refs.slice(0, 1), ([r]) => r)];
           const got = worktreePrs(
-            { branch: branch === null ? null : branch + w, head, tips: at.map((t) => t + w) },
+            { branch: branch === null ? null : branch + w, head, tips: Arr.map(at, (t) => t + w) },
             byRef,
             byHead,
           );
 
           const want = [
             ...(branch === null ? [] : (byRef.get(branch) ?? [])),
-            ...at.flatMap((t) => byRef.get(t) ?? []),
+            ...Arr.flatMap(at, (t) => byRef.get(t) ?? []),
             ...(head === null ? [] : (byHead.get(head) ?? [])),
           ];
 

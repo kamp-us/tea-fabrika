@@ -1,7 +1,7 @@
 // BoxGitProcess.layer: the BoxGit service on real git, run from MAIN. Git sees neither inherited
 // settings nor the box's own config, hooks, fsmonitor or attributes: the caller passes an
 // environment with every GIT_ variable gone, and each call turns the box's programs off.
-import { Effect, Layer, Stream } from "effect";
+import { Effect, Layer, Stream, Array as Arr } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { BoxGit, BoxGitError, type Inspection } from "./BoxGit.ts";
 
@@ -45,7 +45,7 @@ const gitEnv = (inherited: Readonly<Record<string, string | undefined>>): Record
 
 const text = new TextDecoder();
 
-const lines = (out: string) => out.split("\n").filter((line) => line !== "");
+const lines = (out: string) => Arr.filter(out.split("\n"), (line) => line !== "");
 
 export const layer = (
   main: string,
@@ -91,7 +91,7 @@ export const layer = (
           Effect.map(git(at, ["status", "--porcelain=v1", "-z", "--untracked-files=no"]), (out) => out !== ""),
         refs: (at) =>
           Effect.map(git(at, ["for-each-ref", "--format=%(refname) %(objectname)"]), (out) =>
-            lines(out).map((line) => {
+            Arr.map(lines(out), (line) => {
               const space = line.indexOf(" ");
 
               return { ref: line.slice(0, space), oid: line.slice(space + 1) };

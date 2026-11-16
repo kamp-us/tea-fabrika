@@ -22,7 +22,7 @@
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { Agent } from "@kampus/fabrika-old";
 import { ADAPTERS, acpAdapter, psReaper } from "@kampus/fabrika-old/agents/acp";
-import { Clock, Context, Effect, FileSystem, Result, Schema, Stream } from "effect";
+import { Clock, Context, Effect, FileSystem, Result, Schema, Stream, Array as Arr } from "effect";
 import { ChildProcess } from "effect/process";
 import { boxEnv, repoNode } from "./boxnode.ts";
 import { CAPACITY, codexExecAdapter } from "./codexexec.ts";
@@ -62,7 +62,7 @@ export type Answer = typeof Answer.Type;
 
 /** Where a step may send the quest: any step but itself. A step that needs another round of itself
  * is not done yet, and a send to itself only loops (2026-11-11, a tests step on Codex). */
-export const sendsFrom = (step: string) => (["tests", "build", "plan"] as const).filter((to) => to !== step);
+export const sendsFrom = (step: string) => Arr.filter(["tests", "build", "plan"] as const, (to) => to !== step);
 
 /** The typed answer one step is offered: `Answer`, with `to` naming only `sendsFrom(step)`. */
 export const answerFor = (step: string) =>
@@ -177,8 +177,7 @@ const pnpmInstall: Install = (folder) =>
       ],
       { concurrency: 3 },
     );
-
-    return { code: Number(code), said: `${out}${err}`.trim().split("\n").slice(-5).join(" | ") };
+    return { code: Number(code), said: Arr.join(`${out}${err}`.trim().split("\n").slice(-5), " | ") };
   }).pipe(
     Effect.scoped,
     Effect.orElseSucceed(() => ({ code: 127, said: "pnpm could not start" })),
@@ -302,8 +301,7 @@ const ALONE = /^\{[\s\S]*\}$/;
  */
 export const closingWords = (closing: readonly string[]): string => {
   const last = closing.at(-1) ?? "";
-
-  return ALONE.test(last.trim()) ? closing.join("\n\n") : last;
+  return ALONE.test(last.trim()) ? Arr.join(closing, "\n\n") : last;
 };
 
 /** One turn through the agents service, on `prompt` and `seconds`, with its report (`closingWords`). */

@@ -9,7 +9,7 @@
 // not count against the login's 5,000 calls an hour (GitHub's REST docs, "Best practices for using
 // the REST API": use conditional requests), so a wait spends one call per change of the job, not
 // one per poll. Measured here on 2026-11-12: 20 such 304s in 9 seconds moved the count by none.
-import { Effect, Layer, Option, Schema, Stream } from "effect";
+import { Array as Arr, Effect, Layer, Option, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { Checks, ChecksError, type Job } from "./Checks.ts";
 
@@ -21,9 +21,8 @@ export const responseIn = (out: string): Response => {
   const [head = "", ...rest] = out.split(/\r?\n\r?\n/);
   const lines = head.split(/\r?\n/);
   const status = Number(/^HTTP\/\S+ (\d{3})\b/.exec(lines[0] ?? "")?.[1] ?? Number.NaN);
-  const etag = lines.map((line) => /^etag:\s*(\S.*)$/i.exec(line)?.[1]?.trim()).find((e) => e !== undefined);
-
-  return { status, etag: etag ?? null, body: rest.join("\n\n") };
+  const etag = Arr.findFirst(lines, (line) => Option.fromUndefinedOr(/^etag:\s*(\S.*)$/i.exec(line)?.[1]?.trim()));
+  return { status, etag: Option.getOrNull(etag), body: Arr.join(rest, "\n\n") };
 };
 
 const Runs = Schema.fromJsonString(
@@ -42,11 +41,9 @@ const Runs = Schema.fromJsonString(
 /** The latest check run GitHub Actions made in a check-runs body, as `Job`; none when it lists none. */
 export const latestIn = (body: string): Effect.Effect<Option.Option<Job>, Schema.SchemaError> =>
   Effect.map(Schema.decodeEffect(Runs)(body), ({ check_runs }) => {
-    const ours = check_runs.filter((run) => run.app?.slug === "github-actions");
-
-    const latest = ours.reduce<(typeof ours)[number] | undefined>(
-      (max, run) => (max === undefined || run.id > max.id ? run : max),
-      undefined,
+    const ours = Arr.filter(check_runs, (run) => run.app?.slug === "github-actions");
+    const latest = Arr.reduce<(typeof ours)[number], (typeof ours)[number] | undefined>(ours, undefined, (max, run) =>
+      max === undefined || run.id > max.id ? run : max,
     );
 
     return latest === undefined
@@ -89,8 +86,10 @@ export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpaw
       /** Any exit but 0 is a failure, with gh's own last line. */
       const exited = (args: ReadonlyArray<string>, ran: { readonly err: string; readonly code: number }) => {
         const last = ran.err.trim().split("\n").at(-1) ?? "";
-        const path = args.find((a) => !a.startsWith("-")) ?? "";
-
+        const path = Option.getOrElse(
+          Arr.findFirst(args, (a) => !a.startsWith("-")),
+          () => "",
+        );
         return ChecksError.make({ reason: `gh api ${path} exited ${ran.code}: ${last}` });
       };
 

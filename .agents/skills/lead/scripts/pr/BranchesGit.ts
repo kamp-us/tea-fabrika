@@ -1,7 +1,7 @@
 // BranchesGit.layer: the Branches service on real git, in one checkout. The trial merge is
 // `git merge-tree --write-tree` (git 2.38 and later): it merges in the object store and touches no
 // work tree, index or ref, so the check changes nothing but origin's remote-tracking refs.
-import { Effect, Layer } from "effect";
+import { Array as Arr, Effect, Layer, Option } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { type Branch, Branches, BranchesError } from "./Branches.ts";
 import { lastLine, run } from "./command.ts";
@@ -55,7 +55,7 @@ export const layer = (dir: string): Layer.Layer<Branches, never, ChildProcessSpa
       const git = (args: ReadonlyArray<string>, ok: ReadonlyArray<number> = [0]) => call(args, ok);
 
       const list = Effect.map(git(["for-each-ref", "--format=%(refname) %(objectname)", LOCAL, ORIGIN]), (ran) =>
-        ran.out.split("\n").flatMap((line) => fromRefLine(line) ?? []),
+        Arr.flatMap(ran.out.split("\n"), (line) => Option.toArray(Option.fromNullishOr(fromRefLine(line)))),
       );
 
       const ahead = (tip: string) =>

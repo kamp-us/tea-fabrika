@@ -52,6 +52,7 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import {
   Config,
   Console,
+  Array as Arr,
   DateTime,
   Duration,
   Effect,
@@ -173,9 +174,13 @@ const NOTHING = readOutput("");
 
 /** The newest sweep that ran, and how many were skipped after it. */
 export const newest = (sweeps: ReadonlyArray<Sweep>) => {
-  const at = sweeps.findLastIndex((s) => s.outcome._tag !== "skipped");
-
-  return { last: at < 0 ? null : (sweeps[at] ?? null), skipped: sweeps.length - 1 - at };
+  return Option.match(
+    Arr.findLastIndex(sweeps, (s) => s.outcome._tag !== "skipped"),
+    {
+      onNone: () => ({ last: null, skipped: sweeps.length }),
+      onSome: (at) => ({ last: sweeps[at] ?? null, skipped: sweeps.length - 1 - at }),
+    },
+  );
 };
 
 /** Late: no sweep ran yet, or the newest one started more than two periods before `now`. */
@@ -223,8 +228,7 @@ export const says = (
     ...(skipped > 0 ? [`${skipped} skipped since`] : []),
     ...(going === null ? [] : [`one going for ${spoken(now - Date.parse(going.startedAt))} (pid ${going.pid})`]),
   ];
-
-  return { late: isLate, text: `${head}${body}; ${tail.join("; ")}` };
+  return { late: isLate, text: `${head}${body}; ${Arr.join(tail, "; ")}` };
 };
 
 // ---------------------------------------------------------------- the timer's unit
@@ -251,7 +255,7 @@ export const fill = (template: string, values: Readonly<Record<string, string>>)
 
   return missing.size === 0
     ? Result.succeed(filled)
-    : Result.fail(`the unit file has no value for ${[...missing].join(", ")}`);
+    : Result.fail(`the unit file has no value for ${Arr.join([...missing], ", ")}`);
 };
 
 // ---------------------------------------------------------------- the world
@@ -507,8 +511,7 @@ export const sweep = Effect.fn("gcloop.sweep")(function* (ask: Ask) {
 export const sweeps = Effect.fn("gcloop.sweeps")(function* (state: string) {
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs.readFileString(`${state}/gc.jsonl`).pipe(Effect.orElseSucceed(() => ""));
-
-  return text.split("\n").flatMap((line) => Option.toArray(Schema.decodeOption(SweepLine)(line)));
+  return Arr.flatMap(text.split("\n"), (line) => Option.toArray(Schema.decodeOption(SweepLine)(line)));
 });
 
 /** The status line now, with the live holder of the lock if a sweep is going. */
@@ -568,7 +571,7 @@ const statusCommand = Command.make(
       const folders = yield* paths();
       const line = yield* status(folders.state, yield* MINUTES);
       const last = newest(yield* sweeps(folders.state)).last;
-      const kept = keeps && last !== null && last.kept.length > 0 ? `; it kept ${last.kept.join("; ")}` : "";
+      const kept = keeps && last !== null && last.kept.length > 0 ? `; it kept ${Arr.join(last.kept, "; ")}` : "";
       yield* Console.log(`${line.text}${kept}`);
     }),
 );

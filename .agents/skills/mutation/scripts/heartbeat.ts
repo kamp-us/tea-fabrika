@@ -27,7 +27,7 @@
  * - A merge stamped in the future (a skewed clock): never late on its own.
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Clock, Console, Effect, Schema, Stream } from "effect";
+import { Clock, Console, Effect, Schema, Stream, Array as Arr } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** How long a merge may wait for a passing run, in ms. */
@@ -110,7 +110,7 @@ const main = Effect.gen(function* () {
   const b = beat(
     now,
     lastPass,
-    commits.map((c) => Date.parse(c.commit.committer.date)),
+    Arr.map(commits, (c) => Date.parse(c.commit.committer.date)),
   );
 
   yield* Console.log(line(now, b));

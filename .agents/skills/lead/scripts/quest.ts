@@ -2,6 +2,10 @@
 // own laptop; it is not product.
 
 import { dirname, matchesGlob } from "node:path";
+import { Array as Arr, Option, Order, pipe, Schema } from "effect";
+
+/** A text read as JSON, or none when it does not read. */
+const parsed = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
 
 /**
  * A quest's state file (`state/<quest>.json`, drive.ts's) names its quest under `quest`. One written
@@ -62,8 +66,10 @@ export const startHead = (
   saved: string | undefined,
   isAncestor: (a: string, b: string) => boolean,
 ): string | undefined => {
-  const newest = pushed.find((p) => pushed.every((q) => isAncestor(q, p))) ?? pushed[0];
-
+  const newest = Option.getOrElse(
+    Arr.findFirst(pushed, (p) => Arr.every(pushed, (q) => isAncestor(q, p))),
+    () => pushed[0],
+  );
   return newest && !(saved && isAncestor(newest, saved)) ? newest : saved;
 };
 
@@ -84,28 +90,27 @@ export const questRoot = (
 
 /** The step a git note names, or none when it does not read. */
 export const stepOf = (note: string): string[] => {
-  let n: unknown;
+  const read = parsed(note);
 
-  try {
-    n = JSON.parse(note);
-  } catch {
+  if (Option.isNone(read)) {
     return [];
   }
 
+  const n = read.value;
   const step = n !== null && typeof n === "object" ? (n as { step?: unknown }).step : undefined;
 
   return typeof step === "string" ? [step] : [];
 };
 
 const stuckIn = (out: string) =>
-  out.split("\n").flatMap((line) => {
-    let a: unknown;
+  Arr.flatMap(out.split("\n"), (line) => {
+    const read = parsed(line);
 
-    try {
-      a = JSON.parse(line);
-    } catch {
+    if (Option.isNone(read)) {
       return [];
     }
+
+    const a = read.value;
 
     if (a === null || typeof a !== "object" || !("_tag" in a) || a._tag !== "stuck") {
       return [];
@@ -125,10 +130,12 @@ const stuckIn = (out: string) =>
  * reads the exit code too.
  */
 export const questStuck = (out: string, questSteps: ReadonlySet<string>): string[] =>
-  stuckIn(out)
-    .filter(({ reason }) => reason !== "unsigned_commit")
-    .filter(({ reason, step }) => !(reason === "stale_link" && !(typeof step === "string" && questSteps.has(step))))
-    .map((a) => a.line);
+  pipe(
+    stuckIn(out),
+    Arr.filter(({ reason }) => reason !== "unsigned_commit"),
+    Arr.filter(({ reason, step }) => !(reason === "stale_link" && !(typeof step === "string" && questSteps.has(step)))),
+    Arr.map((a) => a.line),
+  );
 
 /**
  * Each stuck answer that holds the step, as `<rule> <commit> [step <s>] [paths]`: the rule
@@ -136,24 +143,26 @@ export const questStuck = (out: string, questSteps: ReadonlySet<string>): string
  * the right place (ticket 429: 18 fetches on 2026-11-09 said only "commits check failed").
  */
 export const heldRules = (out: string, questSteps: ReadonlySet<string>): string[] =>
-  questStuck(out, questSteps).map((line) => {
+  Arr.map(questStuck(out, questSteps), (line) => {
     const a = JSON.parse(line) as {
       reason?: unknown;
       sha?: unknown;
       step?: unknown;
       paths?: unknown;
     };
-
-    const paths = Array.isArray(a.paths) ? a.paths.slice(0, 3).map(String) : [];
-
-    return [
+    const paths = Arr.isArray(a.paths) ? Arr.map(a.paths.slice(0, 3), String) : [];
+    return Arr.join(
+      Arr.filter(
+        [
       typeof a.reason === "string" ? a.reason : "stuck",
       typeof a.sha === "string" ? a.sha.slice(0, 8) : "",
       typeof a.step === "string" ? `step ${a.step}` : "",
       ...paths,
-    ]
-      .filter(Boolean)
-      .join(" ");
+        ],
+        Boolean,
+      ),
+      " ",
+    );
   });
 
 /** Whether the commits check's exit holds the step: 0 never; 1 unless it gave stuck answers and
@@ -164,15 +173,15 @@ export const checkHolds = (code: number, out: string, questSteps: ReadonlySet<st
 /** The `packages:` globs of a pnpm-workspace.yaml: the block's `- glob` lines, comments dropped. */
 export const workspaceGlobs = (yaml: string): string[] => {
   const lines = yaml.split("\n");
-  const start = lines.findIndex((l) => /^packages:\s*(#.*)?$/.test(l));
+  const start = Arr.findFirstIndex(lines, (l) => /^packages:\s*(#.*)?$/.test(l));
 
-  if (start < 0) {
+  if (Option.isNone(start)) {
     return [];
   }
 
   const globs: string[] = [];
 
-  for (const line of lines.slice(start + 1)) {
+  for (const line of lines.slice(start.value + 1)) {
     if (/^\s*(#.*)?$/.test(line)) {
       continue;
     }
@@ -192,8 +201,8 @@ export const workspaceGlobs = (yaml: string): string[] => {
 /** Whether a folder is a workspace package: the root, or one the globs take and no `!` glob drops. */
 const member = (dir: string, globs: readonly string[]) =>
   dir === "." ||
-  (globs.some((g) => !g.startsWith("!") && matchesGlob(dir, g)) &&
-    !globs.some((g) => g.startsWith("!") && matchesGlob(dir, g.slice(1))));
+  (Arr.some(globs, (g) => !g.startsWith("!") && matchesGlob(dir, g)) &&
+    !Arr.some(globs, (g) => g.startsWith("!") && matchesGlob(dir, g.slice(1))));
 
 /** The package.json fields pnpm-lock.yaml follows. Scripts, exports and the rest do not move it. */
 const LOCKED = [
@@ -209,27 +218,31 @@ const LOCKED = [
 
 /** Keys sorted all the way down, so a reorder is not a change. */
 const canon = (v: unknown): string =>
-  Array.isArray(v)
-    ? `[${v.map(canon).join(",")}]`
+  Arr.isArray(v)
+    ? `[${Arr.join(Arr.map(v, canon), ",")}]`
     : v !== null && typeof v === "object"
-      ? `{${Object.keys(v)
-          .toSorted()
-          .map((k) => `${JSON.stringify(k)}:${canon((v as Record<string, unknown>)[k])}`)
-          .join(",")}}`
+      ? `{${pipe(
+          Object.keys(v),
+          Arr.sort(Order.String),
+          Arr.map((k) => `${JSON.stringify(k)}:${canon((v as Record<string, unknown>)[k])}`),
+          Arr.join(","),
+        )}}`
       : JSON.stringify(v);
 
 const lockedPart = (text: string): string | null => {
-  try {
-    const json: unknown = JSON.parse(text);
+  const read = parsed(text);
+
+  if (Option.isNone(read)) {
+    return null;
+  }
+
+  const json = read.value;
 
     if (json === null || typeof json !== "object") {
       return null;
     }
 
-    return canon(LOCKED.map((k) => (json as Record<string, unknown>)[k] ?? null));
-  } catch {
-    return null;
-  }
+  return canon(Arr.map(LOCKED, (k) => (json as Record<string, unknown>)[k] ?? null));
 };
 
 /** One manifest a step's commits touched, as the base and the head hold it (`null`: absent). */
@@ -254,8 +267,9 @@ export const lockfileBehind = (
 ): string[] =>
   lockTouched
     ? []
-    : changed
-        .filter(({ path, before, after }) => {
+    : pipe(
+        changed,
+        Arr.filter(({ path, before, after }) => {
           if (before === after) {
             return false;
           }
@@ -280,5 +294,6 @@ export const lockfileBehind = (
           const is = lockedPart(after);
 
           return was === null || is === null || was !== is;
-        })
-        .map((m) => m.path);
+        }),
+        Arr.map((m) => m.path),
+      );

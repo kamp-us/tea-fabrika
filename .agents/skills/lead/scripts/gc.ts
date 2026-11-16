@@ -38,7 +38,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { Result, Schema } from "effect";
+import { Result, Schema, Array as Arr, pipe, Option } from "effect";
 import { GC_SECONDS } from "./mutbox.ts";
 import { type PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
 import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipOf } from "./quest.ts";
@@ -95,7 +95,7 @@ export const backupsOf = (name: string, branch: string | null): string[] => {
 /** The `state/*.box` files whose box folder is gone: facts of a dead box, which stepcommit would
  * otherwise still read. A box saves its facts only after its folder exists, so none is half made. */
 export const deadFacts = (files: readonly string[], boxes: ReadonlySet<string>): string[] =>
-  files.filter((f) => f.endsWith(".box") && !boxes.has(f.slice(0, -".box".length)));
+  Arr.filter(files, (f) => f.endsWith(".box") && !boxes.has(f.slice(0, -".box".length)));
 
 /**
  * The Check for one quest's pinned scripts, pure. A pin goes only when no process names it and it is
@@ -117,7 +117,7 @@ export const decide = (s: Seen): Verdict => {
   }
 
   if (s.busy.length > 0) {
-    return keep(`a process is working in it (pid ${s.busy.join(", ")})`);
+    return keep(`a process is working in it (pid ${Arr.join(Arr.map(s.busy, String), ", ")})`);
   }
 
   if (s.idle < IDLE) {
@@ -183,7 +183,7 @@ export const worktreePrs = (
   byHead: ReadonlyMap<string, readonly PrState[]>,
 ): PrState[] => [
   ...(w.branch === null ? [] : (byRef.get(w.branch.replace(/(-wip)+$/, "")) ?? [])),
-  ...w.tips.flatMap((t) => byRef.get(t.replace(/(-wip)+$/, "")) ?? []),
+  ...Arr.flatMap(w.tips, (t) => byRef.get(t.replace(/(-wip)+$/, "")) ?? []),
   ...(w.head === null ? [] : (byHead.get(w.head) ?? [])),
 ];
 
@@ -195,7 +195,7 @@ export const decideWorktree = (w: SeenWorktree): Verdict => {
   }
 
   if (w.busy.length > 0) {
-    return keep(`a process is working in it (pid ${w.busy.join(", ")})`);
+    return keep(`a process is working in it (pid ${Arr.join(Arr.map(w.busy, String), ", ")})`);
   }
 
   if (w.idle < IDLE) {
@@ -280,7 +280,7 @@ export const dirtyIn = (gitDir: string, box: string): number | null => {
   ]);
 
   // No rename pairs, so each NUL-ended entry is one file.
-  return r.code === 0 ? r.out.split("\0").filter(Boolean).length : null;
+  return r.code === 0 ? Arr.filter(r.out.split("\0"), Boolean).length : null;
 };
 
 /** Keep a box's uncommitted and untracked files in `main` at `ref`, as one stash commit (`git stash
@@ -366,7 +366,13 @@ const cwds = (): { readonly pid: number; readonly path: string }[] => {
 };
 
 const pidsIn = (busyIn: readonly { pid: number; path: string }[], dir: string) => [
-  ...new Set(busyIn.filter((c) => c.path === dir || c.path.startsWith(`${dir}/`)).map((c) => c.pid)),
+  ...new Set(
+    pipe(
+      busyIn,
+      Arr.filter((c) => c.path === dir || c.path.startsWith(`${dir}/`)),
+      Arr.map((c) => c.pid),
+    ),
+  ),
 ];
 
 /** Box name to when drive kept it stuck, from `state/<quest>.json`. */
@@ -378,7 +384,7 @@ const keptByDrive = (boxes: string): Map<string, number> => {
     return kept;
   }
 
-  for (const file of readdirSync(dir).filter((f) => f.endsWith(".json"))) {
+  for (const file of Arr.filter(readdirSync(dir), (f) => f.endsWith(".json"))) {
     // A state file that does not read is skipped, from the step where it stopped reading.
     Result.try(() => {
       const quest = JSON.parse(readFileSync(join(dir, file), "utf8")) as {
@@ -397,7 +403,7 @@ const keptByDrive = (boxes: string): Map<string, number> => {
 };
 
 const sizeMb = (paths: readonly string[]) => {
-  const there = paths.filter(existsSync);
+  const there = Arr.filter(paths, existsSync);
 
   if (there.length === 0) {
     return 0;
@@ -406,10 +412,11 @@ const sizeMb = (paths: readonly string[]) => {
   const r = sh("du", ["-sk", ...there]);
 
   return Math.round(
-    r.out
-      .split("\n")
-      .filter(Boolean)
-      .reduce((n, l) => n + Number(l.split("\t")[0] ?? 0), 0) / 1024,
+    pipe(
+      r.out.split("\n"),
+      Arr.filter(Boolean),
+      Arr.reduce(0, (n, l) => n + Number(l.split("\t")[0] ?? 0)),
+    ) / 1024,
   );
 };
 
@@ -428,7 +435,7 @@ const main = () => {
   const args = process.argv.slice(2);
   const dry = args.includes("--dry-run");
 
-  if (args.some((a) => a !== "--dry-run")) {
+  if (Arr.some(args, (a) => a !== "--dry-run")) {
     console.error("usage: box.sh gc [--dry-run]");
     process.exit(2);
   }
@@ -483,7 +490,13 @@ const main = () => {
     }
   }
 
-  const merged = new Set([...prsOf].filter(([, s]) => s.includes("MERGED")).map(([r]) => r));
+  const merged = new Set(
+    pipe(
+      [...prsOf],
+      Arr.filter(([, s]) => s.includes("MERGED")),
+      Arr.map(([r]) => r),
+    ),
+  );
   const busyIn = cwds();
   const kept = keptByDrive(env.BOXES);
   const now = Date.now();
@@ -493,17 +506,23 @@ const main = () => {
 
   const foldersIn = (dir: string, skip: (name: string) => boolean) =>
     existsSync(dir)
-      ? readdirSync(dir, { withFileTypes: true })
-          .filter((d) => d.isDirectory() && !skip(d.name))
-          .map((d) => d.name)
+      ? pipe(
+          readdirSync(dir, { withFileTypes: true }),
+          Arr.filter((d) => d.isDirectory() && !skip(d.name)),
+          Arr.map((d) => d.name),
+        )
       : [];
 
   const boxes = [
-    ...foldersIn(boxTrees(env.BOXES), (n) => n.endsWith("-view")).map((name) => ({
+    ...Arr.map(
+      foldersIn(boxTrees(env.BOXES), (n) => n.endsWith("-view")),
+      (name) => ({
       name,
       box: boxTree(env.BOXES, name),
-    })),
-    ...foldersIn(env.BOXES, (n) => n === "state" || n === "box" || n === "pins" || n.endsWith("-gitdata")).map(
+      }),
+    ),
+    ...Arr.map(
+      foldersIn(env.BOXES, (n) => n === "state" || n === "box" || n === "pins" || n.endsWith("-gitdata")),
       (name) => ({
         name,
         box: oldBoxTree(env.BOXES, name),
@@ -608,19 +627,20 @@ const main = () => {
           repo("notes", "--ref=fabrika", "merge", "-q", "-s", "cat_sort_uniq", `box-${name}`);
         }
 
-        const pushed = verdict.to.find(
+        const pushed = Arr.findFirst(
+          verdict.to,
           (to) => sh("node", [join(import.meta.dirname, "botpush.mjs"), env.MAIN, to, ref]).code === 0,
         );
 
         repo("update-ref", "-d", ref);
 
-        if (pushed === undefined) {
-          console.log(`keep ${name}: backup push refused (${verdict.to.join(", ")})`);
+        if (Option.isNone(pushed)) {
+          console.log(`keep ${name}: backup push refused (${Arr.join(verdict.to, ", ")})`);
           keptCount += 1;
           continue;
         }
 
-        reason = `backed up to ${pushed}`;
+        reason = `backed up to ${pushed.value}`;
       }
     }
 
@@ -694,8 +714,8 @@ const main = () => {
       "--main",
       env.MAIN,
       ...(dry ? ["--dry-run"] : []),
-      ...gone.flatMap((name) => ["--gone", name]),
-      ...[...prsOf].flatMap(([ref, states]) => [
+      ...Arr.flatMap(gone, (name) => ["--gone", name]),
+      ...Arr.flatMap([...prsOf], ([ref, states]) => [
         ...(states.includes("MERGED") ? ["--merged", ref] : []),
         ...(states.includes("OPEN") ? ["--open", ref] : []),
       ]),
@@ -712,31 +732,44 @@ const main = () => {
 
   // Linked worktrees outside the boxes folder: a lead's or an agent's own checkout of a quest.
   let trees = 0;
-  const blocks = repo("worktree", "list", "--porcelain").out.split("\n\n").filter(Boolean);
+  const blocks = Arr.filter(repo("worktree", "list", "--porcelain").out.split("\n\n"), Boolean);
 
   for (const block of blocks.slice(1)) {
     const lines = block.split("\n");
-    const path = lines.find((l) => l.startsWith("worktree "))?.slice(9) ?? "";
+    const field = (start: string) => Arr.findFirst(lines, (l) => l.startsWith(start));
+    const path = pipe(
+      field("worktree "),
+      Option.map((l) => l.slice(9)),
+      Option.getOrElse(() => ""),
+    );
 
     if (!path || path === env.MAIN || path.startsWith(`${env.BOXES}/`) || !existsSync(path)) {
       continue;
     }
 
-    const ref = lines.find((l) => l.startsWith("branch "))?.slice("branch refs/heads/".length);
+    const ref = pipe(
+      field("branch "),
+      Option.map((l) => l.slice("branch refs/heads/".length)),
+    );
     const gitDir = gitDirOf(path);
-    const branch = ref ?? null;
-    const head = lines.find((l) => l.startsWith("HEAD "))?.slice(5) ?? null;
-
+    const branch = Option.getOrNull(ref);
+    const head = pipe(
+      field("HEAD "),
+      Option.map((l) => l.slice(5)),
+      Option.getOrNull,
+    );
     const tips =
       head === null
         ? []
-        : repo("for-each-ref", "--points-at", head, "--format=%(refname:lstrip=3)", "refs/remotes/origin")
-            .out.split("\n")
-            .filter(Boolean);
-
+        : Arr.filter(
+            repo("for-each-ref", "--points-at", head, "--format=%(refname:lstrip=3)", "refs/remotes/origin").out.split(
+              "\n",
+            ),
+            Boolean,
+          );
     const verdict = decideWorktree({
       branch,
-      locked: lines.some((l) => l === "locked" || l.startsWith("locked ")),
+      locked: Arr.some(lines, (l) => l === "locked" || l.startsWith("locked ")),
       busy: pidsIn(busyIn, path),
       idle: now - lastTouched(path, gitDir),
       dirty: gitDir === null ? null : dirtyIn(gitDir, path),

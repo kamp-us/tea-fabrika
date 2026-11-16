@@ -52,7 +52,19 @@
 // sweep log, and the status page read the quest's state file and a clock, which is ticket 685.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, DateTime, Effect, FileSystem, Option, Path, Predicate, Schema } from "effect";
+import {
+  Console,
+  DateTime,
+  Effect,
+  FileSystem,
+  Option,
+  Path,
+  Predicate,
+  Schema,
+  Array as Arr,
+  pipe,
+  Order,
+} from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import * as Beat from "./flow/Beat.ts";
 import { paths } from "./gcloop.ts";
@@ -136,7 +148,7 @@ export type Line = typeof Line.Type;
 
 /** The last `{"outcome":...}` line in a chain's output, among whatever else was printed there. */
 export const lastOutcome = (out: string): Omit<End, "at"> | null => {
-  for (const line of out.split("\n").toReversed()) {
+  for (const line of Arr.reverse(out.split("\n"))) {
     const end = Schema.decodeOption(EndLine)(line.trim());
 
     if (Option.isSome(end)) {
@@ -150,11 +162,10 @@ export const lastOutcome = (out: string): Omit<End, "at"> | null => {
 /** The box of an open step: the standing `<quest>-<step><n>` with the highest n. */
 const standing = (quest: string, step: string, boxes: ReadonlyArray<string>): string | null => {
   const head = `${quest}-${step}`;
-
-  const runs = boxes
-    .filter((box) => box.startsWith(head) && /^\d+$/.test(box.slice(head.length)))
-    .toSorted((a, b) => Number(a.slice(head.length)) - Number(b.slice(head.length)));
-
+  const runs = Arr.sort(
+    Arr.filter(boxes, (box) => box.startsWith(head) && /^\d+$/.test(box.slice(head.length))),
+    Order.mapInput(Order.Number, (box: string) => Number(box.slice(head.length))),
+  );
   return runs.at(-1) ?? null;
 };
 
@@ -269,10 +280,20 @@ export const read = Effect.fn("quests.read")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const names = yield* fs.readDirectory(path.join(boxes, "state")).pipe(Effect.orElseSucceed(() => []));
-  const recorded = names.filter((name) => name.endsWith(CHAIN)).map((name) => name.slice(0, -CHAIN.length));
-  const standingBoxes = names.filter((name) => name.endsWith(".box")).map((name) => name.slice(0, -".box".length));
-  const asked = (options.named.length > 0 ? options.named : recorded).toSorted();
+  const names = yield* fs
+    .readDirectory(path.join(boxes, "state"))
+    .pipe(Effect.orElseSucceed(() => Arr.empty<string>()));
+  const recorded = pipe(
+    names,
+    Arr.filter((name) => name.endsWith(CHAIN)),
+    Arr.map((name) => name.slice(0, -CHAIN.length)),
+  );
+  const standingBoxes = pipe(
+    names,
+    Arr.filter((name) => name.endsWith(".box")),
+    Arr.map((name) => name.slice(0, -".box".length)),
+  );
+  const asked = Arr.sort(options.named.length > 0 ? options.named : recorded, Order.String);
   const now = DateTime.toDate(yield* DateTime.now);
 
   const lines = yield* Effect.forEach(
@@ -283,7 +304,7 @@ export const read = Effect.fn("quests.read")(function* (
 
   return options.named.length > 0 || options.all
     ? lines
-    : lines.filter((line) => line.state !== "landed" && line.state !== "queued");
+    : Arr.filter(lines, (line) => line.state !== "landed" && line.state !== "queued");
 });
 
 // ---------------------------------------------------------------- the command

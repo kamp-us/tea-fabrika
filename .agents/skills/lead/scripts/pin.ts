@@ -29,7 +29,7 @@
 // packages in node_modules. Uncommitted edits under `.agents/` in the main checkout are not in the
 // pin either; the launch prints one line when there are some.
 
-import { Console, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { Array as Arr, Console, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** The environment variable the pinned chain reads: its pin, as JSON. */
@@ -132,7 +132,7 @@ export const acquire = Effect.fn("pin.acquire")(function* (o: {
   );
 
   if (dirty.output !== "") {
-    yield* Console.error(`pin: uncommitted changes under ${ARCHIVED.join(" and ")} are not in the pin`);
+    yield* Console.error(`pin: uncommitted changes under ${Arr.join(ARCHIVED, " and ")} are not in the pin`);
   }
 
   const folder = o.folder;

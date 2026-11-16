@@ -1,7 +1,7 @@
 // BoxTestGit.world: the rm suite's world on real git and the real keepruns.sh, in the case's own
 // temp folder with its own HOME and no global or system Git config (0052). It keeps the memory
 // world honest: the same plans, with real index flags, real changes and real retention.
-import { Effect, FileSystem, Layer, Stream } from "effect";
+import { Effect, FileSystem, Layer, Stream, Array as Arr } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as BoxGitProcess from "./BoxGitProcess.ts";
 import type { Plan, World } from "./BoxTest.ts";
@@ -42,7 +42,7 @@ export const world: World = {
       );
 
       if (Number(code) !== 0) {
-        return yield* Effect.fail(`${command} ${args.join(" ")}: ${err}`);
+        return yield* Effect.fail(`${command} ${Arr.join(args, " ")}: ${err}`);
       }
 
       return out.trim();

@@ -73,7 +73,7 @@
 //   - A plan with no "Product lines expected" column and no slices says so: it records no size.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Exit, FileSystem, Predicate, Schema, Stream } from "effect";
+import { Console, Effect, Exit, FileSystem, Predicate, Schema, Stream, Array as Arr, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { ChildProcess } from "effect/process";
 
@@ -126,7 +126,7 @@ export const classify = (path: string, generated: boolean): Kind => {
     return "docs";
   }
 
-  return PRODUCT.some((root) => path.startsWith(root)) ? "product" : "other";
+  return Arr.some(PRODUCT, (root) => path.startsWith(root)) ? "product" : "other";
 };
 
 /** One file of `git diff --numstat -z`: its changed lines, or none when git sees it as binary. */
@@ -203,7 +203,7 @@ export interface PlanSize {
 const unfenced = (text: string): ReadonlyArray<string> => {
   let fence: string | null = null;
 
-  return text.split("\n").map((line) => {
+  return Arr.map(text.split("\n"), (line) => {
     const mark = /^\s{0,3}(`{3,}|~{3,})(.*)$/.exec(line);
 
     if (fence !== null) {
@@ -279,13 +279,14 @@ export const readPlan = (text: string): PlanSize => {
       column = null;
     } else if (!inTable) {
       inTable = true;
-      const at = splitRow(trimmed).findIndex((cell) => plain(cell).toLowerCase().startsWith("product lines"));
-      column = at < 0 ? null : at;
+      column = Option.getOrNull(
+        Arr.findFirstIndex(splitRow(trimmed), (cell) => plain(cell).toLowerCase().startsWith("product lines")),
+      );
       table = column === null ? table : (table ?? 0);
     } else if (column !== null) {
       const cells = splitRow(trimmed);
 
-      if (!cells.every((cell) => /^:?-+:?$/.test(cell))) {
+      if (!Arr.every(cells, (cell) => /^:?-+:?$/.test(cell))) {
         table = (table ?? 0) + (numberIn(cells[column] ?? "") ?? 0);
       }
     }
@@ -304,7 +305,7 @@ export const readPlan = (text: string): PlanSize => {
 
   return {
     table,
-    slices: slices.map(({ order, text }) => {
+    slices: Arr.map(slices, ({ order, text }) => {
       const estimate = LINES.exec(text)?.[1];
       const name = plain(text).split(/[:.]/)[0]?.trim() ?? "";
 
@@ -324,7 +325,7 @@ export type Advice = typeof Advice.Type;
 export const advise = (size: PlanSize): ReadonlyArray<Advice> =>
   size.table === null && size.slices.length === 0
     ? [Advice.cases.unknown.make({})]
-    : size.slices.flatMap((slice): ReadonlyArray<Advice> =>
+    : Arr.flatMap(size.slices, (slice): ReadonlyArray<Advice> =>
         slice.lines === null ? [Advice.cases.unsized.make({ order: slice.order, name: slice.name })] : [],
       );
 
@@ -341,7 +342,7 @@ export const adviceLine = (advice: Advice): string => {
 
 /** The line `plan` prints first, before any advice. */
 export const planLine = (size: PlanSize): string => {
-  const largest = Math.max(0, ...size.slices.map((slice) => slice.lines ?? 0));
+  const largest = Math.max(0, ...Arr.map(size.slices, (slice) => slice.lines ?? 0));
   const table = size.table === null ? "no product lines column" : `${size.table} product lines in the files table`;
   const slices = size.slices.length === 0 ? "no slices" : `${size.slices.length} slices, the largest ${largest}`;
 
@@ -370,14 +371,14 @@ const git = Effect.fn("sizecap.git")(function* (args: ReadonlyArray<string>) {
 
       return { out, code: Number(code) };
     }),
-  ).pipe(Effect.mapError(() => Failed.make({ reason: "git", message: `git ${args.join(" ")} could not run` })));
+  ).pipe(Effect.mapError(() => Failed.make({ reason: "git", message: `git ${Arr.join(args, " ")} could not run` })));
 });
 
 const gitOk = Effect.fn("sizecap.gitOk")(function* (args: ReadonlyArray<string>) {
   const ran = yield* git(args);
 
   if (ran.code !== 0) {
-    return yield* Failed.make({ reason: "git", message: `git ${args.join(" ")} failed` });
+    return yield* Failed.make({ reason: "git", message: `git ${Arr.join(args, " ")} failed` });
   }
 
   return ran.out;
@@ -413,7 +414,7 @@ const diff = Command.make(
 
     const generated = yield* generatedAt(
       head,
-      rows.map((row) => row.path),
+      Arr.map(rows, (row) => row.path),
     );
 
     yield* Console.log(diffLine(countLines(rows, generated), ADVICE_LINES));

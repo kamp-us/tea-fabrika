@@ -2,7 +2,7 @@
 // asks GitHub. The log goes to a temporary folder, and the test clock drives the beats.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Duration, Effect, FileSystem, Fiber, Schema, type Scope } from "effect";
+import { Duration, Effect, FileSystem, Fiber, Schema, type Scope, Array as Arr } from "effect";
 import { TestClock } from "effect/testing";
 import * as Freeze from "./Freeze.ts";
 import * as Level from "./Level.ts";
@@ -62,7 +62,7 @@ const until = Effect.fnUntraced(function* <E, R>(holds: Effect.Effect<boolean, E
 const finished = <A, E>(fiber: Fiber.Fiber<A, E>) =>
   Effect.andThen(until(Effect.sync(() => fiber.pollUnsafe() !== undefined)), Fiber.join(fiber));
 
-const tags = (dir: string) => Effect.map(Level.log(dir), (entries) => entries.map((e) => e._tag));
+const tags = (dir: string) => Effect.map(Level.log(dir), (entries) => Arr.map(entries, (e) => e._tag));
 
 const law = <A, E>(body: Effect.Effect<A, E, NodeServices.NodeServices | Scope.Scope>) =>
   body.pipe(Effect.scoped, Effect.provide(NodeServices.layer));
@@ -122,8 +122,7 @@ describe("verdict", () => {
     { run: Run, allow: Schema.Array(Schema.String), listed: Schema.Boolean },
     ({ run, allow, listed }) => {
       const other = { ...run, event: run.event === "merge_group" ? "push" : run.event };
-      const list = listed ? [...allow, other.branch] : allow.filter((b) => b !== other.branch);
-
+      const list = listed ? [...allow, other.branch] : Arr.filter(allow, (b) => b !== other.branch);
       return (Freeze.verdict(other, list)._tag === "keep") === listed;
     },
   );
@@ -137,7 +136,7 @@ describe("the cancel loop", () => {
         const github = WorkflowRunsTest.world([queue, fixPr, mainPush, otherPr, done, dispatched]);
         const loop = yield* started(dir, github, { allow: [FIX] });
         yield* until(Effect.sync(() => github.calls.length === 3));
-        expect(github.calls.map((c) => c.id)).toEqual([3, 4, 6]);
+        expect(Arr.map(github.calls, (c) => c.id)).toEqual([3, 4, 6]);
 
         // A run that starts later is canceled on the next beat.
         github.runs.push(made(20, {}));
@@ -178,7 +177,7 @@ describe("the cancel loop", () => {
         yield* until(Effect.sync(() => github.calls.length === 1));
         yield* TestClock.adjust(Duration.seconds(40));
         yield* settle;
-        expect(github.calls.map((c) => c.id)).toEqual([4]);
+        expect(Arr.map(github.calls, (c) => c.id)).toEqual([4]);
 
         yield* ending(dir);
         yield* finished(loop);
@@ -202,7 +201,7 @@ describe("the cancel loop", () => {
         yield* until(Effect.sync(() => github.calls.length === 1));
         yield* TestClock.adjust(Duration.seconds(40));
         yield* settle;
-        expect(github.calls.map((c) => c.id)).toEqual([2]);
+        expect(Arr.map(github.calls, (c) => c.id)).toEqual([2]);
 
         yield* ending(dir);
         yield* finished(loop);
@@ -246,11 +245,11 @@ describe("the cancel loop", () => {
         const dir = yield* home;
         const github = WorkflowRunsTest.world([otherPr, mainPush]);
         const loop = yield* started(dir, github, { failing: { cancel: "gh run cancel exited 1: completed" } });
-        yield* until(Effect.map(tags(dir), (t) => t.filter((tag) => tag === "failed").length === 2));
+        yield* until(Effect.map(tags(dir), (t) => Arr.filter(t, (tag) => tag === "failed").length === 2));
         yield* ending(dir);
         yield* finished(loop);
-        const failed = (yield* Level.log(dir)).filter((e) => e._tag === "failed");
-        expect(failed.map((e) => [e.call, e.id, e.reason])).toEqual([
+        const failed = Arr.filter(yield* Level.log(dir), (e) => e._tag === "failed");
+        expect(Arr.map(failed, (e) => [e.call, e.id, e.reason])).toEqual([
           ["cancel", 4, "gh run cancel exited 1: completed"],
           ["cancel", 3, "gh run cancel exited 1: completed"],
         ]);

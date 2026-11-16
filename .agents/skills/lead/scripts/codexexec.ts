@@ -32,7 +32,7 @@
 
 import { Agent } from "@kampus/fabrika-old";
 import { rawOfLine } from "@kampus/fabrika-old/agents/codex";
-import { Effect, FileSystem, Option, Schema, Stream } from "effect";
+import { Array as Arr, Effect, FileSystem, Option, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { holdsPin, NODE_PROBE } from "./boxnode.ts";
 
@@ -253,14 +253,16 @@ export const codexExecAdapter = (
 
               const raws = rawOfLine(line);
 
-              if (!Array.isArray(raws)) {
+              if (!Arr.isArray(raws)) {
                 return Effect.fail(Agent.failed("broke", `${raws.broke}; ${trouble()}`));
               }
 
               // The end waits for the last message file, which Codex writes on its way out.
-              said.ended = raws.find((r) => r._tag === "ended") ?? said.ended;
-
-              return Effect.succeed(raws.filter((r) => r._tag !== "ended"));
+              said.ended = Option.getOrElse(
+                Arr.findFirst(raws, (r) => r._tag === "ended"),
+                () => said.ended,
+              );
+              return Effect.succeed(Arr.filter(raws, (r) => r._tag !== "ended"));
             }),
             Stream.flattenIterable,
           );

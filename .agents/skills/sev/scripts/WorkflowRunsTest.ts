@@ -1,6 +1,6 @@
 // WorkflowRunsTest.layer: the WorkflowRuns service in memory, on one list of runs that its writes
 // change as GitHub's would. It asks GitHub nothing. `calls` keeps every write, in order.
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Schema, Array as Arr, Option } from "effect";
 import { type Run, WorkflowRuns, WorkflowRunsError } from "./WorkflowRuns.ts";
 
 /** One write the layer took, as the caller made it. */
@@ -27,22 +27,21 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<WorkflowRuns
 
   /** Puts `to` on run `id`, as GitHub would; a run it does not hold fails as GitHub's 404. */
   const change = (id: number, to: Partial<Run>) => {
-    const at = w.runs.findIndex((r) => r.id === id);
-    const found = w.runs[at];
+    const at = Arr.findFirstIndex(w.runs, (r) => r.id === id);
+    const found = Option.flatMap(at, (i) => Arr.get(w.runs, i));
 
-    if (found === undefined) {
+    if (Option.isNone(at) || Option.isNone(found)) {
       return Effect.fail(WorkflowRunsError.make({ reason: `no run ${id}` }));
     }
 
-    w.runs[at] = { ...found, ...to };
-
+    w.runs[at.value] = { ...found.value, ...to };
     return Effect.void;
   };
 
   return Layer.succeed(
     WorkflowRuns,
     WorkflowRuns.of({
-      unfinished: Effect.map(fails("unfinished"), () => w.runs.filter((r) => r.status !== "completed")),
+      unfinished: Effect.map(fails("unfinished"), () => Arr.filter(w.runs, (r) => r.status !== "completed")),
       cancel: (id) =>
         fails("cancel").pipe(
           Effect.andThen(change(id, { status: "completed", conclusion: "cancelled" })),

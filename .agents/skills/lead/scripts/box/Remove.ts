@@ -10,7 +10,7 @@
 // The order of the checks is the contract: the first that fails names the reason. Paths are read the
 // way Python's pathlib read them before this port: "." parts drop, ".." stays, and a link is
 // followed by hand, so every link and its target count as MAIN's storage.
-import { Effect, FileSystem, Option, Path, Schema } from "effect";
+import { Effect, FileSystem, Option, Path, Schema, Array as Arr, pipe } from "effect";
 import { BoxGit, type Inspection } from "./BoxGit.ts";
 import { Runs } from "./Runs.ts";
 
@@ -57,10 +57,11 @@ const unsupported = (reason: string) => Unsupported.make({ reason });
 
 // Paths, as pathlib reads an absolute one.
 const normal = (path: string) =>
-  `/${path
-    .split("/")
-    .filter((part) => part !== "" && part !== ".")
-    .join("/")}`;
+  `/${pipe(
+    path.split("/"),
+    Arr.filter((part) => part !== "" && part !== "."),
+    Arr.join("/"),
+  )}`;
 
 const joined = (base: string, rest: string) => normal(rest.startsWith("/") ? rest : `${base}/${rest}`);
 
@@ -443,7 +444,7 @@ const reflogTips = Effect.fnUntraced(function* (d: Disk, logs: string, tips: Set
     Effect.gen(function* () {
       const { folders, files } = yield* entries(d, folder);
 
-      if (folders.some((entry) => entry.link)) {
+      if (Arr.some(folders, (entry) => entry.link)) {
         return yield* keep("symlinked reflog metadata");
       }
 
@@ -487,12 +488,12 @@ const copyRefs = Effect.fnUntraced(function* (
 ) {
   const visit = (relative: ReadonlyArray<string>): Effect.Effect<void, Unsupported | Unreadable> =>
     Effect.gen(function* () {
-      const folder = joined(data, relative.join("/"));
+      const folder = joined(data, Arr.join(relative, "/"));
       const saved = !(relative[0] === "refs" && relative[1] === "remotes");
-      yield* d.failed(fs.makeDirectory(joined(into, relative.join("/")), { recursive: true }));
+      yield* d.failed(fs.makeDirectory(joined(into, Arr.join(relative, "/")), { recursive: true }));
       const { folders, files } = yield* entries(d, folder);
 
-      if (folders.some((entry) => entry.link)) {
+      if (Arr.some(folders, (entry) => entry.link)) {
         return yield* unsupported("symlinked ref metadata");
       }
 
@@ -512,7 +513,7 @@ const copyRefs = Effect.fnUntraced(function* (
           return yield* unsupported("unsupported ref metadata");
         }
 
-        yield* d.failed(fs.writeFile(joined(into, [...relative, name].join("/")), bytes));
+        yield* d.failed(fs.writeFile(joined(into, Arr.join([...relative, name], "/")), bytes));
       }
 
       for (const { name } of folders) {
@@ -559,12 +560,12 @@ const checkMetadata = Effect.fnUntraced(function* (d: Disk, work: string, data: 
     },
   );
 
-  if (shared.includes(true) || names.some((name) => name.startsWith("sharedindex."))) {
+  if (shared.includes(true) || Arr.some(names, (name) => name.startsWith("sharedindex."))) {
     return yield* keep("unsupported shared, shallow or graft metadata");
   }
 
   // Operation state and linked worktrees can hold commits and staged files outside this index.
-  if (names.some((name) => !ORDINARY.has(name))) {
+  if (Arr.some(names, (name) => !ORDINARY.has(name))) {
     return yield* keep("operation, linked worktree or unknown metadata");
   }
 
@@ -644,7 +645,7 @@ const inspect = Effect.fn("Remove.inspect")(function* (
     const value = yield* plain(d, packed);
     const shape = new RegExp(`^(?:${OID} refs/${REF_CHARS}+|\\^${OID})$`);
 
-    if (byteLines(latin1(value)).some((entry) => !entry.startsWith("#") && !shape.test(entry))) {
+    if (Arr.some(byteLines(latin1(value)), (entry) => !entry.startsWith("#") && !shape.test(entry))) {
       return yield* unsupported("unsupported packed refs");
     }
 
@@ -667,12 +668,12 @@ const inspect = Effect.fn("Remove.inspect")(function* (
 
   const index = yield* asked(git.indexEntries(at));
 
-  if (index.some((entry) => entry !== "" && !entry.startsWith("H "))) {
+  if (Arr.some(index, (entry) => entry !== "" && !entry.startsWith("H "))) {
     return yield* keep("unsupported index flags");
   }
 
   // Status must never enter a submodule and read its own config or hooks.
-  if (index.some((entry) => entry.startsWith("H 160000 "))) {
+  if (Arr.some(index, (entry) => entry.startsWith("H 160000 "))) {
     return yield* keep("unsupported submodule metadata");
   }
 
@@ -702,7 +703,7 @@ const inspect = Effect.fn("Remove.inspect")(function* (
   // Only MAIN's retained history counts. Mere object presence and remote refs prove nothing.
   const reachable = yield* asked(Effect.flatMap(git.retained, git.reachable));
 
-  if ([...tips].some((tip) => !reachable.has(tip))) {
+  if (Arr.some([...tips], (tip) => !reachable.has(tip))) {
     return yield* keep("tip not retained in MAIN");
   }
 }, Effect.scoped);

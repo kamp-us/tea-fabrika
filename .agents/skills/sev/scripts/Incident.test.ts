@@ -2,7 +2,7 @@
 // asks GitHub or git. The log goes to a temporary folder.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Duration, Effect, FileSystem, Layer, Schema, type Scope } from "effect";
+import { Duration, Effect, FileSystem, Layer, Schema, type Scope, Array as Arr, Order } from "effect";
 import * as BranchesTest from "../../lead/scripts/pr/BranchesTest.ts";
 import type { PullRequest } from "../../lead/scripts/pr/PullRequests.ts";
 import * as PullRequestsTest from "../../lead/scripts/pr/PullRequestsTest.ts";
@@ -74,12 +74,10 @@ describe("close", () => {
         Effect.gen(function* () {
           const dir = yield* home;
           const github = WorkflowRunsTest.world(runs);
-
-          const prs = picks.map((p, i) =>
+          const prs = Arr.map(picks, (p, i) =>
             pr(i + 1, runs.length === 0 ? stray : (runs[Math.abs(p.at) % runs.length]?.branch ?? stray), p.state),
           );
-
-          const behind = Object.fromEntries(prs.map((p, i) => [p.oid, picks[i]?.behind ?? 0]));
+          const behind = Object.fromEntries(Arr.map(prs, (p, i) => [p.oid, picks[i]?.behind ?? 0]));
           const prWorld = PullRequestsTest.world([...prs, pr(9999, stray)]);
 
           yield* Incident.open({ home: dir, reason: "slow", allow: [] }).pipe(Effect.provide(services({})));
@@ -96,10 +94,18 @@ describe("close", () => {
           expect(github.runs).toEqual(runs);
           expect(prWorld.calls).toEqual([]);
 
-          const hit = new Set(runs.map((r) => r.branch));
-          const due = [...prs, pr(9999, stray)].filter((p) => p.state === "OPEN" && hit.has(p.head));
-          expect(closed.walk.map((w) => w.pr).toSorted((a, b) => a - b)).toEqual(
-            due.map((p) => p.number).toSorted((a, b) => a - b),
+          const hit = new Set(Arr.map(runs, (r) => r.branch));
+          const due = Arr.filter([...prs, pr(9999, stray)], (p) => p.state === "OPEN" && hit.has(p.head));
+          expect(
+            Arr.sort(
+              Arr.map(closed.walk, (w) => w.pr),
+              Order.Number,
+            ),
+          ).toEqual(
+            Arr.sort(
+              Arr.map(due, (p) => p.number),
+              Order.Number,
+            ),
           );
           expect((yield* Level.read(dir)).sev0._tag).toBe("closed");
         }),
@@ -133,7 +139,7 @@ describe("close", () => {
             Effect.provide(services({ prs, behind: { [pr(11, "").oid]: 3, [pr(10, "").oid]: 0 }, issues: [red] })),
           );
 
-          expect(closed.walk.map((w) => w._tag)).toEqual(["holds", "behind"]);
+          expect(Arr.map(closed.walk, (w) => w._tag)).toEqual(["holds", "behind"]);
           expect(Incident.nextLines(closed.walk)).toEqual([
             "sev: 2 open pull requests had runs canceled; walk them in this order, on the merge line:",
             "  11 fabrikalfa/b: 3 commits behind main; merge main in and push",

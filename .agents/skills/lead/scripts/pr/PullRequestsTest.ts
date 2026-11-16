@@ -1,7 +1,11 @@
 // PullRequestsTest.layer: the PullRequests service in memory, on one list of pull requests that its
 // writes change as GitHub's would. It asks GitHub nothing. `calls` keeps every write, in order.
-import { Effect, Layer, Option, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { type Detail, type Patch, type PullRequest, PullRequests, PullRequestsError } from "./PullRequests.ts";
+import { Array as Arr } from "effect";
 
 /** One write the layer took, as the caller made it. */
 export const Call = Schema.TaggedUnion({
@@ -57,13 +61,11 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
     PullRequests,
     PullRequests.of({
       openOn: (branch) =>
-        Effect.map(fails("openOn"), () =>
-          Option.fromUndefinedOr(w.prs.find((pr) => pr.head === branch && pr.state === "OPEN")),
-        ),
+        Effect.map(fails("openOn"), () => Arr.findFirst(w.prs, (pr) => pr.head === branch && pr.state === "OPEN")),
       all: Effect.map(fails("all"), () => [...w.prs]),
       draft: (branch, text) =>
         Effect.map(fails("draft"), () => {
-          const number = Math.max(0, ...w.prs.map((pr) => pr.number)) + 1;
+          const number = Math.max(0, ...Arr.map(w.prs, (pr) => pr.number)) + 1;
           w.prs.push({ number, head: branch, oid: "", state: "OPEN", draft: true });
           w.calls.push(Call.cases.draft.make({ branch, title: text.title }));
 
@@ -75,19 +77,18 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
         }),
       ready: (number) =>
         Effect.map(fails("ready"), () => {
-          const at = w.prs.findIndex((pr) => pr.number === number);
-          const pr = w.prs[at];
+          const at = Arr.findFirstIndex(w.prs, (pr) => pr.number === number);
+          const pr = Option.flatMap(at, (i) => Arr.get(w.prs, i));
 
-          if (pr !== undefined) {
-            w.prs[at] = { ...pr, draft: false };
+          if (Option.isSome(at) && Option.isSome(pr)) {
+            w.prs[at.value] = { ...pr.value, draft: false };
           }
 
           w.calls.push(Call.cases.ready.make({ number }));
         }),
       view: (number) =>
         Effect.flatMap(fails("view"), () => {
-          const pr = w.prs.find((p) => p.number === number);
-
+          const pr = Option.getOrUndefined(Arr.findFirst(w.prs, (p) => p.number === number));
           return pr === undefined
             ? Effect.fail(PullRequestsError.make({ reason: `no pull request ${number}` }))
             : Effect.succeed({
