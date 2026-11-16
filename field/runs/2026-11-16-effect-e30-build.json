@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e30-build",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T21:06:20-08:00",
+  "ended": "2026-11-15T21:17:59-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "parked",
+  "why": "Build step for judgment slice E30 of the Effect-check sweep (strictEffectProvide), in next/, under decision 0565 as amended by pull request 1484. Of the 10 hits the ruling names, 9 are gone and 1 is left. Hand edits, no quick fix. Three library hits got a real fix: next/packages/libfabrika/src/client/Headless.ts builds the global WebSocket constructor's layer with Layer.build in the Scope that already owns the run and provides that context, so the layer lives as long as the run; next/packages/libfabrika/src/node/dev/watch.ts and node/repositories/OpenRepository.ts take a fresh generator from the new plain value Id.Generator.make in next/packages/libfabrika/src/Id.ts (the body Id.Generator.layer already ran, now shared by the layer), so no layer is provided and each call still gets its own generator as before. One library hit is left: next/packages/libfabrika/src/node/build/bundle.ts:92 provides Path.layer, and the checker's fix (the caller provides Path) would change bundle's requirements, which next/packages/libfabrika/src/node/build/build-assets.integration.test.ts runs with Effect.runPromise and nothing provided; Effect exports no plain Path value to use instead. The 6 app entry points got the ruling's line directly above the hit: next/apps/fabrika/build.ts, settings-generate.ts and src/entry/browser.tsx sit on the program handed to runMain; dev.ts (two) and hands.ts sit inside the program that dev.ts's and hands.ts's NodeRuntime.runMain runs, each providing a layer built from values read at run time. The ruled line has a problem: strictEffectProvide is not on in any tsconfig yet (no lock line), so the typecheck reports each `@effect-diagnostics-next-line strictEffectProvide:off` line as TS377000 'directive has no effect', a warning, and the typecheck fails on it. That fails next/apps/fabrika's typecheck on 14 lines (the 6 added here and the 8 the tests step added at c752a59) and oxlint-plugins' typecheck on next/apps/fabrika/src/exam/plant.ts:52. Only the lock line makes those lines take effect, so the lead must decide whether the lock lands with this slice or the 14 lines wait for it. Not in the ruling and not fixed: instance.ts:62 and 63 and runtime.ts:57 in next/apps/fabrika/src; in libfabrika, cloudflare/runtime.ts (907, 911, 920, 945, 958, 1242, 1260, 1273, 2416), cloudflare/SettingsInput.ts (53, 91), cloudflare/SettingsRecorded.ts:43, cloudflare/SettingsStartsLedger.ts (145, 146), gateway/Gateway.ts (406, 420), runtime/Built.ts:35, runtime/ProcessStore.ts:194 and runtime/Runner.ts (516, 529). No file in pull request 1366 was touched. No lock line was added.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 11.7,
+  "note": "Recount: effect-tsgo diagnostics --format json --project for next/apps/fabrika and next/packages/libfabrika, with an --lspconfig setting only strictEffectProvide to error and includeSuggestionsInTsc true: the app went from 279 hits to 273 and libfabrika from 1171 to 1168, with only bundle.ts:92 left of the ruled 10, and no other error. Narrow laws, each green on its own: libfabrika Id.test.ts, Id.cause.test.ts, Id.types.test.ts, client/Start.types.test.ts, client/WindowStart.laws.test.ts, client/HandsStart.laws.test.ts, node/repositories/OpenRepository.test.ts, OpenRepository.integration.test.ts, node/dev/watch.laws.integration.test.ts, and the app's src/tezgah-runner.laws.integration.test.ts. vitest --changed origin/main was refused by the test config as broad, since Id.ts reaches many tests. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) and the exam ratchet passed. libfabrika's own typecheck passed; the app's and oxlint-plugins' failed only on the TS377000 warnings above. The e2e client-protocol suite, which drives Headless.start through Playwright, did not run here.",
+  "plants": [],
+  "step": "build"
+}
