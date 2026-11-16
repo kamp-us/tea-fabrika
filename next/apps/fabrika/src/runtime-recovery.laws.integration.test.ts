@@ -21,6 +21,8 @@ import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
+import { Attached } from "@kampus/libfabrika/transport/Wire";
+import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import {
   commitReply,
   configureProcess,
@@ -1023,6 +1025,79 @@ const world = (
       ).toMatchObject({ _tag: "online" });
       return client;
     },
+    /**
+     * The live door: the real Connection service on its own store, with one hibernating socket that
+     * says hello as a window does. Each call is one JSON-RPC frame, answered the way the wire says.
+     */
+    door: async () => {
+      const doorDb = new DatabaseSync(":memory:"),
+        handles = storage(doorDb),
+        frames: Array<string> = [],
+        // A session is named as a process is (fetch takes it from ProcessIdGenerator).
+        session = "process_01m6v5270hf3c8x2q7w9z4k5mp",
+        tab = "door-test";
+      const client = await project.clientConnect(),
+        nonce = await project.challenge(client);
+      let attached: unknown = Attached.cases.new.make({ client, nonce });
+      // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the hibernating socket methods the Connection service calls
+      const socket = {
+        deserializeAttachment: () => attached,
+        serializeAttachment: (next: unknown) => {
+          attached = next;
+        },
+        send: (frame: string) => {
+          frames.push(frame);
+        },
+        close: () => {},
+      } as unknown as WebSocket;
+      // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the storage and socket handles the real Connection service reads
+      const doorCtx = {
+        id: { name: "gateway-test" },
+        storage: handles,
+        getWebSockets: () => [socket],
+        getTags: () => [session, tab, key.fingerprint],
+        getWebSocketAutoResponseTimestamp: () => null,
+        setWebSocketAutoResponse: () => {},
+        exports: loopbacks,
+      } as unknown as DurableObjectState;
+      const runtime = connectionRuntime(doorCtx, env);
+      await project.register(client, "gateway-test", session);
+      let id = 0;
+      const call = async (method: string, params: unknown) => {
+        id++;
+        await runtime.runPromise(
+          ConnectionService.use((door) => door.message(socket, JSON.stringify({ jsonrpc: "2.0", id, method, params }))),
+        );
+        const answer = frames.map((frame) => JSON.parse(frame)).find((frame) => frame.id === id);
+        return answer === undefined
+          ? undefined
+          : "result" in answer
+            ? { _tag: "ok", result: answer.result }
+            : { _tag: "refused", reason: answer.error.data.reason };
+      };
+      expect(
+        await call("initialize", {
+          versions: [1],
+          has: ["seal"],
+          ping: "30s",
+          key: key.raw,
+          tab,
+          nonce,
+          platform: "headless",
+          os: "linux",
+          sentAt: SENT,
+          signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`),
+        }),
+      ).toMatchObject({ _tag: "ok" });
+      return {
+        db: doorDb,
+        call,
+        close: async () => {
+          await runtime.dispose();
+          doorDb.close();
+        },
+      };
+    },
     start: () =>
       project.start(
         Start.cases.first.make({
@@ -1842,11 +1917,15 @@ describe("P34c live object accounting", () => {
           );
           yield* Effect.promise(() => w.project.info());
           const pid = yield* Effect.promise(() => w.startPoison("quota:1"));
-          const client = yield* Effect.promise(() => w.admit());
+          // The window's socket on the real Connection service: the live caller that counts a refusal (0143).
+          const door = yield* Effect.acquireRelease(
+            Effect.promise(() => w.door()),
+            (door) => Effect.promise(() => door.close()),
+          );
           // `letter` is the door's own key for the message id (0547 keeps wire names).
           const send = (pid: string, id: string) =>
             Effect.promise(() =>
-              w.project.route(client, "process.send", { pid, letter: id, m: { type: "inc" }, sentAt: SENT, seen: 0 }),
+              door.call("process.send", { pid, letter: id, m: { type: "inc" }, sentAt: SENT, seen: 0 }),
             );
           expect(yield* send(pid, "paid")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
           expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
@@ -1874,13 +1953,27 @@ describe("P34c live object accounting", () => {
             project: { ...project, sums: null },
             process: { ...process, sums: null },
           });
+          // The door object's refusal counts (0143). The pinned clock keeps every one in SENT's hour, and
+          // a quota refusal is counted under `other`, so a count anywhere else is a wrong count.
+          const refusals = () => {
+            const rows = door.db.prepare("SELECT hour, refused, count FROM sums").all();
+            return {
+              total: rows.reduce((sum, row) => sum + Number(row.count), 0),
+              elsewhere: rows.filter((row) => row.hour !== Date.parse(SENT) || row.refused !== "other").length,
+            };
+          };
 
           for (const [n, c] of tape.entries()) {
             const before = both();
+            const counted = refusals();
             expect(yield* send(pid, `refused:${n}:${c.pick}`)).toMatchObject({ _tag: "refused", reason: "quota" });
             const after = both();
 
-            // Plant: a refused send that lands its span, an envelope or a reply as a row goes red here.
+            // Plant (countRefusal answers false, Sink.ts): the refused call is never counted, red here.
+            expect(refusals().total, `refusal ${n} was not counted`).toBeGreaterThan(counted.total);
+            expect(refusals().elsewhere, `refusal ${n} was counted outside its hour or tag`).toBe(0);
+
+            // Plant: a refused send that lands an envelope, a binding, a reply or a step as a row goes red here.
             if (n === 0) {
               expect(withoutSums(after), "the first refusal saved a row outside its hourly count").toEqual(
                 withoutSums(before),
