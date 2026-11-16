@@ -94,10 +94,8 @@ override, and still list any the guard refuses. If your own permission check ref
 not retry it and do not look for another way: stop, and report the refusal and what it blocked in
 RESULT.
 
-**Files you never touch:** every file in pull request 1366's diff (read it with the GitHub MCP
-tool `pull_request_read`, method `get_files`, pull 1366, all pages). A hit in one of those files
-is listed in the PR as waiting for the after-1366 slice. Do not add a `LOCKED` row to
-`oxlint-plugins/effect-checks.test.ts` (it waits for E0, pull request 1417). A lock entry goes in
+**PR 1366 is merged to main (2026-11-16).** Its files are no longer off limits. Merge `origin/main` into your branch first (`git merge --no-edit origin/main`, never rebase), and every hit your slice once listed as "waiting on 1366" is now part of your slice: fix it like any other. Do not add a `LOCKED` row to
+`oxlint-plugins/effect-checks.test.ts` unless your brief says so. A lock entry goes in
 the package's own `tsconfig.json` under the `@effect/language-service` plugin's `overrides`, the
 way pull request 1430 (E2) did, never in `tsconfig.base.json`. The tooling folders have their own
 tsconfig: `.agents/tsconfig.json`, `.github/ci/tsconfig.json`, `oxlint-plugins/tsconfig.json`.
