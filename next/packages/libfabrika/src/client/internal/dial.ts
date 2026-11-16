@@ -44,15 +44,18 @@ export type DialMsg =
 /** The id of a frame that answers a call, read only to time the answer. */
 const answerId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Number })));
 
-/** The class of a socket that failed to open: the thrown error's own class, or a network failure. */
+/** The class a failure's thrown cause names, or a network failure when it names none we know. */
+const causeClass = (reason: Socket.SocketErrorReason): ErrorClass => {
+  const cause = "cause" in reason ? reason.cause : undefined;
+  const name = Predicate.hasProperty(cause, "name") ? cause.name : null;
+  return Schema.is(ErrorClass)(name) ? name : "NetworkError";
+};
+
+/** The class of a socket that failed to open: a timeout, the thrown error's own class, or a network failure. */
 const openFailure = (error: Socket.SocketError): ErrorClass =>
   Match.value(error.reason).pipe(
-    Match.when({ _tag: "SocketOpenError", kind: "Timeout" }, (): ErrorClass => "TimeoutError"),
-    Match.orElse((reason) => {
-      const cause = "cause" in reason ? reason.cause : undefined;
-      const name = Predicate.hasProperty(cause, "name") ? cause.name : null;
-      return Schema.is(ErrorClass)(name) ? name : "NetworkError";
-    }),
+    Match.tag("SocketOpenError", (reason) => (reason.kind === "Timeout" ? "TimeoutError" : causeClass(reason))),
+    Match.orElse(causeClass),
   );
 
 /** Whether a reader's failure is the socket's own close, which carries its code. */
