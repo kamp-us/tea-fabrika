@@ -24,7 +24,7 @@ import {
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { HttpClient, HttpClientRequest } from "effect/http";
-import { ChildProcess } from "effect/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { Installed, type Install } from "../../runtime/Code.ts";
@@ -279,6 +279,8 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       Effect.provideContext(recording),
     );
   const local = Context.empty().pipe(
+    // Alchemy's deploy provides its own platform services; this keeps the caller's spawner for workerd's starts.
+    Context.add(ChildProcessSpawner.ChildProcessSpawner, yield* ChildProcessSpawner.ChildProcessSpawner),
     Context.add(RuntimeLifecycle, (event) => {
       const observed = { event, cause };
 
