@@ -15,7 +15,7 @@
   "tokens": null,
   "tools": null,
   "minutes": null,
-  "note": "Counts from effect-tsgo diagnostics per tsconfig. checkerfix.mjs was never run (the owner's rule: no script edits files). Lint and narrow tests recorded in the pull request.",
+  "note": "Per-check report: preferUnsafeConstructor, hits met 6, fixed by quick fix 0, hand edits 6 (Edit tool), left 0, waiting on 1366 0. Files: next/packages/libfabrika/src/node/build/build-assets.integration.test.ts (5), next/apps/fabrika/e2e/one-file.visual.test.ts (1). Counts from effect-tsgo diagnostics per tsconfig. checkerfix.mjs was never run (the owner's rule: no script edits files). Lint and narrow tests recorded in the pull request.",
   "plants": [
     {
       "law": "L1",
