@@ -3,8 +3,8 @@
 
 # Tests step for one judgment slice of the Effect-checker sweep
 
-Ticket 1075, in `next/` and our tooling. Owner ruling: a judgment slice is its own draft pull
-request that **fixes code only and adds no lock line** (no tsconfig `overrides` entry, nothing in
+Ticket 1075, in `next/` and our tooling. Owner ruling: a judgment slice works on its own branch, opens NO pull
+request (an integrator folds it into `fabrikalfa/effect-judgment`), and **fixes code only and adds no lock line** (no tsconfig `overrides` entry, nothing in
 `tsconfig.base.json`, no `LOCKED` row); all judgment locks come later in one small PR. It keeps its
 steps: this tests step, a build step for product files, and one Opus review.
 
@@ -27,8 +27,8 @@ handles the failure, never `runSync`, never a throw or bare default to quiet the
    still asserts the same behavior. Never delete or narrow an assertion; never loosen a law.
 4. `pnpm format`, `pnpm lint` (with `NODE_OPTIONS=--max-old-space-size=6144`), the narrow tests of
    every file you touched and every `.integration.` law they reach, and a recount.
-5. Commit as step `tests` (ticket 1075), push, open the draft PR with the pr skill: title "E<n>:
-   <check> fixed in <folders>, in next/ and our tooling (no lock yet)". The body reports per check:
-   hits met, fixed and by which tool, left with file:line and why, waiting on 1366, which product
-   hits are left for the build, and the tests that ran at which head.
+5. Commit as step `tests` (ticket 1075) and push to your slice branch. Open NO pull request and
+   update none. Your field row and RESULT carry the per-check report: hits met, fixed and by which
+   tool, left with file:line and why, waiting on 1366, which product hits are left for the build,
+   and the tests that ran at which head.
 6. RESULT: `build_needed: yes` if product hits remain.

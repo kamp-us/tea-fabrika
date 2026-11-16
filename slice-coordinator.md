@@ -33,6 +33,6 @@ its plan and its steps.
 
 ## Your own RESULT
 
-End with the RESULT block from `step-rules.md`, with `step: coordinator`, the PR link, the last
+End with the RESULT block from `step-rules.md`, with `step: coordinator`, the PR link if your brief names one (slices have none), the last
 pushed head, each step you ran with its outcome, and what is left or blocked. Never merge, mark
 ready, approve or close.

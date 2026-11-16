@@ -7,5 +7,5 @@ never touch PR 1366's files. The tests step pushed the exam-path fixes; read its
 Fix the product-file hits of your row's folders; touch no exam path (`send_back` to tests and name
 it if one must change). `pnpm format`, `pnpm lint` (with `NODE_OPTIONS=--max-old-space-size=6144`),
 narrow tests, `--changed origin/main`, every `.integration.` law your files reach, one typecheck,
-and a recount at zero for your folders (bar the listed hits). Commit as step `build`, push, update
-the PR body's counts with the pr skill.
+and a recount at zero for your folders (bar the listed hits). Commit as step `build` and push to the slice branch. Open no
+pull request and update none; your field row and RESULT carry the counts.

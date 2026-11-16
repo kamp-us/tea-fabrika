@@ -11,5 +11,5 @@ keep every line. Slice 8's shared stub (`Stub.make`) is on `fabrikalfa/reflect-s
 on main yet: if your slice needs it and it is not on main, stop with `blocked_on: slice 8` and do
 not copy it. Do the tests step's rows (laws first, every fire in a tests-owned file); leave rows
 the plan gives to build. Plant L5 (put one old line back, `pnpm lint` red, undo). A file named
-`.integration.` may be run here. Commit as `tests`, ticket 1056, push, open the draft PR with the
-pr skill. `build_needed: yes` if the plan gives your slice a build row.
+`.integration.` may be run here. Commit as `tests`, ticket 1056, and push to your slice branch; open no
+pull request (an integrator folds it into `fabrikalfa/reflect-rest`). `build_needed: yes` if the plan gives your slice a build row.

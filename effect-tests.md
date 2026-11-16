@@ -26,10 +26,9 @@ Models: pull request 1430 (E2, lock in the package tsconfig) and 1426 (E1, per-c
 5. **Plant L1**: add one line your check flags in a locked folder, see it red, remove it. Drop one
    glob from your entry, see that folder's hits vanish from the count, put it back. Record both in
    your field row's `plants`.
-6. `pnpm format`, `pnpm lint`, your narrow tests. Commit as step `tests` (ticket 1075), push, open
-   the draft pull request (title like "E<n>: <check> at error and zero hits in <where>, in next/
-   and our tooling"). The body reports, per check: hits met, fixed by quick fix, hand edits, left
-   for the build, each waiting 1366 hit by file, and whether a rule of ours gives way to this
-   check (0573) or why both stay.
+6. `pnpm format`, `pnpm lint`, your narrow tests. Commit as step `tests` (ticket 1075) and push to
+   your slice branch. Open NO pull request. Your field row and RESULT carry, per check: hits met,
+   fixed by which tool, left for the build, each waiting 1366 hit by file, and whether a rule of
+   ours gives way to this check (0573) or why both stay.
 7. If product hits remain, `outcome: pass`, `build_needed: yes`, and the typecheck is red only on
    those. If none remain, `build_needed: no`.

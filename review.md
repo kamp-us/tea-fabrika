@@ -5,7 +5,7 @@ Read the whole diff of your branch, every line, quick-fix changes included, agai
 your brief) and the decisions it builds. Check every hit against the check's named fix, every
 hand edit, every comment line the quick fix might have dropped, every ignore or disable line,
 the lock globs (do they cover exactly the folders at zero, nothing in 1366's files, nothing in
-`tsconfig.base.json`), and the counts in the PR body. Run `.agents/skills/lead/scripts/loosening.sh`
+`tsconfig.base.json`), and the counts in the slice's field rows. Run `.agents/skills/lead/scripts/loosening.sh`
 on the range and say what each hit means. Run the narrow tests and the typecheck yourself, and any
 `.integration.` law the diff reaches. Answer `done` (merge-ready) or `send_back` with each fault
 named, located and the fix it needs. Your verdict is the slice's review of record: the integrator's PR has no review of its own.

@@ -5,7 +5,7 @@
 
 The Recorder landed (PR 1401). `docs/plan/quests/recorder-PLAN.md` on main, "Size", lists the
 later slices: one quest per folder, each starting with its own plan. You write that plan, for the
-folder your brief names, read-only apart from the plan file and its PR. Use the plan skill
+folder your brief names, read-only apart from the plan file and its field row. Use the plan skill
 (`.agents/skills/plan/SKILL.md`) and its open questions test. Read decisions 0555 and 0579 and
 `.patterns/a-law-watches-calls-with-a-recorder.md`, and the Recorder in `next/packages/vitest/src/Recorder.ts`.
 
@@ -25,6 +25,6 @@ folder your brief names, read-only apart from the plan file and its PR. Use the 
   already settle. Check `records.ts find` first.
 
 Write `docs/plan/quests/mock-<folder>-PLAN.md` on your branch, commit it (`stepcommit.sh
---commit-only lead 1067 ...`, or plain `git commit` if stepcommit refuses), leakgrep, push, and open
-a draft PR with the pr skill, titled "Plan: the mock sweep in <folder>, in next/". Never mark it
-ready. RESULT gives the PR link and each open question in one line.
+--commit-only lead 1067 ...`, or plain `git commit` if stepcommit refuses), leakgrep, and push to
+your branch. Open NO pull request: an integrator puts every folder's plan into one plan PR on
+`fabrikalfa/mock-plans`. RESULT gives the plan file, its head and each open question in one line.

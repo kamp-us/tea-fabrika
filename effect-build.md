@@ -7,4 +7,4 @@ commit and field row first. You fix the hits left in product files, by the step 
 no exam path (stepcommit refuses one; if you need one changed, answer `send_back` to tests and
 name it). Then `pnpm format`, `pnpm lint`, your narrow tests and `--changed origin/main`, and one
 `pnpm typecheck` (or the package typechecks) at zero hits for your check. Commit as step `build`,
-push, and update the pull request body's counts with the pr skill.
+and push to the slice branch. Open no pull request and update none.
