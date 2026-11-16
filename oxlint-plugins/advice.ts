@@ -4,6 +4,7 @@
 // moment its folder reaches zero: `stale` names it, and a whole `pnpm lint` run fails until it is
 // deleted.
 import { matchesGlob } from "node:path";
+import { Predicate } from "effect";
 
 /** One fire as oxlint reports it, its filename from the top of the repo. */
 export interface Fire {
@@ -69,8 +70,7 @@ export interface WarnLine {
 /** What a whole run says about a warn line: its folder has no fire left, or it names a file. */
 type Stale = { readonly _tag: "zero"; readonly line: WarnLine } | { readonly _tag: "file"; readonly line: WarnLine };
 
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => Predicate.isObject(value);
 
 /** A rule's level: the setting itself, or the first item of `[level, ...options]`. */
 const level = (setting: unknown): unknown => (Array.isArray(setting) ? setting[0] : setting);
@@ -85,7 +85,7 @@ export const warnLines = (printed: unknown): ReadonlyArray<WarnLine> => {
     }
 
     const globs = override.files.filter(
-      (glob: unknown): glob is string => typeof glob === "string" && !FROZEN.has(glob),
+      (glob: unknown): glob is string => Predicate.isString(glob) && !FROZEN.has(glob),
     );
 
     return Object.entries(override.rules).flatMap(([key, setting]) => {

@@ -400,7 +400,7 @@ const relativeMain = Effect.fnUntraced(function* (home: string, dists: ReadonlyA
     const props = resource["props"];
     const main = Predicate.isObject(props) && "main" in props ? props.main : undefined;
 
-    if (!Predicate.isObject(props) || typeof main !== "string") {
+    if (!Predicate.isObject(props) || !Predicate.isString(main)) {
       continue;
     }
 
@@ -678,7 +678,7 @@ const writtenBy = Effect.fnUntraced(function* (
     for (const job of rows.filter((row) => BigInt(row.startTimeUnixNano) >= since)) {
       const a = job.attributes;
 
-      if ((a["process"] === saved.id || a["fab.process"] === saved.id) && typeof a["build"] === "string") {
+      if ((a["process"] === saved.id || a["fab.process"] === saved.id) && Predicate.isString(a["build"])) {
         named.push({ record: `job ${job.name}`, build: a["build"] });
       }
     }

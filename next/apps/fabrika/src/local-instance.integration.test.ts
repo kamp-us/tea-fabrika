@@ -8,7 +8,7 @@ import type { BrainEvent } from "@kampus/libfabrika/brain-event";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import { runsFor } from "@kampus/vitest";
-import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Schema } from "effect";
+import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { FetchHttpClient } from "effect/http";
 import { vi } from "vitest";
@@ -28,9 +28,9 @@ vi.mock("alchemy/Deploy", () => ({
   deploy: ({ stack }: { stack: Context.Context<never> }) =>
     Effect.gen(function* () {
       const entries = [...stack.mapUnsafe.values()] as Array<unknown>;
-      const plugin = entries.find((entry) => typeof entry === "object" && entry !== null && "sockets" in entry);
+      const plugin = entries.find((entry) => Predicate.isObjectOrArray(entry) && "sockets" in entry);
 
-      if (typeof plugin !== "object" || plugin === null || !("start" in plugin)) {
+      if (!Predicate.isObjectOrArray(plugin) || !("start" in plugin)) {
         return yield* Effect.die("test deployment has no control plugin");
       }
 
@@ -107,7 +107,7 @@ const fetchClient = FetchHttpClient.layer.pipe(
 
 /** A stubbed `fetch` call's body as text, sent as a string or as the client's bytes. */
 const bodyText = (options: RequestInit | undefined): string =>
-  typeof options?.body === "string" ? options.body : new TextDecoder().decode(options?.body as Uint8Array);
+  Predicate.isString(options?.body) ? options.body : new TextDecoder().decode(options?.body as Uint8Array);
 
 // The installed runner takes runs and a seed, so the old example runs first from this callback.
 const buildsPair = Schema.Tuple([Schema.NonEmptyString, Schema.NonEmptyString]);

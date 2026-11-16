@@ -22,7 +22,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream } from "effect";
+import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Predicate, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { RateLimiter } from "effect/persistence";
 
@@ -528,7 +528,7 @@ const presence = (files: ReadonlySet<string>, load: () => PolicyDoor): PolicyDoo
   const p = load();
 
   for (const name of ["call", "install", "personCall", "checklistInputs", "knock"] as const) {
-    if (typeof p[name] !== "function") {
+    if (!Predicate.isFunction(p[name])) {
       throw new Error(`missing policy binding: ${name}`);
     }
   }

@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Predicate } from "effect";
 // Desk S3, next/ (the desk program fabrika/tezgah, ticket named by its title): laws L28 and L30 of the
 // approved plan, and the slice's shots. Written before a tab moves focus. Starts the real `dev.ts` in
 // its own temp home on its own port and drives headless Chromium; every resource is acquired in one
@@ -80,7 +80,7 @@ type Page = Parameters<typeof drawn>[0];
  *  column: `above` split down. */
 const splitBelow = (view: View, above: string, under: string): boolean => {
   const holds = (node: View["workspaces"][number]["layout"]): boolean =>
-    typeof node !== "string" &&
+    !Predicate.isString(node) &&
     ((node.dir === "column" &&
       node.parts.length === 2 &&
       node.parts[0]!.inner === above &&
@@ -257,9 +257,11 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
 
               return (
                 n === 4 &&
-                typeof l !== "string" &&
+                !Predicate.isString(l) &&
                 l.dir === "column" &&
-                l.parts.every((p) => typeof p.inner !== "string" && p.inner.dir === "row" && p.inner.parts.length === 2)
+                l.parts.every(
+                  (p) => !Predicate.isString(p.inner) && p.inner.dir === "row" && p.inner.parts.length === 2,
+                )
               );
             },
             "a 2x2",

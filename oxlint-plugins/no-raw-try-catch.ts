@@ -22,10 +22,11 @@
 // edge, in functions with no Effect in them. 0523 sets that count aside: a pull request that makes
 // a folder block reports the fires it met and each disable line.
 import type { CreateRule } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import type { Node } from "./match.ts";
 
 const isEffect = (text: unknown): boolean =>
-  typeof text === "string" && (text === "effect" || text.startsWith("effect/"));
+  Predicate.isString(text) && (text === "effect" || text.startsWith("effect/"));
 
 const named = (specifier: Node): boolean =>
   specifier.type === "ImportSpecifier" && specifier.imported.type === "Literal" && isEffect(specifier.imported.value);

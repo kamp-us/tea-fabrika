@@ -33,6 +33,7 @@
 // commands land. Each step answers only what really waits: the calls in flight and the Cmds handed out.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
@@ -383,14 +384,14 @@ type Size = { readonly width: number; readonly height: number };
 const ACROSS = { row: 22, column: 20 } as const;
 
 const tilesIn = (node: Workspace["layout"]): ReadonlyArray<string> =>
-  typeof node === "string" ? [node] : node.parts.flatMap((p) => tilesIn(p.inner));
+  Predicate.isString(node) ? [node] : node.parts.flatMap((p) => tilesIn(p.inner));
 
 /** Each open tile's drawn size under amendment 13 when `strips` are strips. */
 const drawnWith = (w: Workspace, size: Size, strips: ReadonlySet<string>): ReadonlyMap<string, Size> => {
   const out = new Map<string, Size>();
 
   const walk = (node: Workspace["layout"], box: Size): void => {
-    if (typeof node === "string") {
+    if (Predicate.isString(node)) {
       out.set(node, box);
 
       return;
@@ -413,7 +414,7 @@ const drawnWith = (w: Workspace, size: Size, strips: ReadonlySet<string>): Reado
     }
 
     for (const [i, p] of node.parts.entries()) {
-      if (!fixed[i] || typeof p.inner === "string") {
+      if (!fixed[i] || Predicate.isString(p.inner)) {
         walk(p.inner, row ? { width: shares[i]!, height: box.height } : { width: box.width, height: shares[i]! });
       }
     }
@@ -765,7 +766,7 @@ const FOLDED = /fold|strip/i;
 const keysIn = (v: unknown): ReadonlyArray<string> =>
   Array.isArray(v)
     ? v.flatMap(keysIn)
-    : v !== null && typeof v === "object"
+    : Predicate.isObjectOrArray(v)
       ? Object.entries(v).flatMap(([k, x]) => [k, ...keysIn(x)])
       : [];
 

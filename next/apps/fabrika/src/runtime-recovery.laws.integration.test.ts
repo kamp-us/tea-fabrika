@@ -34,7 +34,7 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit, Predicate, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -317,11 +317,7 @@ const mailRequester = (config: { readonly self: string; readonly peer: string })
           : [s, []],
       send_ok: (s) => [s, []],
       send_err: (s, m) =>
-        s._tag === "waiting" &&
-        m.cmd.m !== null &&
-        typeof m.cmd.m === "object" &&
-        "ref" in m.cmd.m &&
-        m.cmd.m.ref === s.ref
+        s._tag === "waiting" && Predicate.isObjectOrArray(m.cmd.m) && "ref" in m.cmd.m && m.cmd.m.ref === s.ref
           ? [RequestModel.cases.failed.make({ ref: s.ref, reason: m.error._tag }), []]
           : [s, []],
     },
@@ -537,7 +533,7 @@ const world = (
           query: string,
           ...args: Parameters<typeof handles.sql.exec> extends [string, ...infer A] ? A : never
         ) => {
-          if (args.some((arg) => typeof arg === "string" && arg.startsWith("settings/instance/"))) {
+          if (args.some((arg) => Predicate.isString(arg) && arg.startsWith("settings/instance/"))) {
             if (/SELECT \* FROM entries WHERE stream = \? AND rev > \?/i.test(query)) {
               settingsCounts.reads++;
             }
@@ -658,7 +654,7 @@ const world = (
           {},
           {
             get: (_target, method) => {
-              if (typeof method !== "string" || method === "then") {
+              if (!Predicate.isString(method) || method === "then") {
                 return undefined;
               }
 
@@ -745,7 +741,7 @@ const world = (
           {},
           {
             get: (_target, method) => {
-              if (typeof method !== "string" || method === "then") {
+              if (!Predicate.isString(method) || method === "then") {
                 return undefined;
               }
 

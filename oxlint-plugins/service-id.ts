@@ -30,6 +30,7 @@
 // Both diagnostics block since ticket 909: the replay found 1 fire, 1 true and 0 false alarms
 // (README.md).
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import { pathIn, type Node } from "./match.ts";
 
 type Made = "Service" | "Reference";
@@ -37,11 +38,11 @@ type Made = "Service" | "Reference";
 const settings = (options: ReadonlyArray<unknown>): { readonly package: string; readonly src: string } | null => {
   const [given] = options;
 
-  if (typeof given !== "object" || given === null || !("package" in given) || !("src" in given)) {
+  if (!Predicate.isObjectOrArray(given) || !("package" in given) || !("src" in given)) {
     return null;
   }
 
-  return typeof given.package === "string" && typeof given.src === "string"
+  return Predicate.isString(given.package) && Predicate.isString(given.src)
     ? { package: given.package, src: given.src.replace(/\/+$/, "") }
     : null;
 };
@@ -77,14 +78,14 @@ const memberName = (node: ESTree.MemberExpression): string | null => {
     return node.property.name;
   }
 
-  return node.computed && node.property.type === "Literal" && typeof node.property.value === "string"
+  return node.computed && node.property.type === "Literal" && Predicate.isString(node.property.value)
     ? node.property.value
     : null;
 };
 
 /** A template with no expressions, or a string literal: its text. */
 const literal = (node: Node | undefined): string | null => {
-  if (node?.type === "Literal" && typeof node.value === "string") {
+  if (node?.type === "Literal" && Predicate.isString(node.value)) {
     return node.value;
   }
 

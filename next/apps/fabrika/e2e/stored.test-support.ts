@@ -1,7 +1,7 @@
 // L17's scan of an instance's home (P14 slice 2, ticket 828), in a file of its own so its law in
 // `stored.test.ts` can run it on a folder that a writer changes under it.
 import { Row as LedgerRow } from "@kampus/libfabrika/ledger/Log";
-import { Effect, FileSystem, Path, type PlatformError, Schema } from "effect";
+import { Effect, FileSystem, Path, type PlatformError, Predicate, Schema } from "effect";
 import { instanceDatabase } from "../src/instance-database.test-support.ts";
 
 /** An instance's home, and the stop that ends every process that writes in it. */
@@ -109,7 +109,7 @@ const scan = (
             const row = Object.fromEntries(
               Object.entries(read).map(([column, value]) => [
                 column,
-                typeof value === "bigint" && value >= Number.MIN_SAFE_INTEGER && value <= Number.MAX_SAFE_INTEGER
+                Predicate.isBigInt(value) && value >= Number.MIN_SAFE_INTEGER && value <= Number.MAX_SAFE_INTEGER
                   ? Number(value)
                   : value,
               ]),
@@ -145,7 +145,7 @@ const scan = (
                 Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
               )(value);
 
-              if (typeof armored === "string" && proofs.includes(armored)) {
+              if (Predicate.isString(armored) && proofs.includes(armored)) {
                 const replacement = JSON.stringify(rest);
                 allowed.set(value, replacement);
                 cells = { ...row, value: replacement };

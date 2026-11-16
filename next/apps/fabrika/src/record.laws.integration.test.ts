@@ -10,7 +10,7 @@ import type { RecordShape } from "@kampus/libfabrika/workers/objects";
 import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
 import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { Context, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
 
 import { recordCall, recordWire } from "./record-wire.test-support.ts";
 
@@ -82,7 +82,7 @@ const Input = Schema.Struct({
 // A finding records it; this law compares well-formed text.
 const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
   const repair = (value: unknown): unknown => {
-    if (typeof value === "string") {
+    if (Predicate.isString(value)) {
       return value.replace(/\p{Cs}/gu, "�");
     }
 
@@ -90,7 +90,7 @@ const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
       return value.map(repair);
     }
 
-    if (value !== null && typeof value === "object") {
+    if (Predicate.isObjectOrArray(value)) {
       return Object.fromEntries(
         Object.entries(value).map(([key, item]) => [key.replace(/\p{Cs}/gu, "�"), repair(item)]),
       );

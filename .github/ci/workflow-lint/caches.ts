@@ -2,11 +2,12 @@
 // never saves, full-history checkouts are blobless, and the typecheck's buildinfo cache.
 import { globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { Predicate, Result } from "effect";
 import { parse } from "yaml";
 import { compact, map, steps, uses } from "./shared.ts";
 
 const lines = (value: unknown) =>
-  typeof value === "string"
+  Predicate.isString(value)
     ? value
         .split("\n")
         .map((line) => line.trim())
@@ -50,19 +51,20 @@ export const lintCaches = (files: CacheFiles): string[] => {
     }
   };
 
-  let action: Record<string, unknown>, workspace: Record<string, unknown>;
-  const workflows: [string, Record<string, unknown>][] = [];
+  const read = Result.try(() => ({
+    action: map(parse(files.action)),
+    workspace: map(parse(files.workspace)),
+    workflows: Object.entries(files.workflows).map(([path, text]): [string, Record<string, unknown>] => [
+      path,
+      map(parse(text)),
+    ]),
+  }));
 
-  try {
-    action = map(parse(files.action));
-    workspace = map(parse(files.workspace));
-
-    for (const [path, text] of Object.entries(files.workflows)) {
-      workflows.push([path, map(parse(text))]);
-    }
-  } catch {
+  if (Result.isFailure(read)) {
     return ["cache lint: a file is not valid YAML"];
   }
+
+  const { action, workspace, workflows } = read.success;
 
   const actionSteps = steps(map(action["runs"]));
 

@@ -3,10 +3,11 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
+import { Predicate, Result } from "effect";
 import { parseSync, Visitor } from "oxc-parser";
 import { ResolverFactory } from "oxc-resolver";
 
-const map = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+const map = (x: unknown): x is Record<string, unknown> => Predicate.isObject(x);
 
 const declaration = (file: string) => /\.d\.[cm]?ts$/.test(file);
 
@@ -61,7 +62,7 @@ const resolverFor = (conditions: readonly string[]) => {
 // judges every target a runtime condition names, so it lists the condition paths itself: an
 // object's keys (never TypeScript's `types`), each element of a fallback array, nothing for null.
 const conditionPaths = (x: unknown, path: readonly string[] = []): string[][] =>
-  typeof x === "string"
+  Predicate.isString(x)
     ? [[...path]]
     : Array.isArray(x)
       ? x.flatMap((target) => conditionPaths(target, path))
@@ -73,7 +74,7 @@ const conditionPaths = (x: unknown, path: readonly string[] = []): string[][] =>
 
 // Every target string an export value names under a runtime condition.
 const targetStrings = (x: unknown): string[] =>
-  typeof x === "string"
+  Predicate.isString(x)
     ? [x]
     : Array.isArray(x)
       ? x.flatMap(targetStrings)
@@ -168,7 +169,7 @@ const valueLink = (
 const workerClass = (node: unknown): boolean =>
   map(node) &&
   (node.type === "Identifier"
-    ? typeof node.name === "string" && /^(?:WorkerEntrypoint|DurableObject|WorkflowEntrypoint)$/.test(node.name)
+    ? Predicate.isString(node.name) && /^(?:WorkerEntrypoint|DurableObject|WorkflowEntrypoint)$/.test(node.name)
     : node.type === "MemberExpression" && workerClass(node.property));
 
 // A string a link names as written: a string literal or a template literal with no `${}`.
@@ -176,7 +177,7 @@ const literal = (node: unknown): string | undefined =>
   !map(node)
     ? undefined
     : node.type === "Literal"
-      ? typeof node.value === "string"
+      ? Predicate.isString(node.value)
         ? node.value
         : undefined
       : node.type === "TemplateLiteral" &&
@@ -185,7 +186,7 @@ const literal = (node: unknown): string | undefined =>
           Array.isArray(node.quasis) &&
           map(node.quasis[0]) &&
           map(node.quasis[0].value) &&
-          typeof node.quasis[0].value.cooked === "string"
+          Predicate.isString(node.quasis[0].value.cooked)
         ? node.quasis[0].value.cooked
         : undefined;
 
@@ -279,15 +280,15 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
     }
 
     const at = relative(root, file);
-    let text: string;
+    const read = Result.try(() => readFileSync(file, "utf8"));
 
-    try {
-      text = readFileSync(file, "utf8");
-    } catch {
+    if (Result.isFailure(read)) {
       unjudged.push(`'${at}' cannot be read`);
 
       return;
     }
+
+    const text = read.success;
 
     const parsed = parseSync(file, text);
 
@@ -335,7 +336,7 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
       const seen = new Set<string>();
       let at = value(node);
 
-      while (map(at) && at.type === "Identifier" && typeof at.name === "string") {
+      while (map(at) && at.type === "Identifier" && Predicate.isString(at.name)) {
         if (seen.has(at.name)) {
           return undefined;
         }
@@ -357,7 +358,7 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
           return true;
         }
 
-        if (at.type !== "Identifier" || typeof at.name !== "string" || seen.has(at.name)) {
+        if (at.type !== "Identifier" || !Predicate.isString(at.name) || seen.has(at.name)) {
           return false;
         }
 
@@ -370,12 +371,12 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
 
     new Visitor({
       ImportDeclaration(node) {
-        if (valueLink(node.importKind, node.specifiers) && typeof node.source.value === "string") {
+        if (valueLink(node.importKind, node.specifiers) && Predicate.isString(node.source.value)) {
           link(node.source.value);
         }
       },
       ExportNamedDeclaration(node) {
-        if (valueLink(node.exportKind, node.specifiers) && typeof node.source?.value === "string") {
+        if (valueLink(node.exportKind, node.specifiers) && Predicate.isString(node.source?.value)) {
           link(node.source.value);
         }
 
@@ -394,7 +395,7 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
         }
       },
       ExportAllDeclaration(node) {
-        if (node.exportKind !== "type" && typeof node.source.value === "string") {
+        if (node.exportKind !== "type" && Predicate.isString(node.source.value)) {
           link(node.source.value);
         }
       },
@@ -524,11 +525,9 @@ export const programPackageLayout: CreateRule = {
     }
 
     const root = matched[1];
-    let manifest: unknown;
+    const read = Result.try((): unknown => JSON.parse(readFileSync(join(root, "package.json"), "utf8")));
 
-    try {
-      manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-    } catch {
+    if (Result.isFailure(read)) {
       return {
         Program(node) {
           context.report({ node, message: "Cannot read the program package.json." });
@@ -536,10 +535,12 @@ export const programPackageLayout: CreateRule = {
       };
     }
 
+    const manifest = read.success;
+
     // The resolver finds the package by its own name, as Node's self-reference does (11.24.2
     // matches any string name). With no name the package's exports cannot be asked, and every
     // subpath a pattern matches counts as offered.
-    const name = map(manifest) && typeof manifest.name === "string" ? manifest.name : "";
+    const name = map(manifest) && Predicate.isString(manifest.name) ? manifest.name : "";
     const raw = map(manifest) ? manifest.exports : undefined;
 
     const names: Names = {
@@ -705,7 +706,7 @@ export const programPackageLayout: CreateRule = {
         if (
           pure.has(file) &&
           valueLink(node.importKind, node.specifiers) &&
-          typeof node.source.value === "string" &&
+          Predicate.isString(node.source.value) &&
           runtimeName(names, node.source.value)
         ) {
           context.report({ node, message: "Pure program code cannot import Worker runtime APIs." });
@@ -715,7 +716,7 @@ export const programPackageLayout: CreateRule = {
         if (
           pure.has(file) &&
           valueLink(node.exportKind, node.specifiers) &&
-          typeof node.source?.value === "string" &&
+          Predicate.isString(node.source?.value) &&
           runtimeName(names, node.source.value)
         ) {
           context.report({ node, message: "Pure program code cannot export Worker runtime APIs." });
@@ -725,7 +726,7 @@ export const programPackageLayout: CreateRule = {
         if (
           pure.has(file) &&
           node.exportKind !== "type" &&
-          typeof node.source.value === "string" &&
+          Predicate.isString(node.source.value) &&
           runtimeName(names, node.source.value)
         ) {
           context.report({ node, message: "Pure program code cannot export Worker runtime APIs." });

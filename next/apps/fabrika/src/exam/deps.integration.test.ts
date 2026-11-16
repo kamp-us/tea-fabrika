@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Predicate, Schema } from "effect";
 import fc from "fast-check";
 import { rolldown, type Plugin } from "rolldown";
 
@@ -125,11 +125,11 @@ const pointsAt = (from: string, spec: string): string => {
 /** A package's `exports` map, each key with the file it points at. */
 const exportMap = (pkg: Package): ReadonlyMap<string, string | undefined> => {
   const target = (value: unknown): string | undefined => {
-    if (typeof value === "string") {
+    if (Predicate.isString(value)) {
       return join(pkg.dir, value);
     }
 
-    if (typeof value !== "object" || value === null) {
+    if (!Predicate.isObjectOrArray(value)) {
       return undefined;
     }
 
@@ -140,7 +140,7 @@ const exportMap = (pkg: Package): ReadonlyMap<string, string | undefined> => {
 
   const exports = pkg.manifest.exports;
 
-  if (typeof exports !== "object" || exports === null) {
+  if (!Predicate.isObjectOrArray(exports)) {
     return exports === undefined ? new Map() : new Map([[".", target(exports)]]);
   }
 
@@ -208,7 +208,7 @@ const plant = (files: Readonly<Record<string, string | object>>) =>
 
       for (const [path, body] of Object.entries(files)) {
         mkdirSync(dirname(join(root, path)), { recursive: true });
-        writeFileSync(join(root, path), typeof body === "string" ? body : JSON.stringify(body));
+        writeFileSync(join(root, path), Predicate.isString(body) ? body : JSON.stringify(body));
       }
 
       return root;
@@ -768,7 +768,7 @@ describe("a module's front files and its internal/ in the exports map", () => {
   // pinned: the pair the plan writes (PR 9), since each module's two keys are written by hand.
   it("pinned: every module has the pair of keys the plan gives it", () => {
     const exports = real().manifest.exports;
-    const keys = typeof exports === "object" && exports !== null ? Object.fromEntries(Object.entries(exports)) : {};
+    const keys = Predicate.isObjectOrArray(exports) ? Object.fromEntries(Object.entries(exports)) : {};
 
     for (const each of MODULES) {
       expect(keys[`./${each}/*`], `./${each}/*`).toBe(`./src/${each}/*.ts`);

@@ -10,6 +10,7 @@
 // frame the client wrote as it was sent (`MemorySocket.sent`), not only what the door kept of it.
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import type { Request } from "../tasks/Task.ts";
@@ -139,12 +140,12 @@ export const brain = () => {
 
   /** Answers one call by `key`, and changes what the call changes. `finish` says how a finish is answered. */
   const call = (key: string, method: string, params: unknown, finish: FinishMode = "ok"): Outcome => {
-    const p = typeof params === "object" && params !== null ? new Map(Object.entries(params)) : new Map();
+    const p = Predicate.isObjectOrArray(params) ? new Map(Object.entries(params)) : new Map();
 
     const text = (name: string) => {
       const value = p.get(name);
 
-      return typeof value === "string" ? value : "";
+      return Predicate.isString(value) ? value : "";
     };
 
     if (method === "tasks.list") {
@@ -157,7 +158,7 @@ export const brain = () => {
 
     if (method === "tasks.wait") {
       const after = p.get("after");
-      const n = typeof after === "number" ? after : 0;
+      const n = Predicate.isNumber(after) ? after : 0;
 
       return rev(key) > n
         ? Outcome.cases.result.make({ result: { rev: rev(key) } })

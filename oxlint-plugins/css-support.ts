@@ -1,5 +1,6 @@
 // Today's CSS rules share parsing and reporting, so the runner can count known debt too.
 import { relative } from "node:path";
+import { Predicate } from "effect";
 import valueParser from "postcss-value-parser";
 import stylelint from "stylelint";
 import names from "../packages/fabrika-design/src/token-names.json" with { type: "json" };
@@ -113,7 +114,7 @@ export const plugin = (name: string, check: Check) => {
           result,
           ruleName,
           { actual: primary, possible: [true] },
-          { actual: options, possible: { known: [(value) => typeof value === "string"] } },
+          { actual: options, possible: { known: [(value) => Predicate.isString(value)] } },
         )
       ) {
         return;

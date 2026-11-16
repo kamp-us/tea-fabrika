@@ -37,7 +37,7 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import { tezgah } from "@kampus/tezgah";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Schema } from "effect";
+import { Cause, Effect, Exit, Predicate, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -300,7 +300,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
               {},
               {
                 get: (_t, method) =>
-                  typeof method !== "string" || method === "then"
+                  !Predicate.isString(method) || method === "then"
                     ? undefined
                     : (...args: ReadonlyArray<unknown>) => projectCall(method)(args),
               },
@@ -353,7 +353,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
               {},
               {
                 get: (_t, method) => {
-                  if (typeof method !== "string" || method === "then") {
+                  if (!Predicate.isString(method) || method === "then") {
                     return undefined;
                   }
 

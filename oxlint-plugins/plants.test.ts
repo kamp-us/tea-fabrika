@@ -21,6 +21,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import { Predicate } from "effect";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -549,8 +550,7 @@ type Diagnostics = ReadonlyArray<{
 const isEntry =
   (object: string, property: string) =>
   (entry: unknown): boolean =>
-    typeof entry === "object" &&
-    entry !== null &&
+    Predicate.isObjectOrArray(entry) &&
     "object" in entry &&
     entry.object === object &&
     "property" in entry &&

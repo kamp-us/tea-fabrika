@@ -16,6 +16,7 @@ import {
   Logger,
   Path,
   PlatformError,
+  Predicate,
   References,
   Schema,
   Sink,
@@ -767,7 +768,7 @@ it("dev returns InstanceError for malformed saved settings without writing or bu
       try {
         const raw: unknown = JSON.parse(text);
 
-        return typeof raw !== "object" || raw === null || !("name" in raw);
+        return !Predicate.isObjectOrArray(raw) || !("name" in raw);
       } catch {
         return true;
       }

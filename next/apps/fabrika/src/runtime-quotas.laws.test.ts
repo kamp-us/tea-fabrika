@@ -34,7 +34,7 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, Clock, Effect, Option, Schema } from "effect";
+import { ByteSize, Clock, Effect, Option, Predicate, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { programs } from "virtual:fabrika-built";
 import { vi } from "vitest";
@@ -343,7 +343,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
           {},
           {
             get: (_target, method) =>
-              typeof method !== "string" || method === "then"
+              !Predicate.isString(method) || method === "then"
                 ? undefined
                 : // A Process records its start on the Project's own small runtime, beside its service.
                   method === "settingsStart"
@@ -355,7 +355,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
                         Effect.runPromise(
                           project((p) => {
                             const member = Reflect.get(p, method);
-                            const work = typeof member === "function" ? Reflect.apply(member, p, args) : member;
+                            const work = Predicate.isFunction(member) ? Reflect.apply(member, p, args) : member;
 
                             return method === "sign"
                               ? signingReply(work)
@@ -396,7 +396,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
           {},
           {
             get: (_target, method) =>
-              typeof method !== "string" || method === "then"
+              !Predicate.isString(method) || method === "then"
                 ? undefined
                 : (...args: ReadonlyArray<unknown>) =>
                     Effect.runPromise(
@@ -412,7 +412,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
                           : process(current, (p): Effect.Effect<unknown, unknown> => {
                               const member = Reflect.get(p, method);
 
-                              return typeof member === "function" ? Reflect.apply(member, p, args) : Effect.void;
+                              return Predicate.isFunction(member) ? Reflect.apply(member, p, args) : Effect.void;
                             }),
                     ),
           },

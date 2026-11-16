@@ -1,6 +1,7 @@
 // Today's CI, serving both versions. What the merge line runs no more: no tooling test (T1, 0539),
 // in check.yaml and in every other workflow a pull request or the merge queue starts, and nothing of
 // today's app (T2) or today's promise checks (T6, 0525, 0533).
+import { Predicate } from "effect";
 import { parse } from "yaml";
 import { CHANGED_FROM_BASE, compact, denominator, map, type Rule, SHARD_OF, steps } from "./shared.ts";
 
@@ -22,7 +23,7 @@ const VITEST_CALL =
 // changes' outputs. Any other value could carry a `--project` the lint cannot see.
 const VITEST_VARS: Record<string, (value: unknown) => boolean> = {
   SHARD: (value) =>
-    typeof value === "string" &&
+    Predicate.isString(value) &&
     new RegExp(
       `^${SHARD_OF}/(?:${denominator("vitest", String.raw`\d+`)}|${denominator("e2e", String.raw`\d+`)})$`,
     ).test(value),
@@ -55,14 +56,14 @@ const toolingJobs = (workflow: Record<string, unknown>): string[] => {
   return Object.entries(map(workflow["jobs"]))
     .filter(([, job]) =>
       steps(map(job)).some((step) => {
-        if (typeof step["run"] !== "string") {
+        if (!Predicate.isString(step["run"])) {
           return false;
         }
 
         const env = map(step["env"]);
         const set = { ...outer, ...map(map(job)["env"]), ...env };
         const parts = shellCommands(step["run"]);
-        const folder = typeof step["working-directory"] === "string" ? step["working-directory"] : "";
+        const folder = Predicate.isString(step["working-directory"]) ? step["working-directory"] : "";
 
         const inside =
           /^next\//.test(folder) &&
@@ -98,7 +99,7 @@ const toolingJobs = (workflow: Record<string, unknown>): string[] => {
 export const lintNoTooling = (path: string, text: string): string[] => {
   const workflow = map(parse(text));
   const on = workflow["on"];
-  const events = typeof on === "string" ? [on] : Array.isArray(on) ? on : Object.keys(map(on));
+  const events = Predicate.isString(on) ? [on] : Array.isArray(on) ? on : Object.keys(map(on));
 
   return events.includes("pull_request") || events.includes("merge_group")
     ? toolingJobs(workflow).map((job) => `${path}: T1: ${job} runs no tooling test (0539)`)
@@ -118,10 +119,10 @@ export const mergeLine: Rule = ({ workflow, jobs }, require) => {
   for (const [name, job] of Object.entries(jobs)) {
     for (const step of steps(map(job))) {
       require(![step["run"], step["working-directory"]].some(
-        (text) => typeof text === "string" && TODAYS_APP.test(text),
+        (text) => Predicate.isString(text) && TODAYS_APP.test(text),
       ), `T2: ${name} runs nothing of today's app`);
       require(!(
-        typeof step["run"] === "string" && TODAYS_PROMISES.test(step["run"])
+        Predicate.isString(step["run"]) && TODAYS_PROMISES.test(step["run"])
       ), `T6: ${name} runs no promise check of today's version`);
     }
   }

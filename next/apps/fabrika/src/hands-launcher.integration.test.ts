@@ -31,7 +31,7 @@ import { build } from "@kampus/libfabrika/build";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import { Effect, FileSystem, Option, Path, Predicate, Queue, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
@@ -446,7 +446,7 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
                   expect(seen.lines.length, `S2 (${launch}): the scan read real lines`).toBeGreaterThan(0);
 
                   for (const [name, value] of Object.entries(outputs)) {
-                    const text = JSON.stringify(value, (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v));
+                    const text = JSON.stringify(value, (_k, v: unknown) => (Predicate.isBigInt(v) ? String(v) : v));
 
                     for (const form of forms) {
                       expect(text.includes(form), `S2: [secrets] the private half is not in ${name}`).toBe(false);

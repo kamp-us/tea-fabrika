@@ -1,5 +1,6 @@
 // Today's CI, serving both versions. check.yaml's Q1: the record a ready pull request run leaves
 // for the merge queue, its one upload, and every job testing the tree the record names.
+import { Predicate } from "effect";
 import { allSteps, classifier, compact, FLAGS, map, type Rule, sameEntries, steps, uses } from "./shared.ts";
 import { isTimings, TIMED_LEGS } from "./time-tables.ts";
 
@@ -65,7 +66,7 @@ export const record: Rule = ({ jobs }, require) => {
       Object.entries(map(upload["with"])).filter(([key]) => key !== "retention-days"),
       Object.entries(RECORD_UPLOAD),
     ) &&
-    typeof kept === "number" &&
+    Predicate.isNumber(kept) &&
     kept >=
       1, "Q1: changes uploads the record once, after the record step, under the name it printed, and its failure fails nothing");
 
@@ -85,7 +86,7 @@ export const record: Rule = ({ jobs }, require) => {
   }
 
   const uploaders = Object.values(jobs).flatMap((job) =>
-    allSteps(map(job)).filter((s) => typeof s["uses"] === "string" && /(?:^|\/)upload-artifact@/.test(s["uses"])),
+    allSteps(map(job)).filter((s) => Predicate.isString(s["uses"]) && /(?:^|\/)upload-artifact@/.test(s["uses"])),
   );
 
   const timingsUploads = TIMED_LEGS.flatMap(([name]) => allSteps(map(jobs[name])).filter(isTimings));

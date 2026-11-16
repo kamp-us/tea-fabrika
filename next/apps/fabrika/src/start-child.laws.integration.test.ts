@@ -12,7 +12,7 @@ import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
+import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Predicate, Result, Schema, Scope } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
@@ -274,11 +274,11 @@ const ProjectTape = fc
 // Read stored JSON values and their string leaves. Error causes are deliberately excluded: only
 // the message that runPromise actually put in its rejected Error is an error output.
 const outputText = (value: unknown): Array<string> => {
-  if (typeof value === "string") {
+  if (Predicate.isString(value)) {
     return [value, JSON.stringify(value)];
   }
 
-  if (typeof value === "object" && value !== null) {
+  if (Predicate.isObjectOrArray(value)) {
     return Object.entries(value).flatMap(([key, entry]) => [key, ...outputText(entry)]);
   }
 
