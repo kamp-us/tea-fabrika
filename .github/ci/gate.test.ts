@@ -700,6 +700,65 @@ it("G5 property: a call that fails is tried 3 times, and after the third failure
   ).toBe(true);
 });
 
+/** A start GitHub could give that is not a time: `Date.parse` answers NaN for it. */
+const notATime = fc
+  .oneof(
+    fc.constantFrom("", "not a time", "2026-13-45T99:00:00Z", "yesterday", "T14:00:00Z"),
+    fc.string({ maxLength: 30 }),
+  )
+  .filter((text) => Number.isNaN(Date.parse(text)));
+
+it("G8 property: when the newest full run on main gives no job start that parses, every start null or text that is not a time, the step exits 1 with no start line and no summary", async () => {
+  // The review of the E48 slice: a version that printed the run as started at no time answered
+  // `skip, too_soon` on all-null starts and `start, due` on text, a red run turned into a quiet
+  // skip. Plant, run once on gate.mjs and restored: drop the throw in `read` when no start parses
+  // (red: code 0 with a start line).
+  const reached = { allNull: 0, allText: 0, mixed: 0, olderGood: 0, byHand: 0, gated: 0, oldShape: 0 };
+  await fc.assert(
+    fc.asyncProperty(
+      history,
+      fc.constantFrom<Event>("push", "schedule", "workflow_dispatch"),
+      fc.boolean(),
+      fc.array(fc.option(notATime, { nil: null }), { minLength: 1, maxLength: 6 }),
+      async (list, event, gated, bad) => {
+        // The newest finished run on main is full, and none of its jobs gives a start that parses.
+        const runs = runsOf([
+          ...list,
+          { kind: "full", branch: "main", sha: OLD[0]!, conclusion: "success", event: "push", waited: 0, gated },
+        ]);
+        const newest = runs.find((r) => r.id === 100 + list.length)!;
+        newest.jobs = newest.jobs.map((j, i) => ({ ...j, started_at: bad[i % bad.length]! }));
+        const { send } = github(runs);
+        const result = await gate.main(envOf(event, HEAD, 60), {
+          send,
+          sleep: waits().sleep,
+          now: () => BASE + 9999 * MINUTE,
+        });
+
+        expect(result.code, result.line).toBe(1);
+        expect(result.output).toBe("");
+        expect(result.summary).toBe("");
+
+        const starts = newest.jobs.map((j) => j.started_at);
+        reached.allNull += starts.every((s) => s === null) ? 1 : 0;
+        reached.allText += starts.every((s) => s !== null) ? 1 : 0;
+        reached.mixed += starts.some((s) => s === null) && starts.some((s) => s !== null) ? 1 : 0;
+        reached.olderGood += runs.some((r) => r.id < newest.id && r.head_branch === "main" && r.jobs.some(isLeg))
+          ? 1
+          : 0;
+        reached.byHand += event === "workflow_dispatch" ? 1 : 0;
+        reached.gated += gated ? 1 : 0;
+        reached.oldShape += gated ? 0 : 1;
+      },
+    ),
+    options,
+  );
+  expect(
+    Object.values(reached).every((count) => count > 0),
+    JSON.stringify(reached),
+  ).toBe(true);
+});
+
 // ---------------------------------------------------------------- G6, the walk's cost
 
 it("G6 property: after K runs at the head whose gate said false, the gate makes K + 3 calls: two run lists and one jobs list per run it walks", async () => {

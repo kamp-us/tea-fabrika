@@ -17,8 +17,8 @@
 // No installed dependencies and no type stripping, like scheduled.mjs, so the job runs on the
 // runner's own Node with no setup. A pure core (`decide`), a thin reader with the job's own token
 // (`read`), and `main`, which writes `start=true` or `start=false` for the next jobs and one line
-// for the run's summary. When GitHub cannot be read after three tries, or the read runs out of its
-// deadline, the step fails and writes no `start`, so the tests do not run and the report judges the
+// for the run's summary. When GitHub cannot be read after three tries, the read runs out of its
+// deadline, or the last full run gives no start time that parses, the step fails and writes no `start`, so the tests do not run and the report judges the
 // run red.
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -42,7 +42,8 @@ const MINUTE = 60_000;
 /**
  * What `read` answers: a Seen, and `started`, the last full run's start as GitHub wrote it (its
  * earliest job's `started_at`), for the log line, so the gate prints GitHub's own text and builds
- * no `Date`; null when there is no last run or no job of it gave a start that parses.
+ * no `Date`; null only when there is no last run. A last run with no start that parses is an
+ * answer the gate cannot use: `read` rejects, as for a call that failed.
  * @typedef {Seen & { started: string | null }} Read
  */
 
@@ -99,7 +100,8 @@ const isMap = (value) => typeof value === "object" && value !== null && !Array.i
 /**
  * Reads what the gate needs from GitHub with the job's own token: the newest full run on main, and
  * on a push or the catch-up whether main's head has had one. Rejects when the run gave no token,
- * repository or workflow file, or when a call failed three times.
+ * repository or workflow file, when a call failed three times, or when the newest full run gave no
+ * job start that parses.
  * @param {Record<string, string | undefined>} env
  * @param {Io} [io]
  * @returns {Promise<Read>}
@@ -199,12 +201,19 @@ export const read = async (env, io = {}) => {
         job.start === null ? [] : [{ text: job.start, at: Date.parse(job.start) }],
       );
       const at = Math.min(...starts.map((start) => start.at));
+      // No start, or one that does not parse, leaves `at` Infinity or NaN, so no start equals it.
+      const first = starts.find((start) => start.at === at);
+
+      if (first === undefined) {
+        throw new Error("gate: the last full run on main gave no start time");
+      }
+
       last = {
         id: Number(run["id"]),
         sha: typeof run["head_sha"] === "string" ? run["head_sha"] : "",
         at,
       };
-      started = starts.find((start) => start.at === at)?.text ?? null;
+      started = first.text;
       break;
     }
   }
@@ -248,7 +257,7 @@ export const main = async (env, io = {}) => {
   const last =
     seen.last === null
       ? "no full run on main before"
-      : `the last full run on main, ${seen.last.id} at ${seen.last.sha.slice(0, 9)}, started ${seen.started ?? "at a time GitHub did not give"}, ${Math.floor((seen.now - seen.last.at) / MINUTE)} minutes ago`;
+      : `the last full run on main, ${seen.last.id} at ${seen.last.sha.slice(0, 9)}, started ${seen.started}, ${Math.floor((seen.now - seen.last.at) / MINUTE)} minutes ago`;
   const line = `gate: ${seen.event} at ${(env["GITHUB_SHA"] ?? "").slice(0, 9)}: ${decision._tag}, ${decision.reason}; ${last}; the gap is ${seen.gap} minutes${seen.event === "workflow_dispatch" ? "" : `; the head ${seen.tested ? "has had" : "has had no"} full run`}`;
   return { code: 0, output: `start=${decision._tag === "start"}\n`, summary: `${line}\n`, line };
 };
