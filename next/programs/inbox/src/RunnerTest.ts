@@ -1,12 +1,13 @@
 // Ticket 884, next/: the app supplies real runner wiring so this program imports only the library's front (0062).
 import { describe, expect, it } from "@effect/vitest";
-import type { ProgramRunner } from "@kampus/libfabrika";
+import type { Incoming, ProgramRunner } from "@kampus/libfabrika";
 import { Arbitrary, Effect, Schema, type Scope } from "effect";
 import { inbox, Row } from "./program.ts";
 
 type Runner = ProgramRunner["Service"];
 
-type Writer = unknown;
+/** A writer as the door stamps it on a delivered input, the type the runner's `Incoming` decodes. */
+type Writer = Incoming["envelope"]["by"];
 
 export type Open = Effect.Effect<
   {

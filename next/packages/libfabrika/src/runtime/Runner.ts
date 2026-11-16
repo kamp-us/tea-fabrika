@@ -448,7 +448,7 @@ const tag = (word: string): string => `fab.runner.${word}`;
 type Live = {
   readonly loaded: Omit<Loaded, "stepper">;
   readonly model: unknown;
-  readonly view: unknown;
+  readonly view: View;
   readonly wake: number | null;
   readonly v: number;
   /** The last inbox rev folded, and that letter's inbox position. */
