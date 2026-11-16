@@ -36,6 +36,13 @@ export const Detail = Schema.Struct({
 });
 export type Detail = typeof Detail.Type;
 
+/**
+ * One file a pull request changes, as GitHub's files list gives it: its path, and its unified diff
+ * hunks, `null` where GitHub shows none (a binary file, or one too big to show).
+ */
+export const Patch = Schema.Struct({ path: Schema.String, patch: Schema.NullOr(Schema.String) });
+export type Patch = typeof Patch.Type;
+
 /** What a new or edited pull request says: its title and its description. */
 export type Text = { readonly title: string; readonly body: string };
 
@@ -61,6 +68,8 @@ export class PullRequests extends Context.Service<
     readonly enqueue: (number: number, oid: string) => Effect.Effect<void, PullRequestsError>;
     /** The path of every file pull request `number` changes. */
     readonly files: (number: number) => Effect.Effect<ReadonlyArray<string>, PullRequestsError>;
+    /** Each file pull request `number` changes, with its diff hunks (pr/Names.ts reads them, 0587). */
+    readonly patches: (number: number) => Effect.Effect<ReadonlyArray<Patch>, PullRequestsError>;
     /**
      * Turns on GitHub's merge when ready for pull request `number`, as a squash, pinned to the head
      * `oid` (0530): GitHub queues it once `ci-required` is green there, and never on another head.
