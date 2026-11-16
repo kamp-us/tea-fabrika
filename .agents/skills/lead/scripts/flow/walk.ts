@@ -10,7 +10,13 @@
 import { refuse } from "@demlik/tea";
 import { run } from "@demlik/tea/effect";
 import { fileStore } from "@demlik/tea/node";
-import { Clock, Console, Effect, FileSystem, Option, Runtime, Schema } from "effect";
+import * as Clock from "effect/Clock";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Runtime from "effect/Runtime";
+import * as Schema from "effect/Schema";
 import * as Flow from "./Flow.ts";
 import * as FlowMachine from "./machine.ts";
 import * as Runners from "./Runners.ts";
