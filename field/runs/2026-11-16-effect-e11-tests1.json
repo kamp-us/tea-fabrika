@@ -2,7 +2,7 @@
   "date": "2026-11-16",
   "run": "2026-11-16-effect-e11-tests1",
   "ticket": "1075",
-  "pr": null,
+  "pr": "kamp-us/tea-fabrika#1449",
   "started": null,
   "ended": null,
   "parent": null,
@@ -15,7 +15,7 @@
   "tokens": null,
   "tools": null,
   "minutes": null,
-  "note": "No checkerfix run (rule: no script edits files). Recount after: 2 hits, both in 1366's file, shown at message level since that folder is not locked. pnpm lint passed except lint:dead, which aborted with SIGABRT in this box (not run to a result). Tests: .github/ci/field-check.test.ts and WindowMachine.laws.test.ts, 73 passed.",
+  "note": "No checkerfix run (rule: no script edits files). Recount after: 2 hits, both in 1366's file, shown at message level since that folder is not locked. pnpm lint passed except lint:dead, which aborted with SIGABRT in this box (not run to a result). Tests: .github/ci/field-check.test.ts and WindowMachine.laws.test.ts, 73 passed. Per-check report: schemaStructWithTag, hits met 19, fixed by quick fix 0, hand edits 17 (Edit tool), left 0, waiting on 1366 2 (next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts lines 1376 and 1381). Files edited: .github/ci/field-check.test.ts, .github/ci/field-schema.ts, next/apps/fabrika/e2e/chaos-revoke.integration.test.ts, next/apps/fabrika/src/{checklist-instance.laws,instance-one-file,scheduled-job-alarm,tasks-wire}.integration.test.ts, next/packages/libfabrika/src/client/WindowMachine.laws.test.ts, src/node/build/build-one-file.integration.test.ts, src/processes/ProcessStreams.integration.test.ts. Locks: .github/ci, libfabrika src/client, src/node, src/processes, app e2e. PR 1449 was opened before the one-PR rule and is left as it is.",
   "plants": [
     {
       "law": "L1",
