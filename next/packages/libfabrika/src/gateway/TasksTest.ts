@@ -24,22 +24,21 @@
 // answering every open task of every key (G1), and take the stream name from the params (G2).
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import {
-  Arbitrary,
-  Deferred,
-  Effect,
-  Fiber,
-  Layer,
-  Logger,
-  Option,
-  Redacted,
-  Result as R,
-  Schema,
-  type Scope,
-  Semaphore,
-  Tracer,
-} from "effect";
-import { Base64, Base64Url } from "effect/encoding";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Base64 from "effect/encoding/Base64";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import * as R from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
+import * as Tracer from "effect/Tracer";
 import { grantText, revokeText } from "../access/Text.ts";
 import * as Id from "../Id.ts";
 import { MailWakeups, MailWakeupsError } from "../runtime/MailWakeups.ts";

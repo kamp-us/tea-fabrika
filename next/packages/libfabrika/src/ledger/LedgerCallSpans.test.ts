@@ -1,6 +1,11 @@
 // T285, PR 1, next/. Keep remote calls traced once, including decoding failures.
 // Plants: duplicate forwarding spans, missing argument tags, or recovery inside ledger.call.
-import { Cause, Effect, Exit, Option, Stream, Tracer } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";

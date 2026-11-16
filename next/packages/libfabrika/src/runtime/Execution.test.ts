@@ -3,7 +3,11 @@
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Result, Schema } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { executionFailure, nodeExecution, workerExecution } from "./Execution.ts";
 import { stepper, Step, type Admission, type Prepared, type ProgramDown } from "./Program.ts";

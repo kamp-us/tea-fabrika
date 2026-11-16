@@ -2,8 +2,9 @@
 // P33's existing monitor/window tests stay untouched. These add the ended-process read and
 // fixed dead operation that supervision needs, including file reopen and foreign ledger rows.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
-import { TestClock } from "effect/testing";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../../Id.test-support.ts";
 import { Ledger } from "../../ledger/Ledger.ts";

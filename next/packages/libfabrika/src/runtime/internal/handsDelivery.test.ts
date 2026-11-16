@@ -15,7 +15,7 @@
 // delivery; let a second finished reply settle a settled one again.
 import { arbGuidedSequence, propertyInvariant, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { fcResult } from "../../tasks/TasksTest.ts";
 import { Reply } from "../HandsTasks.ts";

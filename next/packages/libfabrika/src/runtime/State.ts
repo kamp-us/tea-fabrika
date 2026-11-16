@@ -5,7 +5,8 @@
  *
  * @stability unstable
  */
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { Rev } from "../coordination/index.ts";
 import { ProgramDown, type State } from "./Program.ts";
 

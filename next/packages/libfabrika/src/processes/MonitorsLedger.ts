@@ -8,7 +8,13 @@
  *
  * @stability unstable
  */
-import { Clock, Data, Effect, Layer, Option, Result, Schema } from "effect";
+import * as Clock from "effect/Clock";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { WatchProcess } from "../permissions/Model.ts";

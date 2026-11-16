@@ -1,6 +1,7 @@
 // S3, next/. Saved.upgrade(saved, state, build) returns {saved, ran}; no I/O.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 const Model = Schema.Struct({ count: Schema.Int, step: Schema.Int });
 const old = { v: 1, model: { n: 7 }, build: "old-build", after: 12 };

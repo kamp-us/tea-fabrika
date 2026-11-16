@@ -1,6 +1,9 @@
 // T753, next/. A caller supplies real entry points, storage and output collectors (0062).
 import { describe, expect } from "@effect/vitest";
-import { Effect, Exit, Option, type Scope } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import type * as Scope from "effect/Scope";
 import * as fc from "fast-check";
 import * as StartsTest from "../settings/StartsTest.ts";
 

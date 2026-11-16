@@ -15,7 +15,10 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";

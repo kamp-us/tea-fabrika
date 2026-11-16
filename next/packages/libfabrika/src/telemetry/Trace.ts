@@ -8,7 +8,8 @@
  *
  * @stability unstable
  */
-import { Cause, Schema } from "effect";
+import * as Cause from "effect/Cause";
+import * as Schema from "effect/Schema";
 import { ProcessId } from "../ProcessId.ts";
 
 /**

@@ -6,8 +6,9 @@
  *
  * @stability unstable
  */
-import { Context, Schema } from "effect";
-import type { Effect } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { ProcessId } from "../ProcessId.ts";
 import { type Recipient, Text } from "./internal/processTable.ts";
 import type { From } from "./Mailbox.ts";

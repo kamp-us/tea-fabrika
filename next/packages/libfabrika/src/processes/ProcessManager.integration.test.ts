@@ -1,7 +1,11 @@
 // Exam amendment, P33 / ticket 252. Replaces P9's per-build start identity only.
 // Mail, writer fields, ledger refusals and lazy layer failures stay covered.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Layer, Stream, Tracer } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";

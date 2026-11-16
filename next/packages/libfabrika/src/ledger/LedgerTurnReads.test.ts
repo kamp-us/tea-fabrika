@@ -6,7 +6,10 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Layer, Option } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { property } from "../Testing.test-support.ts";

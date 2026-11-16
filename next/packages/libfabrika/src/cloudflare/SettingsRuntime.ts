@@ -3,7 +3,16 @@
  *
  * @stability unstable
  */
-import { Context, Duration, Effect, Exit, Layer, ManagedRuntime, Scope, ScopedCache } from "effect";
+// Layer stays a named import: runtime.laws.integration.test.ts in the app spies on this very object's
+// `buildWithMemoMap`, and a module namespace cannot be spied on.
+import { Layer } from "effect";
+import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Scope from "effect/Scope";
+import * as ScopedCache from "effect/ScopedCache";
 
 /**
  * Creates a one-slot cache that builds `ready` on its first read and keeps the built context.

@@ -1,6 +1,12 @@
 // next/, W5: Project route absence is evidence of departure; RPC failure is not.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { nth } from "../runtime/RepliesTest.ts";
 import { Publication, WatcherManager, WatcherManagerError } from "../runtime/WatcherManager.ts";
 import type { Sql } from "../Sql.ts";

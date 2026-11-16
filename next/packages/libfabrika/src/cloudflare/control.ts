@@ -4,7 +4,13 @@
  *
  * @stability unstable
  */
-import { Effect, Equal, Redacted, Result, Schema } from "effect";
+// Effect stays a named import: readers.laws.test.ts spies on the `result` of this very object, and a module
+// namespace cannot be spied on.
+import { Effect } from "effect";
+import * as Equal from "effect/Equal";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { httpContext } from "./fetch.ts";
 import { workerLoader, type ProgramSource } from "./index.ts";

@@ -2,7 +2,10 @@
 // in the schema, small enough that no brain line can reach the ledger's per-line limit. The cap is
 // the lead's lean, 256 characters, counted as `string.length`, as Schema's max length counts.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Exit, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import {
   A,

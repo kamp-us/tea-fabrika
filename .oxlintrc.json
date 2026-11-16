@@ -1859,7 +1859,9 @@
         "eslint/no-restricted-imports": [
           "error",
           {
-            "patterns": [{ "group": ["**", "!effect"], "message": "SettingsRuntime imports only Effect." }]
+            "patterns": [
+              { "group": ["**", "!effect", "!effect/**"], "message": "SettingsRuntime imports only Effect." }
+            ]
           }
         ]
       }
@@ -1879,11 +1881,22 @@
                 "name": "effect",
                 "importNames": ["Layer", "ManagedRuntime", "ScopedCache"],
                 "message": "A service file holds only its contract (0095)."
-              }
+              },
+              { "name": "effect/Layer", "message": "A service file holds only its contract (0095)." },
+              { "name": "effect/ManagedRuntime", "message": "A service file holds only its contract (0095)." },
+              { "name": "effect/ScopedCache", "message": "A service file holds only its contract (0095)." }
             ],
             "patterns": [
               {
-                "group": ["**", "!effect", "!./Start.ts", "!./Starts.ts", "!./Snapshot.ts", "!./Declarations.ts"],
+                "group": [
+                  "**",
+                  "!effect",
+                  "!effect/**",
+                  "!./Start.ts",
+                  "!./Starts.ts",
+                  "!./Snapshot.ts",
+                  "!./Declarations.ts"
+                ],
                 "message": "Settings contracts use Effect and settings-owned types only."
               }
             ]

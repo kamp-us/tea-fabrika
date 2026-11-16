@@ -1,7 +1,8 @@
 // P34c slice 1, L4's producer half: each failure the runner already captured maps to one crash
 // phase, keeping its captured class whole. The expected reason comes from the fixture's own schema.
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../../Id.test-support.ts";
 import { ERROR_CLASS_MAX, ExitReason, fcErrorClass } from "../../processes/Process.test-support.ts";

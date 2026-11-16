@@ -4,7 +4,10 @@
 // law without an edit here. Plant: `catch: unreachable` that ignores its argument, as before this ticket.
 import { it } from "@effect/vitest";
 import { encodeRpcError, ErrorTag, RpcCallError } from "alchemy/Rpc";
-import { Deferred, Effect, Fiber, Schema } from "effect";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Schema from "effect/Schema";
 import { expect } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { LedgerError } from "../ledger/Ledger.ts";

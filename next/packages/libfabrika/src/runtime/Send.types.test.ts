@@ -7,7 +7,7 @@
 //     `Cmd.make("send_chunks", ...)` whose tags hold `too_big` and no `full`, since it waits.
 //   runtime/Chunk.ts: `input(type, item)` is the reader's typed input for one chunked port.
 import { describe, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { expectTypeOf } from "vitest";
 import * as Chunk from "./Chunk.ts";
 import type { send, sendChunks } from "./Send.ts";

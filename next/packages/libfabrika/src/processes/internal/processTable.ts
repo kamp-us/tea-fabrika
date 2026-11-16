@@ -1,5 +1,5 @@
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { LedgerError } from "../../ledger/Ledger.ts";
 import { Entry, valueFor } from "../../ledger/Log.ts";
 import { Sender } from "../../permissions/Senders.ts";

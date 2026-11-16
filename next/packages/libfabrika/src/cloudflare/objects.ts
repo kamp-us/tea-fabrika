@@ -2,7 +2,7 @@ import type * as Cloudflare from "@alchemy.run/cloudflare";
 import { DurableObject, type DurableObjectShape } from "@alchemy.run/cloudflare/Workers/DurableObject";
 import { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import type { Effect } from "effect";
+import type * as Effect from "effect/Effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import type { Activity } from "../processes/Process.ts";
 import type { Descriptor, Opened, Sent, Swapped } from "../runtime/Runner.ts";

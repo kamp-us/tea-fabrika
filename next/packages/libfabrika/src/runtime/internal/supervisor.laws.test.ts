@@ -23,7 +23,8 @@
 import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { A, ExitReason, fcErrorClass, from } from "../../processes/Process.test-support.ts";

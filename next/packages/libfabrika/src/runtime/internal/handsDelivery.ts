@@ -5,7 +5,7 @@
 // the Cmd, so a cut before it leaves the saved state, and the next ask repeats and settles it again.
 // A failed ask is not a reply: the runner leaves the saved state as it was and never steps this.
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { Rev } from "../../Rev.ts";
 import { Result } from "../../tasks/Task.ts";
 import { Refusal, Reply } from "../HandsTasks.ts";

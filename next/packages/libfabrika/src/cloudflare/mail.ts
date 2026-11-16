@@ -1,4 +1,7 @@
-import { Effect, Layer, Option, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { ProgramMail, ProgramMailError } from "../processes/ProgramMail.ts";
 import type { MailDelivery } from "../runtime/MailDelivery.ts";
 import * as MailDeliveryLive from "../runtime/MailDeliveryLive.ts";

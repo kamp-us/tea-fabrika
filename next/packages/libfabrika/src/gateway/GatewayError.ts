@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 
 /**
  * Reason for gateway state that could not be read or written: the `Sql` threw, a saved key is not

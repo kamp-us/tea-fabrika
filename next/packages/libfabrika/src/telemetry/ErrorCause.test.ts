@@ -4,7 +4,8 @@
 // `Archive.ts:68` (a `head` answer that does not decode), `Records.ts:444` (a part's answer that
 // does not decode). `Sink.ts:393` needs a database and runs in `node/ErrorCause.test.ts`.
 import { describe, expect, it, vi } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { Archive, type BucketCalls, sha256 } from "./Archive.ts";
 import { type RecordCalls, RecordManager } from "./Records.ts";

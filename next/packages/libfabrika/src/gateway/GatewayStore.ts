@@ -4,7 +4,9 @@
  *
  * @stability unstable
  */
-import { Effect, Result, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { type Sql } from "../Sql.ts";
 import { BadRow, GatewayError, Storage } from "./GatewayError.ts";
 

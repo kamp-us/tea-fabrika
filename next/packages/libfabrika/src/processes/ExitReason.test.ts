@@ -2,7 +2,8 @@
 // mutations of them against the fixture's independent copy of the schema; L9 is checked by tsc on
 // the uncalled cases below. The real-store halves of L1 and L7 are in ExitReasonTest.ts.
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { ExitReason } from "./ExitReason.ts";
 import {

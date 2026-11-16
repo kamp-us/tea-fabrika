@@ -12,20 +12,18 @@ import { Machine } from "@demlik/tea/effect";
 // Plant: read the span with `Effect.orDie` again; R2's untraced callers go red.
 import { it, expect } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import {
-  Arbitrary,
-  Cause,
-  Context,
-  Effect,
-  Exit,
-  Layer,
-  Logger,
-  References,
-  Result,
-  Schedule,
-  Schema,
-  Tracer,
-} from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as References from "effect/References";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { NORMAL, PIDS } from "../processes/Process.test-support.ts";

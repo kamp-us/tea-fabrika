@@ -5,7 +5,9 @@
  *
  * @stability unstable
  */
-import { Context, type Effect, Schema } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import type { Reply as ReplySchema } from "./internal/reply.ts";
 
 /**

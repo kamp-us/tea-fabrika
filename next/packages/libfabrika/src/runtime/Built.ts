@@ -6,8 +6,10 @@
  *
  * @stability unstable
  */
-import { Effect, Schema, SchemaGetter } from "effect";
-import { Digest } from "effect/crypto";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as SchemaGetter from "effect/SchemaGetter";
 import { ProgramName } from "../packs/ProgramName.ts";
 
 /**

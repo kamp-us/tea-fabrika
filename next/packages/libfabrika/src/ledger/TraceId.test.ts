@@ -3,8 +3,15 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream, Tracer } from "effect";
-import { TestClock } from "effect/testing";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 import { inputParents } from "../Id.test-support.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";

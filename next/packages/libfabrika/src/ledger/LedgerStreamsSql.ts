@@ -3,7 +3,10 @@
  *
  * @stability unstable
  */
-import { Effect, Layer, Option, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import type { Sql } from "../Sql.ts";
 import { ledgerStore } from "./internal/ledgerStore.ts";
 import { BadRow, LedgerStreams, LedgerStreamsError, Storage } from "./LedgerStreams.ts";

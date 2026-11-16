@@ -8,7 +8,10 @@
  * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import { Equal, Option, Result, Schema } from "effect";
+import * as Equal from "effect/Equal";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { LedgerError } from "../ledger/Ledger.ts";
 import type { LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";

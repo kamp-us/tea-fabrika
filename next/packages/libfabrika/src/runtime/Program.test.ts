@@ -2,7 +2,14 @@
 // Imports are inside each law so an absent planned module reports every law, not zero tests.
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Option, Predicate, Result, Schema, SchemaIssue } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as SchemaIssue from "effect/SchemaIssue";
 import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./Entry.ts";

@@ -7,7 +7,12 @@
  *
  * @stability unstable
  */
-import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { Appended, type Entry, Line, lineFor } from "../ledger/Log.ts";
 import type { Rev } from "../Rev.ts";

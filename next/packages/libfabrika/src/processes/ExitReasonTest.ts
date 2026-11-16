@@ -3,7 +3,13 @@
 // scope and gives it back when that scope closes.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Predicate, Result, Schema, type Scope, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";

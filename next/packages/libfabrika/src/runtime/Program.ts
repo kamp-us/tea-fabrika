@@ -6,7 +6,12 @@
  * @stability unstable
  */
 import { applyCell, msgKeysOf, type AnyCmdDef } from "@demlik/tea";
-import { Effect, Option, Predicate, Result, Schema, type SchemaIssue } from "effect";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as SchemaIssue from "effect/SchemaIssue";
 import { ParentText } from "../coordination/index.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
 

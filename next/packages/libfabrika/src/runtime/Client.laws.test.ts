@@ -24,7 +24,8 @@
 // move that state allows; stale and malformed input is built from what the walk delivered.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { ProcessId } from "../ProcessId.ts";
 import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";

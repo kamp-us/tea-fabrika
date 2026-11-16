@@ -1,4 +1,6 @@
-import { Equal, Predicate, Result } from "effect";
+import * as Equal from "effect/Equal";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
 
 /** @internal */
 export type Path = ReadonlyArray<string | number>;

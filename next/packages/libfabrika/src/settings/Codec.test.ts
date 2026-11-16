@@ -1,7 +1,9 @@
 // T753, next/: L1–L4. File input and recorded JSON share one declaration.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import type { Config } from "effect";
-import { ByteSize, Exit, Schema } from "effect";
+import * as ByteSize from "effect/ByteSize";
+import type * as Config from "effect/Config";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
 import * as Setting from "./Setting.ts";

@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 
 /** A captured failure's class, such as `TypeError`: the same 256-character bound as other brain text. */
 const ErrorClass = Schema.NonEmptyString.check(Schema.isMaxLength(256));

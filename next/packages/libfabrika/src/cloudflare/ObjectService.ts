@@ -3,8 +3,11 @@
  *
  * @stability unstable
  */
-import { Context, Effect, type Layer } from "effect";
-import { HttpServerRequest, HttpServerResponse } from "effect/http";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import type * as Layer from "effect/Layer";
 import { settingsWire } from "./runtime.ts";
 import * as SettingsRuntime from "./SettingsRuntime.ts";
 

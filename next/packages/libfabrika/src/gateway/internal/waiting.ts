@@ -1,5 +1,7 @@
 import { Machine } from "@demlik/tea/effect";
-import { Array as Arr, Schema, SchemaTransformation } from "effect";
+import * as Arr from "effect/Array";
+import * as Schema from "effect/Schema";
+import * as SchemaTransformation from "effect/SchemaTransformation";
 
 const Config = Schema.Struct({
   most: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),

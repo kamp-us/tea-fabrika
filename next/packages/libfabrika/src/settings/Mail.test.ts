@@ -7,7 +7,11 @@
 //   `mailChunk` at `mail.chunk`, a byte size from 1 KiB to 1 MiB written as text ("64 KiB"), both in
 //   `all`, scope `["repo"]`, reload on restart.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Exit, Result, Schema } from "effect";
+import * as ByteSize from "effect/ByteSize";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { property } from "../Testing.test-support.ts";
 import * as Declarations from "./Declarations.ts";

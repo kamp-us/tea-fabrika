@@ -1,6 +1,8 @@
 // p79's OTP monitor rules, P33. Stored mail is read independently of fresh delivery.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";

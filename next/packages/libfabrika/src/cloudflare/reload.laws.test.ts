@@ -22,21 +22,19 @@ import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import {
-  Cause,
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Logger,
-  Option,
-  Redacted,
-  Schedule,
-  Schema,
-  Scope,
-} from "effect";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import * as fc from "fast-check";
 import { expectTypeOf, vi } from "vitest";
 import { lineFor } from "../ledger/Log.ts";

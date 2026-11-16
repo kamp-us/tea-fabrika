@@ -7,7 +7,9 @@
  *
  * @stability unstable
  */
-import { Config, Schema, String as Str } from "effect";
+import * as Config from "effect/Config";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 
 /**
  * The two settings files: the person's own, and the repo's.

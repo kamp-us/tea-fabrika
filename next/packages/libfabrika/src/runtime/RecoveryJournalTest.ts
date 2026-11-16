@@ -10,8 +10,15 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Clock, type Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
-import { TestClock } from "effect/testing";
+import * as Clock from "effect/Clock";
+import type * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
 import { InputId, LedgerError, type Sql, Writer } from "../coordination/index.ts";
 import { ExitReason } from "../processes/ExitReason.ts";

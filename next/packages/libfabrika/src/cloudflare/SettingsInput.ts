@@ -5,8 +5,10 @@
  * @stability unstable
  */
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Effect, Equal, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
+import * as Schema from "effect/Schema";
 import * as Codec from "../settings/Codec.ts";
 import * as Declarations from "../settings/Declarations.ts";
 import * as Snapshot from "../settings/Snapshot.ts";

@@ -3,8 +3,9 @@
  *
  * @stability unstable
  */
-import type { Effect } from "effect";
-import { Context, Schema } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 /**
  * A parsed TOML document: its values, and where each key and table header starts.

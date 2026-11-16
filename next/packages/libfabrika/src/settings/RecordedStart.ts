@@ -4,7 +4,8 @@
  *
  * @stability unstable
  */
-import { type Config, Context } from "effect";
+import type * as Config from "effect/Config";
+import * as Context from "effect/Context";
 import type * as Declarations from "./Declarations.ts";
 import type * as Snapshot from "./Snapshot.ts";
 import type * as Start from "./Start.ts";

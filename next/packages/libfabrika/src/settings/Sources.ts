@@ -7,8 +7,12 @@
  *
  * @stability unstable
  */
-import type { Config } from "effect";
-import { ConfigProvider, Effect, Schema, SchemaIssue, String as Str } from "effect";
+import type * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as SchemaIssue from "effect/SchemaIssue";
+import * as Str from "effect/String";
 import { refused, SettingsError, STOP } from "./Files.ts";
 import type * as Setting from "./Setting.ts";
 import type { TomlDocument } from "./Toml.ts";

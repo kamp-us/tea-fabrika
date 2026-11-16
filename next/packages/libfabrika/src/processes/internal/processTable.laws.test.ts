@@ -4,7 +4,9 @@
 // reading of the plan's transition table, never the machine or its driver.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Option, Result, Schema } from "effect";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { LedgerError } from "../../ledger/Ledger.ts";
 import { type Entry, lineFor } from "../../ledger/Log.ts";

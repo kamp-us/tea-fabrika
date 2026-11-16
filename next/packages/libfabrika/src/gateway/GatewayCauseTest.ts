@@ -12,8 +12,11 @@
 // of the wrong length, which has no cause), `GatewayNonce.ts:29` (the one WebCrypto callback that
 // importKey, sign and verify share).
 import { describe, expect } from "@effect/vitest";
-import { Effect, Predicate, Result, Schema } from "effect";
-import { Base64Url } from "effect/encoding";
+import * as Effect from "effect/Effect";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { gatewayNonce } from "./GatewayNonce.ts";

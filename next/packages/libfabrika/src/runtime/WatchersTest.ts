@@ -1,7 +1,13 @@
 // next/, W3/W4. Driver-free laws run by the Node module over real scoped SQLite files.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { type Update, WatcherManager } from "./Entry.ts";
 import { nth } from "./RepliesTest.ts";

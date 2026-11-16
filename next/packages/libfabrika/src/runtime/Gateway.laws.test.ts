@@ -2,7 +2,10 @@ import { DatabaseSync } from "node:sqlite";
 // P12, next/. The callbacks are real platform duties, not replacement gateway logic.
 // The connection must save attachments and release its turn before calling the Project.
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, Layer } from "effect";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
 import * as fc from "fast-check";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";

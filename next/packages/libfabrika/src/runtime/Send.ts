@@ -6,7 +6,7 @@
  * @stability unstable
  */
 import { Cmd } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { MailRefusal } from "../processes/ProgramMail.ts";
 
 /**

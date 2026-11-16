@@ -1,5 +1,5 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 import * as Audit from "../runtime/Audit.ts";
 import { Declaration, type Execution, executionFailure, nodeExecution, Reply } from "../runtime/Execution.ts";
 import { ProgramDown, stepper } from "../runtime/Program.ts";

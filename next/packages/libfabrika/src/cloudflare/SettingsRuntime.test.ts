@@ -1,6 +1,13 @@
 // T753, next/, L16. Exercise the scoped holder, including another entry on the same owner.
 import { describe, expect } from "@effect/vitest";
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope, ScopedCache } from "effect";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
+import * as ScopedCache from "effect/ScopedCache";
 import * as fc from "fast-check";
 import * as StartsTest from "../settings/StartsTest.ts";
 import * as SettingsRuntime from "./SettingsRuntime.ts";

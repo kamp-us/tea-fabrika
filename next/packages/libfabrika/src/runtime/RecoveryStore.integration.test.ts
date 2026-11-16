@@ -6,7 +6,11 @@
 // the fault from below (0043 rule 12, 0055, 0119). This file names no ledger file.
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
-import { type Context, Effect, Exit, type Layer, Schema } from "effect";
+import type * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import type * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { A, B, from, storage } from "../processes/Process.test-support.ts";
 import type { Sql } from "../Sql.ts";

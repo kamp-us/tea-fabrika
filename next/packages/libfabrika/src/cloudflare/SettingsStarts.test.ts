@@ -1,8 +1,13 @@
 // T753, next/. The caller owns the SQLite driver; settings/StartsTest owns the shared laws.
 import { DatabaseSync } from "node:sqlite"; // edge: the ledger's synchronous Sql driver needs node:sqlite
 import { describe, expect } from "@effect/vitest";
-import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as Context from "effect/Context";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as Start from "../settings/Start.ts";

@@ -4,7 +4,7 @@
  * @stability unstable
  */
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 
 /**
  * Schema for where a local brain stands: `starting`, `online`, `waiting` for a restart, `braked`,

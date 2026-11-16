@@ -17,8 +17,11 @@
 //   it refuses an unknown key and a key of the other file. A file whose scope holds no
 //   declaration refuses every key: Effect's empty `Schema.Struct({})` would accept any object.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Exit, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as ByteSize from "effect/ByteSize";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";

@@ -2,7 +2,10 @@
 // with or without that memo; they exist to turn a wrong memo red. A long-lived manager is one layer
 // build kept for a whole history; a fresh one is built for a single call and folds from rev 0.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Layer } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";

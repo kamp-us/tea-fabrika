@@ -2,7 +2,8 @@
 import { applyCell } from "@demlik/tea";
 import { propertyInvariant } from "@demlik/tea/pbt";
 import { syncTest } from "@kampus/libfabrika/testing";
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { fcProcessIds, processId } from "../Id.test-support.ts";

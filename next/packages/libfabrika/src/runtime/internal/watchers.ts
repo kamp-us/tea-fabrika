@@ -1,5 +1,6 @@
 import { Machine } from "@demlik/tea/effect";
-import { Array, Schema } from "effect";
+import * as Array from "effect/Array";
+import * as Schema from "effect/Schema";
 
 const Client = Schema.Struct({
   client: Schema.NonEmptyString.check(Schema.isMaxLength(256)),

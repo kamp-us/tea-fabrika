@@ -9,7 +9,9 @@
 // `Program.ts:379`, a ProgramDown's class, reads as it did before the cause was kept.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Result, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { BuildError, decodeBuilt } from "./Built.ts";
 import { ProgramLoader } from "./Entry.ts";

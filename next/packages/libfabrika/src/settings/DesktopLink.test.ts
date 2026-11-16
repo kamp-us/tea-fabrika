@@ -1,6 +1,9 @@
 // next/, ticket 887, P21 L10. The declaration, Config, files and generated editors agree.
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Result, Schema } from "effect";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
 import * as Sources from "./Sources.ts";

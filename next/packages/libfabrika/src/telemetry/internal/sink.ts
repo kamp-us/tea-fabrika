@@ -3,7 +3,8 @@
 // before: a new sink starts clean and unchecked. No Cmds: `Sink.ts` runs the SQL and sends its
 // outcome.
 import { Machine } from "@demlik/tea/effect";
-import { Array as Arr, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Schema from "effect/Schema";
 import { Chain, Measurements, SpanRow } from "../Trace.ts";
 
 /** What one ended span writes: its health row and its unsent row, worked out before any write. */

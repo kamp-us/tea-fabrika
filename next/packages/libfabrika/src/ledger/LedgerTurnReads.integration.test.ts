@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 import * as LedgerTurnEndTest from "./LedgerTurnEndTest.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 

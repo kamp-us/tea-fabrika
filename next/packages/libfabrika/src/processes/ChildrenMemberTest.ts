@@ -17,7 +17,17 @@
 // The test plays the gateway: its `Senders` answers from the inputs the test delivered, as the
 // gateway's one signing service does (0262). The rows the oracle reads are the store's own.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, type Scope, Stream, Tracer } from "effect";
+import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";

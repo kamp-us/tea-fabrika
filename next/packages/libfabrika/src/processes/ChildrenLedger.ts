@@ -11,7 +11,16 @@
  *
  * @stability unstable
  */
-import { Cause, Data, Effect, Equal, Exit, Layer, Option, Result, Schema, Tracer } from "effect";
+import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Tracer from "effect/Tracer";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { StartProgram } from "../permissions/Model.ts";

@@ -8,7 +8,12 @@
 // table `code (hash PRIMARY KEY, source TEXT)`. `get` decodes through `BuiltProgram`, so a row whose
 // bytes no longer hash to its key fails `bad_row`; it never reads as absent or as the wrong bytes.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Exit, Option, Schema, Scope } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import { expectTypeOf } from "vitest";
 import type { Sql } from "../Sql.ts";
 import { BuiltProgram, hash } from "./Built.ts";

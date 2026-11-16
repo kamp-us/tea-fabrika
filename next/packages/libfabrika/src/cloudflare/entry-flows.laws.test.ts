@@ -8,8 +8,15 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Context, Effect, Exit, Layer, Option, Schema, Scope, Tracer } from "effect";
-import { Digest } from "effect/crypto";
+import * as Context from "effect/Context";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Tracer from "effect/Tracer";
 import { vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";

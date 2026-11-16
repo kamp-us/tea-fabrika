@@ -5,8 +5,12 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Layer, Schema, type Scope } from "effect";
-import { TestClock } from "effect/testing";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
 import { Mailbox, ProcessStore, SessionManager, Writer } from "../coordination/index.ts";
 import { A, brain, data, first, from, ids, PIDS, read } from "../processes/Process.test-support.ts";

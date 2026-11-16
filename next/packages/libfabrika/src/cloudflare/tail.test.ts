@@ -1,7 +1,10 @@
 // next/. Contract: tail(env, {project, name, process}, items) returns an Effect<void>.
 // Only the platform is doubled. Decoding, routing and the loader are the product's public calls.
 import { expect, it } from "@effect/vitest";
-import { Effect, Layer, Schema, Tracer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { workerLoader } from "./index.ts";

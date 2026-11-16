@@ -1,7 +1,12 @@
 // T753, next/, L4 and L14. RecordedStart is granted only after the checked append succeeds.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Context, Deferred, Effect, Exit, Fiber, Layer } from "effect";
-import { Digest } from "effect/crypto";
+import * as Context from "effect/Context";
+import * as Digest from "effect/crypto/Digest";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
 import * as fc from "fast-check";
 import { RecordedStart } from "../settings/RecordedStart.ts";
 import type * as Start from "../settings/Start.ts";

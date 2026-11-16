@@ -1,7 +1,10 @@
 import { it, expect } from "@effect/vitest";
 // T502 PR 2, next/. Plants: return the failed call unchanged; map all failures to unreachable.
 import { encodeRpcError, ErrorTag, RpcCallError } from "alchemy/Rpc";
-import { Effect, Result, Schema, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { RecordManager } from "../telemetry/Records.ts";
 import { Chain, SinkError } from "../telemetry/Trace.ts";
 import { reach } from "./reach.ts";

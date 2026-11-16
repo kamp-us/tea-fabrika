@@ -1,6 +1,9 @@
 // P33 / p79 and p80, next/: real restart policy and recovery functions.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Result, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";

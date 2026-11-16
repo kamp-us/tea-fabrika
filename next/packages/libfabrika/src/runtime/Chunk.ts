@@ -5,8 +5,10 @@
  *
  * @stability unstable
  */
-import { Option, Result, Schema } from "effect";
-import type { NonEmptyReadonlyArray } from "effect/Array";
+import type * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
 /**
  * Schema for a chunk letter's place in its send.
@@ -72,7 +74,7 @@ const bytes = (value: unknown): number => encoder.encode(JSON.stringify(value)).
  * @stability unstable
  * @category constructors
  */
-export const cut = (send: Send, size: number): Result.Result<NonEmptyReadonlyArray<Chunk>, TooBig> => {
+export const cut = (send: Send, size: number): Result.Result<Arr.NonEmptyReadonlyArray<Chunk>, TooBig> => {
   const letter = (items: ReadonlyArray<Schema.Json>, seq: number, last: boolean): Chunk => ({
     type: send.type,
     items,

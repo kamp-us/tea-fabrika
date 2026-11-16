@@ -3,8 +3,9 @@
  *
  * @stability unstable
  */
-import { Context } from "effect";
-import type { Effect, Option } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import type * as Option from "effect/Option";
 import type { Rev } from "../Rev.ts";
 import type { LedgerError } from "./Ledger.ts";
 import type { Entry, Line } from "./Log.ts";

@@ -2,8 +2,13 @@
 // ProcessIdGenerator.layer owns one writer's state; next remains an Effect<ProcessId>.
 import { describe, expect, it, vi } from "@effect/vitest";
 // The id format, clocks, rollback and exhaustion are Id.Generator's own laws, in Id.test.ts.
-import { Cause, Effect, Exit, Option, Schema, Tracer } from "effect";
-import { TestClock } from "effect/testing";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 import { processClocks } from "../Id.test-support.ts";
 import { ProcessIdGenerator } from "./ProcessIdGenerator.ts";
 

@@ -4,7 +4,9 @@
  *
  * @stability unstable
  */
-import { type Brand, type Effect, Schema } from "effect";
+import type * as Brand from "effect/Brand";
+import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { Session, SigningRefused, type Writer } from "../access/SessionManager.ts";
 import type { LedgerCalls } from "../ledger/Ledger.ts";
 import { Appended, Line } from "../ledger/Log.ts";

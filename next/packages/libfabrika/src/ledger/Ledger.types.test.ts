@@ -1,7 +1,11 @@
 // Ticket 702, next/ (0095, slice 1): `Ledger.ts` holds the contract, with its service type written
 // out, and each layer is a sibling file read through its module. tsc checks the uncalled cases.
 import { expect, expectTypeOf, it } from "@effect/vitest";
-import { type Context, Effect, type Layer, Schema, type Stream } from "effect";
+import type * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import type * as Stream from "effect/Stream";
 import type { Rev } from "../Rev.ts";
 import type { Sql } from "../Sql.ts";
 import type * as LedgerFront from "./Ledger.ts";

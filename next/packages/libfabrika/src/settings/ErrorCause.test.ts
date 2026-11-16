@@ -9,7 +9,8 @@
 // `Schema.optional(Schema.Unknown)`, and that error's encoded Error cause stays a plain object.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Exit, Schema } from "effect";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { SettingsError } from "./Files.ts";
 import { SnapshotError } from "./Snapshot.ts";

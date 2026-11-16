@@ -3,7 +3,9 @@
  *
  * @stability unstable
  */
-import { Effect, Layer, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { HandsTasks, HandsTasksError, Reply } from "../runtime/HandsTasks.ts";
 import { ProjectClient } from "./platform.ts";
 import { type Env, projectStub, rpc } from "./runtime.ts";

@@ -5,7 +5,7 @@
  */
 import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import type { ProgramSource } from "./index.ts";
 import { Process, type ProcessShape } from "./objects.ts";

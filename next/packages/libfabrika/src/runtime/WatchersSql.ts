@@ -5,7 +5,11 @@
  * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import { Clock, Effect, Layer, Result, Schema } from "effect";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import type { Sql } from "../Sql.ts";
 import type { Update } from "./Entry.ts";
 import { Model, watchers } from "./internal/watchers.ts";

@@ -7,8 +7,13 @@
  *
  * @stability unstable
  */
-import { Effect, Option, Predicate, Record as Rec, Redacted, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import * as Codec from "./Codec.ts";
 import type * as Setting from "./Setting.ts";
 import { Origin, type Resolved } from "./Sources.ts";

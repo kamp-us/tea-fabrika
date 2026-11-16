@@ -4,7 +4,8 @@
  *
  * @stability unstable
  */
-import { Effect, Layer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Sql } from "../Sql.ts";
 import { pages } from "./internal/ledgerPages.ts";
 import { type Doorbell, Ledger } from "./Ledger.ts";

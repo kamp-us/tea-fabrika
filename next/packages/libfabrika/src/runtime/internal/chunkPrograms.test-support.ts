@@ -13,7 +13,7 @@
 // `type` (`CmdInput` is `{ type?: never }`, and `Cmd.make`'s value is `{ ...input, type: name }`,
 // @demlik/tea 0.25.0), so a `type` operand would be overwritten by "send_chunks".
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { Program } from "../Program.ts";
 import { send, sendChunks } from "../Send.ts";
 

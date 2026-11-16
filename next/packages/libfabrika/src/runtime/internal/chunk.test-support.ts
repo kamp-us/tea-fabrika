@@ -5,7 +5,7 @@
 // `mail.chunk`'s declaration. A test file can, and passes `mailChunk.default`. A law that sends
 // chunked mail sets its own size; every other law runs the same under any size, so this one is not
 // the setting's default and nothing depends on it being one.
-import { ByteSize } from "effect";
+import * as ByteSize from "effect/ByteSize";
 
 /** @internal A chunk size for a runner whose law sends no `send_chunks`. */
 export const ANY_CHUNK = ByteSize.kibibytes(64);

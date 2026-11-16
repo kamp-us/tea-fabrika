@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 import * as fc from "fast-check";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { fetch, serveAsset, workerLoader } from "./index.ts";

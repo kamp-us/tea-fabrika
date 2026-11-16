@@ -4,7 +4,7 @@
  * @stability unstable
  */
 import type { Machine } from "@demlik/tea/effect";
-import type { Schema } from "effect";
+import type * as Schema from "effect/Schema";
 import type { Program } from "./Program.ts";
 
 // --- A program's window -------------------------------------------------------------------------

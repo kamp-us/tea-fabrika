@@ -1,6 +1,7 @@
 // T877, next/: L9's public contract is checked by the lead's typecheck.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Context, Effect } from "effect";
+import type * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
 import type * as TomlFront from "./Toml.ts";
 import type { Toml, TomlDocument, TomlError } from "./Toml.ts";
 

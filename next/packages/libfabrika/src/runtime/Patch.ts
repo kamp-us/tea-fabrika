@@ -4,7 +4,8 @@
  *
  * @stability unstable
  */
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
 /**
  * One RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs.

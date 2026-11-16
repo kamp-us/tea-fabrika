@@ -1,21 +1,19 @@
 // next/. SQLite laws, with no driver (0062). A decision tape chooses only a move allowed by
 // the calls so far. The oracle reads committed health and span rows, never the sink's model.
 import { describe, expect, it } from "@effect/vitest";
-import {
-  Cause,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Logger,
-  References,
-  Ref,
-  Result,
-  Schema,
-  Tracer,
-  type Scope,
-} from "effect";
-import { TestClock } from "effect/testing";
+import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Logger from "effect/Logger";
+import * as Ref from "effect/Ref";
+import * as References from "effect/References";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import type * as IsolateUsage from "./IsolateUsage.ts";

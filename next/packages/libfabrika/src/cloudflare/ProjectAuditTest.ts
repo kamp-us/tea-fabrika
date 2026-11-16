@@ -1,7 +1,11 @@
 // P13 slice 2, next/. Project audit laws take scoped storage and RPC handles from their driver (0062).
 import { createHash, generateKeyPairSync, sign } from "node:crypto"; // edge: Effect has no SSH Ed25519 key export or signing API
 import { Machine } from "@demlik/tea/effect";
-import { Effect, Layer, Schema, type Scope, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
 import { InputId } from "../Id.ts";

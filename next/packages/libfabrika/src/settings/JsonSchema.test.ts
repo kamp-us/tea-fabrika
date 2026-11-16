@@ -17,15 +17,13 @@
 // - The oracle for L2 and L4 is Effect's own reader, `SchemaRepresentation.fromJsonSchemaDocument`
 //   with trusted patterns, never a validator of ours.
 import { describe, expect, it } from "@effect/vitest";
-import {
-  ByteSize,
-  JsonSchema as EffectJsonSchema,
-  Exit,
-  Predicate,
-  Schema,
-  SchemaAST,
-  SchemaRepresentation,
-} from "effect";
+import * as ByteSize from "effect/ByteSize";
+import * as Exit from "effect/Exit";
+import * as EffectJsonSchema from "effect/JsonSchema";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
+import * as SchemaRepresentation from "effect/SchemaRepresentation";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";

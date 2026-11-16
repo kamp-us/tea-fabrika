@@ -8,7 +8,9 @@
 //     on n.
 // A chunk's size is the bytes of its encoded JSON, the letter the reader's inbox saves.
 import { describe, expect, it } from "@effect/vitest";
-import { Option, Result, Schema } from "effect";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Chunk from "./Chunk.ts";
 

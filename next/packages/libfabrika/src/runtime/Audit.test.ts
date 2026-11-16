@@ -1,7 +1,11 @@
 // P13 slice 2, next/. Selection is exercised through the same execution entry used by a box.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Cause, Effect, Exit, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Audit from "./Audit.ts";
 import { nodeExecution, workerExecution } from "./Execution.ts";

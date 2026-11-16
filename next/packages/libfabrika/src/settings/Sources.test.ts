@@ -10,7 +10,10 @@
 //   decoded values, and per dotted path the Origin of the source that supplied it, or `default`.
 //   A source that fails to read, or a winning value that fails its schema, fails the whole resolve.
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Schema } from "effect";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Setting from "./Setting.ts";
 import * as Sources from "./Sources.ts";

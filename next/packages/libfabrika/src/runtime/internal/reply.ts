@@ -1,7 +1,7 @@
 // One terminal reply, next/: a program's refusal kept under its registered name and stable letter
 // (Tier 1, P13). Insert-only: the first reply remembered stays, and a later one changes nothing.
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { InputId } from "../../Id.ts";
 import { Refusal } from "../Program.ts";
 

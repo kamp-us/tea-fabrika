@@ -1,7 +1,10 @@
 // P33 review round 2, one rule instead of single guarded ids: every event the brain writes about a
 // process lives on a stream only the brain may write, and reading an inbox never throws.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Result, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, lineFor } from "../ledger/Log.ts";
 import { Mailbox } from "./Mailbox.ts";

@@ -3,7 +3,8 @@
  *
  * @stability unstable
  */
-import { Effect, Layer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { From } from "../processes/Mailbox.ts";
 import { needs } from "../tasks/Task.ts";
 import { Tasks, type TasksError } from "../tasks/Tasks.ts";

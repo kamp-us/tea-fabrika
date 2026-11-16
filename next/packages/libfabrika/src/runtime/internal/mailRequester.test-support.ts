@@ -4,7 +4,7 @@
 // a late one leaves an answered request as it is. A permanent send refusal moves it to `failed`.
 // It shares the message shape with the responder, never the responder's code.
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { Program } from "../Program.ts";
 import { send } from "../Send.ts";
 

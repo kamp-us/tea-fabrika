@@ -2,7 +2,7 @@
 import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as RateLimit from "../RateLimit.ts";
 import * as Rate from "./rateLimit.ts";

@@ -2,7 +2,11 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema, Stream, Tracer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";

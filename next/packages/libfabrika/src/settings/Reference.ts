@@ -7,7 +7,7 @@
  *
  * @stability unstable
  */
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as Codec from "./Codec.ts";
 import { newer } from "./Files.ts";
 import type * as Setting from "./Setting.ts";

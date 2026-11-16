@@ -3,7 +3,7 @@
  *
  * @stability unstable
  */
-import { Result } from "effect";
+import * as Result from "effect/Result";
 import type { Task } from "../tasks/Task.ts";
 
 type Subject = { readonly process: string; readonly key: string; readonly execution?: string };

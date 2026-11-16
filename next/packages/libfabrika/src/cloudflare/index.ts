@@ -5,7 +5,9 @@
  *
  * @stability unstable
  */
-import { Effect, Option, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { BuiltProgram } from "../runtime/Built.ts";
 import { Declaration, workerExecution, type ExecutionCalls, type ProgramSource } from "../runtime/Execution.ts";
 import { ProgramDown } from "../runtime/Program.ts";

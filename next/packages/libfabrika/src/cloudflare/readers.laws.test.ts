@@ -9,9 +9,15 @@ import {
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { runsFor } from "@kampus/vitest";
-import type { Scope } from "effect";
-import { Cause, Effect, Exit, Option, Redacted, Schema } from "effect";
-import { Digest } from "effect/crypto";
+// Effect stays a named import: the laws below spy on its `result`, and a module namespace cannot be spied on.
+import { Effect } from "effect";
+import * as Cause from "effect/Cause";
+import * as Digest from "effect/crypto/Digest";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../coordination/index.ts";

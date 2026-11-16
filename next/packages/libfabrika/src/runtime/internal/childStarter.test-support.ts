@@ -5,7 +5,7 @@
 // the host decodes strictly and binds the requester itself. Every Cmd answer is kept in the model,
 // in order, so a law reads what the program was told from the process's saved checkpoint.
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { Program } from "../Program.ts";
 import { exit, startChild } from "../StartChild.ts";
 

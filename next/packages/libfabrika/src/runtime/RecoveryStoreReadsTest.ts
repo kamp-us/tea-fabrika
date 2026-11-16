@@ -10,7 +10,10 @@
 // there must be none.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Schema, type Scope } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { property } from "../Testing.test-support.ts";

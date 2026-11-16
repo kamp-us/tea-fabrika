@@ -21,7 +21,7 @@
 // or a `loaded` for an entry the ledger holds. The oracle is the walk's own selection, never the reducer.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import type { ProgramName } from "../packs/ProgramName.ts";

@@ -6,7 +6,12 @@
 // Every step here is plain code over the synchronous `Sql`; the sink runs the row, the rollup and
 // the size inside a span's `end`, and the archive inside `flush`. No alarm, no timer. Each archive
 // try writes its own health row, `sink.archive`, good or failed, so a day that cannot leave is seen.
-import { Clock, Effect, Option, Result, Schema, Struct } from "effect";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Struct from "effect/Struct";
 import type { Sql } from "../../Sql.ts";
 import { Archive, sha256 } from "../Archive.ts";
 import { type Measurements, type SinkError, MetricPoint, sinkError, SumPoint } from "../Trace.ts";

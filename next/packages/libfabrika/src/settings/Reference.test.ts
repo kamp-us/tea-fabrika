@@ -15,8 +15,10 @@
 //   environment name, flag (`--` and the path), reload, since, default and doc, in Markdown that
 //   keeps the doc's meaning whatever punctuation it holds.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as ByteSize from "effect/ByteSize";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Print from "./Print.ts";
 import * as Reference from "./Reference.ts";

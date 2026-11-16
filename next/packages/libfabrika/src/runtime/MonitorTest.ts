@@ -31,21 +31,19 @@ import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import {
-  Arbitrary,
-  Clock,
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Option,
-  Result,
-  Schedule,
-  Schema,
-  Scope,
-} from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
 import { Model as FabrikaModel } from "../permissions/Model.ts";

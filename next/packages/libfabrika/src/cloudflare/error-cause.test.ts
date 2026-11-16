@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { RpcCallError } from "alchemy/Rpc";
-import { Effect, Layer, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 // T695, next/. The Cloudflare adapters keep the failure they translate (decision 0043 rule 12).
 // Only the platform is fake: each stub, storage, bucket, loader and object state is a plain value

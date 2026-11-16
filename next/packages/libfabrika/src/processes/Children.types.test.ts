@@ -7,7 +7,8 @@
 // `StartProgram`, and either ChildrenLedger.ts fails to compile or the layer's requirements grow, which
 // the pinned layer type below refuses.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Effect, Layer } from "effect";
+import type * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
 import type { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import type { StartProgram } from "../permissions/Model.ts";
 import type * as Rebac from "../permissions/Rebac.ts";

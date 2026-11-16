@@ -3,8 +3,9 @@
  *
  * @stability unstable
  */
-import { Effect, Layer } from "effect";
-import { Digest } from "effect/crypto";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { RecordedStart } from "../settings/RecordedStart.ts";
 import type * as Start from "../settings/Start.ts";
 import { Decode, Starts, StartsError } from "../settings/Starts.ts";

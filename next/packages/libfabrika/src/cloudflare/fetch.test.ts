@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 // P12, next/. The public Worker route is plain libfabrika code. No socket or workerd class.
 // Builder contract: workers/fetch.ts exports fetch(request, env, config), returning an Effect.
-import { Cause, Effect, Exit } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as StartsTest from "../settings/StartsTest.ts";

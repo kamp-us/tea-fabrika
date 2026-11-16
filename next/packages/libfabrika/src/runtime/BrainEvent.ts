@@ -3,7 +3,7 @@
  *
  * @stability unstable
  */
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 
 const Life = {
   id: Schema.NonEmptyString,

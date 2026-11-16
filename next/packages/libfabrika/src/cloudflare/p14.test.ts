@@ -11,7 +11,9 @@
 // tables it carried before) and builds a move that state allows: a rebuild, or a request for a route
 // the current table holds, a fresh absent route or `/`, with the current validator or a stale one.
 import { createHash } from "node:crypto";
-import { Cause, Effect, Exit } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import * as StartsTest from "../settings/StartsTest.ts";

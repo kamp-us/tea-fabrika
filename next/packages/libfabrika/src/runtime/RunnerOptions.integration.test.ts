@@ -3,7 +3,8 @@
 // optional again or reads ProcessManager with serviceOption, and `pnpm typecheck` fails. Ticket
 // 1041 adds the chunk size: required, and the `mail.chunk` setting's byte size, so the runner keeps
 // no default of its own.
-import { Effect, type Layer } from "effect";
+import * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
 import { expectTypeOf, it } from "vitest";
 import type { ProcessManager } from "../coordination/index.ts";
 import { Writer } from "../coordination/index.ts";

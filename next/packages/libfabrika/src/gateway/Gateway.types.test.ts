@@ -6,7 +6,8 @@
 // the lead and CI run it with `pnpm typecheck`.
 // Plant: add a member tagged `LedgerError` to one function's error.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Effect, Result } from "effect";
+import type * as Effect from "effect/Effect";
+import type * as Result from "effect/Result";
 import type { From } from "../processes/Mailbox.ts";
 import type { Recipient } from "../processes/Process.ts";
 import type { Gateway } from "./Gateway.ts";

@@ -2,7 +2,12 @@
 import { DatabaseSync } from "node:sqlite";
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";

@@ -3,9 +3,12 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
-import { Result } from "effect";
-import { TestClock } from "effect/testing";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import { Archive } from "../Archive.ts";
 import { RecordManager } from "../Records.ts";

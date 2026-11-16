@@ -3,7 +3,9 @@
  *
  * @stability unstable
  */
-import { Effect, Layer, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { short } from "../telemetry/Trace.ts";
 import { pages } from "./internal/ledgerPages.ts";
 import { STREAM, tag } from "./internal/ledgerTrace.ts";

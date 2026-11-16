@@ -3,22 +3,20 @@
 import { Outcome } from "@demlik/tea";
 import { Machine, Cmd } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import {
-  Clock,
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Option,
-  Result,
-  Schedule,
-  Schema,
-  Scope,
-  Stream,
-} from "effect";
-import { TestClock } from "effect/testing";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { Appended, LedgerError, Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";

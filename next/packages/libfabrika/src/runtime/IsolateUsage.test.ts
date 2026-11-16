@@ -1,6 +1,9 @@
 // next/, U2 and U10. U4/U5's unknown platform words are exercised at the tail entrypoint.
 import { expect, it } from "@effect/vitest";
-import { Effect, Exit, Schema, Tracer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import * as IsolateUsage from "./IsolateUsage.ts";

@@ -7,7 +7,12 @@
  *
  * @stability unstable
  */
-import { Effect, Order, Predicate, Schema, SchemaAST, SchemaIssue } from "effect";
+import * as Effect from "effect/Effect";
+import * as Order from "effect/Order";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
+import * as SchemaIssue from "effect/SchemaIssue";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
 import type * as Setting from "./Setting.ts";

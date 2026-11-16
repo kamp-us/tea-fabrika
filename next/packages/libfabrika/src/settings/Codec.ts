@@ -3,7 +3,8 @@
  *
  * @stability experimental
  */
-import { Schema, Struct } from "effect";
+import * as Schema from "effect/Schema";
+import * as Struct from "effect/Struct";
 import type * as Setting from "./Setting.ts";
 
 /**

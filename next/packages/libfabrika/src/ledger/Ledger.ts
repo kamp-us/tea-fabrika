@@ -6,8 +6,10 @@
  *
  * @stability unstable
  */
-import { Context, Schema } from "effect";
-import type { Effect, Stream } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import type * as Stream from "effect/Stream";
 import type { Rev } from "../Rev.ts";
 import type { Appended, Entry, Line, Waited } from "./Log.ts";
 

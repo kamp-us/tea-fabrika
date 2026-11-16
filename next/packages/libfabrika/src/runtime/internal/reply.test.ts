@@ -3,7 +3,7 @@
 // the state it has reached: a new reply while empty, then the stored reply with one field changed.
 import { applyCell, type Machine, type Sub } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { InputId } from "../../Id.ts";
 import { syncTest } from "../../Testing.ts";

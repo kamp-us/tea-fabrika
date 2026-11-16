@@ -1,8 +1,14 @@
 // T843, next/. The driver owner supplies a scoped persistent Sql and its reopen operation (0062).
 import { describe, expect, it } from "@effect/vitest";
-import { Duration, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as RateLimiter from "effect/persistence/RateLimiter";
-import { TestClock } from "effect/testing";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as TestClock from "effect/testing/TestClock";
 import type { Sql } from "../Sql.ts";
 import * as RateLimiterSql from "./RateLimiterSql.ts";
 

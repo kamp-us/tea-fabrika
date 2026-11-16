@@ -4,7 +4,8 @@
 // history of what was offered, what committed and what flush saw, never the machine's own table.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Arbitrary, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Schema from "effect/Schema";
 import { Chain, Measurements, SpanRow } from "../Trace.ts";
 import { machine } from "./sink.ts";
 

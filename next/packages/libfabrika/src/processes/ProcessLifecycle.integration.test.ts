@@ -1,6 +1,8 @@
 // P33 / p79. The manager is rebuilt over the same SQLite file for each reopen check.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import { Ledger } from "../ledger/Ledger.ts";

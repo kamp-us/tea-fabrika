@@ -1,8 +1,14 @@
 // P33 extends p97/p99 through P37's real SQLite sink and JobRecords.
 // Raw process failure text may be content. It must never become tags or measurements data.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Layer, Redacted, Schema, Stream, Tracer } from "effect";
-import { TestClock } from "effect/testing";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 import * as Id from "../Id.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";

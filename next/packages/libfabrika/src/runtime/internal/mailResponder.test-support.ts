@@ -3,7 +3,7 @@
 // negative value is refused by the program, so no answer is ever sent for it. `approve` is a
 // person-only port, so program mail can never enter it. Command outcomes are messages here too.
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { Program } from "../Program.ts";
 import { send } from "../Send.ts";
 

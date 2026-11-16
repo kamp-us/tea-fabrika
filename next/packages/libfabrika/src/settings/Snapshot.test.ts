@@ -8,9 +8,18 @@
 //   from different sources have one hash. It may need `Digest` from `effect/crypto`.
 // - `Snapshot.Snapshot` is its Schema: what a process start saves, and what a replay reads back.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Cause, Effect, Exit, Formatter, Layer, Logger, References, Schema, Tracer } from "effect";
-import { Digest } from "effect/crypto";
-import { TestConsole } from "effect/testing";
+import * as ByteSize from "effect/ByteSize";
+import * as Cause from "effect/Cause";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as References from "effect/References";
+import * as Schema from "effect/Schema";
+import * as TestConsole from "effect/testing/TestConsole";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";

@@ -1,8 +1,12 @@
 // P12, next/. Real box methods, execution adapters, runner, manager, receipts and SQLite.
 import { Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer, Schema } from "effect";
-import { TestClock } from "effect/testing";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Mailbox, ProcessStore, Writer } from "../coordination/index.ts";

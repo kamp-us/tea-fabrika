@@ -3,8 +3,12 @@
  *
  * @stability unstable
  */
-import { DateTime, Effect, Equal, Layer, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as Digest from "effect/crypto/Digest";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { Doorbell } from "../ledger/Ledger.ts";
 import { Appended, type Entry, lineFor } from "../ledger/Log.ts";
 import { Referee } from "../ledger/Referee.ts";

@@ -5,7 +5,8 @@
 // Recovery: choose array order, another predecessor/name, or an event at/before the hit.
 // Identity pins: widen ExperimentId to string; CI runs this type-only plant.
 import { expect, it } from "@effect/vitest";
-import { Arbitrary, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Schema from "effect/Schema";
 import { expectTypeOf } from "vitest";
 import * as Id from "../Id.ts";
 import type { History } from "../processes/Mailbox.ts";

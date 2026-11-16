@@ -5,8 +5,9 @@
  *
  * @stability unstable
  */
-import { Context, Schema } from "effect";
-import type { Effect } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { type Delivery, MailRefusal } from "../processes/ProgramMail.ts";
 import { type Queued } from "./Send.ts";
 

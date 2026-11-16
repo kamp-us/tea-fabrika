@@ -1,5 +1,6 @@
 import { RpcCallError } from "alchemy/Rpc";
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 /** Turns a failed Connection call into `unreachable`; it opens no span, since a failed exit would keep a letter's text. */
 export const reach = Effect.fnUntraced(function* <A, E, R, X>(

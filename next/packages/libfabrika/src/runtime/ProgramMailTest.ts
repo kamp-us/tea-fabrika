@@ -17,28 +17,26 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import { arbGuidedSequence, propertyInvariant, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import {
-  Arbitrary,
-  ByteSize,
-  Cause,
-  Clock,
-  Console,
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Logger,
-  Option,
-  References,
-  Result,
-  Schema,
-  Scope,
-  Stream,
-  Tracer,
-} from "effect";
-import { TestClock } from "effect/testing";
+import * as Arbitrary from "effect/Arbitrary";
+import * as ByteSize from "effect/ByteSize";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as Console from "effect/Console";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import * as References from "effect/References";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { Appended, InputId, Writer } from "../coordination/index.ts";
 import { INPUT_BYTES } from "../processes/Children.ts";

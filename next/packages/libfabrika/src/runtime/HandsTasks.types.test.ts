@@ -4,7 +4,9 @@
 // its one layer is the sibling `HandsTasksLive.ts`, read through its module. CI's typecheck is this
 // law's runner. Plant (after build): put `TasksError` in `ask`'s error channel.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Context, Effect, Layer } from "effect";
+import type * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
 import type { From } from "../processes/Mailbox.ts";
 import type { Tasks, TasksError } from "../tasks/Tasks.ts";
 import type * as HandsTasksFront from "./HandsTasks.ts";

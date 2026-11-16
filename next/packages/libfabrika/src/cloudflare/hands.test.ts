@@ -5,7 +5,9 @@
 // read. The layer is `handsLayer(env, project)` in `hands.ts`, beside `mailLayer`.
 // Plant (after build): map an RPC failure to `refused no_hands`.
 import { expect, it } from "@effect/vitest";
-import { Effect, Result, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import type { From } from "../processes/Mailbox.ts";
 import { HandsTasks, HandsTasksError, Reply } from "../runtime/HandsTasks.ts";

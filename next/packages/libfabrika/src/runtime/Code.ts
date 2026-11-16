@@ -6,7 +6,7 @@
  * @stability unstable
  */
 import { Machine, Cmd } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { ProgramName } from "../packs/ProgramName.ts";
 import { Hash } from "./Built.ts";
 import { Swapped } from "./Runner.ts";

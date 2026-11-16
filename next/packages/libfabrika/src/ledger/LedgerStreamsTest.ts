@@ -2,7 +2,12 @@
 // Page, wildcard-prefix and error-cause plant trials are recorded in the tests-step report.
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, Layer, Schema, type Scope, Stream } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";

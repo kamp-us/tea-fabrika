@@ -2,7 +2,13 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Context, Effect, Exit, Layer, Schema, Scope } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import { Writer } from "../access/SessionManager.ts";
 import { InputId } from "../Id.ts";
 import { Mailbox } from "../processes/Mailbox.ts";

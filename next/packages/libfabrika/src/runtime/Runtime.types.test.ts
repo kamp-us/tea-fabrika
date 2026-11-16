@@ -4,7 +4,7 @@
 // law; Vitest does not typecheck, so the lead and CI run it with `pnpm typecheck`.
 // Plant: add a member tagged `LedgerError` to one method's error.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Effect } from "effect";
+import type * as Effect from "effect/Effect";
 import type { RecoveryStore } from "./RecoveryStore.ts";
 
 /** What one member of a service fails with: an Effect's error, or that of the Effect a function answers. */

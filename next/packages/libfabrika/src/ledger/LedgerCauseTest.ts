@@ -5,7 +5,10 @@
 // Audit sites: `Ledger.ts:86` (a rejected stub call), `Ledger.ts:91` (an answer that does not
 // decode), both now in `LedgerRemote.ts` (0095), `internal/ledgerStore.ts:192` (a throw in the atomic step, and its pass-through branch).
 import { describe, expect } from "@effect/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";

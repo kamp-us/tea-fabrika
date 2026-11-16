@@ -1,8 +1,12 @@
 // L14 next/. Only the declarations and lower settings services belong in this law. The memory restart
 // plan (docs/plan/quests/memory-restart-PLAN.md) adds L9: the memory limit and the grace.
 import { expect, it } from "@effect/vitest";
-import { ByteSize, ConfigProvider, Effect, Exit, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as ByteSize from "effect/ByteSize";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
 import * as Snapshot from "./Snapshot.ts";

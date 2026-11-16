@@ -7,7 +7,7 @@
  * @stability unstable
  */
 import { Cmd } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { Watched } from "../processes/Monitors.ts";
 
 /**

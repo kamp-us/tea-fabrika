@@ -1,5 +1,7 @@
 // A ledger read as a Stream of pages, shared by both Ledger layers (0095).
-import { Effect, Option, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import type { Rev } from "../../Rev.ts";
 import type { LedgerError } from "../Ledger.ts";
 import { type Entry, PAGE } from "../Log.ts";

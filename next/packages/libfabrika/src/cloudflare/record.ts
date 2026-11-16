@@ -1,6 +1,9 @@
 import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Context, Effect, Layer, Schema } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { RecordedStart } from "../settings/RecordedStart.ts";
 import { recordPart } from "../telemetry/RecordPart.ts";
 import { SinkError } from "../telemetry/Sink.ts";

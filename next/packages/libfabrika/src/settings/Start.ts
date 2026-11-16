@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as Snapshot from "./Snapshot.ts";
 
 const Text = Schema.NonEmptyString.check(Schema.isMaxLength(256));
