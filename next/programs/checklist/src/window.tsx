@@ -51,7 +51,7 @@ const ChecklistWindow = ({ data, press, tile: own, send, refusal }: Props) => {
           aria-label={checklist.inputs.add.description}
           maxLength={80}
           value={own.draft}
-          aria-describedby={refusal ? description : undefined}
+          aria-describedby={refusal !== undefined && refusal !== null && refusal !== "" ? description : undefined}
           onChange={(event) => send({ type: "typed", text: event.target.value })}
         />
         <p id={description} className="checklist-refusal">

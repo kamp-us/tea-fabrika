@@ -70,8 +70,8 @@ export const lengths = (
     return fixed.map((f) => (f ? Math.max(0, left) / count : 0));
   }
 
-  const total = node.parts.reduce((sum, p, i) => (fixed[i] ? sum : sum + p.percent), 0);
-  const shares = node.parts.map((p, i) => (fixed[i] ? STRIP[node.dir] : (has * p.percent) / total));
+  const total = node.parts.reduce((sum, p, i) => (fixed[i] === true ? sum : sum + p.percent), 0);
+  const shares = node.parts.map((p, i) => (fixed[i] === true ? STRIP[node.dir] : (has * p.percent) / total));
   const lead = node.parts.findIndex((p) => order(p.inner).includes(focus));
   const least = Math.min(node.dir === "row" ? SMALLEST.width : SMALLEST.height, has);
 
@@ -83,7 +83,7 @@ export const lengths = (
 
   const rest = total - held.percent;
   return node.parts.map((p, i) =>
-    i === lead ? least : fixed[i] ? STRIP[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
+    i === lead ? least : fixed[i] === true ? STRIP[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
   );
 };
 

@@ -85,7 +85,7 @@ const wire = (call: Write["call"], label: string) => {
           m: call.m,
           sentAt: call.sentAt,
           seen: call.seen,
-          ...(call.traceId ? { traceId: call.traceId } : {}),
+          ...(call.traceId !== undefined && call.traceId !== "" ? { traceId: call.traceId } : {}),
         },
       };
   }
@@ -117,7 +117,7 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
   const identityFor = (rejected: string | null) => {
     const found = identities.get(rejected);
 
-    if (found) {
+    if (found !== undefined) {
       return found;
     }
 

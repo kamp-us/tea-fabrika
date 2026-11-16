@@ -111,11 +111,13 @@ const TileBody = ({
   const [row, send] = useRuntime(run, (m) => m.tiles.find((t) => t.id === tile.id));
   const [shown] = useRuntime(run, (m) => {
     const t = m.tiles.find((t) => t.id === tile.id);
-    return t?.last ? m.client.views[t.last] : undefined;
+    return t?.last !== undefined && t.last !== null && t.last !== "" ? m.client.views[t.last] : undefined;
   });
   const registration = windowFor(tile.program);
   const data =
-    registration && shown ? Option.getOrNull(Schema.decodeUnknownOption(registration.data)(shown.view)) : null;
+    registration !== null && shown !== undefined
+      ? Option.getOrNull(Schema.decodeUnknownOption(registration.data)(shown.view))
+      : null;
 
   // The tile guideline's empty state: one word where the view will start, and on an ended tile in
   // place of the ended process's last view.
@@ -419,7 +421,7 @@ const Page = (props: PageProps) => {
         <header className="topbar">
           <span role="status">
             {link._tag === "online" ? "Online" : "Connection lost. Retrying."}
-            {trouble ? ` ${trouble}` : ""}
+            {trouble !== null && trouble !== "" ? ` ${trouble}` : ""}
           </span>
         </header>
         <Desk {...props} />

@@ -78,7 +78,7 @@ const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
   const assignments: Array<Edit.Assignment> = [];
   const inlines: Array<Edit.Inline> = [];
   const sections: [Edit.Section, ...Array<Edit.Section>] = [
-    { path: [], line: 1, end: tables[0] ? sectionStart(text, tables[0]) : text.length },
+    { path: [], line: 1, end: tables[0] !== undefined ? sectionStart(text, tables[0]) : text.length },
   ];
   const visit = (parent: Edit.Path, node: AST.TOMLKeyValue, inline?: Edit.Range): Edit.Assignment => {
     const path = [...parent, ...key(node.key)];
@@ -87,7 +87,7 @@ const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
       path,
       line: node.loc.start.line,
       value: range(node.value),
-      ...(inline ? { inline } : {}),
+      ...(inline !== undefined ? { inline } : {}),
     };
     assignments.push(assignment);
 
@@ -114,7 +114,7 @@ const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
     sections.push({
       path: table.resolvedKey,
       line: table.loc.start.line,
-      end: next ? sectionStart(text, next) : text.length,
+      end: next !== undefined ? sectionStart(text, next) : text.length,
     });
 
     if (Edit.read(value, table.resolvedKey) === undefined) {

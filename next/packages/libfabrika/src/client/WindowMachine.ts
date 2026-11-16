@@ -1110,7 +1110,7 @@ const dated = (
   const owner = s.from[n];
   const tile = s.tiles.find((t) => t.id === owner?.tile);
   const type =
-    slot &&
+    slot !== undefined &&
     Predicate.isObject(slot.m) &&
     Predicate.hasProperty(slot.m, "type") &&
     Predicate.isString(slot.m.type) &&

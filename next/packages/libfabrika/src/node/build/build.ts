@@ -578,18 +578,19 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
       }
     },
   };
-  const assets: Record<string, Asset> = Object.keys(windows).length
-    ? yield* bundle(
-        Object.fromEntries(Object.keys(windows).map((name) => [name, `${WINDOW}${name}`])),
-        [entries, compiler, stylesheets(context, path)],
-        {
-          phase: "window",
-          cwd: root,
-          split: true,
-          define: { "process.env.NODE_ENV": JSON.stringify("production") },
-        },
-      ).pipe(Effect.flatMap((o) => collect(o.output)))
-    : {};
+  const assets: Record<string, Asset> =
+    Object.keys(windows).length > 0
+      ? yield* bundle(
+          Object.fromEntries(Object.keys(windows).map((name) => [name, `${WINDOW}${name}`])),
+          [entries, compiler, stylesheets(context, path)],
+          {
+            phase: "window",
+            cwd: root,
+            split: true,
+            define: { "process.env.NODE_ENV": JSON.stringify("production") },
+          },
+        ).pipe(Effect.flatMap((o) => collect(o.output)))
+      : {};
 
   if (options.tab !== undefined) {
     for (const [route, file] of Object.entries(yield* tabAssets(options.tab, [compiler], root))) {
@@ -613,7 +614,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
     .join("\n");
 
   // Every module a bundle reached is in `files` now: check them all, and the ledger for stale rows.
-  if (check(files, ledger).length) {
+  if (check(files, ledger).length > 0) {
     return yield* new BuildError({ reason: "compiler" });
   }
 

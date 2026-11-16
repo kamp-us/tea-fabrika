@@ -286,7 +286,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
     Effect.mapError((cause) => new BrainError({ reason: "storage", cause })),
   );
   const write = (rows: ReadonlyArray<typeof BrainEvent.Type>) =>
-    durableWrite(file, rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""));
+    durableWrite(file, rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length > 0 ? "\n" : ""));
   const last = Effect.fnUntraced(function* () {
     const pending = (yield* read).filter((event) => event._tag === "started").at(-1);
 
