@@ -193,6 +193,7 @@
   "next/packages/libfabrika/src/gateway/TaskAccess.test.ts": 0.1,
   "next/packages/libfabrika/src/gateway/internal/rateLimit.test.ts": 0.2,
   "next/packages/libfabrika/src/gateway/internal/waiting.test.ts": 2.4,
+  "next/packages/libfabrika/src/node/build/compiler.test.ts": 0,
   "next/packages/libfabrika/src/tasks/Task.test.ts": 9.2,
   "next/packages/libfabrika/src/tasks/Tasks.types.test.ts": 0,
   "next/packages/libfabrika/src/tasks/internal/task.test.ts": 31.6,

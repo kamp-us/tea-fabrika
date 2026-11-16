@@ -163,6 +163,7 @@
   "next/packages/libfabrika/src/node/access/SessionSender.integration.test.ts": 0.8,
   "next/packages/libfabrika/src/node/build/build-assets.integration.test.ts": 38.1,
   "next/packages/libfabrika/src/node/build/build-one-file.integration.test.ts": 72.5,
+  "next/packages/libfabrika/src/node/build/compiler.test.ts": 0,
   "next/packages/libfabrika/src/node/build/css.integration.test.ts": 10.7,
   "next/packages/libfabrika/src/node/build/error-cause.integration.test.ts": 0.3,
   "next/packages/libfabrika/src/node/dev/DevLife.laws.test.ts": 0.2,

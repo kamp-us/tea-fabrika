@@ -119,9 +119,8 @@ const nextSamples = {
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/apps/fabrika/src/exam/commits.test.ts": [0.8, 0.7, 0.8],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/apps/fabrika/src/exam/compiler.test.ts": [0.0, 0.0, 0.0],
-  // A job 132637025465, B job 132638385663, C job 132639432580.
-  "next/apps/fabrika/src/exam/effect-checks.test.ts": [0.0, 0.0, 0.0],
+  // Measured at its old path, next/apps/fabrika/src/exam/compiler.test.ts; 0591 moved it.
+  "next/packages/libfabrika/src/node/build/compiler.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/apps/fabrika/src/exam/node-kinds.test.ts": [0.1, 0.1, 0.1],
   // A job 132637025465, B job 132638385663, C job 132639432580.
@@ -453,8 +452,6 @@ const integrationSamples = {
   "next/apps/fabrika/src/exam/bytes.integration.test.ts": [6.0, 6.4, 7.0],
   // A job 132292933270, B job 132315559508, C job 132330501025.
   "next/apps/fabrika/src/exam/client-manager-contract.integration.test.ts": [13.9, 10.6, 15.9],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/clock.integration.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933192, B job 132315559467, C job 132330500983.
   "next/apps/fabrika/src/exam/commits-git-chain.integration.test.ts": [77.1, 47.4, 61.7],
   // A job 132292933169, B job 132315559486, C job 132330501025.
@@ -466,31 +463,9 @@ const integrationSamples = {
   // A job 132292933192, B job 132315559467, C job 132330500983.
   "next/apps/fabrika/src/exam/deps.integration.test.ts": [6.5, 4.1, 4.1],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/edge-comment.integration.test.ts": [0.0, 0.0, 0.0],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
   "next/apps/fabrika/src/exam/edges.integration.test.ts": [2.8, 2.9, 4.2],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/effect-functions.integration.test.ts": [0.0, 0.0, 0.0],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
   "next/apps/fabrika/src/exam/laws-scan.integration.test.ts": [0.0, 0.0, 0.0],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/layers.integration.test.ts": [3.6, 4.0, 5.7],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/ledger-sql.integration.test.ts": [6.4, 5.6, 7.7],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/no-effect-run-outside-edge.integration.test.ts": [0.0, 0.0, 0.0],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/no-hand-tag.integration.test.ts": [0.0, 0.0, 0.0],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/no-of.integration.test.ts": [0.0, 0.0, 0.0],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/no-promises.integration.test.ts": [31.2, 31.2, 44.2],
-  // A job 132292933169, B job 132315559486, C job 132330500993.
-  "next/apps/fabrika/src/exam/object-imports.integration.test.ts": [1.3, 1.5, 2.0],
-  // A job 132292933270, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/one-store-hook.integration.test.ts": [0.4, 0.3, 0.4],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/react-rules.integration.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933270, B job 132315559508, C job 132330501001.
   "next/apps/fabrika/src/exam/secret-types.integration.test.ts": [5.1, 5.3, 5.4],
   // A job 132292933221, B job 132315559497, C job 132330501014.
@@ -705,7 +680,7 @@ const e2eSamples = {
   overhead: [76.5, 69.8, 70.2],
 } as const;
 
-it("vector: L5 all 281 next rows, vitest and end-to-end, are the median of three samples, or the larger of one or two", () => {
+it("vector: L5 all 268 next rows, vitest and end-to-end, are the median of three samples, or the larger of one or two", () => {
   // The medians of runs 43656757141, 43657195723 and 43657535864 for the `next` project's files,
   // of 43544589151, 43551626086 and 43556494864 for the integration files, and of 43601966383,
   // 43601964962 and 43605298688 for the end-to-end files, from the samples above.
@@ -1045,13 +1020,13 @@ describe("assign, for a file with no row", () => {
   });
 
   it("scenario: Shards spreads two new next/ files with no row over two machines", async () => {
-    // Today's CI. clock and compiler have rows of 0.0 s, so both stay on shard 1/2 with the
+    // Today's CI. Access.types and compiler have rows of 0.0 s, so both stay on shard 1/2 with the
     // machines tied at 0. The first new file counts the median and goes to shard 1/2, which leaves
     // shard 2/2 the least for the second. The rows are the merge line's, so the sequencer is built
     // over them: the config's own is over the full-depth rows when the schedule runs this test.
     const paths = [
-      "next/apps/fabrika/src/exam/clock.integration.test.ts",
-      "next/apps/fabrika/src/exam/compiler.test.ts",
+      "next/packages/libfabrika/src/access/Access.types.test.ts",
+      "next/packages/libfabrika/src/node/build/compiler.test.ts",
       "next/apps/toy/src/a.new.test.ts",
       "next/apps/toy/src/b.new.test.ts",
     ];
@@ -1216,13 +1191,13 @@ describe("Shards", () => {
     // vitest 5's `groupSpecs` runs every project of one group order in one pool, a project of one
     // isolated file at a time in a pool of its own, and a file that failed last time first; `sort`
     // keeps the pools apart and orders only by seconds inside them. Projects a and c share group 0's
-    // pool, d runs one file at a time and b is group 1. clock and compiler both have rows of 0.0 s,
+    // pool, d runs one file at a time and b is group 1. Access.types and compiler both have rows of 0.0 s,
     // so vitest's own order of the two (larger file first) stands.
     // Plants, each run once and restored: order by seconds alone (red: Watchers, in group 1, comes
     // first); key the pool by project too (red: admission, in project c, comes after runner); drop
     // the one-at-a-time pool (red: StartChild comes before admission); drop the failed-first term
     // (red: the failed light file comes after the heavier one); break equal seconds by path (red:
-    // clock comes before compiler). The rows are the merge line's, so the sequencer is built over them.
+    // Access.types, the smaller, comes before compiler). The rows are the merge line's, so the sequencer is built over them.
     const project = (name: string, groupOrder: number, maxWorkers: number) => ({
       name,
       config: { sequence: { groupOrder }, isolate: true, maxWorkers },
@@ -1235,8 +1210,10 @@ describe("Shards", () => {
     const admission = spec("next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts", "c");
     const startChild = spec("next/packages/libfabrika/src/node/StartChild.integration.test.ts", "d", 0, 1);
     const runner = spec("next/packages/libfabrika/src/runtime/Runner.integration.test.ts", "a");
-    const clock = spec("next/apps/fabrika/src/exam/clock.integration.test.ts", "a");
-    const compiler = spec("next/apps/fabrika/src/exam/compiler.test.ts", "a");
+    // 0591 moved the exam's clock and compiler tests; the compiler laws keep their 0.0 s row at their
+    // new path, and Access.types stands in for clock: a 0.0 s file, smaller, whose path sorts first.
+    const clock = spec("next/packages/libfabrika/src/access/Access.types.test.ts", "a");
+    const compiler = spec("next/packages/libfabrika/src/node/build/compiler.test.ts", "a");
     const failedLight = spec("next/packages/libfabrika/src/ledger/Ledger.integration.test.ts", "a");
     expect(
       [watchers, admission, startChild, runner, clock, compiler, failedLight].map((s) =>
