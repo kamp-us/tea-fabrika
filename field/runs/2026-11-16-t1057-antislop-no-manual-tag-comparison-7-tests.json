@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1057-antislop-no-manual-tag-comparison-7-tests",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-16T00:47:18-08:00",
+  "ended": "2026-11-16T01:07:14-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for anti-slop judgment slice AS-no-manual-tag-comparison-7 (rule anti-slop-effect/no-manual-tag-comparison, decisions 0563 and 0567), in next/. Branch fabrikalfa/antislop-no-manual-tag-comparison-7 at eeb8ecdbb, which holds main with pull request 1366, so 1366's files are part of the slice and nothing waits on it. Counted with the rule forced to error in a scratch config outside the repo, over libfabrika transport, access and tasks and programs/checklist: 297 hits, 182 in exam paths (test files and *Test.ts suites) and 115 in product files. Fixed 166 exam hits by hand with the Edit tool, no codemod and no quick fix: an exported union's own match or isAnyOf where one exists (MemberEvent, Adds, Written, Attached, CheckedHello, Link, State, Result, Sent), Exit.isSuccess for an Exit, and Match.valueTags with one key per case for a union the test cannot import (the access Model, Key and Reply, the connection Model, Tracer's span status and AnySpan) or the test's own record (checklist State, the Connection log's Event). Left 16 exam hits, each unclear: next/packages/libfabrika/src/transport/Handshake.laws.test.ts:209,213,228(2),229,233(2),235,240(2),248,258,266,275(2), because the law types its State on purpose as a loose record with `_tag: string` and drives the machine through `as never`, so no union matcher takes it; the fix is retyping the law's State as Handshake or using Predicate.isTagged, and 0567 point 4 and its binding constraint leave that call open. And next/packages/libfabrika/src/access/ClientManager.integration.test.ts:412, `e._tag === \"founded\"` on a ledger Entry, whose `_tag` is a plain Text field of Log.ts's Line with no union. No disable line, no lock line, no .oxlintrc.json change, no assertion removed or narrowed. 115 product hits are left for the build.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/access/AccessMachine.laws.test.ts, replay and stepping agree at every cut",
+      "plant": "Access.ts members: live became `key._tag !== \"revoked\"`, so spent and replaced keys read live; restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "next/programs/checklist/src/program.laws.test.ts, L1, L6 and L13",
+      "plant": "program.ts timer: `at >= state.since + LATE` became `>`; restored by copy",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Hits: met 297 (exam 182, product 115), fixed by quick fix 0, hand edits 166, left 131 (exam 16 listed in why, product 115), waiting on 1366 0. Product hits for the build: access/Access.ts:446,450,465,518,532,539,566,570,574,578,592,593,654,662,664; access/AccessFold.ts:45; access/Authorization.ts:75; access/ClientManagerLedger.ts:159,207; access/SessionManager.ts:208,212; tasks/TasksLedger.ts:58,62,66,70,135,157,161,202(2),237; tasks/internal/task.ts:68,77,89,99,103,111,120,124,132,136,145,149(2),158; transport/Answer.ts:38,80(2),103,120; transport/Connection.ts:101,107,179,217,236,302,310; transport/Handshake.ts:159(3),187,197,204(2),227,262,285; transport/Hello.ts:186; transport/Link.ts:117,147(3),150(2),166,170(2),174,188,190(2),198,201,205,209,210(2),212,216(2),217; transport/Sshsig.ts:257; transport/internal/connection.ts:48(2),62,66,81,85(2),95,115,116,118(2),127(2), all under next/packages/libfabrika/src/; and next/programs/checklist/src/program.ts:75,77,91,94,99,123,127,134,141. Files changed: the access laws AccessMachine.laws.test.ts, AccessSpans.integration.test.ts, ClientManager.integration.test.ts; tasks/TasksTest.ts; transport Answer.test.ts, Connection.test.ts, Hello.test.ts, Link.laws.test.ts, internal/connection.test.ts; checklist RunnerTest.ts and program.laws.test.ts. Ran at the branch head eeb8ecdbb plus this change, in a cloud box: narrow vitest under nice -n 15 --maxWorkers=3, all green, on the 7 changed plain test files (82 tests) and on Task.test.ts, AccessSpans.integration.test.ts, ClientManager.integration.test.ts, node/tasks/TasksLedger.integration.test.ts, node/tasks/TasksDiscovery.integration.test.ts and next/apps/fabrika/src/checklist-runner.laws.integration.test.ts, the readers of the two changed suites (53 tests); no 0178 guard refusal. pnpm format, NODE_OPTIONS=--max-old-space-size=6144 pnpm lint green (18 parts), the list ratchet exit 0, one pnpm typecheck green.",
+  "step": "tests"
+}

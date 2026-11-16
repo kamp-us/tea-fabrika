@@ -246,7 +246,8 @@ export const BAD_RECORDED: ReadonlyArray<readonly [string, unknown]> = [
 export const brokenResult = (result: Result, pick: number): unknown => {
   const fits = BAD_RESULT.filter(
     ([key]) =>
-      key === "_tag" || (key === "code" ? result._tag === "exited" : key === "reason" && result._tag !== "exited"),
+      key === "_tag" ||
+      (key === "code" ? Result.isAnyOf(["exited"])(result) : key === "reason" && !Result.isAnyOf(["exited"])(result)),
   );
 
   return broken(result, pick, fits);
@@ -529,14 +530,14 @@ const walk = (
         );
 
         const ids = (all: ReadonlyArray<Task>) =>
-          all.map((j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
+          all.map((j) => (State.isAnyOf(["absent"])(j.state) ? "" : j.state.request.id)).sort();
 
         expect(ids(answer.tasks), `${message}: forTarget answers exactly the key's open tasks`).toEqual(
           open.map((s) => s.request.id).sort(),
         );
 
         for (const task of answer.tasks) {
-          const kept = world.tasks.get(task.state._tag === "absent" ? "" : task.state.request.id);
+          const kept = world.tasks.get(State.isAnyOf(["absent"])(task.state) ? "" : task.state.request.id);
           expect(task, `${message}: each listed task reads as saved`).toEqual(
             kept === undefined ? null : expected(kept),
           );
@@ -1146,7 +1147,7 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
           }
 
           for (const choice of a.cells) {
-            const owned = [...expected.entries()].filter(([, j]) => j.state._tag === "requested");
+            const owned = [...expected.entries()].filter(([, j]) => State.isAnyOf(["requested"])(j.state));
             const move = choice % (owned.length > 0 ? 3 : 2);
 
             if (move === 0) {
@@ -1156,14 +1157,14 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
             } else if (move === 2) {
               const [id, saved] = choose(owned, choice);
 
-              if (saved.state._tag === "requested") {
+              if (State.isAnyOf(["requested"])(saved.state)) {
                 yield* call((j) =>
                   j.take(
                     id,
                     {
-                      key: saved.state._tag === "requested" ? saved.state.request.target : "",
+                      key: State.isAnyOf(["requested"])(saved.state) ? saved.state.request.target : "",
                       connection: "discovery",
-                      has: saved.state._tag === "requested" ? saved.state.request.needs : [],
+                      has: State.isAnyOf(["requested"])(saved.state) ? saved.state.request.needs : [],
                       build: "hands",
                     },
                     said,
@@ -1184,17 +1185,17 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
               const rows = [...actual];
 
               const selected = [...expected.values()].filter(
-                (j) => j.state._tag !== "absent" && j.state.request.process === process,
+                (j) => !State.isAnyOf(["absent"])(j.state) && j.state.request.process === process,
               );
 
               const ids = (tasks: ReadonlyArray<Task>) =>
-                tasks.map((j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
+                tasks.map((j) => (State.isAnyOf(["absent"])(j.state) ? "" : j.state.request.id)).sort();
 
               expect(ids(rows)).toEqual(ids(selected));
               expect(new Set(ids(rows)).size).toBe(rows.length);
 
               for (const task of rows) {
-                expect(task).toEqual(expected.get(task.state._tag === "absent" ? "" : task.state.request.id));
+                expect(task).toEqual(expected.get(State.isAnyOf(["absent"])(task.state) ? "" : task.state.request.id));
               }
             }
           }

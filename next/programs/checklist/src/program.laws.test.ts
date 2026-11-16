@@ -9,7 +9,7 @@ import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Program, Input, stepper } from "@kampus/libfabrika";
 import { syncTest } from "@kampus/libfabrika/testing";
-import { Result, Schema } from "effect";
+import { Match, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 
@@ -49,6 +49,22 @@ expectTypeOf<State>().toEqualTypeOf<ChecklistMachine["model"]["Type"]["items"][n
 expectTypeOf<Msg>().toEqualTypeOf<ChecklistMachine["msg"]["Type"]>();
 
 type Fresh = Exclude<Msg, { readonly type: "timer" }>;
+
+// The record's own State has no union schema, so the laws match it with Effect's Match (0567, point
+// 2): every state has a key, so a new state does not compile here.
+const isNew = (s: State): boolean =>
+  Match.valueTags(s, { new: () => true, open: () => false, late: () => false, checked: () => false });
+
+const isChecked = (s: State): boolean =>
+  Match.valueTags(s, { new: () => false, open: () => false, late: () => false, checked: () => true });
+
+/** An open item's `since`, as a list of none or one. */
+const openSince = (s: State): ReadonlyArray<number> =>
+  Match.valueTags(s, { new: () => [], open: ({ since }) => [since], late: () => [], checked: () => [] });
+
+/** A checked item's note, else null. */
+const checkedNote = (s: State): string | null =>
+  Match.valueTags(s, { new: () => null, open: () => null, late: () => null, checked: ({ note }) => note });
 
 /** The plan's one day, written out here so the law does not read it from the code it checks. */
 const DAY = 86_400_000;
@@ -98,10 +114,10 @@ const at = <A>(items: ReadonlyArray<A>, i: number): A | undefined => items[i % M
 const choose = (m: Model, names: ReadonlyArray<string>, move: Move, clock: number): Msg => {
   const here = m.items.map((i) => i.name);
   const free = names.filter((n) => !here.includes(n));
-  const unchecked = m.items.filter((i) => i.state._tag !== "checked").map((i) => i.name);
-  const checked = m.items.filter((i) => i.state._tag === "checked").map((i) => i.name);
-  const wakes = m.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since + DAY] : []));
-  const wake = m.items.some((i) => i.state._tag === "new") ? 0 : wakes.length > 0 ? Math.min(...wakes) : clock;
+  const unchecked = m.items.filter((i) => !isChecked(i.state)).map((i) => i.name);
+  const checked = m.items.filter((i) => isChecked(i.state)).map((i) => i.name);
+  const wakes = m.items.flatMap((i) => openSince(i.state).map((since) => since + DAY));
+  const wake = m.items.some((i) => isNew(i.state)) ? 0 : wakes.length > 0 ? Math.min(...wakes) : clock;
 
   const timer: Msg = {
     type: "timer",
@@ -179,21 +195,23 @@ const expected = (prev: Model, msg: Msg): ReadonlyArray<Item> => {
       return prev.items.filter((i) => i.name !== msg.name);
     case "check":
       return prev.items.map((i) =>
-        i.name === msg.name && i.state._tag !== "checked"
+        i.name === msg.name && !isChecked(i.state)
           ? { name: i.name, state: { _tag: "checked", note: msg.note ?? null } }
           : i,
       );
     case "uncheck":
       return prev.items.map((i) =>
-        i.name === msg.name && i.state._tag === "checked" ? { name: i.name, state: { _tag: "new" } } : i,
+        i.name === msg.name && isChecked(i.state) ? { name: i.name, state: { _tag: "new" } } : i,
       );
     case "timer":
-      return prev.items.map((i) =>
-        i.state._tag === "new"
-          ? { name: i.name, state: { _tag: "open", since: msg.arrivedAt } }
-          : i.state._tag === "open" && msg.arrivedAt >= i.state.since + DAY
-            ? { name: i.name, state: { _tag: "late", since: i.state.since } }
-            : i,
+      return prev.items.map((i): Item =>
+        Match.valueTags(i.state, {
+          new: (): Item => ({ name: i.name, state: { _tag: "open", since: msg.arrivedAt } }),
+          open: (s): Item =>
+            msg.arrivedAt >= s.since + DAY ? { name: i.name, state: { _tag: "late", since: s.since } } : i,
+          late: (): Item => i,
+          checked: (): Item => i,
+        }),
       );
   }
 };
@@ -237,11 +255,10 @@ const reached = (machine: ChecklistMachine) =>
       }));
   });
 
-const left = (m: Model) => m.items.filter((i) => i.state._tag !== "checked").length;
+const left = (m: Model) => m.items.filter((i) => !isChecked(i.state)).length;
 
 /** Each item as the plan's view shows it, from the independent record: its note only when checked. */
-const shownBy = (m: Model) =>
-  m.items.map((i) => ({ name: i.name, state: i.state._tag, note: i.state._tag === "checked" ? i.state.note : null }));
+const shownBy = (m: Model) => m.items.map((i) => ({ name: i.name, state: i.state._tag, note: checkedNote(i.state) }));
 
 /** A walk's Msgs with the record the plan's table folds from them, step by step, beside the real models. */
 const folded = (machine: ChecklistMachine, msgs: ReadonlyArray<Msg>) => {
@@ -367,13 +384,9 @@ describe("ticket 806 the checklist's laws", () => {
       {},
       walked(checklistMachine).map((w) => w.msgs),
       ({ next }) => {
-        const since = next.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since] : []));
+        const since = next.items.flatMap((i) => openSince(i.state));
 
-        const want = next.items.some((i) => i.state._tag === "new")
-          ? 0
-          : since.length === 0
-            ? null
-            : Math.min(...since) + DAY;
+        const want = next.items.some((i) => isNew(i.state)) ? 0 : since.length === 0 ? null : Math.min(...since) + DAY;
 
         return checklist.wake(next) === want || `wake ${checklist.wake(next)}, want ${want}`;
       },
@@ -392,7 +405,7 @@ describe("ticket 806 the checklist's laws", () => {
           asked: fc.integer(),
         })
         .map(({ pick, offset, asked }) => {
-          const open = w.model.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since] : []));
+          const open = w.model.items.flatMap((i) => openSince(i.state));
           const since = at(open, pick) ?? w.clock;
 
           return { model: w.model, arrivedAt: since + DAY + offset, asked };
@@ -407,11 +420,12 @@ describe("ticket 806 the checklist's laws", () => {
           const now = next.items.find((i) => i.name === item.name)?.state;
           const s = item.state;
           expect(now, `item ${n} after a timer at ${time}`).toEqual(
-            s._tag === "new"
-              ? { _tag: "open", since: time }
-              : s._tag === "open" && time >= s.since + DAY
-                ? { _tag: "late", since: s.since }
-                : s,
+            Match.valueTags(s, {
+              new: (): State => ({ _tag: "open", since: time }),
+              open: (o): State => (time >= o.since + DAY ? { _tag: "late", since: o.since } : o),
+              late: (): State => s,
+              checked: (): State => s,
+            }),
           );
         }
 
@@ -457,7 +471,7 @@ describe("ticket 806 the checklist's laws", () => {
       {},
       walked(checklistMachine).map((w) => w.msgs),
       ({ next }) => {
-        const done = next.items.length > 0 && next.items.every((i) => i.state._tag === "checked");
+        const done = next.items.length > 0 && next.items.every((i) => isChecked(i.state));
         const out = finished(next);
 
         if (!done) {

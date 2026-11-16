@@ -7,7 +7,7 @@ import { assert, describe, expect, it, vi } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
-import { checkHello, sameOrigin, selectVersion } from "./Hello.ts";
+import { CheckedHello, checkHello, sameOrigin, selectVersion } from "./Hello.ts";
 import { Admission, type Who } from "./Wire.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -336,7 +336,7 @@ describe("P10 hello", () => {
 
       const result = yield* checked;
       expect(result).toMatchObject({ _tag: "online", identity: x.identity, version: 2, ping: 10_000 });
-      assert(result._tag === "online");
+      assert(CheckedHello.isAnyOf(["online"])(result));
       expect(result.hello).toMatchObject({ os: "ios", has: ["verify", "seal"] });
     }),
   );

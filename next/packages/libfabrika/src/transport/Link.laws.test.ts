@@ -37,7 +37,7 @@ const step = (s: Link, m: LinkMsg): Step => applyCell(linkMachine, s, m);
 
 const currentDial = (s: Link): number | null => ("dial" in s ? s.dial : null);
 
-const live = (s: Link): boolean => s._tag !== "removed" && s._tag !== "blocked";
+const live = (s: Link): boolean => !Link.isAnyOf(["removed", "blocked"])(s);
 
 const roundTrip = (s: Link): Link => Schema.decodeSync(Link)(Schema.encodeSync(Link)(s));
 
@@ -75,36 +75,37 @@ const moves = (w: Walk, c: Choice): ReadonlyArray<LinkMsg> => {
     out.push(stale[c.pick % stale.length]!);
   }
 
-  if (s._tag === "dialing") {
-    out.push(
-      { type: "admitted", dial: s.dial, ping: c.ping, ms: c.ms },
-      { type: "not_granted", dial: s.dial, fingerprint, code: c.word, until: c.ping, ms: c.ms },
-      { type: "closed", dial: s.dial, code: closeCode(c), fingerprint, ms: c.ms },
-      blocked,
-    );
-  } else if (s._tag === "waiting_grant") {
-    out.push(
-      { type: "granted", dial: s.dial },
-      // The door renews the code on the same socket, or a confused peer admits without a grant.
-      { type: "not_granted", dial: s.dial, fingerprint: s.fingerprint, code: c.word, until: c.ping, ms: c.ms },
-      { type: "admitted", dial: s.dial, ping: c.ping, ms: c.ms },
-      { type: "closed", dial: s.dial, code: closeCode(c), fingerprint: s.fingerprint, ms: c.ms },
-      blocked,
-    );
-  } else if (s._tag === "online") {
-    out.push(
-      { type: "pong", dial: s.dial },
-      { type: "closed", dial: s.dial, code: closeCode(c), fingerprint, ms: c.ms },
-      blocked,
-    );
-  } else if (s._tag === "retrying") {
-    out.push(blocked);
-  } else if (s._tag === "removed") {
-    out.push({ type: "ask_again", dial: w.dials + 1 }, { type: "granted", dial: w.dials }, blocked);
-  } else {
-    // Blocked: nothing the outside sends moves it, Ask again included.
-    out.push({ type: "ask_again", dial: w.dials + 1 }, blocked);
-  }
+  out.push(
+    ...Link.match(s, {
+      dialing: (s): ReadonlyArray<LinkMsg> => [
+        { type: "admitted", dial: s.dial, ping: c.ping, ms: c.ms },
+        { type: "not_granted", dial: s.dial, fingerprint, code: c.word, until: c.ping, ms: c.ms },
+        { type: "closed", dial: s.dial, code: closeCode(c), fingerprint, ms: c.ms },
+        blocked,
+      ],
+      waiting_grant: (s): ReadonlyArray<LinkMsg> => [
+        { type: "granted", dial: s.dial },
+        // The door renews the code on the same socket, or a confused peer admits without a grant.
+        { type: "not_granted", dial: s.dial, fingerprint: s.fingerprint, code: c.word, until: c.ping, ms: c.ms },
+        { type: "admitted", dial: s.dial, ping: c.ping, ms: c.ms },
+        { type: "closed", dial: s.dial, code: closeCode(c), fingerprint: s.fingerprint, ms: c.ms },
+        blocked,
+      ],
+      online: (s): ReadonlyArray<LinkMsg> => [
+        { type: "pong", dial: s.dial },
+        { type: "closed", dial: s.dial, code: closeCode(c), fingerprint, ms: c.ms },
+        blocked,
+      ],
+      retrying: (): ReadonlyArray<LinkMsg> => [blocked],
+      removed: (): ReadonlyArray<LinkMsg> => [
+        { type: "ask_again", dial: w.dials + 1 },
+        { type: "granted", dial: w.dials },
+        blocked,
+      ],
+      // Blocked: nothing the outside sends moves it, Ask again included.
+      blocked: (): ReadonlyArray<LinkMsg> => [{ type: "ask_again", dial: w.dials + 1 }, blocked],
+    }),
+  );
 
   return out;
 };
@@ -162,7 +163,7 @@ describe("L1: the link machine", () => {
     fc.assert(
       fc.property(walks, (list) => {
         fold(list, (prev, m, next) => {
-          if (prev.s._tag !== "waiting_grant" || next._tag === "waiting_grant") {
+          if (!Link.isAnyOf(["waiting_grant"])(prev.s) || Link.isAnyOf(["waiting_grant"])(next)) {
             return;
           }
 
@@ -174,9 +175,10 @@ describe("L1: the link machine", () => {
             m.type === "blocked";
 
           expect(allowed, `${m.type} took a grant wait to ${next._tag}`).toBe(true);
-          expect(m.type !== "granted" || next._tag === "dialing", "granted signs a fresh hello on the same dial").toBe(
-            true,
-          );
+          expect(
+            m.type !== "granted" || Link.isAnyOf(["dialing"])(next),
+            "granted signs a fresh hello on the same dial",
+          ).toBe(true);
           expect(m.type !== "granted" || currentDial(next) === prev.s.dial).toBe(true);
         });
       }),
@@ -193,13 +195,13 @@ describe("L1: the link machine", () => {
       fc.property(walks, (list) => {
         fold(list, (prev, m, next, cmds) => {
           if (m.type === "closed" && m.code === REMOVED && live(prev.s) && m.dial === currentDial(prev.s)) {
-            if (prev.s._tag !== "retrying") {
+            if (!Link.isAnyOf(["retrying"])(prev.s)) {
               removed++;
               expect(next).toEqual(Link.cases.removed.make({ fingerprint: m.fingerprint }));
             }
           }
 
-          if (prev.s._tag !== "removed") {
+          if (!Link.isAnyOf(["removed"])(prev.s)) {
             return;
           }
 
@@ -239,10 +241,9 @@ describe("L1: the link machine", () => {
           expect(timer!.after).toBeLessThanOrEqual(CAP);
           const [after, cmds] = step(s, timer!.msg);
           expect(after !== s || cmds.length > 0, `${s._tag}'s timer did nothing`).toBe(true);
-          expect(s._tag !== "waiting_grant" || after._tag === "waiting_grant", "a timer admitted a grant wait").toBe(
-            true,
-          );
-          expect(s._tag !== "waiting_grant" || cmds.some((c) => c.type === "knock"), "renew knocks").toBe(true);
+          const waits = Link.isAnyOf(["waiting_grant"]);
+          expect(!waits(s) || waits(after), "a timer admitted a grant wait").toBe(true);
+          expect(!waits(s) || cmds.some((c) => c.type === "knock"), "renew knocks").toBe(true);
         });
       }),
       opts,
@@ -255,7 +256,7 @@ describe("L1: the link machine", () => {
       fc.property(walks, fc.integer({ min: 1, max: 64 }), (list, tries) => {
         expect(backoff(tries)).toBe(Math.min(CAP, 500 * 2 ** (tries - 1)));
         fold(list, (_prev, _m, s) => {
-          const retry = s._tag === "retrying" ? s : null;
+          const retry = Link.isAnyOf(["retrying"])(s) ? s : null;
           retries += retry === null ? 0 : 1;
           expect(retry === null ? null : linkTimer(retry)).toEqual(
             retry === null
@@ -274,7 +275,7 @@ describe("L1: the link machine", () => {
     fc.assert(
       fc.property(walks, (list) => {
         fold(list, (_prev, _m, start) => {
-          if (start._tag !== "online") {
+          if (!Link.isAnyOf(["online"])(start)) {
             return;
           }
 
@@ -283,7 +284,7 @@ describe("L1: the link machine", () => {
           let s: Link = start,
             waited = 0;
 
-          for (let n = 0; n < 8 && s._tag === "online"; n++) {
+          for (let n = 0; n < 8 && Link.isAnyOf(["online"])(s); n++) {
             const timer = linkTimer(s);
             expect(timer, "online has a timer").not.toBeNull();
             waited += timer!.after;

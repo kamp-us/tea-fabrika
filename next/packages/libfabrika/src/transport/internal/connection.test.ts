@@ -5,6 +5,7 @@
 // the machine must now hold.
 import { applyCellChecked } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
@@ -42,7 +43,7 @@ const expected = (saved: Saved | null): unknown => {
     return { _tag: "unloaded" };
   }
 
-  if (saved._tag !== "online") {
+  if (!Attached.isAnyOf(["online"])(saved)) {
     return { _tag: saved._tag, attached: saved };
   }
 
@@ -51,13 +52,24 @@ const expected = (saved: Saved | null): unknown => {
   return { _tag: busy ? "busy" : "idle", client, identity, version, watching, waits, has, build };
 };
 
-/** The attachment a loaded state saves, read from the Model alone. */
-const projected = (model: Exclude<Model, { readonly _tag: "unloaded" }>): Saved => {
-  if (model._tag === "new" || model._tag === "waiting") {
-    return model.attached;
-  }
+type Loaded = Exclude<Model, { readonly _tag: "unloaded" }>;
 
-  return Attached.cases.online.make({
+type OnlineModel = Extract<Model, { readonly _tag: "idle" | "busy" }>;
+
+// The Model is not exported as a union, so the laws match it with Effect's Match (0567, point 2):
+// every state has a key, so a new state does not compile here.
+const isLoaded = (model: Model): model is Loaded =>
+  Match.valueTags(model, {
+    unloaded: () => false,
+    new: () => true,
+    waiting: () => true,
+    idle: () => true,
+    busy: () => true,
+  });
+
+/** The online attachment an idle or busy state saves; busy lives only in the tag. */
+const onlineSaved = (model: OnlineModel, busy: boolean): Saved =>
+  Attached.cases.online.make({
     client: model.client,
     identity: model.identity,
     version: model.version,
@@ -65,22 +77,46 @@ const projected = (model: Exclude<Model, { readonly _tag: "unloaded" }>): Saved 
     ...(model.build === undefined ? {} : { build: model.build }),
     waits: model.waits,
     watching: model.watching,
-    busy: model._tag === "busy",
+    busy,
   });
-};
+
+/** The attachment a loaded state saves, read from the Model alone. */
+const projected = (model: Loaded): Saved =>
+  Match.valueTags(model, {
+    new: (m): Saved => m.attached,
+    waiting: (m): Saved => m.attached,
+    idle: (m) => onlineSaved(m, false),
+    busy: (m) => onlineSaved(m, true),
+  });
+
+/** What an online state carries except its tag and waits. */
+const onlineMetadata = ({ client, identity, version, watching, has, build }: OnlineModel) => ({
+  client,
+  identity,
+  version,
+  watching,
+  has,
+  build,
+});
 
 /** Everything an online state carries except its tag and waits; `null` before hello. */
-const metadata = (model: Model) => {
-  if (model._tag !== "idle" && model._tag !== "busy") {
-    return model._tag === "unloaded" ? null : model.attached;
-  }
+const metadata = (model: Model) =>
+  Match.valueTags(model, {
+    unloaded: () => null,
+    new: (m) => m.attached,
+    waiting: (m) => m.attached,
+    idle: onlineMetadata,
+    busy: onlineMetadata,
+  });
 
-  const { client, identity, version, watching, has, build } = model;
-
-  return { client, identity, version, watching, has, build };
-};
-
-const held = (model: Model): ReadonlyArray<W> => (model._tag === "idle" || model._tag === "busy" ? model.waits : []);
+const held = (model: Model): ReadonlyArray<W> =>
+  Match.valueTags(model, {
+    unloaded: (): ReadonlyArray<W> => [],
+    new: (): ReadonlyArray<W> => [],
+    waiting: (): ReadonlyArray<W> => [],
+    idle: (m) => m.waits,
+    busy: (m) => m.waits,
+  });
 
 /** What the driver saved before this machine, for one Msg. `null` is an attachment never read. */
 const reference = (saved: Saved | null, msg: Msg): Saved | null => {
@@ -88,7 +124,7 @@ const reference = (saved: Saved | null, msg: Msg): Saved | null => {
     return msg.attached;
   }
 
-  if (saved === null || saved._tag !== "online") {
+  if (saved === null || !Attached.isAnyOf(["online"])(saved)) {
     return saved;
   }
 
@@ -483,7 +519,7 @@ describe("T703 connection machine laws", () => {
         const cut = point % (choices.length + 1);
         const model = walk(choices.slice(0, cut));
 
-        if (model._tag === "unloaded") {
+        if (!isLoaded(model)) {
           return;
         }
 

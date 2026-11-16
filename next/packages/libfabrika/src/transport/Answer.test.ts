@@ -178,7 +178,7 @@ describe("P10 JSON-RPC", () => {
                   : { reason: value.reason, ...("retryAfter" in value ? { retryAfter: value.retryAfter } : {}) },
               );
               expect(route).toHaveBeenCalledOnce();
-              assert(result.attached._tag === "online");
+              assert(Attached.isAnyOf(["online"])(result.attached));
               expect(result.attached.waits).toEqual([]);
             }),
           { concurrency: 1, discard: true },
@@ -247,7 +247,7 @@ describe("P10 JSON-RPC", () => {
               expect(result.attached).toEqual(attached);
               const wire = <A>(value: A): A => JSON.parse(JSON.stringify(value));
 
-              if (attached._tag === "waiting" && method === "gateway.knock") {
+              if (Attached.isAnyOf(["waiting"])(attached) && method === "gateway.knock") {
                 expect(route.mock.calls).toEqual([["gateway.knock", wire(params)]]);
                 expect(JSON.parse(result.send!)).toEqual({
                   jsonrpc: "2.0",
@@ -273,7 +273,7 @@ describe("P10 JSON-RPC", () => {
   it("d2: for any waiting state, a knock that parks sends nothing and leaves it waiting", async () => {
     await fc.assert(
       fc.asyncProperty(
-        unauthenticated.filter((a) => a._tag === "waiting"),
+        unauthenticated.filter(Attached.isAnyOf(["waiting"])),
         fc.oneof(fc.string(), fc.integer()),
         fc.string(),
         fc.nat(),
@@ -300,7 +300,7 @@ describe("P10 JSON-RPC", () => {
         );
 
         expect(result.send).toBeNull();
-        assert(result.attached._tag === "online");
+        assert(Attached.isAnyOf(["online"])(result.attached));
         expect(result.attached.waits).toEqual([{ id, stream: "x", after: 8 }]);
         expect(JSON.parse(JSON.stringify(result.attached))).toEqual(result.attached);
       }),

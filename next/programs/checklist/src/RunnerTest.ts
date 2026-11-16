@@ -6,7 +6,7 @@
 // Ticket 839, slice 1 (0137): L9 sends `check` with and without a note, L16 resends a letter by its
 // id (p53's checklist form), L17 reads the saved letter's note and writer back (p52's checklist form).
 import { describe, expect, it } from "@effect/vitest";
-import type { ProgramRunner } from "@kampus/libfabrika";
+import { type ProgramRunner, Sent } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, DateTime, Effect, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
@@ -236,9 +236,10 @@ export const suite = (open: Open, fresh: Fresh) =>
               );
 
               if (bad) {
-                expect(answer._tag === "refused" ? answer.reason : null, "a note past the wall does not decode").toBe(
-                  "bad_msg",
-                );
+                expect(
+                  Sent.isAnyOf(["refused"])(answer) ? answer.reason : null,
+                  "a note past the wall does not decode",
+                ).toBe("bad_msg");
               }
 
               if (!walled && !refusable && !bad) {

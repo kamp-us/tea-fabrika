@@ -18,6 +18,7 @@ import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
@@ -150,7 +151,8 @@ const capture = () => {
     },
   });
 
-  const ended = (name: string) => spans.filter((s) => s.name === name && s.status._tag === "Ended");
+  const ended = (name: string) =>
+    spans.filter((s) => s.name === name && Match.valueTags(s.status, { Started: () => false, Ended: () => true }));
 
   return { tracer, spans, ended };
 };
@@ -172,7 +174,10 @@ const within = (span: Tracer.NativeSpan, outer: Tracer.NativeSpan): boolean => {
       return true;
     }
 
-    at = at.value._tag === "Span" ? at.value.parent : Option.none();
+    at = Match.valueTags(at.value, {
+      Span: (s): Option.Option<Tracer.AnySpan> => s.parent,
+      ExternalSpan: () => Option.none(),
+    });
   }
 
   return false;
@@ -466,7 +471,7 @@ describe("p97, member spans", () => {
           ),
         };
 
-        const target = macC._tag === "added" ? macC.add.id : "";
+        const target = MemberEvent.isAnyOf(["added"])(macC) ? macC.add.id : "";
 
         // A Ledger that runs Mac X's whole write just before Mac C's append: the race, made certain.
         const racing = Layer.effect(
@@ -574,7 +579,9 @@ describe("p97, the tags hold the right names and numbers", () => {
 
         expect(tagged(grant, "key")).toBe(key);
         expect(tagged(grant, "signer")).toBe("pA");
-        expect(tagged(grant, "id")).toBe(event._tag === "granted" ? event.grant.id : expect.unreachable());
+        expect(tagged(grant, "id")).toBe(
+          MemberEvent.isAnyOf(["granted"])(event) ? event.grant.id : expect.unreachable(),
+        );
         yield* clients.members;
         const read = ended("access.read").at(-1);
 
@@ -622,7 +629,7 @@ describe("p97, the tags hold the right names and numbers", () => {
         const sheet = addedSheet("pA", key);
         const macC = addedDevice(key, "pC", "wC", ["pA"]);
         const macX = addedDevice(key, "pX", "wX");
-        const target = macC._tag === "added" ? macC.add.id : "";
+        const target = MemberEvent.isAnyOf(["added"])(macC) ? macC.add.id : "";
 
         let before: Effect.Effect<void, LedgerError> | null = write(macX).pipe(
           Effect.asVoid,
@@ -752,7 +759,7 @@ describe("p97, the tags hold the right names and numbers", () => {
         const before = yield* clients.members;
         const event = granted("pA", key);
 
-        if (event._tag !== "granted") {
+        if (!MemberEvent.isAnyOf(["granted"])(event)) {
           return expect.unreachable();
         }
 

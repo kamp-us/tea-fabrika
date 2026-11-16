@@ -17,10 +17,11 @@
 // machine's own helpers.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import * as Match from "effect/Match";
 import * as Result from "effect/Result";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
-import { type Access, access, admitted, type Folded, type MemberEvent, members, type Reason } from "./Access.ts";
+import { type Access, access, Adds, admitted, type Folded, MemberEvent, members, type Reason } from "./Access.ts";
 import { allows, EMPTY, foldAccess } from "./AccessFold.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -113,40 +114,48 @@ type Step = {
   readonly refusedBefore: ReadonlySet<string>;
 };
 
-const idFor = (event: MemberEvent): string => {
-  switch (event._tag) {
-    case "founded":
-      return "founded";
-    case "denied":
-      return event.id;
-    case "granted":
-      return event.grant.id;
-    case "revoked":
-      return event.revoke.id;
-    case "added":
-      return event.add.id;
-  }
-};
+const idFor = (event: MemberEvent): string =>
+  MemberEvent.match(event, {
+    founded: () => "founded",
+    denied: (e) => e.id,
+    granted: (e) => e.grant.id,
+    revoked: (e) => e.revoke.id,
+    added: (e) => e.add.id,
+  });
 
-const signerFor = (event: MemberEvent): string | null =>
-  event._tag === "granted" || event._tag === "revoked" || event._tag === "added" ? event.signed.signer : null;
+const isSigned = MemberEvent.isAnyOf(["granted", "revoked", "added"]);
 
-const personFor = (event: MemberEvent): string | null => {
-  switch (event._tag) {
-    case "granted":
-      return event.grant.for;
-    case "revoked":
-      return event.revoke.for;
-    case "added":
-      return event.add.for;
-    default:
-      return null;
-  }
-};
+const signerFor = (event: MemberEvent): string | null => (isSigned(event) ? event.signed.signer : null);
 
-const keysIn = (model: Folded): ReadonlyMap<string, Key> => (model._tag === "founded" ? model.keys : new Map());
+const personFor = (event: MemberEvent): string | null =>
+  MemberEvent.match(event, {
+    founded: () => null,
+    denied: () => null,
+    granted: (e) => e.grant.for,
+    revoked: (e) => e.revoke.for,
+    added: (e) => e.add.for,
+  });
 
-const idsIn = (model: Folded): ReadonlySet<string> => (model._tag === "founded" ? model.ids : new Set());
+// The Model and its keys are not exported as unions, so the laws match them with Effect's Match
+// (0567, point 2): every case has a key, so a new state or standing does not compile here.
+const isFounded = (model: Folded): model is Founded =>
+  Match.valueTags(model, { founded: () => true, unfounded: () => false });
+
+const isLive = (key: Key): boolean =>
+  Match.valueTags(key, { live: () => true, revoked: () => false, spent: () => false, replaced: () => false });
+
+const isRevoked = (key: Key): boolean =>
+  Match.valueTags(key, { live: () => false, revoked: () => true, spent: () => false, replaced: () => false });
+
+const isSpent = (key: Key): boolean =>
+  Match.valueTags(key, { live: () => false, revoked: () => false, spent: () => true, replaced: () => false });
+
+const isReplaced = (key: Key): boolean =>
+  Match.valueTags(key, { live: () => false, revoked: () => false, spent: () => false, replaced: () => true });
+
+const keysIn = (model: Folded): ReadonlyMap<string, Key> => (isFounded(model) ? model.keys : new Map());
+
+const idsIn = (model: Folded): ReadonlySet<string> => (isFounded(model) ? model.ids : new Set());
 
 const at = <A>(xs: ReadonlyArray<A>, n: number): A | undefined => (xs.length === 0 ? undefined : xs[n % xs.length]);
 
@@ -155,12 +164,12 @@ const withStanding = (model: Folded, test: (key: Key) => boolean): ReadonlyArray
 
 /** Signer pools by standing, each with its weight: the walk picks among those the Model holds. */
 const SIGNERS: ReadonlyArray<readonly [number, (key: Key) => boolean]> = [
-  [5, (k) => k._tag === "live" && k.rank === "person"],
-  [3, (k) => k._tag === "live" && k.rank === "recovery"],
-  [1, (k) => k._tag === "live" && (k.rank === "window" || k.rank === "agent" || k.rank === "hands")],
-  [1, (k) => k._tag === "revoked"],
-  [2, (k) => k._tag === "spent"],
-  [2, (k) => k._tag === "replaced"],
+  [5, (k) => isLive(k) && k.rank === "person"],
+  [3, (k) => isLive(k) && k.rank === "recovery"],
+  [1, (k) => isLive(k) && (k.rank === "window" || k.rank === "agent" || k.rank === "hands")],
+  [1, isRevoked],
+  [2, isSpent],
+  [2, isReplaced],
 ];
 
 /** A signer read off the Model: mostly a live person key, else a sheet, a leaf, a key of each stopped
@@ -185,8 +194,8 @@ const pickTarget = (model: Folded, c: Choice, n: number, fresh: string): string 
     return c.raw;
   }
 
-  const live = withStanding(model, (k) => k._tag === "live");
-  const stopped = withStanding(model, (k) => k._tag !== "live");
+  const live = withStanding(model, isLive);
+  const stopped = withStanding(model, (k) => !isLive(k));
 
   return at(c.aim === 7 ? stopped : c.aim === 6 ? [...keysIn(model).keys()] : live, c.target) ?? `${fresh}#${n}`;
 };
@@ -197,14 +206,14 @@ const pickDrops = (model: Folded, c: Choice, signer: string): Array<string> =>
       ? signer
       : which === 1
         ? (at(
-            withStanding(model, (k) => k._tag !== "live"),
+            withStanding(model, (k) => !isLive(k)),
             n,
           ) ?? `gone#${n}`)
         : (at([...keysIn(model).keys()], n) ?? `gone#${n}`),
   );
 
 const pickFor = (model: Folded, c: Choice): string =>
-  c.for < 8 ? (model._tag === "founded" ? model.person : P) : c.for === 8 ? OTHER : "";
+  c.for < 8 ? (isFounded(model) ? model.person : P) : c.for === 8 ? OTHER : "";
 
 const pickId = (model: Folded, c: Choice, refused: ReadonlyArray<string>, n: number, kind: string): string => {
   const accepted = [...idsIn(model)];
@@ -228,7 +237,7 @@ const choose = (
   accepted: ReadonlyArray<MemberEvent>,
   refused: ReadonlyArray<string>,
 ): MemberEvent => {
-  if ((model._tag === "unfounded" && c.found > 0) || c.kind === "founded") {
+  if ((!isFounded(model) && c.found > 0) || c.kind === "founded") {
     return founding(c);
   }
 
@@ -303,7 +312,7 @@ const walk = (choices: ReadonlyArray<Choice>): { readonly start: Folded; readonl
     expect(sent).toEqual([]);
     steps.push({ pre: model, event, post, kept, refusedBefore });
 
-    if (post.reply._tag === "accepted") {
+    if (answer(post) === "accepted") {
       accepted.push(event);
     } else {
       refused.push(idFor(event));
@@ -326,13 +335,13 @@ const walks = (check: (steps: ReadonlyArray<Step>, start: Folded) => void) =>
 
 /** What the reply says: `accepted`, or the refusal's reason. */
 const answer = (model: Folded): "accepted" | Reason =>
-  model.reply._tag === "accepted" ? "accepted" : model.reply.reason;
+  Match.valueTags(model.reply, { accepted: () => "accepted" as const, refused: (r) => r.reason });
 
 /** Keys and ids as plain data, so two Models compare however their maps were filled. */
 const plain = (model: Folded) => ({
   tag: model._tag,
-  person: model._tag === "founded" ? model.person : null,
-  name: model._tag === "founded" ? model.name : null,
+  person: isFounded(model) ? model.person : null,
+  name: isFounded(model) ? model.name : null,
   keys: [...keysIn(model)].map(([name, k]) => [name, k._tag, k.rank, k.under] as const).sort(),
   ids: [...idsIn(model)].sort(),
 });
@@ -353,15 +362,12 @@ const standing = (pre: Founded, signer: string, person: string): Reason | Key["r
     return "not_member";
   }
 
-  if (key._tag === "spent") {
-    return "used";
-  }
-
-  if (key._tag === "replaced" || key._tag === "revoked") {
-    return key._tag;
-  }
-
-  return key.rank;
+  return Match.valueTags(key, {
+    spent: (): Reason | Key["rank"] => "used",
+    replaced: (): Reason | Key["rank"] => "replaced",
+    revoked: (): Reason | Key["rank"] => "revoked",
+    live: (k): Reason | Key["rank"] => k.rank,
+  });
 };
 
 /** Whether `name` may join as `rank`: missing, or live with that rank. */
@@ -372,7 +378,7 @@ const joining = (pre: Founded, name: string, rank: Key["rank"]): "accepted" | Re
     return "accepted";
   }
 
-  if (key._tag !== "live") {
+  if (!isLive(key)) {
     return "revoked";
   }
 
@@ -388,42 +394,36 @@ const ruled = (pre: Founded, event: MemberEvent): "accepted" | Reason => {
     return rank;
   }
 
-  if (event._tag === "granted") {
-    return rank === "person" ? joining(pre, event.grant.key, event.grant.as) : "not_allowed";
-  }
+  return MemberEvent.match(event, {
+    founded: (): "accepted" | Reason => "accepted",
+    denied: (): "accepted" | Reason => "accepted",
+    granted: (e): "accepted" | Reason => (rank === "person" ? joining(pre, e.grant.key, e.grant.as) : "not_allowed"),
+    revoked: (e): "accepted" | Reason => {
+      if (rank !== "person" || e.revoke.key === signer) {
+        return "not_allowed";
+      }
 
-  if (event._tag === "revoked") {
-    if (rank !== "person" || event.revoke.key === signer) {
-      return "not_allowed";
-    }
+      const target = pre.keys.get(e.revoke.key);
 
-    const target = pre.keys.get(event.revoke.key);
+      return target === undefined ? "not_member" : isLive(target) ? "accepted" : "revoked";
+    },
+    added: (e): "accepted" | Reason => {
+      const adds = e.add.adds;
 
-    return target === undefined ? "not_member" : target._tag === "live" ? "accepted" : "revoked";
-  }
+      if (rank !== "person" && !(rank === "recovery" && Adds.isAnyOf(["person"])(adds))) {
+        return "not_allowed";
+      }
 
-  if (event._tag === "added") {
-    const adds = event.add.adds;
-
-    if (rank !== "person" && !(rank === "recovery" && adds._tag === "person")) {
-      return "not_allowed";
-    }
-
-    return joining(pre, adds.key, adds._tag);
-  }
-
-  return "accepted";
+      return joining(pre, adds.key, adds._tag);
+    },
+  });
 };
 
 /** Whether `name` would dial: a live window or agent whose every key above is live, with no loop. */
 const dials = (keys: ReadonlyMap<string, Key>, name: string): boolean => {
   const key = keys.get(name);
 
-  if (
-    key === undefined ||
-    key._tag !== "live" ||
-    (key.rank !== "window" && key.rank !== "agent" && key.rank !== "hands")
-  ) {
+  if (key === undefined || !isLive(key) || (key.rank !== "window" && key.rank !== "agent" && key.rank !== "hands")) {
     return false;
   }
 
@@ -432,7 +432,7 @@ const dials = (keys: ReadonlyMap<string, Key>, name: string): boolean => {
   for (let above = key.under; above !== null;) {
     const parent = keys.get(above);
 
-    if (parent === undefined || parent._tag !== "live" || passed.has(above)) {
+    if (parent === undefined || !isLive(parent) || passed.has(above)) {
       return false;
     }
 
@@ -458,7 +458,7 @@ describe("ticket 706, the access machine's types", () => {
   it("unfounded carries no founder data, and each key has exactly one standing", () => {
     walks((steps, start) => {
       for (const model of [start, ...steps.map((s) => s.post)]) {
-        if (model._tag === "unfounded") {
+        if (!isFounded(model)) {
           expect(Object.keys(model).sort()).toEqual(["_tag", "reply"]);
         }
 
@@ -500,8 +500,8 @@ describe("ticket 706, the access machine walked from init", () => {
   it("the first founding fixes the identity, a later one cannot replace it, and an empty id still founds", () => {
     walks((steps) => {
       for (const { pre, event, post } of steps) {
-        if (pre._tag === "unfounded") {
-          if (event._tag !== "founded") {
+        if (!isFounded(pre)) {
+          if (!MemberEvent.isAnyOf(["founded"])(event)) {
             expect(post._tag, "only a founding leaves unfounded").toBe("unfounded");
             expect(answer(post)).toBe("not_member");
             continue;
@@ -510,7 +510,7 @@ describe("ticket 706, the access machine walked from init", () => {
           expect(post._tag).toBe("founded");
           expect(answer(post)).toBe("accepted");
 
-          if (post._tag !== "founded") {
+          if (!isFounded(post)) {
             continue;
           }
 
@@ -537,19 +537,19 @@ describe("ticket 706, the access machine walked from init", () => {
 
         expect(post._tag, "a founded Model stays founded").toBe("founded");
 
-        if (post._tag !== "founded") {
+        if (!isFounded(post)) {
           continue;
         }
 
         expect(post.person).toBe(pre.person);
         expect(post.name).toBe(pre.name);
 
-        if (event._tag === "founded") {
+        if (MemberEvent.isAnyOf(["founded"])(event)) {
           expect(answer(post), "a later founding is the founding again").toBe("accepted");
           expect(plain(post)).toEqual(plain(pre));
         }
 
-        if (event._tag === "denied" && !pre.ids.has(event.id)) {
+        if (MemberEvent.isAnyOf(["denied"])(event) && !pre.ids.has(event.id)) {
           // Kept as it was: with an empty person id a fresh denial is refused.
           expect(answer(post)).toBe(pre.person === "" ? "not_member" : "accepted");
           expect(plain(post).keys).toEqual(plain(pre).keys);
@@ -590,11 +590,11 @@ describe("ticket 706, the access machine walked from init", () => {
     const seen = new Set<string>();
     walks((steps) => {
       for (const { pre, event, post } of steps) {
-        if (pre._tag !== "founded" || pre.ids.has(idFor(event)) || post._tag !== "founded") {
+        if (!isFounded(pre) || pre.ids.has(idFor(event)) || !isFounded(post)) {
           continue;
         }
 
-        if (event._tag === "founded" || event._tag === "denied") {
+        if (!isSigned(event)) {
           continue;
         }
 
@@ -611,7 +611,7 @@ describe("ticket 706, the access machine walked from init", () => {
         const changed = [...pre.keys].filter(([name, k]) => post.keys.get(name)?._tag !== k._tag).map(([n]) => n);
         const added = [...post.keys.keys()].filter((name) => !pre.keys.has(name));
 
-        if (event._tag === "granted") {
+        if (MemberEvent.isAnyOf(["granted"])(event)) {
           expect(changed).toEqual([]);
           const target = event.grant.key;
           expect(added).toEqual(pre.keys.has(target) ? [] : [target]);
@@ -620,17 +620,17 @@ describe("ticket 706, the access machine walked from init", () => {
           );
         }
 
-        if (event._tag === "revoked") {
+        if (MemberEvent.isAnyOf(["revoked"])(event)) {
           expect(changed).toEqual([event.revoke.key]);
           expect(added).toEqual([]);
           expect(post.keys.get(event.revoke.key)?._tag).toBe("revoked");
         }
 
-        if (event._tag === "added") {
+        if (MemberEvent.isAnyOf(["added"])(event)) {
           const { adds, drops } = event.add;
           const bySheet = pre.keys.get(signer)?.rank === "recovery";
-          const sheets = withStanding(pre, (k) => k._tag === "live" && k.rank === "recovery");
-          const ended = adds._tag === "recovery" ? sheets.filter((name) => name !== adds.key) : [];
+          const sheets = withStanding(pre, (k) => isLive(k) && k.rank === "recovery");
+          const ended = Adds.isAnyOf(["recovery"])(adds) ? sheets.filter((name) => name !== adds.key) : [];
           const named = new Set([...drops.filter((d) => d !== signer), ...ended, ...(bySheet ? [signer] : [])]);
 
           for (const name of changed) {
@@ -647,13 +647,13 @@ describe("ticket 706, the access machine walked from init", () => {
             expect(post.keys.get(signer)?._tag, "a device never drops itself").toBe("live");
           }
 
-          const joined = adds._tag === "person" ? [adds.key, adds.window] : [adds.key];
+          const joined = Adds.match(adds, { person: (a) => [a.key, a.window], recovery: (a) => [a.key] });
           expect(added.every((name) => joined.includes(name))).toBe(true);
           const fresh = pre.keys.get(adds.key) === undefined;
           expect(post.keys.get(adds.key)?.rank).toBe(adds._tag);
           expect(post.keys.get(adds.key)?.under).toBe(fresh ? null : pre.keys.get(adds.key)?.under);
 
-          if (adds._tag === "person" && !pre.keys.has(adds.window) && adds.window !== adds.key) {
+          if (Adds.isAnyOf(["person"])(adds) && !pre.keys.has(adds.window) && adds.window !== adds.key) {
             expect(post.keys.get(adds.window)?.rank).toBe("window");
             expect(post.keys.get(adds.window)?.under).toBe(adds.key);
           }
@@ -681,7 +681,7 @@ describe("ticket 706, the access machine walked from init", () => {
           expect(after?.rank, name).toBe(before.rank);
           expect(after?.under, name).toBe(before.under);
 
-          if (before._tag !== "live") {
+          if (!isLive(before)) {
             expect(after?._tag, `${name} was ${before._tag}`).toBe(before._tag);
           }
         }
@@ -695,16 +695,16 @@ describe("ticket 706, the access machine walked from init", () => {
     walks((steps) => {
       for (const { pre, event, post } of steps) {
         const keys = keysIn(post);
-        const sheets = withStanding(post, (k) => k._tag === "live" && k.rank === "recovery");
+        const sheets = withStanding(post, (k) => isLive(k) && k.rank === "recovery");
         expect(sheets.length, "at most one live sheet").toBeLessThanOrEqual(1);
 
         for (const [name, k] of keys) {
-          if (k._tag === "spent" || k._tag === "replaced") {
+          if (isSpent(k) || isReplaced(k)) {
             expect([k.rank, k.under], name).toEqual(["recovery", null]);
           }
         }
 
-        if (pre._tag !== "founded" || pre.ids.has(idFor(event)) || event._tag !== "added") {
+        if (!isFounded(pre) || pre.ids.has(idFor(event)) || !MemberEvent.isAnyOf(["added"])(event)) {
           continue;
         }
 
@@ -721,10 +721,10 @@ describe("ticket 706, the access machine walked from init", () => {
           expect(keys.get(event.signed.signer)?._tag, "the sheet that let a device in is spent").toBe("spent");
         }
 
-        if (accepted && event.add.adds._tag === "recovery") {
+        if (accepted && Adds.isAnyOf(["recovery"])(event.add.adds)) {
           const fresh = event.add.adds.key;
 
-          for (const name of withStanding(pre, (k) => k._tag === "live" && k.rank === "recovery")) {
+          for (const name of withStanding(pre, (k) => isLive(k) && k.rank === "recovery")) {
             if (name !== fresh) {
               replaced++;
               expect(keys.get(name)?._tag, `${name} ended by the new sheet`).toBe("replaced");
@@ -743,7 +743,7 @@ describe("ticket 706, the access machine walked from init", () => {
       for (const { pre, post } of steps) {
         const view = members(post);
         const keys = keysIn(post);
-        const person = post._tag === "founded" ? post.person : "";
+        const person = isFounded(post) ? post.person : "";
 
         for (const name of [...keys.keys(), "stranger"]) {
           const rank = keys.get(name)?.rank;
@@ -753,7 +753,11 @@ describe("ticket 706, the access machine walked from init", () => {
         }
 
         const stopped = [...keysIn(pre)]
-          .filter(([name, k]) => k._tag === "live" && keys.get(name)?._tag !== "live")
+          .filter(([name, k]) => {
+            const after = keys.get(name);
+
+            return isLive(k) && (after === undefined || !isLive(after));
+          })
           .map(([name]) => name);
 
         for (const name of keysIn(pre).keys()) {
@@ -796,12 +800,12 @@ describe("ticket 706, the access machine walked from init", () => {
         }
 
         const view = members(post);
-        expect(view.person).toBe(post._tag === "founded" ? post.person : "");
-        expect(view.name).toBe(post._tag === "founded" ? post.name : "");
+        expect(view.person).toBe(isFounded(post) ? post.person : "");
+        expect(view.name).toBe(isFounded(post) ? post.name : "");
         expect([...view.keys].map(([name, k]) => [name, k.rank, k.live, k.under] as const).sort()).toEqual(
-          [...keysIn(post)].map(([name, k]) => [name, k.rank, k._tag === "live", k.under] as const).sort(),
+          [...keysIn(post)].map(([name, k]) => [name, k.rank, isLive(k), k.under] as const).sort(),
         );
-        expect([...view.spent].sort()).toEqual([...withStanding(post, (k) => k._tag === "spent")].sort());
+        expect([...view.spent].sort()).toEqual([...withStanding(post, isSpent)].sort());
       }
 
       expect(events).toEqual(copies);

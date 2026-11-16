@@ -24,6 +24,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as References from "effect/References";
 import * as Schema from "effect/Schema";
@@ -37,9 +38,9 @@ import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { From } from "../processes/Mailbox.ts";
 import type { Sql } from "../Sql.ts";
-import type { MemberEvent, Access } from "./Access.ts";
+import { type Access, MemberEvent } from "./Access.ts";
 import { foldAccess } from "./AccessFold.ts";
-import { ClientManager } from "./ClientManager.ts";
+import { ClientManager, Written } from "./ClientManager.ts";
 import * as ClientManagerLedger from "./ClientManagerLedger.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -249,20 +250,14 @@ const denied = (key: string, by: string): MemberEvent => ({
 });
 
 /** The id an event is appended under: its own, and `founded` for the founding. */
-const eventId = (event: MemberEvent): string => {
-  switch (event._tag) {
-    case "founded":
-      return "founded";
-    case "granted":
-      return event.grant.id;
-    case "revoked":
-      return event.revoke.id;
-    case "added":
-      return event.add.id;
-    case "denied":
-      return event.id;
-  }
-};
+const eventId = (event: MemberEvent): string =>
+  MemberEvent.match(event, {
+    founded: () => "founded",
+    granted: (e) => e.grant.id,
+    revoked: (e) => e.revoke.id,
+    added: (e) => e.add.id,
+    denied: (e) => e.id,
+  });
 
 const view = (m: Access) => ({
   person: m.person,
@@ -287,7 +282,7 @@ describe("p96 and p97, replay and write answers", () => {
         const loaded = yield* Effect.exit(members);
         expect(loaded._tag, "unknown member events are skipped").toBe("Success");
 
-        if (loaded._tag === "Success") {
+        if (Exit.isSuccess(loaded)) {
           expect(view(loaded.value)).toEqual(view(before));
         }
 
@@ -315,7 +310,7 @@ describe("p96 and p97, replay and write answers", () => {
           const span = spans.filter((s) => s.name === "access.write").at(-1)!;
           expect(span.attributes.get("fab.access.answer")).toBe(answer._tag);
 
-          if (answer._tag === "refused") {
+          if (Written.isAnyOf(["refused"])(answer)) {
             expect(span.attributes.get("fab.access.reason")).toBe(answer.reason);
           }
         }
@@ -539,7 +534,7 @@ describe("p96, the traced history from the plan", () => {
           const got = yield* write(event);
           expect(got, event._tag).toEqual(answer);
           const after = yield* entries;
-          const wrote = got._tag === "applied" && got.rev > before;
+          const wrote = Written.isAnyOf(["applied"])(got) && got.rev > before;
           expect(after.length, event._tag).toBe(before + (wrote ? 1 : 0));
 
           if (wrote) {
@@ -713,9 +708,9 @@ describe("p96, the stolen sheet race", () => {
               { concurrency: "unbounded" },
             ).pipe(Effect.provideService(References.MaxOpsBeforeYield, 3));
 
-            expect(answers.filter((a) => a._tag === "applied").length, `round ${round}`).toBe(1);
-            const lost = answers.find((a) => a._tag !== "applied");
-            expect(lost?._tag === "ignored" || lost?._tag === "refused", `round ${round}`).toBe(true);
+            expect(answers.filter(Written.isAnyOf(["applied"])).length, `round ${round}`).toBe(1);
+            const lost = answers.find((a) => !Written.isAnyOf(["applied"])(a));
+            expect(lost !== undefined && Written.isAnyOf(["ignored", "refused"])(lost), `round ${round}`).toBe(true);
             expect(lost !== undefined && "reason" in lost ? lost.reason : null).toBe("used");
             const m = yield* members.pipe(Effect.provide(one));
             expect([m.keys.get(device)?.live, m.keys.get("pX")?.live].filter((l) => l === true)).toEqual([true]);
@@ -811,13 +806,13 @@ describe("p96, write tells the truth over any history", () => {
                 expect(answer, next._tag).toEqual({ _tag: "applied", rev: expect.any(Number) });
               }
 
-              if (answer._tag === "refused") {
+              if (Written.isAnyOf(["refused"])(answer)) {
                 refused++;
                 expect(after.length, next._tag).toBe(before.length);
                 expect(changes, next._tag).toBe(false);
               }
 
-              if (answer._tag === "applied") {
+              if (Written.isAnyOf(["applied"])(answer)) {
                 applied++;
                 const placed = after.find((e) => e.rev === answer.rev);
                 expect(placed?.id, next._tag).toBe(eventId(next));

@@ -4,6 +4,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
@@ -45,6 +46,25 @@ type Event =
       readonly saved: Saved;
     }
   | { readonly _tag: "call"; readonly method: string; readonly params: unknown; readonly saved: Saved };
+
+const isOnline = Attached.isAnyOf(["online"]);
+
+// The log is this test's own record, with no union schema, so its events are matched with Effect's
+// Match (0567, point 2): every event has a key, so a new event does not compile here.
+const isSave = (e: Event): e is Extract<Event, { readonly _tag: "save" }> =>
+  Match.valueTags(e, { save: () => true, send: () => false, close: () => false, wait: () => false, call: () => false });
+
+const isSend = (e: Event): e is Extract<Event, { readonly _tag: "send" }> =>
+  Match.valueTags(e, { save: () => false, send: () => true, close: () => false, wait: () => false, call: () => false });
+
+const isClose = (e: Event): e is Extract<Event, { readonly _tag: "close" }> =>
+  Match.valueTags(e, { save: () => false, send: () => false, close: () => true, wait: () => false, call: () => false });
+
+const isWait = (e: Event): e is Extract<Event, { readonly _tag: "wait" }> =>
+  Match.valueTags(e, { save: () => false, send: () => false, close: () => false, wait: () => true, call: () => false });
+
+const isCall = (e: Event): e is Extract<Event, { readonly _tag: "call" }> =>
+  Match.valueTags(e, { save: () => false, send: () => false, close: () => false, wait: () => false, call: () => true });
 
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
 
@@ -163,7 +183,7 @@ const Walk = fc.array(Choice, { minLength: 1, maxLength: 60, size: "max" });
 
 /** Did a saved attachment admit this wait, by the limits the driver had before the machine. */
 const admits = (saved: Saved, wait: W) => {
-  if (saved._tag !== "online") {
+  if (!isOnline(saved)) {
     return false;
   }
 
@@ -173,7 +193,7 @@ const admits = (saved: Saved, wait: W) => {
 };
 
 const answers = (log: ReadonlyArray<Event>, from: number) =>
-  log.slice(from).flatMap((e) => (e._tag === "send" ? [e.frame] : []));
+  log.slice(from).flatMap((e) => (isSend(e) ? [e.frame] : []));
 
 it.effect.prop(
   "T843 frame: ordinary and parked-read replies retain the delay, tag their ended frame, and keep the socket online (50 runs)",
@@ -199,7 +219,7 @@ it.effect.prop(
       for (const [id, pick] of picks.entries()) {
         const now = h.saved();
         expect(now._tag).toBe("online");
-        const method = now._tag === "online" && !now.busy && pick ? "ledger.wait" : "process.send";
+        const method = isOnline(now) && !now.busy && pick ? "ledger.wait" : "process.send";
         yield* h
           .run(h.c.frame(JSON.stringify({ jsonrpc: "2.0", id, method, params: { stream: "events", after: 0 } })))
           .pipe(Effect.withTracer(tracer));
@@ -219,7 +239,7 @@ it.effect.prop(
         const reply = answers(h.log, 0).at(-1)!;
         expect(reply.error).toMatchObject({ message: "rate_limited", data: { reason: "rate_limited", retryAfter } });
         expect(h.saved()._tag).toBe("online");
-        expect(h.log.filter((e) => e._tag === "close")).toEqual([]);
+        expect(h.log.filter(isClose)).toEqual([]);
         const frame = spans.filter((span) => span.name === "connection.frame").at(-1)!;
         expect(frame.status._tag).toBe("Ended");
         expect(frame.attributes.get("fab.gateway.refused")).toBe("rate_limited");
@@ -284,7 +304,7 @@ describe("T703 connection driver laws", () => {
 
             for (const choice of choices) {
               const now = h.saved();
-              const held = now._tag === "online" ? now.waits : [];
+              const held = isOnline(now) ? now.waits : [];
               const { move, pick } = choice;
               const from = h.log.length;
 
@@ -306,7 +326,7 @@ describe("T703 connection driver laws", () => {
                 );
 
                 expect(refused).toHaveLength(ok ? 0 : 1);
-                const registered = h.log.slice(from).find((e) => e._tag === "wait");
+                const registered = h.log.slice(from).find(isWait);
 
                 if (ok) {
                   seen.add("admitted");
@@ -318,7 +338,10 @@ describe("T703 connection driver laws", () => {
                     after: wait.after,
                   });
                   expect(
-                    registered?._tag === "wait" && registered.saved._tag === "online" && registered.saved.waits,
+                    registered !== undefined &&
+                      isWait(registered) &&
+                      isOnline(registered.saved) &&
+                      registered.saved.waits,
                   ).toContainEqual(wait);
                 } else {
                   seen.add("refused");
@@ -337,8 +360,8 @@ describe("T703 connection driver laws", () => {
                 yield* Deferred.succeed(call!.reply, answer);
                 yield* settle;
                 const after = h.log.slice(from);
-                const sent = after.findIndex((e) => e._tag === "send");
-                const idle = after.findIndex((e) => e._tag === "save" && e.saved._tag === "online" && !e.saved.busy);
+                const sent = after.findIndex(isSend);
+                const idle = after.findIndex((e) => isSave(e) && isOnline(e.saved) && !e.saved.busy);
                 // The response goes out first; only then is busy cleared.
                 expect(sent).toBeGreaterThanOrEqual(0);
                 expect(idle).toBeGreaterThan(sent);
@@ -363,9 +386,7 @@ describe("T703 connection driver laws", () => {
                 yield* h.run(h.c.ring(stream, rev));
                 const left = h.saved();
                 // Every wait the ring could answer is answered.
-                expect(
-                  left._tag === "online" && left.waits.filter((w) => w.stream === stream && rev > w.after),
-                ).toEqual([]);
+                expect(isOnline(left) && left.waits.filter((w) => w.stream === stream && rev > w.after)).toEqual([]);
                 seen.add("ring");
               }
 
@@ -373,7 +394,7 @@ describe("T703 connection driver laws", () => {
               expect(h.most()).toBeLessThanOrEqual(1);
 
               for (const e of h.log.slice(from)) {
-                if (e._tag === "call") {
+                if (isCall(e)) {
                   expect(e.saved).toMatchObject({ _tag: "online", busy: true });
                 }
               }
@@ -394,7 +415,7 @@ describe("T703 connection driver laws", () => {
 
             for (const e of h.log) {
               if (
-                e._tag === "send" &&
+                isSend(e) &&
                 e.frame.error?.message !== "too_many_waits" &&
                 (e.frame.error !== undefined || isRev(e.frame.result))
               ) {
@@ -404,7 +425,7 @@ describe("T703 connection driver laws", () => {
 
             const waiting = new Map<string | number, number>();
 
-            for (const w of end._tag === "online" ? end.waits : []) {
+            for (const w of isOnline(end) ? end.waits : []) {
               waiting.set(w.id, (waiting.get(w.id) ?? 0) + 1);
             }
 
@@ -474,13 +495,13 @@ describe("T703 connection driver laws", () => {
                 seen.add(`restored:${h.saved()._tag}`);
               } else if (move < 35) {
                 yield* h.c.wake();
-                const closed = h.log.slice(from).filter((e) => e._tag === "close");
-                expect(closed).toEqual(now._tag === "online" && now.busy ? [{ _tag: "close", code: 1012 }] : []);
+                const closed = h.log.slice(from).filter(isClose);
+                expect(closed).toEqual(isOnline(now) && now.busy ? [{ _tag: "close", code: 1012 }] : []);
                 seen.add(`wake:${closed.length}`);
               } else if (move < 50) {
                 const session = move % 2 === 0 ? SESSION : other;
                 const ping = yield* h.c.probe(session);
-                expect(ping).toBe(session === SESSION && now._tag === "online" ? PING : null);
+                expect(ping).toBe(session === SESSION && isOnline(now) ? PING : null);
                 seen.add(`probe:${ping}`);
               } else if (move < 65) {
                 const method = at(["initialize", "gateway.knock", "process.send"], move);
@@ -494,7 +515,7 @@ describe("T703 connection driver laws", () => {
                 const after = h.log.slice(from);
                 const handshake = method !== "process.send";
 
-                if (now._tag === "online") {
+                if (isOnline(now)) {
                   expect(after.map((e) => e._tag)).toEqual(["save", "call", "send", "save"]);
                   expect(h.saved()).toEqual({ ...now, busy: false });
                 } else if (handshake) {
@@ -512,7 +533,7 @@ describe("T703 connection driver laws", () => {
                 const bad = move % 3 === 0;
                 yield* h.run(h.c.frame(waitFrame(id, bad ? { stream: 1, after: -1 } : { stream: "s", after: 0 })));
 
-                if (now._tag !== "online") {
+                if (!isOnline(now)) {
                   expect(h.log.slice(from)).toEqual([no(id, "no_hello")]);
                 } else if (bad) {
                   expect(h.log.slice(from)).toEqual([no(id, "bad_input")]);
@@ -573,7 +594,7 @@ const admittedTotals = (log: ReadonlyArray<Event>) => {
   let before: ReadonlyArray<W> = [];
 
   for (const e of log) {
-    if (e._tag !== "save" || e.saved._tag !== "online") {
+    if (!isSave(e) || !isOnline(e.saved)) {
       continue;
     }
 
@@ -844,7 +865,7 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
             const check = (from: number) => {
               const calls = h.log
                 .slice(from)
-                .flatMap((e) => (e._tag === "call" ? [{ method: e.method, params: e.params }] : []));
+                .flatMap((e) => (isCall(e) ? [{ method: e.method, params: e.params }] : []));
 
               // The calls the old decode accepted, in order, and no other.
               expect(calls).toEqual(queued.splice(0, calls.length).map(({ method, params }) => ({ method, params })));
@@ -852,7 +873,7 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
 
             for (const { move, pick, frame, failure: f, rev } of moves) {
               const now = h.saved();
-              const held = now._tag === "online" ? now.waits : [];
+              const held = isOnline(now) ? now.waits : [];
               const from = h.log.length;
 
               if (move < 50 || (h.calls.length === 0 && h.waits.length === 0)) {
@@ -898,7 +919,7 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
                 const value = failure(f, trace);
                 const before = h.saved();
 
-                const id = (before._tag === "online" ? before.waits : []).find(
+                const id = (isOnline(before) ? before.waits : []).find(
                   (w) => `${w.stream}|${w.after}` === pending!.label,
                 )?.id;
 
@@ -1006,7 +1027,7 @@ it.effect.prop(
       });
 
       yield* c.frame(callFrame("take", "tasks.take"));
-      expect(copies.map((a) => a._tag === "online" && a.busy)).toEqual([true, false]);
+      expect(copies.map((a) => isOnline(a) && a.busy)).toEqual([true, false]);
 
       for (const copy of copies) {
         expect(copy).toMatchObject({ identity: { as: "hands" }, has, build });
