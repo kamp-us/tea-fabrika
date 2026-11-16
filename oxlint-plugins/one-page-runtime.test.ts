@@ -9,6 +9,9 @@
 // import specifier and read identifiers only, and the three cases after "another run" pass: red.
 // Plant, run once in the second fix round: the rule as it stood at e6432cb, which read a string only
 // as the key inside a computed member, and the two cases after "a run read by a string key" pass: red.
+// Plant, run once in the third fix round: the rule as it stood at 4269851, which read a string only when
+// its whole value was a run name and skipped every template with an expression, and the two cases after
+// "a run named by a string passed to Reflect.get" pass: red.
 import { join } from "node:path";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
@@ -82,7 +85,7 @@ type Key = { readonly read: string; readonly error: RegExp };
 /** A run function's name spelled as a string, and the report it must get. */
 type Held = { readonly spelled: string; readonly error: RegExp };
 
-/** The plan's four planted entries and the reviews' five, each with the reports it must get, in order. */
+/** The plan's four planted entries and the reviews' seven, each with the reports it must get, in order. */
 const breaks = (
   program: string,
   start: string,
@@ -92,6 +95,8 @@ const breaks = (
   alias: string,
   key: Key,
   held: Held,
+  templated: Held,
+  worded: Held,
 ) => ({
   // No `runMain` from `@kampus/tuval/browser`: the import names another module.
   "no import": {
@@ -141,6 +146,16 @@ const breaks = (
     code: entry(program, start, `Reflect.get(Effect, ${held.spelled})(${program});`),
     errors: [held.error],
   },
+  // A run function's name in a piece of a template that holds an expression, read as a key.
+  "a run named in a template with an expression": {
+    code: entry(program, start, `const tail = "";\nEffect[${templated.spelled}](${program});`),
+    errors: [templated.error],
+  },
+  // A run function's name as one word inside a longer string, cut out and read as a key.
+  "a run named inside a longer string": {
+    code: entry(program, start, `Effect[${worded.spelled}](${program});`),
+    errors: [worded.error],
+  },
 });
 
 const from = fc.constantFrom("@kampus/tuval", "effect", "@effect/platform-browser", "@kampus/tuval/electron");
@@ -164,6 +179,33 @@ const runNames = ["runPromise", "runFork", "runSync", "runMain"] as const;
 const quotes = ['"', "'", "`"] as const;
 const held = fc.record({ name: fc.constantFrom(...runNames), quote: fc.constantFrom(...quotes) });
 
+// A run function's name in a template piece beside an expression, `tail`, which is the empty string.
+const pieces = {
+  after: (run: string) => `\`${run}\${tail}\``,
+  before: (run: string) => `\`\${tail}${run}\``,
+  between: (run: string) => `\`\${tail}${run}\${tail}\``,
+} as const;
+
+const templated = fc.record({
+  name: fc.constantFrom(...runNames),
+  piece: fc.constantFrom<keyof typeof pieces>("after", "before", "between"),
+});
+
+// A run function's name as one word of a longer string, in each quote, cut out by `split`.
+const wordings = {
+  dotted: (run: string, quote: string) => `${quote}Effect.${run}${quote}.split(".")[1]`,
+  spaced: (run: string, quote: string) => `${quote}${run} now${quote}.split(" ")[0]`,
+} as const;
+
+const worded = fc.record({
+  name: fc.constantFrom(...runNames),
+  wording: fc.constantFrom<keyof typeof wordings>("dotted", "spaced"),
+  quote: fc.constantFrom(...quotes),
+});
+
+/** The report a run function's name must get: `runMain` is a second runtime, any other a foreign run. */
+const errorFor = (run: string) => (run === "runMain" ? SECOND : OTHER);
+
 const inside = fc.constantFrom(
   "export const App = () => {\n  START\n  return null;\n};",
   "export function App() {\n  START\n  return null;\n}",
@@ -182,17 +224,23 @@ it("refuses each planted entry with its own reports and passes the entry in ever
       alias,
       key,
       held,
-      (program, how, other, runner, place, local, read, hold) => {
+      templated,
+      worded,
+      (program, how, other, runner, place, local, read, hold, piece, word) => {
         const start = starts[how](program);
         reached.add(how);
         reached.add(read.read);
         reached.add(hold.name);
         reached.add(hold.quote);
-        const spelled = {
-          spelled: `${hold.quote}${hold.name}${hold.quote}`,
-          error: hold.name === "runMain" ? SECOND : OTHER,
-        };
-        const planted = breaks(program, start, other, runner, place, local, read, spelled);
+        reached.add(`template ${piece.name}`);
+        reached.add(`piece ${piece.piece}`);
+        reached.add(`word ${word.name}`);
+        reached.add(`wording ${word.wording}`);
+        reached.add(`word quote ${word.quote}`);
+        const spelled = { spelled: `${hold.quote}${hold.name}${hold.quote}`, error: errorFor(hold.name) };
+        const inTemplate = { spelled: pieces[piece.piece](piece.name), error: errorFor(piece.name) };
+        const inWords = { spelled: wordings[word.wording](word.name, word.quote), error: errorFor(word.name) };
+        const planted = breaks(program, start, other, runner, place, local, read, spelled, inTemplate, inWords);
         tester.run("one-page-runtime", onePageRuntime, {
           valid: [{ code: entry(program, start), filename: ENTRY }],
           invalid: Object.values(planted).map(({ code, errors }) => ({
@@ -205,9 +253,22 @@ it("refuses each planted entry with its own reports and passes the entry in ever
     ),
     { seed: 119120, numRuns: 30 },
   );
-  // Coverage: each start spelling, string key, held run name and quote was drawn, so each was planted against.
+  // Coverage: each start spelling, string key, held run name and quote, each run name in each template
+  // piece and each run name in each wording and quote was drawn, so each was planted against.
   expect([...reached].sort()).toEqual(
-    ["curried", "direct", "piped", ...keys.map((k) => k.read), ...runNames, ...quotes].sort(),
+    [
+      "curried",
+      "direct",
+      "piped",
+      ...keys.map((k) => k.read),
+      ...runNames,
+      ...quotes,
+      ...runNames.map((n) => `template ${n}`),
+      ...Object.keys(pieces).map((p) => `piece ${p}`),
+      ...runNames.map((n) => `word ${n}`),
+      ...Object.keys(wordings).map((w) => `wording ${w}`),
+      ...quotes.map((q) => `word quote ${q}`),
+    ].sort(),
   );
 });
 
@@ -224,6 +285,8 @@ it("scenario: the repo's config turns the rule on for the page entry and for no 
     "againBoot",
     { read: 'Effect["runPromise"]', error: OTHER },
     { spelled: '"runFork"', error: OTHER },
+    { spelled: pieces.after("runPromise"), error: OTHER },
+    { spelled: wordings.dotted("runPromise", '"'), error: OTHER },
   );
   const elsewhere = "next/apps/fabrika/src/entry/other.tsx";
   const clean = await plant({ [ENTRY]: entry("page", start), [elsewhere]: planted["a second start"].code });
