@@ -8,9 +8,19 @@
 import { type AnyCmdDef, type Tagged } from "@demlik/tea";
 import { Cause, Effect, Option, Result, Schema } from "effect";
 import * as Redacted from "effect/Redacted";
+import * as Fit from "../processes/Fit.ts";
 import * as Audit from "./Audit.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
-import { Admission, type Input, ProgramDown, stepper, Step, type Prepared, type Stepper } from "./Program.ts";
+import {
+  Admission,
+  type Input,
+  type Program,
+  ProgramDown,
+  stepper,
+  Step,
+  type Prepared,
+  type Stepper,
+} from "./Program.ts";
 import { Saved } from "./State.ts";
 
 const Upgraded = Schema.Struct({ saved: Saved, ran: Schema.Array(Schema.String) });
@@ -96,7 +106,8 @@ export const Reply = Schema.TaggedUnion({
 /**
  * Schema for what the runner knows of a loaded program without holding its code: its name, its
  * saved-state version, its delivery limit and restart policy when it declares them, the events it
- * may write, its input ports, and its Cmd types.
+ * may write, its input ports, its outputs, and its Cmd types. A piped input and every output carry
+ * their declared shape, so the brain can check a pipe without the code (0550, 0553).
  *
  * @stability unstable
  * @category schemas
@@ -107,8 +118,15 @@ export const Declaration = Schema.Struct({
   maxDeliveries: Schema.optionalKey(Deliveries),
   policy: Schema.optionalKey(Policy),
   writes: Schema.Record(Schema.String, Schema.Struct({ personOnly: Schema.Boolean })),
-  /** Each input port: whether it takes writes, and whether only a person may send it. */
-  inputs: Schema.Record(Schema.String, Schema.Struct({ write: Schema.Boolean, personOnly: Schema.Boolean })),
+  /** Each input port: whether it takes writes, whether only a person may send it, and a piped
+   *  input's declared shape. */
+  inputs: Schema.Record(
+    Schema.String,
+    Schema.Struct({ write: Schema.Boolean, personOnly: Schema.Boolean, shape: Schema.optionalKey(Fit.Shape) }),
+  ),
+  /** Each output's declared shape. Optional: a box built before outputs had shapes answers none, and
+   *  its program then pipes nothing out. */
+  outputs: Schema.optionalKey(Schema.Record(Schema.String, Schema.Struct({ shape: Fit.Shape }))),
   cmds: Schema.Array(Schema.String),
 });
 /**
@@ -118,6 +136,39 @@ export const Declaration = Schema.Struct({
  * @category models
  */
 export type Declaration = typeof Declaration.Type;
+
+/**
+ * What the runner knows of a checked program without its code, as both loaders write it: the Node
+ * loader and the Worker's box. Each shape is computed once, here, from the program's own schema.
+ *
+ * @stability unstable
+ * @category constructors
+ */
+export const declaration = (program: typeof Program.schema.Type): Declaration =>
+  Declaration.make({
+    name: program.name,
+    v: program.state.v,
+    ...(program.maxDeliveries === undefined ? {} : { maxDeliveries: program.maxDeliveries }),
+    ...(program.policy === undefined ? {} : { policy: program.policy }),
+    writes: Object.fromEntries(Object.entries(program.writes).map(([name, p]) => [name, { personOnly: p.personOnly }])),
+    inputs: Object.fromEntries(
+      Object.entries(program.inputs).map(([name, p]) => [
+        name,
+        {
+          write: p._tag === "write",
+          personOnly: p._tag === "write" && p.personOnly,
+          ...(p._tag === "write" && p.value !== undefined ? { shape: Fit.shape(p.value) } : {}),
+        },
+      ]),
+    ),
+    outputs: Object.fromEntries(
+      Object.entries(program.outputs).map(([name, port]) => [
+        name,
+        { shape: Fit.shape(Schema.isSchema(port) ? port : port.schema) },
+      ]),
+    ),
+    cmds: (program.machine.cmds ?? []).map((d) => d.cmdType),
+  });
 
 /**
  * One program's compiled source and the hash of it, as the build hands it to the Worker's loader.
@@ -237,6 +288,26 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
 };
 
 /**
+ * A step's answer with the outputs it changed: every output for a boot (`before` is none), else each
+ * output whose encoded value differs from the model the step started from. The selectors run here,
+ * beside the code, so a box answers them across its RPC.
+ */
+const moved = (pure: Stepper, before: unknown, step: Step): Step => {
+  if (step._tag !== "stepped") {
+    return step;
+  }
+
+  const now = pure.outputs(step.model);
+  const was = before === undefined ? undefined : pure.outputs(before);
+  const changed = Object.fromEntries(
+    Object.entries(now).filter(
+      ([name, value]) => was === undefined || JSON.stringify(value) !== JSON.stringify(was[name] ?? null),
+    ),
+  );
+  return Object.keys(changed).length === 0 ? step : Step.cases.stepped.make({ ...step, outputs: changed });
+};
+
+/**
  * Builds an `Execution` that steps a program in this process, from its declaration.
  *
  * **Details**
@@ -256,13 +327,21 @@ export const nodeExecution = (declared: unknown, build = "node"): Execution => {
   const run = <A>(reason: ProgramDown["reason"], f: (pure: Stepper) => A) =>
     pure.pipe(Effect.flatMap((loaded) => attempt(reason, () => f(loaded))));
   return {
-    init: Effect.fn("execution.init")((saved) => run("load", (pure) => pure.init(saved))),
-    step: Effect.fn("execution.step")((model, msg) => run("step", (pure) => pure.step(model, msg))),
+    init: Effect.fn("execution.init")((saved) => run("load", (pure) => moved(pure, undefined, pure.init(saved)))),
+    step: Effect.fn("execution.step")((model, msg) => run("step", (pure) => moved(pure, model, pure.step(model, msg)))),
     fresh: Effect.fn("execution.fresh")((model, msg) =>
       pure.pipe(Effect.flatMap((pure) => Effect.fromResult(pure.fresh(model, msg)))),
     ),
     update: Effect.fn("execution.update")((model, msg) =>
-      pure.pipe(Effect.flatMap((pure) => Effect.fromResult(pure.update(model, msg)))),
+      pure.pipe(
+        Effect.flatMap((pure) => Effect.fromResult(pure.update(model, msg))),
+        Effect.flatMap((prepared) =>
+          run("step", (pure) => {
+            const step = moved(pure, model, prepared);
+            return step._tag === "stepped" ? step : prepared;
+          }),
+        ),
+      ),
     ),
     audit: Effect.fn("execution.audit")((msg) =>
       pure.pipe(
@@ -270,7 +349,9 @@ export const nodeExecution = (declared: unknown, build = "node"): Execution => {
         Effect.flatMap((pure) => Effect.fromResult(Audit.select(pure.program, msg))),
       ),
     ),
-    fold: Effect.fn("execution.fold")((model, msg) => run("saved_letter", (pure) => pure.fold(model, msg))),
+    fold: Effect.fn("execution.fold")((model, msg) =>
+      run("saved_letter", (pure) => moved(pure, model, pure.fold(model, msg))),
+    ),
     upgrade: Effect.fn("execution.upgrade")((saved) =>
       run("saved_state", (pure) => Saved.upgrade(saved, pure.program.state, build)),
     ),

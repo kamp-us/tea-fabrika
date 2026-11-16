@@ -63,6 +63,7 @@ import { InputId } from "../Id.ts";
 import { Children, INPUT_BYTES, Started } from "../processes/Children.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { Monitors } from "../processes/Monitors.ts";
+import { type Listed, Pipes } from "../processes/Pipes.ts";
 import { ProcessName } from "../processes/Process.ts";
 import { MailRefusal } from "../processes/ProgramMail.ts";
 import { Result as TaskResult } from "../tasks/Task.ts";
@@ -83,11 +84,14 @@ import { HandsInput } from "./Hands.ts";
 import { HandsTasks } from "./HandsTasks.ts";
 import { fromFailure } from "./internal/exitReason.ts";
 import { handsDelivery } from "./internal/handsDelivery.ts";
+import * as PipeFold from "./internal/pipeFold.ts";
+import * as PipeItems from "./internal/pipeItems.ts";
 import { Failure, Policy, type Receipt } from "./internal/recovery.ts";
 import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./internal/supervisor.ts";
 import { MailDelivery } from "./MailDelivery.ts";
 import { DemonitorInput, MonitorInput } from "./Monitor.ts";
 import { diff } from "./Patch.ts";
+import { PipeInput } from "./Pipe.ts";
 import { Admission, ProgramDown, Refusal, Step, Write } from "./Program.ts";
 import { recoveryStore, RecoveryStoreError } from "./RecoveryStore.ts";
 import { Replies, type RepliesError } from "./Replies.ts";
@@ -204,6 +208,12 @@ const Dispatched = Schema.Struct({
   chunk: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
   /** A hands Cmd's saved delivery, which only its machine changes. Absent reads as `pending`. */
   hands: Schema.optionalKey(Schema.TaggedUnion({ pending: {}, waiting: { rev: Rev, arrivedAt: Schema.Int } })),
+  /** An output's owed send down a live pipe: no program asked for it, so its answer is recorded and
+   *  never folded (0260). */
+  out: Schema.optionalKey(Schema.Struct({ pipe: Schema.NonEmptyString })),
+  /** A send whose first message is saved: a newer value never replaces it, so a reader is never
+   *  handed two values mixed (0549). */
+  started: Schema.optionalKey(Schema.Literal(true)),
 });
 type Dispatched = typeof Dispatched.Type;
 const decodeDispatched = Schema.decodeUnknownResult(Schema.Array(Dispatched));
@@ -245,8 +255,11 @@ const HANDS = "hands";
 const MONITOR = "monitor";
 const DEMONITOR = "demonitor";
 
+/** The Cmd a program pipes one program's output to another program's input with. */
+const PIPE = "pipe";
+
 /** The Cmds the runner performs as the host: each is owed by this life until it is answered. */
-const HOST = new Set([SEND, SEND_CHUNKS, START_CHILD, STOP_CHILD, EXIT, HANDS, MONITOR, DEMONITOR]);
+const HOST = new Set([SEND, SEND_CHUNKS, START_CHILD, STOP_CHILD, EXIT, HANDS, MONITOR, DEMONITOR, PIPE]);
 
 /** This life still owes a host Cmd (a send, a send_chunks, a start_child, a stop_child, an exit,
  *  a monitor, a demonitor, or a hands Cmd the Project has not saved yet): the next alarm tries it
@@ -299,6 +312,11 @@ const strictMonitor = Schema.decodeUnknownOption(MonitorInput, { onExcessPropert
 const decodeMonitor = (cmd: unknown) => Option.flatMap(operands(cmd, MonitorInput.fields), strictMonitor);
 const strictDemonitor = Schema.decodeUnknownOption(DemonitorInput, { onExcessProperty: "error" });
 const decodeDemonitor = (cmd: unknown) => Option.flatMap(operands(cmd, DemonitorInput.fields), strictDemonitor);
+const strictPipe = Schema.decodeUnknownOption(PipeInput, { onExcessProperty: "error" });
+const decodePipe = (cmd: unknown) => Option.flatMap(operands(cmd, PipeInput.fields), strictPipe);
+const decodeChunk = Schema.decodeUnknownOption(Chunk.Chunk);
+const decodeFold = Schema.decodeUnknownOption(PipeFold.State);
+const encodeFold = Schema.encodeSync(PipeFold.State);
 const encodeResult = Schema.encodeSync(TaskResult);
 const isName = Schema.is(ProcessName);
 const encoder = new TextEncoder();
@@ -400,6 +418,10 @@ type Live = {
   readonly after: number;
   readonly pos: number;
   readonly cmds: ReadonlyArray<Dispatched>;
+  /** A reader's values still arriving, by piped input. Absent: none. */
+  readonly arriving?: Readonly<Record<string, typeof PipeFold.State.Type>>;
+  /** The life whose first load this state holds. */
+  readonly booted?: string;
 };
 
 /** A failed Cmd's settled Msg error: its case is its reason. */
@@ -534,6 +556,10 @@ export class ProgramRunner extends Context.Service<
         const handsTasks = yield* Effect.serviceOption(HandsTasks);
         const children = yield* Effect.serviceOption(Children);
         const monitors = yield* Effect.serviceOption(Monitors);
+        const pipes = yield* Effect.serviceOption(Pipes);
+        /** The last pipe made into each piped input, read once per life: a new pipe into an input is
+         *  only made while its reader's name has no live process, so within one life it never changes. */
+        let into: { readonly life: string; readonly pipes: ReadonlyArray<Listed> } | null = null;
         // Read the lifecycle from its machine; the runner keeps no second copy.
         const ended = Effect.map(
           Effect.suspend(() => manager.status(process.name)),
@@ -572,6 +598,82 @@ export class ProgramRunner extends Context.Service<
 
         const fault = (cut: string) => options.fault?.(cut) ?? Effect.void;
         const chunkBytes = Number(ByteSize.toBigInt(options.chunk));
+        /** The pipes this name is an end of, as the brain recorded them. No `Pipes` service: none. */
+        const listPipes = Effect.suspend(() =>
+          Option.isNone(pipes)
+            ? Effect.succeed<ReadonlyArray<Listed>>([])
+            : pipes.value
+                .list(process.name)
+                .pipe(Effect.mapError((cause) => new LedgerError({ reason: "storage", cause }))),
+        );
+        /** The last pipe made into `input`, live or ended, read once for this life. */
+        const intoInput = Effect.fnUntraced(function* (input: string) {
+          if (into === null || into.life !== process.id) {
+            into = { life: process.id, pipes: yield* listPipes };
+          }
+
+          return Option.fromUndefinedOr(into.pipes.findLast((p) => p.to.name === process.name && p.to.input === input));
+        });
+        /** The piped inputs a program declares: each write port with a declared shape. */
+        const pipedInputs = (state: Live): ReadonlyArray<string> =>
+          Object.entries(state.loaded.declaration.inputs).flatMap(([name, port]) =>
+            port.write && Object.hasOwn(port, "shape") ? [name] : [],
+          );
+        /**
+         * The sends a step's changed outputs owe, one per live pipe out of each, wrapped as items by the
+         * writer's declared shape (0553). Newest wins (0549): an owed send to the same pipe that has not
+         * started is dropped. A `null` value is nothing to send (0260).
+         */
+        const owe = Effect.fnUntraced(function* (
+          cmds: ReadonlyArray<Dispatched>,
+          at: { readonly pos: number; readonly parent: string | null; readonly traceId: string },
+          outputs: Readonly<Record<string, Schema.Json | null>> | undefined,
+        ): Effect.fn.Return<
+          { readonly cmds: ReadonlyArray<Dispatched>; readonly owed: ReadonlyArray<Dispatched> },
+          LedgerError
+        > {
+          const values = Object.entries(outputs ?? {}).filter(
+            (entry): entry is [string, Schema.Json] => entry[1] !== null,
+          );
+
+          if (values.length === 0) {
+            return { cmds, owed: [] };
+          }
+
+          const out = (yield* listPipes).filter((p) => p.live && p.from.name === process.name);
+          const replaced = new Set<string>();
+          const owed: Array<Dispatched> = [];
+
+          for (const [output, value] of values) {
+            for (const [k, p] of out.filter((one) => one.from.output === output).entries()) {
+              replaced.add(p.pipe);
+              const cmd = {
+                type: SEND_CHUNKS,
+                to: p.to.name,
+                as: p.to.input,
+                items: PipeItems.wrap(p.from.shape, value),
+              };
+              owed.push({
+                id: `${process.id}/${at.pos}/out/${output}${k === 0 ? "" : `/${k}`}`,
+                cmd,
+                state: "dispatched",
+                parent: at.parent,
+                traceId: at.traceId,
+                build: process.build,
+                mail: true,
+                chunk: chunkBytes,
+                out: { pipe: p.pipe },
+                ...Option.getOrElse(oversized(cmd), () => ({})),
+              });
+            }
+          }
+
+          const kept = cmds.filter(
+            (job) =>
+              job.out === undefined || !replaced.has(job.out.pipe) || job.started === true || sending.has(job.id),
+          );
+          return { cmds: [...kept, ...owed], owed };
+        });
         /** The newest inbox pos this life told the brain it read. Only a saved checkpoint moves it. */
         let acked = 0;
         /**
@@ -678,6 +780,7 @@ export class ProgramRunner extends Context.Service<
           process = { ...process, id, build };
           live = null;
           retry = [];
+          into = null;
           // A new life has told the brain nothing yet.
           acked = 0;
         });
@@ -1249,6 +1352,26 @@ export class ProgramRunner extends Context.Service<
             yield* send({ type: "limited", maxDeliveries: program.maxDeliveries ?? null });
           }
 
+          // A life's first load sends each piped output that is not null, so a restarted writer's
+          // first whole value reaches its reader; a wake of the same life sends nothing new.
+          const first = Effect.fnUntraced(function* (
+            state: Live,
+            outputs: Readonly<Record<string, Schema.Json | null>> | undefined,
+          ) {
+            // Only a life that could be piped saves which life it is: nothing else reads it.
+            if (state.booted === process.id || Option.isNone(pipes) || outputs === undefined) {
+              return { live: state, owed: false };
+            }
+
+            const { cmds, owed } = yield* owe(
+              state.cmds,
+              { pos: state.pos, parent: null, traceId: yield* traceId },
+              outputs,
+            );
+            drained = [...drained, ...owed];
+            return { live: { ...state, cmds, booted: process.id }, owed: true };
+          });
+
           if (saved === null) {
             const boot = yield* stepped(yield* booted(loaded.execution.init(null)), "load");
             const fresh: Live = {
@@ -1261,7 +1384,8 @@ export class ProgramRunner extends Context.Service<
               pos: 0,
               cmds: [],
             };
-            return { live: fresh, dirty: false };
+            const owed = yield* first(fresh, boot.outputs);
+            return { live: owed.live, dirty: owed.owed };
           }
 
           const decoded = decodeDispatched(saved.cmds);
@@ -1308,15 +1432,31 @@ export class ProgramRunner extends Context.Service<
             after: next.after,
             pos,
             cmds,
+            arriving: Object.fromEntries(
+              Object.entries(saved.arriving ?? {}).flatMap(([input, fold]) =>
+                Option.toArray(Option.map(decodeFold(fold), (state) => [input, state] as const)),
+              ),
+            ),
+            ...(saved.booted === undefined ? {} : { booted: saved.booted }),
           };
-          return { live: woke, dirty: upgraded || saved.turn !== null };
+          const owed = yield* first(woke, boot.outputs);
+          return { live: owed.live, dirty: upgraded || saved.turn !== null || owed.owed };
         });
 
-        const checkpoint = (state: Live, turn: unknown) => ({
-          saved: { v: state.v, build: process.build, model: state.model, after: state.after },
-          turn,
-          cmds: state.cmds,
-        });
+        const checkpoint = (state: Live, turn: unknown) => {
+          const arriving = Object.entries(state.arriving ?? {}).filter(
+            ([, fold]) => !PipeFold.State.guards.empty(fold),
+          );
+          return {
+            saved: { v: state.v, build: process.build, model: state.model, after: state.after },
+            turn,
+            cmds: state.cmds,
+            ...(arriving.length === 0
+              ? {}
+              : { arriving: Object.fromEntries(arriving.map(([input, fold]) => [input, encodeFold(fold)])) }),
+            ...(state.booted === undefined ? {} : { booted: state.booted }),
+          };
+        };
 
         /** Shows the installed view to every watcher and sets the alarm. */
         const publish = Effect.fnUntraced(function* (before: Live, after: Live) {
@@ -1378,6 +1518,9 @@ export class ProgramRunner extends Context.Service<
           );
           let mine = Option.none<History>();
           const drain: Array<Dispatched> = [];
+          // Mutated in place below: one fold per piped input, never spread back into itself (0559).
+          const arriving: Record<string, typeof PipeFold.State.Type> = { ...state.arriving };
+          const piped = pipedInputs(state);
           let alive: boolean | undefined;
           let stop = letters.length;
           let skippedNotices = 0;
@@ -1423,14 +1566,59 @@ export class ProgramRunner extends Context.Service<
               }
             }
 
-            const input = Option.isSome(down) ? { ...down.value, type: down.value._tag } : letter.m;
+            // The end of a writer life: a value still arriving down its pipe is dropped, and the
+            // program's own value is untouched (0553).
+            if (Option.isSome(down) && piped.length > 0) {
+              for (const input of piped) {
+                const pipe = yield* intoInput(input);
+
+                if (Option.exists(pipe, (p) => down.value.ref.startsWith(`${p.pipe}/`))) {
+                  arriving[input] = PipeFold.State.cases.empty.make({});
+                }
+              }
+            }
+
+            // A chunk message for a piped input is the pipe's: only this runner reads it. It steps the
+            // program once per whole value, at its last chunk, with `{type, value}`.
+            const chunk = Option.filter(
+              decodeChunk(letter.m),
+              (c) => !signal && !own && piped.includes(c.type) && !hasParent(letter.m),
+            );
+            let handed: Option.Option<Schema.Json> = Option.none();
+
+            if (Option.isSome(chunk)) {
+              const { type, items, part } = chunk.value;
+              const [next] = applyCell(PipeFold.machine, arriving[type] ?? PipeFold.State.cases.empty.make({}), {
+                type: "chunk",
+                items,
+                part,
+              });
+              const whole = PipeFold.State.guards.whole(next) ? Option.some(next.items) : Option.none();
+              // `whole` is never saved: the value is handed in this same turn.
+              arriving[type] = Option.isSome(whole) ? applyCell(PipeFold.machine, next, { type: "handed" })[0] : next;
+              const pipe = Option.isSome(whole) ? yield* intoInput(type) : Option.none();
+              // Unwrapped by the writer's declared shape on the pipe's row, never by the count of
+              // items; a chunk message for an input that never had a pipe hands nothing.
+              handed = Option.flatMap(Option.all([whole, pipe]), ([items, p]) => PipeItems.unwrap(p.from.shape, items));
+
+              if (Option.isNone(handed)) {
+                placed.push({ id: letter.id, rev: letter.rev, pos: letter.pos });
+                continue;
+              }
+            }
+
+            const input = Option.isSome(down)
+              ? { ...down.value, type: down.value._tag }
+              : Option.isSome(chunk) && Option.isSome(handed)
+                ? { type: chunk.value.type, value: handed.value }
+                : letter.m;
             const m = accepted && !own && letter.parent !== null ? stamp(input, letter.parent) : input;
             const folded = accepted
               ? yield* stepped(
                   yield* step("saved_letter", letter.id, () => state.loaded.execution.fold(model, m)),
                   "saved_letter",
                 )
-              : yield* receive(state, model, letter.id, letter.m);
+              : yield* receive(state, model, letter.id, Option.isSome(chunk) ? input : letter.m);
 
             if (folded._tag === "refused") {
               if (inNoticeSpace(letter.id)) {
@@ -1455,7 +1643,11 @@ export class ProgramRunner extends Context.Service<
             placed.push({ id: letter.id, rev: letter.rev, pos: letter.pos });
             // The brain saves a monitor's answer in its own turn, so any catch-up may fold it first:
             // what its step made is still this life's to run, as if `settle` had folded it.
-            const settled = own && cmds.some((cmd) => letter.id === `${cmd.id}/answer` && cmdType(cmd) === MONITOR);
+            const settled =
+              own &&
+              cmds.some(
+                (cmd) => letter.id === `${cmd.id}/answer` && (cmdType(cmd) === MONITOR || cmdType(cmd) === PIPE),
+              );
 
             if (own && letter.id.endsWith("/answer")) {
               cmds = cmds.filter((cmd) => cmd.id !== letter.id.slice(0, -"/answer".length));
@@ -1477,13 +1669,19 @@ export class ProgramRunner extends Context.Service<
               ...(Option.exists(decodeTyped(cmd), (c) => c.type === SEND_CHUNKS) ? { chunk: chunkBytes } : {}),
               ...Option.getOrElse(oversized(cmd), () => ({})),
             }));
-            cmds = [...cmds, ...dispatched];
+            // Each output this step changed owes its live pipes one whole send (0549, 0553).
+            const owing = yield* owe(
+              [...cmds, ...dispatched],
+              { pos: letter.pos, parent: letter.parent, traceId: letter.traceId },
+              folded.outputs,
+            );
+            cmds = owing.cmds;
 
             if (letter.id === options.mine) {
               mine = Option.some(letter);
-              fresh.push(...dispatched);
+              fresh.push(...dispatched, ...owing.owed);
             } else {
-              drain.push(...dispatched.filter((job) => !accepted || settled || job.mail === true));
+              drain.push(...dispatched.filter((job) => !accepted || settled || job.mail === true), ...owing.owed);
             }
           }
 
@@ -1500,6 +1698,7 @@ export class ProgramRunner extends Context.Service<
             after: last?.rev ?? state.after,
             pos: last?.pos ?? state.pos,
             cmds,
+            arriving,
           };
           yield* store.save(checkpoint(next, null), placed);
           // The ack follows the save, never runs ahead of it: a crash between them leaves it behind.
@@ -1780,9 +1979,10 @@ export class ProgramRunner extends Context.Service<
             return Option.some(yield* err(job, "too_big"));
           }
 
+          // An output's owed send is the runner's own, so a writer declares no send_chunks for it.
           if (
             Result.isFailure(input) ||
-            !state.loaded.declaration.cmds.includes(SEND_CHUNKS) ||
+            (!state.loaded.declaration.cmds.includes(SEND_CHUNKS) && job.out === undefined) ||
             Option.isNone(delivery)
           ) {
             return Option.some(yield* err(job, "bad_cmd"));
@@ -1805,6 +2005,12 @@ export class ProgramRunner extends Context.Service<
             if (Result.isFailure(queued)) {
               const reason = queued.failure;
               yield* Effect.annotateCurrentSpan({ [tag("part")]: letter.part.seq, [tag("answer")]: reason });
+
+              // A pipe's send whose first message is saved has started: it always finishes (0549).
+              if (reason === "full" && letter.part.seq > 0 && job.out !== undefined) {
+                yield* permit.withPermit(begun(job));
+              }
+
               return reason === "full" ? Option.none() : Option.some(yield* err(job, reason));
             }
           }
@@ -1812,6 +2018,23 @@ export class ProgramRunner extends Context.Service<
           return Option.some(
             yield* ok(job, Schema.encodeSync(Chunked)(Chunked.make({ id: job.id, letters: cut.success.length }))),
           );
+        });
+
+        /** Saves that a pipe's owed send has started, so a newer value never replaces it. The permit
+         *  is held. */
+        const begun = Effect.fnUntraced(function* (job: Dispatched) {
+          const saved = live?.cmds.find((cmd) => cmd.id === job.id);
+
+          if (live === null || saved === undefined || saved.started === true) {
+            return;
+          }
+
+          const next = {
+            ...live,
+            cmds: live.cmds.map((cmd) => (cmd.id === job.id ? { ...cmd, started: true as const } : cmd)),
+          };
+          yield* store.save(checkpoint(next, null));
+          live = next;
         });
 
         /** Saves a hands Cmd's waiting task on its dispatched entry, so this life owes it nothing until
@@ -2021,6 +2244,64 @@ export class ProgramRunner extends Context.Service<
           return yield* ok(job, null);
         });
 
+        /** The built-in pipe: this life is the requester and this Cmd's id is the pipe's. The loader
+         *  names both programs, their hashes and their declared shapes; a port a program does not
+         *  declare goes with no shape. The brain saves the answer in the pipe's own turn, so a pipe
+         *  answers none here; a refusal is the answer to place. Storage is not an answer, so the Cmd
+         *  stays dispatched and asks again under the same id. */
+        const pipeCmd = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
+          const input = decodePipe(job.cmd);
+
+          if (!state.loaded.declaration.cmds.includes(PIPE) || Option.isNone(pipes) || Option.isNone(input)) {
+            return Option.some(yield* err(job, "bad_cmd"));
+          }
+
+          const { from: writer, to: reader } = input.value;
+          const codes = yield* Effect.forEach(
+            [writer.program, reader.program],
+            (program) => loader.load(program).pipe(Effect.result),
+            { concurrency: 1 },
+          );
+          const [w, r] = codes;
+
+          if (w === undefined || r === undefined || Result.isFailure(w) || Result.isFailure(r)) {
+            return codes.some((code) => Result.isFailure(code) && code.failure.reason !== "no_program")
+              ? yield* new LedgerError({ reason: "unreachable" })
+              : Option.some(yield* err(job, "no_program"));
+          }
+
+          // The Worker's loader names its build's hash; the Node loader runs this runner's build.
+          const hash = (code: (typeof w)["success"]) =>
+            "hash" in code && typeof code.hash === "string" ? code.hash : process.build;
+          const output = w.success.declaration.outputs?.[writer.output];
+          const port = r.success.declaration.inputs[reader.input];
+          const piped =
+            port !== undefined &&
+            port.write &&
+            Object.hasOwn(port, "shape") &&
+            Object.hasOwn(r.success.declaration.inputs, "DOWN");
+          const asked = yield* pipes.value
+            .pipe(
+              {
+                id: job.id,
+                from: { ...writer, hash: hash(w.success), ...(output === undefined ? {} : { shape: output.shape }) },
+                to: { ...reader, hash: hash(r.success), ...(piped ? { shape: port.shape ?? null } : {}) },
+                requester: { name: process.name, process: process.id },
+              },
+              yield* from(job.parent, job.traceId),
+            )
+            .pipe(Effect.result);
+
+          if (Result.isSuccess(asked)) {
+            return Option.none();
+          }
+
+          const { reason } = asked.failure;
+          return reason === "storage"
+            ? yield* new LedgerError({ reason: "storage" })
+            : Option.some(yield* err(job, reason));
+        });
+
         /** The built-in exit: this life ends with `normal`, as OTP's `{stop, normal, State}`, and
          *  answers nothing. `null` is the ended life; a malformed exit is answered `bad_cmd`. */
         const stop = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
@@ -2117,11 +2398,17 @@ export class ProgramRunner extends Context.Service<
             return Option.isNone(answer) ? [] : yield* place(job, origin, originStore, answer.value);
           }
 
-          if (type === MONITOR) {
-            const refusal = yield* cmdSpan(job, watch(state, job));
+          if (type === MONITOR || type === PIPE) {
+            const refusal = yield* cmdSpan(job, type === MONITOR ? watch(state, job) : pipeCmd(state, job));
             return Option.isSome(refusal)
               ? yield* place(job, origin, originStore, refusal.value)
               : yield* settle(job, origin);
+          }
+
+          // `exit` waits behind an owed send down a live pipe, as a Unix close flushes; it is still
+          // owed, so its alarm tries it again.
+          if (type === EXIT && state.cmds.some((cmd) => cmd.out !== undefined)) {
+            return [];
           }
 
           const answered: Option.Option<unknown> =
@@ -2174,6 +2461,28 @@ export class ProgramRunner extends Context.Service<
           permit.withPermit(
             Effect.gen(function* () {
               const answer = `${job.id}/answer`;
+
+              // An output is not a Cmd and has no answer (0260): the owed send's answer is recorded in
+              // this life's stream, and the writer's program is never stepped with it.
+              if (job.out !== undefined && origin.id === process.id && !recovering(supervision)) {
+                yield* store.record(
+                  answer,
+                  RuntimeRecord.cases["cmd.answered"].make({
+                    m: Schema.decodeUnknownSync(Schema.Json)(m),
+                    cmd: job.id,
+                    build: origin.build,
+                  }),
+                  { ...(yield* from(job.parent, job.traceId)), build: origin.build },
+                );
+
+                if (live !== null) {
+                  live = { ...live, cmds: live.cmds.filter((cmd) => cmd.id !== job.id) };
+                  yield* store.save(checkpoint(live, null));
+                  yield* setAlarm();
+                }
+
+                return [];
+              }
 
               if (origin.id !== process.id || recovering(supervision)) {
                 yield* originStore.record(

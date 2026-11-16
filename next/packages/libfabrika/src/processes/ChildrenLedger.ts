@@ -458,8 +458,9 @@ export const layer = (config: {
           const child = yield* tx
             .transact((turn) => stopped(manager.table(turn), asked))
             .pipe(Effect.mapError(storage), Effect.flatMap(Effect.fromResult));
+          // The stop's own turn ends the pipes the requester asked for with this child as an end.
           yield* manager
-            .exit(child, ExitReason.cases.shutdown.make({}), from)
+            .exit(child, ExitReason.cases.shutdown.make({}), from, { requester: asked.requester.process })
             .pipe(
               Effect.catch((error) =>
                 error instanceof ProcessError

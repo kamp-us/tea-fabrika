@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-pipe-tests1",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T19:48:32-08:00",
+  "ended": "2026-11-15T20:40:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step for pipe slice 1 in next/ (docs/plan/quests/pipe-PLAN.md, approved at 8c155da97). Wrote every law of the plan's Laws section and of Amendment A-Fits: F1 to F4 and F6 to F8 in processes/Fit.test.ts; F5 and F9 in runtime/Program.test.ts, plus F5's checklist case in next/programs/checklist/src/program.laws.test.ts; P1 to P3 in processes/PipesTest.ts and P4 in processes/ProgramMailTest.ts, both run by node/Pipes.integration.test.ts; S1, W1, W2, O1, O2, O3, X2, N1, A1, B1 and G1 in runtime/PipeTest.ts, run by node/Pipe.integration.test.ts; R1 in runtime/internal/pipeFold.test.ts; X1 in runtime/internal/pipeItems.test.ts; T1 and T2 in runtime/Pipe.types.test.ts; H1 in next/apps/fabrika/src/worker-pipe.integration.test.ts. Red now, each because the product does not exist yet: Fit.test, pipeFold.test and pipeItems.test fail to load their planned module (Cannot find module ./Fit.ts, ./pipeFold.ts, ../../processes/Fit.ts); F5 and F9 fail on the missing Piped.ts and Fit.ts (44 older laws in the file green); the checklist's F5 case fails on outputs.done being a bare schema (13 older laws green); T1 and T2 are red only in a typecheck (Pipe.ts, Piped.ts and Output missing). The integration suites were written and not run here, per the brief. The open question took the plan's lean: mail.chunk keeps refusing an item whose message alone is over it, with too_big, and B1 holds that. Today's name mail.chunk is used; decision 0582's rename to mailbox.chunk is ticket 1072, not done here.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 52,
+  "note": "Every plant but one breaks a product file the build writes, so each is written beside its law and runs after the build, at review: F1 (a) extra reader field fine, (b) literal set fits a smaller set; F2 (a) skip nested structs, (b) parent's path; F3 answer fits for equal shapes; F4 ignore checks; F5 (a) type side, (b) single value as a list; F6 (a) pass a writer union when one case fits, (b) checks before kind; F7 no decodes; F8 (a) ids without payloads, (b) trust any equal id; F9 let toJson throw; P1 (a) drop member or rule, (b) relation row in a second turn, (c) keep only the writer's shape; P2 fit before member; P3 new id per try; P4 (a) keep the right after unpiped, (b) both ways, (c) end on a crash; S1 (a) to (e); W1 (a) watch a turn late, (b) pipe id as ref; W2 watch only on writer starts; O1 (a) append to an owed send, (b) drop a started send; O2 send on every load; O3 exit passes an owed send; R1 (a) seq skip, (b) keep on down, (c) whole with no seq 0; X1 (a) Array.isArray, (b) unwrap a list of one, (c) join without the last chunk; X2 (a) items, (b) step per chunk, (c) empty list as no message; N1 (a) null as empty send, (b) nothing on empty items, (c) drop null items; A1 (a) unwrap by the reader, (b) refuse list into anything; B1 (a) step the writer, (b) save chunks before the big item; G1 unwrap a chunk with no pipe; H1 route programPipe to the object's own manager; T1 and T2 by tsc. The plan's lint check that runtime/internal/ is closed to programs ran once with an existing internal file, since runtime/internal/pipeItems.ts does not exist yet: an import of @kampus/libfabrika/runtime/internal/supervisor planted in next/programs/checklist/src/program.ts made oxlint fail with fabrika(package-imports); the pipeItems import itself runs after the build.",
+  "plants": [
+    {
+      "law": "lint: runtime/internal is closed to programs",
+      "plant": "an import of @kampus/libfabrika/runtime/internal/supervisor in next/programs/checklist/src/program.ts, restored after",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

@@ -1688,3 +1688,154 @@ describe("Program watch: a program that monitors declares DOWN, next/", () => {
     }
   });
 });
+
+// Pipe slice 1 (docs/plan/quests/pipe-PLAN.md), next/: laws F5 and F9, the shapes the loader writes,
+// written before the build. Each program declares the shape it means, and the loader records it
+// without running the code, so the brain can check a pipe on two declarations (0550, 0553).
+//
+// The contract these laws pin, from the plan's "What a program declares" and Amendment A-Fits:
+//   Program.ts: `Output.make(schema, select)`; a write port's optional `value`, set by
+//     `Piped.ports(type, shape, description)` (Piped.ts), which makes the value port and the DOWN port.
+//   Execution.ts's `Declaration`: `outputs[k].shape` and a piped input's `inputs[k].shape`, each the
+//     port's `Fit.Shape` (`processes/Fit.ts`): `{doc, decodes}`, where `doc` is
+//     `SchemaRepresentation.toJson(SchemaRepresentation.toRepresentation(schema.ast))` of the
+//     program's own schema, or `null` when that form cannot be written. A write port `Piped.ports`
+//     did not make has no `shape`.
+// Imported inside each law, as the laws above, so the planned modules red these laws only.
+describe("Pipe slice 1: the loader writes each port's declared shape, next/", () => {
+  const Row = Schema.Struct({ id: Schema.String, n: Schema.NumberFromString, title: Schema.String });
+  type Built = Schema.Codec<unknown, unknown>;
+  /** F5's shapes: a list and a single value of each kind, one with a field that decodes from a string. */
+  const SHAPES: ReadonlyArray<readonly [string, Built]> = [
+    ["a list of rows", Schema.Array(Row)],
+    ["a row", Row],
+    ["a number", Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))],
+    ["a string", Schema.String],
+    ["a list of numbers", Schema.Array(Schema.Int)],
+    ["a nullable note", Schema.Struct({ note: Schema.NullOr(Schema.String) })],
+  ];
+  const PortModel = Schema.Struct({ value: Schema.NullOr(Schema.Json) });
+  const DownMsg = Schema.Struct({
+    type: Schema.Literal("DOWN"),
+    ref: Schema.String,
+    process: Schema.String,
+    name: Schema.optionalKey(Schema.String),
+    reason: Schema.Json,
+  });
+  const SetMsg = Schema.Struct({ type: Schema.Literal("set"), value: Schema.Json });
+
+  /** A writer with output `out` of `schema` and output `other` of `other`, and a reader whose piped input `v` is `schema`. */
+  const pair = async (schema: Built, other: Built) => {
+    const { Output, Program: P } = await import("./Program.ts");
+    const Piped = await import("./Piped.ts");
+    const writer = P.make({
+      name: "pipe-writer",
+      machine: Machine.make({
+        model: PortModel,
+        msg: SetMsg,
+        cmds: [],
+        init: (loaded) => [loaded ?? { value: null }, []],
+        update: { set: (_s, m) => [{ value: m.value }, []] },
+      }),
+      state: { v: 1, upgrades: [] },
+      view: (s) => s,
+      refuse: () => null,
+      inputs: { set: "Set the value" },
+      outputs: {
+        out: Output.make(schema, (m: typeof PortModel.Type) => m.value),
+        other: Output.make(other, (m: typeof PortModel.Type) => m.value),
+      },
+      writes: {},
+      wake: () => null,
+    });
+    const reader = P.make({
+      name: "pipe-reader",
+      machine: Machine.make({
+        model: PortModel,
+        msg: Schema.Union([SetMsg, DownMsg, Piped.input("v", schema)]),
+        cmds: [],
+        init: (loaded) => [loaded ?? { value: null }, []],
+        update: { set: (s) => [s, []], DOWN: (s) => [s, []], v: (s) => [s, []] },
+      }),
+      state: { v: 1, upgrades: [] },
+      view: (s) => s,
+      refuse: () => null,
+      inputs: { set: "Set the value", ...Piped.ports("v", schema, "The value") },
+      outputs: {},
+      writes: {},
+      wake: () => null,
+    });
+    const declaration = (name: string, program: unknown) =>
+      Effect.runSync(
+        ProgramLoader.use((loader) => loader.load(name)).pipe(
+          Effect.provide(ProgramLoader.layer({ [name]: program }, {})),
+          Effect.map((loaded) => loaded.declaration),
+        ),
+      );
+    return { writer: declaration("pipe-writer", writer), reader: declaration("pipe-reader", reader) };
+  };
+
+  it("F5: a loaded program's output and piped input shapes are Effect's persisted form of the schema it gave, encoded side, list or not, and survive fromJson; a plain write port has none", async () => {
+    // Plants: (a) read the type side, not the encoded side: F5 red on the NumberFromString field;
+    // (b) record a single value's shape as a list of it: F5 red.
+    const { SchemaRepresentation } = await import("effect");
+    const persisted = (schema: Built) => SchemaRepresentation.toJson(SchemaRepresentation.toRepresentation(schema.ast));
+    const reached = new Set<string>();
+    await fc.assert(
+      fc.asyncProperty(fc.constantFrom(...SHAPES), fc.constantFrom(...SHAPES), async ([label, schema], [, other]) => {
+        const { writer, reader } = await pair(schema, other);
+        expect(writer.outputs.out?.shape, `F5: ${label}'s output shape`).toEqual({
+          doc: persisted(schema),
+          decodes: null,
+        });
+        expect(writer.outputs.other?.shape, "F5: the other output's shape").toEqual({
+          doc: persisted(other),
+          decodes: null,
+        });
+        expect(reader.inputs.v?.shape, `F5: ${label}'s piped input shape`).toEqual({
+          doc: persisted(schema),
+          decodes: null,
+        });
+        // The form persists: it reads back to a document.
+        expect(
+          () => SchemaRepresentation.fromJson(writer.outputs.out?.shape?.doc),
+          `F5: ${label} survives fromJson`,
+        ).not.toThrow();
+        // A write port no pipe made, and the DOWN port, carry no shape.
+        expect(Object.hasOwn(reader.inputs.set ?? {}, "shape"), "F5: a plain write port has no shape").toBe(false);
+        expect(Object.hasOwn(writer.inputs.set ?? {}, "shape"), "F5: a plain write port has no shape").toBe(false);
+        expect(Object.hasOwn(reader.inputs.DOWN ?? {}, "shape"), "F5: the DOWN port has no shape").toBe(false);
+        reached.add(label);
+      }),
+      { seed: SEED, numRuns: 30 },
+    );
+    expect(reached, "F5 reached every shape").toEqual(new Set(SHAPES.map(([label]) => label)));
+  });
+
+  it("F9: a port whose schema holds a custom filter loads with its shape null, a pipe from it cannot tell at the top, and every other port keeps its shape", async () => {
+    // Plant: let toJson throw at load: F9 red. The shell's `table` shape: a non-empty list of rows,
+    // checked by a filter that has no persisted form.
+    const Fit = await import("../processes/Fit.ts");
+    const Table = Schema.NonEmptyArray(Schema.Array(Schema.String)).check(
+      Schema.makeFilter((rows: ReadonlyArray<ReadonlyArray<string>>) =>
+        rows.every((r) => r.length === rows[0]?.length),
+      ),
+    );
+    await fc.assert(
+      fc.asyncProperty(fc.constantFrom(...SHAPES), async ([label, other]) => {
+        const { writer, reader } = await pair(Table, other);
+        expect(writer.outputs.out?.shape, "F9: the table output's shape").toBeNull();
+        expect(reader.inputs.v?.shape, "F9: the table input's shape").toBeNull();
+        expect(writer.outputs.other?.shape, `F9: the other output, ${label}, keeps its shape`).not.toBeNull();
+        expect(
+          Fit.fits(writer.outputs.out?.shape ?? null, Fit.shape(Schema.Unknown)),
+          "F9: a pipe from the table",
+        ).toMatchObject({
+          _tag: "cannot_tell",
+          path: [],
+        });
+      }),
+      { seed: SEED, numRuns: 20 },
+    );
+  });
+});

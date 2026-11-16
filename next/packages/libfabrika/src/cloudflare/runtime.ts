@@ -65,6 +65,8 @@ import { decodeExitReason, type ExitReason } from "../processes/ExitReason.ts";
 import { Mailbox, type From, type Letter } from "../processes/Mailbox.ts";
 import { Monitors, MonitorsError, type Unwatch, type Watch, type Watched } from "../processes/Monitors.ts";
 import * as MonitorsLedger from "../processes/MonitorsLedger.ts";
+import { type Ask as PipeAsk, Listed, type Piped, Pipes, PipesError } from "../processes/Pipes.ts";
+import * as PipesLedger from "../processes/PipesLedger.ts";
 import {
   type Activity,
   type DeadInput,
@@ -118,6 +120,7 @@ import {
   ChildReplies,
   StopReplies,
   MonitorReplies,
+  PipeReplies,
   CommitReply,
   MailReplies,
   type MailReply,
@@ -546,6 +549,21 @@ const monitorReply = (
         : Effect.fail(new LedgerError({ reason: "storage" })),
     ),
   );
+
+/** A pipe's checked refusals are replies, as a watch's are; storage remains a retryable rejection. */
+const pipeReply = (
+  work: Effect.Effect<typeof Piped.Type, unknown>,
+): Effect.Effect<typeof PipeReplies.Type, LedgerError> =>
+  work.pipe(
+    Effect.map((value) => PipeReplies.cases.ok.make({ value })),
+    Effect.catch((error): Effect.Effect<typeof PipeReplies.Type, LedgerError> =>
+      error instanceof PipesError && error.reason !== "storage"
+        ? Effect.succeed(PipeReplies.cases.PipesError.make({ reason: error.reason }))
+        : Effect.fail(new LedgerError({ reason: "storage" })),
+    ),
+  );
+
+const encodeListed = Schema.encodeSync(Schema.Array(Listed));
 
 const processValue = Effect.fnUntraced(function* <A>(reply: ProcessReply<A>) {
   if (reply._tag === "ok") {
@@ -1259,6 +1277,21 @@ const projectLogic = Effect.fn("project.init")(function* (
   const monitors = yield* Monitors.pipe(
     Effect.provide(
       MonitorsLedger.layer({ fabrika: Model.ref("fabrika", name) }).pipe(
+        Layer.provide(
+          Layer.succeed(
+            Senders,
+            SessionSenders.make((parent, process) => door.sender(process, parent)),
+          ),
+        ),
+        Layer.provide(Layer.succeedContext(services)),
+      ),
+    ),
+  );
+  // A program's pipe decides in the same manager's turns, checked against the same member (0551,
+  // 0531), and the manager writes its rows as the brain.
+  const pipes = yield* Pipes.pipe(
+    Effect.provide(
+      PipesLedger.layer({ fabrika: Model.ref("fabrika", name) }).pipe(
         Layer.provide(
           Layer.succeed(
             Senders,
@@ -1994,6 +2027,15 @@ const projectLogic = Effect.fn("project.init")(function* (
       wrapped(
         write(monitors.demonitor(unwatch, origin)).pipe(Effect.mapError(() => new LedgerError({ reason: "storage" }))),
       ),
+    // A program's pipe, as the Process object's runner asks it: the turn holds the call.
+    programPipe: (ask: PipeAsk, origin: From) => wrapped(pipeReply(write(pipes.pipe(ask, origin)))),
+    programPipesList: (name: string) =>
+      wrapped(
+        pipes.list(name).pipe(
+          Effect.map(encodeListed),
+          Effect.mapError(() => new LedgerError({ reason: "storage" })),
+        ),
+      ),
     boot,
   };
 }, projectStorage);
@@ -2146,6 +2188,10 @@ export class ProjectService extends Context.Service<
     readonly programMonitor: (watch: Watch, origin: From) => Effect.Effect<typeof MonitorReplies.Type, ProjectFailure>;
     /** Ends a program's own watch under its ref, in the Project's write turn. */
     readonly programDemonitor: (unwatch: Unwatch, origin: From) => Effect.Effect<void, ProjectFailure>;
+    /** A program's pipe, in the Project's write turn; a refusal is reply data. */
+    readonly programPipe: (ask: PipeAsk, origin: From) => Effect.Effect<typeof PipeReplies.Type, ProjectFailure>;
+    /** The pipes a name is an end of: each live one, and the last one made into each of its inputs. */
+    readonly programPipesList: (name: string) => Effect.Effect<ReadonlyArray<Listed>, ProjectFailure>;
     /** The bootstrap process and the rev of its start. */
     readonly boot: StartAnswer;
   }
@@ -2352,6 +2398,22 @@ const processLogic = Effect.fnUntraced(function* (
         Effect.mapError((cause) => new MonitorsError({ reason: "storage", cause })),
       ),
   });
+  // A pipe is decided in the project too, whose manager writes its rows as the brain.
+  const remotePipes = Pipes.of({
+    pipe: (ask, from) =>
+      asked(rpc(p.programPipe(ask, from))).pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(PipeReplies)),
+        Effect.mapError((cause) => new PipesError({ reason: "storage", cause })),
+        Effect.flatMap((reply) =>
+          reply._tag === "ok" ? Effect.succeed(reply.value) : Effect.fail(new PipesError({ reason: reply.reason })),
+        ),
+      ),
+    list: (name) =>
+      asked(rpc(p.programPipesList(name))).pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Listed))),
+        Effect.mapError((cause) => new PipesError({ reason: "storage", cause })),
+      ),
+  });
   const dependencies = Layer.mergeAll(
     mailLayer(env, project),
     handsLayer(env, project),
@@ -2391,6 +2453,7 @@ const processLogic = Effect.fnUntraced(function* (
     remoteProcessManager(manager, `brain:${project}`),
     Layer.succeed(Children, children),
     Layer.succeed(Monitors, monitors),
+    Layer.succeed(Pipes, remotePipes),
   );
   // P34 on the Worker: receipts and pending recovery live in this object's own SQLite, beside
   // ProcessStore, under the registered name every successor shares.

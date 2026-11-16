@@ -4,12 +4,11 @@ import type { Life } from "./processTable.ts";
 
 /**
  * The member a life was started for, its process owner (0172): the member its first start was
- * checked against. A restarted life's start is `again`, which records none.
+ * checked against. A restarted life keeps the member of the life it replaces (0531).
  *
  * @internal
  */
-export const recorded = (life: Life): Sender | undefined =>
-  life.request._tag === "first" ? life.request.member : undefined;
+export const recorded = (life: Life): Sender | undefined => life.member;
 
 /**
  * Picks the member a call is checked against (0170, 0531): the sender of the input that caused it,

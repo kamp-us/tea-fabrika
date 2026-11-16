@@ -12,6 +12,7 @@ import type { Connections } from "../presence/Connections.ts";
 import { type Child, ChildrenError, type ChildStop, Started } from "../processes/Children.ts";
 import type { From, Letter } from "../processes/Mailbox.ts";
 import { MonitorsError, type Unwatch, type Watch, Watched } from "../processes/Monitors.ts";
+import { type Ask as PipeAsk, type Listed, Piped, PipesError } from "../processes/Pipes.ts";
 import { ProcessError, State, type Activity, type Start } from "../processes/Process.ts";
 import type { ProcessCalls } from "../processes/ProcessManager.ts";
 import { type Delivery, MailRefusal } from "../processes/ProgramMail.ts";
@@ -158,6 +159,18 @@ export const MonitorReplies = Schema.TaggedUnion({
 });
 
 /**
+ * Schema for a program's pipe answer over Project RPC: `Piped`, or its `PipesError` refusal as data.
+ * A storage failure fails the call itself.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const PipeReplies = Schema.TaggedUnion({
+  ok: { value: Piped },
+  PipesError: { reason: PipesError.fields.reason },
+});
+
+/**
  * The door's calls on the Project, as Effects: connecting a client, its hello, routing its calls,
  * knocks and grants, and the signing and appends a process asks for.
  *
@@ -297,6 +310,8 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
     processStop: RemoteCall<(stop: ChildStop, from: From) => Effect.Effect<typeof StopReplies.Encoded>>;
     programMonitor: RemoteCall<(watch: Watch, from: From) => Effect.Effect<typeof MonitorReplies.Encoded>>;
     programDemonitor: RemoteCall<(unwatch: Unwatch, from: From) => Effect.Effect<void>>;
+    programPipe: RemoteCall<(ask: PipeAsk, from: From) => Effect.Effect<typeof PipeReplies.Encoded>>;
+    programPipesList: RemoteCall<(name: string) => Effect.Effect<ReadonlyArray<Listed>>>;
   };
 
 /**

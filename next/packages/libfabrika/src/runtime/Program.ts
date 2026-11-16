@@ -94,6 +94,8 @@ const InputSchema = Schema.TaggedUnion({
     description: Schema.String,
     personOnly: Schema.Boolean,
     answer: Schema.optionalKey(Schema.Never),
+    /** A piped input's value: the shape the program reads, as `Piped.ports` declares it (0553). */
+    value: Schema.optionalKey(Schemas),
   },
   read: {
     schema: Schemas,
@@ -193,6 +195,40 @@ const downDeclared = Schema.makeFilter(
     "a program whose cmds hold monitor must declare a DOWN input",
 );
 
+/** An output: a schema, and the selector that picks its value from the model, `null` for nothing
+ *  to send (0260). A bare schema declares the output's shape and sends nothing. */
+const OutputSchema = Schema.Struct({
+  schema: Schemas,
+  select: code<Code<[model: unknown], unknown>>("an output selector"),
+});
+
+/**
+ * One output of a program, as `Output.make` builds it: its schema and its selector.
+ *
+ * @stability unstable
+ * @category models
+ */
+export type Output<S extends Declared = Declared> = {
+  readonly schema: S;
+  readonly select: Code<[model: unknown], S["Type"] | null>;
+};
+
+/**
+ * The constructor of an output (0260): `Output.make(schema, select)`, where `select` picks the
+ * output's value from the program's model, of the schema's own type, or `null` when there is
+ * nothing to send. The value is the shape the program means: a list is a list, one number is one
+ * number, and nothing here knows how a pipe carries it (0553).
+ *
+ * @stability unstable
+ * @category constructors
+ */
+export const Output = {
+  make: <S extends Declared>(schema: S, select: Code<[model: unknown], S["Type"] | null>): Output<S> => ({
+    schema,
+    select,
+  }),
+};
+
 const Declaration = Schema.Struct({
   name: Schema.NonEmptyString,
   /** How many times one letter is tried before it is dead. Absent: the selected policy's limit. */
@@ -214,7 +250,7 @@ const Declaration = Schema.Struct({
   ),
   refuse: code<Code<[model: unknown, msg: unknown], unknown>>("a refusal check"),
   inputs: Schema.Record(Schema.String, Input),
-  outputs: Schema.Record(Schema.String, Schemas),
+  outputs: Schema.Record(Schema.String, Schema.Union([Schemas, OutputSchema])),
   writes: Schema.Record(Schema.String, EventPolicy),
   wake: code<Code<[model: unknown], unknown>>("a wake time"),
 });
@@ -234,6 +270,13 @@ type Description =
   | {
       readonly description: string;
       readonly personOnly: true;
+      readonly schema?: never;
+      readonly answer?: never;
+    }
+  | {
+      readonly description: string;
+      readonly value: Declared;
+      readonly personOnly?: never;
       readonly schema?: never;
       readonly answer?: never;
     };
@@ -313,7 +356,7 @@ export type Program<
   T extends ProgramMachine = ProgramMachine,
   V extends Schema.Json = Schema.Json,
   I = Record<string, Input>,
-  O = Record<string, Declared>,
+  O = Record<string, Declared | Output>,
   W = Record<string, EventPolicy>,
   A extends Declared = Declared,
 > = {
@@ -366,6 +409,7 @@ const Authoring = Schema.Struct({
     Schema.Union([
       Schema.String,
       Schema.Struct({ description: Schema.String, personOnly: Schema.Literal(true) }),
+      Schema.Struct({ description: Schema.String, value: Schemas }),
       InputSchema.cases.read,
     ]),
   ),
@@ -395,7 +439,8 @@ const construct = (raw: unknown) =>
             : Input.cases.write.make({
                 schema: spec.machine.msg,
                 description: typeof port === "string" ? port : port.description,
-                personOnly: typeof port !== "string",
+                personOnly: typeof port !== "string" && "personOnly" in port,
+                ...(typeof port !== "string" && "value" in port ? { value: port.value } : {}),
               }),
         ]),
       ),
@@ -419,7 +464,7 @@ const make = <
   T extends ProgramMachine,
   V extends Schema.Json,
   const I extends Readonly<Record<string, unknown>>,
-  O extends Readonly<Record<string, Declared>>,
+  O extends Readonly<Record<string, Declared | Output>>,
   W extends Readonly<Record<string, EventPolicy>>,
   A extends Declared = Declared,
 >(
@@ -438,7 +483,7 @@ const makeEffect = Effect.fn("program.make")(function* <
   T extends ProgramMachine,
   V extends Schema.Json,
   const I extends Readonly<Record<string, unknown>>,
-  O extends Readonly<Record<string, Declared>>,
+  O extends Readonly<Record<string, Declared | Output>>,
   W extends Readonly<Record<string, EventPolicy>>,
   A extends Declared = Declared,
 >(spec: Spec<T, V, I, O, W, A>): Effect.fn.Return<Program<T, V, I, O, W, A>, SchemaIssue.Issue> {
@@ -506,6 +551,12 @@ export const Step = Schema.TaggedUnion({
     view: Schema.Json,
     cmds: Schema.Array(Schema.Json),
     wake: Schema.NullOr(Schema.Number),
+    /**
+     * Each output whose encoded value this step changed, by name: its value, or `null` for nothing
+     * to send (0260). A boot answers every output. The box runs the selectors, since on a Worker
+     * only the box holds the code. Absent: none changed.
+     */
+    outputs: Schema.optionalKey(Schema.Record(Schema.String, Schema.NullOr(Schema.Json))),
   },
   refused: Refusal.fields,
 });
@@ -597,6 +648,8 @@ export type Stepper = {
   readonly step: (model: unknown, msg: unknown) => Step;
   /** A saved input: applied as it was accepted, never refused again. */
   readonly fold: (model: unknown, msg: unknown) => Step;
+  /** Each output's value for a saved model, as JSON, or `null` for nothing to send (0260). */
+  readonly outputs: (model: unknown) => Readonly<Record<string, Schema.Json | null>>;
 };
 
 const decodeRefusal = Schema.decodeUnknownResult(Schema.NullOr(Refusal));
@@ -754,6 +807,36 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     return "input" in schemas && accepts(schemas.input, cmd);
   };
 
+  /** Each output's value for `model`, encoded to JSON, or `null`: a selector's `null` is nothing to
+   *  send. A bare schema output has no selector, so it has no value to answer. */
+  const outputs = (model: unknown, reason: ProgramDown["reason"]): Readonly<Record<string, Schema.Json | null>> => {
+    const values: Record<string, Schema.Json | null> = {};
+
+    for (const [name, port] of Object.entries(program.outputs)) {
+      if (isDeclared(port)) {
+        continue;
+      }
+
+      const picked = guard(reason, () => port.select(model));
+
+      if (picked === null) {
+        values[name] = null;
+        continue;
+      }
+
+      const encoded = Schema.encodeUnknownResult(port.schema)(picked);
+      const json = Result.isSuccess(encoded) ? decodeJson(encoded.success) : encoded;
+
+      if (Result.isFailure(json)) {
+        throw new ProgramDown({ reason, error: "ProgramDown", cause: json.failure });
+      }
+
+      values[name] = json.success;
+    }
+
+    return values;
+  };
+
   /** The machine's answer as JSON, checked. Bad data is ProgramDown with `reason`. */
   const prepare = (next: unknown, cmds: ReadonlyArray<unknown>, reason: ProgramDown["reason"]): Prepared => {
     const encoded = encodeModel(next);
@@ -821,6 +904,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     program,
     fresh,
     update,
+    outputs: (raw) => outputs(model(raw, "saved_state"), "step"),
     init: (saved) => {
       const start = saved === null ? null : model(saved, "saved_state");
       const [next] = guard("load", () => machine.init(start, {}));

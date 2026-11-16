@@ -147,13 +147,16 @@ export const layer = (config: {
       const lookup = (failure: ProcessError | LedgerError, refusal: typeof MailRefusal.Type) =>
         failure instanceof ProcessError ? refuse(refusal) : storage(failure);
       /** A child and the program that started it may mail each other with no host grant. The
-       *  right is read by name from the first life's requester, so a restart under the name keeps it. */
+       *  right is read by name from the first life's requester, so a restart under the name keeps it.
+       *  A live pipe gives its writer's name the right to mail its reader's name, one way only, while
+       *  the pipe lives (0526): a restart of either end keeps it too. */
       const related = (source: string, to: string) =>
         transact((turn) => {
           const table = manager.table(turn);
           return (
             Option.exists(table.starter(to), (name) => name === source) ||
-            Option.exists(table.starter(source), (name) => name === to)
+            Option.exists(table.starter(source), (name) => name === to) ||
+            manager.pipes(turn).mails(source, to)
           );
         });
       const deliver = Effect.fn("program_mail.deliver")(
