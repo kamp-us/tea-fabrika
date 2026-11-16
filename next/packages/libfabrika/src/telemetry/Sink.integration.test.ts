@@ -1622,7 +1622,9 @@ describe("A-Sink S3, a typed failure through nested Effect.fn spans stores no ma
       Effect.gen(function* () {
         const { sql } = yield* walkHome;
         yield* Effect.gen(function* () {
-          class Typed extends Schema.TaggedError<Typed>()(sample.tag, { reason: Schema.String }) {}
+          class Typed extends Schema.TaggedError<Typed, { readonly brand: unique symbol }>()(sample.tag, {
+            reason: Schema.String,
+          }) {}
           const names = sample.names.map((name, depth) => `typed.${name}.${depth}`);
           const innermost = Effect.fn(names.at(-1) ?? "typed.none.0")(function* () {
             return yield* new Typed({ reason: sample.reason });

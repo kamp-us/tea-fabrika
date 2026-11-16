@@ -41,7 +41,7 @@ import { rolldown, type PreRenderedChunk } from "rolldown";
 import { build } from "../../src/build.ts";
 import { BrainInput } from "./P19Brain.test-support.ts";
 
-class HostError extends Schema.TaggedError<HostError>()("HostError", {
+class HostError extends Schema.TaggedError<HostError, { readonly brand: unique symbol }>()("HostError", {
   reason: Schema.String,
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}

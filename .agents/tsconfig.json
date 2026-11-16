@@ -4,6 +4,21 @@
   // workspace package: its imports resolve from the root's own dependencies. The other skill
   // scripts (the plan and mutation scripts) still hold type errors and join with ticket 486.
   "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A Schema class names its brand, so two classes with the same fields stay apart. On for the
+        // whole project, which is at zero.
+        "overrides": [
+          {
+            "include": ["raw.d.ts", "skills/**/*.ts"],
+            "options": { "diagnosticSeverity": { "schemaClassMissingBrand": "error" } }
+          }
+        ]
+      }
+    ]
+  },
   "include": [
     "raw.d.ts",
     "skills/lead/scripts/agents.ts",

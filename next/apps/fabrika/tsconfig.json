@@ -6,7 +6,21 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     // The package commands use plain Node, which strips types without transforming them.
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A Schema class names its brand, so two classes with the same fields stay apart. On for the
+        // folders at zero: the globs read from this folder. `src/` waits for the slice that holds
+        // the runtime, so only its exam folder is here.
+        "overrides": [
+          {
+            "include": ["*.ts", "e2e/**/*.ts", "src/exam/**/*.ts"],
+            "options": { "diagnosticSeverity": { "schemaClassMissingBrand": "error" } }
+          }
+        ]
+      }
+    ]
   },
   // The P19 host check bundles this fixture as the small brain that exits normally, so it is checked
   // here with the code that runs it. The root tsconfig is for editors only and no typecheck reads it.

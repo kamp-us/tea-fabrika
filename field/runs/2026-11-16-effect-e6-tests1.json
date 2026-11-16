@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e6-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T04:00:00Z",
+  "ended": "2026-11-16T04:20:00Z",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E6 of the Effect-check sweep (schemaClassMissingBrand), in next/ and our tooling. Recounted 195 hits on origin/main with only this check at error: 135 in the 134 of the row's folders plus one in vitest, outside the row. Of the 134, 36 sit in exam paths and 98 in product files, none in a file of pull request 1366. The lock is an overrides entry in six tsconfigs (.agents, .github/ci, oxlint-plugins, libfabrika's 17 folders, the app's top files, e2e and src/exam, and the pipeline program). All 36 exam-path hits were fixed by hand with the Edit tool, each by adding { readonly brand: unique symbol } as the second type argument of Schema.TaggedError. The 98 product hits are left for the build step, so the typecheck is red only on them.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 20,
+  "note": "Counts from effect-tsgo diagnostics --format json per tsconfig, joined by file and offset, severity error only. 134 errors after the lock, 98 after the hand edits. pnpm lint:dead aborted with SIGABRT twice in this box (a Node crash, not a finding); the other 16 lint parts passed. The 1366 files and the vitest hit are outside the lock.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "a Schema.Class with no brand in libfabrika/src/settings/Plant.ts: the check count rose from 98 to 99 with that file as the new error, then the file was removed",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "src/settings/**/*.ts dropped from libfabrika's override: the count fell from 99 to 86, the 12 settings hits and the plant gone, then the glob was put back",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

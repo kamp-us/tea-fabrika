@@ -1,5 +1,21 @@
 {
   "extends": "../tsconfig.base.json",
-  "compilerOptions": { "allowJs": true, "checkJs": true },
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A Schema class names its brand, so two classes with the same fields stay apart. On for the
+        // whole project, which is at zero.
+        "overrides": [
+          {
+            "include": ["*.ts", "gitignore.mjs", "css/*.ts"],
+            "options": { "diagnosticSeverity": { "schemaClassMissingBrand": "error" } }
+          }
+        ]
+      }
+    ]
+  },
   "include": ["*.ts", "gitignore.mjs", "css/*.ts", "../stylelint.config.ts"]
 }

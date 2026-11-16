@@ -3,7 +3,39 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"],
     // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A Schema class names its brand, so two classes with the same fields stay apart. On for the
+        // folders at zero, their tests too. The globs read from this folder. Each slice adds its
+        // folders here.
+        "overrides": [
+          {
+            "include": [
+              "src/*.ts",
+              "src/access/**/*.ts",
+              "src/ci/**/*.ts",
+              "src/client/**/*.ts",
+              "src/cloudflare/**/*.ts",
+              "src/codehost/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/gateway/**/*.ts",
+              "src/node/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/repositories/**/*.ts",
+              "src/schedules/**/*.ts",
+              "src/settings/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/telemetry/**/*.ts",
+              "src/transport/**/*.ts"
+            ],
+            "options": { "diagnosticSeverity": { "schemaClassMissingBrand": "error" } }
+          }
+        ]
+      }
+    ]
   },
   "include": ["src"]
 }

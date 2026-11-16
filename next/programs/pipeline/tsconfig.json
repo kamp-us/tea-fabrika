@@ -1,4 +1,19 @@
 {
   "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A Schema class names its brand, so two classes with the same fields stay apart. On for the
+        // whole project, which is at zero.
+        "overrides": [
+          {
+            "include": ["src/**/*.ts"],
+            "options": { "diagnosticSeverity": { "schemaClassMissingBrand": "error" } }
+          }
+        ]
+      }
+    ]
+  },
   "include": ["src"]
 }

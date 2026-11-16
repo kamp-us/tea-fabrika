@@ -240,9 +240,13 @@ const fault =
 
 const trace = process.env.P14_E2E_TRACE;
 
-class SetupFault extends Schema.TaggedError<SetupFault>()("SetupFault", { at: Schema.String }) {}
+class SetupFault extends Schema.TaggedError<SetupFault, { readonly brand: unique symbol }>()("SetupFault", {
+  at: Schema.String,
+}) {}
 
-class Stopped extends Schema.TaggedError<Stopped>()("Stopped", { reason: Schema.String }) {}
+class Stopped extends Schema.TaggedError<Stopped, { readonly brand: unique symbol }>()("Stopped", {
+  reason: Schema.String,
+}) {}
 
 const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
 
