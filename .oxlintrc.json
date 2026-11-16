@@ -2924,6 +2924,7 @@
         "next/packages/libfabrika/src/coordination/**",
         "next/packages/libfabrika/src/desktop/**",
         "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/node/**",
         "next/packages/libfabrika/src/packs/**",
         "next/packages/libfabrika/src/permissions/**",
