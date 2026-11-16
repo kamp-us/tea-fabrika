@@ -15,7 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, matchesGlob } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { advises, type Fire, stale, type WarnLine, warnLines } from "./advice.ts";
@@ -43,25 +43,69 @@ const OTHERS = [
   "eslint(no-restricted-imports)",
 ];
 
+/**
+ * What oxlint's `no-restricted-properties` names in a fire's message, written as oxlint 1.90.0 prints
+ * it: `'JSON.parse' is restricted from being used.` The entry's own text is kept apart, as `help`.
+ */
+const restricted = (name: string) => `'${name}' is restricted from being used.`;
+
+/** Members the config restricts, and near misses of `JSON.parse`. */
+const MEMBERS = [
+  "JSON.parse",
+  "Reflect.get",
+  "Reflect.set",
+  "Reflect.has",
+  "globalThis.Reflect",
+  "Effect.retry",
+  "Stream.retry",
+  "setBounds",
+  "JSON.parsed",
+  "JSON",
+];
+
 describe("T930 L1 a fire advises only when it is one of the six and graded a warning", () => {
-  it("is true exactly for the six at severity warning, and false for an error or any other rule", () => {
+  // Reflect ban L2 (0554), in process: of oxlint's own rule, only the JSON.parse fire advises.
+  // Plant: make `advises` read the code alone again, and a Reflect fire at warning advises.
+  it("is true exactly for the six at severity warning, of no-restricted-properties only the JSON.parse fire, and false for an error or any other rule", () => {
+    const seen = { parse: false, reflect: false };
     fc.assert(
       fc.property(
         fc.record(
           {
             // A missing key is drawn through `requiredKeys: []`: oxlint's JSON never holds an explicit undefined.
-            code: fc.constantFrom<string>(...SIX, ...OTHERS),
+            // Weighted toward oxlint's own rule and its JSON.parse fire, the cases this law is about.
+            code: fc.oneof(
+              { arbitrary: fc.constant("eslint(no-restricted-properties)"), weight: 5 },
+              { arbitrary: fc.constantFrom<string>(...SIX, ...OTHERS), weight: 5 },
+            ),
             severity: fc.constantFrom("warning", "error"),
+            message: fc.oneof(
+              { arbitrary: fc.constant(restricted("JSON.parse")), weight: 5 },
+              fc.constantFrom(...MEMBERS).map(restricted),
+              fc.stringMatching(/^[A-Za-z.]{1,12}$/).map(restricted),
+              fc.string(),
+            ),
           },
           { requiredKeys: [] },
         ),
         (fire) => {
           const six = SIX.some((code) => code === fire.code);
-          expect(advises(fire)).toBe(six && fire.severity === "warning");
+          const member = /^'([^']*)' is restricted from being used\.$/.exec(fire.message ?? "")?.[1];
+          const guard = fire.code !== "eslint(no-restricted-properties)" || member === "JSON.parse";
+          const want = six && guard && fire.severity === "warning";
+
+          if (fire.code === "eslint(no-restricted-properties)" && fire.severity === "warning") {
+            seen.parse ||= member === "JSON.parse";
+            seen.reflect ||= member?.startsWith("Reflect.") === true;
+          }
+
+          expect(advises(fire)).toBe(want);
         },
       ),
       runs,
     );
+    // Coverage: a warning-level JSON.parse fire and a warning-level Reflect fire were both drawn.
+    expect(seen).toEqual({ parse: true, reflect: true });
   });
 });
 
@@ -516,6 +560,168 @@ describe("T930 L10 the five stop saying they only advise", () => {
       }
     } finally {
       rmSync(at, { recursive: true, force: true });
+    }
+  }, 120_000);
+});
+
+/** The Reflect ban's four entries (0554), each with its own hint, as the config writes them. */
+const BAN = [
+  { object: "Reflect", property: "get", message: "Decode with Schema, or narrow first (0554)." },
+  { object: "Reflect", property: "set", message: "Assign through the type (0554)." },
+  { object: "Reflect", property: "has", message: "Narrow with Predicate.hasProperty (0554)." },
+  { object: "globalThis", property: "Reflect", message: "Name Reflect directly, so lint can read the call (0554)." },
+];
+
+/**
+ * The small config with the ban on, the way the real config turns it on: blocks after the dirty
+ * folders' lines that repeat the JSON.parse entry, at "warn" where JSON.parse still advises.
+ */
+const banned = (dirty: readonly string[] = ["next/dirty"]) => {
+  const base = small(dirty);
+  const ban = (level: string) => [...parse(level), ...BAN];
+  return {
+    ...base,
+    overrides: [
+      ...base.overrides,
+      { files: ["next/clean/**"], rules: { "eslint/no-restricted-properties": ban("error") } },
+      { files: dirty.map((folder) => `${folder}/**`), rules: { "eslint/no-restricted-properties": ban("warn") } },
+    ],
+  };
+};
+
+/** One planted line per entry of the ban, in a file of its own. */
+const REFLECTS =
+  'declare const x: object;\nexport const a: unknown = Reflect.get(x, "a");\nexport const b = Reflect.set(x, "a", 1);\nexport const c = Reflect.has(x, "a");\nexport const d = globalThis.Reflect;\n';
+
+describe("Reflect ban L2 through lint.ts and oxlint, a Reflect fire blocks where the rule is at warn", () => {
+  // scenario: a small config with one dirty folder, one planted JSON.parse line and one planted file
+  // of Reflect lines, run through the real runner.
+  // Plant: make `advises` read the code alone again, and the dirty folder's Reflect lines advise.
+  it("scenario: in next/dirty the JSON.parse fire advises and each Reflect fire blocks, and in next/clean all block", () => {
+    const { lint, done } = repo(banned(), {
+      "next/dirty/parse.ts": PLANTS["eslint(no-restricted-properties)"].text,
+      "next/dirty/reflect.ts": REFLECTS,
+      "next/clean/reflect.ts": REFLECTS,
+    });
+
+    try {
+      const parsed = lint("next/dirty/parse.ts");
+      expect(parsed.out).toContain("eslint(no-restricted-properties) advice, this folder is not at zero yet:");
+      expect(parsed.out).toContain("oxlint: 0 blocking, 1 advice");
+      expect(parsed.status, parsed.out).toBe(0);
+
+      const dirty = lint("next/dirty/reflect.ts");
+      expect(dirty.out).not.toContain("advice, this folder is not at zero yet");
+      expect(dirty.out).toContain("oxlint: 4 blocking, 0 advice");
+      expect(dirty.status, dirty.out).toBe(1);
+
+      for (const { message } of BAN) {
+        expect(dirty.out).toContain(message);
+      }
+
+      const both = lint("next/dirty/parse.ts", "next/dirty/reflect.ts");
+      expect(both.out).toContain("oxlint: 4 blocking, 1 advice");
+      expect(both.status, both.out).toBe(1);
+
+      const clean = lint("next/clean/reflect.ts");
+      expect(clean.out).toContain("oxlint: 4 blocking, 0 advice");
+      expect(clean.status, clean.out).toBe(1);
+    } finally {
+      done();
+    }
+  }, 120_000);
+});
+
+describe("Reflect ban L3 a Reflect fire does not keep a JSON.parse warn line alive", () => {
+  // scenario: the same small config, with the dirty folder's JSON.parse line removed and its other
+  // five plants kept, so only the JSON.parse warn line can go stale.
+  // Plant: count every warning of the rule as holding the line, and the stale line is not named.
+  it("scenario: a whole run names the rule's warn line stale once only Reflect fires are left, and not while JSON.parse is", () => {
+    const others = Object.fromEntries(
+      Object.entries(planted("next/dirty")).filter(([path]) => !path.endsWith("/parse.ts")),
+    );
+    const stuck = repo(banned(), { ...others, "next/dirty/reflect.ts": REFLECTS });
+    const held = repo(banned(), { ...planted("next/dirty"), "next/dirty/reflect.ts": REFLECTS });
+    const line = "eslint(no-restricted-properties) has no fire left in next/dirty/**";
+
+    try {
+      const whole = stuck.lint();
+      expect(whole.out).toContain(line);
+      expect(whole.out).not.toMatch(/fabrika\([a-z-]+\) has no fire left/);
+      expect(whole.status, whole.out).toBe(1);
+
+      const kept = held.lint();
+      expect(kept.out).not.toContain("has no fire left");
+      expect(kept.out).toContain("oxlint: 4 blocking, 5 advice");
+    } finally {
+      stuck.done();
+      held.done();
+    }
+  }, 120_000);
+});
+
+/** A file inside one folder glob of the config: `next/a/**` and `next/a/*` give `next/a/planted.ts`. */
+const inside = (glob: string): string => `${glob.replace(/(\/\*\*)?\/\*\*?$/, "")}/planted.ts`;
+
+/** One option of the rule, named as oxlint names its fire: `JSON.parse`, or `setBounds` alone. */
+const nameOf = (entry: unknown): string => {
+  if (typeof entry !== "object" || entry === null) {
+    return "";
+  }
+
+  const object = "object" in entry && typeof entry.object === "string" ? `${entry.object}.` : "";
+  const property = "property" in entry && typeof entry.property === "string" ? entry.property : "";
+  return `${object}${property}`;
+};
+
+describe("Reflect ban L4 each ban block under next/ keeps what the rule held there before", () => {
+  // pinned: the real config, read from oxlint 1.90.0's own --print-config, since the law is about
+  // this one file. A level prints as "deny" or "warn", and a setting as [level, [options]].
+  // Plant: drop JSON.parse from the second ban block, and that block no longer keeps it.
+  it("pinned: every ban block under next/ keeps the JSON.parse entry at its folder's old level, and client/ keeps both retry entries", () => {
+    const { at, done } = repo(readFileSync(join(ROOT, ".oxlintrc.json"), "utf8"), {});
+
+    try {
+      const printed = spawnSync(OXLINT, [`--config=${join(at, ".oxlintrc.json")}`, "--print-config"], {
+        cwd: at,
+        encoding: "utf8",
+        maxBuffer: 2 ** 28,
+        timeout: 60_000,
+      });
+      expect(printed.status, printed.stderr).toBe(0);
+      const { overrides }: { readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }> } =
+        JSON.parse(printed.stdout);
+      const settings = overrides.flatMap(({ files, rules }) => {
+        const setting = rules["no-restricted-properties"];
+        return Array.isArray(setting) && Array.isArray(setting[1])
+          ? [{ files, level: setting[0], names: setting[1].map(nameOf) }]
+          : [];
+      });
+      // The folders where JSON.parse advised before the ban: the warn override with no Reflect entry.
+      const advised = settings
+        .filter(({ level, names }) => level === "warn" && !names.includes("Reflect.get"))
+        .flatMap(({ files }) => files);
+      const blocks = settings.filter(
+        ({ files, names }) => names.includes("Reflect.get") && files.some((glob) => glob.startsWith("next/")),
+      );
+      // Coverage: a block where JSON.parse blocks and one where it still advises.
+      expect(new Set(blocks.map(({ level }) => level))).toEqual(new Set(["deny", "warn"]));
+
+      for (const { files, level, names } of blocks) {
+        expect(names, files.join(" ")).toContain("JSON.parse");
+
+        for (const glob of files) {
+          expect(glob, "a ban block under next/ names next/ folders only").toMatch(/^next\//);
+          const was = advised.some((warn) => matchesGlob(inside(glob), warn)) ? "warn" : "deny";
+          expect(level, glob).toBe(was);
+
+          if (glob.startsWith("next/packages/libfabrika/src/client/")) {
+            expect(names, glob).toEqual(expect.arrayContaining(["Effect.retry", "Stream.retry"]));
+          }
+        }
+      }
+    } finally {
+      done();
     }
   }, 120_000);
 });

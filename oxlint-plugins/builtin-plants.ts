@@ -20,7 +20,42 @@ const TEST = 'import {describe, expect, it, vi} from "vitest";';
 
 const REACT = 'import {Component, createContext, forwardRef, useEffect, useMemo, useState} from "react";';
 
+/**
+ * L1 of the Reflect ban (decision 0554): `Reflect.get`, `Reflect.set`, `Reflect.has` and
+ * `globalThis.Reflect` are refused, in each form oxlint's `no-restricted-properties` resolves, and
+ * the rest of `Reflect` passes. plants.test.ts runs these lines beside this file, a tooling path,
+ * and again in every folder a block of the config lists.
+ * Plant: delete one entry from one block of `.oxlintrc.json`, and that folder's line is not refused.
+ */
+export const REFLECT: Plant = {
+  code: "eslint(no-restricted-properties)",
+  prelude: ["declare const x: object;"],
+  lines: [
+    ['export const a: unknown = Reflect.get(x, "a");', true],
+    ['export const b = Reflect.set(x, "a", 1);', true],
+    ['export const c = Reflect.has(x, "a");', true],
+    ["export const d = globalThis.Reflect;", true],
+    ['export const e: unknown = globalThis.Reflect.get(x, "a");', true],
+    ['export const f: unknown = Reflect["get"](x, "a");', true],
+    ['export const g: unknown = Reflect?.get(x, "a");', true],
+    ["export const { has } = Reflect;", true],
+    ["export const { set: renamed } = Reflect;", true],
+    // 0554 does not decide the rest of Reflect.
+    ["export const h: unknown = Reflect.apply(Math.max, null, [1, 2]);", false],
+    ["export const i = Reflect.ownKeys(x);", false],
+    // Not a call: a comment, a string, a type, another object's member.
+    ["// Reflect.get in a comment", false],
+    ['export const j = "Reflect.get(x)";', false],
+    ["export type Get = typeof Reflect.get;", false],
+    ['export const k = new Map<string, number>().get("a");', false],
+    // A documented miss: an alias of Reflect is not followed, and the review reads for it.
+    ["const R = Reflect;", false],
+    ['export const l: unknown = R.get(x, "a");', false],
+  ],
+};
+
 const eslint: readonly Plant[] = [
+  REFLECT,
   {
     code: "eslint(no-constant-binary-expression)",
     prelude: ["declare const x: number | undefined;"],
