@@ -227,6 +227,8 @@ export const codexExecAdapter = (
             );
 
           // What went wrong, from both sides: Codex's `error` events (it says capacity there) and its stderr.
+          // SAFETY: `null` is a value of `Agent.Raw | null`; the cast only widens it so the stdout
+          // reader can keep Codex's ended event here.
           const said = { errors: "", stderr: "", ended: null as Agent.Raw | null };
           const trouble = () => `${said.errors}\n${said.stderr}`.trim().slice(-TAIL);
           yield* handle.stderr.pipe(

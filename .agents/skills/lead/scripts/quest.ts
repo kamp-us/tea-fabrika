@@ -104,6 +104,8 @@ const stuckIn = (out: string) =>
       return [];
     }
 
+    // SAFETY: `a` is a non-null object whose `_tag` is "stuck", checked above; `reason` and `step`
+    // stay unknown, and questStuck's filter checks each before use.
     const { reason, step } = a as { reason?: unknown; step?: unknown };
 
     return [{ line, reason, step }];
@@ -130,6 +132,8 @@ export const questStuck = (out: string, questSteps: ReadonlySet<string>): string
  */
 export const heldRules = (out: string, questSteps: ReadonlySet<string>): string[] =>
   questStuck(out, questSteps).map((line) => {
+    // SAFETY: questStuck returned only lines that parsed to an object, so this parse gives one; each
+    // field stays unknown and is checked below before use.
     const a = JSON.parse(line) as {
       reason?: unknown;
       sha?: unknown;
@@ -202,6 +206,8 @@ const LOCKED = [
 
 /** Keys sorted all the way down, so a reorder is not a change. */
 const canon = (v: Json | undefined): string =>
+  // SAFETY: the one cast below runs only where `v` is a non-null object that is not an array,
+  // and `k` is one of its own keys from Object.keys, so the read gives that key's value.
   Array.isArray(v)
     ? `[${v.map(canon).join(",")}]`
     : Predicate.isObjectOrArray(v)
@@ -218,6 +224,8 @@ const lockedPart = (text: string): string | null => {
     return null;
   }
 
+  // SAFETY: `json` is a non-null object, checked above; a LOCKED key it lacks reads as undefined,
+  // which `?? null` turns to null.
   return canon(LOCKED.map((k) => (json as Record<string, Json>)[k] ?? null));
 };
 

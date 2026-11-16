@@ -836,6 +836,7 @@ describe("T321 K1 fetch, today's tooling", () => {
             expect(b.notes()).toBe("");
           }
         },
+        // SAFETY: a two-element array of strings is a [string, string].
         [["src/a.ts", "tests"], ...(row === "build" ? [[exam, "build"] as [string, string]] : [])],
       ),
     );
@@ -2114,6 +2115,7 @@ describe("T621 the fixture's git shim, today's tooling", () => {
       cd: (dir: string, to: string) => ({ cwd: join(dir, to), C: [] }),
       symlink: (dir: string, to: string) => ({ cwd: dir, C: [["-C", join(dir, "link", to)]] }),
     };
+    // SAFETY: `Object.keys` of the literal `spellings` lists exactly its own keys.
 
     const spelling = fc.constantFrom(...(Object.keys(spellings) as Array<keyof typeof spellings>));
 

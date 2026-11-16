@@ -206,6 +206,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         } as const;
 
         for (const [stands, line] of Object.entries(said)) {
+          // SAFETY: `Object.entries(said)` gives only the keys of `said`.
           const m = memory({ stands: stands as keyof typeof said }, red);
           const refused = yield* Effect.flip(arm(m));
           expect(refused.reason.split("\n")[0]).toBe(line);

@@ -317,6 +317,7 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
     },
     ({ named, open, lead, trail, crlf }) =>
       Effect.gen(function* () {
+        // SAFETY: `indexOf` only compares: a number that is not in `named` answers -1.
         const isOpen = (n: number) => open[named.indexOf(n as never)] === true;
 
         // A repeated line closes its ticket once.

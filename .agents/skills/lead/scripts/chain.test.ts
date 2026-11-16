@@ -85,6 +85,8 @@ const limits = (maxSteps: number, backstop: Budget | null = null, maxStucks = 3)
 type Stepped = ReturnType<ReturnType<typeof makeMachine>["update"]["start"]>;
 
 /** A host step answered skip, as for a quest brief with no `## host`; any other state stays. */
+// SAFETY: `host_run_ok` reads only `m.value`, here a skip outcome with its head and
+// reason; no cell in chain.ts reads the `cmd` a real answer also carries.
 const hostSkipped = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped): Stepped =>
   m.phase === "hosting"
     ? machine.update.host_run_ok(m, {
@@ -94,6 +96,8 @@ const hostSkipped = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped
     : [m, cmds];
 
 /** CI's typecheck job answered green; any other state stays. */
+// SAFETY: `typecheck_read_ok` reads only `m.value`, here the green verdict; no
+// cell in chain.ts reads the `cmd` a real answer also carries.
 const typechecked = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped): Stepped =>
   m.phase === "typechecking"
     ? machine.update.typecheck_read_ok(m, { type: "typecheck_read_ok", value: { _tag: "green" } } as never)
@@ -431,6 +435,8 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
   };
 
   // Every review hosts first; these laws are about the other steps, so the host step skips.
+  // SAFETY: `step_run_ok` reads only `m.value`, here the walk's Line `l`; no
+  // cell in chain.ts reads the `cmd` a real answer also carries.
   const ran = (m: ReturnType<typeof start>[0], l: Line) =>
     hostSkipped(machine, machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never));
 
@@ -448,6 +454,8 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
 
     expect(m.phase).toBe("opening");
     expect(cmds[0]).toMatchObject({ type: "pr_open", head: heads[2] });
+    // SAFETY: `pr_open_ok` reads only `m.value`, here PR 42 opened; no cell
+    // in chain.ts reads the `cmd` a real answer also carries.
     [m, cmds] = machine.update.pr_open_ok(m, {
       type: "pr_open_ok",
       value: { pr: 42, detail: "opened" },
@@ -455,11 +463,15 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
     expect(cmds[0]).toMatchObject({ type: "typecheck_read", pr: 42, head: heads[2] });
     [m, cmds] = typechecked(machine, [m, cmds]);
     expect(cmds[0]).toMatchObject({ type: "loosen", pr: 42, head: heads[2] });
+    // SAFETY: `loosen_ok` reads only `m.value`, here exit 0 with loosening's clean
+    // line; no cell in chain.ts reads the `cmd` a real answer also carries.
     [m, cmds] = machine.update.loosen_ok(m, {
       type: "loosen_ok",
       value: { code: 0, text: "loosening: 0 hits in 0 exam files" },
     } as never);
     expect(cmds[0]).toMatchObject({ type: "land", pr: 42 });
+    // SAFETY: `land_ok` reads only `m.value`, here a queued PR; no cell in
+    // chain.ts reads the `cmd` a real answer also carries.
     [m] = machine.update.land_ok(m, {
       type: "land_ok",
       value: { ok: true, detail: "pr 42: queued at 0123" },
@@ -501,6 +513,8 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
           if (m.phase === "stepping" && a._tag === "line") {
             [m, cmds] = ran(m, line(a.o, "c".repeat(40)));
           } else if (m.phase === "judging" && a._tag === "judged") {
+            // SAFETY: `judge_ok` reads only `m.value`, here the judgment's text; no
+            // cell in chain.ts reads the `cmd` a real answer also carries.
             [m, cmds] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: a.text } } as never);
           } else {
             continue;
@@ -591,6 +605,8 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
 
         const [sent, after] = hostSkipped(
           machine,
+          // SAFETY: `judge_ok` reads only `m.value`, here a send answer's text; no
+          // cell in chain.ts reads the `cmd` a real answer also carries.
           machine.update.judge_ok(m, {
             type: "judge_ok",
             value: { text: `answer: send ${to} ${reason}` },
@@ -600,6 +616,8 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
         expect(sent).toMatchObject({ phase: "stepping", step: to });
         expect(after[0]).toMatchObject({ type: "step_run", step: to });
 
+        // SAFETY: `judge_ok` reads only `m.value`, here a park answer's text; no
+        // cell in chain.ts reads the `cmd` a real answer also carries.
         const [parked] = machine.update.judge_ok(m, {
           type: "judge_ok",
           value: { text: `answer: park ${reason}` },
@@ -620,6 +638,8 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
       fc.property(word, fc.integer({ min: 1, max: 9 }), (reason, times) => {
         const [m] = start();
 
+        // SAFETY: `step_run_err` reads only `m.error`, here a RetriesExhausted with its schedule, tries
+        // and reason; no cell in chain.ts reads the `cmd` a real answer also carries.
         const [over] = machine.update.step_run_err(m, {
           type: "step_run_err",
           error: {
@@ -648,10 +668,14 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
     const small = makeMachine(limits(2));
     const [idle] = small.init(null, undefined);
     let [m] = small.update.start(idle, { type: "start", step: "tests" });
+    // SAFETY: `step_run_ok` reads only `m.value`, here a done Line; no cell
+    // in chain.ts reads the `cmd` a real answer also carries.
     [m] = small.update.step_run_ok(m, {
       type: "step_run_ok",
       value: line("done", "a".repeat(40)),
     } as never);
+    // SAFETY: `step_run_ok` reads only `m.value`, here a second done Line; no
+    // cell in chain.ts reads the `cmd` a real answer also carries.
     [m] = small.update.step_run_ok(m, {
       type: "step_run_ok",
       value: line("send:tests:step_said", "b".repeat(40)),
@@ -662,8 +686,12 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
 
 describe("the host step runs before every review of a new head, today's tooling", () => {
   const machine = makeMachine(limits(16));
+  // SAFETY: `step_run_ok` reads only `m.value`, here the caller's Line `l`; no
+  // cell in chain.ts reads the `cmd` a real answer also carries.
   const stepped = (m: Stepped[0], l: Line) => machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
 
+  // SAFETY: `host_run_ok` reads only `m.value`, here the caller's outcome, head and
+  // reason; no cell in chain.ts reads the `cmd` a real answer also carries.
   const hosted = (m: Stepped[0], outcome: "done" | "skip" | "send" | "stuck", head: string, reason = "why") =>
     machine.update.host_run_ok(m, { type: "host_run_ok", value: { outcome, head, reason } } as never);
 
@@ -715,6 +743,8 @@ describe("the host step runs before every review of a new head, today's tooling"
         const [judging] = stepped(r, line("send:review:step_said", head));
         expect(judging.phase).toBe("judging");
 
+        // SAFETY: `judge_ok` reads only `m.value`, here a send-to-review answer's text;
+        // no cell in chain.ts reads the `cmd` a real answer also carries.
         const [again, cmds] = machine.update.judge_ok(judging, {
           type: "judge_ok",
           value: { text: "answer: send review look again" },
@@ -757,8 +787,12 @@ describe("the host step runs before every review of a new head, today's tooling"
     const small = makeMachine(limits(16, { steps: 2, dollars: 100 }));
     const [idle] = small.init(null, undefined);
     let [b, cmds] = small.update.start(idle, { type: "start", step: "build" });
+    // SAFETY: `step_run_ok` reads only `m.value`, here a done Line at `h`; no
+    // cell in chain.ts reads the `cmd` a real answer also carries.
     [b, cmds] = small.update.step_run_ok(b, { type: "step_run_ok", value: line("done", h) } as never);
     expect(cmds).toEqual([expect.objectContaining({ type: "host_run", round: 2 })]);
+    // SAFETY: `host_run_ok` reads only `m.value`, here a skip outcome; no cell
+    // in chain.ts reads the `cmd` a real answer also carries.
     [b, cmds] = small.update.host_run_ok(b, {
       type: "host_run_ok",
       value: { outcome: "skip", head: "", reason: "no section" },
@@ -791,6 +825,8 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
 
   // A quest whose review said merge-ready at `head`, after `sends` sends back: the PR opens next.
   const merged = (head: string, sends = 0, on: Machine = machine) => {
+    // SAFETY: `step_run_ok` reads only `m.value`, here the caller's Line `l`; no
+    // cell in chain.ts reads the `cmd` a real answer also carries.
     const ran = (m: Stepped[0], l: Line) => on.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
     const [idle] = on.init(null, undefined);
     let [m] = on.update.start(idle, { type: "start", step: sends > 0 ? "tests" : "build" });
@@ -813,9 +849,13 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
   const reviewed = (head: string, sends = 0, on: Machine = machine, pr = 7) => {
     const [m] = merged(head, sends, on);
 
+    // SAFETY: `pr_open_ok` reads only `m.value`, here PR `pr` opened; no cell
+    // in chain.ts reads the `cmd` a real answer also carries.
     return on.update.pr_open_ok(m, { type: "pr_open_ok", value: { pr, detail: "opened" } } as never);
   };
 
+  // SAFETY: `typecheck_read_ok` reads only `m.value`, which each caller gives as a green, skipped
+  // or red verdict; no cell in chain.ts reads the `cmd` a real answer also carries.
   const answered = (m: Stepped[0], value: unknown, on: Machine = machine) =>
     on.update.typecheck_read_ok(m, { type: "typecheck_read_ok", value } as never);
 
@@ -848,6 +888,8 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
         expect(skipped).toMatchObject({ phase: "loosening", pr: n, quest: { unchecked: reason } });
         expect(also).toEqual(loosens);
 
+        // SAFETY: `typecheck_read_err` reads nothing off its Msg, so this unknown error steps it as
+        // any would; no cell in chain.ts reads the `cmd` a real answer also carries.
         const [threw, again] = machine.update.typecheck_read_err(m, {
           type: "typecheck_read_err",
           error: { _tag: "unknown" },
@@ -897,9 +939,13 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
     const [m] = reviewed(first);
     let [back] = answered(m, { _tag: "red", to: "build", lines: ["a.ts(1,1): error TS1: x"] });
     expect(back).toMatchObject({ phase: "stepping", step: "build" });
+    // SAFETY: `step_run_ok` reads only `m.value`, here a done Line at the second head;
+    // no cell in chain.ts reads the `cmd` a real answer also carries.
     [back] = machine.update.step_run_ok(back, { type: "step_run_ok", value: line("done", second) } as never);
     [back] = hostSkipped(machine, [back, []]);
 
+    // SAFETY: `step_run_ok` reads only `m.value`, here the review's done Line at the second
+    // head; no cell in chain.ts reads the `cmd` a real answer also carries.
     const [opening, opens] = machine.update.step_run_ok(back, {
       type: "step_run_ok",
       value: line("done", second),
@@ -908,6 +954,8 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
     expect(opening.phase).toBe("opening");
     expect(opens).toEqual([expect.objectContaining({ type: "pr_open", head: second })]);
 
+    // SAFETY: `pr_open_ok` reads only `m.value`, here the PR already open; no
+    // cell in chain.ts reads the `cmd` a real answer also carries.
     const [, reads] = machine.update.pr_open_ok(opening, {
       type: "pr_open_ok",
       value: { pr: 7, detail: "existing" },
@@ -935,12 +983,16 @@ describe("T590 loosening.sh runs after review and before the merge queue, today'
     for (const _ of QUEST_STEPS) {
       [m] = hostSkipped(
         machine,
+        // SAFETY: `step_run_ok` reads only `m.value`, here each step's done Line; no
+        // cell in chain.ts reads the `cmd` a real answer also carries.
         machine.update.step_run_ok(m, { type: "step_run_ok", value: line("done", head) } as never),
       );
     }
 
     return typechecked(
       machine,
+      // SAFETY: `pr_open_ok` reads only `m.value`, here PR `pr` opened; no cell
+      // in chain.ts reads the `cmd` a real answer also carries.
       machine.update.pr_open_ok(m, { type: "pr_open_ok", value: { pr, detail: "opened" } } as never),
     );
   };
@@ -967,6 +1019,8 @@ describe("T590 loosening.sh runs after review and before the merge queue, today'
       fc.property(pr, sha, hits, fc.integer({ min: -1, max: 255 }), (n, head, list, code) => {
         const [m] = opened(n, head);
 
+        // SAFETY: `loosen_ok` reads only `m.value`, here exit 0 with no hit; no
+        // cell in chain.ts reads the `cmd` a real answer also carries.
         const [clean, landCmds] = machine.update.loosen_ok(m, {
           type: "loosen_ok",
           value: { code: 0, text: "loosening: 0 hits in 2 exam files" },
@@ -975,6 +1029,8 @@ describe("T590 loosening.sh runs after review and before the merge queue, today'
         expect(clean).toMatchObject({ phase: "landing", pr: n });
         expect(landCmds).toEqual([expect.objectContaining({ type: "land", pr: n })]);
 
+        // SAFETY: `loosen_ok` reads only `m.value`, here exit 1 with the generated hit
+        // lines; no cell in chain.ts reads the `cmd` a real answer also carries.
         const [hit, none] = machine.update.loosen_ok(m, {
           type: "loosen_ok",
           value: { code: 1, text: list.join("\n") },
@@ -993,6 +1049,8 @@ describe("T590 loosening.sh runs after review and before the merge queue, today'
 
         const other = code === 0 || code === 1 ? 2 : code;
 
+        // SAFETY: `loosen_ok` reads only `m.value`, here an exit code other than 0 or 1;
+        // no cell in chain.ts reads the `cmd` a real answer also carries.
         const [broke, nothing] = machine.update.loosen_ok(m, {
           type: "loosen_ok",
           value: { code: other, text: "loosening: bad ref" },
@@ -1001,6 +1059,8 @@ describe("T590 loosening.sh runs after review and before the merge queue, today'
         expect(nothing).toEqual([]);
         expect(broke).toMatchObject({ phase: "over", end: { kind: "stuck" } });
         expect(looseningEnd(n, { code: other, text: "x" })?.kind).toBe("stuck");
+        // SAFETY: `loosen_err` reads nothing off its Msg, so this unknown error steps it as any
+        // would; no cell in chain.ts reads the `cmd` a real answer also carries.
         const [threw] = machine.update.loosen_err(m, { type: "loosen_err", error: { _tag: "unknown" } } as never);
         expect(threw).toMatchObject({ phase: "over", end: { kind: "stuck" } });
       }),
@@ -1010,6 +1070,8 @@ describe("T590 loosening.sh runs after review and before the merge queue, today'
 
   it("scenario: a loosening answer outside the loosening phase changes nothing", () => {
     const [idle] = machine.init(null, undefined);
+    // SAFETY: `loosen_ok` reads only `m.value`, here a clean exit while the quest is
+    // idle; no cell in chain.ts reads the `cmd` a real answer also carries.
     const [same, cmds] = machine.update.loosen_ok(idle, { type: "loosen_ok", value: { code: 0, text: "" } } as never);
     expect(same).toBe(idle);
     expect(cmds).toEqual([]);
@@ -1271,6 +1333,7 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
           tools: 1,
         });
 
+        // SAFETY: the turn writes one JSON event per line, each a tagged object, and the expect below checks every tag.
         const lines = events
           .trim()
           .split("\n")
@@ -1326,6 +1389,7 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
   });
 
   it("format: one JSON line in fieldrow.py's shape, with the tokens and a why that says how they were counted", () => {
+    // SAFETY: `stepRow` answers one line that `encodeRow` wrote, a JSON object.
     const row = JSON.parse(
       stepRow({
         run: "t1-build",
@@ -1377,6 +1441,7 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
         const answer = read(JSON.stringify({ verb: "done", to: null, reason, laws: null, ...(plants && { plants }) }));
         expect(answer.plants).toEqual(plants);
 
+        // SAFETY: `stepRow` answers one line that `encodeRow` wrote, a JSON object.
         const row = JSON.parse(
           stepRow({
             run: "t1-tests",
@@ -1510,6 +1575,7 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
   });
 
   // The steps a run may feed, with the mark each makes. None is a done, so the quest never opens a PR.
+  // SAFETY: "send", "pass", "tool" and "work" are each one of MARKS (chain.ts), so these only widen a literal.
   const fed = fc.constantFrom(
     { o: "send:tests:step_said", reason: "a law misses a case", mark: "send" as Mark },
     { o: "send:build:step_said", reason: "a law is red", mark: "send" as Mark },
@@ -1539,6 +1605,8 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
 
         for (const [i, s] of steps.entries()) {
           expect(m.phase).toBe("stepping");
+          // SAFETY: `step_run_ok` reads only `m.value`, here the fed step's Line; no
+          // cell in chain.ts reads the `cmd` a real answer also carries.
           [m] = machine.update.step_run_ok(m, { type: "step_run_ok", value: line(s.o, "", s.reason) } as never);
 
           if (i === expected) {
@@ -1550,6 +1618,8 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
           expect(m.phase).not.toBe("over");
 
           if (m.phase === "judging") {
+            // SAFETY: `judge_ok` reads only `m.value`, here the again answer with no dollars;
+            // no cell in chain.ts reads the `cmd` a real answer also carries.
             [m] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: again, listUsd: 0 } } as never);
           }
         }
@@ -1573,9 +1643,13 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
     ];
 
     for (const l of run) {
+      // SAFETY: `step_run_ok` reads only `m.value`, here the run's Line `l`; no
+      // cell in chain.ts reads the `cmd` a real answer also carries.
       [m] = machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
 
       if (m.phase === "judging") {
+        // SAFETY: `judge_ok` reads only `m.value`, here the again answer with its quarter
+        // dollar; no cell in chain.ts reads the `cmd` a real answer also carries.
         [m] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: again, listUsd: 0.25 } } as never);
       }
     }
@@ -1615,6 +1689,8 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
 
           for (const [i, c] of cents.entries()) {
             spent += c / 100;
+            // SAFETY: `step_run_ok` reads only `m.value`, here an ask Line with its cost; no
+            // cell in chain.ts reads the `cmd` a real answer also carries.
             [m] = machine.update.step_run_ok(m, {
               type: "step_run_ok",
               value: line("ask:lead:question", "", "which form?", c / 100),
@@ -1631,6 +1707,8 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
             }
 
             expect(m.phase).toBe("judging");
+            // SAFETY: `judge_ok` reads only `m.value`, here the again answer with no dollars;
+            // no cell in chain.ts reads the `cmd` a real answer also carries.
             [m] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: again, listUsd: 0 } } as never);
             expect(m.phase).toBe("stepping");
           }

@@ -348,6 +348,8 @@ describe("T388 botpush retries a notes race once, today's tooling", () => {
           ([0, 1, 2] as const).flatMap((races) =>
             [false, true].map(
               (branchRefused) =>
+                // SAFETY: each example is one record of `race`: a server word, a race count
+                // of 0 to 2 and a boolean, the three fields `race` draws.
                 [{ server, races, branchRefused }] as [typeof race extends fc.Arbitrary<infer T> ? T : never],
             ),
           ),
