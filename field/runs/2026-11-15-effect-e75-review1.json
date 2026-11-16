@@ -1,0 +1,44 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e75-review1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T21:41:21-08:00",
+  "ended": "2026-11-15T22:02:45-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The one review of slice E75 (preferEffectArray in libfabrika's src/runtime, in next/) at 6ee536fdd, the review of record: merge-ready with two findings. Recount with effect-tsgo diagnostics, preferEffectArray only: 821 hits at the merge base 37db01aa8 (661 in exam paths, 61 in 14 product files, 99 in PR 1366's files, per-file numbers as both step rows give them), 99 at this head, all in PR 1366's files (Runner.integration.test.ts 54, Runner.ts 32, RecoveryStore.ts 5, RepliesSql.ts 4, ProcessStore.ts 2, RuntimeCauseTest.ts 2). No file in the diff is among PR 1366's 64 files; no tsconfig, lock line, LOCKED row, oxlint-plugins file or script is in the diff, and no ignore or disable line was added or removed. Every line of the 53-file diff was read against effect 4.1.3's Array source: map, filter, flatMap, some, every, reduce (seed second), join (every separator kept, a bare join() became \",\"), reverse, forEach and isArray keep what the built-in call answered; each find became Option.getOrUndefined(Arr.findFirst(...)), each find(...)! became Option.getOrThrow, each findIndex and findLastIndex became getOrElse(..., () => -1); every findFirst predicate answers a boolean, so findFirst's Option overload is never taken; the saved?. chains became saved === null ? undefined : ..., which the types hold to X | null; numeric toSorted became Arr.sort(Order.Number) and canon's localeCompare became Order.String, which only feeds canon(a) === canon(b). RunnerAdmissionTest.ts texts now reads arrays through Object.values, which gives a dense JSON array's items in order. Per file, expect, it, numRuns, fc.pre and matcher counts are the same as on main; comment lines are the same but one added. The branch is 9 commits behind main and merges with no conflict.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 21.4,
+  "note": "Ran at 6ee536fdd: pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (17 parts passed); pnpm typecheck (exit 0); and the 56 libfabrika test files under src/runtime and src/node that vitest --changed origin/main lists, one at a time with --maxWorkers=1, every one passed (StartChild.integration.test.ts 8 of 8). loosening.sh: 108 lines, 37 'unrecognized change' at the added import lines and 71 'removed expect' at rewritten expect calls; each was read, and none loosens a law. Plants in a scratch copy at this head, never the branch: supervisor.ts brake sort with Order.flip(Order.Number), supervisor.laws.test.ts red 1 of 9; Patch.ts same() with Arr.some for Arr.every, Patch.test.ts red 2 of 14; Client.ts dated with () => 0 for () => -1, Client.laws.test.ts green 10 of 10, an old gap given as a missing_test finding. A second finding: the build added Option to three barrel imports from effect, so preferNamespaceImport in src/runtime goes from 403 to 405, against 0577.",
+  "plants": [
+    {
+      "law": "internal/supervisor.laws.test.ts, the brake's window against roomAt",
+      "plant": "internal/supervisor.ts:511 Order.Number became Order.flip(Order.Number)",
+      "result": "red"
+    },
+    {
+      "law": "Patch.test.ts L6, apply undoes diff",
+      "plant": "Patch.ts:31 Arr.every(a, ...) became Arr.some(a, ...)",
+      "result": "red"
+    },
+    {
+      "law": "Client.laws.test.ts L4, client letters",
+      "plant": "Client.ts:162 the missing-index default () => -1 became () => 0",
+      "result": "green"
+    }
+  ],
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billing": "subscription",
+  "step": "review"
+}

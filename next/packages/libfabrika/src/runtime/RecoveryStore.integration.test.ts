@@ -7,6 +7,7 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
 import { type Context, Effect, Exit, type Layer, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { A, B, from, storage } from "../processes/Process.test-support.ts";
 import type { Sql } from "../Sql.ts";
@@ -104,7 +105,7 @@ const snapshot = {
   },
   build: "build-a",
   restarts: [100, 300],
-  observations: [1, 2, 3].map((seq) => ({
+  observations: Arr.map([1, 2, 3], (seq) => ({
     seq,
     process: seq === 3 ? B : A,
     letter: "poison",
@@ -357,7 +358,7 @@ describe("P34 recovery storage", () => {
         fc.array(receipt, { minLength: 6, maxLength: 6 }),
         fc.array(fc.boolean(), { minLength: 6, maxLength: 6 }),
         async (ids, bodies, kept) => {
-          const all = ids.map((letter, n) => {
+          const all = Arr.map(ids, (letter, n) => {
             const body = bodies[n]!;
             const tries = body.dead ? Math.max(body.tries, 1) : body.tries;
 
@@ -380,7 +381,7 @@ describe("P34 recovery storage", () => {
               const s = yield* S;
               yield* s.save({ ...idle, receipts: all });
               // A compact snapshot: only some receipts ride along.
-              yield* s.save({ ...idle, seq: 4, receipts: all.filter((_, n) => kept[n]) });
+              yield* s.save({ ...idle, seq: 4, receipts: Arr.filter(all, (_, n) => kept[n] === true) });
             }).pipe(Effect.provide(layer())),
           );
           disk.reopen();

@@ -46,6 +46,7 @@ import {
   Schema,
   Scope,
 } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
 import { Model as FabrikaModel } from "../permissions/Model.ts";
@@ -203,7 +204,7 @@ const ROWS: ReadonlyArray<Relation.Change> = [
 ];
 
 /** Each writer may mail each reader. */
-const GRANTS = Object.fromEntries(TARGETS.map((t) => [t, [...READERS]]));
+const GRANTS = Object.fromEntries(Arr.map(TARGETS, (t) => [t, [...READERS]]));
 
 const brainFrom = (): From => ({
   by: "SHA256:brain",
@@ -342,7 +343,7 @@ const cutting = (sql: Sql, world: World): Sql => ({
     if (
       world.fault.cut &&
       /^\s*INSERT\b/i.test(query) &&
-      params.some((p) => typeof p === "string" && p.startsWith('["DOWN",'))
+      Arr.some(params, (p) => typeof p === "string" && p.startsWith('["DOWN",'))
     ) {
       world.fault.cut = false;
       world.done.add("cut:fired");
@@ -397,7 +398,9 @@ const host = Effect.fnUntraced(function* (
   const cut = Layer.succeed(Monitors, {
     monitor: (watch, from) =>
       Effect.gen(function* () {
-        const reader = [...world.readers].find(([, r]) => r.pid === watch.watcher.process)?.[0] ?? "";
+        const reader =
+          Option.getOrUndefined(Arr.findFirst([...world.readers], ([, r]) => r.pid === watch.watcher.process))?.[0] ??
+          "";
         const asked = world.asked.get(watch.id) ?? { reader, watcher: watch.watcher.process, tries: 0 };
         asked.tries++;
         world.asked.set(watch.id, asked);
@@ -477,7 +480,7 @@ const host = Effect.fnUntraced(function* (
           // What the reader had folded when the cancel committed: no DOWN for this ref may fold after it.
           const log = yield* savedLog(store, context, watch.reader, watch.watcher).pipe(Effect.orDie);
           watch.state = "canceled";
-          watch.downsAtCancel = log.filter((e) => e.type === "DOWN" && e.ref === watch.ref).length;
+          watch.downsAtCancel = Arr.filter(log, (e) => e.type === "DOWN" && e.ref === watch.ref).length;
         }
       }),
   });
@@ -683,20 +686,20 @@ const walk = (
     });
 
     for (const cell of cells) {
-      const live = TARGETS.filter((t) => world.targets.get(t)?.live === true);
-      const ended = TARGETS.filter((t) => world.targets.get(t)?.live === false);
-
-      const watching = [...world.watches.values()].filter(
+      const live = Arr.filter(TARGETS, (t) => world.targets.get(t)?.live === true);
+      const ended = Arr.filter(TARGETS, (t) => world.targets.get(t)?.live === false);
+      const watching = Arr.filter(
+        [...world.watches.values()],
         (w) => w.state === "live" && world.readers.get(w.reader)?.pid === w.watcher,
       );
-
-      const possible = moves.filter(
+      const possible = Arr.filter(
+        moves,
         (move) =>
           (move !== "watch_race" || live.length > 0) &&
           ((move !== "end" && move !== "end_cut") || live.length > 0) &&
           (move !== "restart" || ended.length > 0) &&
-          (move !== "send_stale" || [...world.targets.values()].some((t) => t.lives.length > 1 || !t.live)) &&
-          (move !== "forget_race" || watching.some((w) => world.targets.get(w.target)?.live === true)),
+          (move !== "send_stale" || Arr.some([...world.targets.values()], (t) => t.lives.length > 1 || !t.live)) &&
+          (move !== "forget_race" || Arr.some(watching, (w) => world.targets.get(w.target)?.live === true)),
       );
 
       const move = choose(possible, cell.move);
@@ -731,7 +734,7 @@ const walk = (
                 const folded = yield* savedLog(store, life.context, reader, pid).pipe(
                   Effect.orDie,
                   Effect.repeat({
-                    until: (log) => log.some((e) => e.type === "monitor_ok" && e.ref === ref),
+                    until: (log) => Arr.some(log, (e) => e.type === "monitor_ok" && e.ref === ref),
                     schedule: Schedule.spaced("2 millis"),
                   }),
                   Effect.timeoutOption(LIMIT),
@@ -759,7 +762,7 @@ const walk = (
             // The lost reply failed the call; the next read finds the answer the brain already saved.
             world.fault.lose = 0;
             yield* wake(reader);
-            const id = [...world.asked.keys()].find((k) => !before.has(k));
+            const id = Option.getOrUndefined(Arr.findFirst([...world.asked.keys()], (k) => !before.has(k)));
 
             if (id !== undefined && (world.asked.get(id)?.tries ?? 0) > 1) {
               done.add("lose_after:retried");
@@ -838,8 +841,8 @@ const walk = (
           break;
         case "forget": {
           const watcher = world.readers.get(reader)?.pid ?? "";
-          const own = watching.filter((w) => w.watcher === watcher);
-          const foreign = watching.filter((w) => w.watcher !== watcher);
+          const own = Arr.filter(watching, (w) => w.watcher === watcher);
+          const foreign = Arr.filter(watching, (w) => w.watcher !== watcher);
           const kind = choose(["own", "foreign", "unknown"] as const, cell.alt);
 
           const ref =
@@ -848,10 +851,9 @@ const walk = (
               : kind === "foreign" && foreign.length > 0
                 ? choose(foreign, cell.alt).ref
                 : `${watcher}/${90_000 + world.n}/0`;
-
-          const actual = own.some((w) => w.ref === ref)
+          const actual = Arr.some(own, (w) => w.ref === ref)
             ? "own"
-            : foreign.some((w) => w.ref === ref)
+            : Arr.some(foreign, (w) => w.ref === ref)
               ? "foreign"
               : "unknown";
 
@@ -863,7 +865,7 @@ const walk = (
 
         case "forget_race": {
           // The demonitor is dispatched and held; the watched life ends, so its DOWN is saved but unread.
-          const held = watching.filter((w) => world.targets.get(w.target)?.live === true);
+          const held = Arr.filter(watching, (w) => world.targets.get(w.target)?.live === true);
           const watch = choose(held, cell.alt);
           const gate = { entered: yield* Deferred.make<void>(), release: yield* Deferred.make<void>() };
           world.fault.gate = gate;
@@ -881,7 +883,7 @@ const walk = (
         case "watcher_end": {
           // The watcher's own life ends and a new one starts under its name.
           const old = world.readers.get(reader) ?? expect.fail("a reader");
-          const held = [...world.watches.values()].filter((w) => w.watcher === old.pid && w.state === "live");
+          const held = Arr.filter([...world.watches.values()], (w) => w.watcher === old.pid && w.state === "live");
           yield* answers(runner(reader).restart({ id: `restart-${++world.n}`, build: BUILD }), `${reader}'s restart`);
           const fresh = yield* readerLife(reader);
           expect(fresh, "a restart is a new process").not.toBe(old.pid);
@@ -914,7 +916,7 @@ const walk = (
 
       if (
         move === "end" &&
-        [...world.watches.values()].some((w) => w.state === "watcher_exited" && world.ends.has(w.process))
+        Arr.some([...world.watches.values()], (w) => w.state === "watcher_exited" && world.ends.has(w.process))
       ) {
         done.add("watcher_end:then_end");
       }
@@ -929,7 +931,7 @@ const walk = (
       }
     }
 
-    const rows = yield* store.entries(["processes", ...READERS.map((name) => `${name}/inbox`)]);
+    const rows = yield* store.entries(["processes", ...Arr.map(READERS, (name) => `${name}/inbox`)]);
     const logs = new Map<string, ReadonlyArray<Logged>>();
 
     for (const name of READERS) {
@@ -944,21 +946,22 @@ const walk = (
     // and one fold; a refused one is one refusal and writes no watch.
     for (const [id, asked] of world.asked) {
       const label = `M7: the monitor ${id}, asked ${asked.tries} times`;
-      const monitored = rows.filter((r) => r.stream === "processes" && r.tag === "monitored" && r.body.ref === id);
-      const placed = rows.filter((r) => r.stream === `${asked.reader}/inbox` && r.id === `${id}/answer`);
+      const monitored = Arr.filter(rows, (r) => r.stream === "processes" && r.tag === "monitored" && r.body.ref === id);
+      const placed = Arr.filter(rows, (r) => r.stream === `${asked.reader}/inbox` && r.id === `${id}/answer`);
       const log = logFor(asked.watcher);
 
       if (!world.watches.has(id)) {
         expect(monitored, `${label}: a refused watch writes no monitored row`).toEqual([]);
-        expect(log.filter((e) => e.type === "monitor_err").length, `${label}: is folded as a refusal`).toBeGreaterThan(
-          0,
-        );
+        expect(
+          Arr.filter(log, (e) => e.type === "monitor_err").length,
+          `${label}: is folded as a refusal`,
+        ).toBeGreaterThan(0);
         continue;
       }
 
       expect(monitored.length, `${label}: one monitored row`).toBe(1);
       expect(placed.length, `${label}: one answer message`).toBe(1);
-      const folded = log.filter((e) => e.type === "monitor_ok" && e.ref === id);
+      const folded = Arr.filter(log, (e) => e.type === "monitor_ok" && e.ref === id);
       expect(folded.length, `${label}: the watcher folds one answer, with the Cmd's id as its ref`).toBe(1);
     }
 
@@ -967,17 +970,20 @@ const walk = (
     for (const watch of world.watches.values()) {
       const owed = program.name === "chaser" ? 1 : 0;
       const label = `M15: ${watch.reader} (${watch.watcher}) watching ${watch.target} as ${watch.ref}`;
-      const runs = world.pings.filter((ref) => ref === watch.ref).length;
-      const folded = logFor(watch.watcher).filter((e) => e.type === "ping_ok" && e.ref === watch.ref).length;
+      const runs = Arr.filter(world.pings, (ref) => ref === watch.ref).length;
+      const folded = Arr.filter(logFor(watch.watcher), (e) => e.type === "ping_ok" && e.ref === watch.ref).length;
       expect(runs, `${label}: its follow-up runs ${owed} times`).toBe(owed);
       expect(folded, `${label}: the follow-up's answer folds ${owed} times`).toBe(owed);
     }
 
     // M3: in every reader life, a watch's answer folds before any DOWN for it.
     for (const [pid, log] of logs) {
-      log.forEach((entry, index) => {
+      Arr.forEach(log, (entry, index) => {
         if (entry.type === "DOWN") {
-          const answered = log.findIndex((e) => e.type === "monitor_ok" && e.ref === entry.ref);
+          const answered = Option.getOrElse(
+            Arr.findFirstIndex(log, (e) => e.type === "monitor_ok" && e.ref === entry.ref),
+            () => -1,
+          );
           expect(answered, `M3: in ${pid}, the answer for ${entry.ref} folds before its DOWN`).toBeGreaterThanOrEqual(
             0,
           );
@@ -988,7 +994,7 @@ const walk = (
 
     for (const watch of world.watches.values()) {
       const log = logFor(watch.watcher);
-      const downs = log.flatMap((e, index) => (e.type === "DOWN" && e.ref === watch.ref ? [{ e, index }] : []));
+      const downs = Arr.flatMap(log, (e, index) => (e.type === "DOWN" && e.ref === watch.ref ? [{ e, index }] : []));
       const label = `${watch.reader} (${watch.watcher}) watching ${watch.target} as ${watch.ref}`;
       // M10: a watch binds the name's life when it was asked, and never follows the name.
       expect(watch.process, `M10: ${label} binds the name's current life`).toBe(watch.current);
@@ -996,8 +1002,8 @@ const walk = (
       if (watch.state === "canceled") {
         // M8: no DOWN for a canceled ref folds after its cancel, including one already saved.
         expect(downs.length, `M8: ${label}: no DOWN folds after its demonitor`).toBe(watch.downsAtCancel ?? 0);
-
-        const canceled = rows.filter(
+        const canceled = Arr.filter(
+          rows,
           (r) =>
             r.tag === "demonitored" &&
             r.body.ref === watch.ref &&
@@ -1011,7 +1017,8 @@ const walk = (
 
       if (watch.state === "watcher_exited") {
         // M9: the watcher's end ends its watches, and no later life under its name folds their DOWN.
-        const exited = rows.filter(
+        const exited = Arr.filter(
+          rows,
           (r) =>
             r.tag === "demonitored" &&
             r.body.ref === watch.ref &&
@@ -1023,7 +1030,7 @@ const walk = (
 
         for (const pid of world.readers.get(watch.reader)?.lives ?? []) {
           if (pid !== watch.watcher) {
-            const later = logFor(pid).filter((e) => e.type === "DOWN" && e.ref === watch.ref);
+            const later = Arr.filter(logFor(pid), (e) => e.type === "DOWN" && e.ref === watch.ref);
             expect(later, `M9: ${label}: the new life ${pid} folds no DOWN for it`).toEqual([]);
           }
         }
@@ -1047,7 +1054,10 @@ const walk = (
         name: watch.target,
         reason,
       });
-      const last = log.findLastIndex((e) => e.type === "rows" && e.life === watch.process);
+      const last = Option.getOrElse(
+        Arr.findLastIndex(log, (e) => e.type === "rows" && e.life === watch.process),
+        () => -1,
+      );
       expect(last < (downs[0]?.index ?? -1), `M2: ${label}: no message from the ended life folds after its DOWN`).toBe(
         true,
       );
@@ -1056,7 +1066,8 @@ const walk = (
     // M8: a demonitor of a ref the life never got, or another life's, answers ok and writes nothing.
     for (const forget of world.forgets) {
       if (forget.kind !== "own") {
-        const touched = rows.filter(
+        const touched = Arr.filter(
+          rows,
           (r) => r.tag === "demonitored" && r.body.ref === forget.ref && r.body.to?.process === forget.watcher,
         );
 
@@ -1065,9 +1076,9 @@ const walk = (
     }
 
     for (const [pid, log] of logs) {
-      const asked = world.forgets.filter((f) => f.watcher === pid).length;
+      const asked = Arr.filter(world.forgets, (f) => f.watcher === pid).length;
       expect(
-        log.filter((e) => e.type === "demonitor_ok").length,
+        Arr.filter(log, (e) => e.type === "demonitor_ok").length,
         `M8: ${pid} folds demonitor_ok for every forget`,
       ).toBe(asked);
     }

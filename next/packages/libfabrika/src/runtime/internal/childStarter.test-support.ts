@@ -6,6 +6,7 @@
 // in order, so a law reads what the program was told from the process's saved checkpoint.
 import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
+import * as Arr from "effect/Array";
 import { Program } from "../Program.ts";
 import { exit, startChild } from "../StartChild.ts";
 
@@ -93,7 +94,12 @@ export const childStarter = (config: { readonly name: string; readonly declare: 
       start: (s: Model, m: typeof Start.Type) => [{ ...s, stepped: s.stepped + 1 }, [asked(m.ask)]],
       end: (s: Model, m: typeof End.Type) => [
         { ...s, stepped: s.stepped + 1 },
-        [...m.before.map(asked), exit({ ...m.extra } as never), ...(m.twice ? [exit({})] : []), ...m.after.map(asked)],
+        [
+          ...Arr.map(m.before, asked),
+          exit({ ...m.extra } as never),
+          ...(m.twice ? [exit({})] : []),
+          ...Arr.map(m.after, asked),
+        ],
       ],
       ping: (s: Model) => [{ ...s, stepped: s.stepped + 1 }, []],
       // An undeclared program has no answers to handle: the host refuses its Cmds before they run.

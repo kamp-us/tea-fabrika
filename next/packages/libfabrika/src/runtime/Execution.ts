@@ -5,6 +5,7 @@
  */
 import { type AnyCmdDef, type Tagged } from "@demlik/tea";
 import { Cause, Effect, Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as Redacted from "effect/Redacted";
 import * as Audit from "./Audit.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
@@ -198,7 +199,7 @@ const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean =>
 
 const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Schema.Json => {
   const type = Schema.decodeUnknownSync(Typed)(cmd).type;
-  const def = defs.find((d) => d.cmdType === type);
+  const def = Option.getOrUndefined(Arr.findFirst(defs, (d) => d.cmdType === type));
 
   if (def === undefined) {
     throw new ProgramDown({ reason: "step" });

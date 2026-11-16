@@ -5,6 +5,7 @@ import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { TestClock } from "effect/testing";
 import {
   Activity,
@@ -397,10 +398,10 @@ describe("P34 interrupted recovery", () => {
                 }
 
                 const rows = yield* lives;
-                const exits = rows.filter((row) => row._tag === "exited");
-                expect(new Set(exits.map((row) => exitBody(row.body).process)).size).toBe(exits.length);
-                const restarts = rows.filter((row) => row._tag === "restarted");
-                expect(new Set(restarts.map((row) => restartBody(row.body).after)).size).toBe(restarts.length);
+                const exits = Arr.filter(rows, (row) => row._tag === "exited");
+                expect(new Set(Arr.map(exits, (row) => exitBody(row.body).process)).size).toBe(exits.length);
+                const restarts = Arr.filter(rows, (row) => row._tag === "restarted");
+                expect(new Set(Arr.map(restarts, (row) => restartBody(row.body).after)).size).toBe(restarts.length);
 
                 if (cut === "after_start") {
                   expect(restarts).toHaveLength(1);
@@ -408,7 +409,7 @@ describe("P34 interrupted recovery", () => {
 
                 if (cut === "after_checkpoint") {
                   expect((yield* r.open("new")).view).toMatchObject({ count: value });
-                  expect((yield* inbox).map((row) => row.id)).toEqual(["good"]);
+                  expect(Arr.map(yield* inbox, (row) => row.id)).toEqual(["good"]);
                 }
 
                 if (cut === "after_dead") {
@@ -447,7 +448,7 @@ describe("P34 interrupted recovery", () => {
         for (let n = 0; n < 2; n++) {
           yield* Effect.gen(function* () {
             yield* Effect.exit(ProgramRunner.use((r) => r.open("wake")));
-            expect((yield* lives).filter((row) => row._tag === "exited")).toHaveLength(1);
+            expect(Arr.filter(yield* lives, (row) => row._tag === "exited")).toHaveLength(1);
             expect(yield* read(`${A}/dead`)).toEqual([]);
             expect(w.controls.steps).toBe(0);
           }).pipe(Effect.provide(w.layer()));
@@ -469,7 +470,7 @@ describe("P34 interrupted recovery", () => {
         const answer = yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input("good", { type: "add", n: 1 }))));
         expect(Exit.isFailure(answer)).toBe(true);
         expect(yield* inbox).toEqual([]);
-        expect((yield* lives).filter((row) => row._tag === "restarted")).toEqual([]);
+        expect(Arr.filter(yield* lives, (row) => row._tag === "restarted")).toEqual([]);
       }).pipe(Effect.provide(w.layer()));
     }),
   );
@@ -488,8 +489,7 @@ describe("P34 interrupted recovery", () => {
         yield* Fiber.join(pending);
         expect((yield* r.open("new")).view).toMatchObject({ replies: 0 });
         expect(w.controls.commands).toBe(1);
-
-        const answers = [...(yield* read(A)), ...(yield* inbox)].filter((row) =>
+        const answers = Arr.filter([...(yield* read(A)), ...(yield* inbox)], (row) =>
           JSON.stringify(row.body).includes('"type":"wait_ok"'),
         );
 
@@ -535,7 +535,7 @@ describe("P34 interrupted recovery", () => {
               expect(w.controls.owns).toBe(0);
               expect(w.controls.commits).toBe(0);
               expect(
-                (yield* inbox).filter((row) => JSON.stringify(row.body).includes('"type":"write_err"')),
+                Arr.filter(yield* inbox, (row) => JSON.stringify(row.body).includes('"type":"write_err"')),
               ).toMatchObject([{ body: { m: { reason: "not_delivered" } } }]);
             }).pipe(Effect.provide(w.layer()));
           }),

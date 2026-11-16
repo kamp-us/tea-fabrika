@@ -4,6 +4,8 @@
 // record of the first reply under each registered name and letter.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Predicate, Result, Schema, Scope, Tracer } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { expectTypeOf } from "vitest";
 import type { Sql } from "../Sql.ts";
 import type * as Module from "./Replies.ts";
@@ -75,10 +77,10 @@ const forms = (secret: string): ReadonlyArray<string> => [
  *  first and asserts once: one `expect` for each output and form took more than half of a walk
  *  that looks after every move. */
 export const unleaked = (outputs: ReadonlyArray<string>, secrets: ReadonlyArray<string>) => {
-  const leaks = secrets.flatMap(forms);
-  const leaked = outputs.filter((output) => leaks.some((form) => output.includes(form)));
+  const leaks = Arr.flatMap(secrets, forms);
+  const leaked = Arr.filter(outputs, (output) => Arr.some(leaks, (form) => output.includes(form)));
   // The outputs go in the message: a property law prints the message and not the diff.
-  expect(leaked, `input text leaked: ${leaked.join("\n")}`).toEqual([]);
+  expect(leaked, `input text leaked: ${Arr.join(leaked, "\n")}`).toEqual([]);
 };
 
 /** Made-up input text with a quote, a space, a slash and a non-ASCII letter, so its three forms
@@ -86,7 +88,7 @@ export const unleaked = (outputs: ReadonlyArray<string>, secrets: ReadonlyArray<
 export const sentinel = Arbitrary.array(Arbitrary.schema(Schema.Literals([..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"])), {
   minLength: 10,
   maxLength: 10,
-}).pipe(Arbitrary.map((core) => `BODY${core.join("")} "x"/ü`));
+}).pipe(Arbitrary.map((core) => `BODY${Arr.join(core, "")} "x"/ü`));
 
 /** Entropy a walk reads against its state. */
 export const nat = Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })));
@@ -94,7 +96,7 @@ export const nat = Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum:
 /** Text of these characters, as long as asked. */
 export const text = (chars: string, maxLength: number) =>
   Arbitrary.array(Arbitrary.schema(Schema.Literals([...chars])), { minLength: 1, maxLength }).pipe(
-    Arbitrary.map((cs) => cs.join("")),
+    Arbitrary.map((cs) => Arr.join(cs, "")),
   );
 
 /** A tracer that keeps every span it makes. */
@@ -116,16 +118,18 @@ export const capture = () => {
   const ended = new WeakMap<Tracer.NativeSpan, string>();
 
   const write = (span: Tracer.NativeSpan) =>
+    Arr.join(
     [
       span.name,
       JSON.stringify([...span.attributes], (_, value) => (typeof value === "bigint" ? value.toString() : value)),
       JSON.stringify(span.events, (_, value) => (typeof value === "bigint" ? value.toString() : value)),
       span.status._tag === "Ended" && Exit.isFailure(span.status.exit) ? Cause.pretty(span.status.exit.cause) : "",
-    ].join("\n");
-
+      ],
+      "\n",
+    );
   /** Each span as text: its name, tags, events and, once it ended, its exit. */
   const text = () =>
-    spans.map((span) => {
+    Arr.map(spans, (span) => {
       const known = ended.get(span);
 
       if (known !== undefined) {
@@ -166,9 +170,10 @@ const faulty = (sql: Sql, control: Control): Sql => ({
 
 /** Every table and row of the database, as text, for retained-row and body checks. */
 const dump = (sql: Sql): ReadonlyArray<{ readonly table: string; readonly row: Record<string, unknown> }> =>
-  sql
-    .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-    .flatMap(({ name }) => sql.exec(`SELECT * FROM "${String(name)}"`).map((row) => ({ table: String(name), row })));
+  Arr.flatMap(
+    sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"),
+    ({ name }) => Arr.map(sql.exec(`SELECT * FROM "${String(name)}"`), (row) => ({ table: String(name), row })),
+  );
 
 const NAMES = ["notes:1", "notes:2", "counter:1"] as const;
 
@@ -300,7 +305,7 @@ const walk = (
 
     const unseen = (step: Step, n: number): { name: string; id: string } => {
       // Half the time, a letter already stored under another registered name.
-      const known = [...first.values()].filter((r) => !first.has(key(nth(NAMES, step.kind), r.id)));
+      const known = Arr.filter([...first.values()], (r) => !first.has(key(nth(NAMES, step.kind), r.id)));
       const reuse = step.kind % 2 === 0 ? known[step.pick % Math.max(known.length, 1)] : undefined;
       const name = nth(NAMES, step.kind);
 
@@ -312,9 +317,8 @@ const walk = (
     };
 
     for (const [n, step] of steps.entries()) {
-      const good = [...first.entries()].filter(([k]) => !corrupt.has(k));
-
-      const moves = enabled.filter((move) =>
+      const good = Arr.filter([...first.entries()], ([k]) => !corrupt.has(k));
+      const moves = Arr.filter(enabled, (move) =>
         move === "repeat" || move === "read" || move === "corrupt" || move === "accepted" ? good.length > 0 : true,
       );
 
@@ -338,7 +342,7 @@ const walk = (
         const [, stored] = chosen;
         expect(yield* service.reply(stored.name, stored.id)).toEqual(stored);
         // The same letter under a registered name that holds no reply for it.
-        const other = NAMES.find((name) => !first.has(key(name, stored.id)));
+        const other = Option.getOrUndefined(Arr.findFirst(NAMES, (name) => !first.has(key(name, stored.id))));
 
         if (other !== undefined) {
           expect(yield* service.reply(other, stored.id)).toBeNull();
@@ -366,9 +370,8 @@ const walk = (
         expect(yield* service.reply(name, id), "a failed write is not a stored reply").toBeNull();
       } else if ((move === "corrupt" || move === "accepted") && chosen !== undefined) {
         const [k, stored] = chosen;
-
-        const located = dump(raw).flatMap(({ table, row }) =>
-          Object.entries(row).flatMap(([column, value]) => {
+        const located = Arr.flatMap(dump(raw), ({ table, row }) =>
+          Arr.flatMap(Object.entries(row), ([column, value]) => {
             if (typeof value !== "string" || parsed(value)?.["digest"] !== stored.digest) {
               return [];
             }
@@ -390,7 +393,7 @@ const walk = (
             ? `${value.slice(0, -1)}${secret}`
             : kind === "missing"
               ? JSON.stringify(
-                  Object.fromEntries(Object.entries(json).filter(([f]) => f !== fields[n % fields.length])),
+                  Object.fromEntries(Arr.filter(Object.entries(json), ([f]) => f !== fields[n % fields.length])),
                 )
               : kind === "key"
                 ? JSON.stringify({ ...json, ...(n % 2 === 0 ? { id: `${stored.id}-other` } : { name: "other:1" }) })
@@ -414,17 +417,16 @@ const walk = (
 
         note(yield* refusedWith(service.reply(stored.name, stored.id), "bad_row"));
         note(yield* refusedWith(service.rememberReply(stored), "bad_row"));
-        const cells = dump(raw).flatMap(({ row }) => Object.values(row));
+        const cells = Arr.flatMap(dump(raw), ({ row }) => Object.values(row));
         expect(cells, "a corrupt row is retained as it was").toContain(damaged);
       }
 
       // After every move: no stored row, printed error or span holds a body (R11).
       const damaged = new Set(corrupt.values());
-
-      const cells = dump(raw)
-        .flatMap(({ row }) => Object.values(row))
-        .filter((cell): cell is string => typeof cell === "string" && !damaged.has(cell));
-
+      const cells = Arr.filter(
+        Arr.flatMap(dump(raw), ({ row }) => Object.values(row)),
+        (cell): cell is string => typeof cell === "string" && !damaged.has(cell),
+      );
       unleaked([...cells, ...errors, ...spans.text()], secrets);
     }
 

@@ -11,6 +11,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Clock, type Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import * as Arr from "effect/Array";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { InputId, LedgerError, type Sql, Writer } from "../coordination/index.ts";
@@ -506,10 +507,10 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
     const crashed = (phase: "step" | "saved_letter", error: string) => ExitReason.cases.crashed.make({ phase, error });
 
     for (const [index, cell] of tape.entries()) {
-      const open = [...a.letters].filter(([id, l]) => id.startsWith("poison") && l.dead === null);
-      const dead = [...a.letters].filter(([, l]) => l.dead !== null);
-
-      const options = allowed.filter(
+      const open = Arr.filter([...a.letters], ([id, l]) => id.startsWith("poison") && l.dead === null);
+      const dead = Arr.filter([...a.letters], ([, l]) => l.dead !== null);
+      const options = Arr.filter(
+        allowed,
         (move) =>
           (move !== "resend" || open.length + dead.length > 0) &&
           (move !== "restart_again" && move !== "restart_conflict" ? true : a.requests.size > 0),
@@ -755,18 +756,19 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
 
 const check = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof world>>, a: Account, limit: number) {
   const rows = w.rows();
-  const lifecycle = rows.filter((row) => row.stream === `processes/${NAME}`);
-
-  const exits = lifecycle
-    .filter((row) => row.event === "exited")
-    .map((row) => row.body as { process: string; reason: unknown })
-    .map(({ process, reason }) => ({ process, reason }));
-
+  const lifecycle = Arr.filter(rows, (row) => row.stream === `processes/${NAME}`);
+  const exits = Arr.map(
+    Arr.map(
+      Arr.filter(lifecycle, (row) => row.event === "exited"),
+      (row) => row.body as { process: string; reason: unknown },
+    ),
+    ({ process, reason }) => ({ process, reason }),
+  );
   // J2, J12: each exit once, in order, with its producer's reason, through every cut and retry.
   expect(exits, "each exit is written once with its slice-1 reason").toEqual(a.exits);
   // J2, J6, J7: one successor per recovery; a cut start or transfer never starts another.
   expect(
-    lifecycle.filter((row) => row.event === "restarted"),
+    Arr.filter(lifecycle, (row) => row.event === "restarted"),
     "one successor per recovery",
   ).toHaveLength(a.successors);
   const status = yield* w.manager((p) => p.status(NAME));
@@ -776,8 +778,8 @@ const check = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof w
   ]);
 
   // J4: exact per-letter accounting and the dead letter's own process.
-  const dead = rows.filter((row) => row.stream.endsWith("/dead"));
-  const expectedDead = [...a.letters].filter(([, l]) => l.dead !== null);
+  const dead = Arr.filter(rows, (row) => row.stream.endsWith("/dead"));
+  const expectedDead = Arr.filter([...a.letters], ([, l]) => l.dead !== null);
   expect(dead, "one dead entry per dead letter").toHaveLength(expectedDead.length);
 
   for (const [id, l] of a.letters) {
@@ -804,18 +806,24 @@ const check = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof w
     if (l.dead !== null) {
       expect(l.errors.length).toBeLessThanOrEqual(limit);
       expect(
-        dead.filter((row) => row.stream === `${l.dead}/dead`).map((row) => row.body),
+        Arr.map(
+          Arr.filter(dead, (row) => row.stream === `${l.dead}/dead`),
+          (row) => row.body,
+        ),
         `dead ${id}`,
       ).toEqual([expect.objectContaining({ m: id, errors: l.errors, tries: l.errors.length })]);
     }
   }
 
   // J5: a saved letter stays in the inbox and is never a dead letter.
-  const inbox = rows.filter((row) => row.stream === `${NAME}/inbox`).map((row) => row.id);
+  const inbox = Arr.map(
+    Arr.filter(rows, (row) => row.stream === `${NAME}/inbox`),
+    (row) => row.id,
+  );
 
   for (const id of a.saved) {
     expect(inbox).toContain(id);
-    expect(dead.some((row) => (row.body as { m?: unknown }).m === id)).toBe(false);
+    expect(Arr.some(dead, (row) => (row.body as { m?: unknown }).m === id)).toBe(false);
   }
 
   // J6: a person's restart starts its successor fresh; a crash recovery carries the checkpoint.

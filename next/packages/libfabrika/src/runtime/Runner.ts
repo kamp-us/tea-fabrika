@@ -25,6 +25,7 @@ import {
   Stream,
   Tracer,
 } from "effect";
+import * as Arr from "effect/Array";
 import { type SessionManagerError } from "../access/SessionManager.ts";
 import {
   Activity,
@@ -264,7 +265,7 @@ const HOST = new Set([SEND, SEND_CHUNKS, START_CHILD, STOP_CHILD, EXIT, HANDS, M
  *  again. A hands task that only waits on the hands is owed nothing: a wake or a due asks it again
  *  (0105). */
 const owesHostCmd = (cmds: ReadonlyArray<Dispatched>): boolean =>
-  cmds.some((cmd) => (cmd.mail === true && cmd.hands?._tag !== "waiting") || cmd.state === "waiting_answer");
+  Arr.some(cmds, (cmd) => (cmd.mail === true && cmd.hands?._tag !== "waiting") || cmd.state === "waiting_answer");
 
 /** The name a send or a send_chunks mails, or none for any other Cmd. */
 const mailTarget = (job: Dispatched): Option.Option<string> =>
@@ -275,13 +276,17 @@ const mailTarget = (job: Dispatched): Option.Option<string> =>
  *  order its Cmds were made, as OTP keeps per pair. */
 const behind = (cmds: ReadonlyArray<Dispatched>, job: Dispatched): boolean => {
   const to = Option.getOrUndefined(mailTarget(job));
-  const index = cmds.findIndex((cmd) => cmd.id === job.id);
+  const index = Option.getOrElse(
+    Arr.findFirstIndex(cmds, (cmd) => cmd.id === job.id),
+    () => -1,
+  );
   return (
     to !== undefined &&
     index > 0 &&
-    cmds
-      .slice(0, index)
-      .some((cmd) => cmd.mail === true && cmdType(cmd) === SEND_CHUNKS && Option.contains(mailTarget(cmd), to))
+    Arr.some(
+      cmds.slice(0, index),
+      (cmd) => cmd.mail === true && cmdType(cmd) === SEND_CHUNKS && Option.contains(mailTarget(cmd), to),
+    )
   );
 };
 
@@ -290,12 +295,12 @@ const behind = (cmds: ReadonlyArray<Dispatched>, job: Dispatched): boolean => {
  * names are checked before the strict decode, since an empty struct takes any field.
  */
 const operands = (cmd: unknown, fields: object): Option.Option<Record<string, unknown>> => {
-  if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd)) {
+  if (typeof cmd !== "object" || cmd === null || Arr.isArray(cmd)) {
     return Option.none();
   }
 
   const { type: _type, ...rest } = cmd as Record<string, unknown>;
-  return Object.keys(rest).every((key) => Object.hasOwn(fields, key)) ? Option.some(rest) : Option.none();
+  return Arr.every(Object.keys(rest), (key) => Object.hasOwn(fields, key)) ? Option.some(rest) : Option.none();
 };
 
 const strictStartChild = Schema.decodeUnknownOption(StartChildInput, { onExcessProperty: "error" });
@@ -317,7 +322,7 @@ const encoder = new TextEncoder();
 /** A start_child's operands without its input: what every `ok` answer echoes, so no row holds the
  *  first letter twice. */
 const withoutInput = (cmd: unknown): unknown => {
-  if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd) || !Object.hasOwn(cmd, "input")) {
+  if (typeof cmd !== "object" || cmd === null || Arr.isArray(cmd) || !Object.hasOwn(cmd, "input")) {
     return cmd;
   }
 
@@ -667,7 +672,7 @@ export class ProgramRunner extends Context.Service<
           const now = yield* Clock.currentTimeMillis;
           const backoff = supervision?.policy.backoff.minMs ?? defaultPolicy.backoff.minMs;
           sendRetry = !owes ? null : sendRetry !== null && sendRetry > now ? sendRetry : now + backoff;
-          const times = [waited, running ? mailRetry : null, sendRetry].filter((at) => at !== null);
+          const times = Arr.filter([waited, running ? mailRetry : null, sendRetry], (at) => at !== null);
           const until = retryAt ?? (times.length === 0 ? null : Math.min(...times));
 
           // Loading supplies the live program's wake; do not clear it before then.
@@ -754,7 +759,7 @@ export class ProgramRunner extends Context.Service<
             change.origin,
           );
           yield* fault("after_swap_record");
-          const times = [next.wake, mailRetry, sendRetry].filter((at) => at !== null);
+          const times = Arr.filter([next.wake, mailRetry, sendRetry], (at) => at !== null);
           const wake = times.length === 0 ? null : Math.min(...times);
           yield* alarm.set(wake);
           alarmAt = wake;
@@ -769,7 +774,8 @@ export class ProgramRunner extends Context.Service<
           live = next;
 
           if (prepared === undefined) {
-            retry = cmds.filter(
+            retry = Arr.filter(
+              cmds,
               (cmd) => cmd.mail === true || Option.exists(decodeTyped(cmd.cmd), (c) => c.type === WRITE),
             );
           }
@@ -799,8 +805,11 @@ export class ProgramRunner extends Context.Service<
               }
               case "writing_dead": {
                 const { failure } = j;
-                const receipt = s.receipts.find(
+                const receipt = Option.getOrUndefined(
+                  Arr.findFirst(
+                    s.receipts,
                   (r) => r.letter === failure.letter && r.process === failure.process && r.result !== null,
+                  ),
                 );
 
                 if (receipt === undefined) {
@@ -1324,7 +1333,8 @@ export class ProgramRunner extends Context.Service<
                   onNone: () => 0,
                   onSome: (letter) => (letter.rev === next.after ? letter.pos : 0),
                 });
-          retry = cmds.filter(
+          retry = Arr.filter(
+            cmds,
             (cmd) =>
               cmd.mail === true ||
               cmd.state === "waiting_answer" ||
@@ -1403,8 +1413,8 @@ export class ProgramRunner extends Context.Service<
           const prepared = Schema.decodeUnknownOption(Turn)(saved?.turn);
           // The raw inbox keeps canceled signals; the manager filters them for this process.
           const signals = new Set(
-            letters.some((letter) => inSignalSpace(letter.id))
-              ? (yield* Stream.runCollect(manager.receive(process.id, state.after))).map((letter) => letter.id)
+            Arr.some(letters, (letter) => inSignalSpace(letter.id))
+              ? Arr.map(yield* Stream.runCollect(manager.receive(process.id, state.after)), (letter) => letter.id)
               : [],
           );
           let mine = Option.none<History>();
@@ -1427,10 +1437,13 @@ export class ProgramRunner extends Context.Service<
             }
 
             const own = inRunnerSpace(letter.id) && letter.id.startsWith(`${process.id}/`);
-            const ending = cmds.findIndex((job) => exits(state, job));
+            const ending = Option.getOrElse(
+              Arr.findFirstIndex(cmds, (job) => exits(state, job)),
+              () => -1,
+            );
 
             // Only answers to Cmds before exit may still fold. Ordinary mail waits for the next life.
-            if (ending >= 0 && !cmds.slice(0, ending).some((job) => own && letter.id === `${job.id}/answer`)) {
+            if (ending >= 0 && !Arr.some(cmds.slice(0, ending), (job) => own && letter.id === `${job.id}/answer`)) {
               stop = Math.min(stop, index);
               continue;
             }
@@ -1486,16 +1499,17 @@ export class ProgramRunner extends Context.Service<
             placed.push({ id: letter.id, rev: letter.rev, pos: letter.pos });
             // The brain saves a monitor's answer in its own turn, so any catch-up may fold it first:
             // what its step made is still this life's to run, as if `settle` had folded it.
-            const settled = own && cmds.some((cmd) => letter.id === `${cmd.id}/answer` && cmdType(cmd) === MONITOR);
+            const settled =
+              own && Arr.some(cmds, (cmd) => letter.id === `${cmd.id}/answer` && cmdType(cmd) === MONITOR);
 
             if (own && letter.id.endsWith("/answer")) {
-              cmds = cmds.filter((cmd) => cmd.id !== letter.id.slice(0, -"/answer".length));
+              cmds = Arr.filter(cmds, (cmd) => cmd.id !== letter.id.slice(0, -"/answer".length));
             }
 
             const owed = !accepted || settled || letter.id === options.mine;
             // Host Cmds retry by stable id after a prepared turn's checkpoint failed.
             const preparedTurn = Option.exists(prepared, (turn) => turn.id === letter.id);
-            const dispatched = folded.cmds.map((cmd, index): Dispatched => ({
+            const dispatched = Arr.map(folded.cmds, (cmd, index): Dispatched => ({
               id: `${process.id}/${letter.pos}/${index}`,
               cmd,
               state: "dispatched",
@@ -1514,7 +1528,7 @@ export class ProgramRunner extends Context.Service<
               mine = Option.some(letter);
               fresh.push(...dispatched);
             } else {
-              drain.push(...dispatched.filter((job) => !accepted || settled || job.mail === true));
+              drain.push(...Arr.filter(dispatched, (job) => !accepted || settled || job.mail === true));
             }
           }
 
@@ -1600,7 +1614,10 @@ export class ProgramRunner extends Context.Service<
         /** Takes the writes and sends an earlier life left dispatched, and the Cmds a drain of
          *  ordinary mail made, to run them once. */
         const takeRetry = () => {
-          const taken = [...retry, ...drained].filter((job) => live?.cmds.some((cmd) => cmd.id === job.id));
+          const taken = Arr.filter(
+            [...retry, ...drained],
+            (job) => live !== null && Arr.some(live.cmds, (cmd) => cmd.id === job.id),
+          );
           retry = [];
           drained = [];
           return taken;
@@ -1848,7 +1865,8 @@ export class ProgramRunner extends Context.Service<
         /** Saves a hands Cmd's waiting task on its dispatched entry, so this life owes it nothing until
          *  a wake or a due asks again. The permit is held. */
         const wait = Effect.fnUntraced(function* (job: Dispatched, waiting: NonNullable<Dispatched["hands"]>) {
-          const saved = live?.cmds.find((cmd) => cmd.id === job.id);
+          const saved =
+            live === null ? undefined : Option.getOrUndefined(Arr.findFirst(live.cmds, (cmd) => cmd.id === job.id));
 
           if (live === null || saved === undefined || saved.hands?._tag === waiting._tag) {
             return;
@@ -1856,7 +1874,7 @@ export class ProgramRunner extends Context.Service<
 
           const next = {
             ...live,
-            cmds: live.cmds.map((cmd) => (cmd.id === job.id ? { ...cmd, hands: waiting } : cmd)),
+            cmds: Arr.map(live.cmds, (cmd) => (cmd.id === job.id ? { ...cmd, hands: waiting } : cmd)),
           };
           yield* store.save(checkpoint(next, null));
           live = next;
@@ -2112,7 +2130,7 @@ export class ProgramRunner extends Context.Service<
           return yield* state.loaded.execution.reply(job.cmd, { ...outcome, at: yield* at }).pipe(
             Effect.map((m) => {
               const tag = outcome._tag === "Err" ? errTag(outcome.error) : undefined;
-              return tag !== undefined && typeof m === "object" && m !== null && !Array.isArray(m)
+              return tag !== undefined && typeof m === "object" && m !== null && !Arr.isArray(m)
                 ? { ...m, reason: tag }
                 : m;
             }),
@@ -2227,7 +2245,8 @@ export class ProgramRunner extends Context.Service<
                   if (old !== null) {
                     yield* originStore.save({
                       ...old,
-                      cmds: old.cmds.filter(
+                      cmds: Arr.filter(
+                        old.cmds,
                         (cmd) => typeof cmd !== "object" || cmd === null || !("id" in cmd) || cmd.id !== job.id,
                       ),
                     });
@@ -2260,7 +2279,7 @@ export class ProgramRunner extends Context.Service<
                       const answer = yield* Schema.decodeUnknownEffect(Schema.Json)(m).pipe(Effect.orDie);
                       const next = {
                         ...live,
-                        cmds: live.cmds.map((cmd): Dispatched =>
+                        cmds: Arr.map(live.cmds, (cmd): Dispatched =>
                           cmd.id === job.id ? { ...cmd, state: "waiting_answer", answer } : cmd,
                         ),
                       };
@@ -2300,7 +2319,7 @@ export class ProgramRunner extends Context.Service<
         /** A host Cmd runs once at a time while dispatched; its owed entry keeps the retry alarm. */
         const sendOnce = (job: Dispatched): Effect.Effect<ReadonlyArray<Dispatched>, RunnerFailure> =>
           Effect.suspend(() => {
-            if (sending.has(job.id) || live?.cmds.some((cmd) => cmd.id === job.id) !== true) {
+            if (sending.has(job.id) || live === null || !Arr.some(live.cmds, (cmd) => cmd.id === job.id)) {
               return Effect.succeed([]);
             }
 
@@ -2542,7 +2561,10 @@ export class ProgramRunner extends Context.Service<
                   return { answer: Sent.cases.refused.make({ reason: "ended" }), jobs: [] };
                 }
 
-                const receipt = supervision?.receipts.find((r) => r.letter === input.id);
+                const receipt =
+                  supervision === null
+                    ? undefined
+                    : Option.getOrUndefined(Arr.findFirst(supervision.receipts, (r) => r.letter === input.id));
 
                 if (receipt !== undefined) {
                   const digest =
@@ -2588,7 +2610,7 @@ export class ProgramRunner extends Context.Service<
                 // Any alarm tries again every host Cmd a failure left dispatched.
                 mailRetry = null;
                 const state = yield* ready();
-                const sends = state.cmds.filter((cmd) => cmd.mail === true || cmd.state === "waiting_answer");
+                const sends = Arr.filter(state.cmds, (cmd) => cmd.mail === true || cmd.state === "waiting_answer");
 
                 if (state.wake === null || state.wake > time) {
                   yield* setAlarm();
@@ -2665,7 +2687,8 @@ export class ProgramRunner extends Context.Service<
                     ? j.origin.request
                     : undefined;
                 const prior =
-                  s.requests.find((r) => r.id === request.id) ?? (flying?.id === request.id ? flying : undefined);
+                  Option.getOrUndefined(Arr.findFirst(s.requests, (r) => r.id === request.id)) ??
+                  (flying?.id === request.id ? flying : undefined);
 
                 if (prior !== undefined) {
                   if (prior.build !== request.build) {
@@ -2725,7 +2748,7 @@ export class ProgramRunner extends Context.Service<
               return { answer: Sent.cases.accepted.make({ rev: prior.rev, pos: prior.pos }), jobs: [] };
             }
 
-            if ((yield* ended) || state.cmds.some((job) => exits(state, job))) {
+            if ((yield* ended) || Arr.some(state.cmds, (job) => exits(state, job))) {
               return { answer: Sent.cases.refused.make({ reason: "ended" }), jobs: [] };
             }
 
@@ -2824,7 +2847,10 @@ export class ProgramRunner extends Context.Service<
             );
 
             if (Result.isFailure(preparation)) {
-              const terminal = supervision?.receipts.find((r) => r.letter === input.id)?.result;
+              const terminal =
+                supervision === null
+                  ? undefined
+                  : Option.getOrUndefined(Arr.findFirst(supervision.receipts, (r) => r.letter === input.id))?.result;
 
               if (
                 preparation.failure instanceof ProgramDown &&
@@ -2862,7 +2888,7 @@ export class ProgramRunner extends Context.Service<
 
             // The inbox now holds the accepted input. Failed deliveries keep their original body.
             if (supervision !== null) {
-              const receipt = supervision.receipts.find((r) => r.letter === input.id);
+              const receipt = Option.getOrUndefined(Arr.findFirst(supervision.receipts, (r) => r.letter === input.id));
 
               if (receipt !== undefined && receipt.tries === 0) {
                 yield* send({

@@ -5,6 +5,7 @@
  * platform.
  */
 import { Effect, Schema, SchemaGetter } from "effect";
+import * as Arr from "effect/Array";
 import { Digest } from "effect/crypto";
 import { ProgramName } from "../packs/ProgramName.ts";
 
@@ -124,12 +125,12 @@ export const Built = Schema.Struct({
   // A refined key would drop a bad name or route quietly, so each record checks its keys instead.
   programs: Schema.Record(Schema.String, BuiltProgram).check(
     Schema.makeFilter(
-      (programs) => Object.keys(programs).every(isProgramName) || "a program's name is not `pack/program`",
+      (programs) => Arr.every(Object.keys(programs), isProgramName) || "a program's name is not `pack/program`",
     ),
   ),
   assets: Schema.Record(Schema.String, Asset).check(
     Schema.makeFilter(
-      (assets) => Object.keys(assets).every((route) => ROUTE.test(route)) || "an asset route is not a path",
+      (assets) => Arr.every(Object.keys(assets), (route) => ROUTE.test(route)) || "an asset route is not a path",
     ),
   ),
 });

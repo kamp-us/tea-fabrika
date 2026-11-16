@@ -2,6 +2,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { type Update, WatcherManager } from "./Entry.ts";
 import { nth } from "./RepliesTest.ts";
@@ -60,8 +62,14 @@ const restore = (sql: Sql, saved: ReadonlyArray<Record<string, SqlValue>>) => {
   for (const row of saved) {
     const columns = Object.keys(row);
     sql.exec(
-      `INSERT INTO process_watchers (${columns.map((c) => `"${c}"`).join(",")}) VALUES (${columns.map(() => "?").join(",")})`,
-      ...columns.map((c) => row[c] ?? null),
+      `INSERT INTO process_watchers (${Arr.join(
+        Arr.map(columns, (c) => `"${c}"`),
+        ",",
+      )}) VALUES (${Arr.join(
+        Arr.map(columns, () => "?"),
+        ",",
+      )})`,
+      ...Arr.map(columns, (c) => row[c] ?? null),
     );
   }
 };
@@ -110,10 +118,10 @@ export const suite = (database: Database) =>
               frames.length = 0;
               yield* a.publish(patch);
               expect(
-                frames.map((f) => f.client),
+                Arr.map(frames, (f) => f.client),
                 "the fill holds the newest 1024 in order",
               ).toEqual(held);
-              filled.push(...rows(sql).filter((row) => row.name === "counter:a"));
+              filled.push(...Arr.filter(rows(sql), (row) => row.name === "counter:a"));
               expect(filled, "the fill is one saved row").toHaveLength(1);
             } else {
               restore(sql, filled);
@@ -127,21 +135,21 @@ export const suite = (database: Database) =>
               } else {
                 gone.delete(client);
                 yield* a.open(client, whole);
-                held = [...held.filter((c) => c !== client), client].slice(-1024);
+                held = [...Arr.filter(held, (c) => c !== client), client].slice(-1024);
               }
 
               frames.length = 0;
               yield* a.publish(patch);
-              held = held.filter((c) => !gone.has(c));
-              expect(frames.map((f) => f.client)).toEqual(held);
+              held = Arr.filter(held, (c) => !gone.has(c));
+              expect(Arr.map(frames, (f) => f.client)).toEqual(held);
               expect(held.length).toBeLessThanOrEqual(1024);
               frames.length = 0;
               yield* b.publish(patch);
-              expect(frames.map((f) => f.client)).toEqual(["isolated"]);
+              expect(Arr.map(frames, (f) => f.client)).toEqual(["isolated"]);
             }
 
             gone.clear();
-            held.forEach((c) => {
+            Arr.forEach(held, (c) => {
               gone.add(c);
             });
             yield* a.publish(patch);
@@ -220,11 +228,13 @@ export const suite = (database: Database) =>
               yield* watches.publish(patch);
               gone = false;
               yield* watches.open("held", whole);
-              const [row] = rows(sql).filter((r) => r.name === "counter:fault");
+              const [row] = Arr.filter(rows(sql), (r) => r.name === "counter:fault");
               expect(row).toBeDefined();
-
-              const column = Object.keys(row ?? {}).find(
+              const column = Option.getOrUndefined(
+                Arr.findFirst(
+                  Object.keys(row ?? {}),
                 (k) => typeof (row ?? {})[k] === "string" && String((row ?? {})[k]).startsWith("{"),
+                ),
               );
 
               expect(column).toBeDefined();
@@ -288,7 +298,7 @@ export const suite = (database: Database) =>
               routes.set(target, route);
               frames.length = 0;
               yield* watches.publish(patch);
-              expect(frames.sort()).toEqual([...held].filter((c) => routes.get(c) === "sent").sort());
+              expect(frames.sort()).toEqual(Arr.filter([...held], (c) => routes.get(c) === "sent").sort());
 
               if (route === "gone") {
                 held.delete(target);

@@ -1,5 +1,6 @@
 // p22. RFC 6902 patches are checked with an independent small applicator, never patch's own apply.
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 
 type Patch = {
@@ -17,11 +18,7 @@ const apply = (before: unknown, patches: ReadonlyArray<Patch>): unknown => {
       continue;
     }
 
-    const keys = patch.path
-      .slice(1)
-      .split("/")
-      .map((s) => s.replaceAll("~1", "/").replaceAll("~0", "~"));
-
+    const keys = Arr.map(patch.path.slice(1).split("/"), (s) => s.replaceAll("~1", "/").replaceAll("~0", "~"));
     let object = root;
 
     for (const key of keys.slice(0, -1)) {
@@ -30,7 +27,7 @@ const apply = (before: unknown, patches: ReadonlyArray<Patch>): unknown => {
 
     const last = keys.at(-1)!;
 
-    if (Array.isArray(object)) {
+    if (Arr.isArray(object)) {
       const at = last === "-" ? object.length : Number(last);
 
       if (patch.op === "remove") {
@@ -101,7 +98,7 @@ type Json = null | boolean | number | string | ReadonlyArray<Json> | { readonly 
 const paths = (value: unknown, at: ReadonlyArray<string> = []): Array<ReadonlyArray<string>> => {
   const out: Array<ReadonlyArray<string>> = [at];
 
-  if (Array.isArray(value)) {
+  if (Arr.isArray(value)) {
     for (const [i, one] of value.entries()) {
       out.push(...paths(one, [...at, String(i)]));
     }
@@ -115,7 +112,7 @@ const paths = (value: unknown, at: ReadonlyArray<string> = []): Array<ReadonlyAr
 };
 
 const read = (value: unknown, at: ReadonlyArray<string>): unknown =>
-  at.reduce<unknown>((v, key) => (typeof v === "object" && v !== null ? Reflect.get(v, key) : undefined), value);
+  Arr.reduce(at, value, (v, key) => (typeof v === "object" && v !== null ? Reflect.get(v, key) : undefined));
 
 /** `value` with `f` done to the container at `at`, copied on the way down. */
 const change = (value: unknown, at: ReadonlyArray<string>, f: (v: unknown) => unknown): unknown => {
@@ -125,7 +122,7 @@ const change = (value: unknown, at: ReadonlyArray<string>, f: (v: unknown) => un
     return f(value);
   }
 
-  if (Array.isArray(value)) {
+  if (Arr.isArray(value)) {
     const copy = [...value];
     copy[Number(key)] = change(copy[Number(key)], rest, f);
 
@@ -148,7 +145,7 @@ type EditChoice = typeof editChoice extends fc.Arbitrary<infer E> ? E : never;
 /** `before` changed by edits chosen from the paths it holds at each step: replace a value, drop a key or
  *  an item, or add one. */
 const edited = (before: unknown, edits: ReadonlyArray<EditChoice>): unknown =>
-  edits.reduce((value, e) => {
+  Arr.reduce(edits, structuredClone(before), (value, e) => {
     const all = paths(value);
     const at = all[e.pick % all.length]!;
     const here = read(value, at);
@@ -162,16 +159,16 @@ const edited = (before: unknown, edits: ReadonlyArray<EditChoice>): unknown =>
 
     if (e.kind % 3 === 1) {
       return change(value, parent, (p) =>
-        Array.isArray(p)
-          ? p.filter((_, i) => String(i) !== last)
-          : Object.fromEntries(Object.entries(Object(p)).filter(([k]) => k !== last)),
+        Arr.isArray(p)
+          ? Arr.filter(p, (_, i) => String(i) !== last)
+          : Object.fromEntries(Arr.filter(Object.entries(Object(p)), ([k]) => k !== last)),
       );
     }
 
     return typeof here === "object" && here !== null
-      ? change(value, at, (p) => (Array.isArray(p) ? [...p, e.value] : { ...Object(p), [e.key]: e.value }))
+      ? change(value, at, (p) => (Arr.isArray(p) ? [...p, e.value] : { ...Object(p), [e.key]: e.value }))
       : change(value, at, () => e.value);
-  }, structuredClone(before));
+  });
 
 const UNSAFE = ["__proto__", "constructor", "prototype"] as const;
 
@@ -184,8 +181,8 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
         const after = edited(before, edits);
         // A view key that names a prototype is refused by the next law, so these pairs hold none.
         fc.pre(
-          ![...paths(before), ...paths(after)].some((p) =>
-            p.some((k) => (UNSAFE as ReadonlyArray<string>).includes(k)),
+          !Arr.some([...paths(before), ...paths(after)], (p) =>
+            Arr.some(p, (k) => (UNSAFE as ReadonlyArray<string>).includes(k)),
           ),
         );
         const ops = diff(before, after);
@@ -238,7 +235,10 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
           // The unsafe key at a path this value holds, as the last token or with one more below it.
           const all = paths(before);
           const at = [...all[pick % all.length]!, unsafe, ...(last ? [] : ["polluted"])];
-          const path = `/${at.map((k) => k.replaceAll("~", "~0").replaceAll("/", "~1")).join("/")}`;
+          const path = `/${Arr.join(
+            Arr.map(at, (k) => k.replaceAll("~", "~0").replaceAll("/", "~1")),
+            "/",
+          )}`;
           const copy = structuredClone(before);
           const got = apply(before, [op === "remove" ? { op, path } : { op, path, value }]);
           expect(Result.isFailure(got), `${op} ${path}`).toBe(true);
@@ -287,7 +287,7 @@ describe("L7: pointers and operations as the RFCs give them", () => {
     for (const [pointer, keys] of vectors) {
       const got = apply(RFC6901, [{ op: "replace", path: pointer, value: "X" }]);
       expect(Result.isSuccess(got), pointer).toBe(true);
-      expect(read(Result.getOrThrow(got), keys.map(String)), pointer).toBe("X");
+      expect(read(Result.getOrThrow(got), Arr.map(keys, String)), pointer).toBe("X");
     }
 
     expect(Result.getOrThrow(apply(RFC6901, [{ op: "replace", path: "", value: "X" }]))).toBe("X");

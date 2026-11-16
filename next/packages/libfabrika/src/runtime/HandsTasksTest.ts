@@ -24,6 +24,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Result as R, type Scope } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import type { From } from "../processes/Mailbox.ts";
 import { Command, type Task, type Result, State } from "../tasks/Task.ts";
@@ -114,8 +115,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>)
     const read = (id: string) => tasks((j) => j.read(id));
 
     for (const cell of tape.cells) {
-      const waiting = [...saved.entries()].filter(([, s]) => s.phase === "requested");
-
+      const waiting = Arr.filter([...saved.entries()], ([, s]) => s.phase === "requested");
       const can: Record<Move, boolean> = {
         ask: true,
         change: life + 1 < tape.targets.length,
@@ -124,7 +124,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>)
       };
 
       const move = choose(
-        (["ask", "change", "finish", "reopen"] as const).filter((m) => can[m]),
+        Arr.filter(["ask", "change", "finish", "reopen"] as const, (m) => can[m]),
         cell.move,
       );
 
@@ -149,7 +149,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>)
           const task = answered(yield* read(a.id), "a waiting ask saved its task");
           const first = task.events[0];
           expect(
-            task.events.map((e) => e.event),
+            Arr.map(task.events, (e) => e.event),
             "one request is saved",
           ).toEqual(["requested"]);
           expect(reply, "S1: a new task answers waiting with its request's receipt").toEqual(
@@ -184,7 +184,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>)
         } else {
           const result = kept.result ?? expect.fail("a finished task has its result");
           const task = answered(yield* read(a.id), "a finished task reads back");
-          const collected = task.events.filter((e) => e.event === "collected");
+          const collected = Arr.filter(task.events, (e) => e.event === "collected");
           expect(collected, "one collect is saved, however often the Cmd asks").toHaveLength(1);
           const receipt = { rev: collected[0]?.rev ?? -1, arrivedAt: collected[0]?.arrivedAt ?? -1 };
           expect(reply, "a finished task answers its result and the collect's receipt").toEqual(

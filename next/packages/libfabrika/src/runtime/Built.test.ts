@@ -10,6 +10,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Effect, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 
@@ -57,8 +58,8 @@ const routes = fc.uniqueArray(
   fc.record({
     route: fc
       .array(fc.stringMatching(/^[\w-][\w.-]{0,8}$/), { minLength: 1, maxLength: 3 })
-      .filter((parts) => parts.every((p) => p !== "." && p !== ".."))
-      .map((parts) => `/${parts.join("/")}`),
+      .filter((parts) => Arr.every(parts, (p) => p !== "." && p !== ".."))
+      .map((parts) => `/${Arr.join(parts, "/")}`),
     type: fc.constantFrom(...types),
     body: fc.string({ maxLength: 40, unit: "grapheme" }),
   }),
@@ -79,8 +80,10 @@ describe("P16 checked built tables", () => {
     await fc.assert(
       fc.asyncProperty(rows, routes, async (rows, assets) => {
         const raw: Built = {
-          programs: Object.fromEntries(rows.map(({ name, source }) => [name, { hash: sha(source), source }])),
-          assets: Object.fromEntries(assets.map(({ route, type, body }) => [route, { hash: sha(body), type, body }])),
+          programs: Object.fromEntries(Arr.map(rows, ({ name, source }) => [name, { hash: sha(source), source }])),
+          assets: Object.fromEntries(
+            Arr.map(assets, ({ route, type, body }) => [route, { hash: sha(body), type, body }]),
+          ),
         };
 
         expect(await Effect.runPromise(api.decodeBuilt(raw))).toEqual(raw);
@@ -182,7 +185,7 @@ describe("P16 checked built tables", () => {
     await fc.assert(
       fc.asyncProperty(rows, tape, async (rows, tape) => {
         const programs: Record<string, Program> = Object.fromEntries(
-          rows.map(({ name, source }) => [name, { hash: sha(source), source }]),
+          Arr.map(rows, ({ name, source }) => [name, { hash: sha(source), source }]),
         );
 
         let added = 0,

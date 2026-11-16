@@ -4,6 +4,8 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
 import { Cause, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Writer, SinkError } from "../coordination/index.ts";
@@ -119,10 +121,9 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
     return result;
   }
 
-  return Array.isArray(value)
-    ? value.flatMap((part) => texts(part, cache))
-    : value !== null && typeof value === "object"
-      ? Object.values(value).flatMap((part) => texts(part, cache))
+  // An array's values are its items, in order, so one branch reads arrays and objects alike.
+  return value !== null && typeof value === "object"
+    ? Arr.flatMap(Object.values(value), (part) => texts(part, cache))
       : [];
 };
 
@@ -340,27 +341,24 @@ const walk = Effect.fnUntraced(function* (
 
         const admission =
           /process_recovery/.test(query) &&
-          params.some((p) => typeof p === "string" && p.includes('"_tag":"stepping"'));
-
+          Arr.some(params, (p) => typeof p === "string" && p.includes('"_tag":"stepping"'));
         const reply = /process_replies/.test(query);
 
         const cleanup =
-          /process_activity/.test(query) && params.some((p) => typeof p === "string" && p.includes('"_tag":"idle"'));
-
+          /process_activity/.test(query) &&
+          Arr.some(params, (p) => typeof p === "string" && p.includes('"_tag":"idle"'));
         const activity =
           /process_activity/.test(query) &&
-          params.some((p) => typeof p === "string" && p.includes('"_tag":"stepping"'));
-
+          Arr.some(params, (p) => typeof p === "string" && p.includes('"_tag":"stepping"'));
         const refusal =
           /process_recovery/.test(query) &&
-          params.some((p) => typeof p === "string" && p.includes('"_tag":"writing_reply"'));
-
+          Arr.some(params, (p) => typeof p === "string" && p.includes('"_tag":"writing_reply"'));
         const abandonment =
           /process_recovery/.test(query) &&
-          params.some((p) => typeof p === "string" && p.includes('"_tag":"clearing_attempt"'));
-
+          Arr.some(params, (p) => typeof p === "string" && p.includes('"_tag":"clearing_attempt"'));
         const replyComplete =
-          /process_recovery/.test(query) && params.some((p) => typeof p === "string" && p.includes('"_tag":"idle"'));
+          /process_recovery/.test(query) &&
+          Arr.some(params, (p) => typeof p === "string" && p.includes('"_tag":"idle"'));
 
         if (
           control.cut === "all" ||
@@ -620,31 +618,36 @@ const walk = Effect.fnUntraced(function* (
       expect(yield* live.journal.input(prior.id), "earlier failure evidence stays exact").toEqual(prior);
     }
 
-    expect(saved?.receipts.filter((r) => r.tries > 0).every((r) => r.errors.length === r.tries)).toBe(true);
-
-    const records = live.raw
-      .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-      .flatMap(({ name }) => live.raw.exec(`SELECT * FROM "${name}"`));
-
-    const outputs = [...writes, ...records.map((row) => JSON.stringify(row)), ...errors, ...monitor.text()].flatMap(
-      (output) => texts(output, decoded),
+    expect(
+      saved === null
+        ? undefined
+        : Arr.every(
+            Arr.filter(saved.receipts, (r) => r.tries > 0),
+            (r) => r.errors.length === r.tries,
+          ),
+    ).toBe(true);
+    const records = Arr.flatMap(
+      live.raw.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"),
+      ({ name }) => live.raw.exec(`SELECT * FROM "${name}"`),
     );
+    const written = [...writes, ...Arr.map(records, (row) => JSON.stringify(row)), ...errors, ...monitor.text()];
+    const outputs = Arr.flatMap(written, (output) => texts(output, decoded));
 
     for (const body of refusedBodies) {
       const forms = [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body), body.slice(0, 14)];
       expect(
-        outputs.filter((output) => forms.some((form) => output.includes(form))),
+        Arr.filter(outputs, (output) => Arr.some(forms, (form) => output.includes(form))),
         "input text leaked",
       ).toEqual([]);
     }
   });
 
   for (const cell of tape) {
-    const unansweredFailures = failures.filter(
-      (failed) => !answers.some((answered) => answered.input.id === failed.id),
+    const unansweredFailures = Arr.filter(
+      failures,
+      (failed) => !Arr.some(answers, (answered) => answered.input.id === failed.id),
     );
-
-    const available = enabled.filter((move) =>
+    const available = Arr.filter(enabled, (move) =>
       move === "refuse_failed"
         ? unansweredFailures.length > 0
         : move === "retry" || move === "reuse"
@@ -844,12 +847,18 @@ const walk = Effect.fnUntraced(function* (
       if (move === "check_throw" || move === "update_throw") {
         failures.push(fresh);
         const saved = yield* live.journal.load;
-        expect(saved?.receipts.find((r) => r.letter === fresh.id)).toMatchObject({
+        expect(
+          saved === null
+            ? undefined
+            : Option.getOrUndefined(Arr.findFirst(saved.receipts, (r) => r.letter === fresh.id)),
+        ).toMatchObject({
           input: fresh,
           tries: 1,
           errors: [move === "check_throw" ? "RangeError" : "TypeError"],
         });
-        expect(saved?.observations.filter((o) => o.letter === fresh.id)).toHaveLength(1);
+        expect(saved === null ? undefined : Arr.filter(saved.observations, (o) => o.letter === fresh.id)).toHaveLength(
+          1,
+        );
         expect(saved?.crashes).toBe((before?.crashes ?? 0) + 1);
       }
 
@@ -862,7 +871,10 @@ const walk = Effect.fnUntraced(function* (
         }
 
         control.cut = "";
-        expect((yield* live.journal.load)?.receipts.some((r) => r.letter === fresh.id && r.tries > 0)).toBe(false);
+        const loaded = yield* live.journal.load;
+        expect(
+          loaded === null ? undefined : Arr.some(loaded.receipts, (r) => r.letter === fresh.id && r.tries > 0),
+        ).toBe(false);
       }
 
       control.mode = "";
@@ -882,10 +894,16 @@ const walk = Effect.fnUntraced(function* (
 
       if (move === "lost_observation") {
         const saved = yield* live.journal.load;
-        expect(saved?.observations.filter((o) => o.letter === fresh.id && o.phase === "fresh")).toHaveLength(0);
-        expect(saved?.observations.filter((o) => o.letter === fresh.id && o.phase === "interrupted")).toHaveLength(
-          sameRunner ? 0 : 1,
-        );
+        expect(
+          saved === null
+            ? undefined
+            : Arr.filter(saved.observations, (o) => o.letter === fresh.id && o.phase === "fresh"),
+        ).toHaveLength(0);
+        expect(
+          saved === null
+            ? undefined
+            : Arr.filter(saved.observations, (o) => o.letter === fresh.id && o.phase === "interrupted"),
+        ).toHaveLength(sameRunner ? 0 : 1);
       }
 
       if (
@@ -930,8 +948,17 @@ const walk = Effect.fnUntraced(function* (
 
         if (move === "lost_observation") {
           const saved = yield* live.journal.load;
-          expect(saved?.observations.filter((o) => o.letter === fresh.id && o.phase === "fresh")).toHaveLength(0);
-          expect(saved?.receipts.find((r) => r.letter === fresh.id)?.errors ?? []).toEqual([]);
+          expect(
+            saved === null
+              ? undefined
+              : Arr.filter(saved.observations, (o) => o.letter === fresh.id && o.phase === "fresh"),
+          ).toHaveLength(0);
+          expect(
+            (saved === null
+              ? undefined
+              : Option.getOrUndefined(Arr.findFirst(saved.receipts, (r) => r.letter === fresh.id))
+            )?.errors ?? [],
+          ).toEqual([]);
         }
 
         answers.push({ input: fresh, first: answer });
@@ -969,7 +996,7 @@ const walk = Effect.fnUntraced(function* (
   }
 
   const letters = yield* Stream.runCollect(live.mailbox.read(NAME, 0));
-  expect(letters.length).toBe([...versions.values()].reduce((a, b) => a + b, 0));
+  expect(letters.length).toBe(Arr.reduce([...versions.values()], 0, (a, b) => a + b));
   yield* check();
 });
 

@@ -5,6 +5,7 @@
  */
 import { type Outcome, type Tagged } from "@demlik/tea";
 import { Context, Effect, Layer, Option, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { type SessionManagerError } from "../access/SessionManager.ts";
 import {
   type Appended,
@@ -149,15 +150,15 @@ export class ProgramLoader extends Context.Service<
                 ...(loaded.program.maxDeliveries === undefined ? {} : { maxDeliveries: loaded.program.maxDeliveries }),
                 ...(loaded.program.policy === undefined ? {} : { policy: loaded.program.policy }),
                 writes: Object.fromEntries(
-                  Object.entries(loaded.program.writes).map(([name, p]) => [name, { personOnly: p.personOnly }]),
+                  Arr.map(Object.entries(loaded.program.writes), ([name, p]) => [name, { personOnly: p.personOnly }]),
                 ),
                 inputs: Object.fromEntries(
-                  Object.entries(loaded.program.inputs).map(([name, p]) => [
+                  Arr.map(Object.entries(loaded.program.inputs), ([name, p]) => [
                     name,
                     { write: p._tag === "write", personOnly: p._tag === "write" && p.personOnly },
                   ]),
                 ),
-                cmds: (loaded.program.machine.cmds ?? []).map((d) => d.cmdType),
+                cmds: Arr.map(loaded.program.machine.cmds ?? [], (d) => d.cmdType),
               },
               handler: (cmd: string) => {
                 const owner = CHAOS_ONLY[cmd];
