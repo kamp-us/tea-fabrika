@@ -105,8 +105,12 @@ const field = (value: string | Uint8Array) => {
   return Buffer.concat([u32(bytes.length), bytes]);
 };
 
+class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
+  message: Schema.String,
+}) {}
+
 const web = <A>(call: () => Promise<A>) =>
-  Effect.tryPromise({ try: call, catch: () => new Error("test crypto failed") });
+  Effect.tryPromise({ try: call, catch: () => new WebCryptoError({ message: "test crypto failed" }) });
 
 const key = Effect.fnUntraced(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));

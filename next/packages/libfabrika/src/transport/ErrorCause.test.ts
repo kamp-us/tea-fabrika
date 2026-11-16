@@ -100,8 +100,13 @@ const integer = (raw: Uint8Array) => {
   return (bytes[0] ?? 0) >= 128 ? Buffer.concat([Buffer.from([0]), bytes]) : bytes;
 };
 
-const web = <A>(work: () => Promise<A>): Effect.Effect<A, Error> =>
-  Effect.tryPromise({ try: work, catch: (cause) => new Error("test WebCrypto failed", { cause }) });
+class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
+const web = <A>(work: () => Promise<A>): Effect.Effect<A, WebCryptoError> =>
+  Effect.tryPromise({ try: work, catch: (cause) => new WebCryptoError({ message: "test WebCrypto failed", cause }) });
 
 /**
  * scenario: a passkey made when the law runs (WebCrypto, P-256) signs authenticator data and the

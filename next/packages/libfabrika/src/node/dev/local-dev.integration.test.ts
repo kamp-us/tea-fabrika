@@ -19,6 +19,11 @@ import { processId } from "../../Id.test-support.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { brainOutbox, checkMemory } from "./local-dev.ts";
 
+/** The failure a stand-in control channel answers a flush with. */
+class ControlFault extends Schema.TaggedError<ControlFault, { readonly brand: unique symbol }>()("ControlFault", {
+  message: Schema.String,
+}) {}
+
 const SEED = 119120;
 
 // Each run has its own scope, so the folder a run opens goes away when the run ends (0061).
@@ -119,7 +124,9 @@ describe("P12 local brain life", () => {
             const folder = yield* home("p12-l-");
             let outbox = yield* brainOutbox(folder);
             yield* outbox.add(event);
-            yield* Effect.exit(outbox.flush(() => Effect.fail(new Error("private control failure"))));
+            yield* Effect.exit(
+              outbox.flush(() => Effect.fail(new ControlFault({ message: "private control failure" }))),
+            );
             outbox = yield* brainOutbox(folder);
             expect(yield* outbox.pending).toEqual([event]);
             expect(readFileSync(join(folder, "brain.pending.jsonl"), "utf8")).not.toContain("private control failure");

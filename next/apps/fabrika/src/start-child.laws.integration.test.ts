@@ -25,6 +25,11 @@ import {
   SENT,
 } from "./start-child.test-support.ts";
 
+/** A public call's rejection, kept whole in `cause`, so a law reads exactly what the caller got. */
+class Rejected extends Schema.TaggedError<Rejected, { readonly brand: unique symbol }>()("Rejected", {
+  cause: Schema.Defect(),
+}) {}
+
 // Each built-in program's hash is the SHA-256 of its source, as `BuiltProgram` requires.
 const CODE = vi.hoisted(() => ({
   counter: { hash: "efe899c74558f20b08bbc19bf0228c0c25bddb7871d80bd34ac8b33c030b3698", source: "counter" },
@@ -338,11 +343,11 @@ const projectSecrets = Effect.fnUntraced(function* (
             return request;
           }).pipe(Effect.provide(logging)),
         ),
-      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      catch: (error) => new Rejected({ cause: error }),
     }).pipe(Effect.result);
 
     if (Result.isFailure(outcome)) {
-      const error = outcome.failure;
+      const error = outcome.failure.cause;
       // This is the actual public call's rejection, not Cause.pretty on an in-memory Exit.
       outputs.reply.push(error instanceof Error ? error.message : String(error), String(error));
     } else {
@@ -535,7 +540,7 @@ const storageCall = Effect.fnUntraced(function* (
   path: StoragePath,
   inspect: (
     fixture: Effect.Success<ReturnType<typeof childProject>>,
-    call: Effect.Effect<unknown, unknown>,
+    call: Effect.Effect<unknown, Rejected>,
     reopen: Effect.Effect<void>,
   ) => Effect.Effect<void, unknown, Scope.Scope>,
 ) {
@@ -570,7 +575,7 @@ const storageCall = Effect.fnUntraced(function* (
 
     const failed = yield* Effect.tryPromise({
       try: () => runtime.runPromise(start),
-      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      catch: (error) => new Rejected({ cause: error }),
     }).pipe(Effect.result);
 
     prepared = Result.isFailure(failed) && fixture.hit();
@@ -580,7 +585,7 @@ const storageCall = Effect.fnUntraced(function* (
 
     const failed = yield* Effect.tryPromise({
       try: () => runtime.runPromise(start),
-      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      catch: (error) => new Rejected({ cause: error }),
     }).pipe(Effect.result);
 
     prepared = Result.isFailure(failed) && fixture.hit();
@@ -671,7 +676,7 @@ const storageCall = Effect.fnUntraced(function* (
 
   const invoke = Effect.tryPromise({
     try: () => runtime.runPromise(call.pipe(Effect.provide(logging))),
-    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    catch: (error) => new Rejected({ cause: error }),
   });
 
   yield* inspect(fixture, invoke, reopen);
@@ -748,7 +753,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
             expect(fixture.hit(), `L11: ${cut.path}/${cut.operation} ${cut.statement}`).toBe(true);
 
             if (Result.isFailure(outcome)) {
-              const error = outcome.failure;
+              const error = outcome.failure.cause;
               outputs.reply.push(error instanceof Error ? error.message : String(error), String(error));
             } else {
               outputs.reply.push(...outputText(outcome.success));

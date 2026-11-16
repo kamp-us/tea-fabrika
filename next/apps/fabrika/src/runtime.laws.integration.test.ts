@@ -26,6 +26,11 @@ import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings, type Env } from "./runtime.ts";
 import { Settings } from "./settings.ts";
 
+class ReopenError extends Schema.TaggedError<ReopenError, { readonly brand: unique symbol }>()("ReopenError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 
 vi.mock("./table.ts", () => table);
@@ -780,7 +785,7 @@ describe("P12 Project authority", () => {
     const result = await Effect.runPromiseExit(
       Effect.tryPromise({
         try: w.reopen,
-        catch: (cause) => new Error("project reopen failed", { cause }),
+        catch: (cause) => new ReopenError({ message: "project reopen failed", cause }),
       }),
     );
 

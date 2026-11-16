@@ -15,6 +15,11 @@ import * as RecordWireTest from "./record-wire.test-support.ts";
 import { programs } from "./table.ts";
 import type { Project as SeededProject } from "./tasks-wire.test-support.ts";
 
+class CallError extends Schema.TaggedError<CallError, { readonly brand: unique symbol }>()("CallError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
 const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
@@ -266,7 +271,7 @@ it.live(
               build: built.build,
             },
           ),
-        catch: (cause: unknown) => new Error("requester start failed", { cause }),
+        catch: (cause: unknown) => new CallError({ message: "requester start failed", cause }),
       });
 
       expect(requester).toMatchObject({ process: expect.any(String) });
@@ -289,7 +294,7 @@ it.live(
               headers: { "content-type": "application/json" },
               body: Formatter.formatJson({ text: value, armored: root.sign(value) }),
             }),
-          catch: (cause: unknown) => new Error("grant failed", { cause }),
+          catch: (cause: unknown) => new CallError({ message: "grant failed", cause }),
         });
 
         expect(reply.ok).toBe(true);
@@ -359,7 +364,7 @@ it.live(
             headers: { "content-type": "application/json" },
             body: Formatter.formatJson({ text: revoke, armored: root.sign(revoke) }),
           }),
-        catch: (cause: unknown) => new Error("revoke failed", { cause }),
+        catch: (cause: unknown) => new CallError({ message: "revoke failed", cause }),
       });
 
       for (const [method, params] of [

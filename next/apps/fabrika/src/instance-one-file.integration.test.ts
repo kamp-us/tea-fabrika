@@ -22,6 +22,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
+class CheckError extends Schema.TaggedError<CheckError, { readonly brand: unique symbol }>()("CheckError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
 const APP = resolve(import.meta.dirname, "..");
 
 const homes: string[] = [];
@@ -783,7 +788,7 @@ describe("P16 copied-file real instance, serial", () => {
                             }
                           }
                         },
-                        catch: (error) => new Error("P16 isolation check failed", { cause: error }),
+                        catch: (error) => new CheckError({ message: "P16 isolation check failed", cause: error }),
                       });
                     }),
                   ).pipe(
@@ -969,7 +974,7 @@ describe("P16 copied-file real instance, serial", () => {
                           b.ws.close();
                         }
                       },
-                      catch: (error) => new Error("P16 recovery check failed", { cause: error }),
+                      catch: (error) => new CheckError({ message: "P16 recovery check failed", cause: error }),
                     });
                   }),
                 ).pipe(

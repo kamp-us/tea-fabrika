@@ -44,6 +44,14 @@ class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cau
 const promised = <A>(run: () => PromiseLike<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
+class NotificationError extends Schema.TaggedError<NotificationError, { readonly brand: unique symbol }>()(
+  "NotificationError",
+  {
+    message: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {}
+
 const SEED = 119120;
 /** Sorts `[program, from]` pairs so two lists compare as sets. */
 const byPair = Order.Tuple([Order.String, Order.String]);
@@ -109,7 +117,8 @@ vi.mock("rolldown", async (original) => {
               (notification) =>
                 Effect.tryPromise({
                   try: () => Promise.resolve(listener(notification)),
-                  catch: (cause: unknown): Error => new Error("the repeated Rolldown notification failed", { cause }),
+                  catch: (cause: unknown) =>
+                    new NotificationError({ message: "the repeated Rolldown notification failed", cause }),
                 }).pipe(Effect.orDie),
               { discard: true, concurrency: 1 },
             );

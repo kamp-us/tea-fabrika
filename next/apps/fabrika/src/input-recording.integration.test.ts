@@ -41,10 +41,15 @@ const Metadata = Schema.Struct({
   reason: Schema.String,
 });
 
+class CallError extends Schema.TaggedError<CallError, { readonly brand: unique symbol }>()("CallError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
 const invoke = (target: object, method: string, args: ReadonlyArray<unknown>) =>
   Effect.tryPromise({
     try: () => Reflect.apply(Reflect.get(target, method), target, args) as PromiseLike<unknown>,
-    catch: (cause) => new Error("local instance call failed", { cause }),
+    catch: (cause) => new CallError({ message: "local instance call failed", cause }),
   });
 
 const program = `
