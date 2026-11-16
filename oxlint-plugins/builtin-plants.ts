@@ -54,6 +54,37 @@ export const REFLECT: Plant = {
   ],
 };
 
+/**
+ * L1 of the trusted-rules swap (decision 0573): `Data.TaggedError` is refused in each form oxlint's
+ * `no-restricted-properties` resolves, now that `fabrika/no-data-taggederror` is gone. Beside it,
+ * the Effect checker's `preferSchemaTaggedError` holds every type-checked file, and this entry holds
+ * the files no project reads. plants.test.ts runs these lines in every folder of every block that
+ * sets the rule, at the root and at a path under no block.
+ * Plant: delete the `Data.TaggedError` entry from one block of `.oxlintrc.json`, and that folder's
+ * lines are not refused.
+ */
+export const TAGGED_ERROR: Plant = {
+  code: "eslint(no-restricted-properties)",
+  prelude: ['import {Data} from "effect";', "declare const Other: {TaggedError: (n: string) => new () => object};"],
+  lines: [
+    ['export class A extends Data.TaggedError("A") {}', true],
+    ["export const ref = Data.TaggedError;", true],
+    ['export const made = Data.TaggedError("C");', true],
+    ["export const { TaggedError } = Data;", true],
+    ['export const indexed = Data["TaggedError"];', true],
+    ["export const optional = Data?.TaggedError;", true],
+    // Not the ban: another object's member, a comment, a string, a type.
+    ['export class B extends Other.TaggedError("B") {}', false],
+    ["// Data.TaggedError in a comment", false],
+    ['export const text = "Data.TaggedError";', false],
+    ["export type Made = typeof Data.TaggedError;", false],
+    // A documented miss: an alias of Data is not followed. In a type-checked file the checker's
+    // preferSchemaTaggedError still catches the class; in an untyped script nothing does.
+    ["const D = Data;", false],
+    ['export class E extends D.TaggedError("E") {}', false],
+  ],
+};
+
 const eslint: readonly Plant[] = [
   REFLECT,
   {

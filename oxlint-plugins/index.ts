@@ -14,14 +14,12 @@ import { noBareTell } from "./no-bare-tell.ts";
 import { noCauseSquash } from "./no-cause-squash.ts";
 import { noClockInView } from "./no-clock-in-view.ts";
 import { noContextTag } from "./no-context-tag.ts";
-import { noDataTaggederror } from "./no-data-taggederror.ts";
 import { noEffectPromise } from "./no-effect-promise.ts";
 import { noEffectRunOutsideEdge } from "./no-effect-run-outside-edge.ts";
 import { noExpectInIf } from "./no-expect-in-if.ts";
 import { noHandTag } from "./no-hand-tag.ts";
 import { noImplicitEffectConcurrency } from "./no-implicit-effect-concurrency.ts";
 import { noLedgerSql } from "./no-ledger-sql.ts";
-import { noNodeFilesystem } from "./no-node-filesystem.ts";
 import { noNodeImports } from "./no-node-imports.ts";
 import { noNumericDuration } from "./no-numeric-duration.ts";
 import { noOf } from "./no-of.ts";
@@ -36,7 +34,6 @@ import { noStaticLayer } from "./no-static-layer.ts";
 import { noThrowInEffectGen } from "./no-throw-in-effect-gen.ts";
 import { noTypeAssertions } from "./no-type-assertions.ts";
 import { noWallClock } from "./no-wall-clock.ts";
-import { oneIdModule } from "./one-id-module.ts";
 import { oneMachinePerFile } from "./one-machine-per-file.ts";
 import { oneStoreHook } from "./one-store-hook.ts";
 import { outsideInputConstructor } from "./outside-input-constructor.ts";
@@ -66,14 +63,12 @@ const plugin: Plugin = {
     "no-cause-squash": noCauseSquash,
     "no-clock-in-view": noClockInView,
     "no-context-tag": noContextTag,
-    "no-data-taggederror": noDataTaggederror,
     "no-effect-promise": noEffectPromise,
     "no-effect-run-outside-edge": noEffectRunOutsideEdge,
     "no-expect-in-if": noExpectInIf,
     "no-hand-tag": noHandTag,
     "no-implicit-effect-concurrency": noImplicitEffectConcurrency,
     "no-ledger-sql": noLedgerSql,
-    "no-node-filesystem": noNodeFilesystem,
     "no-node-imports": noNodeImports,
     "no-numeric-duration": noNumericDuration,
     "no-of": noOf,
@@ -91,7 +86,6 @@ const plugin: Plugin = {
     "one-store-hook": oneStoreHook,
     "one-machine-per-file": oneMachinePerFile,
     "program-package-layout": programPackageLayout,
-    "one-id-module": oneIdModule,
     "outside-input-constructor": outsideInputConstructor,
     "package-imports": packageImports,
     "padding-line-between-statements": paddingLineBetweenStatements,
