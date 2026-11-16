@@ -26,8 +26,8 @@ export const layer = (
           return Answer.cases.declined.make({});
         }
 
-        return yield* new PersonCheckError({
-          reason: new Unavailable({ cause: new Error("No test check available") }),
+        return yield* PersonCheckError.make({
+          reason: Unavailable.make({ cause: new Error("No test check available") }),
         });
       }),
     });

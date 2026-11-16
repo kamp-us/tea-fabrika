@@ -122,7 +122,7 @@ export type Key = {
 // it was under `Effect.promise`: no law expects WebCrypto to fail.
 class CryptoFailed extends Schema.TaggedError<CryptoFailed>()("CryptoFailed", { cause: Schema.Defect() }) {}
 
-const fail = (cause: unknown) => new CryptoFailed({ cause });
+const fail = (cause: unknown) => CryptoFailed.make({ cause });
 
 export const freshKey = (comment?: string): Effect.Effect<Key> =>
   Effect.gen(function* () {

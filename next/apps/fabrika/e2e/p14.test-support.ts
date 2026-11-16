@@ -56,7 +56,7 @@ const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
 /** Fails once this worker is told to stop, so a race against the suite closes its scope first. */
 export const stopped = Effect.callback<never, Stopped>((resume) => {
   const stops = STOPS.map((reason) => {
-    const stop = () => resume(Effect.fail(new Stopped({ reason })));
+    const stop = () => resume(Effect.fail(Stopped.make({ reason })));
     process.once(reason, stop);
     return () => process.off(reason, stop);
   });
@@ -97,7 +97,7 @@ const note = (row: Readonly<Record<string, unknown>>) =>
     }
 
     if (fault?.kind === "trace" && row.acquired === fault.at) {
-      throw new SetupFault({ at: fault.at });
+      throw SetupFault.make({ at: fault.at });
     }
   });
 
@@ -117,7 +117,7 @@ const owned = <A, E, R>(
       fault?.at !== at
         ? Effect.void
         : fault.kind === "setup"
-          ? Effect.fail(new SetupFault({ at }))
+          ? Effect.fail(SetupFault.make({ at }))
           : fault.kind === "hold" || fault.kind === "timeout"
             ? note({ holding: at }).pipe(Effect.andThen(Effect.never))
             : Effect.void,
@@ -155,7 +155,7 @@ export const homeWithCredential = (credential: string) =>
     const exitCode = yield* child.exitCode;
 
     if (exitCode !== 0) {
-      return yield* new KeygenFailed({ exitCode });
+      return yield* KeygenFailed.make({ exitCode });
     }
 
     return {
@@ -224,7 +224,7 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
     yield* Effect.gen(function* () {
       for (;;) {
         if (child.exitCode !== null) {
-          return yield* new DevFailed({ output: out.join("") });
+          return yield* DevFailed.make({ output: out.join("") });
         }
 
         // The readiness probe is one HTTP request. A refused connection is "not yet", never a failure.
@@ -647,7 +647,7 @@ export const reader = (h: Home, dev: Dev) =>
           }
 
           if (closed) {
-            return yield* new WireClosed();
+            return yield* WireClosed.make();
           }
 
           yield* Effect.sleep("20 millis");

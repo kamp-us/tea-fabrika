@@ -193,7 +193,7 @@ const walk = (open: Open) =>
           (key: string) =>
             CLIENTS.some((c) => c === key && world.live.has(c))
               ? Effect.succeed(writer(key === "agent" ? "agent" : "person"))
-              : Effect.fail(new NotGranted({})),
+              : Effect.fail(NotGranted.make({})),
           { input: () => false, event: () => false },
         ),
       ),

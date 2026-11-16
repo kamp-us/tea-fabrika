@@ -189,7 +189,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
         const check = async () => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 30, full: 300 }) });
         // oxlint-disable-next-line fabrika/no-promises -- edge: await fast-check within the scoped test
-        yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => new TrustLawFailed({ cause }) });
+        yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => TrustLawFailed.make({ cause }) });
       }),
     );
 
@@ -305,7 +305,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
           const check = async () => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 30, full: 300 }) });
           // oxlint-disable-next-line fabrika/no-promises -- edge: await fast-check within the scoped test
-          yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => new TrustLawFailed({ cause }) });
+          yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => TrustLawFailed.make({ cause }) });
         }),
     );
 
@@ -365,7 +365,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       append: () => {
                         appends++;
                         return cell.move % 2 === 0
-                          ? Effect.fail(new LedgerError({ reason: "storage" }))
+                          ? Effect.fail(LedgerError.make({ reason: "storage" }))
                           : Effect.succeed(Appended.cases.refused.make({ reason: "bad_parent" }));
                       },
                     };
@@ -411,7 +411,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
         const check = async () => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 30, full: 300 }) });
         // oxlint-disable-next-line fabrika/no-promises -- edge: await fast-check within the scoped test
-        yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => new TrustLawFailed({ cause }) });
+        yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => TrustLawFailed.make({ cause }) });
       }),
     );
   });

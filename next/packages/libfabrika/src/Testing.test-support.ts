@@ -49,5 +49,5 @@ export const property = <A>(
   const options = { seed: SEED, includeErrorInReport: true, ...parameters };
   const assert = (signal: AbortSignal) => fc.assert(checked(signal), options);
   // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-  return Effect.tryPromise({ try: assert, catch: (cause) => new PropertyFailed({ cause }) });
+  return Effect.tryPromise({ try: assert, catch: (cause) => PropertyFailed.make({ cause }) });
 };

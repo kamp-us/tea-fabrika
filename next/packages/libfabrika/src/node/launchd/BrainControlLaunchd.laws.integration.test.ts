@@ -449,7 +449,7 @@ it.effect.prop(
                   refused.set(row.span.spanId, row);
                 }
 
-                return yield* new SinkError({ reason: "unreachable", held: 0, cause: "offline-test-destination" });
+                return yield* SinkError.make({ reason: "unreachable", held: 0, cause: "offline-test-destination" });
               }
 
               delivered.push(...rows);
