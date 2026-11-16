@@ -9,6 +9,7 @@
  */
 import type { Config } from "effect";
 import { ConfigProvider, Effect, Schema, SchemaIssue, String as Str } from "effect";
+import type { App } from "./App.ts";
 import { refused, SettingsError, STOP } from "./Files.ts";
 import type * as Setting from "./Setting.ts";
 import type { TomlDocument } from "./Toml.ts";
@@ -88,21 +89,21 @@ export const flags = (record: Readonly<Record<string, string>>): Source => ({
 });
 
 /**
- * Builds a source from an explicit environment record, never the process's own.
+ * Builds a source of an app's variables from an explicit environment record, never the process's own. An app's own `Sources.env` is this one with the app given.
  *
  * **Details**
  *
- * A key is read as `FABRIKA_` and the constant-cased path, and an empty string is kept as a value. The origin names the variable.
+ * A key is read as the app's prefix and the constant-cased path, as `FABRIKA_INSTANCE_PORT`, so another app's variables are never asked for, and an empty string is kept as a value. The origin names the variable.
  *
  * @stability unstable
  * @category constructors
  */
-export const env = (record: Readonly<Record<string, string>>): Source => ({
+export const env = (app: App, record: Readonly<Record<string, string>>): Source => ({
   provider: ConfigProvider.fromEnv({ env: { ...record }, preserveEmptyStrings: true }).pipe(
-    ConfigProvider.nested("fabrika"),
+    ConfigProvider.nested(app.name),
     ConfigProvider.constantCase,
   ),
-  origin: (path) => Origin.cases.env.make({ name: ["FABRIKA", ...path.map(Str.configCase)].join("_") }),
+  origin: (path) => Origin.cases.env.make({ name: [app.prefix, ...path.map(Str.configCase)].join("_") }),
 });
 
 /**

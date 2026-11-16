@@ -69,11 +69,12 @@ const declaredOrigin = (declaration: Setting.Setting<unknown>) =>
 
       if (origin._tag === "file") {
         const file = origin.file;
+        const home = `$${declaration.app.home}`;
         return (
           file.length > 0 &&
           !/^(?:[\\/]|[A-Za-z]:)/.test(file) &&
           (!file.startsWith("~") || file === "~" || file.startsWith("~/")) &&
-          (!file.startsWith("$") || file === "$FABRIKA_HOME" || file.startsWith("$FABRIKA_HOME/"))
+          (!file.startsWith("$") || file === home || file.startsWith(`${home}/`))
         );
       }
 
@@ -118,7 +119,7 @@ export const make = Effect.fnUntraced(function* <A, R extends Record<string, Set
  *
  * **Details**
  *
- * The input must hold exactly the group's declared paths in `values` and `origins`, with no extra keys. Each origin must fit its own declaration: a flag named `--` and the path, the declaration's own environment name, or a file named by a relative path, `~`, `~/...`, `$FABRIKA_HOME` or `$FABRIKA_HOME/...`. Values are decoded and encoded again to their canonical form, and the saved hash must equal the hash of those canonical values. Returns the decoded values beside the snapshot. Fails with `SnapshotError`, and needs the `Digest` service.
+ * The input must hold exactly the group's declared paths in `values` and `origins`, with no extra keys. Each origin must fit its own declaration: a flag named `--` and the path, the declaration's own environment name, or a file named by a relative path, `~`, `~/...`, or the declaring app's own home variable, as `$FABRIKA_HOME` or `$FABRIKA_HOME/...`. Values are decoded and encoded again to their canonical form, and the saved hash must equal the hash of those canonical values. Returns the decoded values beside the snapshot. Fails with `SnapshotError`, and needs the `Digest` service.
  *
  * @stability unstable
  * @category decoding
