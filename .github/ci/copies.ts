@@ -10,7 +10,10 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Option, Schema } from "effect";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
 const Side = Schema.Struct({
   name: Schema.String,
@@ -56,11 +59,12 @@ export const advice = (clones: ReadonlyArray<Clone>): ReadonlyArray<string> =>
       return `::warning ${where},title=${property("copied code (advice)")}::${lines} lines, ${tokens} tokens, the same as ${at}. Reuse it or say why not in ## Existing tools (0587).`;
     });
 
-const main = (argv: ReadonlyArray<string>): number => {
+/** The whole run: it prints its lines and answers the exit code. */
+const main = Effect.fnUntraced(function* (argv: ReadonlyArray<string>) {
   const base = argv[argv.indexOf("--base") + 1] ?? "";
 
   if (!argv.includes("--base") || !/^[0-9a-f]{40}$/.test(base)) {
-    console.log("copies: no base commit, so no clone can be told new; nothing checked");
+    yield* Console.log("copies: no base commit, so no clone can be told new; nothing checked");
     return 0;
   }
 
@@ -75,27 +79,27 @@ const main = (argv: ReadonlyArray<string>): number => {
   );
 
   if (ran.error !== undefined || ran.status !== 0) {
-    console.log(`copies: jscpd did not run (${ran.error?.message ?? `exit ${ran.status}`}); nothing checked`);
+    yield* Console.log(`copies: jscpd did not run (${ran.error?.message ?? `exit ${ran.status}`}); nothing checked`);
     return 0;
   }
 
   const report = decodeReport(readFileSync(join(out, "jscpd-report.json"), "utf8"));
 
   if (Option.isNone(report)) {
-    console.log("copies: jscpd's report is not the shape this reads; nothing checked");
+    yield* Console.log("copies: jscpd's report is not the shape this reads; nothing checked");
     return 0;
   }
 
   const lines = advice(report.value.duplicates);
 
   for (const line of lines) {
-    console.log(line);
+    yield* Console.log(line);
   }
 
-  console.log(`copies: ${lines.length} new clones, advice only`);
+  yield* Console.log(`copies: ${lines.length} new clones, advice only`);
   return 0;
-};
+});
 
 if (import.meta.main) {
-  process.exitCode = main(process.argv.slice(2));
+  process.exitCode = Effect.runSync(main(process.argv.slice(2)));
 }

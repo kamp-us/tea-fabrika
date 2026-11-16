@@ -20,7 +20,10 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Option, Schema } from "effect";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { type Argument, type Expression, parseSync, Visitor } from "oxc-parser";
 import { DRIVES, reader, type Open, type Receiver } from "./starters.ts";
 
@@ -257,27 +260,32 @@ const line = (finding: Finding): string =>
     ? `${finding.file}: named .integration. but reaches no real thing through its code or its imports (0584). It runs on stand-ins, so name it \`.test.ts\` and it runs on every pull request; or, if it does start a real thing this check cannot see, say what in oxlint-plugins/README.md's integration-test-name section.`
     : `advice: ${finding.file} reaches ${DRIVES[finding.opens._tag]} through ${finding.via.slice(1).join(" -> ")} (\`${finding.opens.call}\`). If the law calls it, name the file \`.integration.test.ts\` (0584).`;
 
-if (import.meta.main) {
-  const root = process.argv[2] ?? join(import.meta.dirname, "..");
+/** The whole run on one tree: it prints each finding and answers the exit code. */
+const main = Effect.fnUntraced(function* (root: string) {
   const trees = SCOPE.map((scope) => tree(root, scope));
   const unread = trees.flatMap((each) => (each._tag === "unread" ? [each.why] : []));
 
   if (unread.length > 0) {
-    console.error(`test-kind: could not read:\n${unread.join("\n")}`);
-    process.exit(2);
+    yield* Console.error(`test-kind: could not read:\n${unread.join("\n")}`);
+    return 2;
   }
 
   const findings = judge(new Map(trees.flatMap((each) => (each._tag === "read" ? each.modules : []))));
   const failed = findings.filter((each) => each._tag === "integration_opens_nothing");
 
   for (const finding of findings) {
-    (finding._tag === "plain_opens" ? console.log : console.error)(line(finding));
+    yield* (finding._tag === "plain_opens" ? Console.log : Console.error)(line(finding));
   }
 
   if (failed.length > 0) {
-    console.error(`test-kind: ${failed.length} .integration. files reach no real thing.`);
-    process.exit(1);
+    yield* Console.error(`test-kind: ${failed.length} .integration. files reach no real thing.`);
+    return 1;
   }
 
-  console.log(`test-kind: every .integration. file in ${SCOPE.join(", ")} reaches a real thing`);
+  yield* Console.log(`test-kind: every .integration. file in ${SCOPE.join(", ")} reaches a real thing`);
+  return 0;
+});
+
+if (import.meta.main) {
+  process.exitCode = Effect.runSync(main(process.argv[2] ?? join(import.meta.dirname, "..")));
 }
