@@ -124,6 +124,7 @@ const note = (state: World, { step, name, process }: Aimed, kept: Answer) => {
   }
 
   if (step.call === "first" || step.call === "again") {
+    // SAFETY: a `first` or `again` start that succeeded answers a placed start, which names its process.
     const placed = (kept.ok as { readonly process: string }).process;
     state.placed.set(placed, name);
     state.live.add(placed);
@@ -143,6 +144,7 @@ const answer = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<Answer> =>
       const value: unknown = exit.value;
 
       if (Predicate.isObjectOrArray(value) && Object.hasOwn(value, "at")) {
+        // SAFETY: the check above proved `value` is an object with its own `at` key.
         const { at: _at, ...rest } = value as { readonly at: unknown };
 
         return { ok: rest };

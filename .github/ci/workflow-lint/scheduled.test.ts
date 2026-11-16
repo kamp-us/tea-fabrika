@@ -42,6 +42,7 @@ const real = (): Workflow => parse(read("scheduled.yaml"));
  */
 const split = (w: Workflow, leaves: (shard: string) => boolean) => {
   const tests = w.jobs["tests"]!;
+  // SAFETY: the real scheduled workflow's test job is a matrix over a list of shard names.
   const all = tests.strategy!.matrix.shard as string[];
   const apart = structuredClone(tests);
   apart.strategy!.matrix.shard = all.filter(leaves);
@@ -49,6 +50,7 @@ const split = (w: Workflow, leaves: (shard: string) => boolean) => {
   tests.strategy!.matrix.shard = all.filter((shard) => !leaves(shard));
   tests.strategy!["max-parallel"] = 1;
   w.jobs["split"] = apart;
+  // SAFETY: `real()` reads the report job's `needs` from the workflow, where it is a list of job names.
   (w.jobs["report"]!.needs as string[]).push("split");
 };
 
@@ -81,6 +83,7 @@ const scheduled = fc
   )
   .map(([minute, minutes, group, most, gap]) => {
     const w = real();
+    // SAFETY: the branch is taken only when `schedule` is a list, and each GitHub schedule entry is a map.
     const crons = Array.isArray(w.on["schedule"]) ? (w.on["schedule"] as { cron?: unknown }[]) : [];
 
     for (const cron of crons) {
@@ -430,6 +433,7 @@ const plants: [string, (w: Workflow) => void][] = [
     (w) => {
       w.jobs["tests"]!.strategy!["max-parallel"] = 8;
       w.jobs["extra"] = { "runs-on": "ubuntu-latest", "timeout-minutes": 5, steps: [{ run: "true" }] };
+      // SAFETY: the report job of the real workflow lists its `needs` as an array of job names.
       (w.jobs["report"]!.needs as string[]).push("extra");
     },
   ],
@@ -822,6 +826,7 @@ it("SC6 scenario: on the real scheduled.yaml, the tooling legs or the next legs 
   const beside = real();
   beside.jobs["tests"]!.strategy!["max-parallel"] = 8;
   beside.jobs["extra"] = { "runs-on": "ubuntu-latest", "timeout-minutes": 5, steps: [{ run: "true" }] };
+  // SAFETY: `beside` is `real()`, whose report job waits on a list of job names.
   (beside.jobs["report"]!.needs as string[]).push("extra");
   expect(lint(beside)).toEqual([ONE]);
 });

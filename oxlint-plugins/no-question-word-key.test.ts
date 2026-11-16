@@ -272,10 +272,12 @@ it("format: diagnostic names the five words and offers no autofix", () => {
   const report = vi.fn();
   // This diagnostic check supplies only the Context method this rule calls.
   const context: Pick<Context, "report"> = { report };
+  // SAFETY: the rule calls only `context.report`, which this stand-in has, so the rest of Context is never read.
   const visitor = noQuestionWordKey.create(context as Context);
   const keys = WORDS.map((word) => ({ type: "Literal", value: word, raw: JSON.stringify(word) }));
 
   for (const key of [...keys, { type: "Identifier", name: "why" }]) {
+    // SAFETY: the rule's Property visitor reads only `key`, `computed` and `parent.type`, all set here.
     visitor.Property?.({
       key,
       computed: false,

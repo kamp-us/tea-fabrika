@@ -157,12 +157,14 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       close: (code) => ws.close(code, "reconnect"),
       ping: () => ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? null,
       wait: Effect.fnUntraced(function* (stream, after, reader) {
+        // SAFETY: `Attached` decodes `client` as a plain string, but each writer of this socket's attachment puts a `ConnectionId` there: `fetch` saves the one `p.clientConnect()` returned, and `call` and the connection's `save` copy the `client` they read back.
         const client = (yield* attached(ws)).client as ConnectionId;
 
         return yield* waits.wait(client, stream, after, reader);
       }),
       call: Effect.fnUntraced(
         function* (method, params) {
+          // SAFETY: `Attached` decodes `client` as a plain string, but each writer of this socket's attachment puts a `ConnectionId` there: `fetch` saves the one `p.clientConnect()` returned, and this call and the connection's `save` copy the `client` they read back.
           const client = (yield* attached(ws)).client as ConnectionId;
 
           if (method === "initialize") {
@@ -275,6 +277,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
 
     yield* rpc(p.leave(state.client, session));
+    // SAFETY: `Attached` decodes `client` as a plain string, but each writer of this socket's attachment puts a `ConnectionId` there: `fetch` saves the one `p.clientConnect()` returned, and `call` and the connection's `save` copy the `client` they read back.
     yield* rpc(p.disconnect(state.client as ConnectionId));
     connections.delete(ws);
   });

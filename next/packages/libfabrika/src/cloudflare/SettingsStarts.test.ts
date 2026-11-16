@@ -190,6 +190,7 @@ StartsTest.law(
 
       const input = yield* StartsTest.input(recipe);
 
+      // SAFETY: the settings-start path reads only the object's name and its SQL handle; every other storage call fails the law through `unexpected`.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: only Alchemy can construct a full object state; these are its SQLite handles
       const ctx = {
         id: { name: input.name },
@@ -212,6 +213,7 @@ StartsTest.law(
         },
       } as unknown as DurableObjectState;
 
+      // SAFETY: a settings start reads only INSTANCE from the env; each binding here fails the law through `unexpected` if it is reached.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: namespace doubles count any non-ledger work without workerd's nominal brands
       const env = {
         INSTANCE: JSON.stringify(input),

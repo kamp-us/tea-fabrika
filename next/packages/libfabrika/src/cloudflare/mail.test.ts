@@ -78,6 +78,7 @@ it.effect("R1: RPC refusals keep their reason; failed transport and undecodable 
     const check = Effect.fnUntraced(function* (choice: typeof Cases extends fc.Arbitrary<infer A> ? A : never) {
       let wakes = 0;
 
+      // SAFETY: this mail layer calls only PROJECT's `mail` and PROCESS's `mailed`, the two methods doubled here.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: fake RPC handles supply only the methods this layer calls
       const env = {
         PROJECT: {
@@ -223,6 +224,7 @@ for (const flow of [
 
         const wakes: Array<{ readonly traceId: string; readonly spanId: string } | undefined> = [];
 
+        // SAFETY: the traced mail path calls PROJECT's `mail` and PROCESS's `mailed` and nothing else on the env.
         // oxlint-disable-next-line fabrika/no-type-assertions -- edge: fake RPC handles supply only the methods this layer calls
         const env = {
           PROJECT: {
@@ -343,6 +345,7 @@ it.effect(
       const check = Effect.fnUntraced(function* (choice: "full" | "ok" | "forbidden", unread: number, cap: number) {
         const woken: Array<unknown> = [];
 
+        // SAFETY: the cap law reaches only PROJECT's `mail` and the keyed PROCESS `mailed`, both doubled below.
         // oxlint-disable-next-line fabrika/no-type-assertions -- edge: fake RPC handles supply only the methods this layer calls
         const env = {
           PROJECT: {
@@ -489,6 +492,7 @@ const project = Effect.fnUntraced(function* () {
   const sql = nodeSql(db);
   const values = new Map<string, unknown>();
 
+  // SAFETY: the Project under test reads its name, SQL, key-value storage and tail exports, as given here.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
   const ctx = {
     id: { name: "project-test" },
@@ -510,6 +514,7 @@ const project = Effect.fnUntraced(function* () {
 
   const descriptors = new Map<string, Pick<Descriptor, "id" | "name" | "build" | "program">>();
 
+  // SAFETY: this composition calls only configure, descriptor, msg, swap and mailed on PROCESS, and CONNECTION's ring and notify.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
     INSTANCE: JSON.stringify(START),
@@ -549,6 +554,7 @@ const project = Effect.fnUntraced(function* () {
       bootstrap: [{ name: "counter:1", id: "counter:1", program: COUNTER }],
       door: () =>
         Effect.succeed(
+          // SAFETY: the door holds every method name the Project may call, each a stub; built from names, its type is lost.
           Object.fromEntries(
             [
               "connect",
@@ -613,6 +619,7 @@ it.effect(
           }
 
           // A stranger: a process id no start in this walk reached.
+          // SAFETY: PIDS holds 40 ids (Process.test-support.ts), so index 30 is present, and no start in this walk uses it.
           const asker = move % 4 === 2 ? (PIDS[30] as string) : live;
           yield* i.project.processAck(asker, pos, brainOrigin).pipe(Effect.result);
           const after = i.acks("counter:1");
@@ -655,6 +662,7 @@ it.effect(
         const objects: Array<string> = [];
         const traces: Array<unknown> = [];
 
+        // SAFETY: the process mail path calls only PROCESS's `getByName`, the one binding this double has.
         // oxlint-disable-next-line fabrika/no-type-assertions -- edge: fake RPC handles supply only the methods this layer calls
         const env = {
           PROCESS: {

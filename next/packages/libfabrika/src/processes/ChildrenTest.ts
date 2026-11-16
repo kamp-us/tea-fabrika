@@ -86,6 +86,7 @@ const BRAIN = "SHA256:brain";
 
 const brain = () => ({
   owner: Owner.cases.brain.make({}),
+  // SAFETY: PIDS holds 40 ids (Process.test-support.ts), so the brain's session at index 3 is present.
   recipient: Recipient.cases.client.make({ client: "window-a", session: PIDS[3] as string }),
   by: BRAIN,
 });
@@ -193,6 +194,7 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
 };
 
 const body = (entry: Entry): Record<string, unknown> =>
+  // SAFETY: the test before this branch proved the body is a non-null, non-array object, which is a string-keyed record.
   Predicate.isObject(entry.body) ? (entry.body as Record<string, unknown>) : {};
 
 /** The store's Sql with two cuts: on the next INSERT, or on the first transaction after an INSERT. */
@@ -341,6 +343,7 @@ const sorted = (value: unknown): unknown =>
 
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 
+// SAFETY: `fc.jsonValue` makes only JSON values, and a JSON round trip of one gives back a JSON value.
 const Json = fc.jsonValue({ maxDepth: 2 }).map((m) => copied({ v: m }).v as Schema.Json);
 
 const Cell = fc.record({
@@ -378,6 +381,7 @@ const Tape = fc
 const inputFor = (cell: Cell): { readonly input?: Schema.Json } => {
   const kind = cell.input % 6;
 
+  // SAFETY: `cell.m` is a generated JSON value, and the copy through JSON keeps it one.
   return kind === 0
     ? {}
     : {
@@ -521,6 +525,7 @@ const refused = (answer: Answer, reason: Reason, message: string) => {
   expect(failure, message).toMatchObject({ reason });
 
   if (reason !== "storage") {
+    // SAFETY: the `toBeInstanceOf(ChildrenError)` check above already holds for `failure`.
     expect((failure as ChildrenError).cause, `L6: a refusal (${reason}) carries no cause`).toBeUndefined();
   }
 };
@@ -663,6 +668,7 @@ const walk = (
         );
 
         expect(registered.length, `${name} is registered once`).toBe(1);
+        // SAFETY: the `toBe(1)` just above proved `registered` has its one entry.
         expect(body(registered[0] as Entry), "L5: the brain owns every registered name").toMatchObject({
           program: held.program,
           owner: Owner.cases.brain.make({}),
@@ -776,6 +782,7 @@ const walk = (
           const again: Child = {
             ...first.child,
             code: { program: first.child.code.program, hash: cell.alt % 2 === 0 ? HASH : "build-b" },
+            // SAFETY: `first.child.input` is a JSON value, and reordering its keys after a JSON copy keeps it JSON.
             ...(first.child.input === undefined ? {} : { input: reorder(copied(first.child.input)) as Schema.Json }),
           };
 
@@ -837,6 +844,7 @@ const walk = (
 
         case "exit": {
           const name = choose(liveNames(world), cell.pick);
+          // SAFETY: `name` comes from `liveNames(world)`, which lists only names that `world.names` holds.
           const held = world.names.get(name) as Held;
           yield* manager((p) => p.exit(held.current, cell.alt % 2 === 0 ? NORMAL : SHUTDOWN, from()));
           held.state = "ended";
@@ -845,6 +853,7 @@ const walk = (
 
         case "down": {
           const name = choose(liveNames(world), cell.pick);
+          // SAFETY: the crashed name is picked from `liveNames(world)`, so `world.names` has it.
           const held = world.names.get(name) as Held;
           yield* manager((p) => p.exit(held.current, CRASHED, from()));
           yield* manager((p) =>
@@ -856,6 +865,7 @@ const walk = (
 
         case "restart": {
           const name = choose(stoppedNames(world), cell.pick);
+          // SAFETY: `stoppedNames(world)` lists only names kept in `world.names`, so the one picked is there.
           const held = world.names.get(name) as Held;
 
           const placed = yield* manager((p) =>
@@ -916,6 +926,7 @@ const walk = (
             Match.orElse((): Bad => ({ child: { ...base, input: { type: "land", deep: [1n] } }, reason: "bad_input" })),
           );
 
+          // SAFETY: `bad.child` is a child with one invalid field on purpose, so the law sees `startChild` refuse it.
           const answer = yield* startChild(bad.child as Child, said(cell, parentFor()));
           refused(answer, bad.reason, `L6: ${bad.reason}`);
           unchanged(`L6: ${bad.reason} writes nothing`);
@@ -990,10 +1001,12 @@ const walk = (
           );
 
           expect(line, "L3: the write turn that committed keeps its start").toBeDefined();
+          // SAFETY: the `toBeDefined` above proved the write turn's line was found.
           const process = String(body(line as Entry)["process"]);
           placed(
             child,
             call,
+            // SAFETY: `line` was checked to be defined two lines up, before `process` was read from it.
             Result.succeed(Started.cases.started.make({ process, name: child.name, rev: (line as Entry).rev })),
             "a cut answer",
           );
@@ -1006,6 +1019,7 @@ const walk = (
           const requester = choose(liveProcesses(world), cell.pick);
           const child = childFor(cell, requester);
           const want = expected(world, child);
+          // SAFETY: `requester` comes from `liveProcesses(world)`, so `holder` finds the name that holds it.
           const held = holder(world, requester)?.held as Held;
           const at = cell.alt % 5;
           let fired = false;
@@ -1042,6 +1056,7 @@ const walk = (
 
           held.state = "ended";
 
+          // SAFETY: the requester's exit was just committed by the move above, so its `exited` line is in the rows.
           const exited = (yield* rowsNow([holder(world, requester)?.name ?? ""])).find(
             (e) => e._tag === "exited" && body(e)["process"] === requester && e.stream.startsWith("processes/"),
           ) as Entry;
@@ -1053,6 +1068,7 @@ const walk = (
               answer.success.rev,
             );
             placed(child, call, answer, "a start whose requester exited after its write turn");
+            // SAFETY: the start was placed, as the branch's check says, and `placed` records each placed child in `world.names`.
             const life = world.names.get(child.name) as Held;
             expect(life.state, "L4: the child keeps running").toBe("live");
             seen.add("exit_late");
@@ -1175,7 +1191,9 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
         id,
         name: plan.name,
         code: { program: r.program, hash: HASH },
+        // SAFETY: every requester is one of the booted names, and the loop above put each booted name's process into `pids`.
         requester: Recipient.cases.process.make({ process: pids.get(requester) as string }),
+        // SAFETY: `inputFor` reads only `input` and `m`, which both come from this racer's draw.
         ...inputFor({ input: r.input, m: r.m } as Cell),
       };
 
@@ -1188,11 +1206,13 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
       }
 
       return {
+        // SAFETY: `prior.input` is a JSON value, and a reordered JSON copy of it is one too.
         child: r.same
           ? { ...prior, ...(prior.input === undefined ? {} : { input: reorder(copied(prior.input)) as Schema.Json }) }
           : r.input % 2 === 0
             ? { ...prior, input: ["changed", r.input] }
             : { ...prior, code: { ...prior.code, program: prior.code.program === MERGER ? WORKER : MERGER } },
+        // SAFETY: the `prior` racer's requester is a process the boot loop stored in `pids`, so the search finds its name.
         requester: [...pids].find(([, p]) => p === prior.requester.process)?.[0] as string,
       };
     });
@@ -1289,6 +1309,7 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
     let starts = 0;
 
     children.forEach(({ child, requester }, index) => {
+      // SAFETY: `answers` holds one answer per racer, in the same order as `children`.
       const answer = answers[index] as Answer;
       const last = log.filter((l) => l.racer === index).at(-1);
       expect(last, `racer ${index} ran a turn`).toBeDefined();
@@ -1298,6 +1319,7 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
       if (p !== undefined && p.rev <= at && child.id === p.id) {
         const same =
           child.code.program === body(p)["program"] &&
+          // SAFETY: a started line's body is written by the brain with a `requester` recipient, which has a `process` field when it is a process.
           child.requester.process === (body(p)["requester"] as { process?: string } | undefined)?.process &&
           ((child.input === undefined && letter === undefined) ||
             (child.input !== undefined && letter !== undefined && sameJson(child.input, body(letter)["m"])));
@@ -1323,6 +1345,7 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
         return;
       }
 
+      // SAFETY: each racer's requester was drawn from REQUESTERS, so its row and program are found.
       const program = REQUESTERS.find(([n]) => n === requester)?.[1] as string;
 
       if (!granted(program, child.code.program)) {
@@ -1336,6 +1359,7 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
         true,
       );
 
+      // SAFETY: the `expect` above proved `registered` is defined before this line reads it.
       if (body(registered as Entry)["program"] !== child.code.program) {
         refused(answer, "name_taken", label);
         seen.add("name_taken");
@@ -1343,8 +1367,10 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
         return;
       }
 
+      // SAFETY: the name is registered to this very program, so one racer's start was placed and `lives[0]` is its started line.
       const tag = exitedAt(String(body(p as Entry)["process"])) <= at ? "already_present" : "already_started";
       expect(Result.isSuccess(answer) ? answer.success : answer.failure, label).toEqual(
+        // SAFETY: as on the line above, the start that holds the name was placed, so `p` is its started line.
         Started.cases[tag].make({ process: String(body(p as Entry)["process"]), name: plan.name }),
       );
       seen.add(tag);
@@ -1691,6 +1717,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                   id: "l13/1/0",
                   name: "merger:1",
                   code: { program: MERGER, hash: HASH },
+                  // SAFETY: PIDS holds 40 ids, so the first one, at index 0, is there.
                   requester: Recipient.cases.process.make({ process: PIDS[0] as string }),
                 },
                 from(),

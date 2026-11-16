@@ -183,6 +183,7 @@ export const serviceId: CreateRule = {
 
     const check = (call: ESTree.CallExpression, id: Node | undefined) => {
       // A class names its service; the rule trusts no other name.
+      // SAFETY: oxlint sets `parent` on each call node it hands a rule; it is missing only on the Program.
       const parent = (call as Node & { readonly parent?: Node }).parent;
 
       const named =
@@ -224,6 +225,7 @@ export const serviceId: CreateRule = {
         }
 
         // The curried class form takes no arguments, and its result takes the ID.
+        // SAFETY: the visited node has its `parent` set by oxlint, and the code below reads it as optional.
         const parent = (node as Node & { readonly parent?: Node }).parent;
 
         if (kind === "Service" && node.arguments.length === 0) {

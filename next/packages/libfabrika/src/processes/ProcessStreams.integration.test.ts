@@ -379,6 +379,7 @@ describe("P33, an inbox read is total", () => {
             ledger.append("watcher:1/inbox", `junk:${n}`, {
               ...from({ by: CLIENT }),
               _tag: "send",
+              // SAFETY: `body` is a junk letter drawn as JSON on purpose, to see the inbox take it as data.
               body: body as Schema.Json,
             }),
           ).pipe(Effect.provide(manager(store)));
@@ -409,6 +410,7 @@ describe("P33, every brain-written line records who asked", () => {
 
     for (const row of rows) {
       expect(row.by).toBe(BRAIN);
+      // SAFETY: each brain row here answers an `asked` call and keeps the key in its body.
       expect((row.body as { readonly asked?: unknown }).asked).toBe(key);
     }
   };

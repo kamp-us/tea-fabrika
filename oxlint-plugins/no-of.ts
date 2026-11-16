@@ -62,9 +62,11 @@ export const noOf: CreateRule = {
 
     /** True when this declaration is the module's own top-level `of`, read by others as `M.of`. */
     const exportedTopLevel = (decl: Node): boolean => {
+      // SAFETY: a declaration always sits inside a statement or the Program, which oxlint sets as its `parent`.
       const { parent } = decl as Node & { readonly parent: Node };
 
       if (parent.type === "ExportNamedDeclaration") {
+        // SAFETY: an export declaration sits at a module's top, or in a namespace, and oxlint sets its `parent` either way.
         return (parent as Node & { readonly parent: Node }).parent.type === "Program";
       }
 
@@ -156,6 +158,7 @@ export const noOf: CreateRule = {
         exported = exportsOf(node);
       },
       VariableDeclarator(node) {
+        // SAFETY: a VariableDeclarator always sits inside its VariableDeclaration, which oxlint sets as `parent`.
         bound(node.id, exportedTopLevel((node as Node & { readonly parent: Node }).parent));
       },
       FunctionDeclaration(node) {
@@ -228,6 +231,7 @@ export const noOf: CreateRule = {
         check(node.exported, true);
       },
       Property(node) {
+        // SAFETY: a Property always has an object as its `parent`, which oxlint sets on each node it visits.
         const { parent } = node as Node & { readonly parent: Node };
 
         if (parent.type === "ObjectExpression" && !node.computed && !node.shorthand) {

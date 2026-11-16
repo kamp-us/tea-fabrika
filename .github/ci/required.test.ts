@@ -160,6 +160,7 @@ it("the verdict passes exactly when every job passes on its own", () => {
         const passes = (name: string) =>
           needs[name]!.result === "success" ||
           (needs[name]!.result === "skipped" &&
+            // SAFETY: `gated` is a tuple of job names; it is read as a plain string list only to ask if it holds `name`.
             (gated as readonly string[]).includes(name) &&
             top.changes === "success" &&
             outputs[name] === "false" &&

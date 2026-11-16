@@ -109,6 +109,7 @@ it("fetch serves the embedded table on GET and HEAD only after its host and orig
           { get: (_target, key) => (key === "settingsStart" ? async () => StartsTest.reply(config) : refuse) },
         );
 
+        // SAFETY: fetch names only CONNECTION and PROJECT besides INSTANCE, and both answer with the stub above.
         // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles stand in for the two namespaces fetch can name
         const env = {
           INSTANCE: JSON.stringify(config),

@@ -168,6 +168,7 @@ SettingsTest.suite((recipe, secret) =>
         return { placed: true };
       }
 
+      // SAFETY: `wire` is the frame a law just generated as a settings start, so it has the `StartsTest.Input` shape.
       const work =
         fault === "refused"
           ? Effect.fail(new Starts.StartsError({ reason: new Starts.Refused({ cause: lower }) }))
@@ -247,6 +248,7 @@ SettingsTest.suite((recipe, secret) =>
         busy: false,
       });
 
+      // SAFETY: the hibernating socket code calls only the attachment pair, `send` and `close`, which this double has.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies hibernating socket methods without workerd's nominal brand
       const socket = {
         deserializeAttachment: () => attached,
@@ -260,6 +262,7 @@ SettingsTest.suite((recipe, secret) =>
       } as unknown as WebSocket;
 
       // Only platform handles are doubled. The five consumer implementations run unchanged.
+      // SAFETY: the five entries call only the object's id, its SQL storage, key-value storage, alarms and sockets, all doubled below.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies only the storage and socket members these entries call
       const ctx = {
         id: {
@@ -309,6 +312,7 @@ SettingsTest.suite((recipe, secret) =>
         exports: { IsolateTail: () => ({ fetch: async () => new Response() }) },
       } as unknown as DurableObjectState;
 
+      // SAFETY: the entries reach only INSTANCE and the four object namespaces plus RECORD and MEASUREMENTS, each doubled below.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy owns the complete binding brands; these doubles implement the observed calls
       const env = {
         INSTANCE: encoded,
@@ -396,6 +400,7 @@ SettingsTest.suite((recipe, secret) =>
           Effect.provideService(WorkerEnvironment, env),
           Effect.provideService(
             ObjectState,
+            // SAFETY: `ctx` holds the storage handles `fromDurableObjectState` reads; its type differs from Alchemy's only in Request brands.
             // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy and the global Worker types disagree on raw Request brands; this double supplies the same storage handles
             fromDurableObjectState(ctx as unknown as Parameters<typeof fromDurableObjectState>[0]),
           ),
@@ -425,6 +430,7 @@ SettingsTest.suite((recipe, secret) =>
               config,
               programs: { "test/fixture": FIXTURE },
               bootstrap: [{ id: "bootstrap-fixture", name: "bootstrap", program: "test/fixture" }],
+              // SAFETY: these entry-flow laws never dial the gateway door, so an empty object stands in for its calls.
               door: () => Effect.succeed({} as GatewayCalls),
             }),
           ),

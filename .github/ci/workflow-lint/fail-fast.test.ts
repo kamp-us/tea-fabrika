@@ -124,6 +124,7 @@ const plants: Plant[] = [
     `F4: ${job}'s checkout keeps the token in .git/config`,
     (w) => {
       const checkout = stepsOf(w, job).find((s) => String(s["uses"]).startsWith("actions/checkout@"))!;
+      // SAFETY: the `find` above picked the job's actions/checkout step, and every checkout here has a `with` map.
       Reflect.deleteProperty(checkout["with"] as Record<string, unknown>, "persist-credentials");
     },
   ]),
@@ -131,6 +132,7 @@ const plants: Plant[] = [
     "F4: a checkout sets persist-credentials to true",
     (w) => {
       const checkout = stepsOf(w, "check")[0]!;
+      // SAFETY: check's first step in `valid` is the checkout, written with a `with` map.
       (checkout["with"] as Record<string, unknown>)["persist-credentials"] = true;
     },
   ],

@@ -745,6 +745,7 @@ describe("fabrika/program-package-layout", () => {
         fc.constantFrom(...links),
         fc.constantFrom(...entries),
         fc.constantFrom("workerd", "worker", "browser", "import", "node", "default"),
+        // SAFETY: `Object.keys` of the `manifests` table answers exactly its own keys.
         fc.constantFrom(...(Object.keys(manifests) as (keyof typeof manifests)[])),
         (
           name,
