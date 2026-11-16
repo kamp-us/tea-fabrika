@@ -124,7 +124,6 @@ const lint = (path) => path === ".oxlintrc.json" || path.startsWith("oxlint-plug
 export const readers = [
   "next/apps/fabrika/src/exam/",
   "next/apps/fabrika/src/settings-generated.test.ts",
-  "next/apps/fabrika/src/build.test.ts",
   "next/apps/fabrika/src/build.integration.test.ts",
   "next/apps/fabrika/src/build-command.integration.test.ts",
   "next/apps/fabrika/src/instance-one-file.integration.test.ts",

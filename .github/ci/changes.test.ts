@@ -867,14 +867,14 @@ it("property: lint rule files alone run check and typecheck, with scope readers"
 
 it("format: each entry of readers is a tracked path that holds a test file", () => {
   // format: the next job's path argument is this list, so a renamed folder would leave the reader
-  // run empty. The six entries the plan and experiment 288 found are all on it, and build.test.ts, the
-  // format law split from build.integration.test.ts (0536).
+  // run empty. The six entries the plan and experiment 288 found are all on it. build.test.ts, the
+  // format law split from build.integration.test.ts (0536), left the list when its law became the
+  // lint rule fabrika/one-page-runtime (0591).
   expect(Array.isArray(ci.readers)).toBe(true);
   expect(ci.readers).toEqual(
     expect.arrayContaining([
       "next/apps/fabrika/src/exam/",
       "next/apps/fabrika/src/settings-generated.test.ts",
-      "next/apps/fabrika/src/build.test.ts",
       "next/apps/fabrika/src/build.integration.test.ts",
       "next/apps/fabrika/src/build-command.integration.test.ts",
       "next/apps/fabrika/src/instance-one-file.integration.test.ts",

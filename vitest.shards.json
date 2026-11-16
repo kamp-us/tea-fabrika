@@ -93,7 +93,6 @@
   "next/apps/fabrika/src/brain-life.integration.test.ts": 26.5,
   "next/apps/fabrika/src/build-command.integration.test.ts": 2.2,
   "next/apps/fabrika/src/build.integration.test.ts": 41.6,
-  "next/apps/fabrika/src/build.test.ts": 0,
   "next/apps/fabrika/src/chaos.laws.integration.test.ts": 79.9,
   "next/apps/fabrika/src/checklist-instance.laws.integration.test.ts": 98,
   "next/apps/fabrika/src/checklist-runner.laws.integration.test.ts": 20.7,
