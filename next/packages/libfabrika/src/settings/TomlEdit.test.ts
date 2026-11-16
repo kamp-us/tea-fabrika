@@ -3,7 +3,8 @@
 // L9 is the Reflect ban's (ticket 1056, slice 5): hostile keys and a scalar in the middle of a path.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, DateTime, Effect, Exit, Schema } from "effect";
+import { ByteSize, Effect, Exit, Schema } from "effect";
+import * as DateTime from "effect/DateTime";
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
