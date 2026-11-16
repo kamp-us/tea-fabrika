@@ -12,15 +12,22 @@
 //   green             #n                           comment on #n, close it
 //   green             none                         nothing
 //   stopped by hand   either                       nothing
+//   on a branch       either                       nothing, whatever the run proved
+//
+// A red run ends `failure` on GitHub: no step cancels the run (workflow-lint.ts's SC4), a failed
+// leg is a failed job, and a leg that runs out of time fails its test step, which holds the limit
+// (SC13). The report job fails too unless the run is green, on any branch (`exitCode`), so a red
+// run with no failed job, such as a leg that ended odd, still ends `failure`.
 //
 // No installed dependencies and no type stripping, like required.mjs, so the job runs on the
 // runner's own Node with no setup. A pure core (`verdict`, `ending`, `causes`, `limits`,
 // `failures`, `jobsOf`, `decide`, `body`), and a thin GitHub reader and writer with the job's own
 // token (`github`), as changes.mjs's. The run is red when a step failed, whatever its job's
-// conclusion says, so the reader asks for the run's jobs and steps: `needs` alone read a red leg
-// that stopped its own run as stopped (ticket 1023). A leg that ran into its time limit is red too:
-// GitHub ends it `cancelled`, as it ends a leg another leg's stop step canceled, so only its run
-// time tells the two apart (run 43723335863 opened no issue for two timed-out legs).
+// conclusion says, so the reader asks for the run's jobs and steps: `needs` folds a matrix's legs
+// into one result (ticket 1023). A leg that ran into its time limit is red too, and named as a
+// time-out: by its failed step's own run time against the limit, or, for a leg its job's backstop
+// canceled, by the leg's run time, since GitHub ends that leg `cancelled` as it ends one its
+// matrix's fail-fast stopped (run 43723335863 opened no issue for two timed-out legs).
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,9 +44,9 @@ export const LABEL = "ci-scheduled";
 const isMap = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
- * One step of a job, as GitHub's jobs API lists it: `conclusion` is `null` while it runs, and `end`
- * until it ends.
- * @typedef {{name: string, conclusion: string | null, end: string | null}} Step
+ * One step of a job, as GitHub's jobs API lists it: `conclusion` is `null` while it runs, `start`
+ * until it starts, and `end` until it ends.
+ * @typedef {{name: string, conclusion: string | null, start: string | null, end: string | null}} Step
  */
 
 /**
@@ -56,42 +63,65 @@ const isMap = (value) => typeof value === "object" && value !== null && !Array.i
  */
 
 /**
- * Each test job's `timeout-minutes`, by its id in the workflow (`next`, `tooling`). The report
- * step's env holds them as `LIMIT_<ID>`, aliases of the jobs' own lines, so each limit stays one
- * line (workflow-lint.ts holds the two the same).
+ * Each suite's test step limit, its `timeout-minutes`, by the suite (`next`, `tooling`, as
+ * `suiteOf` reads a leg's). The report step's env holds them as `LIMIT_<SUITE>`, aliases of the
+ * test steps' own lines, so each limit stays one line (workflow-lint.ts holds them the same, and
+ * the job's own limit a backstop past each).
  * @typedef {Readonly<Record<string, number>>} Limits
  */
 
 /**
  * What the run left: `toJSON(needs)` already parsed, the run's jobs and their steps, the failing
- * tests its legs' reports name (`failures`), and each test job's time limit.
+ * tests its legs' reports name (`failures`), and each suite's time limit.
  * @typedef {{needs: unknown, jobs: readonly Job[], failed: readonly string[], limits: Limits}} Outcome
  */
 
 /**
- * How one finished leg ended. `failed`: a step or the job failed. `timed out`: it was canceled at
- * or past its job's time limit, or GitHub said `timed_out`. `canceled`: it was canceled before its
- * limit, by another leg's stop step, a person, or a sev0's freeze. `odd`: any other conclusion,
- * which proves no pass. `passed`: success, or a skip the workflow meant.
+ * How one finished leg ended. `failed`: a step or the job failed. `timed out`: a failed step ran
+ * for its suite's limit or longer, it was canceled at or past that limit, or GitHub said
+ * `timed_out`. `canceled`: it was canceled before its limit, by its matrix's fail-fast after
+ * another leg failed, a person, or a sev0's freeze. `odd`: any other conclusion, which proves no
+ * pass. `passed`: success, or a skip the workflow meant.
  * @typedef {"passed" | "failed" | "timed out" | "canceled" | "odd"} Ending
  */
 
-/** A leg's job id: GitHub names a matrix leg `<id> (<shard>)`, and no job here sets a `name`. */
-const idOf = (/** @type {string} */ name) => name.split(" (")[0] ?? name;
+/**
+ * A leg's suite, the key of its limit: `tooling` for a leg whose shard starts `tooling-`, `next`
+ * for every other. GitHub names a matrix leg `<job> (<shard>)`, and no job here sets a `name`, so
+ * `tests (tooling-2)` is a tooling leg and `tests (e2e-1)` and `tests (3)` are next legs. The two
+ * suites share one job since 2026-11-15, so one fail-fast stops every leg; the job's id names no
+ * suite any more.
+ * @param {string} name
+ * @returns {"next" | "tooling"}
+ */
+export const suiteOf = (name) => (/\(tooling-[^)]*\)$/.test(name) ? "tooling" : "next");
 
 /**
- * How a finished leg ended. A failed step comes first, whatever the job's conclusion: a red leg's
- * stop step cancels the leg too. GitHub ends a leg that hit its `timeout-minutes` as `cancelled`,
- * the same word as a leg another leg's stop step canceled (run 43723335863, against run
- * 43703058643), so the leg's own run time tells them apart: canceled at or past its limit is a
- * time-out, since no other cancel can land that late. A leg whose limit or times are unknown reads
- * as canceled.
+ * How a finished leg ended. A failed step comes first, whatever the job's conclusion: a cancel
+ * that lands on a red leg ends it `cancelled` with its failed step inside (run 43703058643, from
+ * when a red leg canceled its own run). A test step that ran into its `timeout-minutes` fails, the
+ * same word as a red test, so its own run time tells them apart: GitHub stops it at the limit or a
+ * few seconds after (probe run 43778586135: 72 s against 60). A leg its job's backstop limit
+ * canceled ends `cancelled`, the same word as a leg stopped after another leg failed (run
+ * 43723335863), so the leg's run time tells those apart: canceled at or past the limit is a
+ * time-out. A fail-fast cancel that lands in the minute between a leg's step limit and its run time
+ * reaching it also reads as one; the run is red either way. A leg whose limit or times are unknown
+ * reads as failed or canceled.
  * @param {Job} job
  * @param {Limits} limits
  * @returns {Ending}
  */
 export const ending = (job, limits) => {
-  if (job.conclusion === "failure" || job.steps.some((step) => step.conclusion === "failure")) {
+  const limit = limits[suiteOf(job.name)];
+  const ranOut = (/** @type {string | null} */ start, /** @type {string | null} */ end) =>
+    limit !== undefined && start !== null && end !== null && Date.parse(end) - Date.parse(start) >= limit * 60_000;
+  const failed = job.steps.filter((step) => step.conclusion === "failure");
+
+  if (failed.some((step) => ranOut(step.start, step.end))) {
+    return "timed out";
+  }
+
+  if (job.conclusion === "failure" || failed.length > 0) {
     return "failed";
   }
 
@@ -107,9 +137,7 @@ export const ending = (job, limits) => {
     return "odd";
   }
 
-  const limit = limits[idOf(job.name)];
-  const ran = job.start === null || job.end === null ? Number.NaN : Date.parse(job.end) - Date.parse(job.start);
-  return limit !== undefined && ran >= limit * 60_000 ? "timed out" : "canceled";
+  return ranOut(job.start, job.end) ? "timed out" : "canceled";
 };
 
 /**
@@ -123,8 +151,8 @@ export const ending = (job, limits) => {
 /**
  * Each finished leg that made the run red, the one that failed first first: failed legs by when
  * their failed step ended, then timed-out legs, then odd ones, each in the jobs API's order. A
- * canceled leg is never a cause: when one leg failed, its stop step canceled the others, and the
- * issue names the leg that failed.
+ * canceled leg is never a cause: when one leg failed, its matrix's fail-fast canceled the others,
+ * and the issue names the leg that failed.
  * @param {readonly Job[]} jobs
  * @param {Limits} limits
  * @returns {Cause[]}
@@ -141,14 +169,14 @@ export const causes = (jobs, limits) => {
       .toSorted((a, b) => failedAt(a).localeCompare(failedAt(b)))
       .map((job) => /** @type {Cause} */ ({ _tag: "failed", leg: job.name })),
     ...of("timed out").map(
-      (job) => /** @type {Cause} */ ({ _tag: "timed out", leg: job.name, minutes: limits[idOf(job.name)] ?? null }),
+      (job) => /** @type {Cause} */ ({ _tag: "timed out", leg: job.name, minutes: limits[suiteOf(job.name)] ?? null }),
     ),
     ...of("odd").map((job) => /** @type {Cause} */ ({ _tag: "odd", leg: job.name, conclusion: job.conclusion })),
   ];
 };
 
 /**
- * Each test job's time limit from the report step's env: `LIMIT_NEXT=17` reads as `next: 17`. A
+ * Each suite's time limit from the report step's env: `LIMIT_NEXT=17` reads as `next: 17`. A
  * value that is not a positive number is left out, so its legs' cancels read as canceled.
  * @param {Record<string, string | undefined>} env
  * @returns {Limits}
@@ -166,9 +194,9 @@ export const limits = (env) =>
 /**
  * The run's verdict. Red when a finished leg failed, timed out or ended odd (`causes`), when a
  * leg's report names a failing test, or when `needs` says a job failed. The steps come first
- * because `needs` cannot say it: a red leg's last step cancels the run, and the cancel lands on
- * that leg too, so it ends `cancelled` with its failed step inside (run 43673342835), and `needs`
- * folds every leg of a matrix into one result. A report names the tests; the steps also catch a
+ * because `needs` cannot say it: it folds every leg of a matrix into one result, and a cancel that
+ * lands on a red leg ends it `cancelled` with its failed step inside (run 43673342835). A report
+ * names the tests; the steps also catch a
  * leg that broke before it wrote one (an install, a crash, a time limit). A `continue-on-error`
  * step that failed reads `success` in the jobs API (the runner's ApplyContinueOnError sets its
  * result to Succeeded), so a broken time table never turns a run red. With none of those, a leg
@@ -208,6 +236,7 @@ export const jobsOf = (answer) => {
     steps: (Array.isArray(job["steps"]) ? job["steps"].filter(isMap) : []).map((step) => ({
       name: text(step["name"]) ?? "",
       conclusion: text(step["conclusion"]),
+      start: text(step["started_at"]),
       end: text(step["completed_at"]),
     })),
   }));
@@ -276,7 +305,7 @@ const line = (cause) => {
 
   if (cause._tag === "timed out") {
     const limit = cause.minutes === null ? "its time limit" : `its ${cause.minutes}-minute limit`;
-    return `- \`${cause.leg}\` timed out: it ran into ${limit} and GitHub canceled it. A canceled leg writes no report, so none names the test file that was running; the leg's log on the run's page does.`;
+    return `- \`${cause.leg}\` timed out: it ran into ${limit} and GitHub stopped it. A stopped test run writes no report, so none names the test file that was running; the leg's log on the run's page does.`;
   }
 
   return `- \`${cause.leg}\` ended \`${cause.conclusion ?? "with no conclusion"}\`, which is not a pass.`;
@@ -314,7 +343,7 @@ export const body = (run) => {
           "No test report names a failure: the run broke outside a test (setup, an install, a time limit), or before the red leg wrote its report. The run's page says where.",
         ]
       : [
-          "Failing tests, from the leg that failed first (a red leg stops the others, so their reports are not here):",
+          "Failing tests, from the legs that wrote a report (a red leg stops the other legs of its job, so theirs are not here):",
           "",
           ...listed,
           ...(more > 0 ? [`- and ${more} more`] : []),
@@ -323,7 +352,7 @@ export const body = (run) => {
     run.causes.length === 0
       ? []
       : [
-          "The legs that made it red, the one that failed first first (a leg another leg's stop step canceled is not listed):",
+          "The legs that made it red, the one that failed first first (a leg stopped because another failed is not listed):",
           "",
           ...run.causes.map(line),
           "",
@@ -472,9 +501,24 @@ export const github = (env, send = globalThis.fetch) => {
   };
 };
 
+/** The one branch whose runs open, update or close the issue. */
+const MAIN = "refs/heads/main";
+
+/**
+ * The report job's exit code: 0 for a green run alone. A red run fails the job, so the run ends
+ * `failure` on GitHub even when no leg failed outright (a leg that ended odd). A `stopped` run
+ * fails it too, since it proved no pass. Neither turns a run GitHub ends `cancelled` into a
+ * failure: a person's cancel, or a job that hit its own limit, keeps the run `cancelled` whatever
+ * a later job does (probe runs 43778362939 and 43778355238).
+ * @param {Verdict} result
+ * @returns {0 | 1}
+ */
+export const exitCode = (result) => (result === "green" ? 0 : 1);
+
 /**
  * Decide and do it: reads the run's jobs, then the open issue and the last green run, then opens,
- * comments or closes. A run that is neither red nor green asks nothing past its jobs.
+ * comments or closes. A run that is neither red nor green asks nothing past its jobs, and neither
+ * does a run on a branch (`GITHUB_REF` is not main): it is judged, and it writes nothing.
  * @param {{needs: unknown, reports: readonly unknown[], env: Record<string, string | undefined>, api: Api}} options
  * @returns {Promise<{result: Verdict, action: Action}>}
  */
@@ -485,7 +529,7 @@ export const report = async ({ needs, reports, env, api }) => {
   const jobs = await api.jobs();
   const result = verdict({ needs, jobs, failed, limits: limit });
 
-  if (result === "stopped") {
+  if (result === "stopped" || env["GITHUB_REF"] !== MAIN) {
     return { result, action: { _tag: "none" } };
   }
 
@@ -544,30 +588,43 @@ const readReports = (folder) => {
   }
 };
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const api = github(process.env);
+/**
+ * The whole report job: the line it prints and its exit code. With no token, repository, workflow
+ * file or run id nothing can be judged, which fails the job.
+ * @param {Record<string, string | undefined>} env
+ * @param {readonly unknown[]} reports
+ * @param {Fetch} [send]
+ * @returns {Promise<{line: string, code: 0 | 1}>}
+ */
+export const main = async (env, reports, send) => {
+  const api = github(env, send);
 
   if (api === null) {
-    console.error("scheduled: no token, repository, workflow file or run id, so nothing can be reported");
-    process.exitCode = 1;
-  } else {
-    /** @type {unknown} */
-    let needs = null;
-
-    try {
-      needs = JSON.parse(process.env["NEEDS"] ?? "");
-    } catch {
-      needs = null;
-    }
-
-    const { result, action } = await report({
-      needs,
-      reports: readReports(process.env["RESULTS"] ?? ""),
-      env: process.env,
-      api,
-    });
-    console.log(
-      action._tag === "none" ? `scheduled: ${result}, nothing to report` : `scheduled: ${result}, ${action._tag}`,
-    );
+    return { line: "scheduled: no token, repository, workflow file or run id, so nothing can be reported", code: 1 };
   }
+
+  /** @type {unknown} */
+  let needs = null;
+
+  try {
+    needs = JSON.parse(env["NEEDS"] ?? "");
+  } catch {
+    needs = null;
+  }
+
+  const { result, action } = await report({ needs, reports, env, api });
+  const done = action._tag === "none" ? "nothing to report" : action._tag;
+  return { line: `scheduled: ${result}, ${done}`, code: exitCode(result) };
+};
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const { line, code } = await main(process.env, readReports(process.env["RESULTS"] ?? ""));
+
+  if (code === 0) {
+    console.log(line);
+  } else {
+    console.error(line);
+  }
+
+  process.exitCode = code;
 }
