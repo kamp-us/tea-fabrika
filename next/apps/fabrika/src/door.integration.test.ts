@@ -49,7 +49,7 @@ import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
+import { Arbitrary, type Data, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -304,7 +304,7 @@ const comment = (text = "hello") => Input.cases.comment.make({ ticket: { id: "ti
 
 type Envelope = {
   id: string;
-  by: { _tag: "person" | "agent"; key: string; for: string };
+  by: Data.TaggedEnum<{ person: { key: string; for: string }; agent: { key: string; for: string } }>;
   arrivedAt: number;
   input: unknown;
 };

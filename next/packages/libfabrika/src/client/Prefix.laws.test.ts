@@ -33,7 +33,7 @@
 // commands land. Each step answers only what really waits: the calls in flight and the Cmds handed out.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { type Data, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
@@ -91,14 +91,16 @@ const machine = windowMachineFor({
 });
 
 type Cmd = { readonly type: string; readonly [key: string]: unknown };
-type Call = { readonly _tag: string; readonly [key: string]: unknown };
+/** A call as a write carries it: its case from the model's own, and any field read by name. */
+type Call = Pick<WindowModel["flight"][number]["call"], "_tag"> & { readonly [key: string]: unknown };
 
 type Did = {
   readonly type: "did";
   readonly does: string;
   readonly from: string;
   readonly tile?: string;
-  readonly via: { readonly _tag: string };
+  /** How the person gave it, as the window writes it: by keys, or by a click. */
+  readonly via: Data.TaggedEnum<{ key: { readonly keys: string }; click: Record<never, never> }>;
 };
 
 /** One window of the person, with every Cmd it handed out that is not answered yet. */

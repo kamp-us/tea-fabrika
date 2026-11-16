@@ -6,7 +6,7 @@
 // the lead and CI run it with `pnpm typecheck`.
 // Plant: add a member tagged `LedgerError` to one function's error.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Effect, Result } from "effect";
+import type { Data, Effect, Result, Types } from "effect";
 import type { From } from "../processes/Mailbox.ts";
 import type { Recipient } from "../processes/Process.ts";
 import type { Gateway } from "./Gateway.ts";
@@ -23,10 +23,12 @@ type Failure<Member> = Member extends (...args: ReadonlyArray<never>) => infer A
       : never;
 
 /** The members of a union of errors that are the ledger's own error. */
-type FromLedger<Errors> = Extract<Errors, { readonly _tag: "LedgerError" }>;
+type FromLedger<Errors> = Types.ExtractTag<Errors, "LedgerError">;
 
-type Own = { readonly _tag: "Own" };
-type Ledgers = { readonly _tag: "LedgerError" };
+/** Two errors for the helper to tell apart: one of its own, one tagged as the ledger's. */
+type Errors = Data.TaggedEnum<{ Own: Record<never, never>; LedgerError: Record<never, never> }>;
+type Own = Types.ExtractTag<Errors, "Own">;
+type Ledgers = Types.ExtractTag<Errors, "LedgerError">;
 
 it("type: the gateway's store and nonce fail with GatewayError, never an error tagged LedgerError", () => {
   // The helper finds a ledger error where one is: in an Effect, in a Result, and in a function's answer.

@@ -15,12 +15,13 @@
 import { applyCell } from "@demlik/tea";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Arbitrary, Result, Schema } from "effect";
+import { Arbitrary, type Data, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
 import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
 import { type Tile, type TileId, TezgahView, Workspace } from "../tezgah/Workspace.ts";
+import type { ClientRecord } from "../transport/ClientRows.ts";
 import * as Keys from "./Keys.ts";
 import { optimisticState, type PendingMutation, type TezgahClient, tezgahMachine } from "./Tezgah.ts";
 import {
@@ -307,7 +308,8 @@ const FOCUS_KEYS: ReadonlyArray<{
 ];
 
 type Cmd = { readonly type: string; readonly [key: string]: unknown };
-type Call = { readonly _tag: string; readonly [key: string]: unknown };
+/** A call as a write carries it: its case from the model's own, and any field read by name. */
+type Call = Pick<WindowModel["flight"][number]["call"], "_tag"> & { readonly [key: string]: unknown };
 
 /** One move a window drew: where from and to, its command, the cursor the page last said in `from`
  *  when it was made, and its letter once written. */
@@ -790,14 +792,14 @@ const Cursor = fc.oneof(
   fc.string({ minLength: 81, maxLength: CURSOR_MOST }),
 );
 
-const Pick = fc.record({
+const Draw = fc.record({
   type: fc.constant("pick" as const),
   win: fc.integer({ min: 0, max: 1 }),
   move: fc.nat(),
   pick: fc.nat(),
   cursor: Cursor,
 });
-type Pick = typeof Pick extends fc.Arbitrary<infer A> ? A : never;
+type Draw = typeof Draw extends fc.Arbitrary<infer A> ? A : never;
 
 const Desk = fc.record({
   cuts: fc.array(fc.record({ at: fc.nat(), down: fc.boolean() }), { minLength: 1, maxLength: 5 }),
@@ -807,7 +809,7 @@ const Desk = fc.record({
 const CURSORS = ["item:milk", "item:eggs", null] as const;
 
 /** One pick: the move it names among those possible in window `win` now. */
-const play = (world: World, c: Pick, each: (e: Event) => void) => {
+const play = (world: World, c: Draw, each: (e: Event) => void) => {
   const i = c.win;
   const w = world.wins[i]!;
   const space = drawnSpace(w.s);
@@ -869,7 +871,7 @@ const settle = (world: World, each: (e: Event) => void, batched = false) => {
 };
 
 /** Runs one walk: two windows on `desk`, then `picks`, then everything delivered. */
-const walk = (desk: TezgahView, picks: ReadonlyArray<Pick>, each: (e: Event) => void, count = 2) => {
+const walk = (desk: TezgahView, picks: ReadonlyArray<Draw>, each: (e: Event) => void, count = 2) => {
   const world = makeWorld(desk, count, () => {});
 
   for (const c of picks) {
@@ -904,7 +906,7 @@ describe("Desk S3 L23: the window stores no optimistic focus", () => {
     expect(TABLE, "the laws' key table loads").not.toBeNull();
     const seen = { pending: 0, none: 0 };
     fc.assert(
-      fc.property(Desk, arbMsgSequence(Pick, { minLength: 4, maxLength: 40, size: "max" }), (d, picks) => {
+      fc.property(Desk, arbMsgSequence(Draw, { minLength: 4, maxLength: 40, size: "max" }), (d, picks) => {
         walk(makeDesk(d.cuts, d.focus), picks, ({ win, next, world }) => {
           const w = world.wins[win]!;
           const open = w.moves.filter((m) => !answered(w, m));
@@ -935,7 +937,7 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
   it("L24: each window's drawn focus is the server's once its mutations are answered, a pending mutation goes only once its reply and a view at or past its position came, or its refusal, and a window whose move lost follows the server", () => {
     const seen = { lost: 0, both: 0, early: 0, moves: 0, refused: 0 };
     fc.assert(
-      fc.property(Desk, arbMsgSequence(Pick, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
+      fc.property(Desk, arbMsgSequence(Draw, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
         const world = walk(makeDesk(d.cuts, d.focus), picks, ({ win, m, next, world: at }) => {
           const w = at.wins[win]!;
           const open = w.moves.filter((x) => !answered(w, x));
@@ -994,7 +996,7 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
     let checked = 0;
     let long = 0;
     fc.assert(
-      fc.property(Desk, arbMsgSequence(Pick, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
+      fc.property(Desk, arbMsgSequence(Draw, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
         walk(makeDesk(d.cuts, d.focus), picks, ({ win, cmds, world }) => {
           for (const c of cmds) {
             const call = c["call"] as Call | undefined;
@@ -1004,7 +1006,7 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
             }
 
             const did = call["m"] as Did & {
-              readonly via?: { readonly _tag: string };
+              readonly via?: Data.TaggedEnum<{ key: { readonly keys: string }; click: Record<never, never> }>;
               readonly cursor?: string | null;
             };
             const move = world.wins[win]!.moves.find((x) => x.letter === call["letter"]);
@@ -1109,13 +1111,15 @@ describe("Desk S3 L29: a move the server overrode is recorded", () => {
   it("L29: each answered move writes one focus row with its letter on the step it is dropped: overridden when tezgah refused it or dropping it moves the drawn focus, else kept", () => {
     const seen = { kept: 0, overridden: 0, refused: 0, batch: 0, superseded: 0 };
     fc.assert(
-      fc.property(Desk, arbMsgSequence(Pick, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
+      fc.property(Desk, arbMsgSequence(Draw, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
         const rows = [new Map<string, number>(), new Map<string, number>()];
         const world = walk(makeDesk(d.cuts, d.focus), picks, ({ win, m, prev, next, cmds, world: at }) => {
           const w = at.wins[win]!;
           const focusRows = cmds.flatMap((c) => {
             const record =
-              c.type === "record" ? (c["record"] as { readonly _tag: string; readonly [k: string]: unknown }) : null;
+              c.type === "record"
+                ? (c["record"] as Pick<typeof ClientRecord.Type, "_tag"> & { readonly [k: string]: unknown })
+                : null;
             return record?._tag === "focus" ? [record] : [];
           });
           const before = new Set(waitingMoves(prev).map(letterIn));
@@ -1275,7 +1279,7 @@ describe("Desk S3 L28: a tile lands where focus last sat in it", () => {
       }
     };
     fc.assert(
-      fc.property(Desk, arbMsgSequence(Pick, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
+      fc.property(Desk, arbMsgSequence(Draw, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
         const world = makeWorld(makeDesk(d.cuts, d.focus), 2, () => {});
 
         for (const c of picks) {

@@ -2,7 +2,7 @@ import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Checks } from "@kampus/libfabrika/ci/Ci";
 import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Path } from "@kampus/libfabrika/codehost/CodeHost";
-import { Schema } from "effect";
+import { Schema, type Types } from "effect";
 import * as fc from "fast-check";
 import picomatch from "picomatch/posix.js";
 import * as Change from "./Change.ts";
@@ -186,6 +186,6 @@ const emptyIsInvalid = (runs: typeof Checks.Type) => {
 };
 
 type Model = ReturnType<typeof merger>["machine"]["model"]["Type"];
-type Checking = Extract<Model, { readonly _tag: "checking" }>;
+type Checking = Types.ExtractTag<Model, "checking">;
 expectTypeOf<readonly []>().not.toExtend<Checking["checks"]>();
 void emptyIsInvalid;

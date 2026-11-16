@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 // P12, next/. The callbacks are real platform duties, not replacement gateway logic.
 // The connection must save attachments and release its turn before calling the Project.
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, Layer } from "effect";
+import { type Data, Deferred, Effect, Fiber, Layer, type Types } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -68,15 +68,15 @@ const online = () =>
     busy: false,
   });
 
+/** What a wait answers: a rev once the stream moves past `after`, or parked. */
+type Waited = Data.TaggedEnum<{ ready: { readonly rev: number }; parked: Record<never, never> }>;
+
 const setup = Effect.fnUntraced(function* (
   wait: (
     stream: string,
     after: number,
     reader: string,
-  ) => Effect.Effect<
-    { readonly _tag: "ready"; readonly rev: number } | { readonly _tag: "parked" },
-    LedgerError | typeof RateCountFailure.Type
-  >,
+  ) => Effect.Effect<Waited, LedgerError | typeof RateCountFailure.Type>,
   call = () => Effect.succeed(Answer.cases.ok.make({ result: null })),
   session = "session-1",
   ping = 42,
@@ -198,7 +198,7 @@ describe("P12 Connection attachment laws", () => {
   law("a ready wait reply cannot answer a new wait that reused its request id", ({ id }) =>
     Effect.gen(function* () {
       const entered = yield* Deferred.make<void>();
-      const reply = yield* Deferred.make<{ readonly _tag: "ready"; readonly rev: number }>();
+      const reply = yield* Deferred.make<Types.ExtractTag<Waited, "ready">>();
       const f = yield* setup((stream) =>
         stream === "old"
           ? Effect.gen(function* () {
@@ -225,7 +225,7 @@ describe("P12 Connection attachment laws", () => {
   law("a ready wait reply is discarded after the connection loses its hello", ({ id, rev }) =>
     Effect.gen(function* () {
       const entered = yield* Deferred.make<void>();
-      const reply = yield* Deferred.make<{ readonly _tag: "ready"; readonly rev: number }>();
+      const reply = yield* Deferred.make<Types.ExtractTag<Waited, "ready">>();
       const f = yield* setup(() =>
         Effect.gen(function* () {
           yield* Deferred.succeed(entered, undefined);
@@ -269,7 +269,7 @@ describe("P12 Connection attachment laws", () => {
   law("p12/p94 plant: a late ready reply must not restore an already answered wait", ({ rev }) =>
     Effect.gen(function* () {
       const registered = yield* Deferred.make<void>();
-      const reply = yield* Deferred.make<{ readonly _tag: "ready"; readonly rev: number }>();
+      const reply = yield* Deferred.make<Types.ExtractTag<Waited, "ready">>();
       const f = yield* setup(() =>
         Effect.gen(function* () {
           yield* Deferred.succeed(registered, undefined);

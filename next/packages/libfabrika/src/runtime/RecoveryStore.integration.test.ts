@@ -6,17 +6,18 @@
 // the fault from below (0043 rule 12, 0055, 0119). This file names no ledger file.
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
-import { type Context, Effect, Exit, type Layer, Schema } from "effect";
+import { type Context, type Data, Effect, Exit, type Layer, Schema } from "effect";
 import * as fc from "fast-check";
 import { A, B, from, storage } from "../processes/Process.test-support.ts";
 import type { Sql } from "../Sql.ts";
 import { Supervision } from "./internal/supervisor.ts";
 
 /** The store's own error as these laws read it: its tag, and a tagged reason with the fault it kept. */
-type Fault = {
-  readonly _tag: "RecoveryStoreError";
-  readonly reason: { readonly _tag: "Storage" | "BadRow"; readonly cause: unknown };
-};
+type Fault = Data.TaggedEnum<{
+  RecoveryStoreError: {
+    readonly reason: Data.TaggedEnum<{ Storage: { readonly cause: unknown }; BadRow: { readonly cause: unknown } }>;
+  };
+}>;
 
 type Store = {
   readonly load: Effect.Effect<unknown, Fault>;

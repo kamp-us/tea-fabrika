@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Effect, Schema } from "effect";
+import { type Data, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 
@@ -25,7 +25,9 @@ type Api = {
   readonly Built: Schema.Codec<Built>;
   readonly Asset: Schema.Codec<Asset>;
   readonly BuiltProgram: Schema.Codec<Program>;
-  readonly decodeBuilt: (raw: unknown) => Effect.Effect<Built, { _tag: string; reason: string }>;
+  readonly decodeBuilt: (
+    raw: unknown,
+  ) => Effect.Effect<Built, Data.TaggedEnum<{ BuildError: { readonly reason: string } }>>;
 };
 
 const load = async () => {

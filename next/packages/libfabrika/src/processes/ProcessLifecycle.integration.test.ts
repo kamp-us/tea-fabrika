@@ -488,7 +488,7 @@ const OTHER = "SHA256:not-the-brain";
 const toW = Recipient.cases.process.make({ process: W });
 
 const forger = (store: Storage, by: string, streamForLife: string) => ({
-  forge: (stream: string, event: { readonly _tag: string } & Schema.JsonObject) =>
+  forge: (stream: string, event: Parameters<typeof lineFor>[1]) =>
     Ledger.use((ledger) =>
       ledger.append(
         stream === "counter:1" ? streamForLife : stream,

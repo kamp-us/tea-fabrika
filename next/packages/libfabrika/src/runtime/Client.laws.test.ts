@@ -24,7 +24,7 @@
 // move that state allows; stale and malformed input is built from what the walk delivered.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { type Data, Result, Schema, type Types } from "effect";
 import * as fc from "fast-check";
 import { ProcessId } from "../ProcessId.ts";
 import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";
@@ -35,29 +35,31 @@ const SEED = 119120;
 const opts = { seed: SEED, numRuns: 300 };
 
 // The exam's own statement of the shapes it walks, each pinned to the schema's type (0135).
-type Dating = {
-  readonly _tag: "dating";
-  readonly n: number;
-  readonly pid: string;
-  readonly m: Schema.Json;
-  readonly seen: number;
-  readonly viewRev: number;
-};
+type Dating = Data.TaggedEnum<{
+  dating: {
+    readonly n: number;
+    readonly pid: string;
+    readonly m: Schema.Json;
+    readonly seen: number;
+    readonly viewRev: number;
+  };
+}>;
 
-type Ready = {
-  readonly _tag: "ready";
-  readonly n: number;
-  readonly pid: string;
-  readonly m: Schema.Json;
-  readonly seen: number;
-  readonly viewRev: number;
-  readonly letter: string;
-  readonly sentAt: string;
-  readonly traceId?: string;
-};
+type Ready = Data.TaggedEnum<{
+  ready: {
+    readonly n: number;
+    readonly pid: string;
+    readonly m: Schema.Json;
+    readonly seen: number;
+    readonly viewRev: number;
+    readonly letter: string;
+    readonly sentAt: string;
+    readonly traceId?: string;
+  };
+}>;
 
-expectTypeOf<Dating>().toEqualTypeOf<Extract<Pending, { readonly _tag: "dating" }>>();
-expectTypeOf<Ready>().toEqualTypeOf<Extract<Pending, { readonly _tag: "ready" }>>();
+expectTypeOf<Dating>().toEqualTypeOf<Types.ExtractTag<Pending, "dating">>();
+expectTypeOf<Ready>().toEqualTypeOf<Types.ExtractTag<Pending, "ready">>();
 
 type Model = {
   readonly written: number;

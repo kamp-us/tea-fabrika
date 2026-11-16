@@ -2,7 +2,7 @@
 // its busy state and waits (0037, 0046). Callbacks only: no database, no runtime. Each walk reads
 // the saved attachment and the pending callbacks before it picks the next move (0093).
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Result, Schema, Tracer } from "effect";
+import { type Data, Deferred, Effect, Result, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
 import { connection } from "./Connection.ts";
 import { Answer, Attached, Wait } from "./Wire.ts";
@@ -15,7 +15,11 @@ const PING = 42;
 
 type Saved = typeof Attached.Type;
 type W = typeof Wait.Type;
-type Waited = { readonly _tag: "ready"; readonly rev: number } | { readonly _tag: "parked" };
+
+type Waited = Data.TaggedEnum<{
+  ready: { readonly rev: number };
+  parked: Record<never, never>;
+}>;
 
 type Frame = {
   readonly id: string | number;
@@ -23,18 +27,13 @@ type Frame = {
   readonly error?: { readonly message: string; readonly data?: { readonly reason: string } };
 };
 
-type Event =
-  | { readonly _tag: "save"; readonly saved: Saved }
-  | { readonly _tag: "send"; readonly frame: Frame }
-  | { readonly _tag: "close"; readonly code: number }
-  | {
-      readonly _tag: "wait";
-      readonly stream: string;
-      readonly after: number;
-      readonly reader: string;
-      readonly saved: Saved;
-    }
-  | { readonly _tag: "call"; readonly method: string; readonly params: unknown; readonly saved: Saved };
+type Event = Data.TaggedEnum<{
+  save: { readonly saved: Saved };
+  send: { readonly frame: Frame };
+  close: { readonly code: number };
+  wait: { readonly stream: string; readonly after: number; readonly reader: string; readonly saved: Saved };
+  call: { readonly method: string; readonly params: unknown; readonly saved: Saved };
+}>;
 
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
 const at = <A>(list: ReadonlyArray<A>, pick: number) => list[pick % list.length]!;

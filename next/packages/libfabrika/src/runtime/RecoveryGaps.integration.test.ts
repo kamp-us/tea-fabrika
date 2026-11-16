@@ -21,7 +21,7 @@ import { A, B, W, X, brain, data, first, from, ids, PIDS, read, storage } from "
 import { mailChunk } from "../settings/Declarations.ts";
 import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Event, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
-import { type Descriptor, ProgramRunner } from "./Runner.ts";
+import { type Descriptor, ProgramRunner, type Sent } from "./Runner.ts";
 
 const NAME = "counter:1";
 
@@ -551,7 +551,7 @@ describe("P34 interrupted recovery", () => {
     async () => {
       type Status = { process: string; state: string; until: number | null };
       type Instance = {
-        send: (id: string, m: unknown) => Effect.Effect<{ _tag: string; reason?: string }, unknown>;
+        send: (id: string, m: unknown) => Effect.Effect<typeof Sent.Type, unknown>;
         status: Effect.Effect<Status, unknown>;
         evict: Effect.Effect<void, unknown>;
         waitForRecovery: Effect.Effect<void, unknown>;

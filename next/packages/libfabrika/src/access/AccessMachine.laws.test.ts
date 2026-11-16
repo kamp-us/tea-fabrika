@@ -17,7 +17,7 @@
 // machine's own helpers.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Result } from "effect";
+import { Result, type Types } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { type Access, access, admitted, type Folded, type MemberEvent, members, type Reason } from "./Access.ts";
@@ -26,8 +26,8 @@ import { allows, EMPTY, foldAccess } from "./AccessFold.ts";
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const RUNS = 100;
 
-type Founded = Extract<Folded, { readonly _tag: "founded" }>;
-type Unfounded = Extract<Folded, { readonly _tag: "unfounded" }>;
+type Founded = Types.ExtractTag<Folded, "founded">;
+type Unfounded = Types.ExtractTag<Folded, "unfounded">;
 type Key = Founded["keys"] extends ReadonlyMap<string, infer K> ? K : never;
 type Standing = Key["_tag"];
 
@@ -463,10 +463,10 @@ describe("ticket 706, the access machine's types", () => {
       expectTypeOf<Key>().not.toHaveProperty("live");
       expectTypeOf<Key>().not.toHaveProperty("spent");
       expectTypeOf<Key>().not.toHaveProperty("replaced");
-      expectTypeOf<Extract<Key, { readonly _tag: "spent" }>["rank"]>().toEqualTypeOf<"recovery">();
-      expectTypeOf<Extract<Key, { readonly _tag: "spent" }>["under"]>().toEqualTypeOf<null>();
-      expectTypeOf<Extract<Key, { readonly _tag: "replaced" }>["rank"]>().toEqualTypeOf<"recovery">();
-      expectTypeOf<Extract<Key, { readonly _tag: "replaced" }>["under"]>().toEqualTypeOf<null>();
+      expectTypeOf<Types.ExtractTag<Key, "spent">["rank"]>().toEqualTypeOf<"recovery">();
+      expectTypeOf<Types.ExtractTag<Key, "spent">["under"]>().toEqualTypeOf<null>();
+      expectTypeOf<Types.ExtractTag<Key, "replaced">["rank"]>().toEqualTypeOf<"recovery">();
+      expectTypeOf<Types.ExtractTag<Key, "replaced">["under"]>().toEqualTypeOf<null>();
       // @ts-expect-error a spent window cannot be written: only a sheet is spent
       const spentWindow: Key = { _tag: "spent", rank: "window", under: null };
       // @ts-expect-error a replaced sheet hangs under nothing

@@ -5,7 +5,7 @@
 // typecheck is this law's runner. Plant (after build): put `PlatformError` in `Journal.write`'s
 // error channel.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Context, Effect, Layer, PlatformError } from "effect";
+import type { Context, Effect, Layer, PlatformError, Types } from "effect";
 import type { KeyValueStore } from "effect/persistence";
 import type { Rev } from "../Rev.ts";
 import type { Command, Result } from "../tasks/Task.ts";
@@ -30,12 +30,12 @@ it("type: T1 Journal and Commands speak their own errors and shared names only, 
   >();
   // A finish refused for good keeps the brain's reason, and every entry after `executing` keeps
   // when the command started.
-  expectTypeOf<Extract<typeof Entry.Type, { _tag: "held" }>["reason"]>().toEqualTypeOf<string>();
-  expectTypeOf<Extract<typeof Entry.Type, { _tag: "result" }>["startedAt"]>().toEqualTypeOf<string | undefined>();
+  expectTypeOf<Types.ExtractTag<typeof Entry.Type, "held">["reason"]>().toEqualTypeOf<string>();
+  expectTypeOf<Types.ExtractTag<typeof Entry.Type, "result">["startedAt"]>().toEqualTypeOf<string | undefined>();
   expectTypeOf<(typeof Entry.Type)["execution"]>().toEqualTypeOf<string>();
   expectTypeOf<(typeof Entry.Type)["at"]>().toEqualTypeOf<string>();
-  expectTypeOf<Extract<typeof Entry.Type, { _tag: "result" }>["result"]>().toEqualTypeOf<Result>();
-  expectTypeOf<Extract<typeof Entry.Type, { _tag: "acknowledged" }>["rev"]>().toEqualTypeOf<Rev>();
+  expectTypeOf<Types.ExtractTag<typeof Entry.Type, "result">["result"]>().toEqualTypeOf<Result>();
+  expectTypeOf<Types.ExtractTag<typeof Entry.Type, "acknowledged">["rev"]>().toEqualTypeOf<Rev>();
   // The command contract: what this host can do, and one closed command run once, never failing.
   expectTypeOf<Context.Service.Shape<typeof Commands>>().toEqualTypeOf<{
     readonly has: ReadonlyArray<string>;

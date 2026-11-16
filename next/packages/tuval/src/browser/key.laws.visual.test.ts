@@ -15,6 +15,7 @@
 // a stale Ask again that names a key no longer stored, a read while the store fails, and a persistence
 // claim. The browser, each context and each page are acquired in a scope (0061).
 import { describe, expect, it } from "@effect/vitest";
+import type { ClientKeyError } from "@kampus/libfabrika/transport/ClientKey";
 import { runsFor } from "@kampus/vitest";
 import { Effect } from "effect";
 import * as fc from "fast-check";
@@ -107,7 +108,8 @@ const tab = (context: Awaited<ReturnType<Browser["newContext"]>>) =>
 
 type Answer<A> = {
   readonly ok?: A;
-  readonly err?: { readonly _tag: string; readonly op: string; readonly error: string };
+  /** The store's failure, as the page hands it over. */
+  readonly err?: typeof ClientKeyError.Encoded;
 };
 
 type Key = { readonly fingerprint: string; readonly found: "created" | "reused" | "replaced" };

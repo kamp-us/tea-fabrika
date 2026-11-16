@@ -87,7 +87,7 @@ const exit = (store: Storage, process = A, by = BRAIN) =>
 const fresh = (store: Storage, after = 0) => receive(W, after).pipe(Effect.provide(manager(store, watcher(W))));
 
 /** Another writer's raw row: what a client could hold on a stream it may write. */
-const plant = (store: Storage, stream: string, id: string, event: { readonly _tag: string } & Schema.JsonObject) =>
+const plant = (store: Storage, stream: string, id: string, event: Parameters<typeof lineFor>[1]) =>
   Ledger.use((ledger) => ledger.append(stream, id, lineFor(from({ by: CLIENT }), event))).pipe(
     Effect.provide(manager(store)),
   );

@@ -11,8 +11,10 @@
 // `next-visual` project runs it one file at a time, on the schedule or a `visual` pull request.
 import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
+import type { Entry } from "@kampus/libfabrika/ledger/Log";
+import type { Installed } from "@kampus/libfabrika/runtime/Code";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Stream } from "effect";
+import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Stream, type Types } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
@@ -222,7 +224,7 @@ const objects = (value: unknown): ReadonlyArray<Record<string, unknown>> =>
 /** The outcome an answer gives for `counter:1`, or its failure's reason. */
 const outcome = (answer: unknown) => {
   const loaded = objects(answer).find((o) => Array.isArray(o.processes));
-  const row = (loaded?.processes as ReadonlyArray<{ name: string; outcome: { _tag: string; reason?: string } }>)?.find(
+  const row = (loaded?.processes as Types.ExtractTag<typeof Installed.Encoded, "loaded">["processes"])?.find(
     (p) => p.name === "counter:1",
   );
   const failed = objects(answer).find((o) => o._tag === "failed");
@@ -236,7 +238,7 @@ const session = (url: string, key: string) =>
     const { fingerprint } = yield* driver(p, url, "tab-a");
     yield* grant(p, url, fingerprint, key);
     const processes = yield* rpc(p, "ledger.read", { stream: "processes/counter:1", after: 0 });
-    const pid: string = processes.result.entries.find((r: { _tag: string }) => r._tag === "started").body.process;
+    const pid: string = processes.result.entries.find((r: typeof Entry.Encoded) => r._tag === "started").body.process;
     let letters = 0;
     return {
       pid,

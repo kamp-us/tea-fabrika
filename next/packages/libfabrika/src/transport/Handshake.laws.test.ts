@@ -24,13 +24,14 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Schema } from "effect";
-import { handshakeMachine } from "./Handshake.ts";
+import { type Handshake, handshakeMachine } from "./Handshake.ts";
 
 const SEED = 119120;
 
 type Msg = { readonly type: string; readonly [key: string]: unknown };
 type Cmd = { readonly type: string; readonly [key: string]: unknown };
-type State = { readonly _tag: string; readonly dial: number; readonly [key: string]: unknown };
+/** A handshake state: its case from `Handshake`, its dial, and any field read by name. */
+type State = Pick<typeof Handshake.Type, "_tag"> & { readonly dial: number; readonly [key: string]: unknown };
 
 const step = (s: State, m: Msg): readonly [State, ReadonlyArray<Cmd>] =>
   applyCell(handshakeMachine as never, s as never, m as never) as never;
@@ -45,7 +46,7 @@ const isAdmission = Schema.is(
 );
 
 /** A blind draw the fold reads in the state it reached. */
-const Pick = Schema.Struct({
+const Draw = Schema.Struct({
   move: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })),
   pick: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })),
   aux: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })),
@@ -59,8 +60,8 @@ const Pick = Schema.Struct({
   // The person the door admits: a person id, or any text a door could send.
   person: Schema.Union([Schema.String.check(Schema.isPattern(/^person_[0-9a-hjkmnp-tv-z]{26}$/)), Schema.String]),
 });
-type Pick = typeof Pick.Type;
-const Picks = Schema.Array(Pick).check(Schema.isMinLength(10), Schema.isMaxLength(120));
+type Draw = typeof Draw.Type;
+const Draws = Schema.Array(Draw).check(Schema.isMinLength(10), Schema.isMaxLength(120));
 
 type World = {
   s: State;
@@ -80,7 +81,7 @@ type Event = {
 const liveId = (s: State): string | undefined => (typeof s["id"] === "string" ? s["id"] : undefined);
 
 /** Every move the world allows now. */
-const moves = (w: World, c: Pick): ReadonlyArray<() => Msg> => {
+const moves = (w: World, c: Draw): ReadonlyArray<() => Msg> => {
   const s = w.s;
   const at = Math.max(0, w.at);
   const other = s.dial + 1 + (c.aux % 3);
@@ -141,7 +142,7 @@ const moves = (w: World, c: Pick): ReadonlyArray<() => Msg> => {
 };
 
 /** Folds a walk from the real init, opened on dial 1, and hands each step to `each`. */
-const fold = (list: ReadonlyArray<Pick>, each: (e: Event) => void): void => {
+const fold = (list: ReadonlyArray<Draw>, each: (e: Event) => void): void => {
   const [s0, cmds0]: readonly [State, ReadonlyArray<Cmd>] = handshakeMachine.init(null, {} as never);
   const [s1, cmds1] = step(s0, { type: "opened", dial: 1, at: 0 });
   const w: World = { s: s1, waiting: [...cmds0, ...cmds1], ids: [], at: 0 };
@@ -171,7 +172,7 @@ const runs = { arbitrary: { seed: SEED, runs: 300, size: 120 } };
 describe("P18 L2: the handshake answers only its own request", () => {
   it.prop(
     "a stale id or another dial changes nothing, a hello carries the nonce just folded, a link outcome follows only its own answer, and ms is never negative",
-    { list: Arbitrary.schema(Picks) },
+    { list: Arbitrary.schema(Draws) },
     ({ list }) => {
       fold(list, ({ prev, m, next, cmds, known }) => {
         const own = liveId(prev);
@@ -281,7 +282,7 @@ describe("P18 L2: the handshake answers only its own request", () => {
 
   it.prop(
     "over twenty walks the handshake admits, waits, fails, is refused and refuses a stale answer",
-    { lists: Arbitrary.array(Arbitrary.schema(Picks), { minLength: 20, maxLength: 20 }) },
+    { lists: Arbitrary.array(Arbitrary.schema(Draws), { minLength: 20, maxLength: 20 }) },
     ({ lists }) => {
       const seen: Record<string, number> = { admitted: 0, waiting: 0, failed: 0, refused: 0, stale: 0 };
 

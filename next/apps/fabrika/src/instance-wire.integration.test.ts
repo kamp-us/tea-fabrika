@@ -14,7 +14,7 @@ import { Id } from "@kampus/libfabrika";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Clock, Deferred, Effect, Fiber, Schema } from "effect";
+import { Clock, type Data, Deferred, Effect, Fiber, Schema } from "effect";
 import { afterEach, describe, expect } from "vitest";
 import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
@@ -634,7 +634,10 @@ const sendPlaced = (c: Client, pid: string, letter: string) =>
   Effect.promise(async () => placing(await send(c, pid, letter)));
 
 /** A send settles as accepted, or as cut by the kill (the socket closed before its answer). Nothing else. */
-type Settled = { _tag: "accepted"; placing: Placing } | { _tag: "cut" };
+type Settled = Data.TaggedEnum<{
+  accepted: { placing: Placing };
+  cut: Record<never, never>;
+}>;
 
 const sendSettled = (c: Client, pid: string, letter: string, answered: Deferred.Deferred<void>) =>
   Effect.promise(async (): Promise<Settled> => {

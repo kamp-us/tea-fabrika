@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
-import { Id } from "@kampus/libfabrika";
+import { Id, type Sent } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
 import { Doorbell } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
@@ -40,7 +40,7 @@ type Update =
 
 type Runner = {
   readonly open: (client: string) => Effect.Effect<{ rev: number; view: unknown }, unknown>;
-  readonly msg: (input: unknown) => Effect.Effect<{ _tag: string; reason?: string }, unknown>;
+  readonly msg: (input: unknown) => Effect.Effect<typeof Sent.Type, unknown>;
 };
 
 const reconstruct = (before: unknown, change: Update): unknown => {

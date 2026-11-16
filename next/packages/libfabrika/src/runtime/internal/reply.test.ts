@@ -3,7 +3,7 @@
 // the state it has reached: a new reply while empty, then the stored reply with one field changed.
 import { applyCell, type Machine, type Sub } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { type Data, Schema } from "effect";
 import * as fc from "fast-check";
 import { InputId } from "../../Id.ts";
 import { syncTest } from "../../Testing.ts";
@@ -17,10 +17,16 @@ type Reply = {
   readonly by: string;
   readonly for: string;
   readonly digest: string;
-  readonly answer: { readonly _tag: "refused"; readonly reason: string; readonly now?: number; readonly most?: number };
+  readonly answer: Data.TaggedEnum<{
+    refused: { readonly reason: string; readonly now?: number; readonly most?: number };
+  }>;
 };
 
-type Model = { readonly _tag: "empty" } | { readonly _tag: "remembered"; readonly reply: Reply };
+type Model = Data.TaggedEnum<{
+  empty: Record<never, never>;
+  remembered: { readonly reply: Reply };
+}>;
+
 type Msg = { readonly type: "remember"; readonly reply: Reply };
 
 type Subject = {

@@ -4,11 +4,12 @@
 // lead and CI run it with `pnpm typecheck`.
 // Plant: make `ref` optional on `opening` or `open`, or type `ended`'s `reason` as a string.
 import { expectTypeOf, it } from "@effect/vitest";
+import type { Types } from "effect";
 import type { ExitReason } from "../processes/ExitReason.ts";
 import type { WindowModel } from "./WindowMachine.ts";
 
 type Reach = WindowModel["tiles"][number]["reach"];
-type Case<Tag extends string> = Extract<Reach, { readonly _tag: Tag }>;
+type Case<Tag extends string> = Types.ExtractTag<Reach, Tag>;
 
 it("type: opening and open require their ref, and ended requires its ExitReason", () => {
   expectTypeOf<Pick<Case<"opening">, "ref">>().toEqualTypeOf<{ readonly ref: string }>();

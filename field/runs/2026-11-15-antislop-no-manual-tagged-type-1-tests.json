@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-no-manual-tagged-type-1-tests",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T21:46:38-08:00",
+  "ended": "2026-11-15T22:13:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step of anti-slop judgment slice AS-no-manual-tagged-type-1 (ticket 1057, decisions 0562 and 0563), on branch fabrikalfa/antislop-no-manual-tagged-type-1 from origin/main at bcad0080d, a newer main than the brief's 9186e6c49. Counted with anti-slop-effect/no-manual-tagged-type forced to error in a scratch config outside the repo, over next/, .agents/, .github/ci/ and oxlint-plugins/: 164 hits, 9 of them in three files of PR 1366 (never touched, waiting on 1366: next/packages/libfabrika/src/ledger/Log.ts, next/packages/libfabrika/src/processes/internal/programMail.test.ts, next/packages/libfabrika/src/runtime/Runner.integration.test.ts), so 155 met, as the brief expected. All 155 are in exam paths (tests, *Test.ts, .github/**, oxlint-plugins/**, .agents/skills/*/scripts/*.test.ts); no product file has a hit, so the build step has nothing to do for this rule. Fixed 153, all by hand edits with the Edit tool and small scratchpad scripts (never committed); the checker's quick fix was not used. How: 51 `Extract`/`Exclude` over a tag became Effect's own `Types.ExtractTag`/`Types.ExcludeTag`; hand-written tagged unions and single tagged shapes that a laws file restates (0135) became `Data.TaggedEnum`, the form ChildrenLedger.ts already uses, which keeps every field and every optional field (the Client.laws plant shows the pin still bites); open shapes that read a product value (`{ _tag: string; ... }`) now take their tag from the product type with `Pick<X, \"_tag\">` or use the product type whole (Sent, Installed, Entry, ClientRecord, ClientKeyError, the window model's call, link, reach, inbox and handshake, Handshake, Agent.Heard, the supervisor's encoded origin, lineFor's parameter). Two local names `Pick` (WindowMachine.laws, Tezgah.laws, Handshake.laws) that shadowed TypeScript's Pick were renamed `Draw`. Left 2: next/apps/fabrika/src/exam/agent-may.test.ts:452 and :466, the loose `Answer` type of the agent-policy exam. Its right fix is unclear: the exam feeds deliberately malformed answers on purpose (a refused answer with no reason at :665, answers built with a widened string tag in its controls at :690 and :737), so the wire's own `Answer` type or a tagged enum refuses the exam's own plants; a typed fix needs a reshaped set of control answers, a judgment for the plan or the owner. No disable line was added. No assertion was deleted or narrowed, no law loosened, no `.oxlintrc.json` change and no lock line (owner ruling for judgment slices).",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/gateway/Gateway.types.test.ts: type: the gateway's store and nonce fail with GatewayError, never an error tagged LedgerError",
+      "plant": "the helper's first check expects Own where FromLedger finds Ledgers",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/Client.laws.test.ts: the exam's Ready shape pinned to Pending's ready case",
+      "plant": "next/packages/libfabrika/src/runtime/Client.ts:51 makes the ready case's traceId required",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 27,
+  "note": "Each plant ran once on a saved copy, through the package's own typecheck, and was restored by copy; git status showed no product file after. Checks at the final tree: package typechecks (tsc --noEmit -p .) of next/apps/fabrika, next/packages/libfabrika, next/packages/tuval, next/programs/checklist, pipeline, tezgah and counter, .agents, .github/ci and oxlint-plugins all exit 0; one root pnpm typecheck ran earlier and found only the agent-may errors, which were then undone. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) passes 16 of its 17 parts; the one red part is oxlint-plugins/lint.ts asking that 16 folders now at zero for this rule be added to the rule's block in .oxlintrc.json, which the owner ruled waits for the later lock pull request. The list ratchet exits 0. Tests: 39 plain test files that the change touches or that read a changed file ran green under nice -n 15 vitest --maxWorkers=3 (333 tests). Not run here: the 12 touched .integration. files (the test config refuses them without the owner's yes, 0178; their changes are types only, checked by the typechecks) and the 2 touched .visual. files (never run in this box). pnpm format's lint --fix step stops on the same lock-line ask, so oxlint-plugins/format.ts ran on its own after it.",
+  "step": "tests"
+}

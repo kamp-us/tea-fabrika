@@ -771,7 +771,7 @@ describe("L12: wire formats are refused as typed values", () => {
 // --- P18 L4: one Effect socket per dial ------------------------------------------------------------
 
 /** The link's socket dial, as the window's model says. */
-const socketDialIn = (link: { readonly _tag: string; readonly dial?: number }): number | null =>
+const socketDialIn = (link: Pick<WindowModel["link"], "_tag"> & { readonly dial?: number }): number | null =>
   link._tag === "dialing" || link._tag === "waiting_grant" || link._tag === "online" ? (link.dial ?? null) : null;
 
 /** One thing the door, the network or a person does next. A move whose state does not allow it is skipped. */
@@ -876,7 +876,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
         const frames: Array<FrameMsg> = [];
         // The call ids the door has answered, per socket.
         const replied = new Map<MemorySocket, Set<number>>();
-        let read: () => { readonly link: { readonly _tag: string; readonly dial?: number } } = () => ({
+        let read: () => { readonly link: Pick<WindowModel["link"], "_tag"> & { readonly dial?: number } } = () => ({
           link: { _tag: "dialing", dial: 1 },
         });
         let armed = false;
@@ -1336,7 +1336,9 @@ describe("P18 slice 2: the start's wire for wait and monitor", () => {
         expect(monitors.length, "the window monitored its tile's process").toBeGreaterThan(0);
 
         for (const w of [...waits, ...monitors]) {
-          const call = w.call as { readonly _tag: string; readonly [key: string]: unknown };
+          const call = w.call as Pick<WindowModel["flight"][number]["call"], "_tag"> & {
+            readonly [key: string]: unknown;
+          };
           const params =
             call._tag === "wait"
               ? { method: "ledger.wait", params: { stream: call["stream"], after: call["after"] } }

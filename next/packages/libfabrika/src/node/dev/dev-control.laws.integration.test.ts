@@ -7,7 +7,7 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Context, Deferred, Duration, Effect, FileSystem, Option, Queue, Schema } from "effect";
+import { Clock, Context, type Data, Deferred, Duration, Effect, FileSystem, Option, Queue, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";
@@ -69,12 +69,14 @@ type Row = typeof BrainEvent.Type;
 type Cause = { readonly reason: "open" | "crash" | "memory"; readonly bytes?: number };
 
 // What a row must say, before its start ids are known.
-type Fact =
-  | { readonly _tag: "started"; readonly at: number; readonly pid: number; readonly cause: Cause }
-  | { readonly _tag: "replacing"; readonly at: number; readonly pid: number; readonly bytes: number }
-  | { readonly _tag: "exited" | "restarting"; readonly at: number; readonly cause: Cause; readonly exit: Exit }
-  | { readonly _tag: "braked"; readonly at: number; readonly reason: string; readonly exit: Exit }
-  | { readonly _tag: "stopped"; readonly at: number };
+type Fact = Data.TaggedEnum<{
+  started: { readonly at: number; readonly pid: number; readonly cause: Cause };
+  replacing: { readonly at: number; readonly pid: number; readonly bytes: number };
+  exited: { readonly at: number; readonly cause: Cause; readonly exit: Exit };
+  restarting: { readonly at: number; readonly cause: Cause; readonly exit: Exit };
+  braked: { readonly at: number; readonly reason: string; readonly exit: Exit };
+  stopped: { readonly at: number };
+}>;
 
 type Exit = { readonly exitCode: number | null; readonly signal: string | null };
 
@@ -83,7 +85,11 @@ type Call = {
   readonly body: { target: string; project: string; name: string; method: string; args: Array<unknown> };
 };
 
-type Answer = { readonly _tag: "value"; readonly value: unknown } | { readonly _tag: "error"; readonly error: unknown };
+type Answer = Data.TaggedEnum<{
+  value: { readonly value: unknown };
+  error: { readonly error: unknown };
+}>;
+
 type Span = { readonly span: { name: string; ok: boolean; attributes: Record<string, unknown> } };
 
 // `replacing`: the sampler sent the old process its SIGTERM, and the walk's process ends by its exit.

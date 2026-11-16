@@ -6,6 +6,7 @@
 // The plan's plant: run the typecheck on this file while effect is still 4.1.2. There `Keys` is
 // `ReadonlyArray<unknown>`, so the first two assertions fail.
 import { expectTypeOf, it } from "@effect/vitest";
+import type { Types } from "effect";
 import type { ExitReason } from "./ExitReason.ts";
 
 it("type: isAnyOf takes only the union's own tags, so a misspelled tag does not compile", () => {
@@ -18,6 +19,6 @@ it("type: isAnyOf takes only the union's own tags, so a misspelled tag does not 
   expectTypeOf<readonly ["normal", "kill"]>().toExtend<Keys>();
   // The guard still narrows to the cases asked for, and to nothing else.
   expectTypeOf<ReturnType<typeof ExitReason.isAnyOf<"normal" | "kill">>>().guards.toEqualTypeOf<
-    Extract<ExitReason, { readonly _tag: "normal" | "kill" }>
+    Types.ExtractTag<ExitReason, "normal"> | Types.ExtractTag<ExitReason, "kill">
   >();
 });

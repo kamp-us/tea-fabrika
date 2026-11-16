@@ -43,7 +43,7 @@ import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Start } from "../processes/Process.ts";
 import { hash, type BuiltProgram } from "../runtime/Built.ts";
-import { CodeEvent } from "../runtime/Code.ts";
+import { CodeEvent, type Installed } from "../runtime/Code.ts";
 import { ProgramLoader } from "../runtime/Entry.ts";
 import { Program } from "../runtime/Program.ts";
 import type { Descriptor } from "../runtime/Runner.ts";
@@ -1303,7 +1303,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                 if (move === "control") {
                   const response = yield* ask("project", "codeInstall", TOKEN);
                   expect(response.status).toBe(200);
-                  const answer = ((yield* json(response)) as { value: { _tag: string } }).value;
+                  const answer = ((yield* json(response)) as { value: typeof Installed.Encoded }).value;
                   expect(["loaded", "same"]).toContain(answer._tag);
                 } else if (move === "wrong_target") {
                   const target = g(() => fc.constantFrom("process", "record"));

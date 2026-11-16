@@ -16,7 +16,7 @@
 // Plant, run once and undone (recorded in the tests step's field row): leave out the `PRIMARY KEY`,
 // so an overwrite adds a second row.
 import { describe, expect, it } from "@effect/vitest";
-import { Context, Effect, Exit, Layer } from "effect";
+import { Context, type Data, Effect, Exit, Layer } from "effect";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import * as fc from "fast-check";
 import { Journal, type Entry, Entry as EntrySchema } from "../../client/Journal.ts";
@@ -26,10 +26,11 @@ import { property } from "../../Testing.test-support.ts";
 import * as JournalSqlite from "./JournalSqlite.ts";
 
 /** What one store answers a read: the entry, nothing, or the journal error's reason. */
-type Read =
-  | { readonly _tag: "entry"; readonly entry: Entry }
-  | { readonly _tag: "none" }
-  | { readonly _tag: "error"; readonly reason: string };
+type Read = Data.TaggedEnum<{
+  entry: { readonly entry: Entry };
+  none: Record<never, never>;
+  error: { readonly reason: string };
+}>;
 
 /** One journal over one store, with the store itself for a raw value and its size. */
 type Side = { readonly journal: Context.Service.Shape<typeof Journal>; readonly store: KeyValueStore.KeyValueStore };

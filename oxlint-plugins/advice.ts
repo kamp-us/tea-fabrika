@@ -4,6 +4,7 @@
 // moment its folder reaches zero: `stale` names it, and a whole `pnpm lint` run fails until it is
 // deleted.
 import { matchesGlob } from "node:path";
+import type { Data } from "effect";
 
 /** One fire as oxlint reports it, its filename from the top of the repo. */
 export interface Fire {
@@ -67,7 +68,10 @@ export interface WarnLine {
 }
 
 /** What a whole run says about a warn line: its folder has no fire left, or it names a file. */
-type Stale = { readonly _tag: "zero"; readonly line: WarnLine } | { readonly _tag: "file"; readonly line: WarnLine };
+type Stale = Data.TaggedEnum<{
+  zero: { readonly line: WarnLine };
+  file: { readonly line: WarnLine };
+}>;
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

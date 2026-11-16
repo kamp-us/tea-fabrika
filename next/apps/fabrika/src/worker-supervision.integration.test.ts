@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
+import type { Entry } from "@kampus/libfabrika/ledger/Log";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Effect, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
@@ -389,7 +390,7 @@ const reconnected = (instance: Instance, key: Key, tab: string) =>
 
 /** The raw rows of a stream, as the audit reader gives them: id, tag and body. */
 const rows = async (instance: Instance, stream: string) =>
-  (await instance.project(PROJECT).read(stream, 0, "audit")) as Array<{ id: string; _tag: string; body: any }>;
+  (await instance.project(PROJECT).read(stream, 0, "audit")) as Array<Pick<Entry, "_tag"> & { id: string; body: any }>;
 
 /** Waits with `ledger.wait` after the last rev seen for `restarted {after}` on a process name. No such
  *  fact in WAIT fails the test with the rows it saw, so a missing restart is a failure, never a hang. */
@@ -407,7 +408,7 @@ const restartedAfter = (c: Awaited<ReturnType<typeof wire>>, name: string, after
       );
 
       if (found !== undefined) {
-        return found as { _tag: string; rev: number; body: { process: string; after: string; name: string } };
+        return found as Pick<Entry, "_tag"> & { rev: number; body: { process: string; after: string; name: string } };
       }
 
       if (read.result.entries.length > 0) {

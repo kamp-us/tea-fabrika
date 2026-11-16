@@ -9,7 +9,7 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Duration, Effect, Result, Schedule, Schema } from "effect";
+import { type Data, type Duration, Effect, Result, Schedule, Schema } from "effect";
 
 /** The step's name in every test leg; it times the steps before it. workflow-lint.ts holds both. */
 export const STEP = "time table";
@@ -36,9 +36,10 @@ export type TestFile = {
 };
 
 /** What a section read, or why it could not. */
-export type Section<A> =
-  | { readonly _tag: "read"; readonly rows: readonly A[] }
-  | { readonly _tag: "unavailable"; readonly reason: string };
+export type Section<A> = Data.TaggedEnum<{
+  read: { readonly rows: readonly A[] };
+  unavailable: { readonly reason: string };
+}>;
 
 /** Which leg of which run, each as GitHub's environment gives it. */
 export type Leg = {

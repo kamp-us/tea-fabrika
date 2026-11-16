@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import type { Data } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
@@ -72,10 +73,11 @@ const WRONG = {
 type Wrong = keyof typeof WRONG;
 
 /** What stands above one export: Effect's shape, nothing, or a block wrong in one named way. */
-type State =
-  | { readonly _tag: "right" }
-  | { readonly _tag: "missing" }
-  | { readonly _tag: "wrong"; readonly way: Wrong };
+type State = Data.TaggedEnum<{
+  right: Record<never, never>;
+  missing: Record<never, never>;
+  wrong: { readonly way: Wrong };
+}>;
 
 const state: fc.Arbitrary<State> = fc.oneof(
   fc.constant({ _tag: "right" } as const),

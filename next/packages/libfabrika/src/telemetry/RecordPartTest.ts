@@ -3,7 +3,7 @@
 // The laws, and no driver (0062): a runner in the module that owns a driver calls
 // `RecordPartTest.suite(open)`, and `open` acquires each store in a scope (0061).
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, type PlatformError, type Scope } from "effect";
+import { type Data, Effect, type PlatformError, type Scope } from "effect";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import type { SpanRow } from "./Trace.ts";
@@ -16,7 +16,10 @@ export interface Store {
 /** `file`: every use reopens the same file in a folder the scope removes. `memory`: its own database. */
 export type Open = (mode: "file" | "memory") => Effect.Effect<Store, PlatformError.PlatformError, Scope.Scope>;
 
-type Lookup = { _tag: "found"; content: unknown } | { _tag: "absent"; rolled: boolean };
+type Lookup = Data.TaggedEnum<{
+  found: { content: unknown };
+  absent: { rolled: boolean };
+}>;
 
 type Part = {
   write: (rows: ReadonlyArray<{ span: SpanRow; content: string | null }>) => Effect.Effect<unknown, unknown>;

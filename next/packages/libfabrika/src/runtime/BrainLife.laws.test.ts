@@ -98,8 +98,15 @@ describe("P12 instance machine laws", () => {
       brainLife,
       {},
       fc.array(message, { maxLength: 40 }),
-      ({ prev, next, cmds }: { prev: { _tag: string }; next: { _tag: string }; cmds: ReadonlyArray<unknown> }) =>
-        !["braked", "stopped"].includes(prev._tag) || (next._tag === prev._tag && cmds.length === 0),
+      ({
+        prev,
+        next,
+        cmds,
+      }: {
+        prev: typeof brainLife.model.Type;
+        next: typeof brainLife.model.Type;
+        cmds: ReadonlyArray<unknown>;
+      }) => !["braked", "stopped"].includes(prev._tag) || (next._tag === prev._tag && cmds.length === 0),
       { seed: SEED, numRuns: 100 },
     );
   });

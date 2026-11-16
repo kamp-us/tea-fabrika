@@ -9,7 +9,7 @@ import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Program, Input, stepper } from "@kampus/libfabrika";
 import { syncTest } from "@kampus/libfabrika/testing";
-import { Result, Schema } from "effect";
+import { type Data, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 
@@ -19,11 +19,12 @@ const RUNS = 100;
 const load = () => import("./program.ts");
 type ChecklistMachine = Awaited<ReturnType<typeof load>>["checklistMachine"];
 
-type State =
-  | { readonly _tag: "new" }
-  | { readonly _tag: "open"; readonly since: number }
-  | { readonly _tag: "late"; readonly since: number }
-  | { readonly _tag: "checked"; readonly note: string | null };
+type State = Data.TaggedEnum<{
+  new: Record<never, never>;
+  open: { readonly since: number };
+  late: { readonly since: number };
+  checked: { readonly note: string | null };
+}>;
 
 type Item = { readonly name: string; readonly state: State };
 type Model = { readonly items: ReadonlyArray<Item> };

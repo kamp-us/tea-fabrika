@@ -5,7 +5,7 @@
 // the machine must now hold.
 import { applyCellChecked } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Schema, type Types } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { Attached, Wait } from "../Wire.ts";
@@ -45,7 +45,7 @@ const expected = (saved: Saved | null): unknown => {
 };
 
 /** The attachment a loaded state saves, read from the Model alone. */
-const projected = (model: Exclude<Model, { readonly _tag: "unloaded" }>): Saved => {
+const projected = (model: Types.ExcludeTag<Model, "unloaded">): Saved => {
   if (model._tag === "new" || model._tag === "waiting") {
     return model.attached;
   }
@@ -180,7 +180,7 @@ const sized = (size: number, unit: string) => {
 };
 
 /** A wait whose candidate attachment lands `shift` bytes off the encoded limit. */
-const boundary = (saved: Saved & { readonly _tag: "online" }, choice: Choice): W => {
+const boundary = (saved: Types.ExtractTag<Saved, "online">, choice: Choice): W => {
   const probe = Wait.make({ id: choice.wait.id, stream: "", after: choice.wait.after });
   const space = MAX_BYTES - bytes({ ...saved, waits: [...saved.waits, probe] });
   return Wait.make({ ...probe, stream: sized(Math.max(0, space + choice.shift), choice.unit) });
@@ -299,17 +299,16 @@ describe("T703 connection machine laws", () => {
   it("type: busy comes only from the state tag, and unauthenticated states hold no waits", () => {
     expectTypeOf<Model["_tag"]>().toEqualTypeOf<"unloaded" | "new" | "waiting" | "idle" | "busy">();
     expectTypeOf<Extract<Model, { readonly busy: unknown }>>().toBeNever();
-    type Unauthenticated = Extract<Model, { readonly _tag: "unloaded" | "new" | "waiting" }>;
+    type Unauthenticated =
+      | Types.ExtractTag<Model, "unloaded">
+      | Types.ExtractTag<Model, "new">
+      | Types.ExtractTag<Model, "waiting">;
     expectTypeOf<Extract<Unauthenticated, { readonly waits: unknown }>>().toBeNever();
-    expectTypeOf<Extract<Model, { readonly _tag: "new" }>["attached"]>().toEqualTypeOf<
-      typeof Attached.cases.new.Type
-    >();
-    expectTypeOf<Extract<Model, { readonly _tag: "waiting" }>["attached"]>().toEqualTypeOf<
-      typeof Attached.cases.waiting.Type
-    >();
-    expectTypeOf<Extract<Model, { readonly _tag: "idle" }>>().not.toHaveProperty("attached");
-    expectTypeOf<Extract<Model, { readonly _tag: "busy" }>>().not.toHaveProperty("attached");
-    expectTypeOf<Extract<Model, { readonly _tag: "idle" }>["waits"]>().toEqualTypeOf<ReadonlyArray<W>>();
+    expectTypeOf<Types.ExtractTag<Model, "new">["attached"]>().toEqualTypeOf<typeof Attached.cases.new.Type>();
+    expectTypeOf<Types.ExtractTag<Model, "waiting">["attached"]>().toEqualTypeOf<typeof Attached.cases.waiting.Type>();
+    expectTypeOf<Types.ExtractTag<Model, "idle">>().not.toHaveProperty("attached");
+    expectTypeOf<Types.ExtractTag<Model, "busy">>().not.toHaveProperty("attached");
+    expectTypeOf<Types.ExtractTag<Model, "idle">["waits"]>().toEqualTypeOf<ReadonlyArray<W>>();
   });
 
   it("every Msg keeps the transition table, the metadata and the unrelated waits", () => {

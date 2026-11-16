@@ -2,14 +2,15 @@
 // whatever its answer. Rebuilds remember failed inputs without advancing the phase.
 import { arbGuidedSequence, propertyTrace } from "@demlik/tea/pbt";
 import { expect, expectTypeOf, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { type Data, Schema } from "effect";
 import * as fc from "fast-check";
 
 it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attempt advances boot to watch", async () => {
   const { watcher } = await import("./watcher.ts");
-  type Model =
-    | { readonly _tag: "booting"; readonly failedInputs?: string | null }
-    | { readonly _tag: "watching"; readonly failedInputs?: string | null };
+  type Model = Data.TaggedEnum<{
+    booting: { readonly failedInputs?: string | null };
+    watching: { readonly failedInputs?: string | null };
+  }>;
   type Msg = { readonly type: "attempted" } | { readonly type: "rebuilt"; readonly failedInputs: string | null };
   expectTypeOf<Model>().toEqualTypeOf<typeof watcher.model.Type>();
   expectTypeOf<Msg>().toEqualTypeOf<typeof watcher.msg.Type>();

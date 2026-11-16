@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
+import type { Entry } from "@kampus/libfabrika/ledger/Log";
 import { Effect, Layer, Predicate, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
@@ -157,7 +158,8 @@ const alive = (pid: number) =>
     }),
   ).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
-type Fact = { readonly _tag: string; readonly body: Record<string, unknown> };
+/** One fact of the brain's stream: its case, as the ledger keeps it, and its body. */
+type Fact = Pick<Entry, "_tag"> & { readonly body: Record<string, unknown> };
 
 /** The brain's facts on `gateway/brain`, or null while the call cannot be answered. */
 const brain = async (instance: Instance): Promise<ReadonlyArray<Fact> | null> => {

@@ -6,7 +6,7 @@ import { Commit, Tree } from "@kampus/libfabrika/codehost/CodeHost";
 import { Started } from "@kampus/libfabrika/processes/Children";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { StartRefusal } from "@kampus/libfabrika/runtime/StartChild";
-import { ConfigProvider, Effect, Schema } from "effect";
+import { ConfigProvider, Effect, Schema, type Types } from "effect";
 import * as fc from "fast-check";
 import * as Mail from "./Mail.ts";
 import { queue } from "./Queue.ts";
@@ -531,11 +531,11 @@ for (const [law, reached] of [
 }
 
 // pinned: Q8 is a compile-time contract. CI checks the deliberately invalid assignments.
-const invalidModels = (idle: Extract<Model, { _tag: "idle" }>, entry: Entry) => {
+const invalidModels = (idle: Types.ExtractTag<Model, "idle">, entry: Entry) => {
   // @ts-expect-error idle cannot hold a waiting line
-  const line: Extract<Model, { _tag: "idle" }> = { ...idle, line: [entry] };
+  const line: Types.ExtractTag<Model, "idle"> = { ...idle, line: [entry] };
   // @ts-expect-error idle cannot hold a current landing
-  const current: Extract<Model, { _tag: "idle" }> = { ...idle, current: entry };
+  const current: Types.ExtractTag<Model, "idle"> = { ...idle, current: entry };
   // @ts-expect-error a reply address requires its ref
   const partial: typeof Mail.Enqueue.Type = { type: "enqueue", change: 1, head, reply: { to: "quest" } };
   return [line, current, partial];

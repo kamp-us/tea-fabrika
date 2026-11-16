@@ -1,7 +1,7 @@
 // next/, ticket 887, P21 slice 1. Each plant named here runs after Menu.ts exists.
 import { arbGuidedSequence, foldEvents, propertyInvariant, propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Schema } from "effect";
+import { ConfigProvider, Effect, Schema, type Types } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "../settings/Declarations.ts";
@@ -19,7 +19,7 @@ const signed = (cmds: ReadonlyArray<Test.Command>) =>
   );
 
 const waiting = (s: Test.Model) =>
-  Menu.view(s).filter((i): i is Extract<typeof Menu.Item.Type, { _tag: "waiting" }> => i._tag === "waiting");
+  Menu.view(s).filter((i): i is Types.ExtractTag<typeof Menu.Item.Type, "waiting"> => i._tag === "waiting");
 
 const safe = (s: string) => s.replace(/[\p{Cc}\p{Cf}]/gu, "");
 // pinned: amendment A-Lint uses the existing brain-line text cap, in UTF-16 code units.

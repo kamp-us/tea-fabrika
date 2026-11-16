@@ -45,9 +45,10 @@ import { applyCell } from "@demlik/tea";
 import { Cmd as TeaCmd, Machine } from "@demlik/tea/effect";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import type { SchemaAST } from "effect";
+import type { Data, SchemaAST } from "effect";
 import { Arbitrary, Option, Result, Schema } from "effect";
 import * as fc from "fast-check";
+import type { Entry } from "../ledger/Log.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace, NoProc, Recipient, signalId } from "../processes/Process.ts";
 import { diff } from "../runtime/Patch.ts";
@@ -127,9 +128,11 @@ const POOL = ["milk", "bread", "eggs"] as const;
 const DRAFT = "draft~";
 
 type Cmd = { readonly type: string; readonly [key: string]: unknown };
-type Call = { readonly _tag: string; readonly [key: string]: unknown };
+/** A call as a write carries it: its case from the model's own, and any field read by name. */
+type Call = Pick<WindowModel["flight"][number]["call"], "_tag"> & { readonly [key: string]: unknown };
 type Write = { readonly type: "write"; readonly call: Call; readonly id: number; readonly dial: number };
-type Row = { readonly _tag: string; readonly [key: string]: unknown };
+/** A record row: its case from `ClientRecord`, and any field read by name. */
+type Row = Pick<typeof ClientRecord.Type, "_tag"> & { readonly [key: string]: unknown };
 
 const step = (s: WindowModel, m: WindowMsg): readonly [WindowModel, ReadonlyArray<Cmd>] => applyCell(machine, s, m);
 const isWrite = (c: Cmd): c is Write => c.type === "write";
@@ -1291,7 +1294,7 @@ const AGAIN = new Set<string>(["unreachable", "not_granted", "no_hello", "storag
 const JUNK = ["{ not json", "[1,2]", rpc({ id: true, result: 1 }), "ping", "", "PONG", rpc({ method: "nope" })];
 
 /** A blind draw the fold reads in the state it reached: which move, which target, and its values. */
-const Pick = Schema.Struct({
+const Draw = Schema.Struct({
   move: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })),
   pick: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })),
   aux: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })),
@@ -1303,16 +1306,17 @@ const Pick = Schema.Struct({
     Schema.Int.check(Schema.isBetween({ minimum: 3000, maximum: 4999 })),
   ]),
 });
-type Pick = typeof Pick.Type;
-const Picks = Schema.Array(Pick).check(Schema.isMinLength(40), Schema.isMaxLength(200));
+type Draw = typeof Draw.Type;
+const Draws = Schema.Array(Draw).check(Schema.isMinLength(40), Schema.isMaxLength(200));
 
 /** What the step's frame should do, known when the move was made. */
-type Expect =
-  | { readonly _tag: "owner"; readonly owner: WindowMsg } // the same as the Msg its owner already had
-  | { readonly _tag: "nothing" } // changes nothing and asks for nothing
-  | { readonly _tag: "handshake" } // a string id or a handshake notice: no flight moves
-  | { readonly _tag: "settles"; readonly id: number; readonly dial: number } // only that flight leaves
-  | { readonly _tag: "none" }; // not a frame
+type Expect = Data.TaggedEnum<{
+  owner: { readonly owner: WindowMsg }; // the same as the Msg its owner already had
+  nothing: Record<never, never>; // changes nothing and asks for nothing
+  handshake: Record<never, never>; // a string id or a handshake notice: no flight moves
+  settles: { readonly id: number; readonly dial: number }; // only that flight leaves
+  none: Record<never, never>;
+}>; // not a frame
 
 type Flight = WindowModel["flight"][number];
 
@@ -1334,8 +1338,12 @@ type FrameEvent = {
 };
 
 /** The model's handshake: its state, its dial and its live request id. */
-const handshakeIn = (s: WindowModel): { readonly _tag: string; readonly dial?: number; readonly id?: string } =>
-  Reflect.get(s, "handshake") ?? { _tag: "none" };
+const handshakeIn = (
+  s: WindowModel,
+): (Pick<WindowModel["handshake"], "_tag"> | Data.TaggedEnum<{ none: Record<never, never> }>) & {
+  readonly dial?: number;
+  readonly id?: string;
+} => Reflect.get(s, "handshake") ?? { _tag: "none" };
 
 const frame = (w: FrameWorld, dial: number, text: string, ms?: number): WindowMsg =>
   ({ type: "frame", dial, text, at: w.at, ...(ms === undefined ? {} : { ms }) }) as WindowMsg;
@@ -1347,7 +1355,7 @@ const frame = (w: FrameWorld, dial: number, text: string, ms?: number): WindowMs
  */
 const goodAnswer = (
   f: Flight,
-  c: Pick,
+  c: Draw,
   hs: ReturnType<typeof handshakeIn>,
 ): { readonly result: unknown; readonly owner: WindowMsg | null } => {
   const on = { id: f.id, dial: f.dial };
@@ -1388,7 +1396,7 @@ const goodAnswer = (
 };
 
 /** Every move the world allows now, each with what its frame should do. */
-const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [WindowMsg, Expect]> => {
+const frameMoves = (w: FrameWorld, c: Draw): ReadonlyArray<() => readonly [WindowMsg, Expect]> => {
   const s = w.s;
   const out: Array<() => readonly [WindowMsg, Expect]> = [];
   const none: Expect = { _tag: "none" };
@@ -1595,7 +1603,7 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
 };
 
 /** Folds a frame walk from the real init, handing each step to `each`, and returns every step. */
-const foldFrames = (list: ReadonlyArray<Pick>, each: (e: FrameEvent) => void = () => {}): Array<FrameEvent> => {
+const foldFrames = (list: ReadonlyArray<Draw>, each: (e: FrameEvent) => void = () => {}): Array<FrameEvent> => {
   const [s0, cmds0] = machine.init(null, ctx);
   const w: FrameWorld = { s: s0, waiting: [...cmds0], at: 0, ids: new Set(), old: [], dials: new Set([1]) };
   const events: Array<FrameEvent> = [];
@@ -1681,7 +1689,7 @@ const verdict = (
 describe("P18 L3: each frame reaches exactly one owner", () => {
   it.prop(
     "a number id settles only its own flight on its dial, a string id only the handshake, pong only the link, a view notice its pid, and an old dial's frame or a malformed text nothing",
-    { list: Arbitrary.schema(Picks) },
+    { list: Arbitrary.schema(Draws) },
     ({ list }) => {
       const seen = { online: 0 };
       foldFrames(list, ({ prev, m, next, cmds, expect: e }) => {
@@ -1702,7 +1710,7 @@ describe("P18 L3: each frame reaches exactly one owner", () => {
 
   it.prop(
     "over all walks every route is taken",
-    { list: Arbitrary.array(Arbitrary.schema(Picks), { minLength: 40, maxLength: 40 }) },
+    { list: Arbitrary.array(Arbitrary.schema(Draws), { minLength: 40, maxLength: 40 }) },
     ({ list }) => {
       // A knock's answer settles only once a grant wait renews, which few walks reach: not counted.
       // `stolen` is a live flight's id on a past dial, the frame only the dial check stops. `late`
@@ -1751,7 +1759,7 @@ describe("P18 L3: each frame reaches exactly one owner", () => {
 
   it.prop(
     "P18 slice 2: over all walks, an answer to a wait and an answer to a monitor each reach their call's own handler",
-    { list: Arbitrary.array(Arbitrary.schema(Picks), { minLength: 40, maxLength: 40 }) },
+    { list: Arbitrary.array(Arbitrary.schema(Draws), { minLength: 40, maxLength: 40 }) },
     ({ list }) => {
       const seen: Record<string, number> = { wait: 0, monitor: 0 };
 
@@ -1783,7 +1791,7 @@ describe("P18 L3: each frame reaches exactly one owner", () => {
 describe("P18 L6: a cut Model continues as the uncut run", () => {
   it.prop(
     "a WindowModel saved at a reached state and loaded again takes the same Msgs to the same Models and Cmds, the handshake's live id included",
-    { list: Arbitrary.schema(Picks), cut: Arbitrary.schema(Pick.fields.pick) },
+    { list: Arbitrary.schema(Draws), cut: Arbitrary.schema(Draw.fields.pick) },
     ({ list, cut }) => {
       const events = foldFrames(list);
       const live = events.flatMap((e, i) => (handshakeIn(e.next).id === undefined ? [] : [i]));
@@ -1811,7 +1819,7 @@ describe("P18 L6: a cut Model continues as the uncut run", () => {
 
   it.prop(
     "some walks reach a state whose handshake has a live id, so a cut can fall there",
-    { list: Arbitrary.array(Arbitrary.schema(Picks), { minLength: 20, maxLength: 20 }) },
+    { list: Arbitrary.array(Arbitrary.schema(Draws), { minLength: 20, maxLength: 20 }) },
     ({ list }) => {
       expect(list.some((walk) => foldFrames(walk).some((e) => handshakeIn(e.next).id !== undefined))).toBe(true);
       return true;
@@ -1823,7 +1831,7 @@ describe("P18 L6: a cut Model continues as the uncut run", () => {
 describe("P18 L11: the connect row of a closed dial keeps its close code", () => {
   it.prop(
     "a socket_closed on the link's dial writes one closed or removed connect row with the code it saw, removed only for 4003, and no other connect row carries a code",
-    { list: Arbitrary.schema(Picks) },
+    { list: Arbitrary.schema(Draws) },
     ({ list }) => {
       foldFrames(list, ({ prev, m, next, cmds }) => {
         const rows = cmds.map(recordIn).filter((r): r is Row => r?._tag === "connect");
@@ -2171,8 +2179,7 @@ const EXITS: ReadonlyArray<ExitReason> = [
 ];
 
 /** One entry as `ledger.read` answers it. */
-type Fact = {
-  readonly _tag: string;
+type Fact = Pick<Entry, "_tag"> & {
   readonly by: string;
   readonly id: string;
   readonly rev: number;
@@ -2208,15 +2215,17 @@ const follows = fc.array(followChoice, { minLength: 1, maxLength: 240, size: "ma
 type FollowEvent = Event & { readonly world: Follow };
 
 /** A reach as the laws read it, whichever case it is. */
-type ReachView = {
-  readonly _tag: string;
+type ReachView = Pick<WindowModel["tiles"][number]["reach"], "_tag"> & {
   readonly pid?: string;
   readonly ref?: string;
   readonly id?: number;
   readonly reason?: unknown;
 };
 
-type InboxView = { readonly _tag: string; readonly after: number; readonly id?: number };
+type InboxView = (Pick<WindowModel["inbox"], "_tag"> | Data.TaggedEnum<{ none: Record<never, never> }>) & {
+  readonly after: number;
+  readonly id?: number;
+};
 
 const reachIn = (s: WindowModel, tile: string): ReachView => s.tiles.find((t) => t.id === tile)!.reach;
 const inboxIn = (s: WindowModel): InboxView => Reflect.get(s, "inbox") ?? { _tag: "none", after: -1 };

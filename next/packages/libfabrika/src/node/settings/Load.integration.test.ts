@@ -14,7 +14,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, FileSystem, Layer, Path, Ref, Schema } from "effect";
+import { type Data, Effect, Exit, FileSystem, Layer, Path, Ref, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
@@ -30,10 +30,11 @@ const REPO = ".fabrika/fabrika.toml";
 const PERSON = "~/.fabrika/fabrika.toml";
 const DEFAULT = 18787;
 
-type File =
-  | { readonly _tag: "missing" }
-  | { readonly _tag: "text"; readonly text: string }
-  | { readonly _tag: "folder" };
+type File = Data.TaggedEnum<{
+  missing: Record<never, never>;
+  text: { readonly text: string };
+  folder: Record<never, never>;
+}>;
 
 /** The repo text is already pinned. Only the person's file is read from disk. */
 const lay = (repo: File, person: File) =>

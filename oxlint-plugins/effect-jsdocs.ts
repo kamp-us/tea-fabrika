@@ -21,6 +21,8 @@
 // - Twenty reads by index that our `noUncheckedIndexedAccess` cannot prove in range read `?? ""`:
 //   `lines[index]` (14), `lines[headingIndex]` (3) and a regex group, `match[1]` (3). Each index is
 //   in range where Effect reads it, so the value is the same at runtime.
+// - The local `Result` type is a `Data.TaggedEnum` of the same two cases, so no `_tag` is declared
+//   by hand (0562). It is a type only, so nothing changes at runtime.
 // `@since` stays as Effect asks it: `jsdocs.ts` drops that one ask while libfabrika has no release
 // (0118). On an Effect bump, diff these lines again.
 //
@@ -45,10 +47,14 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
+import type { Data } from "effect";
 
 export type DocScope = "module" | "declaration" | "namespace" | "namespace-declaration" | "member";
 
-type Result<A, E> = { readonly _tag: "Success"; readonly value: A } | { readonly _tag: "Failure"; readonly error: E };
+type Result<A, E> = Data.TaggedEnum<{
+  Success: { readonly value: A };
+  Failure: { readonly error: E };
+}>;
 
 export interface JSDocDiagnostic {
   readonly code: string;

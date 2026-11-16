@@ -20,6 +20,7 @@ import { Recorder } from "@kampus/vitest";
 import {
   Cause,
   ConfigProvider,
+  type Data,
   Effect,
   Exit,
   FileSystem,
@@ -47,10 +48,11 @@ const check = { seed: SEED, numRuns: 100 };
 const VERSION = "0.0.0";
 const HOME = "/t730";
 
-type Person =
-  | { readonly _tag: "missing" }
-  | { readonly _tag: "text"; readonly text: string }
-  | { readonly _tag: "unreadable" };
+type Person = Data.TaggedEnum<{
+  missing: Record<never, never>;
+  text: { readonly text: string };
+  unreadable: Record<never, never>;
+}>;
 
 /** What one run asked of the FileSystem, read from the Recorder that watched it. */
 interface Counts {

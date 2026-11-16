@@ -23,7 +23,7 @@
 import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Result, Schema, type Types } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { A, ExitReason, fcErrorClass, from } from "../../processes/Process.test-support.ts";
@@ -1013,6 +1013,9 @@ describe("P34c slice 2: one saved recovery journal", () => {
   });
 });
 
+/** Why a journal replaces a process, as a saved model encodes it. */
+type SavedOrigin = Types.ExtractTag<(typeof Supervision.Encoded)["journal"], "checkpointing">["origin"];
+
 /** Invalid copies of one saved model: a wrong tag, a missing payload, an old version, a broken identity. */
 const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
   const raw = saved as { journal: Record<string, unknown>; receipts: Array<Record<string, unknown>> };
@@ -1048,7 +1051,7 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
   }
 
   // A crash origin names the process its journal replaces; a foreign failure process is refused.
-  const origin = journal.origin as { _tag: string; failure?: object; request?: { id: string; build: string } };
+  const origin = journal.origin as SavedOrigin;
 
   if (origin?._tag === "crash") {
     const failure = { ...origin.failure, process: FOREIGN };
@@ -1099,14 +1102,14 @@ const sameWork = (j: Journal, msg: Msg): boolean => {
 // J13 (type). A journal case carries what it uses: tsc checks these uncalled lines.
 // Plant: make the checkpoint's predecessor optional, or allow an attempt beside every state.
 const j13 = () => {
-  expectTypeOf<Extract<Journal, { _tag: "checkpointing" }>["after"]>().toEqualTypeOf<string>();
-  expectTypeOf<Extract<Journal, { _tag: "checkpointing" }>["process"]>().toEqualTypeOf<string>();
+  expectTypeOf<Types.ExtractTag<Journal, "checkpointing">["after"]>().toEqualTypeOf<string>();
+  expectTypeOf<Types.ExtractTag<Journal, "checkpointing">["process"]>().toEqualTypeOf<string>();
   expectTypeOf<Model>().not.toHaveProperty("pending");
   expectTypeOf<Model>().not.toHaveProperty("attempt");
   expectTypeOf<Model>().not.toHaveProperty("recovery");
   expectTypeOf<Model>().not.toHaveProperty("restart");
-  expectTypeOf<Extract<Journal, { _tag: "idle" }>>().not.toHaveProperty("attempt");
-  expectTypeOf<Extract<Journal, { _tag: "writing_dead" }>["failure"]["_tag"]>().toEqualTypeOf<"fresh">();
+  expectTypeOf<Types.ExtractTag<Journal, "idle">>().not.toHaveProperty("attempt");
+  expectTypeOf<Types.ExtractTag<Journal, "writing_dead">["failure"]["_tag"]>().toEqualTypeOf<"fresh">();
 };
 
 void j13;

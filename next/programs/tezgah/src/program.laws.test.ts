@@ -42,7 +42,7 @@
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { type Stepper, stepper } from "@kampus/libfabrika";
-import { Result, Schema } from "effect";
+import { type Data, Result, Schema, type Types } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;
@@ -149,17 +149,17 @@ const near = (a: Rect | undefined, b: Rect, label: string) => {
 
 type Cmd = { readonly type: string; readonly [key: string]: unknown };
 
-type Waiting =
-  | { readonly _tag: "attach"; readonly workspace: number; readonly tile: string; readonly cmd: Cmd }
-  | {
-      readonly _tag: "split";
-      readonly from: string;
-      readonly tile: string;
-      readonly dir: Dir;
-      readonly cmd: Cmd;
-      /** The workspace `from` was on when the split was asked. */
-      readonly space: string;
-    };
+type Waiting = Data.TaggedEnum<{
+  attach: { readonly workspace: number; readonly tile: string; readonly cmd: Cmd };
+  split: {
+    readonly from: string;
+    readonly tile: string;
+    readonly dir: Dir;
+    readonly cmd: Cmd;
+    /** The workspace `from` was on when the split was asked. */
+    readonly space: string;
+  };
+}>;
 
 type Dir = "right" | "down";
 const DOES = { right: "tezgah.split_right", down: "tezgah.split_down" } as const;
@@ -179,7 +179,7 @@ type Event = {
   readonly move: string;
   readonly before: View;
   readonly after: View;
-  readonly result: { readonly _tag: string; readonly reason?: string };
+  readonly result: Data.TaggedEnum<{ stepped: Record<never, never>; refused: { readonly reason: string } }>;
   readonly cmds: ReadonlyArray<Cmd>;
   readonly waiting?: Waiting;
   readonly answer?: "started" | "already_started" | "refused";
@@ -195,7 +195,7 @@ const live = (v: View): ReadonlyArray<string> => v.workspaces.flatMap((w) => ord
 const begin = (p: Stepper): World => {
   const s = p.init(null);
   expect(s._tag).toBe("stepped");
-  const stepped = s as Extract<typeof s, { _tag: "stepped" }>;
+  const stepped = s as Types.ExtractTag<typeof s, "stepped">;
   return {
     model: stepped.model,
     view: Schema.decodeUnknownSync(View)(stepped.view),
@@ -207,7 +207,12 @@ const begin = (p: Stepper): World => {
 };
 
 /** One letter or answer through the stepper; a stepped answer moves the world on. */
-const take = (p: Stepper, w: World, msg: unknown, saved: boolean) => {
+const take = (
+  p: Stepper,
+  w: World,
+  msg: unknown,
+  saved: boolean,
+): Pick<Event, "before" | "after" | "result" | "cmds"> => {
   const s = saved ? p.fold(w.model, msg) : p.step(w.model, msg);
   const before = w.view;
 

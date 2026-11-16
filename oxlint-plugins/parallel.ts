@@ -16,7 +16,7 @@
 // (`.oxfmtrc.json`).
 import { constants } from "node:os";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Duration, Effect, Fiber, Result, Schema, Stdio, Stream } from "effect";
+import { Console, type Data, Duration, Effect, Fiber, Result, Schema, Stdio, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** A piece of a part's output, and the stream it went to. */
@@ -26,11 +26,12 @@ type Piece = { readonly to: "stdout" | "stderr"; readonly bytes: Uint8Array };
  * How a part ended: with an exit code; killed by a signal, its code 128 + n as a shell gives it;
  * unable to start; or with no exit code to read. Only `exited` with code 0 passes.
  */
-type End =
-  | { readonly _tag: "exited"; readonly code: number }
-  | { readonly _tag: "killed"; readonly signal: string; readonly code: number }
-  | { readonly _tag: "unstarted"; readonly reason: string }
-  | { readonly _tag: "unread"; readonly reason: string };
+type End = Data.TaggedEnum<{
+  exited: { readonly code: number };
+  killed: { readonly signal: string; readonly code: number };
+  unstarted: { readonly reason: string };
+  unread: { readonly reason: string };
+}>;
 
 /** What one part left: its command, its output in the order it came, how it ended and its time. */
 type Ran = {

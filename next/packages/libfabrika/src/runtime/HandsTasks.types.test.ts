@@ -4,7 +4,7 @@
 // its one layer is the sibling `HandsTasksLive.ts`, read through its module. CI's typecheck is this
 // law's runner. Plant (after build): put `TasksError` in `ask`'s error channel.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Context, Effect, Layer } from "effect";
+import type { Context, Effect, Layer, Types } from "effect";
 import type { From } from "../processes/Mailbox.ts";
 import type { Tasks, TasksError } from "../tasks/Tasks.ts";
 import type * as HandsTasksFront from "./HandsTasks.ts";
@@ -22,7 +22,7 @@ it("type: T1 HandsTasks speaks its own error and shared names only, never TasksE
   // The answer is one of three cases, each the runner's to read.
   expectTypeOf<(typeof Reply.Type)["_tag"]>().toEqualTypeOf<"waiting" | "finished" | "refused">();
   // A refusal is for good, and an answer: no hands key, or a task under the id that is not this process's.
-  expectTypeOf<Extract<typeof Reply.Type, { _tag: "refused" }>["reason"]>().toEqualTypeOf<"no_hands" | "id_reused">();
+  expectTypeOf<Types.ExtractTag<typeof Reply.Type, "refused">["reason"]>().toEqualTypeOf<"no_hands" | "id_reused">();
   // The layer serves HandsTasks over the tasks service, and fails with nothing of its own while built.
   type Live = ReturnType<typeof HandsTasksLive.layer>;
   expectTypeOf<Layer.Success<Live>>().toEqualTypeOf<HandsTasks>();

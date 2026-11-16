@@ -4,7 +4,7 @@
 // law; Vitest does not typecheck, so the lead and CI run it with `pnpm typecheck`.
 // Plant: add a member tagged `LedgerError` to one method's error.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Effect } from "effect";
+import type { Data, Effect, Types } from "effect";
 import type { RecoveryStore } from "./RecoveryStore.ts";
 
 /** What one member of a service fails with: an Effect's error, or that of the Effect a function answers. */
@@ -18,17 +18,22 @@ type Failure<Member> = Member extends (...args: ReadonlyArray<never>) => infer A
 type Failures<Service> = { readonly [Name in keyof Service]: Failure<Service[Name]> }[keyof Service];
 
 /** The members of that union that are the ledger's own error. */
-type FromLedger<Service> = Extract<Failures<Service>, { readonly _tag: "LedgerError" }>;
+type FromLedger<Service> = Types.ExtractTag<Failures<Service>, "LedgerError">;
+
+/** Two errors for the helper to tell apart: one of its own, one tagged as the ledger's. */
+type Errors = Data.TaggedEnum<{ Own: Record<never, never>; LedgerError: Record<never, never> }>;
+type Own = Types.ExtractTag<Errors, "Own">;
+type Ledgers = Types.ExtractTag<Errors, "LedgerError">;
 
 /** A service that breaks the law in one method, so the helper is seen to find it. */
 type Leaky = {
-  readonly load: Effect.Effect<void, { readonly _tag: "Own" }>;
-  readonly save: (value: unknown) => Effect.Effect<void, { readonly _tag: "Own" } | { readonly _tag: "LedgerError" }>;
+  readonly load: Effect.Effect<void, Own>;
+  readonly save: (value: unknown) => Effect.Effect<void, Own | Ledgers>;
 };
 
 it("type: no service of runtime/ fails with an error tagged LedgerError", () => {
   // The helper finds a ledger error where one is, in a plain member and in a function's answer.
-  expectTypeOf<FromLedger<Leaky>>().toEqualTypeOf<{ readonly _tag: "LedgerError" }>();
+  expectTypeOf<FromLedger<Leaky>>().toEqualTypeOf<Ledgers>();
   expectTypeOf<Failures<Leaky>["_tag"]>().toEqualTypeOf<"Own" | "LedgerError">();
 
   // RecoveryStore: `load`, `save`, `input` and `receipt` fail with its own error and nothing else.

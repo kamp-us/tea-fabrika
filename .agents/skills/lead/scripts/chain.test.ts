@@ -1208,7 +1208,7 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
         const lines = events
           .trim()
           .split("\n")
-          .map((l) => JSON.parse(l) as { _tag: string });
+          .map((l) => JSON.parse(l) as Pick<Agent.Heard<unknown>, "_tag">);
         expect(lines.map((l) => l._tag)).toEqual(["started", "tool", "tool", "said", "tokens", "ended"]);
         // The prompt reached the adapter with the schema's form appended, and the system prompt named.
         expect(fake.seen.started[0]?.prompt).toContain("do the step");

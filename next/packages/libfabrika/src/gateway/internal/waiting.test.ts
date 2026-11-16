@@ -7,7 +7,7 @@
 // The walk's plants are named on each law and were run once, then undone (decision 0093).
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Option, Schema } from "effect";
+import { Option, Schema, type Types } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import * as Access from "../../access/Access.ts";
@@ -16,8 +16,8 @@ import * as Waiting from "./waiting.ts";
 type Model = typeof Waiting.machine.model.Type;
 type Msg = typeof Waiting.machine.msg.Type;
 type Knock = Extract<Msg, { readonly type: "knock" }>;
-type Empty = Extract<Model, { readonly _tag: "empty" }>;
-type Busy = Extract<Model, { readonly _tag: "waiting" }>;
+type Empty = Types.ExtractTag<Model, "empty">;
+type Busy = Types.ExtractTag<Model, "waiting">;
 type Pending = Busy["rows"][number];
 
 // Compile-only law: `empty` holds no rows, `waiting` holds at least one, and a pending row holds

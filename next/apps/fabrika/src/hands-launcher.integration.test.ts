@@ -31,7 +31,7 @@ import { grantText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import { Effect, FileSystem, Option, Path, Queue, Schema, Stream, type Types } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
@@ -164,7 +164,7 @@ const launcher = Effect.fnUntraced(function* (
   );
   const next = <T extends Line["_tag"]>(tag: T) =>
     Effect.gen(function* () {
-      const tagged = (line: Line): line is Extract<Line, { readonly _tag: T }> => line._tag === tag;
+      const tagged = (line: Line): line is Types.ExtractTag<Line, T> => line._tag === tag;
 
       while (true) {
         const line = yield* Queue.take(lines);

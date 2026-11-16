@@ -3,7 +3,7 @@
 // written from the plan's transition table checks each step. The memory restart plan
 // (docs/plan/quests/memory-restart-PLAN.md) adds `replacing` and its laws L1 to L4.
 import { applyCell } from "@demlik/tea";
-import { Predicate, Schema } from "effect";
+import { type Data, Predicate, Schema, type Types } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { DevState } from "./DevLife.ts";
@@ -13,8 +13,11 @@ const SEED = 119120;
 type State = typeof DevState.Type;
 type Msg = typeof devLife.msg.Type;
 type Phase = State["_tag"];
-type Case<T extends Phase> = Extract<State, { readonly _tag: T }>;
-type Pending = { readonly _tag: "pending"; readonly id: string };
+type Case<T extends Phase> = Types.ExtractTag<State, T>;
+
+type Pending = Data.TaggedEnum<{
+  pending: { readonly id: string };
+}>;
 
 // L4, a type law checked by tsc. A replace holds the old pid and a replacement that is always
 // pending from its first signal, and its Msg carries what the sampler saw and when.
@@ -23,7 +26,7 @@ expectTypeOf<Case<"replacing">>().toHaveProperty("pid");
 expectTypeOf<Case<"replacing">>().toHaveProperty("listener");
 expectTypeOf<Case<"replacing">>().toHaveProperty("signal");
 expectTypeOf<Case<"replacing">["replacement"]>().toMatchTypeOf<Pending>();
-expectTypeOf<Extract<Case<"replacing">["replacement"], { readonly _tag: "none" }>>().toBeNever();
+expectTypeOf<Types.ExtractTag<Case<"replacing">["replacement"], "none">>().toBeNever();
 expectTypeOf<Case<"replacing">["signal"]>().toEqualTypeOf<"SIGTERM" | "SIGKILL">();
 expectTypeOf<Extract<Msg, { readonly type: "replacing" }>>().toHaveProperty("bytes");
 expectTypeOf<Extract<Msg, { readonly type: "replacing" }>>().toHaveProperty("at");

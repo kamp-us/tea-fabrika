@@ -1,7 +1,7 @@
 // T280, next/: authoring depends on libfabrika and tea alone. tsc checks the uncalled cases.
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { expect, it } from "@effect/vitest";
-import { Effect, Schema, type SchemaIssue } from "effect";
+import { type Data, Effect, Schema, type SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { ProgramLoader } from "./Entry.ts";
@@ -56,10 +56,7 @@ it("a from-scratch libfabrika program compiles and loads with a real Cmd and no 
       expectTypeOf(p.view.select({ count: 1 })).toEqualTypeOf<{ total: number }>();
       expectTypeOf(p.inputs.add.schema.Type).toEqualTypeOf<typeof Msg.Type>();
       expectTypeOf(p.outputs.count.Type).toEqualTypeOf<number>();
-      expectTypeOf(p.writes.saved.schema.Type).toEqualTypeOf<{
-        readonly _tag: "saved";
-        readonly count: number;
-      }>();
+      expectTypeOf(p.writes.saved.schema.Type).toEqualTypeOf<Data.TaggedEnum<{ saved: { readonly count: number } }>>();
       const ok = p.machine.update.save_ok({ count: 1 }, save.ok(save({ count: 1 }), { stored: 1 }, 1));
       const err = p.machine.update.save_err({ count: 1 }, save.err(save({ count: 1 }), { _tag: "disk" }, 1));
       expectTypeOf(ok[0]).toEqualTypeOf<typeof Model.Type>();
@@ -74,7 +71,7 @@ it("a from-scratch libfabrika program compiles and loads with a real Cmd and no 
         }).pipe(Effect.provide(ProgramLoader.layer({ scratch: p }, {}))),
       );
       const boot = loaded.stepper.init({ count });
-      expectTypeOf(boot).toExtend<{ readonly _tag: "stepped" | "refused" }>();
+      expectTypeOf(boot).toExtend<Data.TaggedEnum<{ stepped: Record<never, never>; refused: Record<never, never> }>>();
       expect(boot).toMatchObject({ _tag: "stepped", model: { count }, view: { total: count } });
     }),
     { seed: 119120, numRuns: 100 },
