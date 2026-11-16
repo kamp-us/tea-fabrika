@@ -26,6 +26,8 @@ continue from its head; if not, create it from `origin/main`. Push only to that 
 3. `git push -u origin <branch>`, retry up to 4 times on a network error.
 Never amend, rebase, reset or force-push. Stage your own paths by name.
 
+**Every PR body has a `## New names` section (0587; since PR 1454, `land.ts` refuses to arm without it).** List each new exported name the PR adds, with its industry word and a source (a page URL and section), one line each; or write "None." when the PR adds no exported name. Any step that writes or updates a PR body keeps this section true for the diff.
+
 **GitHub only through its MCP tool.** Open or change a pull request, its title or its body only with the GitHub MCP tools (`create_pull_request`, `update_pull_request`). Never `gh pr`, `gh api` or curl for that: in this cloud environment `gh` is for search only.
 
 **Pull request: one per sweep, never one per slice (owner ruling).** A slice opens NO pull
