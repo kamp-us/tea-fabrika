@@ -1101,6 +1101,13 @@
       }
     },
     {
+      // P12, L11 (0591): the page entry starts its one Effect program through `runMain` from
+      // `@kampus/tuval/browser`, once, at module scope, and calls no other run function.
+      // `one-page-runtime.test.ts` plants each break at this path.
+      "files": ["next/apps/fabrika/src/entry/browser.tsx"],
+      "rules": { "fabrika/one-page-runtime": "error" }
+    },
+    {
       // Product code reads the time through Effect's `Clock` or `DateTime`, so a test sets it with
       // `TestClock`. A `.tsx` file has `no-clock-in-view`, which refuses more. Tests are left out below.
       "files": ["next/**/*.ts"],
@@ -2508,8 +2515,7 @@
       // change them together.
       "files": [
         "next/apps/fabrika/src/exam/**",
-        "next/apps/fabrika/src/settings-generated.integration.test.ts",
-        "next/apps/fabrika/src/build.test.ts",
+        "next/apps/fabrika/src/settings-generated.test.ts",
         "next/apps/fabrika/src/build.integration.test.ts",
         "next/apps/fabrika/src/build-command.integration.test.ts",
         "next/apps/fabrika/src/instance-one-file.integration.test.ts"

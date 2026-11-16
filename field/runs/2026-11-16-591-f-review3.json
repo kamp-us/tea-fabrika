@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-f-review3",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-15T23:49:22-08:00",
+  "ended": "2026-11-15T23:55:00-08:00",
+  "parent": "2026-11-16-591-f-review2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send tests",
+  "why": "Second recheck (0177) of slice F, at cc90752, against the second send-back (field/runs/2026-11-16-591-f-review2.json). The two named cases are fixed: in a scratch RuleTester run, oxlint-plugins/one-page-runtime.ts now reports `const k = \"runPromise\"; Effect[k](page)` and `Reflect.get(Effect, \"runFork\")(page)`, and the law plants both in every run name and quote. No false alarm: the real entry next/apps/fabrika/src/entry/browser.tsx holds no string or identifier that spells run[A-Z] or runMain beyond its import and start, pnpm lint exits 0, and every string the rule now reads was text the old law read too. The class is still not closed. The deleted build.test.ts law matched run names as words anywhere in the source text (`\\brun(?!Main\\b)[A-Z]\\w*`, and `\\brunMain\\b` counted to exactly 2). The fixed rule matches a string only when its whole value is a run name (OTHER_RUN = /^run[A-Z]\\w*$/, line 21) and skips every template with an expression, so two runs still pass with no report while the old law refuses both: `Effect[`runPromise${x}`](page)` with `const x = \"\"`, and `Effect[\"Effect.runPromise\".split(\".\")[1]](page)`. The second send-back asked for 'the name it spells', a whole-value read, so this gap is again the reviewer's under-specified ask. The fix that closes the class: test the old law's two word patterns against every string literal value and every template quasi's cooked text (templates with expressions included), the run pattern reporting a foreign run and the runMain pattern a second runtime, except a runMain string that is an import specifier; and plant both cases. After that, the only text the old law read and the rule does not is comments, regex literals and JSX text, which run nothing, and a name built by joining pieces (\"run\" + \"Promise\") escaped the old law too.",
+  "plants": [
+    {
+      "law": "fabrika/one-page-runtime at cc90752 against the second send-back's two cases",
+      "plant": "run in a scratch RuleTester: const k = \"runPromise\"; Effect[k](page) and Reflect.get(Effect, \"runFork\")(page)",
+      "result": "red"
+    },
+    {
+      "law": "fabrika/one-page-runtime at cc90752 against the old build.test.ts text checks",
+      "plant": "run in a scratch RuleTester: Effect[`runPromise${x}`](page) and Effect[\"Effect.runPromise\".split(\".\")[1]](page)",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 5.6,
+  "note": "Ran at cc90752 under nice -n 19 with --maxWorkers=1: oxlint-plugins/one-page-runtime.test.ts (2 passed). pnpm lint with NODE_OPTIONS=--max-old-space-size=6144: exit 0, 17 parts passed in one run. One pnpm typecheck after pgrep -x tsgo found none: exit 0. The fix row field/runs/2026-11-16-591-f-fix2.json records the new laws red against the e6432cb rule and M7's planned break red. After the fast-forward the worktree's index again held the files from before the fix; they were restored to cc90752 path by path before any read or run. The rest of the slice's diff was reread for other faults and none was found: M8, M5, the deletions and the edits outside the plan's files table hold as in the first review.",
+  "step": "review"
+}
