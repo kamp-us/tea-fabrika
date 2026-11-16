@@ -136,7 +136,8 @@ const nextSamples = {
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/apps/fabrika/src/runtime.decode.test.ts": [0.2, 0.2, 0.2],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/apps/fabrika/src/settings-generated.integration.test.ts": [4.8, 4.0, 5.3],
+  // Measured as next/apps/fabrika/src/settings-generated.integration.test.ts; 0591 left it plain.
+  "next/apps/fabrika/src/settings-generated.test.ts": [4.8, 4.0, 5.3],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/apps/fabrika/src/settings.test.ts": [0.1, 0.1, 0.1],
   // A job 132637025443, B job 132638385672, C job 132639432685.
@@ -1107,9 +1108,12 @@ describe("full, the rows at full depth", () => {
     const seen: string[] = [];
 
     for (let index = 1; index <= legs; index++) {
+      // CI keeps no results cache, so neither does this leg: a file that failed in a local run would
+      // otherwise start first, by vitest's failed-first rule, and the leg would not be CI's (0052).
       const vitest = await createVitest("test", {
         root: ROOT,
         watch: false,
+        cache: false,
         project: ["next", "next-integration"],
         shard: `${index}/${legs}`,
       });
@@ -1166,9 +1170,11 @@ describe("Shards", () => {
 
     for (let index = 1; index <= legs; index++) {
       // The vitest legs' projects, as the schedule runs them; a pull request's `next` alone is a part.
+      // No results cache, as in CI, so a file that failed locally does not start first (0052).
       const vitest = await createVitest("test", {
         root: ROOT,
         watch: false,
+        cache: false,
         project: ["next", "next-integration"],
         shard: `${index}/${legs}`,
       });

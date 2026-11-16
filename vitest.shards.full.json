@@ -55,7 +55,7 @@
   "next/apps/fabrika/src/runtime.decode.test.ts": 0.2,
   "next/apps/fabrika/src/runtime.laws.integration.test.ts": 36.6,
   "next/apps/fabrika/src/scheduled-job-alarm.integration.test.ts": 9.2,
-  "next/apps/fabrika/src/settings-generated.integration.test.ts": 4.1,
+  "next/apps/fabrika/src/settings-generated.test.ts": 4.1,
   "next/apps/fabrika/src/settings-start.integration.test.ts": 28.7,
   "next/apps/fabrika/src/settings.test.ts": 0.1,
   "next/apps/fabrika/src/sibling.laws.integration.test.ts": 8.5,
