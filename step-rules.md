@@ -97,6 +97,13 @@ not retry it and do not look for another way: stop, and report the refusal and w
 RESULT. A permission check that errors with NO verdict (an outage, not a decision) is different: after a
 pause, one fresh retry of the same command is allowed; if it errors again, stop and report.
 
+**Plain git, one command per call.** The worktree-isolation check refuses git it cannot prove stays
+inside your worktree (seen twice on 2026-11-16: git in a `for` loop with `$(...)` after
+`cd ... ||`, and `git -C .`). Run every git command as its own plain call from the worktree root:
+no `cd`, no `-C`, no loop, no `$(...)`, no `&&` chain of git commands. Look at files with the Read
+and Grep tools, not with shell loops over `git show`. This is the check's own instruction, not a
+work-around; a refusal after it is still a stop.
+
 **PR 1366 is merged to main (2026-11-16).** Its files are no longer off limits. Merge `origin/main` into your branch first (`git merge --no-edit origin/main`, never rebase), and every hit your slice once listed as "waiting on 1366" is now part of your slice: fix it like any other. Do not add a `LOCKED` row to
 `oxlint-plugins/effect-checks.test.ts` unless your brief says so. A lock entry goes in
 the package's own `tsconfig.json` under the `@effect/language-service` plugin's `overrides`, the
