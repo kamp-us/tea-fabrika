@@ -30,9 +30,9 @@ const policy = {
 };
 
 const person = Writer.cases.person.make({ key: "SHA256:person", for: from().for });
-const Model = Schema.Struct({ wake: Schema.NullOr(Schema.Number) });
+const Model = Schema.Struct({ wake: Schema.NullOr(Schema.Finite) });
 type Model = typeof Model.Type;
-const Msg = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number });
+const Msg = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite });
 
 /** Up to 10^12 ms, about 31 years of epoch time, or no wake at all. */
 const wake = fc.option(fc.nat({ max: 1_000_000_000_000 }), { nil: null });
@@ -244,7 +244,7 @@ export const suite = (
             expect(Exit.isSuccess(started), "a start answers although its program's init threw").toBe(true);
             const deadline = lastAlarm(w.alarms);
             expect(deadline, "the crash is observed: supervision's wait is armed").toBeTypeOf("number");
-            const at = Schema.decodeUnknownSync(Schema.Number)(deadline);
+            const at = Schema.decodeUnknownSync(Schema.Finite)(deadline);
             w.controls.throws = false;
             yield* TestClock.setTime(at);
             yield* r.due(at);

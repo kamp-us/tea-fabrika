@@ -4,7 +4,7 @@ import { Array, Schema } from "effect";
 const Client = Schema.Struct({
   client: Schema.NonEmptyString.check(Schema.isMaxLength(256)),
   // String encoding preserves every Number value across JSON, including non-finite values.
-  at: Schema.NumberFromString,
+  at: Schema.FiniteFromString,
   position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 

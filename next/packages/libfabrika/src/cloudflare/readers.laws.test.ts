@@ -469,7 +469,7 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
 
 it("control bucket bytes fail as a typed parse error before its HTTP error response", async () => {
   await fc.assert(
-    fc.asyncProperty(malformed(Schema.Array(Schema.Number)), async (raw) => {
+    fc.asyncProperty(malformed(Schema.Array(Schema.Finite)), async (raw) => {
       const w = world(),
         attempts: Array<Exit.Exit<unknown, unknown>> = [];
       const original = Effect.result;

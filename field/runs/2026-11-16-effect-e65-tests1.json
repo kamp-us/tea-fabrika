@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e65-tests1",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-15T23:15:57-08:00",
+  "ended": "2026-11-15T23:58:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Effect sweep slice E65, check schemaNumber, in next/packages/libfabrika/src, after PR 1366 merged. Recount on origin/main b510ed2 with only schemaNumber at error (effect-tsgo diagnostics, lspconfig) found 55 hits in the slice's folders as planned: runtime 35, gateway 12, cloudflare 8. All 55 were fixed by one scripted edit from the diagnostics' own offsets, in the scratchpad and not committed: 53 Schema.Number became Schema.Finite and 2 Schema.NumberFromString (gateway/GatewayRevocation.integration.test.ts:576, runtime/internal/watchers.ts:7) became Schema.FiniteFromString, 54 lines in 21 files. Left 0 in these folders. No lock entry was added, as the coordinator ruled; the folders that had a hit, for the integrator's lock, are next/packages/libfabrika/src/runtime, next/packages/libfabrika/src/gateway and next/packages/libfabrika/src/cloudflare. Other folders still hold 82 hits of other slices (telemetry 18 is left on purpose: its checked hour starts at -Infinity, see PR 1501). Proof of zero: pnpm typecheck exit 0 with a temporary, uncommitted override putting schemaNumber at error for those three folders, and a diagnostics recount at 0 in them. pnpm format, lint:kind, lint:promise-types and lint:dead pass; the first full pnpm lint lost three parts to out-of-memory kills in the box and each passed when rerun alone. Tests at this head's parent plus the edit: 16 unit files and 2 integration files (GatewayRevocation, Runner) pass, 71 + 81 + 16 + 117 tests. A vitest --changed origin/main run reached many unrelated integration laws (node/IsolateUsage, processes, apps/fabrika runtime-recovery, a storage-leak law) that hit 60 second timeouts under box load; it was stopped and none of those files is in the slice's folders. Not run: none refused by the 0178 guard.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 42,
+  "note": "A check fix with no new law: no plant applies. Hits met 55, fixed by script 55, by quick fix 0, left 0, waiting on 1366 0.",
+  "step": "tests"
+}

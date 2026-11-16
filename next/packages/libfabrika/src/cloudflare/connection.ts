@@ -156,7 +156,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
             if (result._tag === "ok") {
               const waiting = yield* Schema.decodeUnknownEffect(
-                Schema.Struct({ code: Schema.String, until: Schema.Number }),
+                Schema.Struct({ code: Schema.String, until: Schema.Finite }),
               )(result.result).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
               yield* rpc(p.publish(client, { method: "gateway.waiting", params: waiting }));
               return Answer.cases.ok.make({ result: waiting });

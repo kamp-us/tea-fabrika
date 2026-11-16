@@ -97,7 +97,7 @@ const Model = Schema.Struct({
   note: Schema.String,
   queue: Schema.Array(Request),
   failures: Schema.Array(Schema.String),
-  wake: Schema.NullOr(Schema.Number),
+  wake: Schema.NullOr(Schema.Finite),
 });
 type Model = typeof Model.Type;
 
@@ -119,8 +119,8 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("background"), token: Schema.String, tag: Schema.String }),
   Schema.Struct({ type: Schema.Literal("throw") }),
   Schema.Struct({ type: Schema.Literal("fire") }),
-  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number }),
-  Schema.Struct({ type: Schema.Literal("schedule"), at: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite }),
+  Schema.Struct({ type: Schema.Literal("schedule"), at: Schema.Finite }),
 ]);
 
 const write = Cmd.make("write", {

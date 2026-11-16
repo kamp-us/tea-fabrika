@@ -769,7 +769,7 @@ const Msg = Schema.Union([
     parent: Schema.optionalKey(Schema.String),
   }),
   Schema.Struct({ type: Schema.Literal("throw") }),
-  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite }),
 ]);
 
 const work = Cmd.make("work", {
