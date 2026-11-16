@@ -33,7 +33,9 @@ export const localInstance = Effect.fn("brain.localInstance")(function* (
   options: Options,
 ) {
   const path = yield* Path.Path;
+  // @effect-diagnostics-next-line processEnvInEffect:off -- Alchemy reads DO_NOT_TRACK from process.env itself, and Config cannot write a variable
   process.env.DO_NOT_TRACK = "1";
+  // @effect-diagnostics-next-line processEnvInEffect:off -- Alchemy reads ALCHEMY_HOME from process.env itself, and Config cannot write a variable
   process.env.ALCHEMY_HOME = path.join(options.home, "alchemy-home");
   // oxlint-disable-next-line fabrika/no-promises -- edge: load Alchemy only after disabling its telemetry
   const { startDev } = yield* Effect.tryPromise({
