@@ -1824,6 +1824,18 @@ describe("P34c live object accounting", () => {
     ({ tape }) =>
       Effect.scoped(
         Effect.gen(function* () {
+          // The objects' own runtimes read Effect's default Clock, which reads `Date.now()`, and the
+          // span sink keys its refusal counts, size rows and rollups by that clock's hour. A run that
+          // crossed an hour wrote that hour's rows mid-tape and went red with no refusal at fault.
+          // The wall clock starts at the top of SENT's hour and moves at real speed, so a run (well
+          // under its 120 s timeout) stays in one hour.
+          yield* Effect.acquireRelease(
+            Effect.sync(() => {
+              vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
+              vi.setSystemTime(Date.parse(SENT));
+            }),
+            () => Effect.sync(() => vi.useRealTimers()),
+          );
           const w = yield* Effect.acquireRelease(
             Effect.sync(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
             (w) => Effect.promise(() => w.close()),
