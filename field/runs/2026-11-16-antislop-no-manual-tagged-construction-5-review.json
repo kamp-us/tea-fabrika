@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-manual-tagged-construction-5-review",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-16T00:45:40-08:00",
+  "ended": "2026-11-16T00:55:52-08:00",
+  "parent": "2026-11-16-antislop-no-manual-tagged-construction-5-tests",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Review of anti-slop judgment slice AS-no-manual-tagged-construction-5 (ticket 1057, decisions 0562, 0563 and its amendments, 0573, 0135), in next/ and .github/ci, at d53064305 on fabrikalfa/antislop-no-manual-tagged-construction-5: merge-ready, two finding rows. Every line of the 42-file diff was read. Each fixed hit is a product maker (MemberEvent, Adds, Written, Change, Chain, Content, SumPoint, MetricPoint, Answer, Sent, Swapped, Installed, Input, Audit.Answer, RuntimeRecord, RateLimit.Decision, Writer), a toBeInstanceOf on a tagged error, a split of toMatchObject into a tag read plus the rest, or an exam-local TaggedStruct for a case the product keeps private or does not know; none hides the key from the rule (no computed key, no disable line, no lock line, no .oxlintrc.json, tsconfig.base.json or next-ledger.json change). The spread-and-override frames write no tag except field-check.test.ts:635-636, where the wrong tag is made by an ad hoc maker; that is the same move slice 2 used for unknown cases and is not the computed key 0562 bans. The product-side exam-path edits keep behavior: proof.ts's Proof as Schema.TaggedUnion keeps the field order and the JSON (Schema.Number takes NaN, so no new throw), time-table.ts's sections() is Effect's Data.taggedEnum, field-schema.ts's TaggedStruct is the same schema. The two strengthened checks hold: ClientManager's walk now pins applied at head + 1 (head is the stream's last rev read just before), RecordPartTest's found content now names its spanId. The _tag reads are justified: readers.laws reads a StartsError that crossed the RPC as data, and access and gateway keep their ledger/ import lines as next-ledger.json lists them. The 23 stopped hits are rightly stopped: gate.mjs and scheduled.mjs run with no installed dependency (their headers say so), and the two @ts-expect-error laws (AccessMachine.laws.test.ts:478-484, sink.test.ts:44-52) run at run time and are cases whose hand-written tag is the point, which 0562 sends to the owner. Findings, neither blocking: supervision.laws.integration.test.ts:22 makes DEAD with its own TaggedStruct where Sent.cases.refused.make exists and its file already imports Runner.ts; gate.test.ts:9 Decision and scheduled.test.ts:9 Cause and Action restate JSDoc unions checkJs can reach with no 0135 pin, while the tests row says pinned where reachable.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "Read-only apart from this row. loosening.sh on b490a3203..HEAD: 30 unrecognized-change hits (import lines) and 31 removed-expect hits, each a rewrite of an assertion into a maker or a split; read each, no law loosened. Tests at d53064305, one file at a time under nice -n 19 --maxWorkers=1: the 5 changed .github/ci test files and the 32 changed next/ test files, the .integration. ones included, plus the two RecordPartTest runners and next/apps/fabrika/src/exam/commits.test.ts, all green. pnpm typecheck passed once. git merge-tree against origin/main (2 commits ahead) is clean. Not proven: the rule's own count of 23 left; an rg for _tag: finds exactly those 23 lines.",
+  "step": "review",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null
+}
