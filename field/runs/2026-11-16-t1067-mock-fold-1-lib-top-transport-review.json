@@ -1,0 +1,52 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1067-mock-fold-1-lib-top-transport-review",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-16T01:53:34-08:00",
+  "ended": "2026-11-16T01:58:09-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Review of mock sweep fold 1 (stack layer 7, decision 0555) on fabrikalfa/mock-fold-1 at ef6008b03, the six commits since the reviewed head 527076fe8: merge-ready, no finding. Both merges keep both sides. Merge 7a952e8b5 (lib-top s1 at 3637964ea, base 5c94f12f4): the per-file stat of slice head to merge equals the stat of base to stack on every file but four, and each of the four differs only by the blank lines pnpm format added (Id.cause.test.ts, Id.test.ts, plants.test.ts) or by the code the slice removed: in Id.ts the stack's IdError brand, blank lines and S.decodeResult are kept, and its S.is(IdError) went with the Effect.try the slice deleted; in Id.test.ts the stack's decodeSync, decodeEffect and blank lines are kept, and its edits inside the vi.spyOn and check.run spy blocks went with those blocks, which the slice replaced with generatorWith and the predicted-ids model. .oxlintrc.json keeps the stack's require-readable-spacing block and appends the slice's three blocks. Merge 4a417c6b4 (transport s1 at fdb4324d6, same base): the stat matches on every file but Answer.test.ts, where only the stack's Offline brand and blank lines inside the vi.fn laws the slice deleted are gone; Answer.ts keeps the stack's Schema.Finite id and Schema.decodeResult beside the slice's Routes service. Commit 21e026f69 adds 11 lines, all blank (git diff --ignore-blank-lines is empty). The pattern doc's Id.ts:205-211 is makeGenerator through its randomBytes(10) draw and Id.ts:263-265 is Generator.layer with SecureRandom.layerWebCrypto, at the head. The two build rows hold no names, machine paths or secrets.",
+  "laws": [
+    {
+      "law": "next/packages/libfabrika/src/Id.test.ts, Id.cause.test.ts, Id.types.test.ts",
+      "result": "green, 32 of 32 in 3 files, at ef6008b03"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Answer.test.ts, ErrorCause.test.ts, ErrorCause.types.test.ts",
+      "result": "green, 22 of 22 in 3 files, at ef6008b03"
+    },
+    {
+      "law": "oxlint-plugins/plants.test.ts, -t REFLECT|VI_ (the REFLECT, VI_METHODS and VI_PROPERTIES scenarios)",
+      "result": "green, 3 of 3, at ef6008b03"
+    }
+  ],
+  "plants": [
+    {
+      "law": "plants.test.ts REFLECT scenario after its dedupe",
+      "plant": "by reading: drop the Reflect entries from the slice's src/*.ts block",
+      "result": "caught: src/*.ts and src/* both plant src/planted.ts, which is linted with the last block's options and refuses nothing"
+    },
+    {
+      "law": "Answer.test.ts p82",
+      "plant": "by reading: pass the identity from the request's params to routes.route",
+      "result": "caught: Recorder.calls(Routes, \"route\")[0][2] is not attached.identity"
+    },
+    {
+      "law": "plants.test.ts VI_PROPERTIES scenario",
+      "plant": "by reading: let advises() pass any no-restricted-properties warning",
+      "result": "caught: the vi fires at warn in src/*.ts would then advise, and the law expects none to"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "loosening.sh gives the same hit list over each merge as over its slice alone (527076fe8..7a952e8b5 against 5c94f12f4..3637964ea, and 06fded6e9..4a417c6b4 against 5c94f12f4..fdb4324d6), so the merges add no hit. Judged: (a) the slice's eslint/no-restricted-properties block at warn for next/packages/libfabrika/src/*.ts holds under 0523 and 0524: those files were already at warn for this rule through the src/* blocks at .oxlintrc.json:2333 and :2449, so the set of files that may advise does not grow (0523's 2026-11-16 amendment reasoning), and oxlint-plugins/advice.ts:26 lets only a JSON.parse fire advise, so the vi and Reflect entries block at warn; the .tsx block is at error. (b) the REFLECT scenario's dropped one-file-per-glob expect (plants.test.ts, now a Set of files) loses no reach: plantPath maps src/* and src/*.ts to the same src/planted.ts, a file both globs truly hold, and that file is linted with the options it really gets; every distinct planted file is still checked. (c) effect/crypto/WebCrypto in tsconfig.base.json allowedUnstableApis follows 0574: a part used on purpose (binary.ts reads WebCrypto.WebCrypto, named in the transport plan), beside its siblings Digest and SecureRandom, and 0574 says the setting is not a 0524 list. Id.test.ts removed law and expects: the shared-fibers law is renamed to the exact-ids law and the check.run spy expects are replaced by the predicted model, both in the reviewed slice. Answer.test.ts's five removed expects are vi.fn expects replaced by Recorder.calls, in the reviewed slice. Not run, as briefed: pnpm lint and pnpm typecheck, which the coordinator runs.",
+  "driver_caused": false,
+  "step": "review"
+}
