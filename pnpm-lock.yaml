@@ -401,6 +401,9 @@ importers:
       '@kampus/vitest':
         specifier: workspace:*
         version: link:next/packages/vitest
+      '@oxlint/plugins':
+        specifier: 'catalog:'
+        version: 1.90.0
       '@tea-fabrika/agents':
         specifier: workspace:*
         version: link:.agents

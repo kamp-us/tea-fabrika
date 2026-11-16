@@ -43,8 +43,8 @@ const VIEW_FIELDS = `${FIELDS},baseRefName,title,body,mergeCommit`;
 const PatchRow = Schema.fromJsonString(Patch);
 
 /**
- * The one merge call the lead tooling makes: a squash, pinned to the head that was checked. It
- * carries no `--admin`, no `--auto` and no other merge method (0162).
+ * The merge call that adds a pull request to the queue: a squash, pinned to the head that was
+ * checked. It carries no `--admin`, no `--auto` and no other merge method (0162).
  */
 export const mergeArgs = (repo: string, number: number, oid: string): ReadonlyArray<string> => [
   "pr",
@@ -55,6 +55,12 @@ export const mergeArgs = (repo: string, number: number, oid: string): ReadonlyAr
   "--squash",
   "--match-head-commit",
   oid,
+];
+
+/** The admin merge, pr/Merge.ts's alone (0183, 0532): the same pinned squash, past the queue. */
+export const adminArgs = (repo: string, number: number, oid: string): ReadonlyArray<string> => [
+  ...mergeArgs(repo, number, oid),
+  "--admin",
 ];
 
 /**
@@ -212,6 +218,8 @@ export const layer = (
         yield* gh(["api", "graphql", "-f", `query=${ARM}`, "-f", `id=${id}`, "-f", `oid=${oid}`]);
       });
 
-      return PullRequests.of({ openOn, all, draft, edit, ready, view, enqueue, files, patches, arm });
+      const admin = (number: number, oid: string) => Effect.asVoid(gh(adminArgs(repo, number, oid)));
+
+      return PullRequests.of({ openOn, all, draft, edit, ready, view, enqueue, files, patches, arm, admin });
     }),
   );

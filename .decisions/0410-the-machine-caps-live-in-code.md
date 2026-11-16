@@ -28,3 +28,15 @@ From [skills keep judgment, K9](../docs/direction/skills-hold-only-judgment.md#t
 ## Consequences
 
 - A step's brief no longer repeats these caps as instructions.
+
+## Amendments
+
+### 2026-11-15: the typecheck lock may be a pid lock at the same single path
+
+The script-port sweep ([0113](0113-no-shell-or-python-scripts.md), and the owner's 2026-11-15 order
+that every shell and Python script is ported) moves `typecheck.sh` to `scripts/typecheck.ts`. The
+lead ruled that "one fixed OS lock" may become a pid lock at the same single path, following
+Mercurial's repository lock (`mercurial/lock.py`, read at 7.2.4). The lock is made atomically and
+names its holder's pid. A dead holder's lock is broken only while a `.break` lock is held. This
+decision's rule holds as written: one type check at a time across shells, held in code. Only the
+mechanism changes. A branch still on the old lock does not wait on the new one until it merges main.

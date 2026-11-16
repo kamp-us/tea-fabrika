@@ -1,6 +1,7 @@
 // PullRequests: what the lead tooling asks GitHub about pull requests, and the few writes it makes
 // (0134: a draft at a branch's first commit, marked ready when its steps passed; 0162: one pinned
-// squash that adds it to GitHub's merge queue; 0530: merge when ready, which pr/Arm.ts turns on).
+// squash that adds it to GitHub's merge queue; 0530: merge when ready, which pr/Arm.ts turns on;
+// 0183 and 0532: an admin merge, which pr/Merge.ts alone asks).
 // This file is the
 // contract only (0095): `PullRequestsGh.layer` asks GitHub through `gh`, `PullRequestsTest.layer`
 // answers from a list in memory. Today's lead tooling, run on our own laptop; it is not product.
@@ -74,5 +75,10 @@ export class PullRequests extends Context.Service<
      * `oid` (0530): GitHub queues it once `ci-required` is green there, and never on another head.
      */
     readonly arm: (number: number, oid: string) => Effect.Effect<void, PullRequestsError>;
+    /**
+     * Squash-merges pull request `number` past the merge queue, pinned to the head `oid`: an admin
+     * merge, which only pr/Merge.ts asks, for a docs-only pull request (0183) or a sev0 fix (0532).
+     */
+    readonly admin: (number: number, oid: string) => Effect.Effect<void, PullRequestsError>;
   }
 >()("lead/pr/PullRequests") {}

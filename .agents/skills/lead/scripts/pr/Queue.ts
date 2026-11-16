@@ -15,9 +15,9 @@
 // it happened. Read through its module: `Queue.add(...)`.
 import { Duration, Effect, Option, Schedule, Schema } from "effect";
 import { Checks, type Job } from "../ci/Checks.ts";
+import * as Leaks from "./Leaks.ts";
 import * as Names from "./Names.ts";
 import { Detail, PullRequests, type PullRequestsError } from "./PullRequests.ts";
-import { Pushes } from "./Pushes.ts";
 import { Sweeps } from "./Sweeps.ts";
 import { Tickets } from "./Tickets.ts";
 
@@ -93,12 +93,8 @@ export const refusal = (found: Detail): string | null =>
           ? `merges into ${found.base}, not main; refused`
           : null;
 
-/** The words a squash puts on main: the pull request's title, then its description. */
-export const words = (found: Pick<Detail, "title" | "body">): string => `${found.title}\n\n${found.body}\n`;
-
 export const add = Effect.fn("Queue.add")(function* (a: Ask) {
   const prs = yield* PullRequests;
-  const pushes = yield* Pushes;
   const found = yield* prs.view(a.pr);
 
   if (found.state === "MERGED") {
@@ -111,9 +107,7 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
     return yield* new NotQueued({ reason: `pr ${found.number}: ${refused}` });
   }
 
-  yield* pushes.leakChange(a.dir, found.oid);
-  yield* pushes.leakGrep(a.dir, found.oid);
-  yield* pushes.leakText(a.dir, words(found));
+  yield* Leaks.gate(a.dir, found);
   const unnamed = Names.refusal(found.body, yield* prs.patches(found.number));
 
   if (unnamed !== null) {
