@@ -171,10 +171,13 @@ it.live.prop(
       const result = yield* Effect.scoped(
         startDev({ build: "quota-start", brain: "unused.mjs", programs: {} }, config),
       ).pipe(
-        Effect.provide(fetchClient),
-        Effect.provide(ProcessIdGenerator.layer),
-        Effect.provide(SecureRandom.layerWebCrypto),
-        Effect.provide(filesWithoutSync),
+        Effect.provide(
+          fetchClient.pipe(
+            Layer.provideMerge(ProcessIdGenerator.layer),
+            Layer.provideMerge(SecureRandom.layerWebCrypto),
+            Layer.provideMerge(filesWithoutSync),
+          ),
+        ),
         Effect.result,
       );
       expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "SchemaError" } });
@@ -220,11 +223,14 @@ it.live.prop(
             yield* Effect.scoped(
               startDev({ build, brain: "unused.mjs", programs: {} }, RecordWireTest.startupFixture(config)),
             ).pipe(
-              Effect.provide(fetchClient),
-              Effect.provide(ProcessIdGenerator.layer),
-              Effect.provide(SecureRandom.layerWebCrypto),
-              Effect.provide(quietMemory),
-              Effect.provide(filesWithoutSync),
+              Effect.provide(
+                fetchClient.pipe(
+                  Layer.provideMerge(ProcessIdGenerator.layer),
+                  Layer.provideMerge(SecureRandom.layerWebCrypto),
+                  Layer.provideMerge(quietMemory),
+                  Layer.provideMerge(filesWithoutSync),
+                ),
+              ),
             );
           }
 
@@ -287,11 +293,14 @@ it.live.prop(
       }).pipe(
         Effect.ensuring(Deferred.succeed(release, undefined)),
         Effect.scoped,
-        Effect.provide(fetchClient),
-        Effect.provide(ProcessIdGenerator.layer),
-        Effect.provide(SecureRandom.layerWebCrypto),
-        Effect.provide(quietMemory),
-        Effect.provide(NodeServices.layer),
+        Effect.provide(
+          fetchClient.pipe(
+            Layer.provideMerge(ProcessIdGenerator.layer),
+            Layer.provideMerge(SecureRandom.layerWebCrypto),
+            Layer.provideMerge(quietMemory),
+            Layer.provideMerge(NodeServices.layer),
+          ),
+        ),
       );
       expect(kill).not.toHaveBeenCalled();
     }),

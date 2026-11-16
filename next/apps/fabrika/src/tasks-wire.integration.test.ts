@@ -7,7 +7,7 @@ import { it, expect } from "@effect/vitest";
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
 import { Task, Result } from "@kampus/libfabrika/tasks/Task";
-import { Effect, FileSystem, Path, Queue, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path, Queue, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -377,6 +377,6 @@ it.live(
       }
 
       yield* socket(url, hands, "revoked", false);
-    }).pipe(Effect.scoped, Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.scoped, Effect.provide(SecureRandom.layerWebCrypto.pipe(Layer.provideMerge(NodeServices.layer)))),
   180_000,
 );

@@ -31,7 +31,7 @@ import { build } from "@kampus/libfabrika/build";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import { Effect, FileSystem, Layer, Option, Path, Queue, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
@@ -383,8 +383,7 @@ const flow = Effect.fnUntraced(
     } satisfies Seen;
   },
   Effect.scoped,
-  Effect.provide(SecureRandom.layerWebCrypto),
-  Effect.provide(NodeServices.layer),
+  Effect.provide(SecureRandom.layerWebCrypto.pipe(Layer.provideMerge(NodeServices.layer))),
 );
 
 describe("P39 slice 4b: the hands launcher end to end", () => {

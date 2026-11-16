@@ -1540,13 +1540,17 @@ describe("T843 sender budget, next/", () => {
             { piece: "runtime.rpc", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 1 },
           ]);
         }).pipe(
-          Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, archive)))),
           Effect.provide(
-            Logger.layer([
-              Logger.make((entry) => {
-                logs.push(entry);
-              }),
-            ]),
+            Gateway.layer(w.settings).pipe(
+              Layer.provideMerge(Layer.merge(w.env, archive)),
+              Layer.provideMerge(
+                Logger.layer([
+                  Logger.make((entry) => {
+                    logs.push(entry);
+                  }),
+                ]),
+              ),
+            ),
           ),
         );
       }),

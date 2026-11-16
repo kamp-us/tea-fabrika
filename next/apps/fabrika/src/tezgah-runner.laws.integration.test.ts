@@ -238,8 +238,7 @@ const startInstance = Effect.fnUntraced(
 
     return { instance, key };
   },
-  Effect.provide(SecureRandom.layerWebCrypto),
-  Effect.provide(NodeServices.layer),
+  Effect.provide(SecureRandom.layerWebCrypto.pipe(Layer.provideMerge(NodeServices.layer))),
 );
 
 const calls = (instance: Instance) => {

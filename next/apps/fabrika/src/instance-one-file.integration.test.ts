@@ -783,9 +783,12 @@ describe("P16 copied-file real instance, serial", () => {
                       });
                     }),
                   ).pipe(
-                    Effect.provide(localState()),
-                    Effect.provide(SecureRandom.layerWebCrypto),
-                    Effect.provide(NodeServices.layer),
+                    Effect.provide(
+                      localState().pipe(
+                        Layer.provideMerge(SecureRandom.layerWebCrypto),
+                        Layer.provideMerge(NodeServices.layer),
+                      ),
+                    ),
                   ),
                 ),
               );
@@ -969,9 +972,11 @@ describe("P16 copied-file real instance, serial", () => {
                     });
                   }),
                 ).pipe(
-                  Effect.provide((await import("alchemy/State/LocalState")).localState()),
-                  Effect.provide(SecureRandom.layerWebCrypto),
-                  Effect.provide(NodeServices.layer),
+                  Effect.provide(
+                    (await import("alchemy/State/LocalState"))
+                      .localState()
+                      .pipe(Layer.provideMerge(SecureRandom.layerWebCrypto), Layer.provideMerge(NodeServices.layer)),
+                  ),
                 ),
               ),
             );

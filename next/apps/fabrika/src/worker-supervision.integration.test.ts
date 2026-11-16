@@ -174,9 +174,9 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
         );
       }).pipe(
         Effect.scoped,
-        Effect.provide(localState()),
-        Effect.provide(SecureRandom.layerWebCrypto),
-        Effect.provide(NodeServices.layer),
+        Effect.provide(
+          localState().pipe(Layer.provideMerge(SecureRandom.layerWebCrypto), Layer.provideMerge(NodeServices.layer)),
+        ),
       ),
     );
   } finally {

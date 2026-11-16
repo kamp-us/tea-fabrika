@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, Schema, Scope } from "effect";
+import { Effect, Layer, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
@@ -391,9 +391,9 @@ const world = async (
         );
       }).pipe(
         Effect.scoped,
-        Effect.provide(localState()),
-        Effect.provide(SecureRandom.layerWebCrypto),
-        Effect.provide(NodeServices.layer),
+        Effect.provide(
+          localState().pipe(Layer.provideMerge(SecureRandom.layerWebCrypto), Layer.provideMerge(NodeServices.layer)),
+        ),
       );
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
@@ -821,9 +821,9 @@ const checklistWorld = async (
       );
     }).pipe(
       Effect.scoped,
-      Effect.provide(localState()),
-      Effect.provide(SecureRandom.layerWebCrypto),
-      Effect.provide(NodeServices.layer),
+      Effect.provide(
+        localState().pipe(Layer.provideMerge(SecureRandom.layerWebCrypto), Layer.provideMerge(NodeServices.layer)),
+      ),
     ),
   );
 };
@@ -1118,9 +1118,9 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
       });
     }).pipe(
       Effect.scoped,
-      Effect.provide(localState()),
-      Effect.provide(SecureRandom.layerWebCrypto),
-      Effect.provide(NodeServices.layer),
+      Effect.provide(
+        localState().pipe(Layer.provideMerge(SecureRandom.layerWebCrypto), Layer.provideMerge(NodeServices.layer)),
+      ),
     ),
   );
 }, 180_000);

@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e94-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:52:52-08:00",
+  "ended": "2026-11-16T02:15:07-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E94 of the Effect-checker sweep, in next/: the check multipleEffectProvide in app:src (the top src/ files of next/apps/fabrika). Branch fabrikalfa/effect-e94, cut from the stack top fabrikalfa/test-sqlite-store at eeb8ecdbb. Counted on that base with only this check at error through --lspconfig on next/apps/fabrika/tsconfig.json: 23 hits in app:src (the plan said 21), 22 in exam paths (test files and test support) and 1 in a product file, next/apps/fabrika/src/instance.ts:66, which is left for the build step. The same run also showed 5 hits in app:e2e, which are slice E52's (fixed on its own branch, not on this base) and not this row. None sits in a file of pull request 1366, which is merged. All 22 exam-path hits were fixed by hand with the Edit tool, no quick fix and no codemod, in the form slice E52 used: a chain Effect.provide(A), Effect.provide(B), Effect.provide(C) becomes one Effect.provide(A.pipe(Layer.provideMerge(B), Layer.provideMerge(C))). That is the chain's exact shape: in the installed effect 4.1.3, Layer.provideMerge feeds the later layer into the earlier one and keeps both outputs (Layer.ts:2486), so the first layer still sees every later one and the effect still gets all their services. The checker's own quick fix, Layer.mergeAll, builds the layers side by side and would cut that feed, so it was not used. Nine files gained a Layer import. Files: door, hands-launcher, input-recording, instance-one-file (2), instance-records, local-instance (3), scheduled-job-alarm, sibling.laws, tasks-wire, tezgah-runner.laws, worker-mail (3), worker-monitor, worker-quotas and worker-supervision .integration.test.ts, and record-wire.test-support.ts and start-child.test-support.ts (2). The recount shows 1 hit left in app:src, the product hit. No law is new or changed, no assertion moved, and no ignore line or lock line was added. Report: hits met 23, fixed by quick fix 0, hand edits 22, left 1 (product, for the build), waiting on 1366 0.",
+  "plants": [
+    {
+      "law": "the multipleEffectProvide recount over next/apps/fabrika/tsconfig.json",
+      "plant": "the old two-call chain put back at next/apps/fabrika/src/tasks-wire.integration.test.ts:380: the hit came back at that line, then the file was restored by copy",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 23,
+  "note": "Left for the build: next/apps/fabrika/src/instance.ts:66, Effect.provide(localState()) then Effect.provide(engine) after deploy(...). No ignore line was taken out or added; none exists for this check in app:src. Folders with a hit, for the lock: next/apps/fabrika/src (app:src); app:e2e's 5 hits belong to slice E52. Tests run in this box at the pre-commit tree on base eeb8ecdbb, one file at a time with vitest --maxWorkers=1, all green: door 153, hands-launcher 2, input-recording 1, instance-one-file 7, instance-records 13, local-instance 3, scheduled-job-alarm 1, sibling.laws 1, tasks-wire 1, tezgah-runner.laws 2, worker-mail 6, worker-monitor 3, worker-quotas 3, worker-supervision 4 (.integration.test.ts each), and the readers of the two changed support functions: start-member.laws 2, record.laws 7, start-child.laws 23. start-child.laws failed once at first, L11 timing out at 60000 ms, and passed 23 of 23 on the next run with no change: a flake, filed as a finding, not caused by this change. tsc --noEmit on next/apps/fabrika passed. pnpm format, pnpm lint (exit 0) and the ratchet passed. No pnpm typecheck was run here, as the tests skill says; the build runs it. The checker's quick fix was not run.",
+  "step": "tests"
+}

@@ -3,7 +3,7 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { SinkError } from "@kampus/libfabrika/telemetry/Sink";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
@@ -85,6 +85,5 @@ export const recordWire = Effect.fnUntraced(
       }),
     );
   },
-  Effect.provide(SecureRandom.layerWebCrypto),
-  Effect.provide(NodeServices.layer),
+  Effect.provide(SecureRandom.layerWebCrypto.pipe(Layer.provideMerge(NodeServices.layer))),
 );

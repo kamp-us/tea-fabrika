@@ -5,7 +5,7 @@ import { Start } from "@kampus/libfabrika/processes/Process";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { runsFor } from "@kampus/vitest";
 import { localState } from "alchemy/State/LocalState";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
@@ -373,9 +373,9 @@ it("A13: built boxes and the real instance record selected metadata across refus
     fc.asyncProperty(fc.array(fc.noBias(fc.nat()), { minLength: 20, maxLength: 28 }), (tape) =>
       Effect.runPromise(
         Effect.scoped(walk(tape, reached)).pipe(
-          Effect.provide(SecureRandom.layerWebCrypto),
-          Effect.provide(localState()),
-          Effect.provide(NodeServices.layer),
+          Effect.provide(
+            SecureRandom.layerWebCrypto.pipe(Layer.provideMerge(localState()), Layer.provideMerge(NodeServices.layer)),
+          ),
         ),
       ),
     ),

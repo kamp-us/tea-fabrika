@@ -8,7 +8,7 @@ import { Quotas } from "@kampus/libfabrika/processes/Quotas";
 import * as QuotasSql from "@kampus/libfabrika/processes/QuotasSql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { ByteSize, Effect, FileSystem, Path, Schema } from "effect";
+import { ByteSize, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect } from "vitest";
 import { build } from "./build.ts";
@@ -430,7 +430,7 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
             result: { _tag: "accepted" },
           });
         }),
-      ).pipe(Effect.provide(NodeServices.layer), Effect.provide(SecureRandom.layerWebCrypto)),
+      ).pipe(Effect.provide(NodeServices.layer.pipe(Layer.provideMerge(SecureRandom.layerWebCrypto)))),
     240_000,
   );
 }

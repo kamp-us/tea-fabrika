@@ -73,13 +73,16 @@ it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call looku
           // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
           yield* deploy({ stack, stage: "local", dev: true, scope: yield* Effect.scope }).pipe(
             Effect.asVoid,
-            Effect.provide(localState()),
             Effect.provide(
-              Layer.mergeAll(
-                Layer.succeed(AlchemyContext, { dotAlchemy: path.join(home, ".alchemy"), dev: true, adopt: false }),
-                Layer.succeed(ArtifactStore, createArtifactStore()),
-                Interaction.layerNonInteractive(),
-                AuthProvidersLive,
+              localState().pipe(
+                Layer.provideMerge(
+                  Layer.mergeAll(
+                    Layer.succeed(AlchemyContext, { dotAlchemy: path.join(home, ".alchemy"), dev: true, adopt: false }),
+                    Layer.succeed(ArtifactStore, createArtifactStore()),
+                    Interaction.layerNonInteractive(),
+                    AuthProvidersLive,
+                  ),
+                ),
               ),
             ),
           );

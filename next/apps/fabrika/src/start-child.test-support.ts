@@ -170,7 +170,7 @@ export const childHome = Effect.fnUntraced(
           starts,
         }),
       );
-    }).pipe(Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(NodeServices.layer));
+    }).pipe(Effect.provide(SecureRandom.layerWebCrypto.pipe(Layer.provideMerge(NodeServices.layer))));
 
     const from: From = {
       by: key.fingerprint,
@@ -184,8 +184,7 @@ export const childHome = Effect.fnUntraced(
 
     return { boot, key, hashes, from };
   },
-  Effect.provide(SecureRandom.layerWebCrypto),
-  Effect.provide(NodeServices.layer),
+  Effect.provide(SecureRandom.layerWebCrypto.pipe(Layer.provideMerge(NodeServices.layer))),
 );
 
 /**
