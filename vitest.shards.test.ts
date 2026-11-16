@@ -103,6 +103,8 @@ it("scenario: L6 the five measured heaviest next files occupy the five vitest ma
 // after them, every law moved unchanged: runner-contract.test.ts, readers.laws.test.ts and
 // RepositoriesGit.test.ts. Each part's sample is the sum of its own tests' times in the same log.
 // This fixed snapshot copies the observations, never the measured table's computed weights.
+// Ticket 591 moved ten of these files to `<name>.laws.test.ts` with `git mv`; their samples are
+// the same files' and keep their numbers.
 const nextSamples = {
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/apps/fabrika/src/build.test.ts": [0.0, 0.0, 0.0],
@@ -153,7 +155,7 @@ const nextSamples = {
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/access/Access.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025465, B job 132638385663, C job 132639432580.
-  "next/packages/libfabrika/src/access/AccessMachine.laws.test.ts": [2.5, 2.0, 2.6],
+  "next/packages/libfabrika/src/access/Access.laws.test.ts": [2.5, 2.0, 2.6],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/access/ClientManager.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025443, B job 132638385672, C job 132639432685.
@@ -223,15 +225,15 @@ const nextSamples = {
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/gateway/TaskAccess.test.ts": [0.1, 0.1, 0.1],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/gateway/internal/rateLimit.test.ts": [0.2, 0.1, 0.2],
+  "next/packages/libfabrika/src/gateway/internal/rateLimit.laws.test.ts": [0.2, 0.1, 0.2],
   // A job 132637025465, B job 132638385663, C job 132639432580.
-  "next/packages/libfabrika/src/gateway/internal/waiting.test.ts": [2.9, 2.3, 2.4],
+  "next/packages/libfabrika/src/gateway/internal/waiting.laws.test.ts": [2.9, 2.3, 2.4],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/tasks/Task.test.ts": [9.2, 7.2, 9.4],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/tasks/Tasks.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/tasks/internal/task.test.ts": [31.6, 23.7, 37.2],
+  "next/packages/libfabrika/src/tasks/internal/task.laws.test.ts": [31.6, 23.7, 37.2],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/ledger/Ledger.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025465, B job 132638385663, C job 132639432580.
@@ -274,7 +276,7 @@ const nextSamples = {
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/packs/ProgramName.test.ts": [0.1, 0.1, 0.1],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/packs/internal/open.test.ts": [14.3, 9.4, 13.8],
+  "next/packages/libfabrika/src/packs/internal/open.laws.test.ts": [14.3, 9.4, 13.8],
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/processes/ExitReason.test.ts": [0.3, 0.3, 0.2],
   // A job 132637025465, B job 132638385663, C job 132639432580.
@@ -326,13 +328,13 @@ const nextSamples = {
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/runtime/internal/exitReason.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/runtime/internal/reply.test.ts": [0.2, 0.2, 0.2],
+  "next/packages/libfabrika/src/runtime/internal/reply.laws.test.ts": [0.2, 0.2, 0.2],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/runtime/internal/supervisor.laws.test.ts": [1.6, 1.1, 1.7],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/runtime/internal/watchers.test.ts": [35.4, 27.7, 39.6],
+  "next/packages/libfabrika/src/runtime/internal/watchers.laws.test.ts": [35.4, 27.7, 39.6],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/schedules/ScheduledJob.test.ts": [0.5, 0.4, 0.4],
+  "next/packages/libfabrika/src/schedules/ScheduledJob.laws.test.ts": [0.5, 0.4, 0.4],
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/settings/Codec.test.ts": [0.1, 0.1, 0.1],
   // A job 132637025465, B job 132638385663, C job 132639432580.
@@ -368,7 +370,7 @@ const nextSamples = {
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/telemetry/Trace.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025465, B job 132638385663, C job 132639432580.
-  "next/packages/libfabrika/src/telemetry/internal/sink.test.ts": [0.5, 0.4, 0.5],
+  "next/packages/libfabrika/src/telemetry/internal/sink.laws.test.ts": [0.5, 0.4, 0.5],
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/telemetry/internal/sums.test.ts": [1.2, 1.2, 1.0],
   // A job 132637025465, B job 132638385663, C job 132639432580.
@@ -390,7 +392,7 @@ const nextSamples = {
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/transport/internal/binaryCryptoFailure.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/transport/internal/connection.test.ts": [2.3, 2.1, 3.5],
+  "next/packages/libfabrika/src/transport/internal/connection.laws.test.ts": [2.3, 2.1, 3.5],
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/programs/chaos/src/program.laws.test.ts": [2.1, 1.8, 1.6],
   // A job 132637025443, B job 132638385672, C job 132639432685.
