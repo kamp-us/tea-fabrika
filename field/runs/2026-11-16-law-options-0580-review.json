@@ -1,0 +1,57 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-law-options-0580-review",
+  "ticket": "580",
+  "pr": "kamp-us/tea-fabrika#1497",
+  "started": "2026-11-15T23:28:06-08:00",
+  "ended": "2026-11-15T23:36:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send_back",
+  "why": "The one review of slice 1 of docs/plan/quests/law-options-0580-PLAN.md (0580, 0579), next/ and tooling, diff 381f5ec..310ff61: send back to tests, two blocking classes, one finding row. (1) The law that each member carries its plant and label in meta (next/packages/vitest/src/Law.test.ts:78) registers it.prop only on Effect inputs and it.effect.prop only on fast-check inputs, and never it.live.prop, so two planted breaks escape it: dropping the law's options in effectLaw's Effect-input branch (Law.ts:265) and in it.prop's fast-check branch (Law.ts:299) each leave all 37 laws green. (2) Four slice-1 laws have no recorded plant run on the real code (0093): the type law, the members' meta law, the scope-per-case law and the counterexample law; the tests row ran them only on throwaway code it did not list, and the build row lists the other five. The finding row: .agents/skills/tests/scripts/plant.ts:53 does not compile (TS2769, a readonly include tuple from as const), hidden because the file is outside .agents/tsconfig.json. Everything else holds: the plant check, its CI wiring and flag, law-shape's option label, Plants.records, plant.ts at run time, the seed, the scope and timeout paths, the docs rows. Calls (a) to (h) judged sound.",
+  "plants": [
+    {
+      "file": "next/packages/vitest/src/Law.test.ts",
+      "law": "scenario: a law registered through each member reads its own plant and label from ctx.task.meta",
+      "plant": "drop the law's options in effectLaw's Effect-input prop branch, in a scratch copy of Law.ts",
+      "result": "green"
+    },
+    {
+      "file": "next/packages/vitest/src/Law.test.ts",
+      "law": "scenario: a law registered through each member reads its own plant and label from ctx.task.meta",
+      "plant": "drop the law's options in it.prop's fast-check branch, in a scratch copy of Law.ts",
+      "result": "green"
+    },
+    {
+      "file": "next/packages/vitest/src/Law.test.ts",
+      "law": "with fast-check inputs, each case runs in its own Scope, closed before the next case opens",
+      "plant": "drop the per-case Effect.scoped in internal/fastCheck.ts, in a scratch copy",
+      "result": "red"
+    },
+    {
+      "file": "next/packages/vitest/src/Law.integration.test.ts",
+      "law": "a fast-check case that fails fails the law with fast-check's counterexample, and a passing run passes",
+      "plant": "ignore fc.assert's failure in internal/fastCheck.ts, in a scratch copy",
+      "result": "red"
+    },
+    {
+      "file": ".github/ci/plant-check.test.ts",
+      "law": "property: the check's refusals equal a model's: no plant, not recorded, green and unclaimed, and an untouched or moved-only law gives none",
+      "plant": "keep the options argument in a law's body, in a scratch copy of plant-check.ts",
+      "result": "red"
+    },
+    {
+      "file": ".github/ci/plant-check.test.ts",
+      "law": "property: the check's refusals equal a model's: no plant, not recorded, green and unclaimed, and an untouched or moved-only law gives none",
+      "plant": "key a law by its title with the old label prefix left on, in a scratch copy of plant-check.ts",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Read-only apart from this row; plants ran in a scratch git worktree outside the repo, never on the branch. Ran at 310ff61 on Node 26.13.0: the four package files (Law.test.ts, Law.types.test.ts, Plants.test.ts, Law.integration.test.ts; 42 passed; the 0178 guard allowed the integration file), plant.test.ts, plant-check.test.ts, changes.test.ts, field-check.test.ts, workflow-lint/check-job.test.ts and law-shape.test.ts (127 passed), pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (17 parts passed), one pnpm typecheck (exit 0), and plant-check.ts as CI runs it on pull_request against origin/main b510ed2e8 (exit 0, nine notices, no refusal: no changed law file in this slice imports it from @kampus/vitest). A tsc run of plant.ts alone found TS2769 at line 53. loosening.sh hits are all unrecognized changes that tighten or add (the field flag, the wiring lint's plant-check step, Plant's optional file, law-shape's option read, the lockfile move); none loosens a law. git merge-tree with origin/main b510ed2e8: conflicts in .github/ci/workflow-lint/check-job.ts and next/packages/vitest/src/index.ts, so the fix round merges main first."
+}
