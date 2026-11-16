@@ -4,6 +4,21 @@
   // workspace package: its imports resolve from the root's own dependencies. The other skill
   // scripts (the plan and mutation scripts) still hold type errors and join with ticket 486.
   "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // One `catchTags` in place of several `catchTag` calls (ticket 1075). All of `.agents/` is
+        // at zero. The globs read from this folder.
+        "overrides": [
+          {
+            "include": ["**/*.ts"],
+            "options": { "diagnosticSeverity": { "multipleCatchTag": "error" } }
+          }
+        ]
+      }
+    ]
+  },
   "include": [
     "raw.d.ts",
     "skills/lead/scripts/agents.ts",
