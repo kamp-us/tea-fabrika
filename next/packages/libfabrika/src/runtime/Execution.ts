@@ -124,8 +124,9 @@ export const Declaration = Schema.Struct({
     Schema.String,
     Schema.Struct({ write: Schema.Boolean, personOnly: Schema.Boolean, shape: Schema.optionalKey(Fit.Shape) }),
   ),
-  /** Each output's declared shape. */
-  outputs: Schema.Record(Schema.String, Schema.Struct({ shape: Fit.Shape })),
+  /** Each output's declared shape. Optional: a box built before outputs had shapes answers none, and
+   *  its program then pipes nothing out. */
+  outputs: Schema.optionalKey(Schema.Record(Schema.String, Schema.Struct({ shape: Fit.Shape }))),
   cmds: Schema.Array(Schema.String),
 });
 /**
