@@ -175,6 +175,7 @@ describe("P10 JSON-RPC", () => {
           (value) => {
             const answer = mode === "ok" ? Answer.cases.ok.make({ result: { rows: [1] } }) : value;
             const attached = online();
+
             return Effect.gen(function* () {
               const result = yield* answerFrame(frame(), attached);
               expect(result.send).not.toBeNull();
@@ -206,13 +207,17 @@ describe("P10 JSON-RPC", () => {
     it.effect(`p23: ${mode} sends nothing and permits a real retry`, () => {
       const attached = online();
       let runs = 0;
+
       const first =
         mode === "failure" ? Effect.fail(RouteError.make({ cause: "offline" })) : Effect.die("route crashed");
+
       const route = () =>
         Effect.suspend(() => {
           runs += 1;
+
           return runs === 1 ? first : Effect.succeed(Answer.cases.ok.make({ result: "recovered" }));
         });
+
       return Effect.gen(function* () {
         const failed = yield* answerFrame(frame(), attached);
         expect(failed).toEqual({ send: null, attached });
@@ -331,6 +336,7 @@ describe("P10 JSON-RPC", () => {
   // attached identity. Plant: read the identity from the request's params.
   it.effect("p82: additive request fields leave the reply id and checked writer alone", () => {
     const attached = online();
+
     return Effect.gen(function* () {
       const result = yield* answerFrame(frame({ future: { by: "forged" } }), attached);
       expect(JSON.parse(result.send!)).toMatchObject({ id: "r1", result: null });

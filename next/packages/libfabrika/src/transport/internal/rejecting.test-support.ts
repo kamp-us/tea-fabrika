@@ -17,6 +17,7 @@ export type Method = "digest" | "importKey" | "verify";
 /** A member of `target` by name, bound to `target` when it is a function. */
 const bound = (target: object, prop: PropertyKey): unknown => {
   const member = Predicate.hasProperty(target, prop) ? target[prop] : undefined;
+
   return Predicate.isFunction(member) ? member.bind(target) : member;
 };
 
@@ -30,9 +31,11 @@ export const crypto = (method: Method, failure: unknown): typeof globalThis.cryp
   const real = globalThis.crypto;
   // oxlint-disable-next-line fabrika/no-promises -- edge: a WebCrypto stand-in answers only with a Promise
   const reject = () => Promise.reject(failure);
+
   const subtle = new Proxy(real.subtle, {
     get: (target, prop) => (prop === method ? reject : bound(target, prop)),
   });
+
   return new Proxy(real, {
     get: (target, prop) => (prop === "subtle" ? subtle : bound(target, prop)),
   });

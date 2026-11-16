@@ -98,6 +98,7 @@ describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
         const signed = yield* write(key, helloText({ url, tab, nonce }));
         const hash = yield* digest("SHA-256", key.publicKey);
         const failure = new DOMException("digest refused", "OperationError");
+
         const error = yield* Effect.flip(
           rejecting(
             "digest",
@@ -126,6 +127,7 @@ describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
             }),
           ),
         );
+
         expect(error._tag).toBe("WebCryptoError");
         expect((error as { readonly cause?: unknown }).cause).toBe(failure);
       }),
