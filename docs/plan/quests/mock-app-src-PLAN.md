@@ -430,6 +430,100 @@ at zero, after 0042's Alchemy work.
 - **Is this a setting?** No. Where a lint rule applies is a code rule of the repo, not a choice a
   person makes in `fabrika.toml` ([0069](../../../.decisions/0069-choices-are-settings.md)).
 
+**Amendment (2026-11-16, lead ruling): the lock is a pair.** oxlint's
+`vitest/no-restricted-vi-methods` does not refuse a call chained onto the `vi` call, in oxlint
+1.90.0 (the lockfile's) and 1.93.0 alike: `vi.spyOn(console, "warn").mockImplementation(() => {})`
+and `vi.fn().mockReturnValue(1)` pass, while the same call in parentheses is refused. The proof is
+the last `false` lines of `VI_METHODS` in `oxlint-plugins/builtin-plants.ts` on
+`fabrikalfa/mock-app-e2e-s1` at `f02b31948`, and the row
+`field/runs/2026-11-15-mock-app-e2e-tests1.json`. So every block of the lock sets two of oxlint's
+own rules over the same files: `vitest/no-restricted-vi-methods`, kept on as it is, and the
+built-in `eslint/no-restricted-properties` with one `object: "vi"` entry for each member the
+block bans, each with the same message as that member's entry in the vitest rule.
+`no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
+with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
+`import { vi as v }`. Both are trusted rules, as
+[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
+filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
+`no-restricted-properties` half stays until oxc fixes it.
+
+The folder's lock still does not land in this sweep (the laptop lead's ruling of 2026-11-15); this is the shape it lands with, whole, the day the folder is at zero.
+
+```jsonc
+// .oxlintrc.json, the lock as a pair (amendment 2026-11-16, lead ruling). A sketch; three blocks, one per set the folder's files take on main.
+{
+  "files": ["next/apps/fabrika/src/*"],
+  "rules": {
+    // Kept on as it is: the same members, with the same messages as below.
+    "vitest/no-restricted-vi-methods": ["error", { /* fn, mock, doMock, spyOn, stubEnv */ }],
+    "eslint/no-restricted-properties": [
+      "warn",
+      // Written out again, since an override replaces options: the `JSON.parse` entry.
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+    ]
+  }
+},
+{
+  "files": ["next/apps/fabrika/src/entry/**"],
+  "rules": {
+    // Kept on as it is: the same members, with the same messages as below.
+    "vitest/no-restricted-vi-methods": ["error", { /* fn, mock, doMock, spyOn, stubEnv */ }],
+    "eslint/no-restricted-properties": [
+      "error",
+      // Written out again, since an override replaces options: the `JSON.parse` entry and the four Reflect entries (`Reflect.get`, `Reflect.set`, `Reflect.has`, `globalThis.Reflect`).
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+    ]
+  }
+},
+{
+  "files": ["next/apps/fabrika/src/exam/**"],
+  "rules": {
+    // Kept on as it is: the same members, with the same messages as below.
+    "vitest/no-restricted-vi-methods": ["error", { /* fn, mock, doMock, spyOn, stubEnv */ }],
+    "eslint/no-restricted-properties": [
+      "warn",
+      // Written out again, since an override replaces options: the `JSON.parse` entry and the four Reflect entries (`Reflect.get`, `Reflect.set`, `Reflect.has`, `globalThis.Reflect`).
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+    ]
+  }
+}
+```
+
+- **The `vi` entries join the list these files already take.** A block's options for a rule
+  replace an earlier block's, they do not merge, and oxlint takes the last matching block's. So the
+  lock's `no-restricted-properties` list writes out again every entry its files take today, at that
+  block's level, and the lock's block sits after that block, the way the Reflect ban's blocks write
+  out the `JSON.parse` entry (`.oxlintrc.json` on main at `b490a3203`). On main the folder's files take three sets: the top files (`src/*`) take the `warn` block that writes out `JSON.parse` alone, `src/entry/**` takes the Reflect ban's error block, and `src/exam/**` its warn block (`JSON.parse` and the four Reflect entries each). So the lock is three blocks, one per set, as the sketch shows; the day it lands, the tests step reads the sets again on main. At `warn`, a `vi`
+  fire still blocks: `pnpm lint` lets only a `JSON.parse` fire of this rule advise
+  (0523, the advice map `pnpm lint` reads). No file loses an entry, and no file gains one but the
+  `vi` entries. Whichever slice lands later carries the entries the others landed first: another folder's `vi` entries, or any new set.
+- **The plant, red first.** The lock's law runs a second plant beside node's `VI_METHODS`:
+  `VI_PROPERTIES`, under the code `eslint(no-restricted-properties)` as `REFLECT` is, in every
+  path of every block that sets the vitest rule, through the same scenario. Refused:
+  `vi.spyOn(console, "warn").mockImplementation(() => undefined)`, `vi.fn().mockReturnValue(1)`,
+  and one plain call of each banned member. Taken: `vi.hoisted(() => 1)`, `vi.waitFor(() => 1)`,
+  a comment, a string and `other.fn()`. A line is held by the lock when either plant refuses it.
+  Red first: drop the block's `vi` entries from `no-restricted-properties`, and the two chained
+  lines are not refused, so the law is red; with them back, it is green. The plants of the entries
+  written out again, such as `REFLECT`, still pass in each locked path, which shows no entry was
+  lost.
+- **`VI_METHODS`' chained lines.** `VI_METHODS` keeps recording what the vitest rule does alone,
+  so its chained lines stay `false` under its own code. They are no longer a miss of the lock: the
+  pair refuses them, through `VI_PROPERTIES`.
+
 ## One value traced: p27 with `to: "project-b"`
 
 1. The law's world builds `clients`: `Layer.unwrap` reads the real `ClientManager` from `w.env`
@@ -455,7 +549,7 @@ plant is what the review runs once to see it red.
 | A4. p27: a granted, revoked or added grant with a wrong `to` never calls `ClientManager.write` and founds nothing | test | Effect Arbitrary: Grant.fields.to | in `next/packages/libfabrika/src/gateway/Gateway.ts`, write the client before the ledger check (the plant is made on a scratch copy; that file is in PR 1366 and is not changed) | next/apps/fabrika/src/door.integration.test.ts |
 | A5. Amendment 2026-11-15 (the lead's ruling): A5 moves to the 0042 Alchemy mocks plan and does not land in this sweep (see "Slice 1"). p33 loader: the loader records the real config and answers typed `no_program` for an unknown name | test | fc.string: the source, with fc.uuid for the process, as today, 3 runs | answer the bare short name: the `no_program` check is red | next/apps/fabrika/src/instance-one-file.integration.test.ts |
 | A6. The lock refuses `vi.fn` and `vi.spyOn` in the files at zero and nowhere else in the folder; a file at zero for all five is in the five-method block and refuses all five (amendment 2026-11-15, ruling 2). Amendment 2026-11-15 (the laptop lead's ruling): A6 does not land in this sweep; it lands with the folder's whole lock once the folder is at zero | test | scenario: the real oxlint over a planted `vi.fn()` in a locked file and in an unlocked file of the folder, through `plantIn` | delete the new override: the locked row stops firing | oxlint-plugins/plants.test.ts |
-| A7. Node's M1 (amendment 2026-11-15, ruling 2): the `VI_METHODS` lines are refused in every path of every block that sets the rule, `vi.fn()`, `vi.spyOn(console, "log")`, `vi.mock`, `vi.doMock` and `vi.stubEnv` among them, and `v.fn()` after `import { vi as v }` joins the set; a plain list is not refused | test | scenario: node's `VI_METHODS` set | drop `fn` from the rule's options: the `vi.fn()` line passes | oxlint-plugins/builtin-plants.ts |
+| A7. Node's M1 (amendment 2026-11-15, ruling 2): the `VI_METHODS` lines are refused in every path of every block that sets the rule, `vi.fn()`, `vi.spyOn(console, "log")`, `vi.mock`, `vi.doMock` and `vi.stubEnv` among them, and `v.fn()` after `import { vi as v }` joins the set; a plain list is not refused | test | scenario: node's `VI_METHODS` set | drop `fn` from the rule's options: the `vi.fn()` line passes. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red | oxlint-plugins/builtin-plants.ts |
 | A8. The locked files are at zero: `pnpm lint` passes with the lock an error, and no disable line names it. Amendment 2026-11-15 (the laptop lead's ruling): A8 waits with A6 | lint | lint | put back `const touched = vi.fn(() => Effect.never)`: `pnpm lint` exits 1 | next/apps/fabrika/src/file-services.laws.integration.test.ts |
 | B1. Alchemy's lifecycle reports spawn ids, replacement delays and the brake, and a closed scope cancels recovery, with workerd spawned through the law's `ChildProcessSpawner` | test | fc.string: the worker name, as today, 3 runs | in the patch, spawn with `node:child_process` again: the law's spawner sees no child and the start event is missing | next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts |
 | B2. The installed lifecycle patch matches its locked hash | test | format: the one registration line and its sha256 | edit the patch without `pnpm patch-commit`: the hash differs | next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts |
@@ -506,12 +600,14 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
 
 | File | Owner | Product lines expected | Change |
 |---|---|---|---|
+| next/apps/fabrika/src/exam/** | tests | tests | (amendment 2026-11-16) the files of one of the lock's three blocks, the day the lock lands; no file changes in this sweep |
+| next/apps/fabrika/src/exam/ | tests | tests | the same folder |
 | next/apps/fabrika/src/file-services.laws.integration.test.ts | tests | tests | slice 1: A1 |
 | next/apps/fabrika/src/grant-readers.laws.test.ts | tests | tests | slice 1: A2, A3 |
 | next/apps/fabrika/src/door.integration.test.ts | tests | tests | slice 1: A4; slice 3: C1 to C4 |
 | next/apps/fabrika/src/instance-one-file.integration.test.ts | tests | tests | slice 2: B3 (amendment 2026-11-15: slice 1's A5 moves to the 0042 Alchemy mocks plan) |
 | .oxlintrc.json | tests | none | slices 1 to 4: the override, its `files` growing, then the folder glob |
-| oxlint-plugins/builtin-plants.ts | tests | tests | slice 1: A7 |
+| oxlint-plugins/builtin-plants.ts | tests | tests | slice 1: A7; and (amendment 2026-11-16, lead ruling) the `VI_PROPERTIES` plant, the lock's other half |
 | oxlint-plugins/plants.test.ts | tests | tests | slice 1: A6; slice 4 changes its rows to the glob |
 | oxlint-plugins/README.md | tests | docs | slice 1: one paragraph on this override and why it is apart from the full one |
 | .patterns/a-law-watches-calls-with-a-recorder.md | build | docs | slice 1: two cases, the wrap of a built service through `Layer.unwrap`, and a built context handed to code that provides its own layers |

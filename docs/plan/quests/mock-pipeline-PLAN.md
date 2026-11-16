@@ -54,6 +54,11 @@ expect((yield* h.host.calls("merge")).map(([change]) => change)).toEqual([1, 2, 
   slice of the sweep that drops a five-method `console` spy adds them; see the cloudflare plan's
   M6), so S2 reads all five methods the spy read. The tea patch is a new file for tea 0.27.0, the
   version `next/` is on since pull request 1391; the 0.25.0 patch belongs to today's version only.
+
+  **Amendment (2026-11-16, lead ruling):** the upstream issue for the missing reader is filed:
+  [Effect-TS/effect#10665](https://github.com/Effect-TS/effect/issues/10665), `TestConsole` has no
+  `warnLines`. `errorLines` is already in effect 4.1.3, so the Effect patch adds `warnLines`, and
+  `infoLines` and `debugLines` beside it, and never `errorLines`.
 - **Whether `CodeHostTest.layer` can hand its stateful fake to `Recorder.layer` as it is (85%).**
   `Recorder.layer` takes the implementation as a value, while today's fake makes its state inside
   `Layer.effectContext(Effect.sync(...))`. The lean wraps the whole build in `Layer.unwrap`, the same
@@ -363,6 +368,67 @@ yield* Effect.acquireRelease(
   in the `oxlint-plugins` folder, which this block does not reach, so that plant stays as it is (0555 named
   it for when the rule reaches its path).
 
+**Amendment (2026-11-16, lead ruling): the lock is a pair.** oxlint's
+`vitest/no-restricted-vi-methods` does not refuse a call chained onto the `vi` call, in oxlint
+1.90.0 (the lockfile's) and 1.93.0 alike: `vi.spyOn(console, "warn").mockImplementation(() => {})`
+and `vi.fn().mockReturnValue(1)` pass, while the same call in parentheses is refused. The proof is
+the last `false` lines of `VI_METHODS` in `oxlint-plugins/builtin-plants.ts` on
+`fabrikalfa/mock-app-e2e-s1` at `f02b31948`, and the row
+`field/runs/2026-11-15-mock-app-e2e-tests1.json`. So every block of the lock sets two of oxlint's
+own rules over the same files: `vitest/no-restricted-vi-methods`, kept on as it is, and the
+built-in `eslint/no-restricted-properties` with one `object: "vi"` entry for each member the
+block bans, each with the same message as that member's entry in the vitest rule.
+`no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
+with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
+`import { vi as v }`. Both are trusted rules, as
+[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
+filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
+`no-restricted-properties` half stays until oxc fixes it.
+
+```jsonc
+// .oxlintrc.json, the lock as a pair (amendment 2026-11-16, lead ruling). A sketch; one block.
+{
+  "files": ["next/programs/pipeline/**"],
+  "rules": {
+    // Kept on as it is: the same members, with the same messages as below.
+    "vitest/no-restricted-vi-methods": ["error", { /* fn, mock, doMock, spyOn, stubEnv */ }],
+    "eslint/no-restricted-properties": [
+      "error",
+      // Written out again, since an override replaces options: the `JSON.parse` entry and the four Reflect entries (`Reflect.get`, `Reflect.set`, `Reflect.has`, `globalThis.Reflect`), of the Reflect ban's error block.
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+    ]
+  }
+}
+```
+
+- **The `vi` entries join the list these files already take.** A block's options for a rule
+  replace an earlier block's, they do not merge, and oxlint takes the last matching block's. So the
+  lock's `no-restricted-properties` list writes out again every entry its files take today, at that
+  block's level, and the lock's block sits after that block, the way the Reflect ban's blocks write
+  out the `JSON.parse` entry (`.oxlintrc.json` on main at `b490a3203`). On main the folder takes the Reflect ban's error block (`JSON.parse` and the four Reflect entries), so the lock is one block, as the sketch shows. At `warn`, a `vi`
+  fire still blocks: `pnpm lint` lets only a `JSON.parse` fire of this rule advise
+  (0523, the advice map `pnpm lint` reads). No file loses an entry, and no file gains one but the
+  `vi` entries. Whichever slice lands later carries the entries the others landed first: another folder's `vi` entries, or any new set.
+- **The plant, red first.** The lock's law runs a second plant beside node's `VI_METHODS`:
+  `VI_PROPERTIES`, under the code `eslint(no-restricted-properties)` as `REFLECT` is, in every
+  path of every block that sets the vitest rule, through the same scenario. Refused:
+  `vi.spyOn(console, "warn").mockImplementation(() => undefined)`, `vi.fn().mockReturnValue(1)`,
+  and one plain call of each banned member. Taken: `vi.hoisted(() => 1)`, `vi.waitFor(() => 1)`,
+  a comment, a string and `other.fn()`. A line is held by the lock when either plant refuses it.
+  Red first: drop the block's `vi` entries from `no-restricted-properties`, and the two chained
+  lines are not refused, so the law is red; with them back, it is green. The plants of the entries
+  written out again, such as `REFLECT`, still pass in each locked path, which shows no entry was
+  lost.
+- **`VI_METHODS`' chained lines.** `VI_METHODS` keeps recording what the vitest rule does alone,
+  so its chained lines stay `false` under its own code. They are no longer a miss of the lock: the
+  pair refuses them, through `VI_PROPERTIES`.
+- **L1's record of misses** is now the pair's: `VI_PROPERTIES` also plants `V.vi.spyOn` after `import * as V from "vitest"` and `const { spyOn } = vi`, and the record stays exactly as the pair does. L2's plant, the old spy `vi.spyOn(console, method).mockImplementation(...)`, is a chained call: the vitest rule alone takes it, and it is red through `eslint(no-restricted-properties)`.
+
 ## One value traced: the queue lands three changes
 
 1. `queue.laws.integration.test.ts`'s `open` builds `CodeHostTest.layer()` and `CiTest.layer()`.
@@ -383,7 +449,7 @@ yield* Effect.acquireRelease(
 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
-| L1. Node's M1 (amendment 2026-11-15, ruling 2): every folder the mock ban block lists refuses `vi.spyOn`, `vi.mock`, `vi.doMock`, `vi.stubEnv` and `vi.fn`, also after `import { vi as v }` and as `vi["spyOn"]`, and the record of what it misses (`V.vi.spyOn` after a namespace import, `const { spyOn } = vi`) stays exactly as the rule does today; these lines are node's shared `VI_METHODS` set | lint | scenario: the repo's own config read by `--print-config`, and one planted file per listed glob, as the Reflect ban's L1 | delete `next/programs/pipeline/**` from the block: its planted file is not refused, L1 red | oxlint-plugins/plants.test.ts, oxlint-plugins/builtin-plants.ts |
+| L1. Node's M1 (amendment 2026-11-15, ruling 2): every folder the mock ban block lists refuses `vi.spyOn`, `vi.mock`, `vi.doMock`, `vi.stubEnv` and `vi.fn`, also after `import { vi as v }` and as `vi["spyOn"]`, and the record of what it misses (`V.vi.spyOn` after a namespace import, `const { spyOn } = vi`) stays exactly as the rule does today; these lines are node's shared `VI_METHODS` set | lint | scenario: the repo's own config read by `--print-config`, and one planted file per listed glob, as the Reflect ban's L1 | delete `next/programs/pipeline/**` from the block: its planted file is not refused, L1 red. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red | oxlint-plugins/plants.test.ts, oxlint-plugins/builtin-plants.ts |
 | L2. No `vi.*` mock, spy, stub or fn in `next/programs/pipeline` | lint | lint | put back `vi.spyOn(console, "log")` in `QueueRunnerTest.ts`: `vitest/no-restricted-vi-methods` red | next/programs/pipeline/src/QueueRunnerTest.ts |
 | L3. S2 keeps its bound: a secret in a scripted fault reaches no letter, saved row, model, view, span, logger line or console line, with the same run count and seed | test | Effect Arbitrary: tapes | make a pipeline handler write the fault's cause with `Console.error`: S2 red. Default runs | next/programs/pipeline/src/QueueRunnerTest.ts |
 | L4. S2's console check reads what the console got: a planted `Console.log` of the secret inside the run turns it red, as the spy did; and (amendment 2026-11-15, ruling 4) so does a planted `Console.warn`, `Console.info` or `Console.debug`, each read by its own patched reader | test | Effect Arbitrary: tapes | drop `TestConsole.layer` from the provide, so the planted line goes to the global console unseen: L4 red; drop `warnLines`, `infoLines` or `debugLines` from `printed`: that method's plant is red | next/programs/pipeline/src/QueueRunnerTest.ts |
@@ -414,7 +480,7 @@ yield* Effect.acquireRelease(
 | next/programs/pipeline/src/node/runner.laws.integration.test.ts | tests | tests | `host.calls` answered with `Recorder.calls(CodeHost, method)` provided `services` |
 | next/programs/pipeline/src/node/queue.laws.integration.test.ts | tests | tests | the same |
 | .oxlintrc.json | tests | tests | the mock ban's first block, for `next/programs/pipeline/**` |
-| oxlint-plugins/builtin-plants.ts | tests | tests | `VI_METHODS`, the planted lines L1 runs, each with `true` or `false` |
+| oxlint-plugins/builtin-plants.ts | tests | tests | `VI_METHODS`, the planted lines L1 runs, each with `true` or `false`; and (amendment 2026-11-16, lead ruling) the `VI_PROPERTIES` plant, the lock's other half |
 | oxlint-plugins/plants.test.ts | tests | tests | L1, beside the Reflect ban's L1, reading the block by its rule |
 | next/packages/libfabrika/src/codehost/CodeHost.test.ts | tests | tests | unchanged; run, since its contract suite takes the wider layer (L6) |
 | next/programs/pipeline/src/handlers.test.ts | tests | tests | unchanged; run, since it merges the wider layer (L6) |

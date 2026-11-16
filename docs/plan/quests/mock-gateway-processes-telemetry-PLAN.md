@@ -261,6 +261,66 @@ ruling 2: one lock shape, node's M1 as every block's law). The rule is in oxlint
 version (`node_modules/oxlint/configuration_schema.json`, `vitest/no-restricted-vi-methods`). `fn` is
 in the list because 0579 makes the Recorder the replacement for `vi.fn`; these folders have none.
 
+**Amendment (2026-11-16, lead ruling): the lock is a pair.** oxlint's
+`vitest/no-restricted-vi-methods` does not refuse a call chained onto the `vi` call, in oxlint
+1.90.0 (the lockfile's) and 1.93.0 alike: `vi.spyOn(console, "warn").mockImplementation(() => {})`
+and `vi.fn().mockReturnValue(1)` pass, while the same call in parentheses is refused. The proof is
+the last `false` lines of `VI_METHODS` in `oxlint-plugins/builtin-plants.ts` on
+`fabrikalfa/mock-app-e2e-s1` at `f02b31948`, and the row
+`field/runs/2026-11-15-mock-app-e2e-tests1.json`. So every block of the lock sets two of oxlint's
+own rules over the same files: `vitest/no-restricted-vi-methods`, kept on as it is, and the
+built-in `eslint/no-restricted-properties` with one `object: "vi"` entry for each member the
+block bans, each with the same message as that member's entry in the vitest rule.
+`no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
+with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
+`import { vi as v }`. Both are trusted rules, as
+[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
+filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
+`no-restricted-properties` half stays until oxc fixes it.
+
+```jsonc
+// .oxlintrc.json, the lock as a pair (amendment 2026-11-16, lead ruling). A sketch; one block, since the three folders take one set on main.
+{
+  "files": ["next/packages/libfabrika/src/gateway/**", "next/packages/libfabrika/src/telemetry/**"],
+  "rules": {
+    // Kept on as it is: the same members, with the same messages as below.
+    "vitest/no-restricted-vi-methods": ["error", { /* fn, mock, doMock, spyOn, stubEnv */ }],
+    "eslint/no-restricted-properties": [
+      "warn",
+      // Written out again, since an override replaces options: the `JSON.parse` entry and the four Reflect entries (`Reflect.get`, `Reflect.set`, `Reflect.has`, `globalThis.Reflect`), of the Reflect ban's warn block; slice 2 adds `processes/**`.
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+    ]
+  }
+}
+```
+
+- **The `vi` entries join the list these files already take.** A block's options for a rule
+  replace an earlier block's, they do not merge, and oxlint takes the last matching block's. So the
+  lock's `no-restricted-properties` list writes out again every entry its files take today, at that
+  block's level, and the lock's block sits after that block, the way the Reflect ban's blocks write
+  out the `JSON.parse` entry (`.oxlintrc.json` on main at `b490a3203`). On main all three folders take the Reflect ban's `warn` block (`JSON.parse` and the four Reflect entries), so the lock is one block, as the sketch shows. At `warn`, a `vi`
+  fire still blocks: `pnpm lint` lets only a `JSON.parse` fire of this rule advise
+  (0523, the advice map `pnpm lint` reads). No file loses an entry, and no file gains one but the
+  `vi` entries. Whichever slice lands later carries the entries the others landed first: another folder's `vi` entries, the `process.stdout` and `process.stderr` entries of the cloudflare plan's M13 (on these files but `*.test.ts`, the way M13 leaves test files out), or any new set.
+- **The plant, red first.** The lock's law runs a second plant beside node's `VI_METHODS`:
+  `VI_PROPERTIES`, under the code `eslint(no-restricted-properties)` as `REFLECT` is, in every
+  path of every block that sets the vitest rule, through the same scenario. Refused:
+  `vi.spyOn(console, "warn").mockImplementation(() => undefined)`, `vi.fn().mockReturnValue(1)`,
+  and one plain call of each banned member. Taken: `vi.hoisted(() => 1)`, `vi.waitFor(() => 1)`,
+  a comment, a string and `other.fn()`. A line is held by the lock when either plant refuses it.
+  Red first: drop the block's `vi` entries from `no-restricted-properties`, and the two chained
+  lines are not refused, so the law is red; with them back, it is green. The plants of the entries
+  written out again, such as `REFLECT`, still pass in each locked path, which shows no entry was
+  lost.
+- **`VI_METHODS`' chained lines.** `VI_METHODS` keeps recording what the vitest rule does alone,
+  so its chained lines stay `false` under its own code. They are no longer a miss of the lock: the
+  pair refuses them, through `VI_PROPERTIES`.
+
 ## One value traced: C1 on the bucket archive
 
 Amended 2026-11-15, on the `WebCrypto` reference:
@@ -286,7 +346,7 @@ ErrorCause's hand runner and seed move to `it.effect.prop` only in 0579's own sw
 | M1. The three revocation laws, unchanged in what they check: a revoke inside the paused request hash is honored, through a stand-in crypto that pauses, handed in with `WebCrypto.layer` (amended 2026-11-15), and the pause is reached within a timeout | test | fc.asyncProperty: target, `revokeFirst`, token and text, as on main; seed 119120, 3 runs fast and 25 runs full | skip the grant recheck after the request hash in `Gateway.ts`: M1 red on `revokeFirst`. And hash with `globalThis.crypto.subtle` again, past the reference: M1 red at the pause's timeout | next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts |
 | M2. C1: a digest that rejects is `storage` with the rejected value as its cause, on either archive and on `sha256` alone, with no defect, and the archive hashed exactly the body it was given, once (amended 2026-11-15: a rejection through the reference, as on main, not a defect) | test | fc.asyncProperty: `failure`, `body` and `onBucket`, as on main; seed 119120, 100 runs | main's plant (`fail` built with no cause): M2 red. Hash `body.slice(1)`: M2 red on `asked`. And `Effect.promise` in place of `tryPromise`, so the rejection dies: M2 red on its no-defect check | next/packages/libfabrika/src/telemetry/ErrorCause.test.ts |
 | M3. `next dies on IdError <reason> and keeps process.next around id.next`, the same three cases with main's `Time`, `Count` and `marker` Schemas, through an `Id.Generator` built by lib-top's `generatorWith` (amended 2026-11-15) | test | Effect Arbitrary: Time | make `makeGenerator` draw from `globalThis.crypto` again: the `entropy` case does not die, M3 red; and provide `Id.Generator.layer` in place of `generatorWith(...)`: the `entropy` and `exhausted` cases do not happen, M3 red | next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts |
-| M4. The lock, node's M1 (amendment 2026-11-15, ruling 2): `vi.fn`, `vi.mock`, `vi.doMock`, `vi.spyOn` and `vi.stubEnv` are refused in every folder of the block, with `vi` imported from `vitest` and from `@effect/vitest`, and `vi.useFakeTimers` passes; these lines join node's `VI_METHODS` set | lint | lint | delete one folder from the block: that folder's planted lines are not refused, M4 red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
+| M4. The lock, node's M1 (amendment 2026-11-15, ruling 2): `vi.fn`, `vi.mock`, `vi.doMock`, `vi.spyOn` and `vi.stubEnv` are refused in every folder of the block, with `vi` imported from `vitest` and from `@effect/vitest`, and `vi.useFakeTimers` passes; these lines join node's `VI_METHODS` set | lint | lint | delete one folder from the block: that folder's planted lines are not refused, M4 red. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
 | M5. The product hashes these laws reach read `crypto` through `WebCrypto.WebCrypto`, never `globalThis.crypto`: with a stand-in handed in, `Archive.ts`'s and `Gateway.ts`'s hashes reach it (amended 2026-11-15; first a type law on `Digest`) | test | scenario: M1's and M2's own runs | read `globalThis.crypto.subtle` in `Archive.ts`: `asked` is empty and the real digest answers, M2 red; the same in `Gateway.ts`: M1 red at the pause's timeout | next/packages/libfabrika/src/telemetry/ErrorCause.test.ts, next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts |
 
 - M4 also plants `import { vi as v } from "vitest"; v.spyOn(...)`, the form 0555 says the rule may
@@ -320,7 +380,7 @@ Amended 2026-11-15: the `Digest` provides in 34 files (31 tests and 3 edges) are
 | next/packages/libfabrika/src/crypto.test-support.ts | tests | tests | new (amended 2026-11-15): `paused` and `rejecting`, stand-in crypto objects on `Stub.make` |
 | next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts | tests | tests | M1: `paused(...)` through `WebCrypto.layer`, `world`/`setup` take the crypto, the three spies go |
 | next/packages/libfabrika/src/telemetry/ErrorCause.test.ts | tests | tests | M2: `digestRejects` becomes `rejecting(failure)` through `WebCrypto.layer`; the `vi` import goes |
-| oxlint-plugins/builtin-plants.ts | tests | tests | M4: its lines join node's `VI_METHODS` set (amended 2026-11-15; was a `VI` plant of its own) |
+| oxlint-plugins/builtin-plants.ts | tests | tests | M4: its lines join node's `VI_METHODS` set (amended 2026-11-15; was a `VI` plant of its own); and (amendment 2026-11-16, lead ruling) the `VI_PROPERTIES` plant, the lock's other half |
 | oxlint-plugins/plants.test.ts | tests | tests | M4: node's M1 scenario, `VI_METHODS` refused exactly in every folder of every block that sets the rule |
 
 Slice 2, after the top-level folder's `Id.Generator` change: processes.

@@ -224,7 +224,7 @@ yield* Effect.acquireRelease(
 | S2 (rewritten). The private half is in no frame, span, log line, `Console` call, tea warning, error, journal row or state, over the same generated flows, with the console spies gone and `TestConsole`'s five readers read beside the Logger (amended 2026-11-15); every output the old law scanned is still scanned, and the `done` coverage list is unchanged | test | fc.record: the file's `Flow`, as today, 100 runs | the three plants the file names (the hello carries `d`; a span attribute holds the JWK; an error message holds the JWK text) stay red, and more: `HandsStart.ts` writes the key's JWK with `Console.log`, then with `Console.warn`, then with `Console.debug`, each caught only by its own reader; and (amended 2026-11-15) a tea run listener that throws with the JWK in its message, caught only through the tea hook | next/packages/libfabrika/src/node/client/HandsSecrets.laws.test.ts |
 | H1. A tea failure with no caller on a hands start becomes one Effect log line, at error (warning for a discard notice), annotated with its `phase`, and nothing reaches `Console` | test | scenario: one tea failure per phase this start can reach, at most three, which no generator draws (see the doubt) | drop `onError` from `run`: no log line, and tea's rethrow fails the run as an unhandled error | next/packages/libfabrika/src/client/HandsStart.laws.test.ts |
 | H2. After that failure, the run's `done()` fails with it (`SubFailed` for a Sub), which is what `hands.ts` races | test | scenario: the same trigger as H1 | the `socket` Sub ends its stream quietly on any failure (`Stream.catchCause(() => Stream.empty)`): `done()` keeps waiting, H2 red at its timeout | next/packages/libfabrika/src/client/HandsStart.laws.test.ts |
-| N1. Node's M1 for this folder (amendment 2026-11-15, ruling 2): a `vi.fn`, `vi.spyOn`, `vi.mock`, `vi.doMock` or `vi.stubEnv` in a test under `next/packages/libfabrika/src/node/client/` fails lint with node's message, and `vi.hoisted` there does not | lint | lint | delete the folder from the rule's `files` block: N1's planted lines pass; delete `fn` from the block: the planted `vi.fn()` passes | oxlint-plugins/builtin-plants.ts, `.oxlintrc.json` |
+| N1. Node's M1 for this folder (amendment 2026-11-15, ruling 2): a `vi.fn`, `vi.spyOn`, `vi.mock`, `vi.doMock` or `vi.stubEnv` in a test under `next/packages/libfabrika/src/node/client/` fails lint with node's message, and `vi.hoisted` there does not | lint | lint | delete the folder from the rule's `files` block: N1's planted lines pass; delete `fn` from the block: the planted `vi.fn()` passes. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red | oxlint-plugins/builtin-plants.ts, `.oxlintrc.json` |
 
 - **S2 stays as strict as it is.** Every output it compared is still compared; one more (the
   `Console` calls) is added. The reviewer runs the loosening check on it.
@@ -262,6 +262,66 @@ and no open pull request adds it (searched 2026-11-16). 0555 names that rule and
   block. 0555 says the hold may move to anti-slop's `no-module-mocking` later; that does not change
   this slice.
 
+**Amendment (2026-11-16, lead ruling): the lock is a pair.** oxlint's
+`vitest/no-restricted-vi-methods` does not refuse a call chained onto the `vi` call, in oxlint
+1.90.0 (the lockfile's) and 1.93.0 alike: `vi.spyOn(console, "warn").mockImplementation(() => {})`
+and `vi.fn().mockReturnValue(1)` pass, while the same call in parentheses is refused. The proof is
+the last `false` lines of `VI_METHODS` in `oxlint-plugins/builtin-plants.ts` on
+`fabrikalfa/mock-app-e2e-s1` at `f02b31948`, and the row
+`field/runs/2026-11-15-mock-app-e2e-tests1.json`. So every block of the lock sets two of oxlint's
+own rules over the same files: `vitest/no-restricted-vi-methods`, kept on as it is, and the
+built-in `eslint/no-restricted-properties` with one `object: "vi"` entry for each member the
+block bans, each with the same message as that member's entry in the vitest rule.
+`no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
+with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
+`import { vi as v }`. Both are trusted rules, as
+[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
+filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
+`no-restricted-properties` half stays until oxc fixes it.
+
+```jsonc
+// .oxlintrc.json, the lock as a pair (amendment 2026-11-16, lead ruling). A sketch; one block.
+{
+  "files": ["next/packages/libfabrika/src/node/client/**"],
+  "rules": {
+    // Kept on as it is: the same members, with the same messages as below.
+    "vitest/no-restricted-vi-methods": ["error", { /* fn, mock, doMock, spyOn, stubEnv */ }],
+    "eslint/no-restricted-properties": [
+      "warn",
+      // Written out again, since an override replaces options: the `JSON.parse` entry, of the warn block that writes it out again.
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+    ]
+  }
+}
+```
+
+- **The `vi` entries join the list these files already take.** A block's options for a rule
+  replace an earlier block's, they do not merge, and oxlint takes the last matching block's. So the
+  lock's `no-restricted-properties` list writes out again every entry its files take today, at that
+  block's level, and the lock's block sits after that block, the way the Reflect ban's blocks write
+  out the `JSON.parse` entry (`.oxlintrc.json` on main at `b490a3203`). On main the folder takes the `warn` block that writes out `JSON.parse` alone, so the lock is one block, as the sketch shows. At `warn`, a `vi`
+  fire still blocks: `pnpm lint` lets only a `JSON.parse` fire of this rule advise
+  (0523, the advice map `pnpm lint` reads). No file loses an entry, and no file gains one but the
+  `vi` entries. Whichever slice lands later carries the entries the others landed first: another folder's `vi` entries, the `process.stdout` and `process.stderr` entries of the cloudflare plan's M13 (on these files but `*.test.ts`, the way M13 leaves test files out), or any new set.
+- **The plant, red first.** The lock's law runs a second plant beside node's `VI_METHODS`:
+  `VI_PROPERTIES`, under the code `eslint(no-restricted-properties)` as `REFLECT` is, in every
+  path of every block that sets the vitest rule, through the same scenario. Refused:
+  `vi.spyOn(console, "warn").mockImplementation(() => undefined)`, `vi.fn().mockReturnValue(1)`,
+  and one plain call of each banned member. Taken: `vi.hoisted(() => 1)`, `vi.waitFor(() => 1)`,
+  a comment, a string and `other.fn()`. A line is held by the lock when either plant refuses it.
+  Red first: drop the block's `vi` entries from `no-restricted-properties`, and the two chained
+  lines are not refused, so the law is red; with them back, it is green. The plants of the entries
+  written out again, such as `REFLECT`, still pass in each locked path, which shows no entry was
+  lost.
+- **`VI_METHODS`' chained lines.** `VI_METHODS` keeps recording what the vitest rule does alone,
+  so its chained lines stay `false` under its own code. They are no longer a miss of the lock: the
+  pair refuses them, through `VI_PROPERTIES`.
+
 ## Files
 
 | File | Owner | Product lines expected | Change |
@@ -275,7 +335,7 @@ and no open pull request adds it (searched 2026-11-16). 0555 names that rule and
 | next/apps/fabrika/hands.ts | build | 3 | the line printer races `runtime.done()` |
 | next/packages/libfabrika/src/node/client/HandsSecrets.laws.test.ts | tests | tests | S2: the `console` spy goes, `TestConsole` is provided and its five readers read, and the two `process` spies and the `vi` import go, held by the cloudflare plan's M13 (amended 2026-11-15); the new plants noted in the header |
 | next/packages/libfabrika/src/client/HandsStart.laws.test.ts | tests | tests | H1 and H2, added beside its laws |
-| oxlint-plugins/builtin-plants.ts | tests | tests | N1: the `VI_METHODS` plant, or one more folder for it |
+| oxlint-plugins/builtin-plants.ts | tests | tests | N1: the `VI_METHODS` plant, or one more folder for it; and (amendment 2026-11-16, lead ruling) the `VI_PROPERTIES` plant, the lock's other half |
 | oxlint-plugins/plants.test.ts | tests | tests | N1 runs the plant in the folder; changed only if the plant needs a new runner line |
 | .oxlintrc.json | tests | 12 | the `vitest/no-restricted-vi-methods` block for the folder, or the folder added to it |
 

@@ -44,6 +44,9 @@ const printed = (yield* TestConsole.warnLines).map(String).join("\n");
   other ways and why not are under "How others do it". What would settle it: whether upstream
   already has a reader on its main branch, which this plan did not fetch; the tests step checks before
   it writes the patch, and if a release has it, the patch is that release's code, word for word.
+  **Amendment (2026-11-16, lead ruling):** the upstream issue is filed:
+  [Effect-TS/effect#10665](https://github.com/Effect-TS/effect/issues/10665), `TestConsole` has no
+  `warnLines`. `errorLines` is already in effect 4.1.3, so the patch adds only `warnLines`.
 - **The edited patch file may meet another pull request that edits `patches/effect@4.1.3.patch`
   (70% that none does).** No open pull request's title names it today. If one lands first, the tests step
   rebases the hunk onto it with `pnpm patch` again; nothing here depends on the other hunk.
@@ -227,6 +230,82 @@ each later mock-sweep slice adds its folder to `files`, and the last folds the l
 `next/**/*` block. If another folder's slice lands first and makes the block, this slice adds its
 line to it.
 
+**Amendment (2026-11-16, lead ruling): the lock is a pair.** oxlint's
+`vitest/no-restricted-vi-methods` does not refuse a call chained onto the `vi` call, in oxlint
+1.90.0 (the lockfile's) and 1.93.0 alike: `vi.spyOn(console, "warn").mockImplementation(() => {})`
+and `vi.fn().mockReturnValue(1)` pass, while the same call in parentheses is refused. The proof is
+the last `false` lines of `VI_METHODS` in `oxlint-plugins/builtin-plants.ts` on
+`fabrikalfa/mock-app-e2e-s1` at `f02b31948`, and the row
+`field/runs/2026-11-15-mock-app-e2e-tests1.json`. So every block of the lock sets two of oxlint's
+own rules over the same files: `vitest/no-restricted-vi-methods`, kept on as it is, and the
+built-in `eslint/no-restricted-properties` with one `object: "vi"` entry for each member the
+block bans, each with the same message as that member's entry in the vitest rule.
+`no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
+with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
+`import { vi as v }`. Both are trusted rules, as
+[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
+filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
+`no-restricted-properties` half stays until oxc fixes it.
+
+```jsonc
+// .oxlintrc.json, the lock as a pair (amendment 2026-11-16, lead ruling). A sketch; two blocks, one per set the folder's files take on main.
+{
+  "files": ["next/apps/fabrika/e2e/*"],
+  "rules": {
+    // Kept on as it is: the same members, with the same messages as below.
+    "vitest/no-restricted-vi-methods": ["error", { /* fn, mock, doMock, spyOn, stubEnv */ }],
+    "eslint/no-restricted-properties": [
+      "warn",
+      // Written out again, since an override replaces options: the `JSON.parse` entry, of the warn block that writes it out again.
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+    ]
+  }
+},
+{
+  "files": ["next/apps/fabrika/e2e/node/**"],
+  "rules": {
+    // Kept on as it is: the same members, with the same messages as below.
+    "vitest/no-restricted-vi-methods": ["error", { /* fn, mock, doMock, spyOn, stubEnv */ }],
+    "eslint/no-restricted-properties": [
+      "error",
+      // Written out again, since an override replaces options: the `JSON.parse` entry and the four Reflect entries (`Reflect.get`, `Reflect.set`, `Reflect.has`, `globalThis.Reflect`).
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+    ]
+  }
+}
+```
+
+- **The `vi` entries join the list these files already take.** A block's options for a rule
+  replace an earlier block's, they do not merge, and oxlint takes the last matching block's. So the
+  lock's `no-restricted-properties` list writes out again every entry its files take today, at that
+  block's level, and the lock's block sits after that block, the way the Reflect ban's blocks write
+  out the `JSON.parse` entry (`.oxlintrc.json` on main at `b490a3203`). On main, `next/apps/fabrika/e2e/node/**` takes the Reflect ban's error block (`JSON.parse` and the four Reflect entries), and the rest of the folder takes the `warn` block that writes out `JSON.parse` alone, so the lock is two blocks, one per set, as the sketch shows; any other subfolder the folder gains takes the set its files take then. At `warn`, a `vi`
+  fire still blocks: `pnpm lint` lets only a `JSON.parse` fire of this rule advise
+  (0523, the advice map `pnpm lint` reads). No file loses an entry, and no file gains one but the
+  `vi` entries. Whichever slice lands later carries the entries the others landed first: another folder's `vi` entries, or any new set.
+- **The plant, red first.** The lock's law runs a second plant beside node's `VI_METHODS`:
+  `VI_PROPERTIES`, under the code `eslint(no-restricted-properties)` as `REFLECT` is, in every
+  path of every block that sets the vitest rule, through the same scenario. Refused:
+  `vi.spyOn(console, "warn").mockImplementation(() => undefined)`, `vi.fn().mockReturnValue(1)`,
+  and one plain call of each banned member. Taken: `vi.hoisted(() => 1)`, `vi.waitFor(() => 1)`,
+  a comment, a string and `other.fn()`. A line is held by the lock when either plant refuses it.
+  Red first: drop the block's `vi` entries from `no-restricted-properties`, and the two chained
+  lines are not refused, so the law is red; with them back, it is green. The plants of the entries
+  written out again, such as `REFLECT`, still pass in each locked path, which shows no entry was
+  lost.
+- **`VI_METHODS`' chained lines.** `VI_METHODS` keeps recording what the vitest rule does alone,
+  so its chained lines stay `false` under its own code. They are no longer a miss of the lock: the
+  pair refuses them, through `VI_PROPERTIES`.
+
 ## One value traced: a warning, from Rolldown to the law
 
 1. L17 writes `brain.ts` importing `p15-missing-abcd`, under `<home>/my folder/`.
@@ -248,8 +327,8 @@ the same line as Rolldown printed it before.
 | L1. `bundle` prints each Rolldown warning once through `Console.warn`, in Rolldown's format, with every file name relative to `cwd` and no form of an absolute path; a `MODULE_LEVEL_DIRECTIVE` log prints nothing; nothing goes to `log` or `error`. 20 runs fast, 100 full, through `runsFor` | test | Effect Arbitrary: WarningCase | print `log.message` before the relative replacement: L1 red; print through the global `console.warn`: L1 red, no line seen | next/packages/libfabrika/src/node/build/bundle-warnings.integration.test.ts |
 | L2. L17, rewritten: the real build's warnings keep unresolved imports visible, name their importer relative to root, and print no absolute path, read from `TestConsole.warnLines` | test | fc.record: L17's own, unchanged (folder from fc.stringMatching, missing from fc.stringMatching), 3 runs fast and 10 full, as today | as L1's first plant: L2 red; and drop `Effect.provide(TestConsole.layer)`: L2 red, `warnLines` has no service | next/apps/fabrika/e2e/reload.visual.test.ts |
 | L3. `TestConsole.warnLines` gives the parameters of every `Console.warn` call in order, and nothing from `log`, `error` or `info`; `logLines` and `errorLines` answer as before | test | fc.record: a list of calls, each a method from fc.constantFrom over warn, log, error and info, and parameters from fc.array of fc.string, 100 runs | filter `warnLines` on `"error"`: L3 red | scripts/effect-testconsole.test.ts |
-| L4. In every folder the block lists, `vi.mock`, `vi.doMock`, `vi.spyOn`, `vi.stubEnv` and `vi.fn` are refused, through a renamed import and a computed key too, and `vi.hoisted` passes. Amendment 2026-11-15 (merge session ruling 2): this is node's M1, and its plant lines are node's shared `VI_METHODS` set, with this plan's renamed-import, computed-key and `vi.hoisted` lines added to it, in place of a `MOCKS` plant of its own | lint | lint | delete the block's one `files` entry: L4 red for that folder | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
-| L5. The folder has no `vi.` call and no disable line for the rule | lint | lint | put the old spy back: `pnpm lint` red | .oxlintrc.json |
+| L4. In every folder the block lists, `vi.mock`, `vi.doMock`, `vi.spyOn`, `vi.stubEnv` and `vi.fn` are refused, through a renamed import and a computed key too, and `vi.hoisted` passes. Amendment 2026-11-15 (merge session ruling 2): this is node's M1, and its plant lines are node's shared `VI_METHODS` set, with this plan's renamed-import, computed-key and `vi.hoisted` lines added to it, in place of a `MOCKS` plant of its own | lint | lint | delete the block's one `files` entry: L4 red for that folder. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
+| L5. The folder has no `vi.` call and no disable line for the rule | lint | lint | put the old spy back: `pnpm lint` red. Amendment 2026-11-16 (lead ruling): the old spy, `vi.spyOn(console, "warn").mockImplementation(() => {})`, is a chained call, which `vitest/no-restricted-vi-methods` alone takes; it is red through `eslint(no-restricted-properties)`, the pair's other half | .oxlintrc.json |
 
 - **L1's input** is a Schema, so `it.effect.prop` draws it (0579). A sketch:
   `const WarningCase = Schema.Struct({ folder: Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9 -]{1,24}$/)), missing: Schema.String.check(Schema.isPattern(/^[a-z]{4,16}$/)) })`,
@@ -285,7 +364,7 @@ change and the docs.
 | next/packages/libfabrika/src/node/build/bundle-warnings.integration.test.ts | tests | tests | new: L1 |
 | next/apps/fabrika/e2e/reload.visual.test.ts | tests | tests | L2: the spy goes, `TestConsole` reads the lines; the `vi` import goes |
 | scripts/effect-testconsole.test.ts | tests | tests | new: L3 |
-| oxlint-plugins/builtin-plants.ts | tests | tests | L4: its lines in node's `VI_METHODS` set (amended 2026-11-15; first a `MOCKS` plant) |
+| oxlint-plugins/builtin-plants.ts | tests | tests | L4: its lines in node's `VI_METHODS` set (amended 2026-11-15; first a `MOCKS` plant); and (amendment 2026-11-16, lead ruling) the `VI_PROPERTIES` plant, the lock's other half |
 | oxlint-plugins/plants.test.ts | tests | tests | L4: the scenario over the block's folders |
 | .oxlintrc.json | tests | configuration | L4, L5: the new block, with `next/apps/fabrika/e2e/**` |
 | next/packages/libfabrika/src/node/build/bundle.ts | build | 18 | `onLog` prints through `Console`, in Rolldown's format |
@@ -297,6 +376,10 @@ change and the docs.
 | .patterns/a-law-watches-calls-with-a-recorder.md | build | docs | "Where it applies": `Console` is watched with `TestConsole`, since its members answer `void` |
 | next/apps/fabrika/e2e/** | tests | tests | the folder the lock holds; no other file in it changes |
 | next/apps/fabrika/e2e/ | tests | tests | the same folder, as the count names it |
+| next/apps/fabrika/e2e/* | tests | tests | (amendment 2026-11-16) the files of the lock's `warn` block; no file changes |
+| next/apps/fabrika/e2e/node/** | tests | tests | (amendment 2026-11-16) the files of the lock's `error` block; no file changes |
+| next/apps/fabrika/e2e/node/ | tests | tests | the same folder |
+| next/apps/fabrika/e2e/node | tests | tests | the same folder, as a path names it |
 | patches/effect | tests | tests | the patch's name as pnpm writes it; the one file above |
 | scripts/effect-arbitrary.test.ts | tests | tests | read and run only: the law of the patch's other hunk, which must stay green |
 | next/packages/libfabrika/src/settings/Snapshot.test.ts | tests | tests | read and run only: a `TestConsole` user, which must stay green |

@@ -351,7 +351,7 @@ another law can see, which the `mockRestore` lines guarded by hand. Those `try/f
 
 | Law | Kind | Generator | What it holds | Plant |
 |---|---|---|---|---|
-| M1 | lint | lint | `vitest/no-restricted-vi-methods` refuses `vi.fn`, `vi.spyOn` and `vi.stubGlobal` in `next/packages/libfabrika/src/node/dev/**`; `vi.stubGlobal` too, so a spy does not move to a global stub (0555). Amendment 2026-11-15 (ruling 2): this is node's M1 for the folder; every file at zero for all five also refuses `vi.mock`, `vi.doMock` and `vi.stubEnv`; where the five files with `vi.mock` or `vi.stubEnv` keep their lock meanwhile is open question 3; answered 2026-11-15 by the laptop lead: M1 does not land in this sweep, since the folder keeps a `cloudflare:workers` mock, and no interim block is allowed (0524) | node's `VI_METHODS` set in `oxlint-plugins/builtin-plants.ts`, with this plan's `vi.stubGlobal` line added to it (amended 2026-11-15; was a `VI_SPY` plant of its own); `plants.test.ts` runs its lines in every path of every block. Plant: drop the folder from the block, and its line is not refused |
+| M1 | lint | lint | `vitest/no-restricted-vi-methods` refuses `vi.fn`, `vi.spyOn` and `vi.stubGlobal` in `next/packages/libfabrika/src/node/dev/**`; `vi.stubGlobal` too, so a spy does not move to a global stub (0555). Amendment 2026-11-15 (ruling 2): this is node's M1 for the folder; every file at zero for all five also refuses `vi.mock`, `vi.doMock` and `vi.stubEnv`; where the five files with `vi.mock` or `vi.stubEnv` keep their lock meanwhile is open question 3; answered 2026-11-15 by the laptop lead: M1 does not land in this sweep, since the folder keeps a `cloudflare:workers` mock, and no interim block is allowed (0524) | node's `VI_METHODS` set in `oxlint-plugins/builtin-plants.ts`, with this plan's `vi.stubGlobal` line added to it (amended 2026-11-15; was a `VI_SPY` plant of its own); `plants.test.ts` runs its lines in every path of every block. Plant: drop the folder from the block, and its line is not refused. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red |
 | M2 | lint | lint | `eslint/no-console` refuses `console.*` in libfabrika's product files and takes it in a test file | a `NO_CONSOLE` plant, run in a product path and a test path. Plant: widen the block to test files, and the test line is refused |
 | M3 | lint | lint | (amendment 2026-11-15, owner ruling) `eslint/no-restricted-properties` refuses `process.stdout` and `process.stderr` in every libfabrika file but a `*.test.ts` file, in each of the five blocks that set the rule for a libfabrika path, and the one exception line above is the only disable line that names those entries; the cloudflare plan's M13 | the planted lines `process.stdout.write(secret)` and `process.stderr.write(secret)` in a `node/dev` product path and in a `*.test-support.ts` path, refused, and in a `*.test.ts` path, taken. Plants: drop the two entries from one block, and that block's planted write is taken; add `process.stdout.write(bearer)` to `dev.ts`, and `pnpm lint` is red |
 | L6a | test | Effect Arbitrary: SignalCase | `signal` succeeds on `missing`, dies on `refused`, and sends exactly one `send(pid, name)` | let `missing` escape `signal`, or swallow `refused` too (the L6 plant of today) |
@@ -389,6 +389,69 @@ const Thrown = Schema.Union([
   for. The tests step plants it and writes down what oxlint does. If oxlint takes it, that is a
   finding row, not a fix here.
 
+**Amendment (2026-11-16, lead ruling): the lock is a pair.** oxlint's
+`vitest/no-restricted-vi-methods` does not refuse a call chained onto the `vi` call, in oxlint
+1.90.0 (the lockfile's) and 1.93.0 alike: `vi.spyOn(console, "warn").mockImplementation(() => {})`
+and `vi.fn().mockReturnValue(1)` pass, while the same call in parentheses is refused. The proof is
+the last `false` lines of `VI_METHODS` in `oxlint-plugins/builtin-plants.ts` on
+`fabrikalfa/mock-app-e2e-s1` at `f02b31948`, and the row
+`field/runs/2026-11-15-mock-app-e2e-tests1.json`. So every block of the lock sets two of oxlint's
+own rules over the same files: `vitest/no-restricted-vi-methods`, kept on as it is, and the
+built-in `eslint/no-restricted-properties` with one `object: "vi"` entry for each member the
+block bans, each with the same message as that member's entry in the vitest rule.
+`no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
+with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
+`import { vi as v }`. Both are trusted rules, as
+[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
+filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
+`no-restricted-properties` half stays until oxc fixes it.
+
+The folder's lock still does not land in this sweep (the laptop lead's ruling of 2026-11-15); this is the shape it lands with, whole, the day the folder is at zero.
+
+```jsonc
+// .oxlintrc.json, the lock as a pair (amendment 2026-11-16, lead ruling). A sketch; `stubGlobal` is in it, since this folder's vitest list holds it.
+{
+  "files": ["next/packages/libfabrika/src/node/dev/**"],
+  "rules": {
+    // Kept on as it is: the same members, with the same messages as below.
+    "vitest/no-restricted-vi-methods": ["error", { /* fn, mock, doMock, spyOn, stubEnv, stubGlobal */ }],
+    "eslint/no-restricted-properties": [
+      "warn",
+      // Written out again, since an override replaces options: the `JSON.parse` entry, and on the folder's files but `*.test.ts` M3's two `process` entries, the way M3 leaves test files out.
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." },
+      { "object": "vi", "property": "stubGlobal", "message": "<the text of the vitest rule's stubGlobal entry>" }
+    ]
+  }
+}
+```
+
+- **The `vi` entries join the list these files already take.** A block's options for a rule
+  replace an earlier block's, they do not merge, and oxlint takes the last matching block's. So the
+  lock's `no-restricted-properties` list writes out again every entry its files take today, at that
+  block's level, and the lock's block sits after that block, the way the Reflect ban's blocks write
+  out the `JSON.parse` entry (`.oxlintrc.json` on main at `b490a3203`). On main the folder takes the `warn` block that writes out `JSON.parse` alone; M3 adds the two `process` entries for its files but `*.test.ts`, so the lock writes those out again for the same files, in as many blocks as M3's shape needs. At `warn`, a `vi`
+  fire still blocks: `pnpm lint` lets only a `JSON.parse` fire of this rule advise
+  (0523, the advice map `pnpm lint` reads). No file loses an entry, and no file gains one but the
+  `vi` entries. Whichever slice lands later carries the entries the others landed first: another folder's `vi` entries, or any new set. `vi.stubGlobal` gets its `vi` entry too, with its vitest message, since M1 bans it here.
+- **The plant, red first.** The lock's law runs a second plant beside node's `VI_METHODS`:
+  `VI_PROPERTIES`, under the code `eslint(no-restricted-properties)` as `REFLECT` is, in every
+  path of every block that sets the vitest rule, through the same scenario. Refused:
+  `vi.spyOn(console, "warn").mockImplementation(() => undefined)`, `vi.fn().mockReturnValue(1)`,
+  and one plain call of each banned member. Taken: `vi.hoisted(() => 1)`, `vi.waitFor(() => 1)`,
+  a comment, a string and `other.fn()`. A line is held by the lock when either plant refuses it.
+  Red first: drop the block's `vi` entries from `no-restricted-properties`, and the two chained
+  lines are not refused, so the law is red; with them back, it is green. The plants of the entries
+  written out again, such as `REFLECT`, still pass in each locked path, which shows no entry was
+  lost.
+- **`VI_METHODS`' chained lines.** `VI_METHODS` keeps recording what the vitest rule does alone,
+  so its chained lines stay `false` under its own code. They are no longer a miss of the lock: the
+  pair refuses them, through `VI_PROPERTIES`.
+
 ## Files
 
 | File | Owner | Product lines expected | Change |
@@ -416,7 +479,7 @@ const Thrown = Schema.Union([
 | next/packages/libfabrika/src/node/dev/dev.laws.integration.test.ts | tests | tests | 3 `fetch`, 3 `process.kill`, 1 matcher |
 | next/packages/libfabrika/src/node/dev/dev-secrets.laws.integration.test.ts | tests | tests | 1 `fetch`, the `console` spies, a new plant |
 | next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts | tests | tests | (amended 2026-11-15) the `console.warn` spy goes for `TestConsole.warnLines` |
-| oxlint-plugins/builtin-plants.ts | tests | tests | M1's lines in node's `VI_METHODS` set (amended 2026-11-15; first a `VI_SPY` plant), and `NO_CONSOLE` |
+| oxlint-plugins/builtin-plants.ts | tests | tests | M1's lines in node's `VI_METHODS` set (amended 2026-11-15; first a `VI_SPY` plant), and `NO_CONSOLE`; and (amendment 2026-11-16, lead ruling) the `VI_PROPERTIES` plant, the lock's other half |
 | oxlint-plugins/plants.test.ts | tests | tests | M1 and M2's scenarios, and (amendment 2026-11-15) M3's, the cloudflare plan's M13 scenario, as `REFLECT`'s at `:532` |
 | .oxlintrc.json | tests | tests | the two blocks; and (amendment 2026-11-15) M3's `process` entries in the five `no-restricted-properties` blocks that reach libfabrika, if cloudflare's slice 1 is not folded first |
 | next/packages/libfabrika/src/node/client/JournalSqlite.child.test-support.ts | tests | tests | (amendment 2026-11-15) M3's one exception: a disable line with its written reason, if cloudflare's slice 1 is not folded first |

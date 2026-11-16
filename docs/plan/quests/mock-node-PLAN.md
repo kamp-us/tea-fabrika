@@ -172,6 +172,67 @@ Each choice, decided in one line:
   one. The plant law below reads every block that sets the rule, so a block that drops a method is
   red. 80%.
 
+**Amendment (2026-11-16, lead ruling): the lock is a pair.** oxlint's
+`vitest/no-restricted-vi-methods` does not refuse a call chained onto the `vi` call, in oxlint
+1.90.0 (the lockfile's) and 1.93.0 alike: `vi.spyOn(console, "warn").mockImplementation(() => {})`
+and `vi.fn().mockReturnValue(1)` pass, while the same call in parentheses is refused. The proof is
+the last `false` lines of `VI_METHODS` in `oxlint-plugins/builtin-plants.ts` on
+`fabrikalfa/mock-app-e2e-s1` at `f02b31948`, and the row
+`field/runs/2026-11-15-mock-app-e2e-tests1.json`. So every block of the lock sets two of oxlint's
+own rules over the same files: `vitest/no-restricted-vi-methods`, kept on as it is, and the
+built-in `eslint/no-restricted-properties` with one `object: "vi"` entry for each member the
+block bans, each with the same message as that member's entry in the vitest rule.
+`no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
+with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
+`import { vi as v }`. Both are trusted rules, as
+[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
+filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
+`no-restricted-properties` half stays until oxc fixes it.
+
+```jsonc
+// .oxlintrc.json, the lock as a pair (amendment 2026-11-16, lead ruling). A sketch; one block.
+{
+  "files": ["next/packages/libfabrika/src/node/*.ts"],
+  "rules": {
+    // Kept on as it is: the same members, with the same messages as below.
+    "vitest/no-restricted-vi-methods": ["error", { /* fn, mock, doMock, spyOn, stubEnv */ }],
+    "eslint/no-restricted-properties": [
+      "warn",
+      // Written out again, since an override replaces options: the `JSON.parse` entry, of the warn block that writes it out again.
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+    ]
+  }
+}
+```
+
+- **The `vi` entries join the list these files already take.** A block's options for a rule
+  replace an earlier block's, they do not merge, and oxlint takes the last matching block's. So the
+  lock's `no-restricted-properties` list writes out again every entry its files take today, at that
+  block's level, and the lock's block sits after that block, the way the Reflect ban's blocks write
+  out the `JSON.parse` entry (`.oxlintrc.json` on main at `b490a3203`). On main `node/*.ts` takes the `warn` block that writes out `JSON.parse` alone, so the lock is one block, as the sketch shows. At `warn`, a `vi`
+  fire still blocks: `pnpm lint` lets only a `JSON.parse` fire of this rule advise
+  (0523, the advice map `pnpm lint` reads). No file loses an entry, and no file gains one but the
+  `vi` entries. Whichever slice lands later carries the entries the others landed first: another folder's `vi` entries, the `process.stdout` and `process.stderr` entries of the cloudflare plan's M13 (on these files but `*.test.ts`, the way M13 leaves test files out), or any new set.
+- **The plant, red first.** The lock's law runs a second plant beside node's `VI_METHODS`:
+  `VI_PROPERTIES`, under the code `eslint(no-restricted-properties)` as `REFLECT` is, in every
+  path of every block that sets the vitest rule, through the same scenario. Refused:
+  `vi.spyOn(console, "warn").mockImplementation(() => undefined)`, `vi.fn().mockReturnValue(1)`,
+  and one plain call of each banned member. Taken: `vi.hoisted(() => 1)`, `vi.waitFor(() => 1)`,
+  a comment, a string and `other.fn()`. A line is held by the lock when either plant refuses it.
+  Red first: drop the block's `vi` entries from `no-restricted-properties`, and the two chained
+  lines are not refused, so the law is red; with them back, it is green. The plants of the entries
+  written out again, such as `REFLECT`, still pass in each locked path, which shows no entry was
+  lost.
+- **`VI_METHODS`' chained lines.** `VI_METHODS` keeps recording what the vitest rule does alone,
+  so its chained lines stay `false` under its own code. They are no longer a miss of the lock: the
+  pair refuses them, through `VI_PROPERTIES`.
+- **M1 is still the sweep's one lock law:** it runs both plants, `VI_METHODS` and `VI_PROPERTIES`, in every path of every block, and every other mock plan's lock runs both. M2's plant, `getEntrypoint: vi.fn().mockReturnValue(box)`, is a chained call: the vitest rule alone takes it, and it is red through `eslint(no-restricted-properties)`.
+
 ## One value traced: a refused message
 
 1. The project audit suite builds the environment with `harness.environment(box, accept, usage, loaded)`
@@ -189,8 +250,8 @@ Each choice, decided in one line:
 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
-| M1. In every folder a `vitest/no-restricted-vi-methods` block lists, `vi.fn`, `vi.mock`, `vi.doMock`, `vi.spyOn` and `vi.stubEnv` are refused, and `vi.waitFor`, a comment, a string and another object's `fn` pass | lint | scenario: the plant lines of `VI_METHODS`, run in a file of each listed folder, as `REFLECT` is | delete `fn` from the new block of `.oxlintrc.json`: M1 red for `node/*.ts` | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
-| M2. `RunnerAdmission.integration.test.ts` has no `vi` call and no import of `vi` | lint | lint | put back `getEntrypoint: vi.fn().mockReturnValue(box)`: `vitest(no-restricted-vi-methods)` red | next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts |
+| M1. In every folder a `vitest/no-restricted-vi-methods` block lists, `vi.fn`, `vi.mock`, `vi.doMock`, `vi.spyOn` and `vi.stubEnv` are refused, and `vi.waitFor`, a comment, a string and another object's `fn` pass | lint | scenario: the plant lines of `VI_METHODS`, run in a file of each listed folder, as `REFLECT` is | delete `fn` from the new block of `.oxlintrc.json`: M1 red for `node/*.ts`. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
+| M2. `RunnerAdmission.integration.test.ts` has no `vi` call and no import of `vi` | lint | lint | put back `getEntrypoint: vi.fn().mockReturnValue(box)`: `vitest(no-restricted-vi-methods)` red. Amendment 2026-11-16 (lead ruling): that line is a chained call, which the vitest rule alone takes; it is red through `eslint(no-restricted-properties)`, the pair's other half | next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts |
 | M3. Both suites in the file keep every law they had: the runner admission suite and the project audit suite, with the same seeds, run counts and `required` coverage, and the audit walks still reach every case | test | scenario: the suites' own tapes, unchanged | make the process stub's `msg` answer `accepted` without asking `box.admit`: the audit suite's admission walk is red | next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts |
 | M4. Each stub is typed by its `Env` binding: a member name `Env` lacks in `own` does not compile | type | type | rename `write` to `writ` in the record stub's `own`: red in the typecheck | next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts |
 
@@ -207,7 +268,7 @@ Each choice, decided in one line:
 |---|---|---|---|
 | next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts | tests | tests | the four `vi.fn` become `Stub.make` over `Env`'s bindings; `unexpected` names the member; the `vi` import goes |
 | .oxlintrc.json | tests | 0 | one override block for `next/packages/libfabrika/src/node/*.ts`, `vitest/no-restricted-vi-methods` at error with five messages |
-| oxlint-plugins/builtin-plants.ts | tests | tests | `VI_METHODS`, the plant lines for M1, beside `REFLECT` |
+| oxlint-plugins/builtin-plants.ts | tests | tests | `VI_METHODS`, the plant lines for M1, beside `REFLECT`; and (amendment 2026-11-16, lead ruling) the `VI_PROPERTIES` plant, the lock's other half |
 | oxlint-plugins/plants.test.ts | tests | tests | M1: `VI_METHODS`' lines refused exactly in every folder of every block that sets the rule, as the `REFLECT` scenario does |
 | field/runs/2026-11-15-mock-node-tests1.json | tests | docs | the tests step's run row, with its plants |
 | next/packages/libfabrika/src/cloudflare/ProjectAuditTest.ts | tests | 0 | read only, not changed: its `Harness["environment"]` type is what the stubs fill |
