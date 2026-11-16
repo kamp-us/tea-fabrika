@@ -30,8 +30,10 @@ export type Clone = typeof Clone.Type;
 
 const Report = Schema.Struct({ duplicates: Schema.Array(Clone) });
 
+const decoder = Schema.decodeUnknownOption(Schema.fromJsonString(Report));
+
 /** jscpd's json report, read; none when it is not that shape. */
-export const decodeReport = Schema.decodeUnknownOption(Schema.fromJsonString(Report));
+export const decodeReport = (input: unknown) => decoder(input);
 
 /** A workflow command's property value, escaped as GitHub's toolkit escapes one. */
 const property = (text: string) =>

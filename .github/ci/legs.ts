@@ -118,10 +118,13 @@ export const split: {
 );
 
 /** The seconds of a leg's files, a file with no row at the table's median. */
-export const seconds = (files: readonly string[], table: Readonly<Record<string, number>>) => {
+export const seconds: {
+  (table: Readonly<Record<string, number>>): (files: readonly string[]) => number;
+  (files: readonly string[], table: Readonly<Record<string, number>>): number;
+} = Function.dual(2, (files: readonly string[], table: Readonly<Record<string, number>>): number => {
   const unmeasured = median(Object.values(table));
   return files.reduce((sum, path) => sum + (rowOf(table, path) ?? unmeasured), 0);
-};
+});
 
 /**
  * The fewest legs, up to `most`, whose longest share fits `limit` seconds. When no count fits (one
@@ -246,7 +249,10 @@ export const outputs: {
 });
 
 /** The test files `vitest list` picks with `args`, as a run with them would, from the repo root. */
-export const list = (root: string, args: readonly string[]): string[] => {
+export const list: {
+  (args: readonly string[]): (root: string) => string[];
+  (root: string, args: readonly string[]): string[];
+} = Function.dual(2, (root: string, args: readonly string[]): string[] => {
   const out = join(mkdtempSync(join(tmpdir(), "legs-")), "list.json");
   // CI=true, as on a runner: the config's local guard refuses a broad list without it.
   const done = spawnSync(
@@ -267,7 +273,7 @@ export const list = (root: string, args: readonly string[]): string[] => {
         : [],
     )
     .toSorted();
-};
+});
 
 // Under Vitest `import.meta.main` is false, so a test that imports this file never lists or writes.
 if (import.meta.main) {

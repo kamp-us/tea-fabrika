@@ -1,6 +1,6 @@
 // T753, next/. Shared start laws take their storage driver from the calling module (0062).
 import { describe, expect, it } from "@effect/vitest";
-import { type Config, DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
+import { type Config, DateTime, Effect, Exit, Function, Option, Schema, type Scope } from "effect";
 import { Digest } from "effect/crypto";
 import { Hex } from "effect/encoding";
 import * as fc from "fast-check";
@@ -12,17 +12,21 @@ import { Origin } from "./Sources.ts";
 export const options = { arbitrary: { seed: 119120, runs: 100 } };
 
 // Stateful walks use fast-check because the plan requires fc.array move recipes.
-export const law = <A>(
-  name: string,
-  arbitrary: fc.Arbitrary<A>,
-  check: (value: A) => Effect.Effect<unknown, unknown, Scope.Scope | Digest.Digest>,
-  examples?: Array<[A]>,
-) => {
-  const parameters = { numRuns: 100, ...(examples === undefined ? {} : { examples }) };
-  it.effect(name, () =>
-    property(arbitrary, (value: A) => check(value).pipe(Effect.provide(Digest.layerWebCrypto)), parameters),
-  );
-};
+type Check<A> = (value: A) => Effect.Effect<unknown, unknown, Scope.Scope | Digest.Digest>;
+
+export const law: {
+  <A>(arbitrary: fc.Arbitrary<A>, check: Check<A>, examples?: Array<[A]>): (name: string) => void;
+  <A>(name: string, arbitrary: fc.Arbitrary<A>, check: Check<A>, examples?: Array<[A]>): void;
+} = Function.dual(
+  // A direct call starts with the law's name; a piped one with its arbitrary.
+  (args) => typeof args[0] === "string",
+  <A>(name: string, arbitrary: fc.Arbitrary<A>, check: Check<A>, examples?: Array<[A]>): void => {
+    const parameters = { numRuns: 100, ...(examples === undefined ? {} : { examples }) };
+    it.effect(name, () =>
+      property(arbitrary, (value: A) => check(value).pipe(Effect.provide(Digest.layerWebCrypto)), parameters),
+    );
+  },
+);
 
 export const recipe = fc.record({
   port: fc.integer({ min: 1, max: 65535 }),
@@ -67,10 +71,13 @@ export const originFault = (kind: (typeof originKinds)[number]): fc.Arbitrary<Or
               }),
     }));
 
-export const changeOrigin = (value: Input, fault: OriginFault): Input => ({
+export const changeOrigin: {
+  (fault: OriginFault): (value: Input) => Input;
+  (value: Input, fault: OriginFault): Input;
+} = Function.dual(2, (value: Input, fault: OriginFault): Input => ({
   ...value,
   settings: { ...value.settings, origins: { ...value.settings.origins, [fault.path]: fault.origin } },
-});
+}));
 
 export interface Input {
   readonly settings: Snapshot.Snapshot;
@@ -175,7 +182,9 @@ export interface Fixture {
 }
 
 // The calling platform supplies its synchronous hash driver. Snapshot.make still owns the encoding.
-export const fixture = (config: Fixture, hash: (algorithm: Digest.Algorithm, data: Uint8Array) => Uint8Array) =>
+type Hash = (algorithm: Digest.Algorithm, data: Uint8Array) => Uint8Array;
+
+const fixtureBody = (config: Fixture, hash: Hash) =>
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: synchronous Vitest fixture setup needs a plain snapshot value
   Effect.runSync(
     Effect.gen(function* () {
@@ -209,7 +218,12 @@ export const fixture = (config: Fixture, hash: (algorithm: Digest.Algorithm, dat
     ),
   );
 
-export const corrupt = (value: Input, choice: number, secret = "invalid") => {
+export const fixture: {
+  (hash: Hash): (config: Fixture) => ReturnType<typeof fixtureBody>;
+  (config: Fixture, hash: Hash): ReturnType<typeof fixtureBody>;
+} = Function.dual(2, fixtureBody);
+
+const corruptBody = (value: Input, choice: number, secret = "invalid") => {
   const snapshot = value.settings;
   const { "instance.port": _port, ...withoutPort } = snapshot.values;
   const { "instance.port": _origin, ...withoutOrigin } = snapshot.origins;
@@ -237,11 +251,23 @@ export const corrupt = (value: Input, choice: number, secret = "invalid") => {
   return variants[choice % variants.length];
 };
 
+export const corrupt: {
+  (choice: number, secret?: string): (value: Input) => ReturnType<typeof corruptBody>;
+  (value: Input, choice: number, secret?: string): ReturnType<typeof corruptBody>;
+} = Function.dual(
+  // A direct call starts with the input; a piped one with the choice, a number.
+  (args) => typeof args[0] !== "number",
+  corruptBody,
+);
+
 export const sentinel = fc
   .tuple(fc.uuid(), fc.constantFrom('"', "+", "/", "&", " "))
   .map(([word, mark]) => `private-${word}${mark}end`);
 
-export const exclude = (output: unknown, secret: string) => {
+export const exclude: {
+  (secret: string): (output: unknown) => void;
+  (output: unknown, secret: string): void;
+} = Function.dual(2, (output: unknown, secret: string): void => {
   const forms = [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
   const seen = new WeakSet<object>();
   const visit = (value: unknown): void => {
@@ -279,7 +305,7 @@ export const exclude = (output: unknown, secret: string) => {
     }
   };
   visit(output);
-};
+});
 
 // The driver normalizes its checked receipt. No ledger or platform type enters settings.
 export interface Saved {

@@ -36,6 +36,7 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import * as Function from "effect/Function";
 import vitestPackage from "vitest/package.json" with { type: "json" };
 import { testConfig } from "../../vitest.config.ts";
 import { rowsAt } from "../../vitest.shards.ts";
@@ -94,20 +95,30 @@ export const isTrigger = (path: string): boolean =>
   match.isMatch(path, testConfig.test.forceRerunTriggers, { dot: true });
 
 /** The changed files that match a rerun trigger, in git's order. */
-export const triggered = (changed: readonly string[], isTrigger: (path: string) => boolean): string[] =>
-  changed.filter(isTrigger);
+export const triggered: {
+  (isTrigger: (path: string) => boolean): (changed: readonly string[]) => string[];
+  (changed: readonly string[], isTrigger: (path: string) => boolean): string[];
+} = Function.dual(2, (changed: readonly string[], isTrigger: (path: string) => boolean): string[] =>
+  changed.filter(isTrigger),
+);
 
 /** The changed set split into legs `"1"` to `"N"`, the fewest that fit, as `Sizing` says. */
-export const legsOf = (files: readonly string[], sizing: Sizing): Record<string, string[]> => {
+export const legsOf: {
+  (sizing: Sizing): (files: readonly string[]) => Record<string, string[]>;
+  (files: readonly string[], sizing: Sizing): Record<string, string[]>;
+} = Function.dual(2, (files: readonly string[], sizing: Sizing): Record<string, string[]> => {
   const count = fewest(files, sizing.most, sizing.limit, sizing.table);
   return Object.fromEntries(split(files, count, sizing.table).map((leg, i) => [`${i + 1}`, leg]));
-};
+});
 
 /**
  * What the run tests. `triggers` comes first: a change to a rerun trigger is the full set whatever
  * the import graph says. Else `files`, the set Vitest listed, split by `sizing`.
  */
-export const choose = (seen: Seen, triggers: readonly string[], files: readonly string[], sizing: Sizing): Proof => {
+export const choose: {
+  (triggers: readonly string[], files: readonly string[], sizing: Sizing): (seen: Seen) => Proof;
+  (seen: Seen, triggers: readonly string[], files: readonly string[], sizing: Sizing): Proof;
+} = Function.dual(4, (seen: Seen, triggers: readonly string[], files: readonly string[], sizing: Sizing): Proof => {
   if (triggers.length > 0) {
     return { _tag: "full", base: seen.base, head: seen.head, at: seen.at, vitest: seen.vitest, triggers };
   }
@@ -129,7 +140,7 @@ export const choose = (seen: Seen, triggers: readonly string[], files: readonly 
       Object.entries(legs).map(([leg, list]) => [leg, Math.round(seconds(list, sizing.table) * 10) / 10]),
     ),
   };
-};
+});
 
 /**
  * What the select step gives the next jobs: `scope`, `full` or `changed`; `legs`, the `changed`
@@ -187,7 +198,10 @@ export const summary = (proof: Proof): string => {
 };
 
 /** A positive whole number from the step's env, or a throw, so the step fails and prints nothing. */
-export const whole = (name: string, value: string | undefined): number => {
+export const whole: {
+  (value: string | undefined): (name: string) => number;
+  (name: string, value: string | undefined): number;
+} = Function.dual(2, (name: string, value: string | undefined): number => {
   const number = Number(value);
 
   if (value === undefined || value.trim() === "" || !Number.isInteger(number) || number < 1) {
@@ -195,7 +209,7 @@ export const whole = (name: string, value: string | undefined): number => {
   }
 
   return number;
-};
+});
 
 // Under Vitest `import.meta.main` is false, so a test that imports this file never lists or writes.
 if (import.meta.main) {

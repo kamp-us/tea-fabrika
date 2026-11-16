@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e43-tests3",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T23:21:43-08:00",
+  "ended": "2026-11-15T23:50:38-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Third tests round for judgment slice E43 of the Effect-check sweep (missingPipeableSignature): the merge of origin/main into fabrikalfa/effect-e43, which conflicted in three files. Each conflict kept both sides. check-job.ts keeps main's 0587 copy-paste step C1 and its header line, inside the branch's Function.dual form of checkJob with its Require and Workflow types. scheduled.ts keeps the branch's Function and Result imports with main's SC1 to SC18 header. Process.test-support.ts keeps the branch's again dual over againBody and main's lazily made temp folder (let folder: string | null = null, 0584); main's afterAll and storage already used it. Recounted with only this check at error through --lspconfig over the 13 tsconfigs, before the merge (at 998d6e5, in a scratch worktree) and after: 144 hits before, 170 after, 26 new from main and none gone. New exam hits: 12 (.github/ci copies.ts decodeReport, legs.ts seconds and list, proof.ts triggered, legsOf, choose and whole, gate.mjs read and main; oxlint-plugins anti-slop.ts lock, strays and audit). New product hits: 14, all in libfabrika and vitest. Fixed 10 of the new exam hits: nine take Function.dual at their fixed arity, and decodeReport became a one-argument function over a private decoder, as the four decoders of round 2. Left gate.mjs (2): like changes.mjs and scheduled.mjs, it runs in the gate job before any install, so it cannot import effect (ruling Q4). Also fixed the 6 exam hits in PR 1366's files, now merged and part of this slice: RuntimeCauseTest.ts suite (dual over suiteBody) and StartsTest.ts law (generic, decided by a string name), changeOrigin, fixture (dual over fixtureBody), corrupt (decided by a non-number first argument, since its secret is optional) and exclude. Every data-first caller stays as it was.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 29,
+  "note": "Counts per tsconfig folder after this round (exam / product): .github/ci 17 / 0 (changes.mjs 9, scheduled.mjs 6, gate.mjs 2, all before-install scripts), .agents 0 / 7, oxlint-plugins 3 / 0 (effect-jsdocs.ts, ruling Q5), next/packages/libfabrika 0 / 112, next/apps/fabrika 1 / 2 (exam plant.ts:39, waiting on the lead as in round 2), next/packages/tuval 0 / 5, next/packages/vitest 0 / 4, next/programs/pipeline 0 / 3, chaos, checklist, counter, inbox and tezgah 0. Total 154: exam 21 (17 + 3 + 1), product 133 (7 + 112 + 2 + 5 + 4 + 3). New product hits from main for the build (14): libfabrika cloudflare/quotas.ts own, ownWrite, process, project, runtimeAppend; ledger/RefereeSql.ts accountingEntries, nextPlace; ledger/internal/ledgerStore.ts committedEntries, headPlace; processes/QuotasSql.ts accounting, layer; runtime/QuotaRunner.ts guard, restart; vitest src/Stub.ts make. Hits in PR 1366's files, now merged, counted in libfabrika: 38 product (cloudflare/runtime.ts 10, cloudflare/quotas.ts 5, ledger/internal/ledgerStore.ts 3, cloudflare/connection.ts 2, ledger/RefereeSql.ts 2, processes/ProcessManager.ts 2, processes/QuotasSql.ts 2, runtime/QuotaRunner.ts 2, ledger/Log.ts 1, runtime/RecoveryStore.ts 1, runtime/RepliesSql.ts 1, runtime/internal/recovery.ts 1) and 0 exam after this round (6 fixed). Tests ran at 9956aaf plus this change, one file at a time on Node 26.13.0: the 17 workflow-lint tests, workflow-lint.test, copies, legs, proof, scheduled and gate tests, oxlint-plugins anti-slop, advice and plants tests, the 17 processes tests (ProcessLifecycle, ProcessMonitors, ProcessTextCaps, ProcessWindow and the rest, integration files on temp SQLite included), supervisor.laws, exitReason, leave.laws, mail, node ExitReason and Replies integration, RecoveryStore, RunnerOptions and RunnerSupervision integration, and the 21 plain tests that import StartsTest, SettingsTest or RuntimeCauseTest: all green. Not run: dev-secrets.laws, IsolateUsage, build-one-file, runtime-recovery.laws, door, runtime.laws and settings-start integration files (they start dev servers or builds). pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144), the list ratchet and pnpm typecheck pass; typecheck ran twice, once after the tooling fixes and once after the libfabrika fixes. No lock line, no tsconfig change, no disable or @effect-diagnostics comment.",
+  "plants": [
+    {
+      "law": ".github/ci/proof.test.ts: property: the full set's triggers are exactly the changed files that match, in git's order",
+      "plant": "proof.ts choose's Function.dual arity set to 3, so a direct choose(seen, triggers, files, sizing) reads as piped",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/cloudflare/SettingsInput.test.ts",
+      "plant": "StartsTest.ts corrupt's dual predicate inverted, so corrupt(value, choice, secret) reads as piped and returns a function",
+      "result": "green"
+    }
+  ],
+  "step": "tests"
+}

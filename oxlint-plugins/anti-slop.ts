@@ -16,6 +16,7 @@ import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, matchesGlob, relative, resolve } from "node:path";
 import { Exit, Predicate, Schema } from "effect";
+import * as Function from "effect/Function";
 import { verify } from "./vendored.ts";
 
 /**
@@ -84,14 +85,16 @@ const covers = (glob: string, folder: string): boolean =>
   glob === folder || (WHOLE.includes(glob) && folder.startsWith(glob.slice(0, -"**".length)));
 
 /** The zero lock for one rule: its list, and the rule's hits in each folder of the scope. */
-export const lock = (
-  scope: ReadonlyArray<string>,
-  listed: ReadonlyArray<string>,
-  hits: ReadonlyMap<string, number>,
-): Lock => ({
-  add: scope.filter((folder) => (hits.get(folder) ?? 0) === 0 && !listed.some((glob) => covers(glob, folder))),
-  refused: listed.filter((glob) => !scope.includes(glob) && !WHOLE.includes(glob)),
-});
+export const lock: {
+  (listed: ReadonlyArray<string>, hits: ReadonlyMap<string, number>): (scope: ReadonlyArray<string>) => Lock;
+  (scope: ReadonlyArray<string>, listed: ReadonlyArray<string>, hits: ReadonlyMap<string, number>): Lock;
+} = Function.dual(
+  3,
+  (scope: ReadonlyArray<string>, listed: ReadonlyArray<string>, hits: ReadonlyMap<string, number>): Lock => ({
+    add: scope.filter((folder) => (hits.get(folder) ?? 0) === 0 && !listed.some((glob) => covers(glob, folder))),
+    refused: listed.filter((glob) => !scope.includes(glob) && !WHOLE.includes(glob)),
+  }),
+);
 
 /** A rule's setting as `oxlint --print-config` prints it: a level, or a level and the list of its options. */
 const Setting = Schema.Union([Schema.String, Schema.Tuple([Schema.String, Schema.Array(Schema.Unknown)])]);
@@ -181,7 +184,10 @@ const UNREAD = "anti-slop.ts: could not read oxlint --print-config, so nothing s
  * anywhere but its vendored path, so an edited copy in another folder cannot stand in for the pinned
  * one. `printed` is the text of `oxlint --print-config` for the config at the top of `root`.
  */
-export const strays = (root: string, printed: string): ReadonlyArray<string> => {
+export const strays: {
+  (printed: string): (root: string) => ReadonlyArray<string>;
+  (root: string, printed: string): ReadonlyArray<string>;
+} = Function.dual(2, (root: string, printed: string): ReadonlyArray<string> => {
   const config = Schema.decodeUnknownExit(Printed)(printed);
 
   if (Exit.isFailure(config)) {
@@ -197,7 +203,7 @@ export const strays = (root: string, printed: string): ReadonlyArray<string> => 
           `.oxlintrc.json: ${pinned.name} is loaded from ${from}, and only ${pinned.specifier} is the pinned copy (0563)`,
         ];
   });
-};
+});
 
 /**
  * Every line a whole run prints for the anti-slop plugin, none when all holds: the config loads its
@@ -206,7 +212,10 @@ export const strays = (root: string, printed: string): ReadonlyArray<string> => 
  * `oxlint --print-config` for the config the run lints with. A config that loads neither of the
  * fork's plugins, as a test's small repo has, runs none of their code, so there is nothing to hold.
  */
-export const audit = (root: string, printed: string): ReadonlyArray<string> => {
+export const audit: {
+  (printed: string): (root: string) => ReadonlyArray<string>;
+  (root: string, printed: string): ReadonlyArray<string>;
+} = Function.dual(2, (root: string, printed: string): ReadonlyArray<string> => {
   const config = Schema.decodeUnknownExit(Printed)(printed);
 
   if (Exit.isFailure(config)) {
@@ -250,4 +259,4 @@ export const audit = (root: string, printed: string): ReadonlyArray<string> => {
     ];
   });
   return [...pinned, ...unlocked];
-};
+});
