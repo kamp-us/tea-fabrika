@@ -13,7 +13,7 @@ tags: [ci, tests, integration, tooling, lint, pull-request, test-size]
 ```mermaid
 flowchart LR
   law["a law"] --> uses{"starts or reaches a real thing?"}
-  uses -->|"yes"| integration["*.integration.test.ts: the full run only"]
+  uses -->|"yes, or writes local disk"| integration["*.integration.test.ts: the full run only"]
   uses -->|"no: reads repo files, or runs on in-memory stand-ins"| plain["plain law: every pull request its change reaches"]
 ```
 
@@ -44,6 +44,10 @@ request whose change reaches it, whatever it is called.**
 
 - **A real thing** is a real instance, workerd, Electron or a browser, a child process, a real
   signal, a port, or the network.
+- **A law that writes to local disk is `.integration.` too:** a SQLite file or a temp folder. In
+  Google's sizes a small test may not touch the file system and a test that uses local disk is
+  medium, and medium and up are `.integration.` here. It moves to plain when an in-memory stand-in
+  takes the disk's place (ticket 1070).
 - **A plain law** reads the repository's files or runs on in-memory stand-ins.
 - **Tooling laws follow the same rule.** A plain tooling law runs on the pull request its change
   reaches, picked by Vitest's `--changed`, as next/'s plain laws are. A tooling law that starts a
@@ -74,7 +78,6 @@ request whose change reaches it, whatever it is called.**
   is read through this definition.
 - The pull request check runs more laws, so it costs more runner time; the plan sizes it against
   [0541](0541-ci-speed-has-a-goal-and-a-daily-check.md)'s goal, and the daily speed job watches it.
-- **Not decided here:** whether a law that writes a SQLite file or a temp folder inside its own
-  process, and reaches nothing in the list above, is plain. 0536 and experiment 292 count such a
-  file as a real resource, and Google's sizes put disk use at medium; this ruling's list does not
-  name it. Until the owner rules, such a law keeps its `.integration.` name.
+- The disk rule keeps 0536's and experiment 292's count of a SQLite file and temp files as real,
+  and it keeps the slowest laws off the pull request, within
+  [0541](0541-ci-speed-has-a-goal-and-a-daily-check.md)'s limit.
