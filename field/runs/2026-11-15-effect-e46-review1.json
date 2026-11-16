@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e46-review1",
+  "ticket": "kamp-us/tea-fabrika#1075",
+  "pr": null,
+  "started": "2026-11-15T22:30:13-08:00",
+  "ended": "2026-11-15T22:47:00-08:00",
+  "parent": "2026-11-15-effect-e46-build1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of record for slice E46 (runEffectInsideEffect, judgment) of the Effect-checker sweep, in next/, at 95c9fe027 (tests eb4e2e70e, build 95c9fe027): merge-ready, two finding rows, no blocker. Read every line of origin/main...HEAD (48 files, 289+/129-). Each of the 109 hits became Effect.run*With on services captured by yield* Effect.context<never>() in the enclosing generator, as the check names; the 8 product hits are platform callbacks in node/build/bundle.ts, node/dev/dev-recording.ts, node/dev/dev.ts and node/dev/watch.ts, each still under its unchanged edge comment. Every removed line is an Effect.run* call, an it.effect( opener, or a binding the next line rewrites: no assertion, seed, run count, timeout or comment line was removed or changed. 11 new edge lines, each above a const runPromise = Effect.runPromiseWith(...) binding the old edge line still covers (the rule matches a bare runPromise call, and reportUnusedDisableDirectives is error). No ignore or @effect-diagnostics line. No lock line and no LOCKED row, per the owner ruling in effect-judgment-tests.md. No file of PR 1366 (67 files, read with the GitHub MCP tool). 17 it.effect laws moved to it.live (the tests row says 18; 17 sites): no moved body uses TestClock or TestConsole outside a walk that provides its own TestClock.layer(), so the moves give each walk the live services runPromise gave it and hide no behavior. Product behavior: the callbacks now run on the caller's services (clock, logger, tracer, parent span). In dev.ts the binding path is call, settled and dial, all fnUntraced, with HTTP tracing turned off in dial, so no new span; under a TestClock the replacement wait follows the test clock, which the dev laws cover green.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 17,
+  "note": "Read-only apart from this row. Recount with only runEffectInsideEffect at error through --lspconfig at 95c9fe027: libfabrika 0, tuval 0, next/apps/fabrika 19, all app:src (E95, after 1366). pnpm typecheck green once. Ran one file at a time, --maxWorkers=1: cloudflare/mail, ledger/TraceId, node/ProgramMail.integration, node/Monitor.integration, node/dev dev.laws, watch.laws, dev-recording.laws and local-dev integration, telemetry/Sink.integration, runtime/Audit, node/Children.integration, node/StartChild.integration, node/ProgramMailRuntime.integration, cloudflare/reload.laws and supervision.laws: all green. Red, and red the same way at base e613fa45b in a scratch worktree, so not caused by this diff: node/IsolateUsage.integration U7 and U8, and node/runtime/RunnerHands.integration L12, L13, L14, L20, R1 and B1, each at its timeout (finding row). Plants by reading: watch.ts:153 back to Effect.runPromise gives a hit (the build's recount shows 1); the processAck law in mail.test.ts back to it.effect hangs, because its Project start retries on a TestClock nobody moves; fromHere returning a random traceId fails TraceId.test.ts at the entry traceId expect, which the diff leaves unchanged. loosening.sh: 42 'unrecognized change' hits, one per file, each the first added context line or the run call it rewrites; no law loosened. leakgrep clean. git merge-tree with origin/main 6c092dd78: no conflict. Not run: the two .visual. files and pnpm lint (build ran it green at this head).",
+  "step": "review"
+}
