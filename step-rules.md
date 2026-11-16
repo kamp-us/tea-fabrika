@@ -103,8 +103,11 @@ inside your worktree (seen twice on 2026-11-16: git in a `for` loop with `$(...)
 no `cd`, no `-C`, no loop, no `$(...)`, no `&&` chain of git commands. Look at files with the Read
 and Grep tools, not with shell loops over `git show`. Edit and create files only with the Edit and
 Write tools: never a heredoc, `python`, `node -e`, `sed -i` or a shell redirect (refused a third
-time the same day, for `python3 <<EOF || node -e`). This is the check's own instruction, not a
-work-around; a refusal after it is still a stop.
+time the same day, for `python3 <<EOF || node -e`). A command that is not git also must not carry
+the word `git` in an argument, a quoted path included: a `node` call whose argument named
+skillscheck's path holding `git` was refused the same way (fourth sighting). Run the script by a
+path or package script that does not contain it, or ask the coordinator. This is the check's own
+instruction, not a work-around; a refusal after it is still a stop.
 
 **A box is small.** In one cloud box, at most two code agents run at once, and only one of them
 runs `pnpm lint` or `pnpm typecheck` at a time. With more, the memory limit kills parts of the run
