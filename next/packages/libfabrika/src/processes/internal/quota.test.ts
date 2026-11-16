@@ -4,6 +4,7 @@
 import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import * as Quota from "./quota.ts";
@@ -39,7 +40,11 @@ describe("P34c quota machine", () => {
           }
 
           const arrival = Math.max(at, previous);
-          const window = history.filter((h) => h.at > arrival - 60_000).reduce((s, h) => s + h.writes, 0);
+          const window = Arr.reduce(
+            Arr.filter(history, (h) => h.at > arrival - 60_000),
+            0,
+            (s, h) => s + h.writes,
+          );
           const delta =
             move === "release"
               ? -Math.min(bytes, 1 + (c.amount % bytes))
@@ -71,7 +76,13 @@ describe("P34c quota machine", () => {
           }
 
           expect(next.bytes).toBe(bytes);
-          expect(next.writes).toBe(history.filter((h) => h.at > arrival - 60_000).reduce((s, h) => s + h.writes, 0));
+          expect(next.writes).toBe(
+            Arr.reduce(
+              Arr.filter(history, (h) => h.at > arrival - 60_000),
+              0,
+              (s, h) => s + h.writes,
+            ),
+          );
           model = next;
           // Candidates that do not commit are discarded. Reopening gets the last committed state.
           const restored = machine.init(model, {})[0];

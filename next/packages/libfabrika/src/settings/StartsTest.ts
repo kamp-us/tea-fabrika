@@ -1,6 +1,7 @@
 // T753, next/. Shared start laws take their storage driver from the calling module (0062).
 import { describe, expect, it } from "@effect/vitest";
 import { type Config, DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
+import * as Arr from "effect/Array";
 import { Digest } from "effect/crypto";
 import { Hex } from "effect/encoding";
 import * as fc from "fast-check";
@@ -45,7 +46,7 @@ export interface OriginFault {
 export const originFault = (kind: (typeof originKinds)[number]): fc.Arbitrary<OriginFault> =>
   fc
     .tuple(
-      fc.constantFrom(...Declarations.all.declarations.map((declaration) => declaration.path)),
+      fc.constantFrom(...Arr.map(Declarations.all.declarations, (declaration) => declaration.path)),
       fc.uuid(),
       fc.nat(),
     )
@@ -98,9 +99,9 @@ export const rateLimit = { limit: 100_000, window: 60_000 };
 /** Each declaration's default value, by its key, and the default origin, by its path. */
 const defaults = {
   values: Object.fromEntries(
-    Object.entries(Declarations.all.settings).map(([key, d]) => [key, d.default]),
+    Arr.map(Object.entries(Declarations.all.settings), ([key, d]) => [key, d.default]),
   ) as Config.Success<typeof Declarations.all>,
-  origins: Object.fromEntries(Declarations.all.declarations.map((d) => [d.path, Origin.cases.default.make({})])),
+  origins: Object.fromEntries(Arr.map(Declarations.all.declarations, (d) => [d.path, Origin.cases.default.make({})])),
 };
 
 /** Declared values a fixture sets in place of their defaults, by each setting's key. */
@@ -109,7 +110,7 @@ export type Values = Partial<Config.Success<typeof Declarations.all>>;
 /** A flag origin for each value a fixture sets, so the snapshot never says a chosen value is a default. */
 const chosen = (values: Values) =>
   Object.fromEntries(
-    Object.keys(values).map((key) => {
+    Arr.map(Object.keys(values), (key) => {
       const path = Declarations.all.settings[key as keyof Values].path;
       return [path, Origin.cases.flag.make({ name: `--${path}` })];
     }),
@@ -383,7 +384,7 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
 
             const selected =
               move === "repeat" || move === "read" || move === "conflict"
-                ? inputs.filter((value) => saved.has(value.start))
+                ? Arr.filter(inputs, (value) => saved.has(value.start))
                 : inputs;
             const current = Option.getOrThrow(Option.fromUndefinedOr(selected[choice % selected.length]));
             const before = driver.counts();
@@ -452,8 +453,8 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
 
             const entries = yield* driver.entries;
             expect(entries).toHaveLength(saved.size);
-            expect(new Set(entries.map((entry) => entry.entry.stream)).size).toBe(saved.size);
-            expect(new Set(entries.map((entry) => entry.entry.id)).size).toBe(saved.size);
+            expect(new Set(Arr.map(entries, (entry) => entry.entry.stream)).size).toBe(saved.size);
+            expect(new Set(Arr.map(entries, (entry) => entry.entry.id)).size).toBe(saved.size);
             expect(driver.counts().consumers).toBe(0);
 
             for (const entry of entries) {

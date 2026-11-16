@@ -1,6 +1,7 @@
 // P34c slice 4, next/. Calibration is copied from A-Numbers, never read from product defaults.
 import { describe, expect, it } from "@effect/vitest";
 import { ByteSize, Effect, Option, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { Digest } from "effect/crypto";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Setting.ts";
@@ -10,7 +11,7 @@ import { Toml } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
 const declaration = (path: string) => {
-  const found = Declarations.all.declarations.filter((d) => d.path === path);
+  const found = Arr.filter(Declarations.all.declarations, (d) => d.path === path);
   expect(found, `${path} must be declared once`).toHaveLength(1);
   return Option.getOrThrow(Option.fromUndefinedOr(found[0]));
 };
@@ -28,7 +29,7 @@ const numeric = (value: unknown): unknown => {
   }
 
   if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, numeric(v)]));
+    return Object.fromEntries(Arr.map(Object.entries(value), ([key, v]) => [key, numeric(v)]));
   }
 
   return value;
@@ -109,7 +110,7 @@ describe("P34c Q11 settings", () => {
           const defaults = new Map<string, number>([
             ["writes", 13_760],
             ["storage", 1_000_000_000],
-            ...Object.entries(measured).flatMap(([location, value]) => [
+            ...Arr.flatMap(Object.entries(measured), ([location, value]) => [
               [`recovery.${location}.writes`, value.writes] as const,
               [`recovery.${location}.bytes`, value.bytes] as const,
               [`recovery.${location}.message.writes`, value.message.writes] as const,
@@ -128,13 +129,16 @@ describe("P34c Q11 settings", () => {
             for (const [key, value] of selected) {
               const segments = key.split(".");
               const field = segments.pop()!;
-              const table = ["limits", ...segments].join(".");
+              const table = Arr.join(["limits", ...segments], ".");
               const rows = tables.get(table) ?? [];
               rows.push(`${field} = ${field === "bytes" || field === "storage" ? `"${value} B"` : value}`);
               tables.set(table, rows);
             }
 
-            const text = [...tables].map(([table, rows]) => `[${table}]\n${rows.join("\n")}`).join("\n");
+            const text = Arr.join(
+              Arr.map([...tables], ([table, rows]) => `[${table}]\n${Arr.join(rows, "\n")}`),
+              "\n",
+            );
             const resolved = yield* resolve(text);
             const g = group();
             const saved = yield* Snapshot.make(g, resolved);
@@ -144,7 +148,7 @@ describe("P34c Q11 settings", () => {
               writes: selected.get("writes"),
               storage: selected.get("storage"),
               recovery: Object.fromEntries(
-                ["project", "process"].map((location) => [
+                Arr.map(["project", "process"], (location) => [
                   location,
                   {
                     writes: selected.get(`recovery.${location}.writes`),
@@ -186,7 +190,10 @@ describe("P34c Q11 settings", () => {
           for (const cell of tape) {
             const key = [...valid.keys()][cell.pick % valid.size]!;
             const bad = cell.value % 2 === 0 ? "0" : key === "writes" ? "13761" : '"1000000001 B"';
-            const text = `[limits]\n${[...valid].map(([k, v]) => `${k} = ${k === key ? bad : v}`).join("\n")}\n`;
+            const text = `[limits]\n${Arr.join(
+              Arr.map([...valid], ([k, v]) => `${k} = ${k === key ? bad : v}`),
+              "\n",
+            )}\n`;
             expect(yield* Effect.result(resolve(text))).toMatchObject({ _tag: "Failure" });
           }
 

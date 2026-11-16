@@ -5,6 +5,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Option, Layer, Result, Schema } from "effect";
 import type { Scope } from "effect";
+import * as Arr from "effect/Array";
 import { TestClock } from "effect/testing";
 import type { Ledger } from "../ledger/Ledger.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
@@ -71,16 +72,17 @@ const recovery = {
 
 const rows = (sql: Sql) => {
   // oxlint-disable-next-line fabrika/no-ledger-sql -- Independent SQL oracle checks committed rows and transaction rollback (Q3/Q4).
-  return sql.exec("SELECT * FROM entries ORDER BY rev").map((row) => Schema.decodeUnknownSync(Row)(row));
+  return Arr.map(sql.exec("SELECT * FROM entries ORDER BY rev"), (row) => Schema.decodeUnknownSync(Row)(row));
 };
 
 const bytes = (e: Entry) => new TextEncoder().encode(JSON.stringify(Schema.encodeSync(Entry)(e))).length;
 
 const snapshot = (sql: Sql) =>
   Object.fromEntries(
-    sql
-      .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-      .map(({ name }) => [String(name), sql.exec(`SELECT * FROM "${String(name).replaceAll('"', '""')}"`)]),
+    Arr.map(
+      sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"),
+      ({ name }) => [String(name), sql.exec(`SELECT * FROM "${String(name).replaceAll('"', '""')}"`)],
+    ),
   );
 
 const world = Effect.fnUntraced(function* (
@@ -192,9 +194,11 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
               const at = Math.max(now, lastArrival);
               const cost = cell.alt % 2 === 0 || n < 4 ? 2 : 1;
-              const used = history
-                .filter((h) => h.program === program(name) && h.at > at - 60_000)
-                .reduce((s, h) => s + h.cost, 0);
+              const used = Arr.reduce(
+                Arr.filter(history, (h) => h.program === program(name) && h.at > at - 60_000),
+                0,
+                (s, h) => s + h.cost,
+              );
               const answer =
                 cost === 2
                   ? yield* w.input(name, `input:${n}`, cell.text)
@@ -214,9 +218,11 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               }
 
               expect((yield* w.status(program(name))).writes).toBe(
-                history
-                  .filter((h) => h.program === program(name) && h.at > at - 60_000)
-                  .reduce((s, h) => s + h.cost, 0),
+                Arr.reduce(
+                  Arr.filter(history, (h) => h.program === program(name) && h.at > at - 60_000),
+                  0,
+                  (s, h) => s + h.cost,
+                ),
               );
 
               if (cell.alt % 3 === 0) {
@@ -287,8 +293,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 refusal++;
               } else {
                 count++;
-                const attributable = w.rows().filter((e) => e.stream.startsWith("alpha:") && e._tag === "send");
-                expect(after.bytes).toBe(attributable.reduce((sum, e) => sum + bytes(e), 0));
+                const attributable = Arr.filter(w.rows(), (e) => e.stream.startsWith("alpha:") && e._tag === "send");
+                expect(after.bytes).toBe(Arr.reduce(attributable, 0, (sum, e) => sum + bytes(e)));
                 expect(after.ahead.writes).toBe(count);
                 expect(after.writes).toBe(2 * count);
                 expect(after.bytes + after.ahead.bytes).toBeLessThanOrEqual(w.limits.storage);

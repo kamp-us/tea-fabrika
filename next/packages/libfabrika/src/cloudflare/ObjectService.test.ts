@@ -27,6 +27,7 @@ import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime
 import { describe, expect } from "@effect/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Context, Effect, Layer, Option, type Scope, Struct } from "effect";
+import * as Arr from "effect/Array";
 import { HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -256,13 +257,16 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         // object's own accounting (P34c): its two tables and its fault slot, and the guard checks
         // that slot before a call. Each is asked for the object's own name; any other query throws.
         const allowed = new Set(
-          [
-            ["SELECT name FROM sqlite_master WHERE name='process_state'"],
-            ["CREATE TABLE IF NOT EXISTS quota_local (account TEXT PRIMARY KEY,value TEXT NOT NULL)"],
-            ["CREATE TABLE IF NOT EXISTS quota_fault (name TEXT PRIMARY KEY,value TEXT NOT NULL)"],
-            ["INSERT OR IGNORE INTO quota_fault (name,value) VALUES (?,?)", descriptor.name, ""],
-            ["SELECT value FROM quota_fault WHERE name=?", descriptor.name],
-          ].map((call) => JSON.stringify(call)),
+          Arr.map(
+            [
+              ["SELECT name FROM sqlite_master WHERE name='process_state'"],
+              ["CREATE TABLE IF NOT EXISTS quota_local (account TEXT PRIMARY KEY,value TEXT NOT NULL)"],
+              ["CREATE TABLE IF NOT EXISTS quota_fault (name TEXT PRIMARY KEY,value TEXT NOT NULL)"],
+              ["INSERT OR IGNORE INTO quota_fault (name,value) VALUES (?,?)", descriptor.name, ""],
+              ["SELECT value FROM quota_fault WHERE name=?", descriptor.name],
+            ],
+            (call) => JSON.stringify(call),
+          ),
         );
         let lookups = 0;
         const values = new Map<string, unknown>([["descriptor", descriptor]]);

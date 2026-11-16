@@ -7,6 +7,7 @@ import {
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Cause, Deferred, Effect, Exit, Layer, Option, type Scope } from "effect";
+import * as Arr from "effect/Array";
 import fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
@@ -49,12 +50,15 @@ const lookup = "SELECT name FROM sqlite_master WHERE name='process_state'";
 // The Process object's own accounting (P34c), set up on each build: its two tables and its fault
 // slot, then the guard's fault check before a step. Each is asked for the object's own name only.
 const accounting = (name: string) =>
-  [
-    ["CREATE TABLE IF NOT EXISTS quota_local (account TEXT PRIMARY KEY,value TEXT NOT NULL)"],
-    ["CREATE TABLE IF NOT EXISTS quota_fault (name TEXT PRIMARY KEY,value TEXT NOT NULL)"],
-    ["INSERT OR IGNORE INTO quota_fault (name,value) VALUES (?,?)", name, ""],
-    ["SELECT value FROM quota_fault WHERE name=?", name],
-  ].map((call) => JSON.stringify(call));
+  Arr.map(
+    [
+      ["CREATE TABLE IF NOT EXISTS quota_local (account TEXT PRIMARY KEY,value TEXT NOT NULL)"],
+      ["CREATE TABLE IF NOT EXISTS quota_fault (name TEXT PRIMARY KEY,value TEXT NOT NULL)"],
+      ["INSERT OR IGNORE INTO quota_fault (name,value) VALUES (?,?)", name, ""],
+      ["SELECT value FROM quota_fault WHERE name=?", name],
+    ],
+    (call) => JSON.stringify(call),
+  );
 
 /** The object's store: the checkpoint lookup and its own accounting answer empty, and any other query throws. */
 const processSql = (name: string) => {
@@ -192,7 +196,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
           const moves = draw(fc.integer, { min: 12, max: 20 });
 
           for (let index = 0; index < moves; index++) {
-            const possible = goals.filter((move) =>
+            const possible = Arr.filter(goals, (move) =>
               move === "replace" || move === "repeat"
                 ? requested !== null && armed !== null
                 : move === "clear"
@@ -201,7 +205,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
                     ? requested === null && covered.has("clear")
                     : true,
             );
-            const missing = possible.filter((move) => !covered.has(move));
+            const missing = Arr.filter(possible, (move) => !covered.has(move));
             const choices: Move[] =
               covered.has("clear") && !covered.has("clear-again") && requested === null
                 ? ["clear-again" as const]
@@ -422,8 +426,8 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
 
             if (Exit.isFailure(exit)) {
               // A defect, never a typed failure: the slot's type has none, and the bridge rejects on it.
-              expect(exit.cause.reasons.some(Cause.isFailReason)).toBe(false);
-              expect(exit.cause.reasons.some(Cause.isDieReason)).toBe(true);
+              expect(Arr.some(exit.cause.reasons, Cause.isFailReason)).toBe(false);
+              expect(Arr.some(exit.cause.reasons, Cause.isDieReason)).toBe(true);
             }
           }
         }).pipe(Effect.scoped),

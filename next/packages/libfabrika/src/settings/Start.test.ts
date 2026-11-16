@@ -3,6 +3,7 @@
 // `desktop.brain-memory` and `desktop.brain-grace`, so they join it too.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Effect, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
@@ -16,7 +17,7 @@ describe("instance start envelope, next/", () => {
     fc.tuple(StartsTest.recipe, fc.option(fc.integer({ min: 1, max: Number.MAX_SAFE_INTEGER }), { nil: undefined })),
     ([recipe, cap]) =>
       Effect.gen(function* () {
-        expect(Declarations.all.declarations.map((setting) => setting.path).sort()).toEqual([
+        expect(Arr.map(Declarations.all.declarations, (setting) => setting.path).sort()).toEqual([
           "desktop.brain-grace",
           "desktop.brain-memory",
           "desktop.brain-poll",

@@ -318,7 +318,7 @@ const arrays = (groups: ReadonlyArray<typeof Group.Type>) => {
     }
   }
 
-  return { text: `${lines.join("\n")}\n`, value, names, seen };
+  return { text: `${Arr.join(lines, "\n")}\n`, value, names, seen };
 };
 
 it.effect.prop(
@@ -333,7 +333,7 @@ it.effect.prop(
         items: { name: "constructor", elements: [leaves, leaves] },
       } as const;
       // The hostile arrays come first, so a drawn group of the same name is the one left out.
-      const w = arrays([...hostile.map((name) => ({ name, elements: [{ leaves }, nested] })), ...groups]);
+      const w = arrays([...Arr.map(hostile, (name) => ({ name, elements: [{ leaves }, nested] })), ...groups]);
       const parsed = yield* toml.parse(w.text);
 
       expect(parsed.value, w.text).toEqual(w.value);

@@ -229,12 +229,19 @@ const Key = Schema.Literals([...hostile, "leaf", "a.b", "雪"]);
 const inherited = [Object.prototype, Object, Object.prototype.toString];
 
 const members = () =>
-  inherited.flatMap((owner) =>
-    Object.entries(Object.getOwnPropertyDescriptors(owner)).map(([name, d]) => [owner, name, d.value, d.get, d.set]),
+  Arr.flatMap(inherited, (owner) =>
+    Arr.map(Object.entries(Object.getOwnPropertyDescriptors(owner)), ([name, d]) => [
+      owner,
+      name,
+      d.value,
+      d.get,
+      d.set,
+    ]),
   );
 
 const unchanged = (before: ReturnType<typeof members>, after: ReturnType<typeof members>) =>
-  after.length === before.length && after.every((member, i) => member.every((x, j) => Object.is(x, before[i]![j])));
+  after.length === before.length &&
+  Arr.every(after, (member, i) => Arr.every(member, (x, j) => Object.is(x, before[i]![j])));
 
 // What TOML holds of a JSON value today: no null, no whole number past the safe range, and no
 // lone surrogate in a string or a key.
@@ -243,15 +250,19 @@ const lone = (text: string) => /[\uD800-\uDFFF]/u.test(text);
 const writable = (value: unknown): boolean =>
   value === null
     ? false
-    : Array.isArray(value)
-      ? value.every(writable)
+    : Arr.isArray(value)
+      ? Arr.every(value, writable)
       : record(value)
-        ? Object.entries(value).every(([key, child]) => !lone(key) && writable(child))
+        ? Arr.every(Object.entries(value), ([key, child]) => !lone(key) && writable(child))
         : typeof value === "string"
           ? !lone(value)
           : typeof value !== "number" || !Number.isInteger(value) || Number.isSafeInteger(value);
 
-const dotted = (path: Path): string => path.map((key) => JSON.stringify(key)).join(".");
+const dotted = (path: Path): string =>
+  Arr.join(
+    Arr.map(path, (key) => JSON.stringify(key)),
+    ".",
+  );
 
 // Read both the model and the reparsed document before selecting a move.
 const selected = (model: Tree, parsed: Tree, hint: Hint): Path => {
@@ -939,7 +950,7 @@ describe("T877 public TOML edits, next/", () => {
         const before = members();
         // Every run holds each hostile key in the middle of a path and at its end.
         const middle = 1 + (Math.abs(at) % (path.length - 1));
-        const paths = [path, ...hostile.flatMap((key) => [path.toSpliced(middle, 0, key), [...path, key]])];
+        const paths = [path, ...Arr.flatMap(hostile, (key) => [path.toSpliced(middle, 0, key), [...path, key]])];
         const seen = { put: 0, refused: 0, midway: 0 };
 
         for (const p of paths) {
@@ -964,7 +975,9 @@ describe("T877 public TOML edits, next/", () => {
           // and a document that writes through it is a Syntax failure at the line that does.
           const prefix = p.slice(0, middle);
           const source = yield* toml.set("", prefix, scalar);
-          const line = (yield* toml.parse(source)).spans.find((span) => same(span.path, prefix))!.line;
+          const line = Option.getOrThrow(
+            Arr.findFirst((yield* toml.parse(source)).spans, (span) => same(span.path, prefix)),
+          ).line;
           const set = yield* refusal(toml.set(source, p, 1), "Conflict", line);
           expect(set.reason).toMatchObject({ path: p });
           yield* refusal(toml.remove(source, p), "Conflict", line);
