@@ -2,6 +2,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema } from "effect";
 import type { Scope } from "effect";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import type { Sql } from "../Sql.ts";
 import { Archive, sha256 } from "./Archive.ts";
@@ -29,7 +30,7 @@ const counts = (sql: Sql) =>
       .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
       .map(({ name }) => [
         String(name),
-        sql.exec(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`)[0]?.n,
+        sql.exec(`SELECT count(*) AS n FROM "${Str.replaceAll('"', '""')(String(name))}"`)[0]?.n,
       ]),
   );
 

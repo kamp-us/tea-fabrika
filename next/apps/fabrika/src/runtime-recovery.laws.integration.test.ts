@@ -34,7 +34,7 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -159,7 +159,7 @@ const identity = () => {
   return {
     raw: bytes.toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -303,7 +303,7 @@ const mailRequester = (config: { readonly self: string; readonly peer: string })
     },
   });
   return Program.make({
-    name: `p41/requester-${config.self.replaceAll(":", "-")}`,
+    name: `p41/requester-${Str.replaceAll(":", "-")(config.self)}`,
     machine,
     state: { v: 1, upgrades: [] },
     view: (s) => s,
@@ -504,7 +504,7 @@ const world = (
           query: string,
           ...args: Parameters<typeof handles.sql.exec> extends [string, ...infer A] ? A : never
         ) => {
-          if (args.some((arg) => typeof arg === "string" && arg.startsWith("settings/instance/"))) {
+          if (args.some((arg) => typeof arg === "string" && Str.startsWith("settings/instance/")(arg))) {
             if (/SELECT \* FROM entries WHERE stream = \? AND rev > \?/i.test(query)) {
               settingsCounts.reads++;
             }
@@ -741,10 +741,10 @@ const world = (
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => {
-          const requester = id.startsWith(`${requesterCode.hash}/`),
-            responder = id.startsWith(`${responderCode.hash}/`);
+          const requester = Str.startsWith(`${requesterCode.hash}/`)(id),
+            responder = Str.startsWith(`${responderCode.hash}/`)(id);
 
-          if (id.startsWith(`${poisonCode.hash}/`) || requester || responder) {
+          if (Str.startsWith(`${poisonCode.hash}/`)(id) || requester || responder) {
             // The real box: its declaration carries the program's own maxDeliveries.
             const program = requester ? requestProgram : responder ? mailResponder : poisonProgram(flow.limit);
             const Box = programBox(
@@ -781,12 +781,12 @@ const world = (
             };
           }
 
-          if (id.startsWith(`${checklistCode.hash}/`)) {
+          if (Str.startsWith(`${checklistCode.hash}/`)(id)) {
             const Box = programBox(checklist, checklistCode.hash);
             return Reflect.construct(Box, []);
           }
 
-          const approval = id.startsWith(`${approvalCode.hash}/`),
+          const approval = Str.startsWith(`${approvalCode.hash}/`)(id),
             program = approval ? approvals : counter,
             execution = nodeExecution(program);
           return {
@@ -1286,7 +1286,9 @@ describe("P12 Project configure recovery", () => {
               logged.some((spy) =>
                 spy.mock.calls.some((call) => {
                   const text = inspect(call, { depth: 8 });
-                  return text.includes(descriptor.id) && (fault === "interrupted" || text.includes("LedgerError"));
+                  return (
+                    Str.includes(descriptor.id)(text) && (fault === "interrupted" || Str.includes("LedgerError")(text))
+                  );
                 }),
               ),
               `the ${fault} delivery of ${descriptor.id} is logged`,
@@ -1941,7 +1943,7 @@ describe("P34c live object accounting", () => {
                 .all()
                 .map(({ name }) => [
                   String(name),
-                  db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
+                  db.prepare(`SELECT count(*) AS n FROM "${Str.replaceAll('"', '""')(String(name))}"`).get()?.n,
                 ]),
             );
 

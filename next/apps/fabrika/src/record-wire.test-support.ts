@@ -3,7 +3,7 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { SinkError } from "@kampus/libfabrika/telemetry/Sink";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Path, Schema, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
@@ -16,7 +16,9 @@ export const settingsFixture = <A extends StartsTest.Fixture>(config: A) => {
   return {
     ...rest,
     ...StartsTest.fixture(config, (algorithm, data) =>
-      createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+      createHash(Str.toLowerCase(Str.replaceAll("-", "")(algorithm.name)))
+        .update(data)
+        .digest(),
     ),
   };
 };
