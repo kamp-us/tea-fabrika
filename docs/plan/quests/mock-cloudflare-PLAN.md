@@ -40,8 +40,13 @@ expect(sent.map((text) => JSON.parse(text))).toContainEqual(/* ... */);
   `process.stdout` and `process.stderr` half was not ruled on and stays open question 1; until it is
   answered, slice 1 still holds back those two spies.
 
-  **Amendment (2026-11-15, merge session rulings):** that half still waits on the owner. Nothing
-  else in this plan waits on it.
+  **Amendment (2026-11-15, owner ruling, relayed by the merge session, which records it as a
+  decision):** that half is answered too. Raw `process.stdout` and `process.stderr` writes are
+  banned across libfabrika with oxlint's built-in `eslint/no-restricted-properties`, and every write
+  goes through Effect's `Console`. A real exception (a CLI's final output, a crash path) takes a
+  disable line with a plain written reason. Slice 1 turns the ban on at zero (law M13), in the same
+  fold pull request as the rest, never with a gap, and the two entry-flows spies go in slice 1.
+  Open question 1 is closed (see "Answered questions").
 - **The lock's reach while the folder still holds `vi.mock` (open question 2, waiting on the merge
   session).** The merge session's ruling 2 of 2026-11-15 gives every block all five methods, `mock`
   included. On main at `0683861`, `rg -c 'vi\.mock\('` finds `vi.mock` lines in 11 of the folder's
@@ -375,14 +380,39 @@ it is, and only how it watches changes. The reviewer runs the loosening check.
 | M10. C1: a bucket put whose digest rejects fails `crypto` with the rejected value as its cause | test | fc.record: failure, body and key, default runs | make `checkedPut` call `globalThis.crypto.subtle.digest` again: the real digest answers, C1 red | next/packages/libfabrika/src/cloudflare/error-cause.test.ts |
 | M11. No file in the folder calls `vi.fn`, `vi.spyOn`, `vi.doMock` or `vi.stubEnv`, or uses a `toHaveBeenCalled*` matcher; each file at zero for all five also refuses `vi.mock`; this is node's M1 (amendment 2026-11-15, ruling 2): each `VI_METHODS` line is refused or taken exactly, in each path of every block that sets the rule. Where the files that still hold `vi.mock` keep their lock is open question 2 | lint | lint | delete `fn` from the block in `.oxlintrc.json`: `plants.test.ts`'s `VI_METHODS` scenario red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
 | M12. No product file in `next/packages/libfabrika/src` calls `console`, held by oxlint's built-in `eslint/no-console` at error, not a rule of ours (amendment 2026-11-16, merge session ruling); its plant lines are refused in a libfabrika product path and taken in a test path | lint | lint | drop the libfabrika glob from the `no-console` block: the planted `console.log(secret)` in a product path is taken, the plant scenario red | .oxlintrc.json, oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
+| M13. No file under `next/packages/libfabrika/src` but a `*.test.ts` file reads `process.stdout` or `process.stderr`, held by oxlint's built-in `eslint/no-restricted-properties` at error (amendment 2026-11-15, owner ruling); its plant lines `process.stdout.write(secret)` and `process.stderr.write(secret)` are refused in a libfabrika product path and in a `*.test-support.ts` path, and taken in a `*.test.ts` path; every exception line is listed below with its reason, and no other disable line names the rule's `process` entries | lint | lint | (a) drop the two `process` entries from one of the five blocks that set the rule for a libfabrika path: the planted write in that block's paths is taken, red; (b) add a block for libfabrika after the others that lists only the two `process` entries: the `JSON.parse` plant in its paths is taken, red (an override replaces options); (c) add a `process.stdout.write(cause)` to `SettingsStartsLedger.ts`: `pnpm lint` red | .oxlintrc.json, oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
 
+
+- **M13 (amendment 2026-11-15, owner ruling).** On main at `0683861`,
+  `rg -n 'process\.(stdout|stderr)' next/packages/libfabrika/src --glob '!*.test.ts'` finds one
+  line, so the ban is on at one known exception and no other hit:
+
+  | Exception line | Reason, written on its disable line |
+  |---|---|
+  | `next/packages/libfabrika/src/node/client/JournalSqlite.child.test-support.ts:37`, `process.stdout.write("ready\n")` | `-- a child process's ready line on its own stdout, which the parent law reads as its start signal; it is the process's output channel, not a log` |
+
+  No CLI final output or crash path in libfabrika writes raw today; a new one takes its own disable
+  line with its reason, which review reads. Test files (`*.test.ts`) are left out, as `no-console`
+  leaves them, since a law may read a child's output; the four that touch `process.stdout` or
+  `process.stderr` on main lose their spies in this sweep (entry-flows here, node-client's S2) or
+  read a child's stream.
+- **Where the entries go.** `eslint/no-restricted-properties` is already set by five override
+  blocks that reach libfabrika paths (`.oxlintrc.json` at `0683861`: the `next/**/*` block with
+  `JSON.parse`, the `client/**` block with the dial retries, and the three later blocks that list
+  libfabrika folders by name). oxlint takes the last matching override's options for a rule, so
+  a new block would drop their entries for its files. The two `process` entries are added to each
+  of those five blocks instead, with one message: "Write through Effect's Console; a raw stdout or
+  stderr write takes a disable line with its reason (owner ruling, 2026-11-15)." For the
+  `next/**/*` block, which also reaches the app and test files, the entries go into a copy of it
+  scoped to `next/packages/libfabrika/src/**` with `*.test.ts` left out, placed right after it.
+  M13's plant (b) holds that no entry is lost.
 - M12 is new (amendment 2026-11-16). It is what lets the `console` spy go in slice 1 without M6
   losing a raw `console` write: a raw call cannot land at all. `no-console` is oxlint's own rule
   (installed oxlint 1.90.0), not a plugin rule of ours, by the merge session's ruling.
 - M1, M2, M5 and M6 lose a spy and keep what it checked. M1 and M2 still check the typed failure,
   now on the live member's own exit, and (amendment 2026-11-15) still check the one attempt with
   its value, now on the Recorder's record. M5 still checks each ended span. M6 still reads every
-  output the flow can write, given open question 1.
+  output the flow can write: the `process` spies give way to M13 (amendment 2026-11-15, owner ruling).
 - **M6 reads every `Console` method the spies read** (amendment 2026-11-15, ruling 4: coverage is
   never lost). The `console` spy watched five methods. `TestConsole` reads back `log` and `error`
   on main; app-e2e's patch adds `warnLines`
@@ -410,7 +440,7 @@ it is, and only how it watches changes. The reviewer runs the loosening check.
 | next/packages/libfabrika/src/cloudflare/readers.laws.test.ts | tests | tests | slice 1: the world on `Stub.make`, 6 `vi.fn` go (M3, M4); slice 2: the 3 `Effect.result` spies and `vi.mock("effect")` go (M1, M2) |
 | next/packages/libfabrika/src/cloudflare/ProjectAuditTest.ts | tests | tests | slice 1: 2 `vi.fn` go, the guard is `Stub.make`'s `rest` (M7) |
 | next/packages/libfabrika/src/cloudflare/connection.test.ts | tests | tests | slice 1: the `ProjectClient.make` spy goes, spans read from the records (M5) |
-| next/packages/libfabrika/src/cloudflare/entry-flows.laws.test.ts | tests | tests | slice 1: the span attribute spy and (amendment 2026-11-16) the `console` spy go; the `stdout` and `stderr` spies go once open question 1 is answered (M6) |
+| next/packages/libfabrika/src/cloudflare/entry-flows.laws.test.ts | tests | tests | slice 1: the span attribute spy and (amendment 2026-11-16) the `console` spy go; and (amendment 2026-11-15, owner ruling) the `stdout` and `stderr` spies go, held by M13 (M6) |
 | next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts | tests | tests | slice 2, after 1366: 4 spies go (M8) |
 | next/packages/libfabrika/src/cloudflare/ObjectService.test.ts | tests | tests | slice 2, after 1366: 2 spies go (M9) |
 | next/packages/libfabrika/src/cloudflare/error-cause.test.ts | tests | tests | slice 2: the `crypto.subtle` spy goes (M10) |
@@ -423,9 +453,10 @@ it is, and only how it watches changes. The reviewer runs the loosening check.
 | patches/effect | tests | tests | the patch's name as pnpm writes it; the one file above |
 | scripts/effect-testconsole.test.ts | tests | tests | slice 1, with the readers above: their law, beside app-e2e's L3 |
 | next/packages/libfabrika/src/cloudflare/runtime.ts | build | 26 | slice 2, after 1366: `SinkLayer` and `RunnerLayer` with doc blocks, read where `SpanSink.layer` and `ProgramRunner.withLoader` are named; the two digests read `WebCrypto.WebCrypto`; (amendment 2026-11-15) provides `Dispatcher.layer` and `Waits.layer` |
-| .oxlintrc.json | tests | 38 | slice 2: the lock block above, 30 lines; slice 1 (amendment 2026-11-16): an `eslint/no-console` block at error for `next/packages/libfabrika/src/**`, test files left out (M12), about 8 lines |
-| oxlint-plugins/builtin-plants.ts | tests | tests | slice 2: `VI_BAN` (M11); slice 1 (amendment 2026-11-16): the `no-console` plant lines (M12) |
-| oxlint-plugins/plants.test.ts | tests | tests | slice 2: the VI_BAN scenario, beside REFLECT's (M11); slice 1 (amendment 2026-11-16): the `no-console` scenario (M12) |
+| .oxlintrc.json | tests | 62 | slice 2: the lock block above, 30 lines; slice 1 (amendment 2026-11-16): an `eslint/no-console` block at error for `next/packages/libfabrika/src/**`, test files left out (M12), about 8 lines; slice 1 (amendment 2026-11-15): the two `process` entries in the five `no-restricted-properties` blocks that reach libfabrika, and a libfabrika copy of the `next/**/*` block (M13), about 24 lines |
+| oxlint-plugins/builtin-plants.ts | tests | tests | slice 2: M11's lines in node's `VI_METHODS` set (amended 2026-11-15; first `VI_BAN`); slice 1: the `no-console` plant lines (M12, amendment 2026-11-16) and the `process` write plant lines (M13, amendment 2026-11-15) |
+| oxlint-plugins/plants.test.ts | tests | tests | slice 2: node's M1 scenario (M11); slice 1: the `no-console` scenario (M12) and the `process` write scenario over every block that sets the rule (M13, amendment 2026-11-15) |
+| next/packages/libfabrika/src/node/client/JournalSqlite.child.test-support.ts | tests | tests | slice 1 (amendment 2026-11-15): the one exception line, a disable line with its written reason above `process.stdout.write("ready\n")` (M13) |
 | next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts | tests | tests | unchanged; run once in slice 1, since it reads `ProjectAuditTest.ts` (M7) |
 | next/AGENTS.md | build | docs | slice 2: a "What lint holds" row for the vi ban, naming the folders it is on for |
 | oxlint-plugins/README.md | tests | docs | slice 2: the two vitest rules and their messages |
@@ -516,7 +547,9 @@ Both slices land on `fabrikalfa/mock-fold`, the sweep's one fold branch, in its 
 
 1. Slice 1, the test-only fakes and the spans: no product code, about 120 test lines changed, and
    (amendment 2026-11-16) about 8 lines of `no-console` config, with its plants, and (amendment
-   2026-11-15) the two `TestConsole` readers if no earlier slice added them, about 12 lines. 20 lines.
+   2026-11-15) the two `TestConsole` readers if no earlier slice added them, about 12 lines, and
+   (amendment 2026-11-15, owner ruling) about 24 lines of `process` entries and one disable line,
+   with their plants. 44 lines.
 2. Slice 2, after 1366 and reflect slice 10: the two services (amendment 2026-11-15), the two
    References, the `WebCrypto` reads and the lock, about 90 product and config lines, about 160
    test lines. 90 lines.
@@ -532,8 +565,9 @@ Estimate: 7 steps, $31
 ## Records
 
 - No decision file. This plan builds 0554, 0555, 0557 and 0579. The merge session's ruling of
-  2026-11-16 answered the `console` half of its one question; the `process.stdout` and
-  `process.stderr` half is still asked.
+  2026-11-16 answered the `console` half of its one question, and the owner's ruling of 2026-11-15,
+  which the merge session records as a decision, answered the `process.stdout` and
+  `process.stderr` half.
 - No glossary row: no new word. `Stub` is reflect slice 8's. `Dispatcher` and `Waits` are code
   names; if the build keeps them, slice 2 adds one row each (amendment 2026-11-15).
 - The merge session's rulings of 2026-11-15 are amendments here: one pull request for the sweep,
@@ -555,6 +589,26 @@ Estimate: 7 steps, $31
 
 ## Open questions
 
+2. **For the merge session (amendment 2026-11-15): where do the files that still hold `vi.mock`
+   keep their lock until their last call goes?** Ruling 2 puts all five methods in every block.
+   Read as written, a file with a `vi.mock` that waits on Alchemy or the object exports cannot be
+   in any block, so `fn`, `spyOn`, `doMock` and `stubEnv` are no longer refused there, which this
+   plan held folder-wide. That loosens M11, so this amendment does not apply it. Lean, 80%: keep
+   one interim block for those files, the four methods it had, with M1's plants for what it names
+   and `vi.mock` recorded as taken there; each file moves to the five-method block the day its
+   `vi.mock` goes, and the interim block goes with the last one. The same question stands in the
+   app-src and node-dev plans. The other way: the folder waits for its `vi.mock` sweep before any
+   lock, and new `vi.fn` or `vi.spyOn` lines can land until then.
+
+## Answered questions
+
+**Amendment (2026-11-15, owner ruling, relayed by the merge session):** question 1 is answered
+whole. Its `console` half was ruled on 2026-11-16 (M12). Its `process.stdout` and `process.stderr`
+half: raw writes are banned across libfabrika with oxlint's built-in
+`eslint/no-restricted-properties`, every write goes through Effect's `Console`, and a real exception
+takes a disable line with a plain written reason (M13, slice 1). The lean held. The question is kept
+as it was asked.
+
 1. **Does a lint rule hold that libfabrika's product code writes no raw `console` call and no
    `process.stdout` or `process.stderr` write?** The entry-flows leak law (M6) spies on all three
    today, so a secret written raw would turn it red. With the spies gone, `TestConsole` sees only
@@ -570,19 +624,8 @@ Estimate: 7 steps, $31
    built-in `no-console` rule, not a rule of ours (M12, slice 1). What stays open is only the
    `process.stdout` and `process.stderr` half: does a `no-restricted-properties` entry for them go
    on for libfabrika's non-test files, or do their two spies go with M6 no longer seeing a raw
-   write? The lean for that half is unchanged: the entry, 80%. (Amendment 2026-11-15: still
-   waiting on the owner.)
-
-2. **For the merge session (amendment 2026-11-15): where do the files that still hold `vi.mock`
-   keep their lock until their last call goes?** Ruling 2 puts all five methods in every block.
-   Read as written, a file with a `vi.mock` that waits on Alchemy or the object exports cannot be
-   in any block, so `fn`, `spyOn`, `doMock` and `stubEnv` are no longer refused there, which this
-   plan held folder-wide. That loosens M11, so this amendment does not apply it. Lean, 80%: keep
-   one interim block for those files, the four methods it had, with M1's plants for what it names
-   and `vi.mock` recorded as taken there; each file moves to the five-method block the day its
-   `vi.mock` goes, and the interim block goes with the last one. The same question stands in the
-   app-src and node-dev plans. The other way: the folder waits for its `vi.mock` sweep before any
-   lock, and new `vi.fn` or `vi.spyOn` lines can land until then.
+   write? The lean for that half is unchanged: the entry, 80%. (Answered 2026-11-15: the entry,
+   by the owner's ruling.)
 
 ## Findings
 

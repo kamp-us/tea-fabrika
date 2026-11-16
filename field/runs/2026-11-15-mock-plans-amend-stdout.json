@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-plans-amend-stdout",
+  "ticket": "1067",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1491",
+  "started": "2026-11-15T22:04:58-08:00",
+  "ended": null,
+  "parent": "2026-11-15-mock-plans-amend",
+  "active": null,
+  "role": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "The owner's ruling on the open half of the cloudflare plan's question 1 reached the lead step after its one amendment commit was pushed, so it lands as a second commit, never an amend. Raw process.stdout and process.stderr writes are banned across libfabrika with oxlint's built-in eslint/no-restricted-properties, every write goes through Effect's Console, and a real exception takes a disable line with its written reason. The cloudflare plan gains law M13 and moves question 1 to Answered questions; the node-dev plan gains law M3, the same law; both turn it on at zero in the same fold pull request, whichever slice is folded first. The node-client plan's two process spies and its lock, which waited on this answer, now go in its slice.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "On main at 0683861 one line outside test files writes raw: next/packages/libfabrika/src/node/client/JournalSqlite.child.test-support.ts:37, a child's ready line its parent law reads; both plans list it as the one expected exception, with its reason. eslint/no-restricted-properties is already set by five override blocks that reach libfabrika paths, and oxlint keeps only the last matching block's options, so the plans add the two process entries to each of those blocks, and M13's plant (b) holds that no earlier entry is lost. The ended time is null: it was not read from the clock before the commit. plancheck, format and lint ran before the commit; no test ran.",
+  "step": "lead"
+}

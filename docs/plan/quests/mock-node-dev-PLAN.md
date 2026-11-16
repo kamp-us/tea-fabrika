@@ -213,6 +213,25 @@ a law owns, not services, the case the Recorder pattern leaves to the law
   support left out. `rg -n '\bconsole\.'` finds 0 hits there on main, so it blocks from the start
   (0523's "block where clean"). It holds what the spy held for our own code: nothing of ours writes
   to the global `console`, so `TestConsole` sees every write of ours.
+- **Raw `process.stdout` and `process.stderr` writes are banned across libfabrika** (amendment
+  2026-11-15, owner ruling, relayed by the merge session, which records it as a decision): oxlint's
+  built-in `eslint/no-restricted-properties`, at error, on every file under
+  `next/packages/libfabrika/src` but `*.test.ts` files, and every write goes through Effect's
+  `Console`. A real exception (a CLI's final output, a crash path) takes a disable line with a plain
+  written reason. Law M3 holds it; it is the cloudflare plan's M13, one law for both plans. It is
+  turned on at zero hits in the same fold pull request as this slice, never with a gap: whichever of
+  this slice and cloudflare's slice 1 is folded first adds the entries, and the other runs M3 green
+  and changes nothing. The entries go into each of the five blocks that already set
+  `no-restricted-properties` for a libfabrika path, since an override replaces options (the
+  cloudflare plan, "Where the entries go").
+
+  `rg -n 'process\.(stdout|stderr)' next/packages/libfabrika/src/node/dev --glob '!*.test.ts'`
+  finds none on main at `0683861`, so this folder expects no exception line. The one exception
+  line in libfabrika, which this plan expects too:
+
+  | Exception line | Reason, written on its disable line |
+  |---|---|
+  | `next/packages/libfabrika/src/node/client/JournalSqlite.child.test-support.ts:37`, `process.stdout.write("ready\n")` | `-- a child process's ready line on its own stdout, which the parent law reads as its start signal; it is the process's output channel, not a log` |
 
 ### The watch law's warnings (open question 1, answered 2026-11-15)
 
@@ -308,6 +327,7 @@ another law can see, which the `mockRestore` lines guarded by hand. Those `try/f
 |---|---|---|---|---|
 | M1 | lint | lint | `vitest/no-restricted-vi-methods` refuses `vi.fn`, `vi.spyOn` and `vi.stubGlobal` in `next/packages/libfabrika/src/node/dev/**`; `vi.stubGlobal` too, so a spy does not move to a global stub (0555). Amendment 2026-11-15 (ruling 2): this is node's M1 for the folder; every file at zero for all five also refuses `vi.mock`, `vi.doMock` and `vi.stubEnv`; where the five files with `vi.mock` or `vi.stubEnv` keep their lock meanwhile is open question 3 | node's `VI_METHODS` set in `oxlint-plugins/builtin-plants.ts`, with this plan's `vi.stubGlobal` line added to it (amended 2026-11-15; was a `VI_SPY` plant of its own); `plants.test.ts` runs its lines in every path of every block. Plant: drop the folder from the block, and its line is not refused |
 | M2 | lint | lint | `eslint/no-console` refuses `console.*` in libfabrika's product files and takes it in a test file | a `NO_CONSOLE` plant, run in a product path and a test path. Plant: widen the block to test files, and the test line is refused |
+| M3 | lint | lint | (amendment 2026-11-15, owner ruling) `eslint/no-restricted-properties` refuses `process.stdout` and `process.stderr` in every libfabrika file but a `*.test.ts` file, in each of the five blocks that set the rule for a libfabrika path, and the one exception line above is the only disable line that names those entries; the cloudflare plan's M13 | the planted lines `process.stdout.write(secret)` and `process.stderr.write(secret)` in a `node/dev` product path and in a `*.test-support.ts` path, refused, and in a `*.test.ts` path, taken. Plants: drop the two entries from one block, and that block's planted write is taken; add `process.stdout.write(bearer)` to `dev.ts`, and `pnpm lint` is red |
 | L6a | test | Effect Arbitrary: SignalCase | `signal` succeeds on `missing`, dies on `refused`, and sends exactly one `send(pid, name)` | let `missing` escape `signal`, or swallow `refused` too (the L6 plant of today) |
 | L6b | test | Effect Arbitrary: Thrown | `make` over a call that throws answers `missing` only for `{ code: "ESRCH" }` and keeps the thrown value as `cause` | classify by `message` in place of `code`, or answer `missing` for any error |
 | L6c | test, `SignalsNode.integration.test.ts` | vector: one real ESRCH from Node, a child this law spawned and waited for | `SignalsNode.layer`'s `send` to a child this law spawned and waited for fails as `missing`: the shape `{ code: "ESRCH" }` that L6b assumes comes from a real Node, as a `vector:` | drop the `catch` in `make`, and the ESRCH dies as a defect |
@@ -371,8 +391,9 @@ const Thrown = Schema.Union([
 | next/packages/libfabrika/src/node/dev/dev-secrets.laws.integration.test.ts | tests | tests | 1 `fetch`, the `console` spies, a new plant |
 | next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts | tests | tests | (amended 2026-11-15) the `console.warn` spy goes for `TestConsole.warnLines` |
 | oxlint-plugins/builtin-plants.ts | tests | tests | M1's lines in node's `VI_METHODS` set (amended 2026-11-15; first a `VI_SPY` plant), and `NO_CONSOLE` |
-| oxlint-plugins/plants.test.ts | tests | tests | M1 and M2's scenarios, as `REFLECT`'s at `:532` |
-| .oxlintrc.json | tests | tests | the two blocks |
+| oxlint-plugins/plants.test.ts | tests | tests | M1 and M2's scenarios, and (amendment 2026-11-15) M3's, the cloudflare plan's M13 scenario, as `REFLECT`'s at `:532` |
+| .oxlintrc.json | tests | tests | the two blocks; and (amendment 2026-11-15) M3's `process` entries in the five `no-restricted-properties` blocks that reach libfabrika, if cloudflare's slice 1 is not folded first |
+| next/packages/libfabrika/src/node/client/JournalSqlite.child.test-support.ts | tests | tests | (amendment 2026-11-15) M3's one exception: a disable line with its written reason, if cloudflare's slice 1 is not folded first |
 
 - **The libfabrika test** (`next/AGENTS.md`): a from-scratch client that runs a local dev brain
   needs `Signals` too, so it lives in libfabrika, and `instance.ts` only provides it.

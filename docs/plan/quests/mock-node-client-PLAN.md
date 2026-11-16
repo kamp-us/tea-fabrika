@@ -26,8 +26,9 @@ whose warning hook this start sets), and writes that go through Effect's `Consol
 with app-e2e's `warnLines` patch. So this plan drops its own `Console` stand-in for `TestConsole`.
 The lock refuses all five methods, `fn` included, with node's M1 as its law (ruling 2), and the
 slice lands on the sweep's one fold branch (ruling 1). The two `process.stdout` and
-`process.stderr` spies wait on the owner's answer to the cloudflare plan's open question 1, as the
-same two spies do there.
+`process.stderr` spies go too: the owner ruled (2026-11-15, relayed by the merge session) that raw
+writes to them are banned across libfabrika by oxlint's `no-restricted-properties`, the cloudflare
+plan's law M13.
 
 ## Doubts, read these first
 
@@ -60,9 +61,11 @@ same two spies do there.
     old net read.
   - Our own code: the cloudflare plan's M12 turns `eslint/no-console` on for libfabrika's product
     files, which reaches `client/` and `node/client/`.
-  - `process.stdout` and `process.stderr`: the owner's answer to the cloudflare plan's open
-    question 1 decides how a raw write is held. Until it lands, this slice keeps those two spies,
-    and the folder's lock waits with them (see "The lock").
+  - `process.stdout` and `process.stderr`: the owner's ruling of 2026-11-15 bans a raw write to
+    either across libfabrika with oxlint's built-in `no-restricted-properties` (the cloudflare
+    plan's M13, on in the same fold pull request), so a raw write on S2's path cannot land, and the
+    two spies go in this slice. Its one exception in libfabrika,
+    `JournalSqlite.child.test-support.ts:37`, is a child's ready line S2 never starts.
 
 ## What changes, in one paragraph
 
@@ -242,8 +245,8 @@ and no open pull request adds it (searched 2026-11-16). 0555 names that rule and
 
 - **Amendment (2026-11-15, merge session ruling 2):** the block refuses all five methods, `fn`
   included, with node's five messages, not 0555's four; its law is node's M1. The folder has no
-  `vi.fn` today, so `fn` blocks at zero. The lock goes on the day the folder is at zero, which waits
-  for the two `process` spies (see the doubts); the slice's other parts land before it.
+  `vi.fn` today, so `fn` blocks at zero. The lock goes on in this slice: with the two `process`
+  spies gone under the owner's ruling, the folder is at zero (amended 2026-11-15).
 - **If main still has no such entry when this slice's tests step starts,** this slice adds it: one
   `overrides` block in `.oxlintrc.json` for `next/packages/libfabrika/src/node/client/**`, at
   `error`, with node's five messages, and node's `VI_METHODS` plant in
@@ -270,7 +273,7 @@ and no open pull request adds it (searched 2026-11-16). 0555 names that rule and
 | scripts/effect-testconsole.test.ts | tests | tests | with the readers above: their law, beside app-e2e's L3 |
 | patches/@demlik__tea@0.27.0.patch | tests | 0 | read only here (amended 2026-11-15): the pipeline plan's tea patch, whose hook `HandsStart.ts` sets; this slice waits for it |
 | next/apps/fabrika/hands.ts | build | 3 | the line printer races `runtime.done()` |
-| next/packages/libfabrika/src/node/client/HandsSecrets.laws.test.ts | tests | tests | S2: the `console` spy goes, `TestConsole` is provided and its five readers read (amended 2026-11-15); the two `process` spies and the `vi` import go once the owner answers the cloudflare plan's open question 1; the new plants noted in the header |
+| next/packages/libfabrika/src/node/client/HandsSecrets.laws.test.ts | tests | tests | S2: the `console` spy goes, `TestConsole` is provided and its five readers read, and the two `process` spies and the `vi` import go, held by the cloudflare plan's M13 (amended 2026-11-15); the new plants noted in the header |
 | next/packages/libfabrika/src/client/HandsStart.laws.test.ts | tests | tests | H1 and H2, added beside its laws |
 | oxlint-plugins/builtin-plants.ts | tests | tests | N1: the `VI_METHODS` plant, or one more folder for it |
 | oxlint-plugins/plants.test.ts | tests | tests | N1 runs the plant in the folder; changed only if the plant needs a new runner line |
@@ -324,7 +327,8 @@ no pull request of its own. It lands on the mock sweep's one fold branch, `fabri
 in its one pull request (0589, amended 2026-11-15), after its own steps, one fresh agent each:
 tests (S2, H1, H2, N1 and their plants, each run once), build (`HandsStart.ts` and `hands.ts`) and
 review (the slice's diff, with the loosening check on S2). It waits for the pipeline plan's tea
-patch and app-e2e's `warnLines`; its lock and the two `process` spies wait for the owner's answer.
+patch, app-e2e's `warnLines` and the cloudflare plan's M13 (whichever slice adds it), all in the
+same fold pull request.
 
 1. The mock sweep in `node/client`: about 21 product lines, about 130 test lines added and about 20
    removed, about 12 lines of lint config, and the two `TestConsole` readers if no earlier slice
@@ -356,8 +360,6 @@ Estimate: 4 steps, $17
   above). tea's warnings no longer belong here: the tea patch's hook covers them (amended
   2026-11-15). A future tea site that skips the hook would not be seen; the bump that drops the
   patch reads tea's `dist/` again.
-- **When the owner answers the `process.stdout` and `process.stderr` question,** and so when this
-  folder's lock goes on.
 - **`hands.ts`'s race,** read by the review only; the integration law runs on the schedule.
 
 ## Open questions
