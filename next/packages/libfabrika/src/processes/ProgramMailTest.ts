@@ -1395,7 +1395,14 @@ const pipeMail = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           (move !== "reverse" || (live(PIPE_R) && ends.has(PIPE_W))) &&
           ((move !== "stop" && move !== "stop_other" && move !== "crash") || live(PIPE_W) || live(PIPE_R)),
       );
-      const move = possible[cell.move % possible.length] ?? "start";
+      // Once both ends are stopped no move is left, and the walk ends: a stopped name is never
+      // started again here, since the walk's model starts each end once.
+      const move = possible[cell.move % possible.length];
+
+      if (move === undefined) {
+        break;
+      }
+
       const end = cell.end ? PIPE_W : PIPE_R;
       const liveEnd = live(end) ? end : live(PIPE_W) ? PIPE_W : PIPE_R;
 

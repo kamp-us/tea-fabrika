@@ -586,7 +586,7 @@ describe("ticket 806 the checklist's laws", () => {
         Effect.provide(ProgramLoader.layer({ "fabrika/checklist": checklist }, {})),
       ),
     );
-    expect(loaded.declaration.outputs.done?.shape).toEqual({
+    expect(loaded.declaration.outputs?.done?.shape).toEqual({
       doc: SchemaRepresentation.toJson(SchemaRepresentation.toRepresentation(Done.ast)),
       decodes: null,
     });

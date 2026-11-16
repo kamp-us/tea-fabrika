@@ -691,13 +691,16 @@ describe("Pipe slice 1: a pipe fits on the two declared shapes, next/", () => {
   it("F8: Effect's own checks with equal payloads fit in any order; a differing payload or a foreign id answers cannot_tell, even on equal ends", () => {
     // Plants: (a) compare ids without payloads (isMaxLength 10 against 256); (b) trust any equal
     // id: F8 red.
-    type Spec = { readonly id: "min" | "max" | "pattern"; readonly n: number };
+    // Each check has two payloads, and every mix of them leaves strings Effect's Arbitrary can draw
+    // (a lowercase word of 3 to 10 letters passes all of them), so the soundness step can sample any
+    // pair that fits. A differing payload flips one check to its other payload.
+    type Spec = { readonly id: "min" | "max" | "pattern"; readonly at: 0 | 1 };
     const one = (s: Spec) =>
       s.id === "min"
-        ? Schema.isMinLength(s.n)
+        ? Schema.isMinLength(s.at === 0 ? 1 : 3)
         : s.id === "max"
-          ? Schema.isMaxLength(s.n)
-          : Schema.isPattern(new RegExp(`^[a-z]{0,${s.n}}$`));
+          ? Schema.isMaxLength(s.at === 0 ? 10 : 256)
+          : Schema.isPattern(s.at === 0 ? /^[a-z]+$/ : /^[a-z0-9]+$/);
     const FOREIGN = Schema.makeFilter((s: string) => s !== "x", {
       representation: { id: "pack/isTicket", payload: null },
     });
@@ -707,7 +710,7 @@ describe("Pipe slice 1: a pipe fits on the two declared shapes, next/", () => {
       return first === undefined ? Schema.String : Schema.String.check(first, ...rest);
     };
     const Specs = fc.uniqueArray(
-      fc.record({ id: fc.constantFrom<Spec["id"]>("min", "max", "pattern"), n: fc.constantFrom(1, 10, 256) }),
+      fc.record({ id: fc.constantFrom<Spec["id"]>("min", "max", "pattern"), at: fc.constantFrom<0 | 1>(0, 1) }),
       { maxLength: 3, selector: (s) => s.id },
     );
     const reached = new Set<string>();
@@ -721,16 +724,19 @@ describe("Pipe slice 1: a pipe fits on the two declared shapes, next/", () => {
         ];
         const differ = !widen && reader.length > 0;
         const writer = differ
-          ? rotated.map((s, n) => (n === 0 ? { ...s, n: s.n === 10 ? 256 : 10 } : s))
+          ? rotated.map((s, n): Spec => (n === 0 ? { ...s, at: s.at === 0 ? 1 : 0 } : s))
           : widen && !reader.some((s) => s.id === "min")
-            ? [...rotated, { id: "min" as const, n: 1 }]
+            ? [...rotated, { id: "min" as const, at: 0 as const }]
             : rotated;
         const verdict = judged(checkedString(writer, foreign), checkedString(reader, foreign));
         const expected = foreign || differ ? "cannot_tell" : "fits";
         expect(verdict._tag, `F8 ${JSON.stringify({ writer, reader, foreign })}`).toBe(expected);
 
         if (expected === "fits") {
-          sound(checkedString(writer, false), checkedString(reader, false), seed, "F8");
+          expect(
+            sound(checkedString(writer, false), checkedString(reader, false), seed, "F8"),
+            "F8: the soundness step drew writer values",
+          ).toBeGreaterThan(0);
         }
 
         reached.add(foreign ? "foreign" : differ ? "payload" : writer.length > reader.length ? "more" : "order");

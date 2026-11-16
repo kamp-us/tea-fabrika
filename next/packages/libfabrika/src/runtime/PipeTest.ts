@@ -99,7 +99,7 @@ const LIMIT = "20 seconds";
 
 const PIDS: ReadonlyArray<string> = Array.from(
   { length: 80 },
-  (_, n) => `process_0000000000e00c00${String(n).padStart(10, "0")}`,
+  (_, n) => `process_0000000000e00b00${String(n).padStart(10, "0")}`,
 );
 
 type Built = Schema.Codec<unknown, unknown>;
@@ -274,7 +274,7 @@ const brainFrom = (): From => ({
 });
 
 const inputId = (n: number) =>
-  Schema.decodeUnknownSync(InputId)(`input_0000000000e00c${n.toString(16).padStart(12, "0")}`);
+  Schema.decodeUnknownSync(InputId)(`input_0000000000e00b${n.toString(16).padStart(12, "0")}`);
 
 const ids = (values: ReadonlyArray<string>) => {
   let calls = 0;
@@ -386,7 +386,30 @@ const pipeWorld = Effect.fnUntraced(function* (open: Effect.Effect<Store, never,
       Layer.provideMerge(Mailbox.layer),
       Layer.provideMerge(ledger(store.sql("ledger"))),
     );
-    return yield* Layer.buildWithScope(shared, scope);
+    const built = yield* Layer.buildWithScope(shared, scope);
+    const manager = Context.get(built, ProcessManager);
+    // An exit writes each watcher's DOWN, and the host then wakes the watchers, as the Worker's
+    // Project does (`wakeWatchers` in cloudflare/runtime.ts, after `exit`). The only watchers here
+    // are the pipes' readers, so the host wakes each reader it runs but the one that ended; a wake
+    // with no new mail hands nothing.
+    const wakeReaders = (ending: string | undefined) =>
+      Effect.forEach(
+        config.pairs.keys(),
+        (k) => {
+          const held = runners.get(readerName(k));
+          return held === undefined || readerName(k) === ending ? Effect.void : held.runner.mailed;
+        },
+        { concurrency: 1, discard: true },
+      ).pipe(Effect.orDie);
+    return Context.add(built, ProcessManager, {
+      ...manager,
+      exit: (process, reason, from, stop) =>
+        Effect.gen(function* () {
+          const ending = (yield* manager.info).find((row) => row.process === process)?.name;
+          yield* manager.exit(process, reason, from, stop);
+          yield* wakeReaders(ending);
+        }),
+    });
   });
 
   let scope = yield* Scope.make();
@@ -758,27 +781,39 @@ const drawValue = (schema: Built) =>
     return Result.isSuccess(encoded) ? copied(encoded.success) : null;
   });
 
-/** X2's cases: a shape and a value of it, and the plan's edges. */
-const ValueCase = fc
-  .oneof(
-    {
-      weight: 3,
-      arbitrary: fc.nat({ max: SHAPES.length - 1 }).chain((at) => {
-        const [label, schema] = SHAPES[at] ?? expect.fail("a shape");
-        return drawValue(schema).map((value) => ({ label, schema, value }));
-      }),
-    },
-    {
-      weight: 2,
-      arbitrary: fc.constantFrom(
-        { label: "an empty list", schema: Schema.Array(Row2), value: copied([]) },
-        { label: "a list of one", schema: Schema.Array(Row2), value: copied([{ id: "a", title: "one" }]) },
-        { label: "a list that needs several chunks", schema: Schema.Array(Row3), value: copied(rows3("many", 30)) },
-        { label: "a list of lists", schema: Schema.Array(Schema.Array(Schema.Int)), value: copied([[1, 2], [], [3]]) },
-      ),
-    },
+/** Every class a tour holds; X2 and A1 each require all of them reached. */
+const LABELS = [
+  ...SHAPES.map(([label]) => label),
+  "an empty list",
+  "a list of one",
+  "a list that needs several chunks",
+  "a list of lists",
+];
+
+/** One shape class and a value of it. */
+type ValueCase = { readonly label: string; readonly schema: Built; readonly value: Schema.Json };
+
+/**
+ * X2's and A1's cases, one tour per run: a generated value of each of X1's shapes, then the plan's
+ * edges, so every run reaches every class at any depth.
+ */
+const ValueTour = fc
+  .tuple(
+    ...SHAPES.map(([label, schema]) => drawValue(schema).map((value) => ({ label, schema, value }))),
+    fc.constant({ label: "an empty list", schema: Schema.Array(Row2), value: copied([]) }),
+    fc.constant({ label: "a list of one", schema: Schema.Array(Row2), value: copied([{ id: "a", title: "one" }]) }),
+    fc.constant({
+      label: "a list that needs several chunks",
+      schema: Schema.Array(Row3),
+      value: copied(rows3("many", 30)),
+    }),
+    fc.constant({
+      label: "a list of lists",
+      schema: Schema.Array(Schema.Array(Schema.Int)),
+      value: copied([[1, 2], [], [3]]),
+    }),
   )
-  .filter((c): c is { label: string; schema: Built; value: Schema.Json } => c.value !== null);
+  .map((cases) => cases.filter((c): c is ValueCase => c.value !== null));
 
 // ---------------------------------------------------------------------------------------------
 // The laws.
@@ -1154,7 +1189,7 @@ const o3 = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
 /** X2 on one case: through real runners, the reader is handed the value once, as it was given. */
 const x2 = (open: Effect.Effect<Store, never, Scope.Scope>, reached: Set<string>) =>
-  Effect.fnUntraced(function* (c: { readonly label: string; readonly schema: Built; readonly value: Schema.Json }) {
+  Effect.fnUntraced(function* (c: ValueCase) {
     const w = yield* pipeWorld(open, { pairs: [{ writer: c.schema, reader: c.schema }], cap: 4, chunk: 1_024 });
     yield* connect(w, 0);
     yield* w.say(writerName(0), { type: "set", value: c.value });
@@ -1162,6 +1197,10 @@ const x2 = (open: Effect.Effect<Store, never, Scope.Scope>, reached: Set<string>
     expect(yield* w.handed(readerName(0)), `X2: ${c.label} arrives once, as it was given`).toEqual([c.value]);
     reached.add(c.label);
   });
+
+/** One run of a tour: each case on its own world, each world in its own scope. */
+const tour = (law: (c: ValueCase) => Effect.Effect<void, unknown, Scope.Scope>) => (cases: ReadonlyArray<ValueCase>) =>
+  Effect.forEach(cases, (c) => Effect.scoped(law(c)), { concurrency: 1, discard: true });
 
 /** N1's values: a list of nullable integers, and a struct with a nullable field. */
 const N1_LIST = [null, [], [null], [null, null], [7]] as const;
@@ -1208,7 +1247,7 @@ const n1 = (open: Effect.Effect<Store, never, Scope.Scope>, reached: Set<string>
 
 /** A1 on one case: a reader of anything is handed the writer's value as the writer declared it. */
 const a1 = (open: Effect.Effect<Store, never, Scope.Scope>, reached: Set<string>) =>
-  Effect.fnUntraced(function* (c: { readonly label: string; readonly schema: Built; readonly value: Schema.Json }) {
+  Effect.fnUntraced(function* (c: ValueCase) {
     const w = yield* pipeWorld(open, { pairs: [{ writer: c.schema, reader: Schema.Unknown }], cap: 4, chunk: 1_024 });
     yield* connect(w, 0);
     yield* w.say(writerName(0), { type: "set", value: c.value });
@@ -1385,9 +1424,9 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       () => {
         const reached = new Set<string>();
         return Effect.andThen(
-          property(ValueCase, x2(open, reached), { fast: 10, full: 30 }),
+          property(ValueTour, tour(x2(open, reached)), { fast: 3, full: 30 }),
           Effect.sync(() => {
-            for (const required of ["an empty list", "a list that needs several chunks", "a number"]) {
+            for (const required of LABELS) {
               expect(reached, `X2 reached ${required}`).toContain(required);
             }
           }),
@@ -1424,9 +1463,9 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       () => {
         const reached = new Set<string>();
         return Effect.andThen(
-          property(ValueCase, a1(open, reached), { fast: 10, full: 30 }),
+          property(ValueTour, tour(a1(open, reached)), { fast: 3, full: 30 }),
           Effect.sync(() => {
-            for (const required of ["a number", "a list of one"]) {
+            for (const required of LABELS) {
               expect(reached, `A1 reached ${required}`).toContain(required);
             }
           }),

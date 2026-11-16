@@ -1705,14 +1705,18 @@ describe("Program watch: a program that monitors declares DOWN, next/", () => {
 describe("Pipe slice 1: the loader writes each port's declared shape, next/", () => {
   const Row = Schema.Struct({ id: Schema.String, n: Schema.NumberFromString, title: Schema.String });
   type Built = Schema.Codec<unknown, unknown>;
-  /** F5's shapes: a list and a single value of each kind, one with a field that decodes from a string. */
-  const SHAPES: ReadonlyArray<readonly [string, Built]> = [
-    ["a list of rows", Schema.Array(Row)],
-    ["a row", Row],
-    ["a number", Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))],
-    ["a string", Schema.String],
-    ["a list of numbers", Schema.Array(Schema.Int)],
-    ["a nullable note", Schema.Struct({ note: Schema.NullOr(Schema.String) })],
+  /**
+   * F5's shapes: a list and a single value of each kind, one with a field that decodes from a string,
+   * and where each first decodes through a transformation (A-Fits rule 5, law F7): the row's `n`,
+   * at `["n"]` in the row and `["[]", "n"]` in a list of rows, and nowhere in the others.
+   */
+  const SHAPES: ReadonlyArray<readonly [string, Built, ReadonlyArray<string> | null]> = [
+    ["a list of rows", Schema.Array(Row), ["[]", "n"]],
+    ["a row", Row, ["n"]],
+    ["a number", Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)), null],
+    ["a string", Schema.String, null],
+    ["a list of numbers", Schema.Array(Schema.Int), null],
+    ["a nullable note", Schema.Struct({ note: Schema.NullOr(Schema.String) }), null],
   ];
   const PortModel = Schema.Struct({ value: Schema.NullOr(Schema.Json) });
   const DownMsg = Schema.Struct({
@@ -1782,31 +1786,37 @@ describe("Pipe slice 1: the loader writes each port's declared shape, next/", ()
     const persisted = (schema: Built) => SchemaRepresentation.toJson(SchemaRepresentation.toRepresentation(schema.ast));
     const reached = new Set<string>();
     await fc.assert(
-      fc.asyncProperty(fc.constantFrom(...SHAPES), fc.constantFrom(...SHAPES), async ([label, schema], [, other]) => {
-        const { writer, reader } = await pair(schema, other);
-        expect(writer.outputs.out?.shape, `F5: ${label}'s output shape`).toEqual({
-          doc: persisted(schema),
-          decodes: null,
-        });
-        expect(writer.outputs.other?.shape, "F5: the other output's shape").toEqual({
-          doc: persisted(other),
-          decodes: null,
-        });
-        expect(reader.inputs.v?.shape, `F5: ${label}'s piped input shape`).toEqual({
-          doc: persisted(schema),
-          decodes: null,
-        });
-        // The form persists: it reads back to a document.
-        expect(
-          () => SchemaRepresentation.fromJson(writer.outputs.out?.shape?.doc),
-          `F5: ${label} survives fromJson`,
-        ).not.toThrow();
-        // A write port no pipe made, and the DOWN port, carry no shape.
-        expect(Object.hasOwn(reader.inputs.set ?? {}, "shape"), "F5: a plain write port has no shape").toBe(false);
-        expect(Object.hasOwn(writer.inputs.set ?? {}, "shape"), "F5: a plain write port has no shape").toBe(false);
-        expect(Object.hasOwn(reader.inputs.DOWN ?? {}, "shape"), "F5: the DOWN port has no shape").toBe(false);
-        reached.add(label);
-      }),
+      fc.asyncProperty(
+        fc.constantFrom(...SHAPES),
+        fc.constantFrom(...SHAPES),
+        async ([label, schema, decodes], [, other, otherDecodes]) => {
+          const { writer, reader } = await pair(schema, other);
+          expect(writer.outputs?.out?.shape, `F5: ${label}'s output shape`).toEqual({
+            doc: persisted(schema),
+            decodes,
+          });
+          expect(writer.outputs?.other?.shape, "F5: the other output's shape").toEqual({
+            doc: persisted(other),
+            decodes: otherDecodes,
+          });
+          expect(reader.inputs.v?.shape, `F5: ${label}'s piped input shape`).toEqual({
+            doc: persisted(schema),
+            decodes,
+          });
+          // The form persists: it reads back to a document.
+          const doc = writer.outputs?.out?.shape?.doc;
+          expect(doc, `F5: ${label}'s output has a persisted form`).toBeDefined();
+          expect(
+            () => SchemaRepresentation.fromJson(doc ?? expect.fail("a persisted form")),
+            `F5: ${label} survives fromJson`,
+          ).not.toThrow();
+          // A write port no pipe made, and the DOWN port, carry no shape.
+          expect(Object.hasOwn(reader.inputs.set ?? {}, "shape"), "F5: a plain write port has no shape").toBe(false);
+          expect(Object.hasOwn(writer.inputs.set ?? {}, "shape"), "F5: a plain write port has no shape").toBe(false);
+          expect(Object.hasOwn(reader.inputs.DOWN ?? {}, "shape"), "F5: the DOWN port has no shape").toBe(false);
+          reached.add(label);
+        },
+      ),
       { seed: SEED, numRuns: 30 },
     );
     expect(reached, "F5 reached every shape").toEqual(new Set(SHAPES.map(([label]) => label)));
@@ -1824,11 +1834,11 @@ describe("Pipe slice 1: the loader writes each port's declared shape, next/", ()
     await fc.assert(
       fc.asyncProperty(fc.constantFrom(...SHAPES), async ([label, other]) => {
         const { writer, reader } = await pair(Table, other);
-        expect(writer.outputs.out?.shape, "F9: the table output's shape").toBeNull();
+        expect(writer.outputs?.out?.shape, "F9: the table output's shape").toBeNull();
         expect(reader.inputs.v?.shape, "F9: the table input's shape").toBeNull();
-        expect(writer.outputs.other?.shape, `F9: the other output, ${label}, keeps its shape`).not.toBeNull();
+        expect(writer.outputs?.other?.shape, `F9: the other output, ${label}, keeps its shape`).not.toBeNull();
         expect(
-          Fit.fits(writer.outputs.out?.shape ?? null, Fit.shape(Schema.Unknown)),
+          Fit.fits(writer.outputs?.out?.shape ?? null, Fit.shape(Schema.Unknown)),
           "F9: a pipe from the table",
         ).toMatchObject({
           _tag: "cannot_tell",

@@ -95,8 +95,9 @@ it("type: L5 a step that yields StartProgram needs it, provide removes it, and a
 });
 
 it("type: L6 a type, relation or permission the model does not declare does not compile", () => {
-  // A ref takes exactly the types the model declares, and names its type in its own.
-  expectTypeOf<Parameters<typeof Model.ref>[0]>().toEqualTypeOf<"person" | "fabrika">();
+  // A ref takes exactly the types the model declares, and names its type in its own. Pipe slice 1
+  // declares `name`, a registered name that pipes to another (docs/plan/quests/pipe-PLAN.md, Model.ts).
+  expectTypeOf<Parameters<typeof Model.ref>[0]>().toEqualTypeOf<"person" | "fabrika" | "name">();
   expectTypeOf<Rebac.Ref<"fabrika">>().toEqualTypeOf<`fabrika:${string}`>();
   expectTypeOf(undeclared).toBeFunction();
 });

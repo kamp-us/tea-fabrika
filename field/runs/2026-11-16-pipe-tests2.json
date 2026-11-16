@@ -1,0 +1,80 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-pipe-tests2",
+  "ticket": "kamp-us/tea-fabrika#1081",
+  "pr": "kamp-us/tea-fabrika#1458",
+  "started": "2026-11-15T22:28:26-08:00",
+  "ended": "2026-11-15T22:55:53-08:00",
+  "parent": null,
+  "active": null,
+  "driver_caused": false,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Second tests round for pipe slice 1 in next/ (docs/plan/quests/pipe-PLAN.md), a send-back from the build at c2a965c, on fabrikalfa/pipe-s1 at 192e91f (origin/main merged in, with PR 1508 and tea 0.27.0). Fixed the laws that could not pass, test files only. runtime/PipeTest.ts: its process and input ids used e00c, which is no UUIDv7 variant digit, so every law failed at setup; they now use e00b. The Node world's host now wakes the pipes' readers after an exit, as the Worker's Project wakes watchers (wakeWatchers in cloudflare/runtime.ts), so S1 step 5, W1 and W2 see the DOWN the brain wrote. X2 and A1 now draw one tour per run, a generated value of each of X1's six shapes plus the four edges, so every class is reached at any depth, and each requires all ten classes reached (it required two or three before). processes/ProgramMailTest.ts, P4: once both ends are stopped no move is left and the walk ends, in place of falling back to starting tracker:1 again. runtime/Program.test.ts, F5: a shape that holds the row with a NumberFromString field records decodes [\"n\"] for the row and [\"[]\",\"n\"] for a list of rows, as A-Fits rule 5 and law F7 need; the others record null. processes/Fit.test.ts, F8: each check has two payloads whose every mix leaves strings Effect's Arbitrary can draw (min length 1 or 3, max 10 or 256, pattern ^[a-z]+$ or ^[a-z0-9]+$), and the soundness step must draw writer values. permissions/Rebac.types.test.ts, L6: the model's types are person | fabrika | name; the plan's Files table adds the name type to permissions/Model.ts (the pipes_to relation and mail permission live on it), and L6 says a ref takes exactly the types the model declares, so this is the plan's meaning and not a loosening: an extra type still turns L6 red. Program.test.ts and the checklist's program.laws.test.ts read declaration.outputs?.out, since outputs stays optional. Still red, product only: O2, 'a restart sends again from seq 0' (expected undefined to be +0), list or single by timing. When the restart's backoff has passed inside the crash's own call, the runner adopts the new life and setAlarm returns at runtime/Runner.ts:760 (running, live null, until null), so the new life is never loaded and never sends its first value; when the restart goes through an alarm, due loads it and O2 is green. An uncommitted runner change that arms the alarm at once after a restart completes with no live state (continueRecovery, Runner.ts:1035) made all 11 PipeTest laws green three runs in a row; it was put back by copy. Build needed.",
+  "plants": [
+    {
+      "law": "S1 and W1 (runtime/PipeTest.ts)",
+      "plant": "processes/ProcessManager.ts: the pipe's watches written only in a first start, never in a restart turn",
+      "result": "red"
+    },
+    {
+      "law": "W2 (runtime/PipeTest.ts)",
+      "plant": "processes/ProcessManager.ts pipeWatches: the watch written only on a writer's start, never on a reader's",
+      "result": "red"
+    },
+    {
+      "law": "W1 (runtime/PipeTest.ts)",
+      "plant": "processes/ProcessManager.ts pipeWatches: the pipe id reused as the watch ref",
+      "result": "red"
+    },
+    {
+      "law": "X2 (runtime/PipeTest.ts)",
+      "plant": "runtime/internal/pipeItems.ts unwrap: the reader handed the items in place of the value",
+      "result": "red"
+    },
+    {
+      "law": "A1 (runtime/PipeTest.ts)",
+      "plant": "runtime/Runner.ts: unwrap by the reader's declared shape in place of the writer's",
+      "result": "red"
+    },
+    {
+      "law": "P4 (processes/ProgramMailTest.ts)",
+      "plant": "processes/ProcessManager.ts unpipe: the unrelated pipes_to row written on another stream, so the right is kept after unpiped",
+      "result": "red"
+    },
+    {
+      "law": "F5 (runtime/Program.test.ts)",
+      "plant": "processes/Fit.ts shape: decodes always null",
+      "result": "red"
+    },
+    {
+      "law": "F8 (processes/Fit.test.ts)",
+      "plant": "processes/Fit.ts: a check's key without its payload",
+      "result": "red"
+    },
+    {
+      "law": "F8 (processes/Fit.test.ts)",
+      "plant": "processes/Fit.ts: any equal check id trusted, not only Effect's own",
+      "result": "red"
+    },
+    {
+      "law": "L6 (permissions/Rebac.types.test.ts)",
+      "plant": "permissions/Model.ts: a fourth type, planted, declared on the model; libfabrika's tsc reported one error, at Rebac.types.test.ts line 100",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 28,
+  "note": "Each plant ran once on a saved copy and was restored by copy; git status showed no product file before the commit. Ran in the box at 192e91f plus this round's test edits: Pipe.integration (10 green, O2 red as above, also at FABRIKA_TEST_DEPTH=full), Pipes.integration (P1 to P4 green, P4 also at full depth), Fit.test (8, also at full depth), Program.test (46), pipeFold.test, pipeItems.test, Chunk.test, the checklist's program.laws.test (14), ProcessMonitors.integration (29), StartChild.integration (8), ProgramMail.integration (9), ProgramMailRuntime.integration (23), ProgramMailReads.integration (4) and H1, next/apps/fabrika/src/worker-pipe.integration.test.ts on real workerd (1). The 0178 guard refused none. No .visual. law is reached by this slice. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144), the list ratchet and one pnpm typecheck passed. While looking at O2, a world with a restart wait of 0 ms lost the lab's pipe answer; that setting was only tried and is not in any law.",
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billing": "subscription",
+  "step": "tests"
+}
