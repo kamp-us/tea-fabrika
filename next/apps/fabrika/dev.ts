@@ -83,6 +83,7 @@ for (let n = 2; n < process.argv.length; n++) {
   }
 }
 
+// @effect-diagnostics-next-line processEnv:off -- Alchemy's telemetry check reads process.env itself, and Config cannot write a variable
 process.env.DO_NOT_TRACK = "1";
 
 const command = Command.make("dev", flags, (options) => {
