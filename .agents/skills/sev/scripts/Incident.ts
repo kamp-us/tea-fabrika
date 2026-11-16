@@ -74,7 +74,7 @@ export const nextLines = (walk: ReadonlyArray<Walk>): ReadonlyArray<string> => [
     ? "sev: the freeze canceled no run of an open pull request"
     : `sev: ${walk.length} open pull requests had runs canceled; walk them in this order, on the merge line:`,
   ...ordered(walk).map((w) => `  ${walkLine(w)}`),
-  `sev: start the 3-hour full run by hand, since the freeze canceled it: ${FULL_RUN}`,
+  `sev: start the full run by hand, since the freeze canceled it: ${FULL_RUN}`,
 ];
 
 /** The latest sev0's log, as lines for the write-up. */

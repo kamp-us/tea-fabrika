@@ -40,12 +40,22 @@
 //
 //   land.ts arm <pr>
 //     the lead session, the one way merge when ready is turned on (0530, 0544; pr/Arm.ts): refuses
-//     one that is not open, not into main, or titled `Plan:`; reads the full run (scheduled.yaml) on
-//     its branch at its head, and refuses one that is red or not ended, printing each job that is
-//     not green, its failed steps and its failing test lines. With no full run at the head it arms,
-//     as 0544 allows, and says so in one line, unless the branch's newest run at an older head is
-//     not green. Then marks a draft ready and turns on merge when ready, a squash pinned to the head
-//     that was read.
+//     one that is not open, not into main, or titled `Plan:`; runs the leak gate (pr/Leaks.ts) on its
+//     net change, each of its commits and its title and description, and refuses on any hit or on a
+//     grep that could not run; reads the proof run (scheduled.yaml) on its branch at its head, the
+//     full set or, since 0590, the changed set, and refuses one that is red or not ended, printing
+//     each job that is not green, its failed steps and its failing test lines. With no run at the
+//     head it arms, as 0544 allows, and says so in one line, unless the branch's newest run at an
+//     older head is not green or is a changed-set run, which proves only that head's change. Then
+//     marks a draft ready and turns on merge when ready, a squash pinned to the head that was read.
+//
+//   land.ts merge <pr> [--admin]
+//     the lead session, the only way it merges a pull request by hand (pr/Merge.ts); never a bare
+//     `gh pr merge`. Without --admin, as `queue`. With --admin, an admin merge past the queue, only
+//     for a docs-only pull request (0183: every file Markdown in a docs folder, or a field row) or a
+//     branch an open sev0 allows (0532, whose fix also needs `ci-required` green). Both run the
+//     leak gate first, on the change, each commit, the title and the description, and refuse on any
+//     hit or on a grep that could not run.
 //
 //   land.ts merged <pr>...
 //     the lead session, later: one read of each pull request, no wait. Merged into main: closes
@@ -69,10 +79,13 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, DateTime, Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
+import * as Level from "../../sev/scripts/Level.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as RunsGh from "./ci/RunsGh.ts";
 import * as Arm from "./pr/Arm.ts";
+import * as Merge from "./pr/Merge.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
+import { LeakGrepRefused } from "./pr/Pushes.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
 import * as SweepsProcess from "./pr/SweepsProcess.ts";
@@ -656,22 +669,60 @@ const queueCommand = Command.make(
   }),
 );
 
+/** A refusal from a merge path: a leak grep that refused or could not run is the `leak` check's. */
+const refusedAt =
+  (check: typeof Check.Type) =>
+  (e: { readonly reason: string }): Refused =>
+    new Refused({ check: e instanceof LeakGrepRefused ? "leak" : check, reason: e.reason, output: "" });
+
 const armCommand = Command.make(
   "arm",
   { pr: PrNumber },
   Effect.fn("land.armCommand")(function* ({ pr }) {
     const env = yield* loadEnv;
-    const armed = yield* Arm.arm({ repo: env.GH_REPO, pr }).pipe(
+    const armed = yield* Arm.arm({ repo: env.GH_REPO, dir: env.MAIN, pr }).pipe(
       Effect.provide(
         Layer.mergeAll(
           PullRequestsGh.layer(env.GH_REPO, env.MAIN),
+          PushesProcess.layer(HERE),
           RunsGh.layer(env.GH_REPO, env.MAIN),
           ChecksGh.layer(env.GH_REPO),
         ),
       ),
-      Effect.mapError((e) => new Refused({ check: "arm", reason: e.reason, output: "" })),
+      Effect.mapError(refusedAt("arm")),
     );
     yield* Console.log(Arm.line(armed));
+  }),
+);
+
+/** The branches an open sev0 allows, from the sev log in the main checkout; none when none is open. */
+const sev0Allows = Effect.fn("land.sev0Allows")(function* (main: string) {
+  const { sev0 } = yield* Level.read(`${main}/runs/sev`).pipe(
+    Effect.mapError(
+      (e) =>
+        new Refused({
+          check: "merge",
+          reason: `the sev log does not read: ${e._tag === "Refused" ? e.reason : e.message}`,
+          output: "",
+        }),
+    ),
+  );
+  return sev0._tag === "open" ? sev0.allow : [];
+});
+
+const mergeCommand = Command.make(
+  "merge",
+  { pr: PrNumber, admin: Flag.Boolean("admin") },
+  Effect.fn("land.mergeCommand")(function* ({ pr, admin }) {
+    const env = yield* loadEnv;
+    const route = admin
+      ? Merge.Route.cases.admin.make({ sev0: yield* sev0Allows(env.MAIN) })
+      : Merge.Route.cases.queue.make({});
+    const done = yield* Merge.merge({ dir: env.MAIN, pr, route }).pipe(
+      Effect.provide(queueServices(env)),
+      Effect.mapError(refusedAt("merge")),
+    );
+    yield* Console.log(Merge.line(done));
   }),
 );
 
@@ -708,7 +759,7 @@ const closeNamed = Command.make(
 );
 
 const land = Command.make("land").pipe(
-  Command.withSubcommands([ready, run, queueCommand, armCommand, merged, closeNamed]),
+  Command.withSubcommands([ready, run, queueCommand, armCommand, mergeCommand, merged, closeNamed]),
 );
 
 if (import.meta.main) {

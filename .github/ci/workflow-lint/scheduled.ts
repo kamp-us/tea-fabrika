@@ -1,6 +1,6 @@
 import * as Function from "effect/Function";
 import * as Result from "effect/Result";
-// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC13).
+// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC18).
 import { parse } from "yaml";
 import {
   allSteps,
@@ -26,9 +26,9 @@ import { TIME_TABLE, timed } from "./time-tables.ts";
 // globs). No call in check.yaml runs it (0539).
 const TOOLING_PROJECT = "--project tooling";
 
-// The schedule (0534): scheduled.yaml runs all of next/ and every tooling test on main, and a red run
-// opens one `ci-scheduled` issue. Half of the organization's 20 runners at most, so pull requests
-// keep theirs.
+// The full run (0534, 0581): scheduled.yaml runs all of next/ and every tooling test on main, and a
+// red run opens one `ci-scheduled` issue. Half of the organization's 20 runners at most, so pull
+// requests keep theirs.
 const RUNNERS = 10;
 // What the workflow's token may do: read runs (the time tables) and the checkout. Canceling a run takes
 // `actions: write`, and a run anything canceled ends `cancelled`, never `failure`.
@@ -41,8 +41,44 @@ const TOOLING_LEG = "tooling-";
 const ON_TOOLING = `startsWith(matrix.shard, '${TOOLING_LEG}')`;
 // On every branch: the report job fails unless the run is green, so a red run with no failed job
 // still ends `failure`. scheduled.mjs writes the issue on main alone.
-const REPORT_IF = "always()";
+// A run whose gate said `false` skips the report too, so it leaves the issue as it was; a gate that
+// failed leaves `start` empty, and the report judges that run red (0581).
+const REPORT_IF = "always() && needs.gate.outputs.start != 'false'";
 const REPORT = "node .github/ci/scheduled.mjs";
+// The gate (0581): the first job, which says whether this run starts the tests. A push to main or
+// the hourly catch-up starts them only when no full run on main started within the gap, and the
+// catch-up only on a head that has had none; a hand start always does.
+const GATE_JOB = "gate";
+const GATE = "node .github/ci/gate.mjs";
+const GATE_STEP = "decide";
+const GATE_OUTPUTS = { start: `\${{ steps.${GATE_STEP}.outputs.start }}` };
+const STARTED = `needs.${GATE_JOB}.outputs.start == 'true'`;
+// A branch's proof run (0590): `select` runs proof.ts on a hand start on a branch other than main
+// alone, so main's push, catch-up and hand start run the full set on `tests` (SC15, SC17). It says
+// `full` or `changed`, and a changed set runs on `changed`'s legs, each its own list (SC18).
+const SELECT_JOB = "select";
+const SELECT = "node .github/ci/proof.ts";
+const SELECT_STEP = "set";
+const SELECT_IF = `${STARTED} && github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'`;
+
+const SELECT_OUTPUTS = Object.fromEntries(
+  ["scope", "legs", "files"].map((key) => [key, `\${{ steps.${SELECT_STEP}.outputs.${key} }}`]),
+);
+
+const RECORD = `\${{ runner.temp }}/proof-set.json`;
+// `tests` runs after a skipped `select`, on main, or after one that said `full`.
+const TESTS_IF = `\${{ !cancelled() && ${STARTED} && (needs.${SELECT_JOB}.result == 'skipped' || needs.${SELECT_JOB}.outputs.scope == 'full') }}`;
+const CHANGED_JOB = "changed";
+const CHANGED_IF = `${STARTED} && needs.${SELECT_JOB}.outputs.scope == 'changed' && needs.${SELECT_JOB}.outputs.legs != '[]'`;
+const CHANGED_LEGS = `\${{ fromJSON(needs.${SELECT_JOB}.outputs.legs) }}`;
+const LEG_FILES = `fromJSON(needs.${SELECT_JOB}.outputs.files)[matrix.shard]`;
+// The gap (0581, 0069): a setting in the workflow's own env, beside the cron line. 0581's binding
+// constraint is an hour at least.
+const GAP = "GAP_MINUTES";
+const LEAST_GAP = 60;
+// The hourly catch-up: a fixed minute of every hour, never minute 0, which GitHub's docs name as
+// the busiest ("Events that trigger workflows", schedule).
+const HOURLY = /^([1-9]|[1-5][0-9]) \* \* \* \*$/;
 
 const REPORT_ENV = {
   NEEDS: `\${{ toJSON(needs) }}`,
@@ -58,6 +94,9 @@ const REPORTERS = `--reporter=default --reporter=json --reporter=github-actions 
 const WHOLE_NEXT = `pnpm exec vitest run --project next --project next-integration --shard "$SHARD" ${REPORTERS}`;
 const WHOLE_E2E = `pnpm exec vitest run --project next-visual --shard "\${SHARD#e2e-}" ${REPORTERS}`;
 const WHOLE_TOOLING = `pnpm exec vitest run ${TOOLING_PROJECT} --shard "\${SHARD#${TOOLING_LEG}}" --passWithNoTests ${REPORTERS}`;
+// A changed leg's one command: its own list, `$FILES` from `select`, over every project CI runs and
+// proof.ts lists, today's left out (0533). No `--changed` and no `--shard`: the list is the leg.
+const CHANGED_RUN = `pnpm exec vitest run --project next --project next-integration --project next-visual --project tooling $FILES ${REPORTERS}`;
 // The schedule's test depth (pull request 1274): its laws run their full case count.
 const DEPTH = "full";
 // Each suite's test commands, which carry its time limit on their own steps (SC13). The report reads
@@ -92,6 +131,20 @@ const listed = (job: Record<string, unknown>): unknown[] => {
 };
 
 /**
+ * A job's step of the `needs` chain: 0 for a job that needs nothing, else one past the deepest job
+ * it needs. A job that needs one that is not there, or a loop, counts as 0: GitHub refuses such a
+ * workflow, and the other rules name what is wrong.
+ */
+const depth = (jobs: Record<string, unknown>, name: string, seen: readonly string[] = []): number => {
+  const needs = map(jobs[name])["needs"];
+  const list = typeof needs === "string" ? [needs] : Array.isArray(needs) ? needs : [];
+  const known = list.filter(
+    (need): need is string => typeof need === "string" && need in jobs && !seen.includes(need) && need !== name,
+  );
+  return known.length === 0 ? 0 : 1 + Math.max(...known.map((need) => depth(jobs, need, [...seen, name])));
+};
+
+/**
  * scheduled.yaml's shape. `check` is check.yaml's text: the schedule runs next on its full matrix
  * of legs, so the measured split (vitest.shards.ts) and each leg's `/N` hold for both.
  */
@@ -117,12 +170,25 @@ export const lintScheduled: {
     }
   };
 
-  // SC1. A schedule and a hand start, nothing else: no pull request, queue or push runs the whole
-  // suite (0534's binding constraint). The cron line is the interval, a setting.
+  // SC1. A push to main, the hourly catch-up and a hand start, nothing else (0581): no pull request
+  // or queue runs the whole suite, and a push to any other branch does not either. The push takes
+  // every path, since the gate, not a path filter, decides. The catch-up is hourly at a fixed minute.
   const crons = Array.isArray(on["schedule"]) ? on["schedule"] : [];
-  require(JSON.stringify(Object.keys(on).toSorted()) === JSON.stringify(["schedule", "workflow_dispatch"]) &&
+  require(JSON.stringify(Object.keys(on).toSorted()) === JSON.stringify(["push", "schedule", "workflow_dispatch"]) &&
+    JSON.stringify(on["push"]) === JSON.stringify({ branches: ["main"] }) &&
     crons.length === 1 &&
-    typeof map(crons[0])["cron"] === "string", "SC1: it runs on one schedule and by hand, on no other event");
+    Object.keys(map(crons[0])).length === 1 &&
+    typeof map(crons[0])["cron"] === "string" &&
+    HOURLY.test(
+      String(map(crons[0])["cron"]),
+    ), "SC1: it runs on a push to main, on one hourly schedule at a minute from 1 to 59, and by hand, on no other event");
+  // SC16. The gap is the workflow's one env value, a whole number of minutes, an hour at least
+  // (0581's binding constraint), so a person changes it in one line beside the cron line.
+  const gap = map(workflow["env"])[GAP];
+  require(JSON.stringify(Object.keys(map(workflow["env"]))) === JSON.stringify([GAP]) &&
+    typeof gap === "number" &&
+    Number.isInteger(gap) &&
+    gap >= LEAST_GAP, `SC16: the workflow's env is ${GAP} alone, a whole number of minutes, ${LEAST_GAP} or more`);
   // SC2. One run at a time, and a running one is never cut short.
   const concurrency = map(workflow["concurrency"]);
   require(typeof concurrency["group"] === "string" &&
@@ -173,15 +239,18 @@ export const lintScheduled: {
   }
 
   // SC5. The report judges every other job, after any result, on every branch, with scheduled.mjs,
-  // and its failure shows: it is the job that fails for a red run. It and the time tables are the
-  // steps that get the token.
+  // and its failure shows: it is the job that fails for a red run. It skips only a run whose gate
+  // said `false`, so a skipped run neither judges nor closes the issue, and a gate that failed is
+  // judged red. It, the gate's step and the time tables are the steps that get the token.
   const report = map(jobs[VERDICT]),
     others = Object.keys(jobs).filter((name) => name !== VERDICT);
   const needed = Array.isArray(report["needs"]) ? report["needs"] : [];
   require(needed.length === others.length &&
     others.every((name) => needed.includes(name)) &&
     compact(report["if"]) ===
-      REPORT_IF, "SC5: the report needs every other job, and runs after any result, on every branch");
+      compact(
+        REPORT_IF,
+      ), "SC5: the report needs every other job, and runs after any result, on every branch, unless the gate said false");
   const judged = steps(report).filter((s) => "run" in s);
   // Each suite's limit, as `LIMIT_<SUITE>`, equal to its test steps' `timeout-minutes` (SC13):
   // scheduled.mjs tells a timed-out leg from a red or a canceled one by it, and reads a leg's suite
@@ -204,42 +273,188 @@ export const lintScheduled: {
     !("if" in (judged[0] ?? {})) &&
     judged[0]?.["continue-on-error"] ===
       undefined, `SC5: the report runs ${REPORT} once, with the needs, the results, the token and each suite's time limit, and its failure shows`);
-  // The legs' time tables read their own job's steps with it too (TT1 pins their env).
+  // The legs' time tables read their own job's steps with it too (TT1 pins their env), and the
+  // gate's step reads the run list (SC14 pins its env).
+  const gateJob = map(jobs[GATE_JOB]);
+  const gateRuns = steps(gateJob).filter((s) => "run" in s);
   require(Object.values(jobs).every((job) =>
     steps(map(job)).every(
-      (s) => s === judged[0] || s["run"] === TIME_TABLE || !/github\.token|secrets\./.test(JSON.stringify(s)),
+      (s) =>
+        s === judged[0] ||
+        s["run"] === TIME_TABLE ||
+        (gateRuns.length === 1 && s === gateRuns[0]) ||
+        !/github\.token|secrets\./.test(JSON.stringify(s)),
     ),
-  ), "SC5: only the report step and the time tables get the token, and no step a secret");
+  ), "SC5: only the report step, the gate's step and the time tables get the token, and no step a secret");
 
-  // SC6. Every test leg is in one matrix, the test job, and the report is the only other job: GitHub's
-  // fail-fast stops only the legs of the red leg's own matrix (probe run 43778347612), so a second
-  // matrix would run on to its end after a red leg, as the stop step never let it. At most RUNNERS
-  // machines: the matrix counts its `max-parallel`, the report one. The matrix sets it, runs no
-  // more at once than it has legs, and stops its other legs once one failed, which leaves the run's
-  // conclusion `failure`.
-  require(JSON.stringify(others) === JSON.stringify([TESTS_JOB]) &&
+  // SC14. The gate is the first job: it needs nothing and runs on every run, its one command is
+  // gate.mjs, with the token alone, in a step whose `start` is the job's one output, after a
+  // checkout of .github/ci alone, as the report's.
+  const gateCheckouts = steps(gateJob).filter((s) => uses(s, "actions/checkout"));
+  require(GATE_JOB in jobs &&
+    !("needs" in gateJob) &&
+    !("if" in gateJob) &&
+    gateRuns.length === 1 &&
+    gateRuns[0]?.["id"] === GATE_STEP &&
+    gateRuns[0]?.["run"] === GATE &&
+    JSON.stringify(gateRuns[0]?.["env"]) === JSON.stringify({ GITHUB_TOKEN: TOKEN }) &&
+    JSON.stringify(gateJob["outputs"]) === JSON.stringify(GATE_OUTPUTS) &&
+    gateCheckouts.length === 1 &&
+    map(gateCheckouts[0]?.["with"])["sparse-checkout"] ===
+      ".github/ci", `SC14: the ${GATE_JOB} job needs nothing, runs ${GATE} once with the token alone, and gives its start as its one output`);
+  // Every way the gate ends with no `start` ends its job `failure`, so the report judges the run
+  // red: each of its steps has a whole time limit of its own, which ends that step `failure`, and
+  // the job's own limit is a backstop past their sum, since a job that hits its own limit ends
+  // `cancelled`, which the report reads as a run a person stopped (the review of pull request 1404).
+  // No `continue-on-error` on the job or a step, which would turn a failed read into a success with
+  // an empty `start`, and no `if` on a step, since a skipped step ends the job `success` with no
+  // `start` too (the recheck of pull request 1404).
+  const gateLimits = steps(gateJob).map((s) => s["timeout-minutes"]);
+  const gateLimit = gateJob["timeout-minutes"];
+  require(gateLimits.length > 0 &&
+    gateLimits.every((limit) => typeof limit === "number" && Number.isInteger(limit) && limit > 0) &&
+    typeof gateLimit === "number" &&
+    (gateLimits as number[]).reduce((sum, limit) => sum + limit, 0) < gateLimit &&
+    !("continue-on-error" in gateJob) &&
+    steps(gateJob).every(
+      (s) => !("if" in s) && !("continue-on-error" in s),
+    ), `SC14: every step of the ${GATE_JOB} job runs on every run, with a whole timeout-minutes of its own inside the job's, and neither the job nor a step continues on error, so a gate that gives no start fails`);
+
+  // SC15. The tests run only when the gate said `true`: a gate that said `false` or failed starts
+  // none. They run the full set wherever `select` did not run, which is every run on main, and on a
+  // branch whose `select` said `full` (0590). A select that failed starts no full set.
+  const testsJob = map(jobs[TESTS_JOB]);
+  require(JSON.stringify(testsJob["needs"]) === JSON.stringify([GATE_JOB, SELECT_JOB]) &&
+    compact(testsJob["if"]) ===
+      compact(
+        TESTS_IF,
+      ), `SC15: ${TESTS_JOB} needs the ${GATE_JOB} and ${SELECT_JOB}, and runs only when the gate said start=true and ${SELECT_JOB} was skipped or said full`);
+
+  // SC17. `select` runs only on a hand start on a branch other than main, after the gate said
+  // `true` (0590): a push to main, the catch-up and a hand start on main skip it, so SC15's `tests`
+  // runs every test there. It runs proof.ts once, in a step whose three outputs are the job's,
+  // with the most legs at once (`MOST`, the `changed` matrix's `max-parallel`, SC6), the legs' test
+  // step limit (`LIMIT`, next's, SC18) and where its record goes, and no token. It checks out the
+  // whole history, to diff the branch with origin/main from their merge base, and keeps the record
+  // as `proof-set` after a red step too.
+  const commandsOf = (job: Record<string, unknown>) =>
+    steps(job).flatMap((s) => (typeof s["run"] === "string" ? [s["run"]] : []));
+  const select = map(jobs[SELECT_JOB]);
+  const selectSteps = steps(select);
+  const selectRuns = selectSteps.filter((s) => "run" in s && s["run"] !== "pnpm install --frozen-lockfile");
+  const selectEnv = map(selectRuns[0]?.["env"]);
+  const selectCheckouts = selectSteps.filter((s) => uses(s, "actions/checkout"));
+  const records = selectSteps.filter((s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === RECORD);
+  require(SELECT_JOB in jobs &&
+    JSON.stringify(select["needs"]) === JSON.stringify([GATE_JOB]) &&
+    compact(select["if"]) === compact(SELECT_IF) &&
+    JSON.stringify(select["outputs"]) === JSON.stringify(SELECT_OUTPUTS) &&
+    selectRuns.length === 1 &&
+    selectRuns[0]?.["id"] === SELECT_STEP &&
+    selectRuns[0]?.["run"] === SELECT &&
+    !("if" in (selectRuns[0] ?? {})) &&
+    JSON.stringify(Object.keys(selectEnv)) === JSON.stringify(["MOST", "LIMIT", "RECORD"]) &&
+    selectEnv["RECORD"] === RECORD &&
+    selectCheckouts.length === 1 &&
+    map(selectCheckouts[0]?.["with"])["fetch-depth"] === 0 &&
+    records.length === 1 &&
+    map(records[0]?.["with"])["name"] === "proof-set" &&
+    compact(records[0]?.["if"]) === "!cancelled()" &&
+    selectSteps.indexOf(records[0] ?? {}) >
+      selectSteps.indexOf(
+        selectRuns[0] ?? {},
+      ), `SC17: ${SELECT_JOB} runs ${SELECT} once, only on a hand start on a branch other than main, after the gate said start=true, with the whole history, and keeps its record as proof-set`);
+
+  // SC18. `changed` runs a changed set's legs (0590): only when `select` said `changed` with a leg,
+  // so it and `tests` never run in one run, each leg exactly its own list over every project CI
+  // runs, at next's test step limit with the same backstop, chromium first when its list holds a
+  // visual file, and nothing else.
+  const changed = map(jobs[CHANGED_JOB]);
+  const changedSteps = steps(changed);
+  const changedRuns = changedSteps.filter((s) => s["run"] === CHANGED_RUN);
+  const nextLimitHere = limitOf(jobs, "next");
+  require(CHANGED_JOB in jobs &&
+    JSON.stringify(changed["needs"]) === JSON.stringify([GATE_JOB, SELECT_JOB]) &&
+    compact(changed["if"]) === compact(CHANGED_IF) &&
+    map(map(changed["strategy"])["matrix"])["shard"] === CHANGED_LEGS &&
+    Object.keys(map(map(changed["strategy"])["matrix"])).length === 1 &&
+    changedRuns.length === 1 &&
+    JSON.stringify(map(changedRuns[0]?.["env"])) ===
+      JSON.stringify({ FILES: `\${{ ${LEG_FILES} }}`, FABRIKA_TEST_DEPTH: DEPTH }) &&
+    !("if" in (changedRuns[0] ?? {})) &&
+    typeof nextLimitHere === "number" &&
+    changedRuns[0]?.["timeout-minutes"] === nextLimitHere &&
+    selectEnv["LIMIT"] === nextLimitHere &&
+    changed["timeout-minutes"] === nextLimitHere + BACKSTOP &&
+    changedSteps.some(
+      (s) => s["run"] === chromium && compact(s["if"]) === compact(`contains(${LEG_FILES}, '.visual.test.')`),
+    ) &&
+    JSON.stringify(commandsOf(changed).toSorted()) ===
+      JSON.stringify(
+        ["pnpm install --frozen-lockfile", chromium, CHANGED_RUN, TIME_TABLE].toSorted(),
+      ), `SC18: ${CHANGED_JOB} runs only when ${SELECT_JOB} said changed with a leg, each leg its own list over every project at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else`);
+  const changedKept = changedSteps.filter(
+    (s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === `\${{ runner.temp }}/results.json`,
+  );
+  require(changedKept.length === 1 &&
+    compact(changedKept[0]?.["if"]) === "!cancelled()" &&
+    changedSteps.indexOf(changedKept[0] ?? {}) >
+      changedSteps.indexOf(
+        changedRuns[0] ?? {},
+      ), `SC10: ${CHANGED_JOB} uploads its report after its tests, even after a red one`);
+  errors.push(...timed(CHANGED_JOB, changed, "results.json").map((reason) => `scheduled.yaml: ${reason}`));
+
+  // SC6. Every test leg a run starts is in one matrix: the test job's, or on a branch's changed set
+  // the `changed` job's, which SC15 and SC18 keep from running in one run. The gate, `select` and
+  // the report are the only other jobs: GitHub's fail-fast stops only the legs of the red leg's own
+  // matrix (probe run 43778347612), so a second matrix in one run would run on to its end after a red
+  // leg, as the stop step never let it. At most RUNNERS machines at once: jobs run together only at
+  // the same step of the `needs` chain, so each step counts its jobs, a matrix its `max-parallel` and
+  // any other job one, and the two test matrices, which never run together, count as the larger.
+  // A matrix sets it, runs no more at once than it has legs (the `changed` legs: no more than proof.ts
+  // makes, its `MOST`), and stops its other legs once one failed, which leaves the run's conclusion
+  // `failure`.
+  const MATRICES = [TESTS_JOB, CHANGED_JOB];
+  require(JSON.stringify(others.toSorted()) === JSON.stringify([GATE_JOB, SELECT_JOB, ...MATRICES].toSorted()) &&
     Object.entries(jobs).every(
-      ([name, job]) => name === TESTS_JOB || !("strategy" in map(job)),
-    ), `SC6: every test leg is in one matrix, the ${TESTS_JOB} job, so its first red leg stops all the others`);
-  let machines = 0;
+      ([name, job]) => MATRICES.includes(name) || !("strategy" in map(job)),
+    ), `SC6: every test leg a run starts is in one matrix, the ${TESTS_JOB} job or the ${CHANGED_JOB} job, so its first red leg stops all the others`);
+  const atOnce = new Map<number, number>();
+  const matrixAt = new Map<number, number>();
 
   for (const [name, job] of Object.entries(jobs).map(([name, job]) => [name, map(job)] as const)) {
     const strategy = map(job["strategy"]);
     const most = strategy["max-parallel"];
+    const cap = name === CHANGED_JOB ? selectEnv["MOST"] : listed(job).length;
 
     if ("strategy" in job) {
       require(typeof most === "number" &&
         Number.isInteger(most) &&
         most >= 1 &&
-        most <= listed(job).length &&
+        typeof cap === "number" &&
+        most <= cap &&
+        (name !== CHANGED_JOB || most === cap) &&
         strategy["fail-fast"] ===
           true, `SC6: ${name} sets max-parallel to at most its legs, and its first red leg stops the others`);
     }
 
-    machines += "strategy" in job && typeof most === "number" ? most : 1;
+    const at = depth(jobs, name);
+    const machines = "strategy" in job && typeof most === "number" ? most : 1;
+
+    if (MATRICES.includes(name)) {
+      matrixAt.set(at, Math.max(matrixAt.get(at) ?? 0, machines));
+    } else {
+      atOnce.set(at, (atOnce.get(at) ?? 0) + machines);
+    }
   }
 
-  require(machines <= RUNNERS, `SC6: its jobs take at most ${RUNNERS} machines at once, half of the 20 runners`);
+  for (const [at, machines] of matrixAt) {
+    atOnce.set(at, (atOnce.get(at) ?? 0) + machines);
+  }
+
+  require([...atOnce.values()].every(
+    (machines) => machines <= RUNNERS,
+  ), `SC6: its jobs take at most ${RUNNERS} machines at once, half of the 20 runners`);
 
   // SC7. All of next/ on check.yaml's full matrix, each leg's `/N` its kind's count, nothing
   // narrowed. A `--changed`, a `$FILTER` or a list would make it the merge line's selection again.
@@ -283,8 +498,6 @@ export const lintScheduled: {
       ), "SC8: the tooling legs run every tooling test once, legs tooling-1 to tooling-N, each its share of them");
 
   // SC9. The commands are only these: no step runs another test command or narrows one.
-  const commandsOf = (job: Record<string, unknown>) =>
-    steps(job).flatMap((s) => (typeof s["run"] === "string" ? [s["run"]] : []));
   require(JSON.stringify(commandsOf(tests).toSorted()) ===
     JSON.stringify(
       ["pnpm install --frozen-lockfile", WHOLE_NEXT, chromium, WHOLE_E2E, WHOLE_TOOLING, TIME_TABLE].toSorted(),

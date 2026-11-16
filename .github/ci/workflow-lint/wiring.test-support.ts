@@ -382,6 +382,13 @@ const valid = (label: string, extra: string) => ({
         { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },
         { name: "install", if: checkFlag, run: "pnpm install --frozen-lockfile" },
         { name: "install the row check", if: rowsAlone, run: rowInstall },
+        {
+          name: "copies (advice)",
+          if: checkFlag,
+          "continue-on-error": true,
+          env: { BASE: `\${{ github.event.pull_request.base.sha }}` },
+          run: 'node .github/ci/copies.ts --base "$BASE"',
+        },
         { name: "lint", if: checkFlag, run: "pnpm lint" },
         { name: "build", run: "pnpm build", if: build },
         { name: "lists only shrink", if: checkFlag, env: testEnv, run: ratchet },

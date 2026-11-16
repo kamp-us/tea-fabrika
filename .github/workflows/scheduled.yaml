@@ -1,12 +1,21 @@
 name: scheduled
 
-# The whole suite, on a schedule (0534). The merge line runs only the tests a change reaches: a pull
+# The full run, the whole suite (0534). The merge line runs only the tests a change reaches: a pull
 # request, a merge queue group and a push to main each run the next/ tests their diff reaches, and
 # none of them runs a tooling test (0539, check.yaml). This runs all of next/, every layer of it
 # (0536): the in-memory tests, the real-resource ones (`*.integration.test.ts`) and the visual ones
-# (`*.visual.test.ts`), which the merge line never runs, and every tooling test, on main's head, so a
-# break no diff reached shows within about 3 hours. A red run opens one GitHub issue labeled `ci-scheduled`, or comments on the open one,
-# and a green run closes it (scheduled.mjs). Those are the only issues automation opens here.
+# (`*.visual.test.ts`), which the merge line never runs, and every tooling test, on main's head. A
+# push to main starts it when no full run on main started in the last hour, and an hourly catch-up
+# starts it on a head that has had none (0581): the `gate` job decides (gate.mjs), so a break no
+# diff reached shows within about an hour of its push, two at most when the next push is long in
+# coming. A red run opens one GitHub issue labeled `ci-scheduled`, or comments on the open one, and
+# a green run closes it (scheduled.mjs). Those are the only issues automation opens here.
+#
+# A run whose gate said `false` ends `success` in seconds, with `tests` and `report` skipped, and
+# leaves the issue as it was; a run whose gate failed ends `failure`, with the report run and red.
+# From probe runs of a throwaway copy of this file (43795273918, 43795308056), and with the report on
+# `always()`, it ran on a skipped run too (43795341752). GitHub lists the skipped matrix as one job
+# named `tests`, with no shard, which is how scheduled.mjs's `isFull` tells a full run.
 #
 # A red run ends `failure`, on main and on a branch, and only a run a person or a sev0's freeze
 # canceled ends `cancelled`. On 2026-11-15 a red run on a branch that had canceled itself was read
@@ -26,28 +35,51 @@ name: scheduled
 # all of it (SC3 to SC6, SC13).
 #
 #   what            legs   how
+#   gate            1      first; says start=true or start=false (gate.mjs), with the run list read
+#                          by the workflow's own token
 #   next/ vitest    5      check.yaml's next legs 1 to 5, the `next` and `next-integration`
 #                          projects, every file, no `--changed`
 #   next/ visual    2      check.yaml's legs e2e-1 and e2e-2, the `next-visual` project, every file
 #   tooling tests   2      legs tooling-1 and tooling-2, the `tooling` project, every file, no
 #                          `--changed`; the 9 legs above are one matrix, the `tests` job
-#   report          1      after the others, on any result; it fails unless the run is green, so
-#                          a run whose red leg left no failed job still ends `failure`
+#   report          1      after the others, on any result but the gate's `false`; it fails unless
+#                          the run is green, so a run whose red leg left no failed job still ends
+#                          `failure`
+#
+# A branch's proof run (0590) is this workflow started by hand on a branch other than main. Its
+# `select` job runs proof.ts, which lists the tests the branch's change reaches against origin/main
+# with Vitest's own `--changed`, `.integration.` and `.visual.` laws included. A change to a file in
+# vitest.config.ts's `forceRerunTriggers` (a config, .oxlintrc.json, a tsconfig, the lockfile, a
+# package.json) runs the full set, on the `tests` legs above. Any other change runs its set on the
+# `changed` legs, as many as the set needs and one when it is small, each its own list; a set of
+# zero files starts no leg and the run is green. The run keeps what it tested as its `proof-set`
+# artifact and in its summary. On main `select` never runs, so `tests` runs every test there: a
+# push, the catch-up and a hand start on main (SC15, SC17).
+#
+#   what            legs   how
+#   select          1      after the gate, on a branch's hand start alone; says `full` or
+#                          `changed`, and each changed leg's files
+#   changed         0-9    after select, on a changed set alone; leg `k` runs its own list over
+#                          every project CI runs, chromium first when the list holds a visual file
 #
 # Every test leg sets `FABRIKA_TEST_DEPTH: full`, so a law with a depth runs its full case count
 # here; the merge line leaves it unset, which reads as `fast` (pull request 1274).
 #
 # 10 machines at most, half of the organization's 20 runners, so pull requests keep theirs:
-# `max-parallel` on the matrix, which workflow-lint.ts adds up. The next legs are check.yaml's full
+# `max-parallel` on the matrix, which workflow-lint.ts adds up per step of the `needs` chain. The next legs are check.yaml's full
 # matrix, and workflow-lint.ts keeps the two the same. Their split is not check.yaml's: at full
 # depth a file takes longer, so `Shards` splits and orders these legs by the seconds measured here,
 # vitest.shards.full.json (vitest.shards.ts). Refresh its rows from a leg's `results-next-N` report.
 on:
-  # Every 3 hours, at minute 17: GitHub delays runs queued on the hour, when most schedules start
-  # (its docs, "Events that trigger workflows", schedule). The interval is a setting (0534, 0069):
-  # change this line to change it.
+  # Every push to main asks; the gate starts the run only when none started within the gap (0581).
+  # Every path: the gate, not a path filter, decides.
+  push:
+    branches: [main]
+  # The hourly catch-up (0581), at minute 17: GitHub delays and drops runs queued on the hour, when
+  # most schedules start (its docs, "Events that trigger workflows", schedule). It starts a run only
+  # on a head that has had none, and never within the gap.
   schedule:
-    - cron: "17 */3 * * *"
+    - cron: "17 * * * *"
   # By hand, on main, or on a branch, to run every test on it or to try a change to this file. Only
   # main's run writes the issue.
   workflow_dispatch:
@@ -69,7 +101,43 @@ permissions:
   actions: read
   contents: read
 
+# The gap (0581, 0069): no full run on main starts within this many minutes of the last one, except
+# by hand. An hour at least, 0581's binding constraint. The gate reads it; change this line to
+# change it.
+env:
+  GAP_MINUTES: 60
+
 jobs:
+  # The gate (0581): whether this run starts the tests. A hand start always does; a push or the
+  # catch-up does when no full run on main started within the gap, and only on a head that has had
+  # none (gate.mjs). It runs while this run holds the `scheduled` group, so every run ahead of it
+  # has ended. It reads the run list with the workflow's own token, which cannot cancel a run, and
+  # its summary line says why. When it cannot read GitHub it fails and gives no `start`: the tests
+  # skip and the report judges the run red. No install: the runner's own Node runs gate.mjs.
+  #
+  # Every way it ends with no `start` ends the job `failure`, so the report judges the run red:
+  # each step has its own limit, which ends that step `failure`, and gate.mjs gives up loudly well
+  # inside its step's (its `DEADLINE`). The job's own limit is only a backstop past both, since a job
+  # that hits it ends `cancelled`, which the report reads as a run a person stopped (the review of
+  # pull request 1404). Nothing here continues on error. workflow-lint.ts holds it (SC14).
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      start: ${{ steps.decide.outputs.start }}
+    steps:
+      - uses: actions/checkout@v7
+        timeout-minutes: 1
+        with:
+          sparse-checkout: .github/ci
+          persist-credentials: false
+      - id: decide
+        name: gate
+        timeout-minutes: 2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/ci/gate.mjs
+
   # Every test leg, in one matrix, so one `fail-fast` reaches them all: the first red leg stops the
   # other eight, as the stop step did before 2026-11-15, and the run still ends `failure`. Two
   # matrices would let a red tooling leg leave next's seven legs running, up to about 59 runner
@@ -85,7 +153,14 @@ jobs:
   # them: the merge line runs none, and a tooling change's author runs its narrow tests on the
   # laptop (0539). Today's tests run in no CI job (0533). Nothing is narrowed: no `--changed`, no
   # list.
+  #
+  # The full set, wherever it runs: on main, where `select` never runs, and on a branch whose
+  # `select` said `full`. A run starts this job or `changed`, never both, so each red leg still stops
+  # every leg the run started. `!cancelled()` lets it run after a skipped `select`, which would skip
+  # it otherwise; the gate's `start` and the select's own result still decide (SC15).
   tests:
+    needs: [gate, select]
+    if: ${{ !cancelled() && needs.gate.outputs.start == 'true' && (needs.select.result == 'skipped' || needs.select.outputs.scope == 'full') }}
     runs-on: ubuntu-latest
     # A backstop: the leg's test step limit (`next-limit` or `tooling-limit` below) and 3 minutes
     # more, so 20 for a next leg and 33 for a tooling leg (GitHub's docs, "Contexts reference": this
@@ -97,7 +172,7 @@ jobs:
     timeout-minutes: ${{ startsWith(matrix.shard, 'tooling-') && 33 || 20 }}
     # Fail fast, GitHub's own (ticket 990): the first red leg stops every other leg, so they free
     # their runners, and the run still ends `failure`. Every leg at once: 9, and the report job
-    # after them, 10 machines.
+    # after them, 10 machines; the gate runs before them, alone.
     strategy:
       fail-fast: true
       max-parallel: 9
@@ -185,19 +260,131 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
 
+  # What a branch's proof run tests (0590, proof.ts). Only on a hand start on a branch other than
+  # main, so main's push, catch-up and hand start never narrow (SC17). The whole history, blobless as
+  # in check.yaml, so git can diff the branch with origin/main from their merge base, and an install,
+  # since Vitest lists the set. It says `full` when the change touches a rerun trigger, else `changed`
+  # with each leg's files, and keeps that record, the commits it chose from and when, as the run's
+  # `proof-set` artifact, after a failed select too, so a broken choice can be read. `MOST`, the most
+  # legs at once, is the `changed` matrix's `max-parallel`, and `LIMIT` the legs' test step limit,
+  # each an alias of its one line.
+  select:
+    needs: [gate]
+    if: needs.gate.outputs.start == 'true' && github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      scope: ${{ steps.set.outputs.scope }}
+      legs: ${{ steps.set.outputs.legs }}
+      files: ${{ steps.set.outputs.files }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - uses: ./.github/actions/pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - id: set
+        name: set
+        timeout-minutes: 5
+        env:
+          MOST: &most 9
+          LIMIT: *next-limit
+          RECORD: ${{ runner.temp }}/proof-set.json
+        run: node .github/ci/proof.ts
+      - name: record
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: proof-set
+          path: ${{ runner.temp }}/proof-set.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+  # A changed set's legs (0590): leg `k` runs exactly its list from `select`, over every project CI
+  # runs, so a list may hold next/'s in-memory, real-resource and visual laws and tooling tests
+  # together, at full depth, as the `tests` legs do. Chromium comes first on a leg whose list holds a
+  # visual file. Its own matrix, which a run starts only when `select` said `changed` with a leg, so
+  # it and `tests` never run in one run, and its own fail-fast stops each leg of it. Its legs are
+  # next legs for the report (`changed (k)`), with next's test step limit and the same backstop.
+  changed:
+    needs: [gate, select]
+    if: needs.gate.outputs.start == 'true' && needs.select.outputs.scope == 'changed' && needs.select.outputs.legs != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: true
+      max-parallel: *most
+      matrix:
+        shard: ${{ fromJSON(needs.select.outputs.legs) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - name: chromium
+        if: contains(fromJSON(needs.select.outputs.files)[matrix.shard], '.visual.test.')
+        run: |
+          sudo sh .github/ci/apt.sh update
+          pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
+      # `$FILES` unquoted: one path per word, which proof.ts makes sure of.
+      - name: vitest
+        timeout-minutes: *next-limit
+        env:
+          FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
+          FABRIKA_TEST_DEPTH: full
+        run: pnpm exec vitest run --project next --project next-integration --project next-visual --project tooling $FILES --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
+      - name: results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: results-changed-${{ matrix.shard }}
+          path: ${{ runner.temp }}/results.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: time table
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          JOB_ID: ${{ job.check_run_id }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          LEG: ${{ matrix.shard }}
+          REPORT: ${{ runner.temp }}/results.json
+        run: node .github/ci/time-table.ts
+      - name: timings
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 1
+        uses: actions/upload-artifact@v7
+        with:
+          name: timings-${{ github.job }}-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/timings-${{ github.job }}-${{ matrix.shard }}.json
+          if-no-files-found: warn
+          retention-days: 90
+
   # The verdict. On main: red opens one `ci-scheduled` issue naming the commits since the last
-  # green scheduled run, the legs that made it red and the failing tests, or comments on the open
+  # green full run, the legs that made it red and the failing tests, or comments on the open
   # one; a leg that ran into its time limit is red, named as a time-out; green closes it; a run
   # stopped by hand does nothing. On a branch it writes nothing. On both it fails unless the run is
   # green (scheduled.mjs), so a red run with no failed job, such as a leg that ended odd, still ends
   # `failure`; its failure cannot turn a run GitHub ends `cancelled` into one (probe run
-  # 43778355238). `always()`, so it runs after a red leg, as ci-required does in check.yaml. The
+  # 43778355238). `always()`, so it runs after a red leg, as ci-required does in check.yaml, unless
+  # the gate said `false`: a skipped run proves nothing and leaves the issue as it was. The
   # one job with `issues: write`, and `actions: read` to read the run's jobs and steps and find
   # the last green run: `needs` folds a matrix's legs into one result. No install: the runner's own
-  # Node runs scheduled.mjs.
+  # Node runs scheduled.mjs. A job the run skipped on purpose passes: `select` on main, the test job
+  # `select` did not choose, and both on a changed set of zero files (scheduled.mjs's `skippable`).
   report:
-    needs: [tests]
-    if: always()
+    needs: [gate, select, tests, changed]
+    if: always() && needs.gate.outputs.start != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
