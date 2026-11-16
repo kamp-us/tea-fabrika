@@ -8,7 +8,7 @@ import type { BrainEvent } from "@kampus/libfabrika/brain-event";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import { runsFor } from "@kampus/vitest";
-import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Schema } from "effect";
+import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Schema, Match } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { FetchHttpClient } from "effect/http";
 import { vi } from "vitest";
@@ -149,18 +149,22 @@ it.live.prop(
         values[Declarations.storage.path] = invalid;
       } else {
         values[Declarations.recovery.path] = {
-          project:
-            field === "project.bytes"
-              ? { ...project, bytes: invalid }
-              : field === "project.message.bytes"
-                ? { ...project, message: { ...project.message, bytes: invalid } }
-                : project,
-          process:
-            field === "process.bytes"
-              ? { ...process, bytes: invalid }
-              : field === "process.message.bytes"
-                ? { ...process, message: { ...process.message, bytes: invalid } }
-                : process,
+          project: Match.value(field).pipe(
+            Match.when("project.bytes", () => ({ ...project, bytes: invalid })),
+            Match.when("project.message.bytes", () => ({
+              ...project,
+              message: { ...project.message, bytes: invalid },
+            })),
+            Match.orElse(() => project),
+          ),
+          process: Match.value(field).pipe(
+            Match.when("process.bytes", () => ({ ...process, bytes: invalid })),
+            Match.when("process.message.bytes", () => ({
+              ...process,
+              message: { ...process.message, bytes: invalid },
+            })),
+            Match.orElse(() => process),
+          ),
         };
       }
 

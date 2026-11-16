@@ -26,6 +26,7 @@ import {
   Result,
   Schema,
   Stream,
+  Match,
 } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -1776,8 +1777,12 @@ describe("p35 Cmd order, replay and recorded failures", () => {
               fault === "ledger" ? "SELECT checkpoint FROM process_state" : "INSERT INTO process_recovery";
             w.store.fault.query = (q) => q.startsWith(failing);
             w.store.fault.once = fault === "ledger" || fault === "recovery";
-            w.fault.load =
-              fault === "recovery" ? "limit" : fault === "down" ? "down" : fault === "interrupt" ? "pause" : "";
+            w.fault.load = Match.value(fault).pipe(
+              Match.when("recovery", () => "limit" as const),
+              Match.when("down", () => "down" as const),
+              Match.when("interrupt", () => "pause" as const),
+              Match.orElse(() => "" as const),
+            );
             yield* Effect.gen(function* () {
               const r: Runner = yield* w.ProgramRunner;
               yield* TestClock.setTime(now);

@@ -1,4 +1,3 @@
-import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
 // E6 (0023, 0120): every public export of a `next/` library has an Effect-shaped doc block, and its
 // file a module block. Ticket 913, slice B2.1 of `docs/plan/effect-rules-big.md`.
 //
@@ -46,6 +45,7 @@ import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
 // What it cannot see: whether a description is true, whether a `@see {@link x}` names a real thing,
 // whether an example compiles, and a name sent on under a new binding (`const b = a; export { b }`),
 // which is asked for its block at `b`.
+import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
 import { Match } from "effect";
 import {
   buildTags,

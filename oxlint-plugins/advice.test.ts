@@ -1,3 +1,7 @@
+// Ticket 930 (0523): the five old advice rules block wherever their folder is at zero, and advise
+// only where a warn override at the end of the config names their folder. Ticket 948 adds the docs
+// rule, `fabrika/jsdocs`, the same way: six in all. These laws read
+// `advice.ts` in process, and run the real `lint.ts` and oxlint in a small temp repo of their own.
 import { spawnSync } from "node:child_process";
 import {
   copyFileSync,
@@ -12,10 +16,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, matchesGlob } from "node:path";
-// Ticket 930 (0523): the five old advice rules block wherever their folder is at zero, and advise
-// only where a warn override at the end of the config names their folder. Ticket 948 adds the docs
-// rule, `fabrika/jsdocs`, the same way: six in all. These laws read
-// `advice.ts` in process, and run the real `lint.ts` and oxlint in a small temp repo of their own.
 import { Match } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";

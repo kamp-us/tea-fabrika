@@ -19,7 +19,7 @@
 // builds the error without its `cause`. The other stores keep the ledger's error until their slices.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
-import { Effect, Layer, Result, Schema } from "effect";
+import { Effect, Layer, Result, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import { MemberEvent } from "../access/Access.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
@@ -106,7 +106,11 @@ const recoveryCalls = fc.constantFrom<RecoveryCall>("load", "input", "receipt");
 
 const callRecovery = (call: RecoveryCall) =>
   RecoveryStore.use((store) =>
-    call === "load" ? store.load : call === "input" ? store.input("letter-1") : store.receipt("letter-1"),
+    Match.value(call).pipe(
+      Match.when("load", () => store.load),
+      Match.when("input", () => store.input("letter-1")),
+      Match.orElse(() => store.receipt("letter-1")),
+    ),
   );
 
 /** The session manager's own error, named through `end`, which fails with nothing else. */
