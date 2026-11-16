@@ -778,7 +778,7 @@ returned. Law N3 kills only holders, never a breaker, so it cannot reach the cas
 **The lead's ruling.** Step 4's sentence becomes "a dead `.break` is broken the same way, under
 `<lock>.break.break`", as Mercurial does. In `mercurial/lock.py` at 7.2.4, `_testlock` (lines
 374-386) breaks a dead lock only inside `with lock(self.vfs, self.f + b'.break', timeout=0):`. That
-inner `lock` is a lock like any other, so its own `_trylock` (lines 297-343) meets a dead `.break`
+inner `lock` is a lock like any other, so its own `_trylock` (lines 298-343) meets a dead `.break`
 with EEXIST, calls its own `_testlock`, and breaks it under `.break.break`. `timeout=0` means a
 `.break` held by a live process is never waited on: the caller reports the lock held and tries
 again later. The old sentence stays in step 4, marked **Wrong**. Decision 0567 also covers these
@@ -861,6 +861,187 @@ one fix round it priced.
 - Whether a chain of dead breakers deeper than one (`.break.break` left by a second SIGKILL) shows
   up in practice. The recursion handles any depth; N7 runs one.
 - The Mercurial reading is from its source, not a run of Mercurial.
+
+## Amendment, 2026-11-16 (fix round 2): anti-slop's zero lock reaches `scripts/typecheck*`
+
+**Why.** Law L3 of the first fix round puts `scripts/typecheck.ts`, `scripts/typecheck/**`,
+`scripts/typecheck.test.ts` and `scripts/typecheck-lock.test.ts` in the
+`anti-slop-effect/no-manual-tag-comparison` block of `.oxlintrc.json` (the tests step did, in
+`0df871b21`). But the zero lock in `oxlint-plugins/anti-slop.ts`, which every whole `pnpm lint` runs
+through `audit` (`oxlint-plugins/lint.ts:214`), refuses a listed glob that is not a folder of its
+scope: `lock()` returns it as `refused` (`anti-slop.ts:93`), and `folders()` (`anti-slop.ts:63`)
+holds only the three tooling folders `.agents`, `.github/ci` and `oxlint-plugins`, and folders
+under `next/`. So lint
+prints four lines, one per glob:
+`.oxlintrc.json: anti-slop-effect/no-manual-tag-comparison's block names scripts/typecheck.ts, which is not a folder of its scope`.
+No step owned `anti-slop.ts`.
+
+**The lead's ruling (option a).** Count first, read-only, then widen the lock's scope to what can
+reach zero, with its own law and plant. Decision 0563's scope is `next/` and "our tooling", and the
+first fix round already took `scripts/typecheck*` as lead tooling under 0567 and 0033; the lead
+accepted that scope there, so this widens no decision. Call, 85%: 0563 names three tooling folders
+by name, and `scripts/` is not one of them; if the owner reads that list as closed, it is his call.
+
+This amendment adds to the plan; it replaces nothing above, except that the first fix round's
+"`_trylock` (lines 297-343)" now reads "lines 298-343": in Mercurial 7.2.4's `mercurial/lock.py`,
+`_trylock` starts at line 298, as "How others do it" already cites (`lock.py:298-386`). That is the
+only edit above this section.
+
+### The count, read-only, at `0df871b21`
+
+How the lock works, read from `anti-slop.ts`: it covers all ten taken rules (`TAKEN`), not one. One
+oxlint run reads the folders in `ROOTS` with every taken rule on, and counts each rule's hits per
+scope folder. For each rule, `add` is every scope folder with no hit that the rule's block does not
+name, and lint prints one "has no hit left in <folder>: add the folder to its block (0563)" line for
+each. So "turning on" a new scope folder means it must be named, at once, in the block of every taken
+rule that has no hit there, and stays unnamed where the rule has hits.
+
+The count ran on a scratch config outside the repo, built as `count()` builds its own: the ten rules
+with the options of their first block, the two vendored plugins, `--no-ignore`, over all of
+`scripts/` (24 files), with the config's ignore list matched after. The branch head was `0df871b21`,
+before the build's fix. 207 hits in all, none ignored:
+
+| Folder | Hits by rule |
+|---|---|
+| `scripts/typecheck.ts` | none |
+| `scripts/typecheck/**` | `no-manual-tag-comparison` 7, `require-readable-spacing` 36, `prefer-effect-match` 2 (`CommandsTest.ts:33`, `NodeModulesFs.ts:17`), `max-ternary-depth` 1 (`CommandsTest.ts:33`) |
+| `scripts/typecheck.test.ts` | `require-readable-spacing` 20, `require-safety-comment-for-type-assertion` 1 (`:86`), `no-manual-tagged-construction` 1 (`:292`) |
+| `scripts/typecheck-lock.test.ts` | `require-readable-spacing` 34, `no-manual-tagged-construction` 1 (`:155`) |
+| `scripts/typecheck.integration.test.ts` | `require-readable-spacing` 18, `no-manual-tagged-construction` 2 (`:268`, `:269`) |
+| `scripts/caps.test.ts` | `require-readable-spacing` 58, `no-runtime-typeof` 3 (`:73`, `:332`, `:713`) |
+| `scripts/effect-arbitrary.test.ts` | `require-readable-spacing` 18, `no-manual-tag-comparison` 3 (`:72`, `:90`, `:132`) |
+| `scripts/testhome.test.ts` | `require-readable-spacing` 2 |
+| `scripts/testhome.ts`, `scripts/vitest.setup.ts` | none |
+
+The `no-manual-tag-comparison` hits inside the typecheck port are 7 of the 8 product lines the first
+fix round named: `LocksFile.ts:104, 108, 117, 168, 175`, `Look.ts:84` and `Typecheck.ts:69`.
+`LocksFile.ts:19` (`e.reason._tag === tag`) is no hit: it compares `_tag` with the parameter `tag`,
+not a literal, and the rule does not fire on it. The build may still match it as the first fix round
+says; the lock does not need it.
+
+Beyond those 7, the rule fires on 3 unplanned lines, all outside the port:
+`scripts/effect-arbitrary.test.ts:72`, `:90` and `:132`, `anti-slop-effect/no-manual-tag-comparison`.
+The other rules' hits matter only where a block would name the folder, and no block will name a
+folder where its rule has a hit.
+
+### The scope: the port's four globs, not `scripts/**`
+
+`scripts/**` as one scope folder cannot be green inside this quest. `covers` matches a listed glob to
+a scope folder only by equal text, so the 0567 block would have to name `scripts/**` in place of its
+four globs, and lint would be red on the 3 `effect-arbitrary.test.ts` lines above: a new job, outside
+the ticket. So `folders()` gains the port's four globs, exactly as the 0567 block names them. Call,
+90%: they are the only globs the block lists, and the port is the only part of `scripts/` that
+follows `next/`'s rules (0033) so far.
+
+```ts
+// oxlint-plugins/anti-slop.ts, sketch: the typecheck's port joins the scope as four globs.
+/** The typecheck's port (ticket 766), today's lead tooling in scripts/, as its lint blocks name it. */
+const TYPECHECK = [
+  "scripts/typecheck.ts",
+  "scripts/typecheck/**",
+  "scripts/typecheck.test.ts",
+  "scripts/typecheck-lock.test.ts",
+];
+
+/** The folders and files the zero lock's run reads: the scope. */
+const ROOTS = ["next", ".agents", "oxlint-plugins", ".github/ci", ...TYPECHECK.map((glob) => glob.replace(/\/\*\*$/, ""))];
+
+export const folders = (root: string): ReadonlyArray<string> => [
+  // ... the three tooling folders, as today
+  ...TYPECHECK,
+  `${LIBFABRIKA}/*`,
+  // ... the rest as today
+];
+```
+
+`ROOTS` names the four paths, not all of `scripts/`, so the lock's run reads only the scope, as its
+comment says. Call, 80%: `"scripts"` alone also works, since `count` drops a file that matches no
+scope folder, but it would read 9 files for nothing. `WHOLE` does not change: `scripts/**` is not in
+the scope, so it is no whole-scope glob. The file's header comment and `folders()`'s comment say the
+scope now holds the typecheck's port.
+
+The lock then asks for each of the four globs in the block of every taken rule with no hit there. At
+`0df871b21` that is 28 new entries in `.oxlintrc.json`, each at zero today:
+
+```text
+scripts/typecheck.ts            every taken rule but no-manual-tag-comparison, already listed (9)
+scripts/typecheck/**            require-safety-comment-for-type-assertion, no-unknown-parameters,
+                                no-unknown-returns, no-runtime-typeof, no-manual-tagged-construction,
+                                no-manual-tagged-type (6)
+scripts/typecheck.test.ts       max-ternary-depth, no-unknown-parameters, no-unknown-returns,
+                                no-runtime-typeof, no-manual-tagged-type, prefer-effect-match (6)
+scripts/typecheck-lock.test.ts  max-ternary-depth, require-safety-comment-for-type-assertion,
+                                no-unknown-parameters, no-unknown-returns, no-runtime-typeof,
+                                no-manual-tagged-type, prefer-effect-match (7)
+```
+
+The list the tests step writes is the lock's own add lines at its head, not this table: if a hit
+moves before then, lint names the difference. Each entry goes after a block's `next/` entries, so
+`anti-slop.test.ts`'s L2, which plants in the first `/**` folder a block lists, still plants under
+`next/`. 0563's rule D ("each rule goes on folder by folder, as each folder reaches zero") is what
+asks for all 28; none is a list of leftovers.
+
+Is this a setting? No: which folders a lint rule covers is the repo's lint config, which no person
+picks per run (0069).
+
+### One run traced
+
+1. `pnpm lint` runs `oxlint-plugins/lint.ts`, which calls `audit(ROOT, printed)`.
+2. `count` runs oxlint over `ROOTS`, now with the four port paths, and finds 7
+   `no-manual-tag-comparison` hits in `scripts/typecheck/**` (before the build's fix), 0 in the
+   other three.
+3. For `no-manual-tag-comparison`, `lock` gets a scope that names the four globs: `refused` is
+   empty, so the four "not a folder of its scope" lines are gone. `add` is empty too, since the
+   block names all four.
+4. For `no-unknown-returns`, the four globs have no hit and the block names them (the 28 entries),
+   so `add` is empty. Without the entries, lint would print four "has no hit left" lines.
+5. Lint's oxlint run itself still fails on the 7 product lines until the build matches them. Then
+   lint is green.
+
+### Laws, changed and new
+
+| Law | Kind (lint, type or test?) | Generator | Plant | Where |
+|---|---|---|---|---|
+| L8, new: the zero lock's scope holds the typecheck port's four globs, and for the repository's own config no taken rule's block names a glob the lock refuses: `folders(ROOT)` contains the four, and `lock(folders(ROOT), listed(rule), new Map()).refused` is `[]` for every rule in `TAKEN` | test | scenario: the repository's own config and disk, one case | drop `...TYPECHECK` from `folders()`: L8 is red, naming the four globs for `no-manual-tag-comparison`, and `pnpm lint` prints its 4 refused lines again | oxlint-plugins/anti-slop.test.ts |
+| L9, new: `pnpm lint`'s zero lock prints no line for the four globs: the lock's run reads them, and every taken rule's block names each glob where the rule has no hit | lint | lint | (a) drop the four port paths from `ROOTS`: the run counts no hit there, and lint prints "has no hit left" lines for `require-readable-spacing` in `scripts/typecheck/**` and the others; (b) take `scripts/typecheck.ts` out of the `no-unknown-returns` block: lint prints that one line | oxlint-plugins/anti-slop.ts |
+
+L3 stays as written; with this amendment it can be green. L4's property of `lock` is unchanged,
+since `lock` is. No law is loosened or moved.
+
+### Who does what next
+
+- **The tests step** writes all of it. The lint plugins' folder and `.oxlintrc.json` are exam paths
+  (`exam-paths.json`), so `anti-slop.ts` is the tests step's, with its law. It adds `TYPECHECK` to
+  `folders()` and the four paths to `ROOTS` in `oxlint-plugins/anti-slop.ts`, writes L8 in
+  `oxlint-plugins/anti-slop.test.ts`, and adds the 28 entries to `.oxlintrc.json`, from the lock's
+  add lines at its head. It runs L8's plant and L9's plants (a) and (b) once each, records them in its
+  row, runs `oxlint-plugins/anti-slop.test.ts` by path and `pnpm lint`. Lint then prints none of the
+  4 refused lines and no add line, and is red only on the build's 7 product lines, if the build has
+  not landed them yet.
+- **The build** has nothing new. Its first-fix-round work stands. From now on a hit of any rule
+  that names the port's globs is red there too: for example a cast with no `SAFETY` comment in
+  `scripts/typecheck/**`.
+- **The same reviewer** rechecks (0177).
+
+### Files, amended
+
+| File | Owner | Product lines expected | Change |
+|---|---|---|---|
+| `oxlint-plugins/anti-slop.ts` | tests | 10 | `TYPECHECK` in `folders()`, its paths in `ROOTS`, the comments |
+| `oxlint-plugins/anti-slop.test.ts` | tests | tests | L8 |
+| `.oxlintrc.json` | tests | 28 | the four port globs in each taken rule's block where they have no hit (L9) |
+| `exam-paths.json`, `oxlint-plugins/lint.ts`, `scripts/effect-arbitrary.test.ts`, `scripts/testhome.test.ts` | tests | none | not changed: read for the count and the owners; the 3 `effect-arbitrary.test.ts` hits stay out of scope |
+
+About 38 product lines more than "Size" says. The quest's budget line is not changed: this is one
+more small lint change inside the same fix round, done by the tests step.
+
+### What this amendment cannot tell us
+
+- Whether the build's matcher fixes add a hit of a rule that now names the port: the count ran before
+  them. Lint shows it.
+- Whether the owner reads 0563's tooling list as closed (the call above, 85%).
+- The 3 `effect-arbitrary.test.ts` hits stay outside every lock until some later work brings
+  `scripts/` whole into the scope.
 
 ## Findings
 
