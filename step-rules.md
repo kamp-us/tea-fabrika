@@ -106,6 +106,16 @@ Write tools: never a heredoc, `python`, `node -e`, `sed -i` or a shell redirect 
 time the same day, for `python3 <<EOF || node -e`). This is the check's own instruction, not a
 work-around; a refusal after it is still a stop.
 
+**A box is small.** In one cloud box, at most two code agents run at once, and only one of them
+runs `pnpm lint` or `pnpm typecheck` at a time. With more, the memory limit kills parts of the run
+(tsgo parts lost to the out-of-memory kill, and `lint:dead`, `lint:promise-types` and `lint:kind`
+dying with EPIPE; both seen 2026-11-16), and the run reads as red for no code reason. A part that
+dies that way is run again alone before anyone calls it red.
+
+**After a worktree agent moves its checkout to the branch head,** check `git status`. If the index
+or files still hold the old content, restore them with `git checkout HEAD -- <paths>` before you
+read or test anything (seen twice on 2026-11-16).
+
 **PR 1366 is merged to main (2026-11-16).** Its files are no longer off limits. Merge `origin/main` into your branch first (`git merge --no-edit origin/main`, never rebase), and every hit your slice once listed as "waiting on 1366" is now part of your slice: fix it like any other. Do not add a `LOCKED` row to
 `oxlint-plugins/effect-checks.test.ts` unless your brief says so. A lock entry goes in
 the package's own `tsconfig.json` under the `@effect/language-service` plugin's `overrides`, the
