@@ -87,8 +87,10 @@ Say in the PR and RESULT which tests ran and at which head.
 
 **The 0178 guard.** No box sets `FABRIKA_HOST_RUN_OWNER_APPROVED`, ever. A `.integration.` or
 `.visual.` law that the guard refuses is listed in your field row and RESULT as "not run: 0178
-guard", with its path. Once the merge session's narrowed guard is on main (it refuses only on the
-laptop), those laws run in a box as usual. If your own permission check refuses any command, do
+guard", with its path. PR 1508 narrows the guard: it allows a run when `CI` is set or when
+`CLAUDE_CODE_REMOTE=true` on Linux. Once your branch holds it (main after 1508, or merge
+`origin/main` in), run your reached `.integration.` and `.visual.` laws in the box as usual, with no
+override, and still list any the guard refuses. If your own permission check refuses any command, do
 not retry it and do not look for another way: stop, and report the refusal and what it blocked in
 RESULT.
 
