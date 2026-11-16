@@ -1,7 +1,7 @@
 // P12, next/. Real box methods, execution adapters, runner, manager, receipts and SQLite.
 import { Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer, Schema } from "effect";
+import { Cause, Effect, Exit, Layer, Match, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
@@ -32,15 +32,14 @@ const thrown = fc.oneof(
     .tuple(fc.constantFrom("Error", "TypeError", "RangeError", "SyntaxError", "custom"), fc.string())
     .map(([kind, message]) => {
       class ProgramError extends Error {}
-      return kind === "TypeError"
-        ? new TypeError(message)
-        : kind === "RangeError"
-          ? new RangeError(message)
-          : kind === "SyntaxError"
-            ? new SyntaxError(message)
-            : kind === "custom"
-              ? new ProgramError(message)
-              : new Error(message);
+      return Match.value(kind).pipe(
+        Match.when("TypeError", () => new TypeError(message)),
+        Match.when("RangeError", () => new RangeError(message)),
+        Match.when("SyntaxError", () => new SyntaxError(message)),
+        Match.when("custom", () => new ProgramError(message)),
+        Match.when("Error", () => new Error(message)),
+        Match.exhaustive,
+      );
     }),
   fc.jsonValue(),
   fc.constant(undefined),
@@ -316,14 +315,12 @@ it("P1: the Worker description carries the checked policy and rejects corrupt RP
             const value = field % 3 === 0 ? 0 : field % 3 === 1 ? -1 : 0.5;
             r.raw.policy = field < 9 ? { ...p, [key]: value } : { ...p, backoff: { ...p.backoff, [key]: value } };
           } else {
-            r.raw.policy =
-              field === 18
-                ? { ...p, maxDeliveries: 33 }
-                : field === 19
-                  ? { ...p, intensity: p.maxDeliveries - 1 }
-                  : field === 20
-                    ? { ...p, backoff: { ...p.backoff, minMs: p.backoff.maxMs + 1 } }
-                    : { ...p, periodMs: p.intensity * p.backoff.minMs };
+            r.raw.policy = Match.value(field).pipe(
+              Match.when(18, () => ({ ...p, maxDeliveries: 33 })),
+              Match.when(19, () => ({ ...p, intensity: p.maxDeliveries - 1 })),
+              Match.when(20, () => ({ ...p, backoff: { ...p.backoff, minMs: p.backoff.maxMs + 1 } })),
+              Match.orElse(() => ({ ...p, periodMs: p.intensity * p.backoff.minMs })),
+            );
           }
 
           m.valid = false;
@@ -521,14 +518,12 @@ it("P2: runners select policy before init and retain policy, pending recovery an
                       expect(yield* w.snapshot).toEqual(before);
                     } else {
                       const pending = m.pending!;
-                      const at =
-                        edge === 0
-                          ? pending.until - 1
-                          : edge === 1
-                            ? pending.until
-                            : edge === 2
-                              ? (m.restarts[0] ?? m.now) + program.periodMs + 1
-                              : (m.restarts[0] ?? m.now) + wiring.periodMs + 1;
+                      const at = Match.value(edge).pipe(
+                        Match.when(0, () => pending.until - 1),
+                        Match.when(1, () => pending.until),
+                        Match.when(2, () => (m.restarts[0] ?? m.now) + program.periodMs + 1),
+                        Match.orElse(() => (m.restarts[0] ?? m.now) + wiring.periodMs + 1),
+                      );
                       m.now = Math.max(m.now, at);
                       yield* TestClock.setTime(m.now);
                       w.move("ok");

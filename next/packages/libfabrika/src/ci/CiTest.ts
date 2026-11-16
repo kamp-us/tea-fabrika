@@ -185,14 +185,17 @@ const expected = (reports: ReadonlyArray<Report>, commit: string) => {
       unknown.length > 0
         ? unknown
         : group.filter((r) => r.order === Math.max(...group.map((p) => p.order ?? -Infinity)));
-    const priority = (r: typeof CheckRun.Type) =>
-      r.status._tag !== "done"
-        ? 4
-        : ["failure", "timed_out"].includes(r.status.conclusion)
-          ? 3
-          : ["cancelled", "startup_failure"].includes(r.status.conclusion)
-            ? 2
-            : 1;
+    const priority = (r: typeof CheckRun.Type) => {
+      if (r.status._tag !== "done") {
+        return 4;
+      }
+
+      return ["failure", "timed_out"].includes(r.status.conclusion)
+        ? 3
+        : ["cancelled", "startup_failure"].includes(r.status.conclusion)
+          ? 2
+          : 1;
+    };
     const worst =
       unknown.length > 0 ? pool : pool.filter((r) => priority(r.run) === Math.max(...pool.map((p) => priority(p.run))));
     const winner = item(
@@ -204,9 +207,13 @@ const expected = (reports: ReadonlyArray<Report>, commit: string) => {
 };
 
 const sorted = (runs: ReadonlyArray<typeof CheckRun.Type>) =>
-  [...runs].sort((a, b) =>
-    a.name < b.name ? -1 : a.name > b.name ? 1 : a.source < b.source ? -1 : a.source > b.source ? 1 : 0,
-  );
+  [...runs].sort((a, b) => {
+    if (a.name !== b.name) {
+      return a.name < b.name ? -1 : 1;
+    }
+
+    return a.source < b.source ? -1 : a.source > b.source ? 1 : 0;
+  });
 
 export const suite = (testLayer: Layer.Layer<Ci | Control>) =>
   describe("C2: the CI contract", () => {

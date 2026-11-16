@@ -4,7 +4,7 @@
 // P39 slice 3 (ticket 1040), J1's select half: a collected task is never offered, as a finished one
 // is not. Plant (after build): let select keep `collected` tasks.
 import { expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Match, Result, Schema } from "effect";
 import * as Id from "../Id.ts";
 import { type Task, Request, Executor, Result as TaskResult, State } from "../tasks/Task.ts";
 
@@ -30,21 +30,21 @@ const taskFor = (a: typeof AnyItem.Type): Task => {
     execution: a.execution,
     executor: { ...a.executor, key: a.matching ? a.request.target : `${a.request.target}x` },
   };
-  const state =
-    a.phase === "requested"
-      ? State.cases.requested.make({ request: a.request })
-      : a.phase === "assigned"
-        ? State.cases.assigned.make({ request: a.request, assignment })
-        : a.phase === "started"
-          ? State.cases.started.make({ request: a.request, assignment })
-          : a.phase === "finished"
-            ? State.cases.finished.make({ request: a.request, assignment, result: a.result })
-            : State.cases.collected.make({
-                request: a.request,
-                assignment,
-                result: a.result,
-                collection: { process: a.request.process, letter: `${a.request.id}/answer` },
-              });
+  const state = Match.value(a.phase).pipe(
+    Match.when("requested", () => State.cases.requested.make({ request: a.request })),
+    Match.when("assigned", () => State.cases.assigned.make({ request: a.request, assignment })),
+    Match.when("started", () => State.cases.started.make({ request: a.request, assignment })),
+    Match.when("finished", () => State.cases.finished.make({ request: a.request, assignment, result: a.result })),
+    Match.when("collected", () =>
+      State.cases.collected.make({
+        request: a.request,
+        assignment,
+        result: a.result,
+        collection: { process: a.request.process, letter: `${a.request.id}/answer` },
+      }),
+    ),
+    Match.exhaustive,
+  );
   return { state, events: [] };
 };
 

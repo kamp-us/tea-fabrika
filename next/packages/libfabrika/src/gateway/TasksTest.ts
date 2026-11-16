@@ -31,6 +31,7 @@ import {
   Fiber,
   Layer,
   Logger,
+  Match,
   Option,
   Redacted,
   Result as R,
@@ -702,15 +703,16 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       const s = pick(saved, cell.pick);
       const p = phase(s);
       const available = moves[focus].filter((move) =>
-        move === "race"
-          ? current.live && current.build !== undefined && current.has.includes("git") && p !== "requested"
-          : move === "revoke"
-            ? current.live && p !== "requested"
-            : move === "retry"
-              ? p === "started" || p === "finished"
-              : move === "wrong"
-                ? p !== "requested"
-                : true,
+        Match.value(move).pipe(
+          Match.when(
+            "race",
+            () => current.live && current.build !== undefined && current.has.includes("git") && p !== "requested",
+          ),
+          Match.when("revoke", () => current.live && p !== "requested"),
+          Match.when("retry", () => p === "started" || p === "finished"),
+          Match.when("wrong", () => p !== "requested"),
+          Match.orElse(() => true),
+        ),
       );
       const move = pick(available, cell.move);
       done.add(move);
@@ -798,8 +800,8 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
           }
         }
       } else if (move === "reconnect" || move === "capabilities") {
-        const has =
-          focus === "A7" ? ["git"] : move === "capabilities" ? (cell.variant % 2 === 0 ? [] : ["git"]) : cell.has;
+        const offered = cell.variant % 2 === 0 ? [] : ["git"];
+        const has = focus === "A7" ? ["git"] : move === "capabilities" ? offered : cell.has;
 
         if (current.live) {
           current = yield* w.hello(
@@ -1123,15 +1125,17 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       }
 
       for (const [name, value] of Object.entries(outputs)) {
-        const encoded = JSON.stringify(value, (_key, item: unknown) =>
-          typeof item === "bigint"
-            ? String(item)
-            : item instanceof Map
-              ? [...item]
-              : item instanceof Error
-                ? { name: item.name, message: item.message, cause: item.cause }
-                : item,
-        );
+        const encoded = JSON.stringify(value, (_key, item: unknown) => {
+          if (typeof item === "bigint") {
+            return String(item);
+          }
+
+          return item instanceof Map
+            ? [...item]
+            : item instanceof Error
+              ? { name: item.name, message: item.message, cause: item.cause }
+              : item;
+        });
 
         for (const sentinel of sentinels) {
           for (const form of [
@@ -1522,13 +1526,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
               seed: 119120,
               // A8 at 15 walks never races a read or a finish at this seed, so A8 and A10 run 30.
               runs: runsFor(
-                focus === "A12"
-                  ? { fast: 10, full: 40 }
-                  : focus === "W1"
-                    ? { fast: 10, full: 60 }
-                    : focus === "A8" || focus === "A10"
-                      ? { fast: 30, full: 60 }
-                      : { fast: 25, full: 100 },
+                Match.value(focus).pipe(
+                  Match.when("A12", () => ({ fast: 10, full: 40 })),
+                  Match.when("W1", () => ({ fast: 10, full: 60 })),
+                  Match.when(Match.is("A8", "A10"), () => ({ fast: 30, full: 60 })),
+                  Match.orElse(() => ({ fast: 25, full: 100 })),
+                ),
               ),
               concurrency: 1,
             },

@@ -8,7 +8,7 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Context, Effect, Exit, Layer, Option, Schema, Scope, Tracer } from "effect";
+import { Context, Effect, Exit, Layer, Match, Option, Schema, Scope, Tracer } from "effect";
 import { Digest } from "effect/crypto";
 import { vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
@@ -371,13 +371,14 @@ SettingsTest.suite((recipe, secret) =>
           const part = yield* build.pipe(Effect.provideService(Scope.Scope, scope));
           const chain = Chain.cases.spans.make({});
           const method = choice % 4;
-          return yield* method === 0
-            ? part.write(chain, 0, [])
-            : method === 1
-              ? part.read(chain, 0, 0)
-              : method === 2
-                ? part.content(chain, 0, "absent")
-                : part.deleteContent(chain, 0, "absent", { by: "fixture-writer", at: 0, reason: "requested" });
+          return yield* Match.value(method).pipe(
+            Match.when(0, () => part.write(chain, 0, [])),
+            Match.when(1, () => part.read(chain, 0, 0)),
+            Match.when(2, () => part.content(chain, 0, "absent")),
+            Match.orElse(() =>
+              part.deleteContent(chain, 0, "absent", { by: "fixture-writer", at: 0, reason: "requested" }),
+            ),
+          );
         });
       } else {
         const runtime =
@@ -460,14 +461,8 @@ SettingsTest.suite((recipe, secret) =>
               ? []
               : db.prepare(`SELECT * FROM ${table}`).all(),
           );
-          const channel =
-            table === "entries"
-              ? "ledger"
-              : table === "dev_descriptors"
-                ? "descriptors"
-                : table === "content"
-                  ? "content"
-                  : "spans";
+          const stored = table === "content" ? "content" : "spans";
+          const channel = table === "entries" ? "ledger" : table === "dev_descriptors" ? "descriptors" : stored;
           output[channel] = [...output[channel], ...rows];
         }
 

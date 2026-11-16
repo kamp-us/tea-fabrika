@@ -8,7 +8,7 @@
 //   from different sources have one hash. It may need `Digest` from `effect/crypto`.
 // - `Snapshot.Snapshot` is its Schema: what a process start saves, and what a replay reads back.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Cause, Effect, Exit, Formatter, Layer, Logger, References, Schema, Tracer } from "effect";
+import { ByteSize, Cause, Effect, Exit, Formatter, Layer, Logger, Match, References, Schema, Tracer } from "effect";
 import { Digest } from "effect/crypto";
 import { TestConsole } from "effect/testing";
 import * as fc from "fast-check";
@@ -54,13 +54,14 @@ StartsTest.law(
           const source = (choice + index) % 4;
           return [
             declaration.path,
-            source === 0
-              ? Sources.Origin.cases.default.make({})
-              : source === 1
-                ? Sources.Origin.cases.flag.make({ name: `--${declaration.path}` })
-                : source === 2
-                  ? Sources.Origin.cases.env.make({ name: declaration.env })
-                  : Sources.Origin.cases.file.make({ file: files[choice % files.length]!, line: 1 + (choice % 1000) }),
+            Match.value(source).pipe(
+              Match.when(0, () => Sources.Origin.cases.default.make({})),
+              Match.when(1, () => Sources.Origin.cases.flag.make({ name: `--${declaration.path}` })),
+              Match.when(2, () => Sources.Origin.cases.env.make({ name: declaration.env })),
+              Match.orElse(() =>
+                Sources.Origin.cases.file.make({ file: files[choice % files.length]!, line: 1 + (choice % 1000) }),
+              ),
+            ),
           ];
         }),
       );
@@ -501,14 +502,13 @@ it("T753 L9 [secrets] malformed snapshots keep rejected values out of public dia
       async ({ flow: v, word, field }) => {
         const flow = save(v);
         const made = await digest(Snapshot.make(flow.group, flow));
-        const input =
-          field === "value"
-            ? { ...made, values: { ...made.values, "limits.record": word } }
-            : field === "extra"
-              ? { ...made, values: { ...made.values, unrelated: word } }
-              : field === "origin"
-                ? { ...made, origins: { ...made.origins, "limits.record": { _tag: word } } }
-                : { ...made, hash: word };
+        const input = Match.value(field).pipe(
+          Match.when("value", () => ({ ...made, values: { ...made.values, "limits.record": word } })),
+          Match.when("extra", () => ({ ...made, values: { ...made.values, unrelated: word } })),
+          Match.when("origin", () => ({ ...made, origins: { ...made.origins, "limits.record": { _tag: word } } })),
+          Match.when("hash", () => ({ ...made, hash: word })),
+          Match.exhaustive,
+        );
         const traced = spans();
         const entries: Array<string> = [];
         const logger = Logger.make((options) =>

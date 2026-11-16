@@ -6,7 +6,7 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Change, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { Saved } from "@kampus/libfabrika/runtime/State";
-import { Arbitrary, ConfigProvider, Effect, Schema } from "effect";
+import { Arbitrary, ConfigProvider, Effect, Match, Schema } from "effect";
 import * as fc from "fast-check";
 import * as ChangeKind from "./Change.ts";
 import * as Mail from "./Mail.ts";
@@ -148,17 +148,14 @@ const valueFor = (w: World, cmd: Command, pick: number): unknown => {
 };
 
 const answer = (p: Program, w: World, cmd: Command, drawn: number, at: number): Msg => {
-  const pick = w.complete
-    ? cmd.type === "change"
-      ? 2
-      : cmd.type === "update"
-        ? 4
-        : cmd.type === "checks" && w.ending !== "checks"
-          ? 7
-          : cmd.type === "merge" && w.ending === "merged"
-            ? 3
-            : drawn
-    : drawn;
+  const completed = Match.value(cmd.type).pipe(
+    Match.when("change", () => 2),
+    Match.when("update", () => 4),
+    Match.when("checks", () => (w.ending !== "checks" ? 7 : drawn)),
+    Match.when("merge", () => (w.ending === "merged" ? 3 : drawn)),
+    Match.orElse(() => drawn),
+  );
+  const pick = w.complete ? completed : drawn;
   return Schema.decodeUnknownSync(p.msg)(
     cmd.type !== "send" && pick % 5 === 0
       ? {
@@ -296,13 +293,12 @@ const guided = (p: Program, w: World) => {
 const service = (cmd: Command) => cmd.type !== "send" && cmd.type !== "exit";
 
 const stateCmd = (model: Model) =>
-  model._tag === "reading"
-    ? "change"
-    : model._tag === "updating"
-      ? "update"
-      : model._tag === "checking"
-        ? "checks"
-        : "merge";
+  Match.value(model).pipe(
+    Match.tag("reading", () => "change"),
+    Match.tag("updating", () => "update"),
+    Match.tag("checking", () => "checks"),
+    Match.orElse(() => "merge"),
+  );
 
 // Each invariant reads a complete tea fold. A cut-off job is checked for its prefix, never for a
 // reply it has not sent yet.
@@ -693,20 +689,23 @@ describe("the merger, next/", () => {
                   }
 
                   const msg = moves[cell.move % moves.length]!();
-                  const refused =
-                    msg.type === "land"
-                      ? prev._tag !== "idle"
-                        ? "busy"
-                        : null
-                      : msg.type === "abandon"
-                        ? prev._tag === "idle"
-                          ? "idle"
-                          : prev._tag === "merging"
-                            ? "merging"
-                            : msg.ref !== prev.job.ref
-                              ? "other_job"
-                              : null
-                        : null;
+                  // The refusal the machine owes this Msg in this state, or null.
+                  const refusal = () => {
+                    if (msg.type === "land") {
+                      return prev._tag !== "idle" ? "busy" : null;
+                    }
+
+                    if (msg.type !== "abandon") {
+                      return null;
+                    }
+
+                    if (prev._tag === "idle") {
+                      return "idle";
+                    }
+
+                    return prev._tag === "merging" ? "merging" : msg.ref !== prev.job.ref ? "other_job" : null;
+                  };
+                  const refused = refusal();
 
                   if (msg.type === "land" || msg.type === "abandon") {
                     expect(p.refuse(prev, msg)?.reason ?? null).toBe(refused);

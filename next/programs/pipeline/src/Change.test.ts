@@ -51,13 +51,15 @@ const oracle = (checks: ReadonlyArray<typeof Change.Check.Type>, runs: typeof Ch
     const matching = selected.filter((r) => r.name === c.name && (c.source === undefined || c.source === r.source));
     return matching.length === 0 || matching.some((r) => r.status._tag !== "done");
   });
-  return red.length > 0
-    ? { tag: "red", values: red }
-    : lost.length > 0
-      ? { tag: "lost", values: lost }
-      : pending.length > 0
-        ? { tag: "pending", values: pending }
-        : { tag: "green", values: selected };
+  if (red.length > 0) {
+    return { tag: "red", values: red };
+  }
+
+  return lost.length > 0
+    ? { tag: "lost", values: lost }
+    : pending.length > 0
+      ? { tag: "pending", values: pending }
+      : { tag: "green", values: selected };
 };
 
 describe("L5: the verdict", () => {

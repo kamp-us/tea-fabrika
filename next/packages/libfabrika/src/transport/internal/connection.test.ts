@@ -434,7 +434,8 @@ describe("T703 connection machine laws", () => {
 
           const reused = from.waits.some((w) => w.id === msg.wait.id) && !matching;
           const late = fold.completed.some((w) => same(w, msg.wait)) && !matching;
-          seen.add(matching ? "matching" : reused ? "reused" : late ? "late" : "absent");
+          const unmatched = reused ? "reused" : late ? "late" : "absent";
+          seen.add(matching ? "matching" : unmatched);
           seen.add(`id:${typeof msg.wait.id}:${answered}`);
         });
       }),

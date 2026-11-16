@@ -390,19 +390,29 @@ const success = <A>(answer: R.Result<A, unknown>, message: string): A => {
 const expected = (saved: Saved): Task => {
   const { request, executor, execution, result } = saved;
   const assignment = executor === undefined || execution === undefined ? undefined : { execution, executor };
-  const state =
-    saved.phase === "requested"
-      ? State.cases.requested.make({ request })
-      : saved.phase === "assigned" && assignment !== undefined
-        ? State.cases.assigned.make({ request, assignment })
-        : saved.phase === "started" && assignment !== undefined
-          ? State.cases.started.make({ request, assignment })
-          : saved.phase === "finished" && assignment !== undefined && result !== undefined
-            ? State.cases.finished.make({ request, assignment, result })
-            : assignment !== undefined && result !== undefined && saved.collection !== undefined
-              ? State.cases.collected.make({ request, assignment, result, collection: saved.collection })
-              : expect.fail("the fold reached a phase without its facts");
-  return { state, events: saved.events } as Task;
+  // The state the saved phase holds, first match first.
+  const stateFor = () => {
+    if (saved.phase === "requested") {
+      return State.cases.requested.make({ request });
+    }
+
+    if (saved.phase === "assigned" && assignment !== undefined) {
+      return State.cases.assigned.make({ request, assignment });
+    }
+
+    if (saved.phase === "started" && assignment !== undefined) {
+      return State.cases.started.make({ request, assignment });
+    }
+
+    if (saved.phase === "finished" && assignment !== undefined && result !== undefined) {
+      return State.cases.finished.make({ request, assignment, result });
+    }
+
+    return assignment !== undefined && result !== undefined && saved.collection !== undefined
+      ? State.cases.collected.make({ request, assignment, result, collection: saved.collection })
+      : expect.fail("the fold reached a phase without its facts");
+  };
+  return { state: stateFor(), events: saved.events } as Task;
 };
 
 const at = (world: World, phases: ReadonlyArray<Phase>) =>

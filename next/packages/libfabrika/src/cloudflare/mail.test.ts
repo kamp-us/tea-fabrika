@@ -579,7 +579,8 @@ it.effect(
           yield* i.project.processAck(asker, pos, brainOrigin).pipe(Effect.result);
           const after = i.acks("counter:1");
           const lands = asker === live && running && pos > acked;
-          reached.add(asker !== live ? "stranger" : !running ? "ended" : pos > acked ? "forward" : "behind");
+          const own = running ? (pos > acked ? "forward" : "behind") : "ended";
+          reached.add(asker !== live ? "stranger" : own);
 
           // The live process's ack is one row bound to it; one from behind, an ended life or a
           // stranger changes nothing.
