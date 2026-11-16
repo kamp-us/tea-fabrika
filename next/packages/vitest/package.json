@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "The new fabrika's test primitives, as Effect keeps its own in @effect/vitest (decision 0538): so far the test depth, runsFor({ fast, full }), the only reader of FABRIKA_TEST_DEPTH.",
+  "description": "The new fabrika's test primitives, as Effect keeps its own in @effect/vitest (decision 0538): so far the test depth, runsFor({ fast, full }), the only reader of FABRIKA_TEST_DEPTH, and the Recorder, the one typed way a law watches a service's calls (decision 0579).",
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts"
