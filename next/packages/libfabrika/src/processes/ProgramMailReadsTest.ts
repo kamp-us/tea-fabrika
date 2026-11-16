@@ -13,6 +13,7 @@ import * as fc from "fast-check";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
+import * as RelationsLedger from "../permissions/RelationsLedger.ts";
 import type { Sql } from "../Sql.ts";
 import { property } from "../Testing.test-support.ts";
 import { type From, Mailbox } from "./Mailbox.ts";
@@ -90,6 +91,7 @@ const OPEN = 16_384;
 
 const layer = (sql: Sql, next: Effect.Effect<string>) =>
   ProgramMailLedger.layer({ grants: GRANTS, cap: OPEN }).pipe(
+    Layer.provideMerge(RelationsLedger.layer({ by: BRAIN })),
     Layer.provideMerge(
       ProcessManager.layer(
         {

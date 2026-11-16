@@ -51,7 +51,11 @@ type D =
       readonly k: "tagged";
       readonly cases: ReadonlyArray<{ readonly tag: string; readonly fields: ReadonlyArray<Field> }>;
     }
-  | { readonly k: "union"; readonly ds: ReadonlyArray<D> };
+  | { readonly k: "union"; readonly ds: ReadonlyArray<D> }
+  // A writer with an index signature: a record, or a struct with a record as its rest. Its keys are
+  // field names a reader may ask for, so the writer's values do carry the keys a reader reads.
+  | { readonly k: "record"; readonly value: D }
+  | { readonly k: "rest"; readonly fields: ReadonlyArray<Field>; readonly value: D };
 
 const PRIMS: Record<Prim, Built> = {
   string: Schema.String,
@@ -60,10 +64,7 @@ const PRIMS: Record<Prim, Built> = {
   null: Schema.Null,
 };
 
-const struct = (fields: ReadonlyArray<Field>): Built =>
-  Schema.Struct(
-    Object.fromEntries(fields.map((f) => [f.name, f.optional ? Schema.optionalKey(build(f.d)) : build(f.d)])),
-  );
+const struct = (fields: ReadonlyArray<Field>): Built => Schema.Struct(fieldSchemas(fields));
 
 const build = (d: D): Built => {
   switch (d.k) {
@@ -87,8 +88,23 @@ const build = (d: D): Built => {
       );
     case "union":
       return Schema.Union(d.ds.map(build));
+    case "record":
+      return Schema.Record(key([]), build(d.value));
+    case "rest":
+      return Schema.StructWithRest(Schema.Struct(fieldSchemas(d.fields)), [
+        Schema.Record(key(d.fields.map((f) => f.name)), build(d.value)),
+      ]);
   }
 };
+
+/** A record's key: any field name but the struct's own, so Effect's Arbitrary draws keys a reader's
+ *  field reads, and never a key the struct's own field and the rest would both have to take. */
+const key = (own: ReadonlyArray<string>) =>
+  Schema.String.check(Schema.isPattern(new RegExp(`^(${NAMES.filter((n) => !own.includes(n)).join("|")})$`)));
+
+/** Each field's schema by its name, optional where the field is. */
+const fieldSchemas = (fields: ReadonlyArray<Field>) =>
+  Object.fromEntries(fields.map((f) => [f.name, f.optional ? Schema.optionalKey(build(f.d)) : build(f.d)]));
 
 // Effect Arbitrary has no fast-check adapter: one seed draws values from the schema's own Arbitrary.
 const sampled = (schema: Built, seed: number): ReadonlyArray<unknown> =>
@@ -171,6 +187,10 @@ const grammar = (unions: boolean): fc.Arbitrary<D> =>
       fc.uniqueArray(fc.constantFrom(...WORDS), { minLength: 2, maxLength: 4 }).map((vs): D => ({ k: "literals", vs })),
       tie("d").map((item): D => ({ k: "array", item })),
       fieldList(tie("d")).map((fields): D => ({ k: "struct", fields })),
+      // A writer with an index signature: a reader never fits one (cannot_tell), so it is drawn as
+      // a writer, and `derive` reads a struct out of it.
+      tie("d").map((value): D => ({ k: "record", value })),
+      fc.tuple(fieldList(tie("d")), tie("d")).map(([fields, value]): D => ({ k: "rest", fields, value })),
       ...(unions
         ? [
             tie("d").map((d): D => ({ k: "nullOr", d })),
@@ -273,6 +293,39 @@ const derive = (w: D, picks: ReadonlyArray<number>, move: Move, at = { n: 0 }): 
     }
     case "union":
       return { k: "union", ds: w.ds.map((d) => derive(d, picks, move, at)) };
+    case "record": {
+      // A reader record v1 cannot tell; else a struct of one key the writer's index may send, read
+      // as the writer's value. Optional, since a record may hold no key; break may require it.
+      if (roll % 5 === 0) {
+        return w;
+      }
+
+      const name = NAMES[roll % NAMES.length] ?? "id";
+      const way = next();
+      const required = move === "break" && way % 3 === 0;
+      // Break: the key the index may send is read as another primitive, the review's missed case.
+      const d: D =
+        move === "break" && way % 3 === 1 && w.value.k === "prim"
+          ? { k: "prim", p: w.value.p === "string" ? "number" : "string" }
+          : derive(w.value, picks, move, at);
+      return { k: "struct", fields: [{ name, d, optional: !required }] };
+    }
+    case "rest": {
+      // The struct's own fields, derived as a struct's, and maybe one key only the rest may send.
+      const base = derive({ k: "struct", fields: w.fields }, picks, move, at);
+
+      if (base.k !== "struct") {
+        return base;
+      }
+
+      const name = NAMES.find((n) => !w.fields.some((f) => f.name === n) && !base.fields.some((f) => f.name === n));
+      return name === undefined || roll % 2 === 0
+        ? base
+        : {
+            k: "struct",
+            fields: [...base.fields, { name, d: derive(w.value, picks, move, at), optional: move === "keep" }],
+          };
+    }
   }
 };
 
@@ -317,12 +370,22 @@ const kinds = (d: D, into = new Set<string>()): Set<string> => {
       }
 
       break;
+    case "record":
+      kinds(d.value, into);
+      break;
+    case "rest":
+      kinds({ k: "struct", fields: d.fields }, into);
+      kinds(d.value, into);
+      break;
     default:
       break;
   }
 
   return into;
 };
+
+/** Whether a description holds an index signature anywhere. */
+const indexed = (d: D): boolean => kinds(d).has("record") || kinds(d).has("rest");
 
 describe("Pipe slice 1: a pipe fits on the two declared shapes, next/", () => {
   it("F1: a pipe that fits is sound: every value the writer's schema makes, encoded and sent as JSON, decodes with the reader's schema", () => {
@@ -334,6 +397,10 @@ describe("Pipe slice 1: a pipe fits on the two declared shapes, next/", () => {
         const reader = derive(writer, picks, move);
         const verdict = judged(build(writer), build(reader));
         reached.add(verdict._tag);
+
+        if (indexed(writer)) {
+          reached.add(`${verdict._tag}:indexed`);
+        }
 
         if (verdict._tag !== "fits") {
           return;
@@ -347,7 +414,13 @@ describe("Pipe slice 1: a pipe fits on the two declared shapes, next/", () => {
           }
         }
       }),
-      { seed: SEED, numRuns: runsFor({ fast: 60, full: 200 }) },
+      {
+        seed: SEED,
+        numRuns: runsFor({ fast: 60, full: 200 }),
+        // Plant (b)'s case, drawn at every depth: a set of three literals into the set of its last
+        // two (picks: break drops the first).
+        examples: [[{ writer: { k: "literals", vs: ["open", "closed", "late"] }, move: "break", picks: [0], seed: 0 }]],
+      },
     );
 
     // Coverage: passes and refusals both, and a passing value of each kind of v1's grammar.
@@ -361,9 +434,29 @@ describe("Pipe slice 1: a pipe fits on the two declared shapes, next/", () => {
       "fits:array",
       "fits:struct",
       "fits:optional",
+      "fits:record",
+      "fits:rest",
+      "does_not_fit:indexed",
     ]) {
       expect(reached, `F1 reached ${required}`).toContain(required);
     }
+
+    // The review's case: a writer's index signature may send a key the reader reads, so that key's
+    // value must fit what the reader needs there, even when the reader makes it optional.
+    const Optional = Schema.Struct({ a: Schema.optionalKey(Schema.String) });
+    expect(judged(Schema.Record(Schema.String, Schema.Number), Optional)).toMatchObject({
+      _tag: "does_not_fit",
+      path: ["a"],
+      need: "String",
+      has: "Number",
+    });
+    expect(
+      judged(
+        Schema.StructWithRest(Schema.Struct({ b: Schema.String }), [Schema.Record(Schema.String, Schema.Number)]),
+        Optional,
+      ),
+    ).toMatchObject({ _tag: "does_not_fit", path: ["a"] });
+    expect(judged(Schema.Record(Schema.String, Schema.String), Optional)).toEqual({ _tag: "fits" });
   });
 
   it("F1: the plan's vectors answer as the plan writes them", () => {
@@ -604,6 +697,10 @@ describe("Pipe slice 1: a pipe fits on the two declared shapes, next/", () => {
         const verdict = judged(build(writer), build(reader));
         reached.add(verdict._tag);
 
+        if (indexed(writer)) {
+          reached.add(`${verdict._tag}:indexed`);
+        }
+
         if (verdict._tag === "fits") {
           const checked = sound(build(writer), build(reader), seed, `F6 ${JSON.stringify({ writer, reader })}`);
 
@@ -614,10 +711,27 @@ describe("Pipe slice 1: a pipe fits on the two declared shapes, next/", () => {
           }
         }
       }),
-      { seed: SEED, numRuns: runsFor({ fast: 60, full: 200 }) },
+      {
+        seed: SEED,
+        numRuns: runsFor({ fast: 60, full: 200 }),
+        // The review's missed case, drawn at every depth: a record of numbers into a reader whose
+        // optional `title` is a string (picks: key `title`, read as another primitive).
+        examples: [
+          [{ writer: { k: "record", value: { k: "prim", p: "number" } }, move: "break", picks: [1, 1], seed: 0 }],
+        ],
+      },
     );
 
-    for (const required of ["fits", "does_not_fit", "fits:nullOr", "fits:tagged", "fits:union"]) {
+    for (const required of [
+      "fits",
+      "does_not_fit",
+      "fits:nullOr",
+      "fits:tagged",
+      "fits:union",
+      "fits:record",
+      "fits:rest",
+      "does_not_fit:indexed",
+    ]) {
       expect(reached, `F6 reached ${required}`).toContain(required);
     }
 

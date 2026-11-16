@@ -50,6 +50,7 @@ import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
 import { Model as FabrikaModel } from "../permissions/Model.ts";
 import * as Relation from "../permissions/Relation.ts";
+import * as RelationsLedger from "../permissions/RelationsLedger.ts";
 import * as RelationsMemory from "../permissions/RelationsMemory.ts";
 import { Sender, Senders } from "../permissions/Senders.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
@@ -360,6 +361,8 @@ const host = Effect.fnUntraced(function* (
       Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
     ),
   ).pipe(
+    // The mail check reads the brain's relation rows on the ledger, as the Worker's does.
+    Layer.provideMerge(RelationsLedger.layer({ by: "SHA256:brain" })),
     Layer.provideMerge(
       ProcessManager.layer(
         {

@@ -208,6 +208,8 @@ const life = Effect.fnUntraced(function* (
         Layer.succeed(MailWakeups, { wake: () => Effect.void }),
       ),
     ),
+    // No pipe here, so the mail check's relation rows are none.
+    Layer.provideMerge(RelationsMemory.layer([])),
     Layer.provideMerge(manager),
     Layer.provideMerge(Mailbox.layer),
     Layer.provideMerge(data),

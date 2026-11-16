@@ -15,13 +15,15 @@
 // start piece records that right on the child's first start.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Option, Result, Schema, type Scope, Stream } from "effect";
+import { Context, Effect, Layer, Option, Result, Schema, type Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { valueFor } from "../ledger/Log.ts";
 import { Model } from "../permissions/Model.ts";
+import { Relations } from "../permissions/Relations.ts";
+import * as RelationsLedger from "../permissions/RelationsLedger.ts";
 import * as RelationsMemory from "../permissions/RelationsMemory.ts";
 import { Sender, Senders } from "../permissions/Senders.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
@@ -209,6 +211,7 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
 const layer = (sql: Sql, next: Effect.Effect<string>) =>
   // T1041: the largest cap, so no walk here meets a full inbox; the cap's own laws are below.
   ProgramMailLedger.layer({ grants: GRANTS, cap: OPEN }).pipe(
+    Layer.provideMerge(RelationsLedger.layer({ by: BRAIN })),
     Layer.provideMerge(
       ProcessManager.layer({ ...brain(), by: BRAIN }, next).pipe(
         Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data(sql)))),
@@ -716,6 +719,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
           Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
         ),
       ),
+      Layer.provideMerge(RelationsLedger.layer({ by: BRAIN })),
       Layer.provideMerge(
         ProcessManager.layer({ ...brain(), by: BRAIN }, next.next).pipe(
           Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data(store.sql)))),
@@ -992,6 +996,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
     const store = yield* open;
     const next = ids(...PIDS);
     const stack = ProgramMailLedger.layer({ grants: { [WRITER]: [READER] }, cap }).pipe(
+      Layer.provideMerge(RelationsLedger.layer({ by: BRAIN })),
       Layer.provideMerge(
         ProcessManager.layer({ ...brain(), by: BRAIN }, next.next).pipe(
           Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data(store.sql)))),
@@ -1324,12 +1329,14 @@ const pipeMail = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       relation: "owner",
       object: PIPE_FABRIKA,
     });
+    // The relation rows live on the ledger, as on the Worker, so the mail check reads the very
+    // `pipes_to` rows the pipe's turns write, never a list beside them (0526).
     const services = Layer.mergeAll(
       ProgramMailLedger.layer({ grants: {}, cap: OPEN }),
       ChildrenLedger.layer({ grants: [], fabrika: PIPE_FABRIKA }),
       PipesLedger.layer({ fabrika: PIPE_FABRIKA }),
     ).pipe(
-      Layer.provideMerge(RelationsMemory.layer([{ id: "owner", row: owner }])),
+      Layer.provideMerge(RelationsLedger.layer({ by: BRAIN })),
       Layer.provideMerge(Layer.succeed(Senders, founder)),
       Layer.provideMerge(
         ProcessManager.layer({ ...brain(), by: BRAIN }, next.next).pipe(
@@ -1338,6 +1345,7 @@ const pipeMail = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ),
     );
     const context = yield* Layer.build(services);
+    yield* Context.get(context, Relations).write([{ id: "owner", row: owner }], from());
     const run = <A, E>(effect: Effect.Effect<A, E, ProgramMail | ProcessManager | Children | Ledger | PipesService>) =>
       effect.pipe(Effect.provideContext(context), Effect.result);
     let n = 0;

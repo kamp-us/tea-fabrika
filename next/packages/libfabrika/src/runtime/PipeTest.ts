@@ -46,7 +46,8 @@ import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
 import { Model as FabrikaModel } from "../permissions/Model.ts";
 import * as Relation from "../permissions/Relation.ts";
-import * as RelationsMemory from "../permissions/RelationsMemory.ts";
+import { Relations } from "../permissions/Relations.ts";
+import * as RelationsLedger from "../permissions/RelationsLedger.ts";
 import { Sender, Senders } from "../permissions/Senders.ts";
 import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
@@ -65,6 +66,7 @@ import * as Piped from "./Piped.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Output, Program } from "./Program.ts";
 import { ProgramRunner } from "./Runner.ts";
+import * as Send from "./Send.ts";
 import * as StartChild from "./StartChild.ts";
 
 /**
@@ -170,8 +172,9 @@ const CrashMsg = Schema.Struct({ type: Schema.Literal("crash") });
 
 const logged = (s: ReaderModel, entry: unknown): ReaderModel => ({ log: [...s.log, copied(entry)] });
 
-const readerProgram = (name: string, shape: Built) => {
+const readerProgram = (name: string, shape: Built, { down = true }: { readonly down?: boolean } = {}) => {
   const encode = Schema.encodeUnknownSync(shape);
+  const { DOWN, ...value } = Piped.ports("in", shape, "The value this program reads");
   return Program.make({
     name,
     machine: Machine.make({
@@ -193,12 +196,17 @@ const readerProgram = (name: string, shape: Built) => {
     state: { v: 1, upgrades: [] },
     view: (s) => s,
     refuse: () => null,
-    inputs: { ...Piped.ports("in", shape, "The value this program reads"), crash: "Crash" },
+    inputs: { ...value, ...(down ? { DOWN } : {}), crash: "Crash" },
     outputs: {},
     writes: {},
     wake: () => null,
   });
 };
+
+/** A reader that declares the piped input but no DOWN input: a pipe into it is `no_input`. */
+const PLAIN = "pipe-plain";
+
+const plainReader = () => readerProgram(PLAIN, Schema.Unknown, { down: false });
 
 /** The parent: it asks for pipes, starts and stops children, and keeps every answer it folds. */
 const End = Schema.Struct({ name: Schema.String, program: Schema.String });
@@ -211,6 +219,8 @@ const LabMsg = Schema.Union([
   }),
   Schema.Struct({ type: Schema.Literal("start"), ...End.fields }),
   Schema.Struct({ type: Schema.Literal("stop"), name: Schema.String }),
+  // G1: a chunked send to a child's input that no pipe was ever made into, as program mail.
+  Schema.Struct({ type: Schema.Literal("chunks"), to: Schema.String, as: Schema.String, items: Schema.Array(Json) }),
 ]);
 
 const labProgram = () =>
@@ -219,10 +229,13 @@ const labProgram = () =>
     machine: Machine.make({
       model: ReaderModel,
       msg: LabMsg,
-      cmds: [Pipe.pipe, StartChild.startChild, StartChild.stopChild],
+      cmds: [Pipe.pipe, StartChild.startChild, StartChild.stopChild, Send.sendChunks],
       init: (loaded) => [loaded ?? { log: [] }, []],
       update: {
         pipe: (s, m) => [s, [Pipe.pipe({ from: m.from, to: m.to })]],
+        chunks: (s, m) => [s, [Send.sendChunks({ to: m.to, as: m.as, items: m.items })]],
+        send_chunks_ok: (s) => [logged(s, { type: "send_chunks_ok" }), []],
+        send_chunks_err: (s, m) => [logged(s, { type: "send_chunks_err", reason: m.error._tag }), []],
         start: (s, m) => [s, [StartChild.startChild({ program: m.program, name: m.name })]],
         stop: (s, m) => [s, [StartChild.stopChild({ name: m.name })]],
         pipe_ok: (s, m) => [logged(s, { type: "pipe_ok", value: m.value }), []],
@@ -236,7 +249,12 @@ const labProgram = () =>
     state: { v: 1, upgrades: [] },
     view: (s) => s,
     refuse: () => null,
-    inputs: { pipe: "Pipe two programs", start: "Start a child", stop: "Stop a child" },
+    inputs: {
+      pipe: "Pipe two programs",
+      start: "Start a child",
+      stop: "Stop a child",
+      chunks: "Send a child chunks",
+    },
     outputs: {},
     writes: {},
     wake: () => null,
@@ -263,8 +281,10 @@ const readerCode = (k: number) => `pipe-reader-${k}`;
 
 const person = (id: string) => Writer.cases.person.make({ key: `SHA256:${id}`, for: id });
 
+const BRAIN = "SHA256:brain";
+
 const brainFrom = (): From => ({
-  by: "SHA256:brain",
+  by: BRAIN,
   for: "brain",
   sentAt: "2026-11-15T00:00:00Z",
   seen: 0,
@@ -339,6 +359,7 @@ const pipeWorld = Effect.fnUntraced(function* (open: Effect.Effect<Store, never,
   const alarms = new Map<string, number>();
   const programs: Record<string, unknown> = {
     "pipe-lab": labProgram(),
+    [PLAIN]: plainReader(),
     ...Object.fromEntries(
       config.pairs.flatMap((pair, k) => [
         [writerCode(k), writerProgram(writerCode(k), pair.writer, pair.initial ?? null)],
@@ -370,13 +391,15 @@ const pipeWorld = Effect.fnUntraced(function* (open: Effect.Effect<Store, never,
       ProgramMailLedger.layer({ grants: {}, cap: config.cap }),
       ChildrenLedger.layer({ grants: [], fabrika: FABRIKA }),
       PipesLedger.layer({ fabrika: FABRIKA }),
-    ).pipe(Layer.provideMerge(RelationsMemory.layer([{ id: "owner", row: owner }])), Layer.provideMerge(gateway));
+      // The relation rows live on the ledger, as on the Worker, so the mail check reads the very
+      // `pipes_to` rows the pipe's turns write (0526).
+    ).pipe(Layer.provideMerge(RelationsLedger.layer({ by: BRAIN })), Layer.provideMerge(gateway));
     const shared = MailDeliveryLive.layer.pipe(
       Layer.provideMerge(Layer.mergeAll(brainSide, wakeups)),
       Layer.provideMerge(
         ProcessManager.layer(
           {
-            by: "SHA256:brain",
+            by: BRAIN,
             owner: Owner.cases.brain.make({}),
             recipient: Recipient.cases.client.make({ client: "brain", session: PIDS.at(-1) ?? "" }),
           },
@@ -387,6 +410,8 @@ const pipeWorld = Effect.fnUntraced(function* (open: Effect.Effect<Store, never,
       Layer.provideMerge(ledger(store.sql("ledger"))),
     );
     const built = yield* Layer.buildWithScope(shared, scope);
+    // The founder owns the fabrika: one row by the brain, kept once across every host life.
+    yield* Context.get(built, Relations).write([{ id: "owner", row: owner }], brainFrom());
     const manager = Context.get(built, ProcessManager);
     // An exit writes each watcher's DOWN, and the host then wakes the watchers, as the Worker's
     // Project does (`wakeWatchers` in cloudflare/runtime.ts, after `exit`). The only watchers here
@@ -1091,6 +1116,24 @@ const o1 = (open: Effect.Effect<Store, never, Scope.Scope>, list: boolean, reach
       expect(got.at(-1), `${label}: the last value handed is the writer's last`).toEqual(values.at(-1));
       reached.add(got.length < values.length ? "dropped" : "all");
     }
+
+    // A started send always finishes (the plan's "The writer's runner wraps"): newest wins drops only
+    // a send whose seq 0 is not saved yet, and no writer life ends here. So every send whose seq 0
+    // reached the reader's inbox has its last chunk there too, and is handed once.
+    const parts = (yield* w.rows([`${reader}/inbox`]))
+      .flatMap((r) => Option.toArray(decodeChunk(r.body)))
+      .map((b) => b.m.part);
+    const finished = new Set(parts.filter((p) => p.last).map((p) => p.id));
+    const begun = [...new Set(parts.filter((p) => p.seq === 0).map((p) => p.id))];
+    expect(
+      begun.filter((id) => !finished.has(id)),
+      `${label}: every send whose seq 0 was saved finishes whole`,
+    ).toEqual([]);
+    expect(got.length, `${label}: each finished send is handed once`).toBe(finished.size);
+
+    if (parts.some((p) => !p.last)) {
+      reached.add("several chunks");
+    }
   });
 
 /** The chunk messages of `pid` in a reader's inbox. */
@@ -1318,19 +1361,61 @@ const b1 = (open: Effect.Effect<Store, never, Scope.Scope>, reached: Set<string>
 const g1 = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   Effect.gen(function* () {
     const shape = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
-    const w = yield* pipeWorld(open, { pairs: [{ writer: shape, reader: shape }], cap: 16, chunk: 1_024 });
+    // A reader of anything: a chunk message handed on as its items, or as its one item, would
+    // decode and be logged, so the law sees it; an integer reader would refuse `[7]` by itself.
+    const w = yield* pipeWorld(open, { pairs: [{ writer: shape, reader: Schema.Unknown }], cap: 16, chunk: 1_024 });
     // The reader alone: no pipe was ever made into its input.
     yield* w.start(readerName(0), readerCode(0));
     const reader = readerName(0);
     yield* w.say(reader, { type: "in", value: 1041 });
     yield* w.settle();
     expect(yield* w.handed(reader), "G1: a direct message steps the program as any write port").toEqual([1041]);
-    yield* w.say(reader, { type: "in", items: [7], part: { id: "process_X/1/out/out", seq: 0, last: true } });
+    // A chunk message reaches the reader's inbox as program mail: the lab, its parent, sends it
+    // `[7]` as one chunked send into `in`, which no pipe was ever made into. A person's door
+    // refuses a chunk message, so only mail can bring one.
+    yield* w.say(LAB, { type: "chunks", to: reader, as: "in", items: [7] });
     yield* w.settle();
+    expect(
+      (yield* w.log(LAB)).filter((e) => e.type.startsWith("send_chunks")).map((e) => e.type),
+      "G1: the chunk message is saved in the reader's inbox",
+    ).toEqual(["send_chunks_ok"]);
     expect(yield* w.handed(reader), "G1: a chunk message for an input with no pipe hands nothing").toEqual([1041]);
     yield* w.say(reader, { type: "in", value: 12 });
     yield* w.settle();
     expect(yield* w.handed(reader), "G1: and the inbox moves on past it").toEqual([1041, 12]);
+  });
+
+/**
+ * P2 at the runner: the refusals the writer's and reader's runners answer from the loaded programs,
+ * before the brain's own checks. The lab asks for each pipe and gets `pipe_err` with that reason,
+ * and nothing is written on the pipe or relation streams.
+ */
+const p2 = (open: Effect.Effect<Store, never, Scope.Scope>) =>
+  Effect.gen(function* () {
+    const shape = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
+    const w = yield* pipeWorld(open, { pairs: [{ writer: shape, reader: shape }], cap: 16, chunk: 1_024 });
+    const writer = { name: writerName(0), program: writerCode(0), output: "out" };
+    const reader = { name: readerName(0), program: readerCode(0), input: "in" };
+    const cases: ReadonlyArray<readonly [string, unknown, unknown, string]> = [
+      ["a writer with no such output", { ...writer, output: "nope" }, reader, "no_output"],
+      ["a reader with no such piped input", writer, { ...reader, input: "nope" }, "no_input"],
+      ["a reader with the piped input and no DOWN input", writer, { ...reader, program: PLAIN }, "no_input"],
+      ["a writer program that is not loaded", { ...writer, program: "pipe-none" }, reader, "no_program"],
+      ["a reader program that is not loaded", writer, { ...reader, program: "pipe-none" }, "no_program"],
+    ];
+
+    for (const [label, from, to, reason] of cases) {
+      const streams = yield* w.rows(["pipes", Relation.STREAM]);
+      const before = (yield* w.log(LAB)).length;
+      yield* w.say(LAB, { type: "pipe", from, to });
+      yield* w.settle([LAB]);
+      const answers = (yield* w.log(LAB)).slice(before);
+      expect(
+        answers.map((a) => ({ type: a.type, reason: a.reason })),
+        `P2 at the runner: ${label}`,
+      ).toEqual([{ type: "pipe_err", reason }]);
+      expect(yield* w.rows(["pipes", Relation.STREAM]), `P2 at the runner: ${label} writes nothing`).toEqual(streams);
+    }
   });
 
 /** Runs the laws on the stores `open` gives. */
@@ -1397,7 +1482,10 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               full: 50,
             }),
           ),
-          Effect.sync(() => expect(reached, "O1 reached a run where newest wins dropped a value").toContain("dropped")),
+          Effect.sync(() => {
+            expect(reached, "O1 reached a run where newest wins dropped a value").toContain("dropped");
+            expect(reached, "O1 reached a send cut into several chunk messages").toContain("several chunks");
+          }),
         );
       },
       600_000,
@@ -1496,6 +1584,14 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     it.live(
       "G1 scenario: a {type, value} message sent straight to a piped input steps the program as any write port; a chunk message for an input that never had a pipe is acked and hands nothing",
       () => Effect.scoped(g1(open)),
+      600_000,
+    );
+
+    // Plants: remove the runner's no_program, no_output or no_input check (the writer's output looked
+    // up, the reader's piped port and its DOWN input): P2 at the runner red.
+    it.live(
+      "P2 at the runner scenario: a pipe from a writer with no such output, into a reader with no such piped input or no DOWN input, or from or into a program not loaded, is answered pipe_err with that reason and writes nothing",
+      () => Effect.scoped(p2(open)),
       600_000,
     );
   });

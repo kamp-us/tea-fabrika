@@ -13,6 +13,7 @@ import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { ROW_BYTES } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+import * as RelationsLedger from "../permissions/RelationsLedger.ts";
 import * as RelationsMemory from "../permissions/RelationsMemory.ts";
 import { Senders } from "../permissions/Senders.ts";
 import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
@@ -115,6 +116,8 @@ export const databases = Effect.gen(function* () {
       // T1041: mail.unread's largest value, so no law here meets a full inbox.
       ProgramMailLedger.layer({ grants: StartChildTest.HOST, cap: 16_384 }),
     ).pipe(
+      // The mail check reads the brain's relation rows on the ledger, as the Worker's does.
+      Layer.provideMerge(RelationsLedger.layer({ by: "SHA256:brain" })),
       Layer.provideMerge(
         ProcessManager.layer(
           {

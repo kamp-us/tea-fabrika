@@ -41,6 +41,7 @@ import {
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Appended, InputId, Writer } from "../coordination/index.ts";
+import * as RelationsLedger from "../permissions/RelationsLedger.ts";
 import { INPUT_BYTES } from "../processes/Children.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
 import { data as ledger, ids, PIDS, SHUTDOWN } from "../processes/Process.test-support.ts";
@@ -490,6 +491,8 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
         wakeups,
       ),
     ),
+    // The mail check reads the brain's relation rows on the ledger, as the Worker's does.
+    Layer.provideMerge(RelationsLedger.layer({ by: "SHA256:brain" })),
     Layer.provideMerge(manager),
     Layer.provideMerge(Mailbox.layer),
     Layer.provideMerge(data),
@@ -1680,6 +1683,7 @@ const pipeHost = Effect.fnUntraced(function* (
         wakeups,
       ),
     ),
+    Layer.provideMerge(RelationsLedger.layer({ by: "SHA256:brain" })),
     Layer.provideMerge(manager),
     Layer.provideMerge(Mailbox.layer),
     Layer.provideMerge(data),
