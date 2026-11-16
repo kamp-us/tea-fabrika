@@ -293,6 +293,8 @@ const operands = (cmd: unknown, fields: object): Option.Option<Record<string, un
     return Option.none();
   }
 
+  // SAFETY: the guard above returned for every non-object, null and array, so `cmd` is an object
+  // here, and a rest spread of an object copies only its own enumerable keys, read as unknown.
   const { type: _type, ...rest } = cmd as Record<string, unknown>;
   return Object.keys(rest).every((key) => Object.hasOwn(fields, key)) ? Option.some(rest) : Option.none();
 };
@@ -320,6 +322,8 @@ const withoutInput = (cmd: unknown): unknown => {
     return cmd;
   }
 
+  // SAFETY: the guard above let through only a non-null, non-array object that has its own `input`
+  // key, so the rest spread reads that object's own keys, each value kept as unknown.
   const { input: _input, ...rest } = cmd as Record<string, unknown>;
   return rest;
 };
@@ -1379,6 +1383,8 @@ export class ProgramRunner extends Context.Service<
           options: { readonly mine?: string; readonly dirty?: boolean } = {},
         ) {
           if (yield* ended) {
+            // SAFETY: an ended life folds no letter, so it makes no Cmd; the literal is empty, and an
+            // empty array is a ReadonlyArray of any element type.
             return { state, fresh: [] as ReadonlyArray<Dispatched>, mine: Option.none<History>() };
           }
 
@@ -1386,6 +1392,8 @@ export class ProgramRunner extends Context.Service<
           const saved = yield* store.load;
 
           if (letters.length === 0 && options.dirty !== true) {
+            // SAFETY: with no letter read and nothing dirty there is nothing to fold, and this empty
+            // literal holds no element, so naming its element type Dispatched cannot be wrong.
             return { state, fresh: [] as ReadonlyArray<Dispatched>, mine: Option.none<History>() };
           }
 
@@ -1544,6 +1552,8 @@ export class ProgramRunner extends Context.Service<
 
           live = next;
           yield* publish(state, next);
+          // SAFETY: `fresh` is the Array<Dispatched> declared at the top of this call; the cast only
+          // drops its mutable methods, and nothing pushes to it once this call returns.
           return { state: next, fresh: fresh as ReadonlyArray<Dispatched>, mine };
         });
 
@@ -2268,6 +2278,8 @@ export class ProgramRunner extends Context.Service<
                     }
 
                     yield* waitForRoom;
+                    // SAFETY: this quota-wait path folds no letter and makes no Cmd, so the answer
+                    // is this empty literal, and an array with no element fits any element type.
                     return [] as ReadonlyArray<Dispatched>;
                   }),
                 ),
