@@ -153,6 +153,12 @@ runs leakgrep twice: on the lines that land, added lines only
 A plain `git diff` carries 3 context lines, and `--text` scans the whole file, so a moved blank line
 beside an old fixture drags that line in. The gate still fails closed on any hit in added lines.
 
+**A judgment slice adds no `@effect-diagnostics` ignore line (lead ruling, 2026-11-16, after
+0589's no lock lines).** While a check is off, an ignore line does nothing, and `pnpm typecheck`
+fails it with TS377000 "directive has no effect". A site a slice cannot fix stays as it is. The
+slice lists it in its run row: its file:line, and the exact ignore line with its reason, as it would
+read. The judgment sweep's final lock PR adds every listed line together with the locks.
+
 **Folds roll in batches.** Each sweep has one integrator branch. When 5 or more reviewed slices of
 a sweep sit unfolded, its integrator folds them (merge, never rebase), and the twin mails the head
 for the merge session to stack.
