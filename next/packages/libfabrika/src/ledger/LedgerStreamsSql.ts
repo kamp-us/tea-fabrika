@@ -20,7 +20,7 @@ export const layer = (sql: Sql): Layer.Layer<LedgerStreams> =>
     const store = ledgerStore(sql, { ring: () => Effect.void });
     return {
       list: (prefix: string) =>
-        Stream.paginate(null as string | null, (after) =>
+        Stream.paginate(null, (after: string | null) =>
           store.streams(prefix, after).pipe(
             Effect.mapError(
               (error) =>

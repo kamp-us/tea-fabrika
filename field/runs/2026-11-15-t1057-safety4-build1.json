@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1057-safety4-build1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T22:07:14-08:00",
+  "ended": "2026-11-15T22:16:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Build step for anti-slop judgment slice AS-require-safety-comment-4, branch fabrikalfa/antislop-require-safety-comment-4, from the tests step's head 018916756, no pull request (owner ruling: one per sweep). Rule anti-slop/require-safety-comment-for-type-assertion with its SAFETY marker (0561), forced to error in a scratch config outside the repo. Met the 5 product hits the tests step left; all 5 fixed by hand edits with the Edit tool, no quick fix and no script. Removed 1 cast: next/packages/libfabrika/src/ledger/LedgerStreamsSql.ts:23, `null as string | null` became a typed callback parameter `(after: string | null)`, so Stream.paginate infers its state type. Kept 4 with a SAFETY comment naming the fact on that line: next/packages/libfabrika/src/schedules/ScheduledJob.ts:96 (the reducer's computed keys are the two settled types of the still-generic Cmd, which settle handles; the old plain comment above it became the SAFETY line), next/packages/libfabrika/src/desktop/BrainServiceManaged.ts:100 and :104 (tea's template-string reply Msgs, the same reason the tests step wrote in BrainLife.laws.test.ts; the ok value is the Command's own because work is picked by cmd.type), next/packages/tuval/src/browser/key.ts:133 (the thunk runs only from the transaction's complete event, after the read's handler set out; a failed read or a throw aborts instead). Counted again over the slice's 11 folders: 1 hit left, next/packages/libfabrika/src/settings/StartsTest.ts:100, waiting on PR 1366. No assertion deleted or narrowed, no disable line, no lock line, no .oxlintrc.json change.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Tests run at 018916756 plus this diff, one file at a time under nice -n 15 --maxWorkers=3, all green: schedules/ScheduledJob.test, desktop/BrainServiceManaged.laws, desktop/BrainLife.laws, ledger/LedgerStreams.types, node/runtime/RunnerHands.test, tasks/Task.test, tasks/internal/task.test, cloudflare/hands.test, apps/fabrika hands-client.test. Not run here: node/ledger/LedgerStreams.integration.test.ts and the --changed origin/main run, which reaches 41 integration files; the test config refuses both locally (0178), and CI's full run carries them. tuval browser/key.laws.visual.test.ts is a visual test, never run here. One pnpm typecheck: exit 0. The list ratchet exits 0. pnpm format and pnpm lint fail only on ten lines that ask to add access, desktop, ledger, schedules, telemetry, tezgah, transport, tuval, programs/counter and programs/pipeline to the rule's .oxlintrc.json block, which the owner ruling holds for the later lock PR; every other lint part passes.",
+  "step": "build"
+}

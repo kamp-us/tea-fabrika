@@ -97,10 +97,17 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         const error = translate(answer.failure);
         return {
           cause: Redacted.make(answer.failure),
+          // SAFETY: `cmd` is one of BrainLife's Commands, and BrainLife's Msg union has a
+          // `${type}_err` case for each of them whose error is a Conflict or an Operation, which is
+          // what `Failed` makes; the compiler cannot join the template string to that case.
           cmds: yield* send({ type: `${cmd.type}_err`, cmd, error: Failed.cases[error].make({}), at } as BrainLife.Msg),
         };
       }
 
+      // SAFETY: `work` above is picked by `cmd.type`, so its value is that Command's own: a Status
+      // for inspect, Readiness for ready, Children for cleanup, and void, sent as null, for the
+      // rest, which is what BrainLife's `${type}_ok` case for it carries; the compiler cannot join
+      // the template string to that case.
       const cmds = yield* send({ type: `${cmd.type}_ok`, cmd, value: answer.success ?? null, at } as BrainLife.Msg);
 
       if (cmd.type === "remove" && model._tag === "failed_stop") {

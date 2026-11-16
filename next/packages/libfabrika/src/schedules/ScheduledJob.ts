@@ -92,7 +92,9 @@ export const make = <C extends AnyCmdDef>(config: {
     msg: Timer,
     cmds: [config.cmd],
     init: (loaded) => [loaded ?? Model.cases.idle.make({ next: 0, period }), []],
-    // Computed command keys form the settled-message reducer for this command.
+    // SAFETY: tea settles a Cmd of `config.cmd` only with `config.cmd.okType` or
+    // `config.cmd.errType`, which are the two `type`s of `Settled<C>`, and `settle` handles both;
+    // the compiler cannot map those computed keys onto `Reducer` while `C` is still generic.
     update: {
       timer: (s: Model, m: { readonly at: number }): readonly [Model, readonly CmdOf<C>[]] =>
         s._tag === "idle" && m.at >= s.next

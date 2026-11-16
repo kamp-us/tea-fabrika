@@ -130,6 +130,9 @@ const atomically = <A>(
         store.put(decided.put, key);
       }
     };
+    // SAFETY: `transaction` calls this only from the transaction's complete event, which fires
+    // only after `read` succeeded and its handler set `out`; a failed read or a throw in that
+    // handler aborts the transaction, and the abort takes the failure path instead.
     return () => out as A;
   });
 
