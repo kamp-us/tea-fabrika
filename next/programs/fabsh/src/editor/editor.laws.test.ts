@@ -818,6 +818,10 @@ it.prop(
       const split = text.length + Math.max(1, Math.abs(seed) % ending.length);
       const cuts = new Set([text.length + 1, split, text.length + ending.length - 1]);
 
+      if (ending.startsWith("\x1b[200~")) {
+        cuts.add(text.length + "\x1b[200~".length + text.length);
+      }
+
       for (const at of cuts) {
         const actual = boot();
         send(actual, { type: "keys", data: prefix + suffix.slice(0, at) });

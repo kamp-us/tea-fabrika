@@ -266,6 +266,9 @@ describe("fabsh S1 reader", () => {
           [`${field}=`, namespace === "input"],
           [`>${field}`, namespace === "output"],
           [field, true],
+          [`--${field}=`, false],
+          [`>${field}=`, false],
+          [`<${field}=`, false],
         ] as const) {
           const source = `known --help ${part}`;
           const checked = check(parse(source), list);
