@@ -242,9 +242,9 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
       }),
   );
 
-  // vector: 0544's path, word for word: no run at the head arms, with one line and the way to start one.
+  // vector: 0544's path, word for word: fallback guidance describes automatic CI without starting local work.
   it.effect(
-    "vector: no full run arms with the 0544 line and the preflight command; a green run at an older head arms with the same line; a docs pull request's line says it starts no full run",
+    "vector: no full run arms with the 0544 line and automatic CI guidance; a green run at an older head arms with the same line; a docs pull request's line says it starts no full run",
     () =>
       Effect.gen(function* () {
         const red = yield* fixture;
@@ -252,11 +252,11 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         const tail = `merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`;
         const none = memory({ stands: "none" }, red);
         expect(Arm.line(yield* arm(none))).toBe(
-          `pr 1092: no full run at ${head}; arming as 0544 allows (before starting one: node .agents/skills/lead/scripts/ci/preflight.ts --repo ${repo} --branch ${branch} --head ${oid}); ${tail}`,
+          `pr 1092: no full run at ${head}; arming as 0544 allows (automatic ready and queue CI provide the required checks); ${tail}`,
         );
         const stale = memory({ stands: "older" }, red);
         expect(Arm.line(yield* arm(stale))).toBe(
-          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (before starting one: node .agents/skills/lead/scripts/ci/preflight.ts --repo ${repo} --branch ${branch} --head ${oid}); ${tail}`,
+          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (automatic ready and queue CI provide the required checks); ${tail}`,
         );
         const docs = memory({ stands: "none", files: ["docs/plan/README.md", ".glossary/TERMS.md"] }, red);
         expect(Arm.line(yield* arm(docs))).toBe(
@@ -270,9 +270,9 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
       }),
   );
 
-  // Plant: preflight the old fixed branch instead of the PR branch; generated requests must expose it.
+  // Plant owed on CI: call preflight while composing guidance; its recorded call must fail this law.
   it.effect.prop(
-    "property: new-proof guidance refuses an old workflow while existing head evidence keeps its meaning",
+    "property: fallback guidance performs no local preflight while existing head evidence keeps its meaning",
     {
       branch: Schema.String.check(Schema.isPattern(/^fabrikalfa\/[a-z][a-z0-9_-]{0,24}$/)),
       head: Schema.String.check(
@@ -287,13 +287,10 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         const missing = memory({ stands: "none", branch, head }, red);
         missing.actions.preflight = reason;
         const line = Arm.line(yield* arm(missing));
-        expect(line).toContain(`new proof unavailable: ${reason}`);
-        expect(line.replace(`new proof unavailable: ${reason}`, "")).not.toContain("workflow run");
-        expect(missing.actions.asked).toEqual([
-          `runs scheduled.yaml ${branch}`,
-          `runs check.yaml ${branch}`,
-          `preflight ${branch} ${head}`,
-        ]);
+        expect(line).toContain("automatic ready and queue CI provide the required checks");
+        expect(line).not.toContain("preflight.ts");
+        expect(line).not.toContain("workflow run");
+        expect(missing.actions.asked).toEqual([`runs scheduled.yaml ${branch}`, `runs check.yaml ${branch}`]);
         expect(missing.github.calls).toEqual([{ _tag: "arm", number: 1092, oid: head }]);
 
         const existing = memory({ stands: "green", jobs: shaped("changed"), branch, head }, red);
@@ -306,7 +303,14 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
 
         const stale = memory({ stands: "older", jobs: shaped("changed"), branch, head }, red);
         stale.actions.preflight = reason;
-        expect((yield* Effect.flip(arm(stale))).reason).toContain(`new proof unavailable: ${reason}`);
+        expect((yield* Effect.flip(arm(stale))).reason).toContain(
+          "automatic ready and queue CI provide the required checks",
+        );
+        expect(stale.actions.asked).toEqual([
+          `runs scheduled.yaml ${branch}`,
+          `runs check.yaml ${branch}`,
+          `jobs ${RED}`,
+        ]);
         expect(stale.github.calls).toEqual([]);
       }),
   );
@@ -391,14 +395,14 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
           const stale = memory({ stands: "older", jobs: shaped(kind) }, red);
           const refused = yield* Effect.flip(arm(stale));
           expect(refused.reason, kind).toBe(
-            `pr 1092: no full run at this head, and at the older head ${older.slice(0, 12)}: the changed-set run ${url} tested that head's change, not this one (0590); before starting one: node .agents/skills/lead/scripts/ci/preflight.ts --repo ${repo} --branch ${branch} --head ${oid}`,
+            `pr 1092: no full run at this head, and at the older head ${older.slice(0, 12)}: the changed-set run ${url} tested that head's change, not this one (0590); automatic ready and queue CI provide the required checks`,
           );
           expect(stale.github.calls, kind).toEqual([]);
         }
 
         const full = memory({ stands: "older", jobs: shaped("full") }, red);
         expect(Arm.line(yield* arm(full))).toBe(
-          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (before starting one: node .agents/skills/lead/scripts/ci/preflight.ts --repo ${repo} --branch ${branch} --head ${oid}); merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
+          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (automatic ready and queue CI provide the required checks); merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
         );
         const fullAt = memory({ stands: "green", jobs: shaped("full") }, red);
         expect(Arm.line(yield* arm(fullAt))).toContain(`full run ${RED} green on every job at ${head}`);

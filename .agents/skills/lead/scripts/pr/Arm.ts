@@ -21,7 +21,7 @@
 // green, its failed steps and the failing test lines of its log.
 //
 // No run at the head arms, as 0544 lets a reviewed pull request be armed with no full run first, and
-// says so in one line with how to start one. A run at the head that is red or has not ended refuses.
+// says so in one line. A run at the head that is red or has not ended refuses.
 // With no scheduled proof at the head, the newest exact-head automatic check can prove the related
 // set. It must be a successful ready PR run from this repository, with select, related and the real
 // ci-required check complete. Red or unfinished new-route CI refuses. Legacy and draft checks do
@@ -340,22 +340,13 @@ const redReport = Effect.fn("Arm.redReport")(function* (
   return lines.join("\n");
 });
 
+const proofNote = "automatic ready and queue CI provide the required checks";
+
 /** The line a head with no full run of its own is armed with (0544). */
-const unrunNote = (seen: string, oid: string, guidance: string, docsOnly: boolean): string =>
+const unrunNote = (seen: string, oid: string, docsOnly: boolean): string =>
   `no full run at ${oid.slice(0, 12)}${seen}; arming as 0544 allows (${
-    docsOnly ? `a docs pull request, only ${DOCS.join(", ")} files, starts no full run` : guidance
+    docsOnly ? `a docs pull request, only ${DOCS.join(", ")} files, starts no full run` : proofNote
   })`;
-
-/** New proof guidance rechecks the exact branch head; already completed evidence keeps its meaning. */
-const proofNote = Effect.fn("Arm.proofNote")(function* (repo: string, branch: string, head: string) {
-  const runs = yield* Runs;
-
-  return yield* Effect.match(runs.preflight(branch, head), {
-    onFailure: (error) => `new proof unavailable: ${error.reason}`,
-    onSuccess: () =>
-      `before starting one: node .agents/skills/lead/scripts/ci/preflight.ts --repo ${repo} --branch ${branch} --head ${head}`,
-  });
-});
 
 export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
   const prs = yield* PullRequests;
@@ -384,17 +375,13 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
   const files = yield* prs.files(found.number);
   const docsOnly = files.length > 0 && files.every(isDocs);
 
-  const note = Effect.fnUntraced(function* (seen: string) {
-    const guidance = docsOnly ? "" : yield* proofNote(a.repo, found.head, found.oid);
-
-    return unrunNote(seen, found.oid, guidance, docsOnly);
-  });
+  const note = (seen: string) => Effect.succeed(unrunNote(seen, found.oid, docsOnly));
 
   // A green run arms with its line; any other refuses, at the head or, with none there, at the older head.
   const judged = (
     verdict: Verdict,
     place: string,
-    green: (run: number, kind: Kind) => Effect.Effect<string, NotArmed, Runs>,
+    green: (run: number, kind: Kind) => Effect.Effect<string, NotArmed>,
   ) =>
     Verdict.match(verdict, {
       green: ({ run, kind }) => green(run, kind),
@@ -426,11 +413,9 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
       return judged(verdict, place, (run, kind) =>
         kind === "full"
           ? note(`, and the newest one, ${run} at the older head ${head.slice(0, 12)}, was green`)
-          : Effect.flatMap(proofNote(a.repo, found.head, found.oid), (guidance) =>
-              Effect.fail(
-                refuse(
-                  `${place}: the changed-set run ${runUrl(a.repo, run)} tested that head's change, not this one (0590); ${guidance}`,
-                ),
+          : Effect.fail(
+              refuse(
+                `${place}: the changed-set run ${runUrl(a.repo, run)} tested that head's change, not this one (0590); ${proofNote}`,
               ),
             ),
       );
