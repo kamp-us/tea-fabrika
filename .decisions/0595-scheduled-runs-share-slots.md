@@ -24,7 +24,7 @@ flowchart LR
 ```mermaid
 flowchart LR
   main["main run"] --> queue["one main workflow group"]
-  proof["source proof"] --> proofs["one workflow group per source SHA"]
+  proof["branch proof"] --> proofs["one workflow group per ref"]
   queue --> gate["scheduled-control: gate / select"]
   proofs --> gate
   gate --> tests["scheduled-test-1 through scheduled-test-9"]
@@ -63,14 +63,26 @@ can serialize jobs across runs by a shared group. This is the existing platform 
 no separate queue service is added. The change applies to today's CI serving both versions.
 
 This amends [0534](0534-the-merge-line-runs-changed-tests-a-schedule-runs-all.md)'s single
-scheduled queue, [0581](0581-main-full-run-starts-on-push-and-hourly.md)'s all-ref serialization,
-and [0590](0590-a-branch-proof-run-runs-only-what-its-change-reaches.md)'s branch-ref dispatch
-route. Their test selection, depth, main cadence and reporting rules remain.
+scheduled queue and [0581](0581-main-full-run-starts-on-push-and-hourly.md)'s all-ref serialization.
+[0590](0590-a-branch-proof-run-runs-only-what-its-change-reaches.md)'s branch-ref dispatch,
+test selection and head checks remain, as do test depth, main cadence and reporting.
+
+## Amendments
+
+2026-11-16: correct this record's unnecessary implementation requirement. Native per-ref workflow
+groups can retain the existing branch/head proof contract.
+[`Arm.ts`](../.agents/skills/lead/scripts/pr/Arm.ts) matches `run.head` to the PR head,
+[`proof.ts`](../.github/ci/proof.ts) records checkout `HEAD`,
+[`gate.mjs`](../.github/ci/gate.mjs) reads main histories only, and
+[`scheduled.mjs`](../.github/ci/scheduled.mjs) writes no incident for a branch.
+The earlier current-main/target-SHA protocol, dual checkouts and
+new evidence schema are not required. This refines the implementation choice; it adds no owner
+ruling and weakens no proof or resource check.
 
 ## Decision
 
 **Participating scheduled runs share nine test-job groups and one control-job group; separate
-workflow admission follows only after trusted source proof and migration are proven.**
+per-ref workflow admission follows only after shared job locks and migration are proven.**
 
 - Each full or changed test leg uses exactly one of `scheduled-test-1` through
   `scheduled-test-9`. Both matrices share these names across source commits and workflow runs.
@@ -78,16 +90,15 @@ workflow admission follows only after trusted source proof and migration are pro
 - Retain `queue: max` and `cancel-in-progress: false`. Keep every test, full-depth case count,
   job name, failure verdict and timeout. Main still runs the complete suite; branch proof keeps
   [0590](0590-a-branch-proof-run-runs-only-what-its-change-reaches.md)'s selection.
-- The supported proof request uses the current workflow on main and an exact target source SHA.
-  Verify each actual source checkout. Keep source SHA, workflow SHA, run, attempt, selection and
-  actual runtime versions in its evidence. Missing or mismatched facts are missing proof.
-- Treat source proof separately even when its workflow comes from main. It never advances main's
-  hour limiter or writes main's incident issue. Main runs remain serialized with their existing
-  push, hourly catch-up and manual-start rules.
-- After migration, tooling starts and accepts new proofs only through this current-workflow
-  protocol. Historical records retain their original meaning; they are never relabeled as the
-  new protocol. A direct dispatch of historical workflow code is outside this protocol's budget
-  guarantee and is not suggested or accepted as current proof.
+- Keep branch-ref dispatch and the existing branch/head proof contract. Before each supported
+  new proof start, tooling checks the exact branch HEAD for all shared job locks. Missing locks
+  refuse the start. This adds no trusted-main input, dual checkout or artifact schema.
+- Branch proof never advances main's hour limiter or writes main's incident issue. Main runs
+  remain serialized in their own workflow group with the existing one-hour gap, push, hourly
+  catch-up and manual-start rules. Other refs use their own native workflow groups.
+- Historical proof records retain their original meaning and existing acceptance rules. Do not
+  relabel them or accept stale proof unconditionally. Direct dispatch of historical workflow code
+  remains outside the supported budget guarantee and is not suggested as a supported new start.
 
 **Binding constraints**
 
@@ -102,11 +113,11 @@ workflow admission follows only after trusted source proof and migration are pro
 ## Rollout
 
 1. Add and prove the shared job groups while keeping the existing global workflow group.
-2. Add and prove current-main source-SHA dispatch, actual checkout and evidence verification,
-   still under the global workflow group.
-3. Let already queued or running versions without shared job groups finish without cancellation.
+2. Add and prove the exact-branch-HEAD lock preflight for supported proof starts, still under the
+   global workflow group. Migrate active proof refs to the shared job groups.
+3. Drain every already queued or running version without shared job groups, without cancellation.
    Record their workflow versions and the drain before enabling independent admission.
-4. Separate main and source-proof workflow queues, retaining all ten shared job groups. Prove
+4. Use native per-ref workflow groups, retaining all ten shared job groups. Prove
    actual overlap, job bounds, source identity and unchanged reporting before claiming recovery.
 
 This decision records the staged change. It does not say these code slices have landed or that
@@ -119,6 +130,6 @@ the global workflow queue has already been removed.
   worker pool. Measure the resulting wait and execution time after rollout.
 - The scheduled workload keeps its existing ten-runner budget and the intent to leave capacity
   for pull requests. This does not reserve runners against every other workflow.
-- Evidence must identify tested source independently from the workflow's own commit. A green
+- Existing run-head checks and checkout-HEAD records still identify the tested source. A green
   workflow at the wrong source is not proof for a pull request.
 - No glossary term is added or renamed.
