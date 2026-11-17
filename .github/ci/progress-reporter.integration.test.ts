@@ -363,6 +363,7 @@ for (let i = 0; i < ${cases}; i++) test("probe " + i, async () => { process.stdo
     diagnostic === "on" || (measurement && (yield* fs.exists(path.join(scratch, "vitest-progress.ndjson"))))
       ? yield* fs.readFileString(path.join(scratch, "vitest-progress.ndjson"))
       : "";
+
   expect(JSON.stringify(actual)).not.toContain(scratch);
   expect(markdown(actual)).not.toContain(scratch);
 
