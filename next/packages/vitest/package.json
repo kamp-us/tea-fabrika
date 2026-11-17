@@ -13,15 +13,15 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "effect": "catalog:"
+    "@effect/vitest": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "vitest": "catalog:"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
-    "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
-    "fast-check": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "catalog:"
+    "typescript": "catalog:"
   },
   "volta": {
     "extends": "../../../package.json"

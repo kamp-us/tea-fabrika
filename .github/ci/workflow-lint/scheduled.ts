@@ -1,4 +1,8 @@
-// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC18).
+// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC19).
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { Result, Schema } from "effect";
 import { parse } from "yaml";
 import {
   allSteps,
@@ -11,6 +15,7 @@ import {
   nextJob,
   numbered,
   ON_E2E,
+  type Require,
   steps,
   TOKEN,
   uses,
@@ -28,6 +33,26 @@ const TOOLING_PROJECT = "--project tooling";
 // red run opens one `ci-scheduled` issue. Half of the organization's 20 runners at most, so pull
 // requests keep theirs.
 const RUNNERS = 10;
+
+const CONTROL_GROUP = "scheduled-control";
+
+const TEST_GROUP = "scheduled-test-";
+
+const TEST_SLOTS = Array.from({ length: RUNNERS - 1 }, (_, i) => String(i + 1));
+
+const decodeSlots = Schema.decodeResult(
+  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Finite]))),
+);
+
+/** Reads only a closed JSON lookup on the full matrix's shard, not an arbitrary expression. */
+const slotsOf = (value: unknown): Record<string, unknown> => {
+  const match =
+    typeof value === "string"
+      ? /^scheduled-test-\$\{\{\s*fromJSON\('([^']*)'\)\[matrix\.shard\]\s*\}\}$/i.exec(value)
+      : null;
+
+  return Result.getOrElse(decodeSlots(match?.[1] ?? ""), () => ({}));
+};
 
 // What the workflow's token may do: read runs (the time tables) and the checkout. Canceling a run takes
 // `actions: write`, and a run anything canceled ends `cancelled`, never `failure`.
@@ -162,6 +187,73 @@ const listed = (job: Record<string, unknown>): unknown[] => {
   return Array.isArray(shard) ? shard : [];
 };
 
+/** The shared scheduled job budget, independent of the workflow admission queue. */
+const jobSlots = (workflow: Record<string, unknown>, require: Require): void => {
+  const jobs = map(workflow["jobs"]);
+  const concurrency = map(workflow["concurrency"]);
+
+  const selectRuns = steps(map(jobs[SELECT_JOB])).filter(
+    (s) => "run" in s && s["run"] !== "pnpm install --frozen-lockfile",
+  );
+
+  const selectEnv = map(selectRuns[0]?.["env"]);
+
+  const names = [GATE_JOB, SELECT_JOB, VERDICT, TESTS_JOB, CHANGED_JOB];
+  require(Object.keys(jobs).length === names.length &&
+    names.every((name) =>
+      Object.hasOwn(jobs, name),
+    ), "SC19: every admitted job is one of the five jobs with shared slots");
+
+  // SC19. Fixed job groups reserve the same nine test slots and one control slot across
+  // participating scheduled workflows, even when their refs have separate workflow queues.
+  const fullSlots = slotsOf(map(map(jobs[TESTS_JOB])["concurrency"])["group"]);
+  const fullShards = listed(map(jobs[TESTS_JOB]));
+  const fullMatrix = map(map(map(jobs[TESTS_JOB])["strategy"])["matrix"]);
+  const changedStrategy = map(map(jobs[CHANGED_JOB])["strategy"]);
+  const changedMatrix = map(changedStrategy["matrix"]);
+
+  const slotValues = Object.values(fullSlots).map((slot) =>
+    typeof slot === "number" && Number.isInteger(slot) ? String(slot) : slot,
+  );
+
+  const fullGroup =
+    Object.keys(fullMatrix).length === 1 &&
+    fullShards.length === TEST_SLOTS.length &&
+    Object.keys(fullSlots).length === fullShards.length &&
+    fullShards.every((shard) => typeof shard === "string" && Object.hasOwn(fullSlots, shard)) &&
+    new Set(slotValues).size === TEST_SLOTS.length &&
+    TEST_SLOTS.every((slot) => slotValues.includes(slot));
+
+  for (const name of names) {
+    const held = map(map(jobs[name])["concurrency"]);
+    const group = held["group"];
+
+    const shared =
+      name === TESTS_JOB
+        ? fullGroup
+        : name === CHANGED_JOB
+          ? typeof group === "string" &&
+            /^scheduled-test-\$\{\{\s*matrix\.shard\s*\}\}$/i.test(group) &&
+            typeof selectEnv["MOST"] === "number" &&
+            Number.isInteger(selectEnv["MOST"]) &&
+            selectEnv["MOST"] >= 1 &&
+            selectEnv["MOST"] <= TEST_SLOTS.length &&
+            changedStrategy["max-parallel"] === selectEnv["MOST"] &&
+            Object.keys(changedMatrix).length === 1 &&
+            changedMatrix["shard"] === CHANGED_LEGS
+          : typeof group === "string" && group.toLowerCase() === CONTROL_GROUP;
+
+    require(Object.keys(held).length === 3 &&
+      held["queue"] === "max" &&
+      held["cancel-in-progress"] === false &&
+      shared, `SC19: ${name} shares its fixed job slots across runs, keeps every waiting job and cancels none`);
+  }
+
+  const reserved = [CONTROL_GROUP, ...TEST_SLOTS.map((slot) => `${TEST_GROUP}${slot}`)];
+  require(typeof concurrency["group"] === "string" &&
+    !reserved.includes(concurrency["group"].toLowerCase()), "SC19: the workflow group never holds a shared job group");
+};
+
 /**
  * A job's step of the `needs` chain: 0 for a job that needs nothing, else one past the deepest job
  * it needs. A job that needs one that is not there, or a loop, counts as 0: GitHub refuses such a
@@ -183,15 +275,13 @@ const depth = (jobs: Record<string, unknown>, name: string, seen: readonly strin
  * of legs, so the measured split (vitest.shards.ts) and each leg's `/N` hold for both.
  */
 export const lintScheduled = (text: string, check: string): string[] => {
-  let source: unknown;
+  const parsed = Result.try((): unknown => parse(text));
 
-  try {
-    source = parse(text);
-  } catch {
+  if (Result.isFailure(parsed)) {
     return ["scheduled.yaml: invalid YAML"];
   }
 
-  const workflow = map(source),
+  const workflow = map(parsed.success),
     on = map(workflow["on"]),
     jobs = map(workflow["jobs"]);
 
@@ -222,11 +312,12 @@ export const lintScheduled = (text: string, check: string): string[] => {
     typeof gap === "number" &&
     Number.isInteger(gap) &&
     gap >= LEAST_GAP, `SC16: the workflow's env is ${GAP} alone, a whole number of minutes, ${LEAST_GAP} or more`);
-  // SC2. One run at a time, and a running one is never cut short.
+  // SC2. One run per ref at a time. Main's triggers share a queue; branch proofs have their own.
   const concurrency = map(workflow["concurrency"]);
   require(typeof concurrency["group"] === "string" &&
-    !concurrency["group"].includes("${{") &&
-    concurrency["cancel-in-progress"] === false, "SC2: one run at a time, in one fixed group, and none cut short");
+    /^scheduled-\$\{\{\s*github\.ref\s*\}\}$/i.test(concurrency["group"]) &&
+    concurrency["cancel-in-progress"] ===
+      false, "SC2: one run per ref at a time, in the shared per-ref group, and none cut short");
 
   // SC3. The token reads runs (the time tables) and the checkout, and no more: `actions: write`
   // is what canceling a run takes. Only the report may write issues, and it may read runs to find
@@ -495,6 +586,8 @@ export const lintScheduled = (text: string, check: string): string[] => {
     (machines) => machines <= RUNNERS,
   ), `SC6: its jobs take at most ${RUNNERS} machines at once, half of the 20 runners`);
 
+  jobSlots(workflow, require);
+
   // SC7. All of next/ on check.yaml's full matrix, each leg's `/N` its kind's count, nothing
   // narrowed. A `--changed`, a `$FILTER` or a list would make it the merge line's selection again.
   // The test job lists check.yaml's legs first, then the tooling legs (SC8).
@@ -567,7 +660,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
       ), `SC11: every step that runs ${command.split(" --shard")[0]} sets FABRIKA_TEST_DEPTH: ${DEPTH}`);
   }
 
-  // SC12. SC2's one group holds main's schedule and every hand-started run, so a waiting run is
+  // SC12. SC2's group holds every run on the same ref, so a waiting run is
   // never replaced: GitHub's default queue keeps one waiting and cancels it when a newer run queues.
   require(map(workflow["concurrency"])["queue"] === "max", "SC12: a newer run never cancels a waiting one: queue: max");
 
@@ -598,3 +691,34 @@ export const lintScheduled = (text: string, check: string): string[] => {
 
   return errors;
 };
+
+// Proof preflight reads the workflow at its exact source head, without executing that source.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (process.argv.length !== 3 || process.argv[2] !== "--job-slots") {
+    console.error("usage: scheduled.ts --job-slots < scheduled.yaml");
+    process.exitCode = 2;
+  } else {
+    const input = Result.try((): unknown => parse(readFileSync(0, "utf8")));
+    const errors: string[] = [];
+
+    if (Result.isFailure(input)) {
+      errors.push("scheduled.yaml: invalid YAML");
+    } else {
+      jobSlots(map(input.success), (holds, reason) => {
+        if (!holds) {
+          errors.push(`scheduled.yaml: ${reason}`);
+        }
+      });
+    }
+
+    if (errors.length === 0) {
+      console.log("scheduled job slots conform");
+    } else {
+      for (const error of errors) {
+        console.error(error);
+      }
+
+      process.exitCode = 1;
+    }
+  }
+}
