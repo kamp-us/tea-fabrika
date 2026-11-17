@@ -7,13 +7,18 @@
 // id (p53's checklist form), L17 reads the saved letter's note and writer back (p52's checklist form).
 import { describe, expect, it } from "@effect/vitest";
 import type { ProgramRunner } from "@kampus/libfabrika";
-import { Arbitrary, Effect, Schema, type Scope } from "effect";
+import { runsFor } from "@kampus/vitest";
+import { Arbitrary, DateTime, Effect, Schema, type Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { checklist } from "./program.ts";
 
 const SEED = 119120;
+
 const TRACE = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
+
 /** The plan's one day, written out here so the law does not read it from the code it checks. */
 const DAY = 86_400_000;
+
 /** The plan's longest note, written out as `DAY` is. */
 const MOST = 256;
 
@@ -74,6 +79,7 @@ const View = Schema.Struct({
 
 const shown = (view: unknown) => {
   const v = Schema.decodeUnknownSync(View)(view);
+
   return {
     items: v.items
       .map((i) => ({ name: i.name, state: i.state, note: i.note }))
@@ -86,7 +92,9 @@ const shown = (view: unknown) => {
 const sent = (letters: ReadonlyArray<Saved>) => letters.filter((l) => l.id.startsWith("checklist-"));
 
 const NAMES = ["git", "node", "pnpm", "volta"] as const;
+
 const INPUTS = ["add", "rename", "remove", "check", "uncheck"] as const;
+
 /** A wall, not a setting (plan, "Settings"): only a person may add, rename or remove. */
 const PERSON_ONLY: ReadonlySet<string> = new Set(["add", "rename", "remove"]);
 
@@ -101,7 +109,9 @@ const Step = Arbitrary.all({
   pick: Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 }))),
   note: Arbitrary.schema(Schema.Literals(["none", "one", "most", "over"])),
 });
+
 type Step = typeof Step extends Arbitrary.Arbitrary<infer A> ? A : never;
+
 const Walk = Arbitrary.array(Step, { minLength: 4, maxLength: 16 });
 
 /** An item as the record keeps it: checked or not, and the note its first `check` wrote. */
@@ -130,8 +140,10 @@ const named = (items: ReadonlyMap<string, Kept>, step: Step): Record<string, str
       return name === undefined || fresh === undefined ? null : { type: "rename", name, to: fresh };
     case "check": {
       const note = NOTES[step.note];
+
       return name === undefined ? null : note === undefined ? { type: "check", name } : { type: "check", name, note };
     }
+
     default:
       return name === undefined ? null : { type: step.input, name };
   }
@@ -148,16 +160,20 @@ const apply = (items: Map<string, Kept>, input: Record<string, string>) => {
   switch (input["type"]) {
     case "add":
       items.set(name, { done: false, note: null });
+
       return;
     case "rename":
       items.delete(name);
       items.set(input["to"] ?? "", was);
+
       return;
     case "remove":
       items.delete(name);
+
       return;
     case "check":
       items.set(name, was.done ? was : { done: true, note: input["note"] ?? null });
+
       return;
     default:
       items.set(name, { done: false, note: null });
@@ -179,6 +195,7 @@ const AnyNote = Arbitrary.flatMap(Arbitrary.schema(Schema.Literals(["any", "any"
 
 /** A writer's clock, skewed from the referee's by up to a day either way. */
 const Skew = Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: -DAY, maximum: DAY })));
+
 const BASE = Date.parse("2026-11-11T00:00:00.000Z");
 
 export const suite = (open: Open, fresh: Fresh) =>
@@ -237,7 +254,7 @@ export const suite = (open: Open, fresh: Fresh) =>
             }
           }),
         ),
-      { timeout: 600_000, arbitrary: { seed: SEED, runs: 12 } },
+      { timeout: 600_000, arbitrary: { seed: SEED, runs: runsFor({ fast: 3, full: 12 }) } },
     );
 
     it.live.prop(
@@ -283,10 +300,12 @@ export const suite = (open: Open, fresh: Fresh) =>
               const input = named(items, step) ?? { type: "add", name: "git" };
               const fresh = letter(++n, step.by === "agent" ? agent : person, input);
               const answer = yield* r.msg(fresh);
+
               const ok =
                 !(step.by === "agent" && PERSON_ONLY.has(input["type"] ?? "")) &&
                 !(items.has(input["name"] ?? "") && input["type"] === "add") &&
                 !malformed(input);
+
               expect(answer._tag, `${step.by} ${JSON.stringify(input)}`).toBe(ok ? "accepted" : "refused");
 
               if (ok) {
@@ -308,10 +327,10 @@ export const suite = (open: Open, fresh: Fresh) =>
             }
           }),
         ),
-      { timeout: 600_000, arbitrary: { seed: SEED, runs: 50 } },
+      { timeout: 600_000, arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
     );
 
-    it.live.prop(
+    it.effect.prop(
       "L17: a saved check keeps its note's exact bytes and its writer's checked key, and a writer clock skewed up to a day never changes the model",
       [AnyNote, Skew, Arbitrary.schema(Schema.Literals(["agent", "person"]))],
       ([note, skew, side]) =>
@@ -321,17 +340,24 @@ export const suite = (open: Open, fresh: Fresh) =>
             const alarms: Array<number | null> = [];
             const r = yield* start(checklist, alarms);
             const writer = side === "agent" ? agent : person;
-            const clock = new Date(BASE + skew).toISOString();
+            const clock = DateTime.formatIso(DateTime.makeUnsafe(BASE + skew));
             const view = r.open("watch").pipe(Effect.map((o) => shown(o.view)));
+
             const one = (state: string, n: string | null) => ({
               items: [{ name: "git", state, note: n }],
               left: state === "checked" ? 0 : 1,
             });
 
             expect((yield* r.msg(letter(1, person, { type: "add", name: "git" }, clock)))._tag).toBe("accepted");
-            yield* r.due(1000);
+            yield* TestClock.setTime(1000);
+            yield* r.due(0);
             expect(yield* view, "the referee's time stamps it, not the writer's").toEqual(one("open", null));
-            expect(alarms.at(-1), "since is the timer's at").toBe(1000 + DAY);
+            expect(alarms.at(-1), "since is the timer's arrivedAt").toBe(1000 + DAY);
+            expect((yield* letters).find((l) => !l.id.startsWith("checklist-"))?.m).toEqual({
+              type: "timer",
+              at: 0,
+              arrivedAt: 1000,
+            });
 
             const check = letter(2, writer, { type: "check", name: "git", note }, clock);
             expect((yield* r.msg(check))._tag).toBe("accepted");
@@ -345,15 +371,16 @@ export const suite = (open: Open, fresh: Fresh) =>
             expect(saved?.sentAt, "the writer's own clock, kept as it came").toBe(clock);
 
             expect((yield* r.msg(letter(3, person, { type: "uncheck", name: "git" }, clock)))._tag).toBe("accepted");
+            yield* TestClock.setTime(5000);
             yield* r.due(5000);
             expect(yield* view).toEqual(one("open", null));
-            expect(alarms.at(-1), "a second stamp is the second timer's at").toBe(5000 + DAY);
+            expect(alarms.at(-1), "a second stamp is the second timer's arrivedAt").toBe(5000 + DAY);
           }),
         ),
-      { timeout: 600_000, arbitrary: { seed: SEED, runs: 50 } },
+      { timeout: 600_000, arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
     );
 
-    it.live(
+    it.effect(
       "L10 scenario: a restart between an add and its timer keeps the items and states, and a fired alarm after it still stamps",
       () =>
         // The plan's scenario: close the three files mid-list and reopen, at each point where the
@@ -363,14 +390,18 @@ export const suite = (open: Open, fresh: Fresh) =>
           Effect.gen(function* () {
             const { start, person } = yield* open;
             const alarms: Array<number | null> = [];
+
             const reopen = <A, E>(f: (r: Runner) => Effect.Effect<A, E>) =>
               Effect.scoped(
                 Effect.gen(function* () {
                   const r = yield* start(yield* fresh, alarms);
+
                   return yield* f(r);
                 }),
               );
+
             const view = (r: Runner) => r.open("watch").pipe(Effect.map((o) => shown(o.view)));
+
             const both = (git: string) => ({
               items: [
                 { name: "git", state: git, note: null },
@@ -392,7 +423,8 @@ export const suite = (open: Open, fresh: Fresh) =>
               Effect.gen(function* () {
                 expect(yield* view(r), "the items and states come back").toEqual(both("new"));
                 expect(alarms.at(-1), "the reopened runner asks for the alarm at once again").toBe(0);
-                yield* r.due(1000);
+                yield* TestClock.setTime(1000);
+                yield* r.due(0);
                 expect(yield* view(r), "the alarm fired after the reopen stamps").toEqual(both("open"));
                 expect(alarms.at(-1)).toBe(1000 + DAY);
               }),
@@ -401,8 +433,10 @@ export const suite = (open: Open, fresh: Fresh) =>
               Effect.gen(function* () {
                 expect(yield* view(r)).toEqual(both("open"));
                 expect(alarms.at(-1), "the stamp is saved, not held in memory").toBe(1000 + DAY);
+                yield* TestClock.setTime(1000 + DAY - 1);
                 yield* r.due(1000 + DAY - 1);
                 expect(yield* view(r), "not late a millisecond early").toEqual(both("open"));
+                yield* TestClock.setTime(1000 + DAY);
                 yield* r.due(1000 + DAY);
                 expect(yield* view(r)).toEqual(both("late"));
               }),

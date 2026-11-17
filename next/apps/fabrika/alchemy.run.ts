@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import type { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import * as Alchemy from "alchemy";
 import { Config, Context, Effect, Layer, Schema } from "effect";
 import type { Built } from "./src/build.ts";
-import type { Settings } from "./src/settings.ts";
 
 /** Cloudflare's limit on one environment variable, in encoded bytes (Workers platform limits). */
 const ENV_BYTES = 5 * 1024;
@@ -13,12 +13,12 @@ const Setting = Schema.String.check(
 );
 
 const setting = (value: string) =>
-  Schema.decodeUnknownEffect(Setting)(value).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
+  Schema.decodeEffect(Setting)(value).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
 
 // The stack runs the completed brain file as it is (`bundle: false`); no code rides in its env.
 export const stack = (
   built: Pick<Built, "brain">,
-  settings: Settings,
+  checked: Effect.Success<ReturnType<typeof readSettings>>,
   local: Context.Context<never> = Context.empty(),
 ) =>
   Alchemy.Stack(
@@ -28,30 +28,36 @@ export const stack = (
       state: Alchemy.localState(),
     },
     Effect.gen(function* () {
+      const settings = checked.input;
       const instance = yield* setting(JSON.stringify(settings));
+
       const measurements = yield* Cloudflare.R2.Bucket("Measurements", {
         name: "fabrika-measurements",
         lifecycleRules: [],
         locks: [],
       });
+
       const brain = yield* Cloudflare.Workers.Worker("Brain", {
         name: settings.name,
         main: built.brain,
         bundle: false,
         compatibility: { date: "2026-10-12" },
         observability: { enabled: false },
-        dev: { host: "127.0.0.1", port: settings.port, strictPort: true },
+        dev: { host: "127.0.0.1", port: checked.values.port, strictPort: true },
         env: {
           PROJECT: Cloudflare.DurableObject("Project"),
           PROCESS: Cloudflare.DurableObject("Process"),
           CONNECTION: Cloudflare.DurableObject("Connection"),
+          Connection: Cloudflare.DurableObject("Connection"),
           RECORD: Cloudflare.DurableObject("RecordPart"),
           RecordPart: Cloudflare.DurableObject("RecordPart"),
+          Process: Cloudflare.DurableObject("Process"),
           LOADER: Cloudflare.WorkerLoader(),
           MEASUREMENTS: measurements,
           INSTANCE: instance,
         },
       });
+
       return { url: brain.url };
     }),
   );

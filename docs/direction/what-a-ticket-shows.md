@@ -1,10 +1,15 @@
+---
+state: "decided 2026-10-25; the bridge dropped; sections 1, 2, 5 and the ask box built 2026-10-26, the live row next; its dollars decided 2026-11-06"
+summary: "One top line folded from facts (done, closed, waits on you, running, stuck, idle, next); nine quest fact kinds, one row each; a running agent is one live row with a link to its log, never its tool calls; no bridge for today's Claude Code agents, which post plain comments until the pipeline runs quests; done is a merge or a user's close, never an agent's word."
+---
+
 # What a ticket's view shows
 
 **Decided 2026-10-25: sections 1, 2, 3 and 5, as written. Section 4, the
 bridge, is dropped.** *Built 2026-10-26: sections 1, 2 and 5, and the ask box,
 in the tracker ("Built so far", below). Section 3, the live row, is the next
 pull request.* It extends
-[the ticket is the lane's one view](./the-ticket-is-the-lane-view.md).
+[the ticket is the quest's one view](./the-ticket-is-the-lane-view.md).
 *Read by the owner the same day. Two changes: beats and logs are on the shared
 record (section 3), and no bridge for today's agents (section 4).*
 
@@ -27,10 +32,10 @@ const live = runningOf(ticket.timeline).map(liveRow); // one row per agent still
 The answer in five lines:
 
 - **The top line** says one of seven things, and an open ask always wins.
-- **A lane writes about nine kinds of fact.** Each shows as one short row.
+- **A quest writes about nine kinds of fact.** Each shows as one short row.
 - **A running agent is one live row,** updated in place. Its tool calls are
   never rows; "open log" opens the whole log in a tile.
-- **No bridge for today's agents.** The view is built for lanes our pipeline
+- **No bridge for today's agents.** The view is built for quests our pipeline
   runs, where code writes the start and end of each agent run. Until then,
   agents post plain comments on the ticket.
 - **Done is a merged pull request with every criterion met.** Code says it,
@@ -38,7 +43,7 @@ The answer in five lines:
 
 ## 1. The top of a ticket
 
-One line: where the lane is, whether it is done, and what waits on the owner.
+One line: where the quest is, whether it is done, and what waits on the owner.
 
 - **The branches, checked in this order.** The first that fits is the line.
   - its pull request merged: **"done: PR #12 merged"**.
@@ -52,14 +57,14 @@ One line: where the lane is, whether it is done, and what waits on the owner.
   - nothing runs, nothing is asked, and the last fact is older than an hour:
     **"idle since 14:02"**. Nobody is driving it.
   - otherwise: **"next: review"**, from the last `send`.
-- **Why closed and done come first.** Today's fabrika had a lane viewer that
+- **Why closed and done come first.** Today's fabrika had a quest viewer that
   sorted what needs a person first. On 2026-08-20, nine of its first ten
   "waiting on a human" rows were for issues already closed, most shipped days
   before
   ([phoenix ADR 0322](https://github.com/kamp-us/phoenix/blob/main/.decisions/0322-closed-issue-lanes-demote-at-read-time.md)).
   An ask on a finished ticket is not waiting on anyone.
-- **Why "idle" is a branch.** A lane that nobody drives looks the same as a
-  lane that is fine, unless the view says so.
+- **Why "idle" is a branch.** A quest that nobody drives looks the same as a
+  quest that is fine, unless the view says so.
 
 ```ts
 // A sketch, in Effect Schema. The fold from a ticket's facts to its top line. Pure.
@@ -95,12 +100,12 @@ const headOf = (timeline: readonly Entry[], now: number): Head => {
   line can change with no new fact; the window reads it again each minute.
 - **How sure: 80%.** The doubt is the hour for "idle". A build round can run
   longer than an hour with no fact, which is why a running agent wins over
-  idle. A week of real lanes would show the right number.
+  idle. A week of real quests would show the right number.
 
-## 2. The fact kinds a lane writes
+## 2. The fact kinds a quest writes
 
 The tracker writes four today: `filed`, `commented`, `closed`, `reopened`. A
-lane adds these. Each shows as one short row, and the writer shows beside it.
+quest adds these. Each shows as one short row, and the writer shows beside it.
 
 | Fact | Written by | Its row |
 |---|---|---|
@@ -115,7 +120,8 @@ lane adds these. Each shows as one short row, and the writer shows beside it.
 | `rated` | a user | you rated finding f-12: noise |
 
 ```ts
-// A sketch. The lane's facts, beside the tracker's four. Keys are short words.
+// A sketch. The quest's facts, beside the tracker's four. Keys are short words.
+// Today's code names the union `LaneFact` (packages/pipeline/src/tickets/ticket.ts).
 const Run = Schema.String; // one agent run's id: "r-7"
 const LaneFact = Schema.Union([
 	Schema.TaggedStruct("started", {run: Run, stage: Stage, task: Schema.NullOr(TaskId), log: Schema.NullOr(Schema.String)}),
@@ -171,7 +177,7 @@ const rowOf = (e: Entry): Row => {
 - **How sure: 75%.** The doubt: whether `planned`, `pushed` and `reviewed`
   should be their own facts, or live inside `ended` as the stage's data. Own
   facts read more simply as rows; inside `ended` there are fewer kinds. Writing
-  the first lane's facts both ways would settle it.
+  the first quest's facts both ways would settle it.
 
 ## 3. What it is doing right now
 
@@ -259,20 +265,20 @@ const liveRow = (run: Started, beat: Beat | null, now: number): Row => ({
     in it is trimmed or deleted
     ([a JobRecord holds each host job](./a-job-record-holds-its-trace.md)).
 
-## 4. The bridge until our pipeline runs lanes (dropped)
+## 4. The bridge until our pipeline runs quests (dropped)
 
 **Dropped 2026-10-25, by the owner.** Adding hooks only so today's Claude Code
 agents can post to the ledger is not worth it.
 
-- The view is built for lanes our pipeline runs. There, code starts each agent,
+- The view is built for quests our pipeline runs. There, code starts each agent,
   so code writes `started` and `ended`, and nothing has to be bridged.
-- Until then, an agent on a lane posts plain comments on its ticket, through
-  the tracker. The ticket shows them as comments, not as lane facts.
-- What this costs: tickets of lanes run today have no live row and no
+- Until then, an agent on a quest posts plain comments on its ticket, through
+  the tracker. The ticket shows them as comments, not as quest facts.
+- What this costs: tickets of quests run today have no live row and no
   "open log". Their top line comes from the tracker's own four facts.
 - The research below is kept as it was, in case the question comes back.
 
-Today a lane is run by plain Claude Code subagents, outside our ledger. Four
+Today a quest is run by plain Claude Code subagents, outside our ledger. Four
 ways they could write the facts above as `agent:` writers.
 
 | Way | What it writes | Trust | Cost |
@@ -308,7 +314,7 @@ ways they could write the facts above as `agent:` writers.
   - The `pr` fact comes from the watcher, never from an agent. A check's
     color is GitHub's word, not the agent's.
   - The ticket a run belongs to: the main session writes a `bound` fact
-    (`{session, ticket}`) when it takes the lane, and the hook command looks
+    (`{session, ticket}`) when it takes the quest, and the hook command looks
     the session up. A session not bound writes nothing.
 
 ```ts
@@ -347,15 +353,15 @@ const write = (writer: Writer, fact: unknown) =>
 - **Why not D now:** it knows no ticket, and needs a collector. It is the
   better source of cost later, once a run carries the ticket as a resource
   attribute.
-- **Cost:** one command, about six hook lines in the lane's project settings,
+- **Cost:** one command, about six hook lines in the quest's project settings,
   and one line per skill for the outcome. Hooks only run in a trusted folder
   when a session is interactive; `-p` and SDK sessions run them.
 - **How sure: 75%.** The doubts:
   - `SubagentStart` gets no prompt, so the hook cannot tell which stage the
-    subagent is. `agent_type` (builder, reviewer) may be enough; a first lane
+    subagent is. `agent_type` (builder, reviewer) may be enough; a first quest
     would show it.
   - whether binding a session to a ticket holds when one session drives two
-    lanes at once. Trying two lanes in one session would show it.
+    quests at once. Trying two quests in one session would show it.
 
 ## 5. What "done" means, and who can say it
 
@@ -367,12 +373,12 @@ const write = (writer: Writer, fact: unknown) =>
   - the ticket needs no code (a decision, a ruling): **done** when the owner
     answers its last ask and closes it. The `closed` fact is a user's.
   - an agent says it is done, and nothing merged: **not done.** The row says
-    "build: done" and the top line still says where the lane is. An agent's
+    "build: done" and the top line still says where the quest is. An agent's
     word is never the ticket's state.
   - a user closes it before anything merged: **"closed by you"**, not done.
     Won't do, duplicate, or moved.
   - triage thinks it is a duplicate: it **asks**. The owner's approval closes it.
-  - a user reopens a done ticket: open again, and a new lane starts. The old
+  - a user reopens a done ticket: open again, and a new quest starts. The old
     pull request stays in the timeline.
 - **Who can say it.** Nobody writes "done". It is a fold of two facts only
   code or a user writes: a merge, read from GitHub, or a user's close.
@@ -389,12 +395,12 @@ const write = (writer: Writer, fact: unknown) =>
 - **How sure: 85%.** The doubt is a plan that covers many tickets. Each of
   them is done when the one pull request merges, which matches
   `LaneView.tickets` in `packages/pipeline/src/stages/lane/view.ts`, but no
-  lane has run that way yet.
+  quest has run that way yet.
 
 ## Built so far (2026-10-26)
 
-The first slice is in `programs/tracker`. Nothing runs lanes yet, so every
-lane fact on a ticket today comes from a test.
+The first slice is in `programs/tracker`. Nothing runs quests yet, so every
+quest fact on a ticket today comes from a test.
 
 ```ts
 // programs/tracker/src/head.ts. The top line, pure, at the clock's last tick.
@@ -414,7 +420,7 @@ lineOf(head, when); // "waits on you: approve plan v2"
     is written new.
   - `asked` is flattened to `{ask, what, picks}`; `answered` is
     `{ask, pick, note}`. The pipeline's own `Ask` is richer; mapping it to
-    these is for the pipeline lane that writes them.
+    these is for the pipeline quest that writes them.
   - The fold refuses a fact that does not fit: an answer to an ask never asked,
     a second answer, a pick the ask did not offer, a run ended twice or never
     started.
@@ -451,7 +457,7 @@ gone.
 
 ## Still open
 
-- How the window groups rows once a lane has many rounds: by task, by round,
+- How the window groups rows once a quest has many rounds: by task, by round,
   or folded like a GitHub Actions group.
 - Whether a beat names a file ("last: Edit login.ts") or only the tool. A
   path says more and can leak more.
@@ -460,9 +466,9 @@ gone.
 
 ## What it cannot tell us
 
-- Sections 1, 2 and 5 are built, but no real lane has written a fact yet.
-  Every lane fact the tracker has shown came from a test. Whether the rows read
-  well on a long lane is unknown.
+- Sections 1, 2 and 5 are built, but no real quest has written a fact yet.
+  Every quest fact the tracker has shown came from a test. Whether the rows read
+  well on a long quest is unknown.
 - The hour for "idle" is still a guess, now in code (`HOUR` in
   `programs/tracker/src/head.ts`).
 - Done for a ticket with no code (a person's close once its asks are answered)

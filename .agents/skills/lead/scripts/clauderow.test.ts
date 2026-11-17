@@ -11,6 +11,7 @@ import { DateTime, Effect, FileSystem, Layer, PlatformError, Result, Schema } fr
 import { type Ask, read, rounded, row, turns } from "./clauderow.ts";
 
 const tool = { type: "tool_use", id: "t", name: "Read", input: {} };
+
 const text = { type: "text", text: "made-up words that must never reach a row" };
 
 /** A usage as the Messages API writes it, with the cache writes split by lifetime. */
@@ -28,8 +29,11 @@ const assistant = (at: string, id: string, model: string, said: unknown, content
   JSON.stringify({ type: "assistant", uuid: `u-${at}`, timestamp: at, message: { id, model, content, usage: said } });
 
 const OPUS = "claude-opus-5-5";
+
 const SONNET = "claude-sonnet-5-5";
+
 const HAIKU = "claude-haiku-5-5";
+
 const FABLE = "claude-fable-5-2";
 
 // One message over three lines, a blank line, a line that is not JSON, a message with no usage,
@@ -258,8 +262,11 @@ const Counts = Schema.Struct({
   cached: count(2_000_000),
   output: count(60_000),
 });
+
 type Counts = typeof Counts.Type;
+
 const some = (most: number) => Schema.Array(Counts).check(Schema.isMaxLength(most));
+
 const ZERO: Counts = { input: 0, write5m: 0, write1h: 0, cached: 0, output: 0 };
 
 /** A transcript of one line per call, each call with its own id. */
@@ -291,6 +298,7 @@ describe("clauderow's edge cases, each a law", () => {
         const got = JSON.parse(
           yield* row("agent.jsonl", ask()).pipe(on("UTC", { "agent.jsonl": transcript(FABLE, calls) })),
         );
+
         const dollars = calls.reduce(
           (sum, call) =>
             sum +
@@ -302,6 +310,7 @@ describe("clauderow's edge cases, each a law", () => {
               1e6,
           0,
         );
+
         expect(got.model).toBe(FABLE);
         expect(got.costUsd).toBeNull();
         // The row rounds to four places.
@@ -321,6 +330,7 @@ describe("clauderow's edge cases, each a law", () => {
         const files = {
           "agent.jsonl": `${transcript(OPUS, before)}\n${transcript("claude-made-up-9", [call], {}, "odd")}`,
         };
+
         const refused = yield* Effect.flip(row("agent.jsonl", ask())).pipe(on("UTC", files));
         expect(refused.reason).toBe("no list price for 'claude-made-up-9'");
         expect((yield* Effect.flip(turns("agent.jsonl")).pipe(on("UTC", files))).reason).toBe(refused.reason);
@@ -356,6 +366,7 @@ describe("clauderow's edge cases, each a law", () => {
       const lines = calls.map((call) =>
         unnamed("2026-11-10T08:00:00.000Z", undefined, usage(call.input, 0, 0, 0, call.output)),
       );
+
       const got = read(lines.join("\n"));
       expect(Result.isSuccess(got) && got.success.calls.map((call) => call.tokens.input)).toEqual(
         calls.map((call) => call.input),
@@ -366,6 +377,7 @@ describe("clauderow's edge cases, each a law", () => {
 
   it("skips a line that is no JSON object and a message with no usage, and counts the rest", () => {
     const real = assistant("2026-11-10T08:00:00.000Z", "msg_1", OPUS, usage(1, 0, 0, 0, 1));
+
     const skipped = [
       "[]",
       "3",
@@ -375,6 +387,7 @@ describe("clauderow's edge cases, each a law", () => {
       "   ",
       assistant("2026-11-10T08:00:01.000Z", "msg_2", OPUS, {}),
     ];
+
     const noMessage = JSON.stringify({ type: "assistant", timestamp: "2026-11-10T08:00:02.000Z", message: "words" });
     const got = read([...skipped, real, noMessage, ...skipped].join("\n"));
     expect(Result.isSuccess(got) && got.success.calls).toHaveLength(1);
@@ -398,6 +411,7 @@ describe("clauderow's edge cases, each a law", () => {
       const said = usage(1, 0, 0, 0, 1);
       const bare = { "agent.jsonl": assistant("2026-11-10T08:00:00.000", "msg_1", OPUS, said) };
       const day = { "agent.jsonl": assistant("2026-11-10", "msg_1", OPUS, said) };
+
       const none = {
         "agent.jsonl": JSON.stringify({ type: "assistant", message: { id: "m", model: OPUS, usage: said } }),
       };
@@ -451,6 +465,7 @@ describe("clauderow's edge cases, each a law", () => {
       yield* fs.writeFileString(`${dir}/plain.jsonl`, plain);
       yield* fs.writeFileString(`${dir}/odd.jsonl`, transcript("claude-made-up-9", [{ ...ZERO, input: 1 }]));
       const script = `${import.meta.dirname}/clauderow.ts`;
+
       const clauderow = (...args: string[]) =>
         spawnSync(process.execPath, [script, ...args], {
           cwd: dir,

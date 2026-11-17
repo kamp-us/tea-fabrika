@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e2-tests2",
+  "ticket": "1075",
+  "pr": "kamp-us/tea-fabrika#1430",
+  "started": "2026-11-15T19:44:00-08:00",
+  "ended": "2026-11-15T20:05:00-08:00",
+  "parent": "2026-11-15-effect-e2-tests1",
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Second tests round for slice E2 (preferNamespaceImport), in next/ and our tooling, after the lead said to give the fix a lint rule with a safe autofix, as E1 did. Wrote oxlint-plugins/prefer-namespace-import.ts: it reports a named import from effect or one of its folders (effect/process, effect/testing) and writes one import * as line per name, import type * as for a type (whole declaration or one name), and the imported module for an alias; a name that is no module of the installed package has no fix and the whole declaration is reported (0 such hits in the scope). It is on in .oxlintrc.json for the same 13 libfabrika folders and tuval that the tsconfig locks. Then ran lint.ts --fix over the 145 exam-path files and format.ts: 667 hits fixed (992 before, 325 after: all in the 85 product files, 121 import lines, for the build to fix through pnpm format). Of the 992, 96 were not from the barrel effect but from effect/process, effect/testing, effect/crypto, effect/encoding, effect/http, effect/socket, effect/persistence and effect/cli, each with a file per module, so the rule handles those folders too.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 21,
+  "note": "Per-package typechecks after the fix: libfabrika 313 effect(preferNamespaceImport) errors, tuval 12, 325 in 85 product files and 0 in exam-path files; no other error. pnpm lint is red only on the product import lines (fabrika/prefer-namespace-import, 121 lines in 85 files). plants.test.ts 236 passed, namespace-imports.test.ts and prefer-namespace-import.test.ts 7 passed. None of PR 1366's files holds a hit.",
+  "plants": [
+    {
+      "law": "law 1",
+      "plant": "the fix writes the barrel path in place of effect/<Name>: laws 1, 2 and 3 red",
+      "result": "red"
+    },
+    {
+      "law": "law 2",
+      "plant": "the fix always writes import, never import type: laws 2 and 3 red",
+      "result": "red"
+    },
+    {
+      "law": "law 3",
+      "plant": "the module is named after the local alias: law 3 red",
+      "result": "red"
+    },
+    {
+      "law": "law 4",
+      "plant": "the module check always answers yes: law 4 red",
+      "result": "red"
+    },
+    {
+      "law": "law 5",
+      "plant": "src/tezgah/** dropped from the .oxlintrc.json block: the planted tezgah file does not fire",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

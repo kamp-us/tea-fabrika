@@ -1,8 +1,38 @@
-import { Schema } from "effect";
+/**
+ * The wire schemas of the gateway transport: the client hello, who is connected, what an answer
+ * to a request can be, and the attachment saved for each connection.
+ */
+import * as Schema from "effect/Schema";
 
+export {
+  /**
+   * How many entries one `ledger.read` answer holds at most, and how many spans one `spans.read`
+   * answer holds, re-exported from `Rev.ts`, the log's own page size. The door cuts every page
+   * here, so a client that gets a full page knows to ask again after its last entry, and a shorter
+   * page is the last.
+   *
+   * @category constants
+   */
+  PAGE,
+} from "../Rev.ts";
+
+/**
+ * Schema for the hello a client sends to start a connection.
+ *
+ * **Details**
+ *
+ * `versions` lists the protocol versions the client speaks, each at least 1. The server checks
+ * `tab` and `nonce` against the ones it expects, and `key` against the expected fingerprint.
+ * `signed` holds the armored SSHSIG, made with `key`, over the hello text from `helloText`: the
+ * url, the tab and the nonce. `ping` is a duration such as `30s`. `platform` and `os` name the
+ * client's runtime, and `sentAt` is the client's own clock time.
+ *
+ * @category models
+ */
 export const Hello = Schema.Struct({
   versions: Schema.Array(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
   has: Schema.Array(Schema.String),
+  build: Schema.optionalKey(Schema.NonEmptyString),
   ping: Schema.String,
   key: Schema.String,
   tab: Schema.String,
@@ -13,17 +43,40 @@ export const Hello = Schema.Struct({
   signed: Schema.String,
 });
 
+/**
+ * Schema for the identity of an admitted connection: the key, the person it belongs to, and
+ * whether it acts as a window or an agent.
+ *
+ * @category models
+ */
 export const Who = Schema.Struct({
   key: Schema.String,
   person: Schema.String,
-  as: Schema.Literals(["window", "agent"]),
+  as: Schema.Literals(["window", "agent", "hands"]),
 });
 
+/**
+ * Schema for the outcome of asking whether a key may connect: `admitted` with its identity, or
+ * `refused` with the reason `not_granted`.
+ *
+ * @category models
+ */
 export const Admission = Schema.TaggedUnion({
   admitted: { identity: Who },
   refused: { reason: Schema.Literal("not_granted") },
 });
 
+/**
+ * Schema for what handling a request can give back.
+ *
+ * **Details**
+ *
+ * `ok` carries a JSON result. `refused` carries a reason, and optionally `retryAfter` in
+ * milliseconds, at least 1. `parked` carries no reply yet: it names the stream and position the
+ * request waits on.
+ *
+ * @category models
+ */
 export const Answer = Schema.TaggedUnion({
   ok: { result: Schema.Json },
   refused: {
@@ -38,7 +91,6 @@ export const Answer = Schema.TaggedUnion({
 /**
  * Schema for a rate refusal with the earliest retry delay in milliseconds.
  *
- * @stability unstable
  * @category models
  */
 export const RateRefusal = Schema.TaggedStruct("refused", {
@@ -49,19 +101,35 @@ export const RateRefusal = Schema.TaggedStruct("refused", {
 /**
  * Identifies a failed rate count by the static Error message preserved across RPC.
  *
- * @stability unstable
  * @category models
  */
 export const RateCountFailure = Schema.Struct({
   message: Schema.Literal("Gateway rate refusal count could not be saved"),
 });
 
+/**
+ * Schema for one parked request: its JSON-RPC id, the stream it waits on and the position it
+ * waits after.
+ *
+ * @category models
+ */
 export const Wait = Schema.Struct({
-  id: Schema.Union([Schema.String, Schema.Number]),
+  id: Schema.Union([Schema.String, Schema.Finite]),
   stream: Schema.String,
   after: Schema.Int,
 });
 
+/**
+ * Schema for the state saved for one connection.
+ *
+ * **Details**
+ *
+ * `new` is before any hello, `waiting` holds the client, key, hello and nonce seen so far, and
+ * `online` is after a successful hello. Only `online` carries the identity, the negotiated version, the
+ * parked `waits`, a `watching` flag and a `busy` flag.
+ *
+ * @category models
+ */
 export const Attached = Schema.TaggedUnion({
   new: { client: Schema.String, nonce: Schema.String },
   waiting: { client: Schema.String, key: Schema.String, hello: Hello, nonce: Schema.String },
@@ -72,5 +140,7 @@ export const Attached = Schema.TaggedUnion({
     waits: Schema.Array(Wait),
     watching: Schema.Boolean,
     busy: Schema.Boolean,
+    has: Schema.optionalKey(Hello.fields.has),
+    build: Schema.optionalKey(Schema.NonEmptyString),
   },
 });

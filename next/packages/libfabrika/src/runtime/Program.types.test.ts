@@ -5,7 +5,7 @@ import { Effect, Schema, type SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { ProgramLoader } from "./Entry.ts";
-import { Input, Program, Write } from "./Program.ts";
+import { type Admission, type Prepared, type Stepper, Input, Program, Write } from "./Program.ts";
 
 const Model = Schema.Struct({ count: Schema.Int });
 
@@ -68,11 +68,13 @@ it("a from-scratch libfabrika program compiles and loads with a real Cmd and no 
         Effect.Effect<unknown, SchemaIssue.Issue>
       >();
       expectTypeOf<Effect.Error<ReturnType<typeof Program.makeEffect>>>().toEqualTypeOf<SchemaIssue.Issue>();
+
       const loaded = Effect.runSync(
         Effect.gen(function* () {
           return yield* (yield* ProgramLoader).load("scratch");
         }).pipe(Effect.provide(ProgramLoader.layer({ scratch: p }, {}))),
       );
+
       const boot = loaded.stepper.init({ count });
       expectTypeOf(boot).toExtend<{ readonly _tag: "stepped" | "refused" }>();
       expect(boot).toMatchObject({ _tag: "stepped", model: { count }, view: { total: count } });
@@ -81,7 +83,7 @@ it("a from-scratch libfabrika program compiles and loads with a real Cmd and no 
   );
 });
 
-it("tea exposes the original schemas with readonly fields and a plain Msg, excluding Cmd replies", () => {
+it("type: tea exposes the original schemas with readonly fields and a plain Msg, excluding Cmd replies", () => {
   expectTypeOf(machine.model).toEqualTypeOf<Schema.Schema<typeof Model.Type>>();
   expectTypeOf(machine.msg).toEqualTypeOf<Schema.Schema<typeof Msg.Type>>();
 });
@@ -92,10 +94,9 @@ function authoringTypeErrors() {
   Program.make({ ...fields, view: (m) => ({ count: m.count }) });
   Program.make({
     ...fields,
-    view: (m) => {
+    view: (m) =>
       // @ts-expect-error The model comes from the machine, not this callback.
-      return { count: m.missing };
-    },
+      ({ count: m.missing }),
   });
   // @ts-expect-error Another model's selector cannot widen the machine's model.
   Program.make({ ...fields, view: (m: { other: string }) => ({ other: m.other }) });
@@ -111,11 +112,13 @@ function authoringTypeErrors() {
   Program.make({ ...fields, view: (m) => m, inputs: { missing: "Missing" } });
   // @ts-expect-error Settled Cmd replies are not fresh Msg ports.
   Program.make({ ...fields, view: (m) => m, inputs: { save_ok: "Reply" } });
+
   const wrongPayload = {
     description: "Add",
     schema: Schema.Struct({ type: Schema.Literal("reset") }),
     personOnly: true,
   };
+
   // @ts-expect-error Write payload schemas come from the machine and cannot be repeated or mismatched.
   Program.make({ ...base, inputs: { add: wrongPayload } });
   // @ts-expect-error Write descriptions must be text.
@@ -163,16 +166,19 @@ function authoringTypeErrors() {
         description: "Read count",
         answer: (v: { total: number }, q) => {
           expectTypeOf(q).toEqualTypeOf<{ readonly offset: number }>();
+
           return v.total + q.offset;
         },
       }),
     },
   });
+
   const wrongView = Input.cases.read.make({
     schema: Schema.Null,
     description: "Read",
     answer: (v: { other: string }) => v.other,
   });
+
   // @ts-expect-error A read answer takes the inferred view, not another view.
   Program.make({ ...base, inputs: { count: wrongView } });
   Input.cases.read.make({
@@ -232,7 +238,52 @@ function authoringTypeErrors() {
   expectTypeOf(fresh).toExtend<typeof Msg.Type>();
   // @ts-expect-error The exposed msg schema excludes settled replies.
   const reply: typeof machine.msg.Type = save.ok(save({ count: 1 }), { stored: 1 }, 1);
+
   return reply;
 }
 
 void authoringTypeErrors;
+
+// A14 is a type law. The lead runs tsc after the product contracts exist.
+function admissionTypeErrors(pure: Stepper, admitted: Admission) {
+  expectTypeOf<Admission>().not.toHaveProperty("model");
+  expectTypeOf<Admission>().not.toHaveProperty("view");
+  expectTypeOf<Admission>().not.toHaveProperty("cmds");
+  // @ts-expect-error Admission carries no prepared model, view, Cmds or wake time.
+  const prepared: Prepared = admitted;
+  const metadata = Schema.Struct({ type: Schema.String, total: Schema.Int });
+  Program.make({
+    ...fields,
+    view: (m) => m,
+    audit: {
+      data: metadata,
+      select: (msg) => {
+        expectTypeOf(msg).toEqualTypeOf<typeof Msg.Type>();
+
+        return { type: msg.type, total: msg.type === "add" ? msg.n : 0 };
+      },
+    },
+  });
+  Program.make({
+    ...fields,
+    view: (m) => m,
+    audit: {
+      data: metadata,
+      // @ts-expect-error The audit selector consumes this machine's fresh Msg.
+      select: (_msg: { type: "foreign" }) => ({ type: "foreign", total: 0 }),
+    },
+  });
+  Program.make({
+    ...fields,
+    view: (m) => m,
+    audit: {
+      data: metadata,
+      // @ts-expect-error The selected value must match the declared metadata schema.
+      select: () => ({ type: "add", total: "invalid" }),
+    },
+  });
+
+  return [pure.fresh({}, {}), pure.update({}, {}), prepared];
+}
+
+void admissionTypeErrors;

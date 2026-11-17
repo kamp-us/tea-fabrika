@@ -2,7 +2,6 @@
  * MCP tools made from the ports a program declares: the list an agent sees, and the call an
  * agent's arguments decode to. It holds no transport and sends nothing.
  *
- * @stability unstable
  */
 import type * as JsonSchema from "effect/JsonSchema";
 import * as Option from "effect/Option";
@@ -15,7 +14,6 @@ import * as Program from "../runtime/Program.ts";
  * Schema for one tool as an agent sees it: its name, its description, the JSON Schema of its
  * arguments, and a read-only hint on a tool that changes nothing.
  *
- * @stability unstable
  * @category models
  */
 export const Tool = Schema.Struct({
@@ -28,7 +26,6 @@ export const Tool = Schema.Struct({
 /**
  * One tool as an agent sees it, the type of {@link Tool}.
  *
- * @stability unstable
  * @category models
  */
 export type Tool = typeof Tool.Type;
@@ -38,7 +35,6 @@ export type Tool = typeof Tool.Type;
  * as JSON, a `query` holding the program's name, the read port's name and its JSON input, or
  * `refused` with the reason.
  *
- * @stability unstable
  * @category models
  */
 export const Call = Schema.TaggedUnion({
@@ -51,7 +47,6 @@ export const Call = Schema.TaggedUnion({
 /**
  * What a tool call decodes to, the type of {@link Call}.
  *
- * @stability unstable
  * @category models
  */
 export type Call = typeof Call.Type;
@@ -60,7 +55,6 @@ export type Call = typeof Call.Type;
  * Error that says why a set of programs cannot be listed as tools: `reason` names the fault and
  * `tool` the tool it was found on.
  *
- * @stability unstable
  * @category errors
  */
 export class ToolsError extends Schema.TaggedError<ToolsError>()("ToolsError", {
@@ -321,7 +315,6 @@ const ps = Tool.make({
  * array, record or rest that does not say what it holds. So is one holding a field that can never
  * have a value, or a nested struct with no fields.
  *
- * @stability unstable
  * @category getters
  */
 export const list = (programs: ReadonlyArray<AnyProgram>): Result.Result<ReadonlyArray<Tool>, ToolsError> => {
@@ -375,7 +368,6 @@ const refused = Call.cases.refused.make;
  * person-only port's included, is refused as `unknown_tool`, and arguments the schema rejects as
  * `bad_input`. It never throws.
  *
- * @stability unstable
  * @category decoding
  */
 export const read = (programs: ReadonlyArray<AnyProgram>, name: string, args: unknown): Call => {

@@ -8,11 +8,13 @@ import { describe, expect, it } from "vitest";
 import { plan, saved } from "./fieldfile.ts";
 
 // Today's lead tooling. Decision 0090: each new field row is its own file, named by its id.
-// Plants caught: a run row saved under its undated lane id, a rating saved under the finding's
+// Plants caught: a run row saved under its undated quest id, a rating saved under the finding's
 // name, a counter id let through, two rows of one name both planned, and a clash that writes
 // the rows before it.
 const options = { seed: 119120, numRuns: 100 };
+
 const word = fc.stringMatching(/^[a-z0-9]{1,8}$/);
+
 const slug = fc.array(word, { minLength: 1, maxLength: 4 }).map((words) => words.join("-"));
 
 const day = fc
@@ -20,18 +22,18 @@ const day = fc
   .map((n) => new Date(Date.UTC(2026, 10, 11) - n * 86_400_000).toISOString().slice(0, 10));
 
 describe("fieldfile, today's lead tooling", () => {
-  it("a row is saved under its own id, and a lane's run id gets the row's date in front", () => {
+  it("a row is saved under its own id, and a quest's run id gets the row's date in front", () => {
     fc.assert(
       fc.property(day, slug, (date, name) => {
         const id = `${date}-${name}`;
         const note = saved("notes", { id, date });
         const finding = saved("findings", { _tag: "finding", id, date });
         const dated = saved("runs", { run: id, date });
-        const lane = saved("runs", { run: name, date, role: "hand" });
+        const quest = saved("runs", { run: name, date, role: "hand" });
         const rating = saved("findings", { _tag: "rated", finding: id, date });
         expect([note, finding, dated].map((exit) => Result.isSuccess(exit) && exit.success.name)).toEqual([id, id, id]);
-        // A lane's run id such as `t562-tests1` is also the slug of the file the row lands in.
-        expect(lane).toEqual(Result.succeed({ name: id, row: { run: id, date, role: "hand" } }));
+        // A quest's run id such as `t562-tests1` is also the slug of the file the row lands in.
+        expect(quest).toEqual(Result.succeed({ name: id, row: { run: id, date, role: "hand" } }));
         expect(Result.isSuccess(rating) && rating.success.name).toBe(`${date}-rated-${id}`);
       }),
       options,
@@ -51,6 +53,7 @@ describe("fieldfile, today's lead tooling", () => {
           saved("runs", { run: name }),
           saved("runs", { date, run: `${name} ${name}` }),
         ];
+
         expect(bad.map((result) => Result.isFailure(result))).toEqual(bad.map(() => true));
       }),
       options,
@@ -78,6 +81,7 @@ describe("fieldfile, today's lead tooling", () => {
   it("scenario: writes one file per row, and on a clash writes none", () => {
     const dir = mkdtempSync(join(tmpdir(), "ff-"));
     const script = join(import.meta.dirname, "fieldfile.ts");
+
     const fieldfile = (...args: string[]) =>
       spawnSync(process.execPath, [script, ...args], {
         cwd: dir,
@@ -88,7 +92,7 @@ describe("fieldfile, today's lead tooling", () => {
     try {
       const rows = join(dir, "rows.jsonl");
       const step = { date: "2026-11-11", run: "t562-tests1", role: "hand", step: "tests" };
-      const pipeline = { date: "2026-11-11", run: "2026-11-11-t562-lane", role: "pipeline" };
+      const pipeline = { date: "2026-11-11", run: "2026-11-11-t562-quest", role: "pipeline" };
       writeFileSync(rows, `${JSON.stringify(step)}\n${JSON.stringify(pipeline)}\n`);
       expect(fieldfile("runs", rows).status).toBe(1);
       mkdirSync(join(dir, "field"));
@@ -96,7 +100,7 @@ describe("fieldfile, today's lead tooling", () => {
       expect(first.status, first.stderr).toBe(0);
       expect(first.stdout.split("\n").filter(Boolean)).toEqual([
         join("field", "runs", "2026-11-11-t562-tests1.json"),
-        join("field", "runs", "2026-11-11-t562-lane.json"),
+        join("field", "runs", "2026-11-11-t562-quest.json"),
       ]);
       expect(JSON.parse(readFileSync(join(dir, "field/runs/2026-11-11-t562-tests1.json"), "utf8"))).toEqual({
         ...step,
@@ -109,7 +113,7 @@ describe("fieldfile, today's lead tooling", () => {
       expect(clash.stderr).toContain("2026-11-11-t562-tests1.json exists");
       expect(existsSync(join(dir, "field/runs/2026-11-11-t562-other.json"))).toBe(false);
       expect(readdirSync(join(dir, "field/runs")).toSorted()).toEqual([
-        "2026-11-11-t562-lane.json",
+        "2026-11-11-t562-quest.json",
         "2026-11-11-t562-tests1.json",
       ]);
     } finally {

@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "@demlik/tea": "catalog:",
+    "@demlik/tea": "catalog:old",
     "@effect/platform-node": "catalog:",
     "@kampus/fabrika-old": "workspace:*",
     "effect": "catalog:"

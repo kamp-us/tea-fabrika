@@ -6,7 +6,9 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 const script = process.env.TEST_LEAKGREP ?? join(import.meta.dirname, "leakgrep.sh");
+
 const word = fc.stringMatching(/^[a-z]{8,16}$/).map((s) => `private_${s}[x]`);
+
 const options = { seed: 325, numRuns: 8 };
 
 describe("T325 K6 leakgrep, today's tooling", () => {
@@ -24,6 +26,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
           const words = join(dir, "words");
           const url = "https://github.com/usirin/tea-fabrika";
           writeFileSync(words, [word, ...url.split("/").slice(-2)].join("\n"));
+
           const run = (input: string) =>
             spawnSync("sh", [script], {
               cwd: repo,
@@ -74,6 +77,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
           const repo = join(dir, "repo"),
             words = join(dir, "words"),
             draft = join(dir, "draft");
+
           mkdirSync(repo);
           spawnSync("git", ["init", "-q", repo]);
           writeFileSync(words, word);
@@ -87,6 +91,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
           writeFileSync(leak, word);
           const loop = join(dir, "loop");
           symlinkSync(loop, loop);
+
           const cases = [
             { args: [], env: { TMPDIR: missing } },
             { args: ["--text", missing] },
@@ -117,6 +122,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
                 ...flow.env,
               },
             });
+
             expect(ran.stdout + ran.stderr).not.toContain(word);
             expect(ran.stdout + ran.stderr).not.toContain(dir);
             expect(ran.status).toBe(flow.code ?? 2);
@@ -146,6 +152,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
               words,
               `${word}\n${"https://github.com/usirin/tea-fabrika".split("/").slice(-2).join("\n")}\n`,
             );
+
             const run = (input: string) =>
               spawnSync("sh", [script], {
                 cwd: repo,
@@ -154,6 +161,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
                 timeout: 5_000,
                 env: { ...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined },
               });
+
             const leaks = [
               word.toUpperCase(),
               `/` + `Users/${suffix}/work`,
@@ -166,6 +174,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
               String.fromCodePoint(0x2014),
               `https://claude.ai/` + `design/${suffix}`,
             ];
+
             const eol = crlf ? "\r\n" : "\n";
 
             for (const leak of leaks) {
@@ -210,6 +219,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
           expect(spawnSync("git", ["init", "-q", repo]).status).toBe(0);
           const words = join(dir, "words");
           writeFileSync(words, "usirin\nkamp-us\ntea-fabrika\n");
+
           const run = (input: string) =>
             spawnSync("sh", [script], {
               cwd: repo,
@@ -241,12 +251,14 @@ describe("T325 K6 leakgrep, today's tooling", () => {
         try {
           const repo = join(dir, "repo"),
             home = join(dir, "home");
+
           mkdirSync(repo);
           mkdirSync(join(home, ".fabrika"), { recursive: true });
           spawnSync("git", ["init", "-q", repo]);
           writeFileSync(join(home, ".fabrika/leak-words"), word);
           const draft = join(repo, "draft.md");
           writeFileSync(draft, `# Plan\n${word}\n`);
+
           const run = (words?: string) =>
             spawnSync("sh", [script, "--text", draft], {
               cwd: repo,
@@ -258,6 +270,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
                 TYPESAFE_API_KEY: undefined,
               },
             });
+
           expect(run().status).toBe(1);
           const local = join(repo, "words");
           writeFileSync(local, word);
@@ -265,6 +278,38 @@ describe("T325 K6 leakgrep, today's tooling", () => {
           symlinkSync(local, alias);
           expect(run(linked ? alias : local).status).toBe(2);
           expect(run(join(dir, "missing")).status).toBe(0);
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      }),
+      options,
+    );
+  });
+
+  // PushesProcess.leakText feeds a pull request's words this way. `-` is cat's name for stdin; the
+  // path /dev/stdin does not open on Linux when stdin is the socket Node gives a child.
+  // Plant: read the draft from /dev/stdin, which exits 2 on Linux for every draft.
+  it("property: --text - reads the whole draft from a piped stdin, clean or leaking", () => {
+    fc.assert(
+      fc.property(fc.record({ word, leaks: fc.boolean() }), ({ word, leaks }) => {
+        const dir = mkdtempSync(join(tmpdir(), "lg-stdin-"));
+
+        try {
+          const repo = join(dir, "repo");
+          mkdirSync(repo);
+          spawnSync("git", ["init", "-q", repo]);
+          const words = join(dir, "words");
+          writeFileSync(words, word);
+
+          const ran = spawnSync("sh", [script, "--text", "-"], {
+            cwd: repo,
+            input: `# Plan\n${leaks ? word : "nothing private"}\n`,
+            encoding: "utf8",
+            env: { ...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined },
+          });
+
+          expect(ran.status, ran.stderr).toBe(leaks ? 1 : 0);
+          expect(ran.stdout + ran.stderr).not.toContain(word);
         } finally {
           rmSync(dir, { recursive: true, force: true });
         }
@@ -285,6 +330,7 @@ describe("T325 R5 leakgrep defaults and token lengths, today's tooling", () => {
           const repo = join(dir, "repo"),
             home = join(dir, "home"),
             draft = join(dir, "draft");
+
           mkdirSync(home);
           expect(spawnSync("git", ["init", "-q", repo]).status).toBe(0);
 
@@ -300,6 +346,7 @@ describe("T325 R5 leakgrep defaults and token lengths, today's tooling", () => {
                 [String.fromCodePoint(0x2014), "em_dash"],
               ] as const) {
                 writeFileSync(draft, `${text}\n`);
+
                 const ran = spawnSync("sh", [script, ...(textMode ? ["--text", draft] : [])], {
                   cwd: repo,
                   input: `+${text}\n`,
@@ -311,6 +358,7 @@ describe("T325 R5 leakgrep defaults and token lengths, today's tooling", () => {
                     TYPESAFE_API_KEY: undefined,
                   },
                 });
+
                 expect(ran.status, ran.stderr).toBe(kind ? 1 : 0);
                 const notice = ran.stderr.split("\n").filter((line) => /word list.*missing/i.test(line));
                 expect(notice).toHaveLength(1);
@@ -344,10 +392,13 @@ describe("T325 R5 leakgrep defaults and token lengths, today's tooling", () => {
           const repo = join(dir, "repo"),
             words = join(dir, "words"),
             draft = join(dir, "draft");
+
           expect(spawnSync("git", ["init", "-q", repo]).status).toBe(0);
           writeFileSync(words, "");
+
           const run = (text: string, textMode: boolean) => {
             writeFileSync(draft, text);
+
             return spawnSync("sh", [script, ...(textMode ? ["--text", draft] : [])], {
               cwd: repo,
               input: `+${text}\n`,
@@ -399,8 +450,10 @@ describe("T396 leakgrep plain /tmp paths, today's tooling (decision 0011)", () =
     try {
       const repo = join(dir, "repo"),
         words = join(dir, "words");
+
       expect(spawnSync("git", ["init", "-q", repo]).status).toBe(0);
       writeFileSync(words, "");
+
       return spawnSync("sh", [script], {
         cwd: repo,
         input: `+${text}\n`,

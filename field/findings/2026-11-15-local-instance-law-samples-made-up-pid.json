@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-local-instance-law-samples-made-up-pid",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/apps/fabrika/src/local-instance.integration.test.ts",
+    "line": 35
+  },
+  "says": "In next/, local-instance.integration.test.ts starts the app's real startDev with a made-up pid, 27001, the real ChildProcessSpawner (so a real ps of that pid) and the real process.kill; it is safe only because each law's scope closes before the sampler's first one-second sample. Fixed in the same pull request: both laws now run with rssStandIn, which answers the memory sample with 0 KiB for every pid (moved into rss.fixture.ts from memory-replace.laws.integration.test.ts), and with a spy on process.kill that each law checks was never called, so no real ps of the made-up pid and no real signal can leave the file. The file is edited and not run here; it runs in CI's full run only (0178).",
+  "proof": "At 490d3f7a9e40c387808db514281f8adbd293f587, the mocked deploy at line 35 reports pid 27001, and the laws provide NodeServices.layer (lines 138 and 202), whose spawner runs ps for real; nothing spies on process.kill in the file.",
+  "cost": "A slower machine or a longer law would sample and could signal whatever process holds pid 27001 on the laptop running the tests.",
+  "head": "490d3f7a9e40c387808db514281f8adbd293f587",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1316"
+}

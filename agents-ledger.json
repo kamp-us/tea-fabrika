@@ -52,26 +52,6 @@
 		},
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-node-filesystem)",
-			"code": "import {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-node-filesystem)",
-			"code": "import { join } from \"node:path\";"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-node-imports)",
-			"code": "import { spawn } from \"node:child_process\";"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-node-imports)",
-			"code": "} from \"node:fs\";"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
 			"rule": "fabrika(no-node-imports)",
 			"code": "import { join } from \"node:path\";"
 		},
@@ -114,21 +94,6 @@
 			"file": ".agents/skills/lead/scripts/chain.ts",
 			"rule": "fabrika(no-promises)",
 			"code": "Effect.runPromise("
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "const note = JSON.parse(r.out) as { _tag?: string; step?: string; ticket?: string };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-node-filesystem)",
-			"code": "import {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-node-filesystem)",
-			"code": "import { join } from \"node:path\";"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
@@ -176,16 +141,6 @@
 			"code": "const holderOf = (porcelain: string, branch: string): string | null => {"
 		},
 		{
-			"file": ".agents/skills/lead/scripts/gc.ts",
-			"rule": "fabrika(no-node-filesystem)",
-			"code": "import { existsSync, readdirSync, readFileSync, rmSync, statSync } from \"node:fs\";"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/gc.ts",
-			"rule": "fabrika(no-node-filesystem)",
-			"code": "import { isAbsolute, join, resolve } from \"node:path\";"
-		},
-		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
 			"rule": "fabrika(no-node-imports)",
 			"code": "import { spawnSync } from \"node:child_process\";"
@@ -221,34 +176,19 @@
 			"code": "const prsOf = new Map<string, PrState[]>();"
 		},
 		{
-			"file": ".agents/skills/lead/scripts/lane.ts",
-			"rule": "fabrika(no-node-filesystem)",
-			"code": "import { dirname, matchesGlob } from \"node:path\";"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/lane.ts",
+			"file": ".agents/skills/lead/scripts/quest.ts",
 			"rule": "fabrika(no-node-imports)",
 			"code": "import { dirname, matchesGlob } from \"node:path\";"
 		},
 		{
-			"file": ".agents/skills/lead/scripts/lane.ts",
+			"file": ".agents/skills/lead/scripts/quest.ts",
 			"rule": "fabrika(no-of)",
 			"code": "export const wipOf = (branch: string): string => `${branch.replace(/(-wip)+$/, \"\")}-wip`;"
 		},
 		{
-			"file": ".agents/skills/lead/scripts/lane.ts",
+			"file": ".agents/skills/lead/scripts/quest.ts",
 			"rule": "fabrika(no-of)",
 			"code": "export const stepOf = (note: string): string[] => {"
-		},
-		{
-			"file": ".agents/skills/mutation/scripts/sample.ts",
-			"rule": "fabrika(no-node-filesystem)",
-			"code": "import { readFileSync, writeFileSync } from \"node:fs\";"
-		},
-		{
-			"file": ".agents/skills/mutation/scripts/sample.ts",
-			"rule": "fabrika(no-node-filesystem)",
-			"code": "import { resolve } from \"node:path\";"
 		},
 		{
 			"file": ".agents/skills/mutation/scripts/sample.ts",

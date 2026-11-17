@@ -1,8 +1,8 @@
 // plants.ts: the plant records a review's brief carries (ticket 850). A tests step's answer names
-// each plant it ran (0093), and drive keeps them on the step's entry in state/<lane>.json. The
-// report beside the lane (`../boxes/<box>.md`) holds the table of what each failure looked like,
+// each plant it ran (0093), and drive keeps them on the step's entry in state/<quest>.json. The
+// report beside the quest (`../boxes/<box>.md`) holds the table of what each failure looked like,
 // and a box cannot read it, so a review once asked the tests step for records that already
-// existed, and the lane looped (acpcancel and sjob1, 2026-11-11). The chain writes this section
+// existed, and the quest looped (acpcancel and sjob1, 2026-11-11). The chain writes this section
 // into a review's brief instead.
 
 import { Schema } from "effect";
@@ -13,9 +13,10 @@ import { Schema } from "effect";
  * test of this file would have to declare them all.
  */
 const SavedPlant = Schema.Struct({ law: Schema.String, plant: Schema.String, result: Schema.String });
+
 type SavedPlant = typeof SavedPlant.Type;
 
-/** A tests entry in the lane's state file that named plants; other entries are not read. */
+/** A tests entry in the quest's state file that named plants; other entries are not read. */
 const TestsEntry = Schema.Struct({
   step: Schema.Literal("tests"),
   head: Schema.String,
@@ -23,7 +24,7 @@ const TestsEntry = Schema.Struct({
   plants: Schema.NonEmptyArray(SavedPlant),
 });
 
-/** A build that moved the lane: a record from before it ran at an older head. */
+/** A build that moved the quest: a record from before it ran at an older head. */
 const BuildEntry = Schema.Struct({
   step: Schema.Literal("build"),
   outcome: Schema.Literal("done"),
@@ -37,7 +38,7 @@ export type LawRecord = {
   readonly plants: ReadonlyArray<SavedPlant>;
   /** The last cell of each row the report's plant table has for this law; empty with no report. */
   readonly failures: ReadonlyArray<string>;
-  /** The record's tests step ran before the lane's last build, and that build moved the head. */
+  /** The record's tests step ran before the quest's last build, and that build moved the head. */
   readonly older: boolean;
 };
 
@@ -84,7 +85,7 @@ export const failuresIn = (report: string, law: string): string[] => {
 };
 
 /**
- * Each law's newest record among the lane's state file's steps, oldest law first. `read` gives a
+ * Each law's newest record among the quest's state file's steps, oldest law first. `read` gives a
  * report's text, `null` when the file is gone.
  */
 export const records = (steps: ReadonlyArray<unknown>, read: (path: string) => string | null): LawRecord[] => {
@@ -123,11 +124,12 @@ export const section = (records: ReadonlyArray<LawRecord>, build: string | null)
   }
 
   const short = (s: string) => s.slice(0, 8);
+
   const lines = [
     "## Plant records",
     "",
-    "The chain copied these from the lane's state file: for each law, the plants the newest tests answer that named it ran, at the head that step ended on. They are the lane's records; do not ask the tests step for them again.",
-    build === null ? "No build has moved the lane yet." : `The last build ended at ${short(build)}.`,
+    "The chain copied these from the quest's state file: for each law, the plants the newest tests answer that named it ran, at the head that step ended on. They are the quest's records; do not ask the tests step for them again.",
+    build === null ? "No build has moved the quest yet." : `The last build ended at ${short(build)}.`,
     "",
   ];
 

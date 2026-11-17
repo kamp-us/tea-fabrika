@@ -14,7 +14,7 @@ if (!dir || !(branch === "-" || branch?.startsWith("fabrikalfa/"))) {
 }
 
 // Check only committed additions, before reading credentials or making any network request.
-// A lane's diff can pass execFileSync's 1 MB default (a minified CSS patch did), so the buffer is
+// A quest's diff can pass execFileSync's 1 MB default (a minified CSS patch did), so the buffer is
 // wide, and a failure says which part failed instead of exiting with no word.
 let diff;
 
@@ -71,8 +71,11 @@ const raw = execFileSync("security", ["find-generic-password", "-s", "fabrika-gi
   .trim();
 
 const pem = raw.includes("BEGIN") ? raw : Buffer.from(raw, "base64").toString();
+
 const now = Math.floor(Date.now() / 1000);
+
 const body = `${b64(JSON.stringify({ alg: "RS256", typ: "JWT" }))}.${b64(JSON.stringify({ iat: now - 60, exp: now + 540, iss: APP }))}`;
+
 const jwt = `${body}.${createSign("RSA-SHA256").update(body).sign(pem, "base64url")}`;
 
 const api = async (path, init = {}, auth = `Bearer ${jwt}`) => {
@@ -120,6 +123,7 @@ const git = (...a) =>
   }).toString();
 
 const url = `https://github.com/${REPO}.git`;
+
 // One atomic push: the notes and the branch land together or not at all, so CI finds the signatures.
 const refs = ["refs/notes/fabrika:refs/notes/fabrika"];
 
@@ -155,6 +159,7 @@ const takeNotes = () => {
 const staleNotesOnly = (stderr) => {
   const refused = stderr.split("\n").filter((l) => /^\s*!\s/.test(l));
   const notes = refused.filter((l) => /->\s+refs\/notes\/fabrika\b/.test(l));
+
   return (
     notes.length > 0 &&
     notes.every((l) => /cannot lock ref|fetch first|non-fast-forward/.test(l)) &&

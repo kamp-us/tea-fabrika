@@ -33,7 +33,9 @@ import * as JsonSchema from "./JsonSchema.ts";
 import * as Setting from "./Setting.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: 100 };
+
 const DIALECT = "https://json-schema.org/draft/2020-12/schema";
 
 // The kinds of value a setting holds here, each with its own words, as Declarations.ts writes them.
@@ -73,6 +75,7 @@ const pool = fc.array(
 );
 
 const segment = fc.stringMatching(/^[a-z][a-z0-9]{0,5}$/);
+
 const scopes = fc.constantFrom<Setting.Scope>(["person"], ["repo"], ["person", "repo"]);
 
 // Words with Markdown punctuation and line breaks, which the schema must keep as written.
@@ -107,6 +110,7 @@ const build = ([schemas, ds]: Declared) => {
       description: s.description,
     }),
   );
+
   return { made, values: (n: number) => KINDS[schemas[ds[n]!.schema]!.kind] };
 };
 
@@ -114,6 +118,7 @@ const build = ([schemas, ds]: Declared) => {
 const groupWith = (input: Declared, defaults: ReadonlyArray<unknown>) => {
   const [, ds] = input;
   const { made } = build(input);
+
   return Setting.group(
     Object.fromEntries(
       ds.map((d, n) => [
@@ -147,6 +152,7 @@ const target = (document: Json, ref: string) => {
   const name = decodeURIComponent(ref.slice(prefix.length)).replaceAll("~1", "/").replaceAll("~0", "~");
   const defs = document.$defs;
   expect(Predicate.isObject(defs) && Object.hasOwn(defs, name), `${ref} names no definition`).toBe(true);
+
   return (defs as Json)[name] as Json;
 };
 
@@ -155,6 +161,7 @@ const resolve = (document: Json, node: Json): Json => {
   const { $ref, allOf, ...own } = node;
   const below = typeof $ref === "string" ? resolve(document, target(document, $ref)) : {};
   const parts = Array.isArray(allOf) ? allOf.map((part: Json) => resolve(document, part)) : [];
+
   return Object.assign({}, below, ...parts, own);
 };
 
@@ -162,6 +169,7 @@ const resolve = (document: Json, node: Json): Json => {
 const leaf = (document: Json, segments: ReadonlyArray<string>) =>
   segments.reduce<Json | undefined>((node, key) => {
     const properties = node === undefined ? undefined : resolve(document, node).properties;
+
     return Predicate.isObject(properties) && Object.hasOwn(properties, key)
       ? resolve(document, (properties as Json)[key] as Json)
       : undefined;
@@ -274,6 +282,7 @@ it("T753 L7 shared byte schemas keep distinct file defaults, descriptions and re
       }),
       (v) => {
         const shared = Schema.ByteSize;
+
         const declare = (path: string, count: bigint, words: string) =>
           Setting.make(path, {
             schema: shared,
@@ -284,10 +293,12 @@ it("T753 L7 shared byte schemas keep distinct file defaults, descriptions and re
             since: "1.2.3",
             format: "text",
           });
+
         const group = Setting.group({
           first: declare("limits.first", v.count, v.first),
           second: declare("limits.second", v.count + v.delta, v.second),
         });
+
         const document = JsonSchema.make(Files.schema(group, v.file)) as Json;
         const editor = imported(document);
 
@@ -352,7 +363,9 @@ describe("L3, every allowed declaration keeps its own words and encoded default 
 
         if (node !== undefined) {
           expect(node.description).toBe(d.doc);
-          expect(node.default).toEqual(Schema.encodeSync(Schema.toCodecJson(d.schema))(d.default));
+          // The default as the file spells it: JSON, or a `text` setting's text, as `mail.chunk`'s "65536 bytes".
+          const spelled = d.format === "text" ? Schema.toCodecStringTree(d.schema) : Schema.toCodecJson(d.schema);
+          expect(node.default).toEqual(Schema.encodeSync(spelled)(d.default));
         }
       }
 
@@ -433,6 +446,7 @@ describe("L4, generated local references resolve, with every definition present"
 
   it("a leaf Effect cannot represent fails generation, never a looser schema", () => {
     class Thing {}
+
     fc.assert(
       fc.property(
         withDefaults,
@@ -455,16 +469,19 @@ describe("L4, generated local references resolve, with every definition present"
               reload: "restart",
               since: "0.0.0",
             });
+
             const both = Setting.group({ ...group.settings, loose });
             expect(() => JsonSchema.make(Files.schema(both, file))).toThrow();
           } else {
             // `Setting.make` refuses a schema with no text codec, so this leaf sits beside the
             // file's schema: Effect writes it as `{}`, which accepts anything.
             const opaque = Schema.toCodecJson(kind === "map" ? Schema.instanceOf(Map) : Schema.instanceOf(Thing));
+
             const schema = Schema.Struct({
               file: Schema.optionalKey(Files.schema(group, file)),
               nojsonx: Schema.optionalKey(Schema.Struct({ value: Schema.optionalKey(opaque) })),
             });
+
             expect(() => JsonSchema.make(schema)).toThrow();
           }
         },

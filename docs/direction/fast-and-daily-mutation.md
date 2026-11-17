@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01 (experiment 181)"
+summary: "A check that cannot finish inside the per-pull-request budget does not gate it: it runs on a schedule and files tickets. Checks that stop a wrong merge or lost work never move. Mutation: 5 minutes per pull request, lines first, incremental reuse between rounds with `force` on the last, a survivor advises and never blocks until its false alarms are measured; today's version gets only these speedups, a `2` in agent hours. In `next/`, Tier 6, a mutation queue shaped like a merge queue takes a pull request's leftovers and a daily sweep, drops repeats by a stable id, has hands run Stryker, and files at most 3 tickets a day."
+---
+
 # A fast check per pull request, a mutation queue for the rest
 
 **Changed 2026-11-10 by [0066](../../.decisions/0066-mutation-runs-on-a-schedule.md):** the check on each pull request is gone; mutation runs hourly against main. The rest of this note holds as the plan for the `next/` queue.
@@ -20,7 +25,7 @@ const fast = mutation({
 	mutants: "changed lines, one per line first, then the rest",
 	limits: {wall: minutes(5), perTest: seconds(10), overRun: seconds(5)},
 	static: "off", // Stryker's ignoreStatic
-	tests: "related, the lane's end-to-end tests left out",
+	tests: "related, the quest's end-to-end tests left out",
 	answer: "advice", // a survivor never stops the pull request
 	reuse: "incremental between rounds on one pull request; the last round before review uses force",
 });
@@ -38,13 +43,13 @@ const queue = scheduled("mutation_queue", {every: days(1)}, function* () {
 
 - **A check that cannot finish inside the per-pull-request budget does not gate the pull
   request.** It runs on a schedule, and what it finds becomes a ticket in our tracker. The
-  ticket goes through the lane like any other.
+  ticket goes through the quest like any other.
 - **The cost, said plainly.** A gap a long check would have found reaches main, and is found
   a day or more later. A survivor is a missing test, not a bug. The damage is a real bug that
   sits in that same gap. What limits it:
   - The fast check still runs on the pull request's own changed lines first.
   - Every pull request on main can be reverted.
-  - The queue's ticket is picked up by the lane like any other, so how fast it is fixed is how
+  - The queue's ticket is picked up by the quest like any other, so how fast it is fixed is how
     fast the owner slots it.
 - **This is not new here.** CI on a pull request already runs only the tests of changed files
   (`--changed`), and main runs them all, one merge late.
@@ -61,7 +66,7 @@ Times are from 31 recent successful CI runs on this repo (p50, seconds).
 | Fast mutation on changed lines | 5 minutes at most | advises |
 | All tests on main | 171 to 241 per shard | one merge late |
 | Mutation over the whole codebase | about 48 worker hours for a first pass, a guess | the queue, `next/` |
-| Mutants under the lane's end-to-end tests | about 100 s per mutant | not at all, for now |
+| Mutants under the quest's end-to-end tests | about 100 s per mutant | not at all, for now |
 | TLA+ drift ([scheduled jobs](./scheduled-jobs-on-the-host.md)) | not measured | daily |
 
 **What never moves to the daily side, whatever it costs.** A check that stops the wrong thing
@@ -76,7 +81,7 @@ moves.
 Today's version gets this now, through the pipeline. `next/` keeps the same settings.
 
 - **How it runs.** Static mutants off, a 5 s over-run and a 10 s test limit, not 60 s. The
-  lane's end-to-end tests and the nested Stryker tests left out. Mutants in a fixed seeded
+  quest's end-to-end tests and the nested Stryker tests left out. Mutants in a fixed seeded
   order, one per changed line first, then the rest. A reporter writes each answer as it
   comes, and at 5 minutes the step stops the Stryker process it started and keeps what it
   has (Stryker has no cap of its own; a stop from outside missed it in 181). Survivors are
@@ -117,7 +122,7 @@ Today's version gets this now, through the pipeline. `next/` keeps the same sett
   Splitting is for the review.
 
 ```ts
-// A sketch. What the fast check reports, as data. Nothing in it can stop the lane.
+// A sketch. What the fast check reports, as data. Nothing in it can stop the quest.
 type FastCheck = {
 	ran: number; // mutants that got an answer
 	lines: {changed: number; reached: number};
@@ -131,14 +136,14 @@ type FastCheck = {
 
 ## What a survivor does, decided 2026-11-01
 
-- **Today a survivor sends the lane back:** `send:test_writer:mutant_survived` in
+- **Today a survivor sends the quest back:** `send:test_writer:mutant_survived` in
   `stages/mutation/machine.ts`, and its comment says every survivor blocks.
 - **Decided: a survivor advises and never blocks.** The step answers `done` with its
   survivors attached. They show in the review and on the ticket, and the owner rates each
   one, as [every finding is rated](./every-finding-is-rated.md) says. A survivor the owner
   rates `noise` is never shown again.
 - **Why.** Blocking needs about 0% false alarms, and advice up to 10% (Google, CACM 2018).
-  We have no measured rate for survivors on real pull requests. The lane's own mutation step
+  We have no measured rate for survivors on real pull requests. The quest's own mutation step
   has never run on a real ticket. The studies give: in 119, 1 of 12 checked was not a real
   uncovered change; in 126, 4 of 11 hand-checked survivors were not real gaps. Together 5 of
   23, 22%. Google reports 82% useful, so 18% not. Both are above even the advice bar, so even
@@ -149,7 +154,7 @@ type FastCheck = {
   survivors may then be sent to the test writer once, inside the budget. Blocking needs about
   300 in a row with no `noise` for 1%. The order: decided 2026-11-01, 85%.
 - **What a fast-check survivor is not.** A static mutant, or one no fast test covers, is "not
-  covered by the fast tests", not a gap. In 181, 39% of those were caught by the lane's
+  covered by the fast tests", not a gap. In 181, 39% of those were caught by the quest's
   end-to-end tests.
 
 ## The mutation queue, `next/` only, decided 2026-11-01
@@ -174,7 +179,7 @@ type Queue = {waiting: Entry[]; running: {batch: Entry[]; hands: string} | null}
   waiting, or was run on the same code, is dropped. Leftovers from a pull request go before
   the sweep.
 - **Hands run Stryker, never the brain.** Running mutants is machine work. The queue hands a
-  batch to hands, as any job ([brain, hands, window, agent](./brain-hands-window-agent.md)),
+  batch to hands, as any task ([brain, hands, window, agent](./brain-hands-window-agent.md)),
   and waits for the answers. A batch that crashes is split and its entries run again alone.
 - **It files tickets from survivors,** at most 3 a day, as below.
 - **It runs on a Durable Object alarm,** as
@@ -234,20 +239,20 @@ type Daily = {filed: Gap["id"][]; updated: Gap["id"][]; closed: Gap["id"][]; hel
   the queue comments and closes the ticket.
 - **No flood.** At most 3 new tickets a day, ranked by how many gaps they hold. The rest are
   held, and `held` says how many. A gap the owner rated `noise` is never filed again. 3 is our
-  guess at what the lane takes in a day. Decided 2026-11-01, 60%; a week of real tickets
+  guess at what the quest takes in a day. Decided 2026-11-01, 60%; a week of real tickets
   settles it.
 - **The id is like Stryker's own.** Incremental reuse matches mutants by their text, not their
   line (181: every line moved, and every mutant was reused).
 - **Before any ticket, its false alarms are counted,** as scheduled jobs say. The first weeks
   report, and the owner rates.
 
-## The lane takes a weak-test ticket, decided 2026-11-01
+## The quest takes a weak-test ticket, decided 2026-11-01
 
-A weak-test ticket asks for a test and no product change. Today's lane cannot finish one:
+A weak-test ticket asks for a test and no product change. Today's quest cannot finish one:
 
 - Triage's `plan` route fits, and the plan's Property `behavior: "existing"` must pass on the
   base, which a test for a live mutant does.
-- **The builder has nothing to change,** so build ends `stuck:no_change`, and the lane ends
+- **The builder has nothing to change,** so build ends `stuck:no_change`, and the quest ends
   stuck.
 - **The mutation step skips a test-only diff** (`skip:no_lines`), so nothing proves the new
   test kills the mutant.
@@ -257,7 +262,7 @@ green on the original, or `cannot`, or `noise`. So a weak-test ticket takes a sh
 triage, the `mutants` job on the ticket's gaps, one review, ship. No builder.
 
 **Where it gets fixed: in `next/`'s pipeline stages, in Tier 6, before the queue files its
-first ticket.** Today's version files no queue tickets, so its lane keeps the gap. Decided
+first ticket.** Today's version files no queue tickets, so its quest keeps the gap. Decided
 2026-11-01, 75%. The doubt is whether the plan step is still needed when the ticket already names the gaps.
 
 ## Size of the build

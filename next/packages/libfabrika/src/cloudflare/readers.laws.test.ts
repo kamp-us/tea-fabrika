@@ -1,33 +1,271 @@
 // P12, next/. Saved and wire values enter the real services over in-memory platform handles.
-import { createHash } from "node:crypto";
+// The settings entry flows (L10, L16) are in entry-flows.laws.test.ts, split out unchanged so each
+// file stays under about 60 s on a CI leg.
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { Cause, Effect, Exit, Redacted, Schema } from "effect";
+import {
+  DurableObjectState as ObjectState,
+  fromDurableObjectState,
+} from "@alchemy.run/cloudflare/Workers/DurableObjectState";
+import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
+import { Recorder, runsFor } from "@kampus/vitest";
+import type { Scope } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+import * as StartsTest from "../settings/StartsTest.ts";
+import { Chain } from "../telemetry/Trace.ts";
 import { Attached } from "../transport/Wire.ts";
-import { ConnectionService, connectionRuntime } from "./connection.ts";
+import { ConnectionService, connectionRuntime, GatewayWaits, gatewayLayer, gatewayProject } from "./connection.ts";
 import { control } from "./control.ts";
-import { recordRead } from "./record.ts";
-import { ProcessService, processDescriptor, processRuntime, type Env } from "./runtime.ts";
+import { fetch } from "./fetch.ts";
+import type { RecordShape } from "./objects.ts";
+import { recordRead, recordWrite } from "./record.ts";
+import {
+  ProcessService,
+  ProjectService,
+  processDescriptor,
+  processRuntime,
+  projectRuntime,
+  recordedLayer,
+  SettingsRuntime,
+  type Env,
+} from "./runtime.ts";
+
+const recordConstructor = vi.hoisted(() => {
+  const slot: {
+    value?: Effect.Effect<
+      Effect.Effect<RecordShape, unknown, Scope.Scope>,
+      unknown,
+      ObjectState | WorkerEnvironment | Scope.Scope
+    >;
+  } = {};
+
+  return slot;
+});
+
+// Capture only Alchemy's constructor registration. The actual RecordPart implementation runs below.
+vi.mock("./objects.ts", async (original) => {
+  const actual = await original<typeof import("./objects.ts")>();
+  const { Layer } = await import("effect");
+
+  return {
+    ...actual,
+    RecordPart: {
+      make: (implementation: NonNullable<typeof recordConstructor.value>) => {
+        recordConstructor.value = implementation;
+
+        return Layer.empty;
+      },
+    },
+  };
+});
 
 vi.mock("effect", async (original) => {
   const actual = await original<typeof import("effect")>();
+
   return { ...actual, Effect: { ...actual.Effect } };
 });
 
-const config = {
+const config = instanceFixture({
   name: "parse-test",
   person: "person-test",
   founder: "public-test",
   window: null,
   port: 18787,
   build: "test",
-  rateLimit: { limit: 100_000, window: 60_000 },
-};
+});
 
 const malformed = (schema: Schema.Top) => fc.jsonValue().filter((value) => !Schema.is(schema)(value));
+
+const entryPaths = ["Project", "Process", "Connection", "HTTP", "RecordPart"] as const;
+
+for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
+  for (const path of entryPaths) {
+    StartsTest.law(
+      `T753 L3 ${path} rejects corrupt ${corruption} before consumer construction`,
+      fc.tuple(
+        StartsTest.recipe,
+        fc.array(fc.nat(), { minLength: 8, maxLength: 25 }),
+        corruption === "snapshot" ? fc.constant(undefined) : StartsTest.originFault(corruption),
+      ),
+      ([recipe, choices, origin]) =>
+        Effect.gen(function* () {
+          let deployment = yield* StartsTest.input(recipe);
+
+          for (const [index, choice] of choices.entries()) {
+            // A reopen keeps immutable input; a deployment chooses a fresh start and snapshot.
+            const moves = ["deliver", "reopen", "deploy"];
+            const move = moves[choice % moves.length];
+
+            if (move === "deploy") {
+              deployment = yield* StartsTest.input({
+                ...recipe,
+                start: `${recipe.start}-${index}`,
+                port: 1 + (choice % 65535),
+              });
+              continue;
+            }
+
+            const w = yield* Effect.acquireRelease(Effect.sync(world), (value) => Effect.sync(() => value.db.close()));
+            let consumers = 0;
+            let settingsCalls = 0;
+
+            const bad =
+              origin === undefined
+                ? StartsTest.corrupt(deployment, Math.floor(choice / moves.length))
+                : StartsTest.changeOrigin(deployment, origin);
+
+            const sql = w.ctx.storage.sql;
+
+            const ctx = {
+              ...w.ctx,
+              id: {
+                ...w.ctx.id,
+                name:
+                  path === "Process"
+                    ? JSON.stringify(["settings-law", "worker"])
+                    : path === "RecordPart"
+                      ? JSON.stringify(["settings-law", "spans/0"])
+                      : "settings-law",
+              },
+              getWebSockets: () => {
+                consumers++;
+
+                return [];
+              },
+              storage: new Proxy(w.ctx.storage, {
+                get: (target, key) => {
+                  if (key === "get") {
+                    return (...args: unknown[]) => {
+                      consumers++;
+
+                      return Reflect.apply(target.get, target, args);
+                    };
+                  }
+
+                  if (key === "sql") {
+                    return new Proxy(sql, {
+                      get: (target, key) =>
+                        key === "exec"
+                          ? (...args: unknown[]) => {
+                              consumers++;
+
+                              return Reflect.apply(target.exec, target, args);
+                            }
+                          : Reflect.get(target, key),
+                    });
+                  }
+
+                  return Reflect.get(target, key);
+                },
+              }),
+            };
+
+            const env = {
+              ...w.env,
+              INSTANCE: JSON.stringify(bad),
+              PROJECT: new Proxy(w.env.PROJECT, {
+                get: (target, key) =>
+                  key === "getByName"
+                    ? () =>
+                        new Proxy(target.getByName("settings-law"), {
+                          get: (stub, method) =>
+                            method === "settingsStart"
+                              ? async (wire: StartsTest.Input) => {
+                                  settingsCalls++;
+
+                                  return StartsTest.reply(wire);
+                                }
+                              : Reflect.get(stub, method),
+                        })
+                    : Reflect.get(target, key),
+              }),
+            };
+
+            const publicKey = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x;
+
+            const local = {
+              ...config,
+              name: "settings-law",
+              port: recipe.port,
+              person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+              founder: publicKey ?? "missing-public-key",
+              window: config.founding.window,
+            };
+
+            let exit: Exit.Exit<unknown, unknown>;
+
+            if (path === "HTTP") {
+              exit = yield* Effect.exit(
+                fetch(
+                  new Request(`http://127.0.0.1:${recipe.port}/window.js`, {
+                    headers: { host: `127.0.0.1:${recipe.port}` },
+                  }),
+                  env,
+                  local,
+                  { "/window.js": { hash: "asset", type: "text/javascript", body: "window.fixture = true" } },
+                ),
+              );
+            } else if (path === "RecordPart") {
+              const constructor = Option.getOrThrow(Option.fromUndefinedOr(recordConstructor.value));
+              exit = yield* Effect.exit(
+                Effect.gen(function* () {
+                  const build = yield* constructor;
+                  const part = yield* build;
+
+                  return yield* part.read(Chain.cases.spans.make({}), 0, 0);
+                }).pipe(
+                  Effect.provideService(WorkerEnvironment, env),
+                  Effect.provideService(
+                    ObjectState,
+                    // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy and the global Worker types disagree on raw Request brands; this double supplies the same storage handles
+                    fromDurableObjectState(ctx as unknown as Parameters<typeof fromDurableObjectState>[0]),
+                  ),
+                ),
+              );
+            } else if (path === "Connection") {
+              const runtime = connectionRuntime(ctx, env, local);
+              yield* Effect.addFinalizer(() => runtime.disposeEffect);
+              exit = yield* Effect.promise(() => runtime.runPromiseExit(ConnectionService));
+            } else if (path === "Process") {
+              const runtime = processRuntime(ctx, env, {});
+              yield* Effect.addFinalizer(() => runtime.disposeEffect);
+              exit = yield* Effect.promise(() => runtime.runPromiseExit(ProcessService));
+            } else {
+              const runtime = projectRuntime(ctx, env, {
+                config: local,
+                programs: {},
+                bootstrap: [{ id: "boot", name: "boot", program: "missing" }],
+                door: () => Effect.die("consumer before start"),
+              });
+
+              yield* Effect.addFinalizer(() => runtime.disposeEffect);
+              exit = yield* Effect.promise(() => runtime.runPromiseExit(ProjectService));
+            }
+
+            expect(Exit.isFailure(exit)).toBe(true);
+
+            if (Exit.isFailure(exit)) {
+              expect(Cause.hasDies(exit.cause)).toBe(false);
+              expect(Cause.hasFails(exit.cause)).toBe(true);
+              expect(Cause.findErrorOption(exit.cause)).toMatchObject({
+                _tag: "Some",
+                value: { _tag: "StartsError", reason: { _tag: "Decode" } },
+              });
+            }
+
+            expect(consumers).toBe(0);
+            // A remote receipt check must not hide a skipped local snapshot check.
+            expect(settingsCalls).toBe(0);
+          }
+        }).pipe(Effect.provide(Digest.layerWebCrypto)),
+    );
+  }
+}
 
 // Keep parser checks independent of the bearer migration. The separate [secrets] type and
 // flow laws require Redacted; this fixture also reaches HEAD's parser using its old signature.
@@ -39,6 +277,7 @@ const parserControl = (request: Request, env: Env) =>
       Redacted.make("test"),
       {},
     ]);
+
     const response = yield* secure;
 
     if (response.status !== 403) {
@@ -46,6 +285,7 @@ const parserControl = (request: Request, env: Env) =>
     }
 
     const legacy: Effect.Effect<Response, unknown> = Reflect.apply(control, undefined, [request, env, "test", {}]);
+
     return yield* legacy;
   });
 
@@ -63,6 +303,7 @@ const typed = (exit: Exit.Exit<unknown, unknown>, tag = "LedgerError") => {
 const world = () => {
   const db = new DatabaseSync(":memory:"),
     sql = nodeSql(db);
+
   let attached: unknown = Attached.cases.online.make({
     client: "client",
     identity: { key: "public", person: "person", as: "agent" },
@@ -71,8 +312,10 @@ const world = () => {
     watching: false,
     busy: false,
   });
+
   let tags: unknown = ["session", "tab", "key"],
     name: unknown = "gateway";
+
   const ws = {
     deserializeAttachment: () => attached,
     serializeAttachment: (value: unknown) => {
@@ -81,8 +324,10 @@ const world = () => {
     send: vi.fn(),
     close: vi.fn(),
   };
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- the socket double supplies attachment, send and close; workerd owns the complete WebSocket
   const socket = ws as unknown as WebSocket;
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- only workerd constructs a complete DurableObjectState; these are the handles the real readers use
   const ctx = {
     id: {
@@ -105,11 +350,15 @@ const world = () => {
     acceptWebSocket: vi.fn(),
     setWebSocketAutoResponse: vi.fn(),
   } as unknown as DurableObjectState;
+
   const route = vi.fn(async (): Promise<unknown> => ({ _tag: "parked", stream: "stream", after: 0 }));
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- in-memory platform stubs supply just the RPCs these readers reach
   const env = {
+    INSTANCE: JSON.stringify(config),
     PROJECT: {
       getByName: () => ({
+        settingsStart: async () => StartsTest.reply(config),
         route,
         leave: async () => {},
         disconnect: async () => {},
@@ -120,6 +369,7 @@ const world = () => {
     RECORD: { getByName: () => ({ write: async () => ({ _tag: "written" }) }) },
     MEASUREMENTS: {},
   } as unknown as Env;
+
   return {
     ctx,
     env,
@@ -146,6 +396,7 @@ for (const source of ["attachment", "tags", "name"] as const) {
       tags: Schema.Tuple([Schema.String, Schema.String, Schema.String]),
       name: Schema.String,
     }[source];
+
     await fc.assert(
       fc.asyncProperty(malformed(schema), async (raw) => {
         const w = world();
@@ -159,7 +410,7 @@ for (const source of ["attachment", "tags", "name"] as const) {
           w.db.close();
         }
       }),
-      { seed: 119120, numRuns: 20, examples: [[null], [{}], [17]] },
+      { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [17]] },
     );
   });
 }
@@ -174,6 +425,7 @@ for (const method of ["message", "close", "ring", "probe", "notify"] as const) {
         try {
           const gateway = await runtime.runPromise(ConnectionService);
           w.attached(raw);
+
           const work = () =>
             ({
               message: () => gateway.message(w.socket, '{"jsonrpc":"2.0","id":1,"method":"view.open","params":{}}'),
@@ -182,13 +434,14 @@ for (const method of ["message", "close", "ring", "probe", "notify"] as const) {
               probe: () => gateway.probe("session"),
               notify: () => gateway.notify("client", {}),
             })[method]();
+
           typed(await runtime.runPromiseExit(Effect.suspend(work)));
         } finally {
           await runtime.dispose();
           w.db.close();
         }
       }),
-      { seed: 119120, numRuns: 20, examples: [[null], [{}]] },
+      { seed: 119120, numRuns: runsFor({ fast: 4, full: 20 }), examples: [[null], [{}]] },
     );
   });
 }
@@ -197,18 +450,28 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
   await fc.assert(
     fc.asyncProperty(malformed(Schema.Struct({ rev: Schema.Int })), async (raw) => {
       const w = world(),
-        runtime = connectionRuntime(w.ctx, w.env, config);
-      const original = Effect.result;
-      const attempts: Array<Exit.Exit<unknown, unknown>> = [];
-      const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
-        original(
-          work.pipe(
-            Effect.onExit((exit) =>
-              Effect.sync(() => {
-                attempts.push(exit);
-              }),
-            ),
-          ),
+        attempts: Array<Exit.Exit<unknown, unknown>> = [];
+      // The real waits, watched: each run is recorded, and its exit is kept to read its error.
+      const waits = Layer.unwrap(
+        Effect.gen(function* () {
+          const real = yield* GatewayWaits;
+          return Recorder.layer(GatewayWaits, {
+            wait: (...args) =>
+              real.wait(...args).pipe(
+                Effect.onExit((exit) =>
+                  Effect.sync(() => {
+                    attempts.push(exit);
+                  }),
+                ),
+              ),
+          });
+        }),
+      ).pipe(Layer.provide(GatewayWaits.layer));
+      const runtime = SettingsRuntime.runtime(
+        gatewayLayer(w.ctx, w.env).pipe(
+          Layer.provideMerge(waits),
+          Layer.provide(gatewayProject(w.env)),
+          Layer.provide(recordedLayer(w.env)),
         ),
       );
 
@@ -228,6 +491,7 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
             )
             .pipe(Effect.exit),
         );
+        expect(await runtime.runPromise(Recorder.calls(GatewayWaits, "wait"))).toHaveLength(1);
         expect(attempts).toHaveLength(1);
         typed(attempts[0]!);
         expect(w.ws.send.mock.calls.map(([text]) => JSON.parse(text))).toContainEqual(
@@ -237,12 +501,11 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
           }),
         );
       } finally {
-        inspect.mockRestore();
         await runtime.dispose();
         w.db.close();
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [[null], [{}], [{ rev: "1" }], [{ rev: 1.5 }]] },
+    { seed: 119120, numRuns: runsFor({ fast: 6, full: 20 }), examples: [[null], [{}], [{ rev: "1" }], [{ rev: 1.5 }]] },
   );
 });
 
@@ -251,7 +514,9 @@ it("control bucket bytes fail as a typed parse error before its HTTP error respo
     fc.asyncProperty(malformed(Schema.Array(Schema.Number)), async (raw) => {
       const w = world(),
         attempts: Array<Exit.Exit<unknown, unknown>> = [];
+
       const original = Effect.result;
+
       const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
         original(
           work.pipe(
@@ -276,6 +541,7 @@ it("control bucket bytes fail as a typed parse error before its HTTP error respo
             args: ["key", raw, "checksum"],
           }),
         });
+
         const exit = await Effect.runPromiseExit(parserControl(request, w.env));
         expect(Exit.isSuccess(exit)).toBe(true);
         expect(attempts).toHaveLength(1);
@@ -288,7 +554,7 @@ it("control bucket bytes fail as a typed parse error before its HTTP error respo
         w.db.close();
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [[null], [{}], [["byte"]]] },
+    { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [["byte"]]] },
   );
 });
 
@@ -299,7 +565,9 @@ for (const field of ["put key", "put checksum", "head key"] as const) {
       fc.asyncProperty(input, async (raw) => {
         const w = world(),
           attempts: Array<Exit.Exit<unknown, unknown>> = [];
+
         const original = Effect.result;
+
         const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
           original(
             work.pipe(
@@ -335,6 +603,7 @@ for (const field of ["put key", "put checksum", "head key"] as const) {
               args,
             }),
           });
+
           const exit = await Effect.runPromiseExit(parserControl(request, w.env));
           expect(attempts).toHaveLength(1);
           typed(attempts[0]!);
@@ -347,7 +616,7 @@ for (const field of ["put key", "put checksum", "head key"] as const) {
           w.db.close();
         }
       }),
-      { seed: 119120, numRuns: 20, examples: [[{ toString: 0 }], [null], [17]] },
+      { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[{ toString: 0 }], [null], [17]] },
     );
   });
 }
@@ -367,13 +636,18 @@ for (const service of ["process", "record"] as const) {
             service === "process"
               ? await runtime.runPromiseExit(ProcessService)
               : await Effect.runPromiseExit(recordRead(w.ctx, undefined, { _tag: "spans" }, 0, 0));
+
           typed(exit, service === "record" ? "SinkError" : "LedgerError");
         } finally {
           await runtime.dispose();
           w.db.close();
         }
       }),
-      { seed: 119120, numRuns: 20, examples: [[null], ["{"], ['["project"]'], ['["project",17]']] },
+      {
+        seed: 119120,
+        numRuns: runsFor({ fast: 6, full: 20 }),
+        examples: [[null], ["{"], ['["project"]'], ['["project",17]']],
+      },
     );
   });
 }
@@ -386,6 +660,7 @@ it("processDescriptor checks the saved value before returning it to a caller", a
     build: Schema.String,
     owner: Writer,
   });
+
   await fc.assert(
     fc.asyncProperty(malformed(descriptor), async (raw) => {
       const w = world();
@@ -398,7 +673,7 @@ it("processDescriptor checks the saved value before returning it to a caller", a
         w.db.close();
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [[null], [{}], [17]] },
+    { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [17]] },
   );
 });
 
@@ -417,7 +692,7 @@ it("Connection close checks saved tags again after startup", async () => {
         w.db.close();
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [[null], [{}], [17]] },
+    { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [17]] },
   );
 });
 
@@ -426,10 +701,12 @@ it("Connection rejects missing or malformed URL segments with a typed error", as
     fc.constantFrom("/ws", "/ws/key", "/ws/%/tab", "/ws/key/%"),
     fc.string().map((text) => `/ws/${encodeURIComponent(text)}%/tab`),
   );
+
   await fc.assert(
     fc.asyncProperty(invalid, async (path) => {
       const w = world(),
         runtime = connectionRuntime(w.ctx, w.env, config);
+
       vi.stubGlobal(
         "WebSocketPair",
         class {
@@ -451,6 +728,69 @@ it("Connection rejects missing or malformed URL segments with a typed error", as
         w.db.close();
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [["/ws"], ["/ws/%/tab"], ["/ws/key/%"]] },
+    { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [["/ws"], ["/ws/%/tab"], ["/ws/key/%"]] },
   );
 });
+
+function instanceFixture(config: StartsTest.Fixture) {
+  return StartsTest.fixture(config, (algorithm, data) =>
+    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  );
+}
+
+StartsTest.law(
+  "T753 L19 the legacy cap, fallback, resend and rollover behavior remain intact",
+  fc.record({
+    cap: fc.option(fc.integer({ min: 1, max: 1_000_000_000 }), { nil: undefined }),
+    id: fc.integer({ min: 1, max: 1_000_000 }),
+  }),
+  ({ cap, id }) =>
+    Effect.gen(function* () {
+      const w = yield* Effect.acquireRelease(Effect.sync(world), (value) => Effect.sync(() => value.db.close()));
+      let size = 0;
+      const raw = w.ctx.storage.sql;
+
+      const ctx = {
+        ...w.ctx,
+        id: { ...w.ctx.id, name: JSON.stringify(["settings-law", "spans/0"]) },
+        storage: {
+          ...w.ctx.storage,
+          sql: new Proxy(raw, { get: (target, key) => (key === "databaseSize" ? size : Reflect.get(target, key)) }),
+        },
+      };
+
+      const chain = Chain.cases.spans.make({});
+
+      const row = (n: number) => ({
+        span: {
+          traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+          spanId: n.toString(16).padStart(16, "0"),
+          parentSpanId: null,
+          name: "settings-cap-fixture",
+          kind: "internal" as const,
+          startTimeUnixNano: "1794096000000000000",
+          endTimeUnixNano: "1794096000001000000",
+          attributes: {},
+          events: [],
+          links: [],
+          resource: { attributes: { "fab.object": "settings-cap-fixture" } },
+          ok: true,
+        },
+        content: null,
+      });
+
+      const old = row(id);
+      const next = row(id + 1);
+      const fresh = row(id + 2);
+      expect(yield* recordWrite(ctx, cap, chain, 0, [old])).toEqual({ _tag: "written" });
+      size = (cap ?? 1_000_000_000) - 1;
+      expect(yield* recordWrite(ctx, cap, chain, 0, [next])).toEqual({ _tag: "written" });
+      size++;
+      expect(yield* recordWrite(ctx, cap, chain, 0, [old])).toEqual({ _tag: "written" });
+      expect(yield* recordWrite(ctx, cap, chain, 0, [old, fresh])).toEqual({
+        _tag: "rolled",
+        next: "spans/1",
+        had: [old.span.spanId],
+      });
+    }),
+);

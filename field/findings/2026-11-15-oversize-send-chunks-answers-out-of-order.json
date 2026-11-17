@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-oversize-send-chunks-answers-out-of-order",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Runner.ts",
+    "line": 320
+  },
+  "says": "In next/, a send_chunks over INPUT_BYTES was saved as { type } alone, so no target was found and `behind` did not hold it after an earlier send_chunks still waiting on the same name: its too_big answer could come first, and its echo named no target. Fixed in the same pull request: the oversize entry is saved as the answer's own echo, `{type, to, as}` with only the items dropped, so `behind` holds it behind the earlier send to that name and its too_big echoes the target and input type. A `to` or `as` over 256 characters stays out, as before; a process name is at most 256 characters, so a dropped `to` names no inbox an earlier send could wait on. The per-pair L11 law sends an oversize send_chunks behind a waiting one and checks the answer order and the echo, and L12 checks the echo of an oversize send.",
+  "proof": "Runner.ts:320 returned { cmd: { type }, oversize: \"too_big\" }, and `behind` returns false when the target is none.",
+  "cost": "A writer that tells its chunked sends apart by answer order would file the oversize send's too_big under the earlier send, and the answer could not say which name it was for.",
+  "head": "1bc71fd31a15d5680aa13bf38b146060139ec29b",
+  "ticket": "kamp-us/tea-fabrika#1041",
+  "pr": "kamp-us/tea-fabrika#1310"
+}

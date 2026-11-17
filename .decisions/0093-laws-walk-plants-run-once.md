@@ -1,7 +1,7 @@
 ---
 id: 0093
 title: Each law the tests step writes is a property that walks the machine, and each plant is run once and recorded, never kept, as a trial
-status: accepted
+status: amended-in-part by [0523](0523-advice-rules-block-where-clean.md), [0527](0527-type-laws-get-a-type-label.md), [0580](0580-law-options-carry-plant-and-label.md)
 date: 2026-11-11
 tags: [tests, laws, properties, plants, lint, mutation, trial, next]
 ---
@@ -146,3 +146,5 @@ this file.
 ## Amendments
 
 - 2026-11-11: the second check ran as [experiment 257](../experiments/257-second-check-blind-laws.md). A law file written from the plan alone, blind to the old tests, killed 98 of 144 mutants of `gateway/internal/waiting.ts`; the old file killed the same 98. By the rule above ("at least as many"), the trial ends and this stays the rule. One small file, so the write-up says what it cannot tell us.
+- 2026-11-15: [0579](0579-property-laws-use-it-prop.md) drops `fc.assert(fc.property(...))` and `fc.assert(fc.asyncProperty(...))` as ways to write a law in `next/` and our tooling. A law is `it.prop` or `it.effect.prop`, and the lint rule's list of property shapes follows with the sweep.
+- 2026-11-15: [0580](0580-law-options-carry-plant-and-label.md) moves the plant out of a comment into a `plant` option of the law's declaration, and the label out of the title into an option with a required reason; a title prefix becomes an error, and a CI check holds each plant against the ticket's run row. The rules above on what a plant is and that it is run once and not kept hold.

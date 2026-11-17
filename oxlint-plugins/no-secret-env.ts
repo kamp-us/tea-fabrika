@@ -44,6 +44,7 @@ const SECRET =
   /^(?:.*_)?(?:(?:API|PRIVATE|SECRET|ACCESS|SIGNING)_?KEY|TOKEN|SECRET|PASSWORD|PASSWD|AUTH|CREDENTIALS?)(?:_.*)?$/;
 
 const NOT_SECRET = /^.*_(?:HASH|SOCK)$/;
+
 const isSecret = (name: string): boolean => SECRET.test(name) && !NOT_SECRET.test(name);
 
 const READ =
@@ -52,6 +53,7 @@ const READ =
 export const noSecretEnv: CreateRule = {
   create(context) {
     const source = context.sourceCode;
+
     /** `!x`, `delete x`, `x === undefined` and the like: an answer of yes or no, or a removal. */
     const onlyAsksIfSet = (node: Node & { readonly parent: Node }): boolean => {
       if (grouped(source, node) > 0) {
@@ -73,8 +75,10 @@ export const noSecretEnv: CreateRule = {
       }
 
       const other = parent.left === node ? parent.right : parent.left;
+
       return other.type === "Identifier" && other.name === "undefined" && grouped(source, other) === 0;
     };
+
     return {
       MemberExpression(node) {
         const isEnv = dotted(node.object) === "process.env";

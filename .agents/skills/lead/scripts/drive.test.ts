@@ -35,14 +35,15 @@ import {
   relatedIn,
   commitsSaid,
   decide,
+  heldBy,
   dockerHolder,
   endName,
   FINISH,
   firstEventAt,
-  freeLane,
-  holdLane,
+  freeQuest,
+  holdQuest,
   holdsElectron,
-  laneRunning,
+  questRunning,
   machine,
   NO_ESCALATION,
   phasesIn,
@@ -53,14 +54,14 @@ import {
   STEPS,
   tailFor,
 } from "./drive.ts";
-import { boxTree } from "./lane.ts";
+import { boxTree } from "./quest.ts";
 import * as RunId from "./runid.ts";
 
 // Today's tooling. The machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
 
 const ask = {
-  lane: "l",
+  quest: "l",
   step: "build" as const,
   agent: "codex" as const,
   model: "gpt-6-astra",
@@ -117,6 +118,7 @@ const recorded = (
     report,
     problem: null,
   };
+
   const [read, cmds] = machine.update.step_read_ok({ phase: "reading", ask, answer: typed, spent: NO_SPENT }, {
     type: "step_read_ok",
     value,
@@ -130,6 +132,7 @@ const recorded = (
     type: "backup_push_ok",
     value: { ok: pushed, detail: pushed ? "" : "rejected" },
   } as never);
+
   return { state, cmd: after[0] as Recorded };
 };
 
@@ -167,11 +170,13 @@ describe("drive keeps a box that holds work, today's tooling", () => {
   // outcome. Plants run once, both red: drop them on the backup push; drop them on a failed push.
   it("records the plants the typed answer names, through a push or a failed one, and none when it names none", () => {
     const plant = fc.record({ law: fc.string(), plant: fc.string(), result: fc.constantFrom("red", "green") });
+
     const typed = fc.record({
       verb: fc.constantFrom("done", "send", "ask", "skip", "stuck"),
       reason: fc.string(),
       plants: fc.option(fc.array(plant, { maxLength: 6 }), { nil: undefined }),
     });
+
     fc.assert(
       fc.property(typed, fc.nat({ max: 2 }), left, fc.boolean(), (said, commits, held, pushed) => {
         const to = said.verb === "send" ? "tests" : null;
@@ -189,9 +194,11 @@ describe("drive keeps a box that holds work, today's tooling", () => {
 
 describe("drive takes a skip answer, today's tooling", () => {
   const reason = fc.stringMatching(/^[a-z][a-z ]{0,30}[a-z]$/);
+
   const steps = fc.constantFrom("tests", "build", "mutation", "review") as fc.Arbitrary<
     "tests" | "build" | "mutation" | "review"
   >;
+
   const read = (step: "tests" | "build" | "mutation" | "review", report: string) =>
     machine.update.step_read_ok({ phase: "reading", ask: { ...ask, step }, answer: null, spent: NO_SPENT }, {
       type: "step_read_ok",
@@ -283,13 +290,16 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
   // no verb, marks around the line (` and **), upper case, a line inside a code fence, a fence that
   // never closes, and a review whose verdict line is not merge-ready.
   type Step = "mutation" | "review";
+
   const steps = fc.constantFrom<Step>("mutation", "review");
   const reason = fc.stringMatching(/^[a-z][a-z ]{0,20}[a-z]$/);
   const wrap = fc.constantFrom("", "`", "**");
+
   const spell = fc.constantFrom(
     (l: string) => l,
     (l: string) => l.toUpperCase(),
   );
+
   const readable = fc.constantFrom(
     ["done", "done"],
     ["send tests", "send:tests:step_said"],
@@ -299,6 +309,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
     ["skip", "skip:step_said"],
     ["stuck", "stuck:step_said"],
   );
+
   const line = fc.oneof(
     {
       arbitrary: fc.tuple(readable, reason).map(([[verb, name], text]) => ({ text: `answer: ${verb} ${text}`, name })),
@@ -311,15 +322,19 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
       weight: 1,
     },
   );
+
   const lines = fc.array(fc.tuple(line, wrap, spell), { maxLength: 4 });
+
   const ready = fc.constantFrom(
     "merge-ready; findings: 0",
     "**merge-ready; findings: 2**",
     "# merge-ready; findings: 1",
   );
+
   const back = fc
     .tuple(fc.integer({ min: 1, max: 12 }), fc.nat({ max: 3 }), fc.constantFrom("", "**", "`", "# "))
     .map(([n, m, mark]) => `${mark}changes: ${n}; findings: ${m}${mark === "# " ? "" : mark}`);
+
   const verdict = fc.oneof(ready, back, fc.constantFrom("", "The review", "changes: 0; findings: 1"));
   const chatter = fc.constantFrom("", "what I checked", "the answer is below", "it says answer: done in the brief");
 
@@ -342,7 +357,9 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
         },
       } as never,
     );
+
     expect(state.phase).toBe("recording");
+
     return cmds[0] as { outcome: string; exit: number; keep: boolean; reason: string };
   };
 
@@ -404,6 +421,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
             "\tanswer: Schema.Json,",
             closed ? fence.slice(0, 3) : "",
           ];
+
           const cmd = ended(step, ["merge-ready; findings: 0", ...block, own.text].join("\n"));
           expect(cmd.outcome).toBe(closed && own.name !== null ? own.name : "stuck:no_answer");
         },
@@ -418,6 +436,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
     fc.assert(
       fc.property(verdict, lines, chatter, (first, said, between) => {
         const texts = said.map(([l, w, f]) => `${w}${f(l.text)}${w}`);
+
         const read = {
           head: ask.base,
           commits: 0,
@@ -431,6 +450,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
           report: written(first, texts, between),
           problem: null,
         };
+
         const judged = decide({ ...ask, step: "review" }, read, { verb: "done", to: null, reason: "", laws: null });
         const ready = /merge-ready/.test(first);
         expect(nameOf(judged.outcome)).toBe(ready ? "done" : "stuck:no_answer");
@@ -459,6 +479,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
         answer,
       ).outcome,
     );
+
   const layout = fc.constantFrom(
     (a: Answer) => JSON.stringify(a),
     (a: Answer) => `${JSON.stringify(a, null, 2)}\n`,
@@ -498,6 +519,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
       reason: "merge-ready; findings: 0\nFull diff matches the plan.\nanswer: done read-only review complete",
       laws: null,
     };
+
     expect(judgedReview(JSON.stringify(answer), answer)).toBe("done");
   });
 
@@ -510,6 +532,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
       "answer: send tests the rule misses two cases",
       "answer: done",
     ].join("\n");
+
     const cmd = ended("review", report);
     expect(cmd.outcome).toBe("stuck:no_answer");
     expect(cmd.exit).toBe(30);
@@ -522,6 +545,7 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
   const check = fc.constantFrom(...checks);
   const detail = fc.stringMatching(/^[a-z0-9](?:[a-z0-9 /|.-]{0,40}[a-z0-9])?$/);
   const noise = fc.array(fc.stringMatching(/^[a-z ]{0,20}$/), { maxLength: 3 });
+
   const boxNewOk = (value: ReturnType<typeof startedOf>) =>
     machine.update.box_new_ok({ phase: "starting", ask: { ...ask, step: "tests" } }, {
       type: "box_new_ok",
@@ -553,18 +577,20 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
   });
 
   // Plants: record a refusal as stuck:box_failed, give it the stuck exit, keep its box, or let it
-  // move the lane's head. The stuck rate then counts steps no agent ran.
+  // move the quest's head. The stuck rate then counts steps no agent ran.
   it("a refusal ends at once as refused:<check>, exit 3, nothing kept, and never reads as stuck", () => {
     fc.assert(
       fc.property(check, detail, (c, d) => {
         const [state, cmds] = boxNewOk({ _tag: "refused", check: c, detail: d });
         expect(state.phase).toBe("recording");
+
         const cmd = cmds[0] as {
           outcome: string;
           exit: number;
           keep: boolean;
           reason: string;
         };
+
         expect(cmd.outcome).toBe(`refused:${c}`);
         expect(cmd.outcome.startsWith("stuck")).toBe(false);
         expect(cmd.exit).toBe(3);
@@ -620,6 +646,7 @@ describe("the agent cap refuses a start once 12 agents run (0012), today's tooli
 
 describe("T566 a mutation step while another Docker box runs is refused before its box, today's tooling", () => {
   const pid = fc.integer({ min: 1, max: 99_999 });
+
   const lock = fc.oneof(
     pid.map(String),
     pid.map((n) => ` ${n}\n`),
@@ -631,10 +658,13 @@ describe("T566 a mutation step while another Docker box runs is refused before i
     fc.assert(
       fc.property(fc.option(lock, { nil: null }), fc.boolean(), (text, alive) => {
         const asked: number[] = [];
+
         const holder = dockerHolder(text, (p) => {
           asked.push(p);
+
           return alive;
         });
+
         const n = Number(text?.trim());
         const named = text !== null && Number.isInteger(n) && n > 0;
         expect(holder).toBe(named && alive ? n : null);
@@ -650,7 +680,7 @@ describe("T566 a mutation step while another Docker box runs is refused before i
   });
 });
 
-describe("T569 a review reads the lane's newest mutation report in its prompt, today's tooling", () => {
+describe("T569 a review reads the quest's newest mutation report in its prompt, today's tooling", () => {
   const stepName = fc.constantFrom("plan", "tests", "build", "mutation", "review");
   const path = fc.stringMatching(/^\/b\/[a-z0-9]{1,6}\.md$/);
   const row = fc.record({ step: stepName, report: fc.option(path, { nil: null }) });
@@ -679,6 +709,7 @@ describe("T569 a review reads the lane's newest mutation report in its prompt, t
       { step: "mutation", report: "/b/p34w-mutation3.md" },
       { step: "tests", report: "/b/p34w-tests10.md" },
     ];
+
     const tail = mutationTail("review", steps, (p) => `text of ${p}`);
     expect(tail).toContain("text of /b/p34w-mutation3.md");
     expect(tail).not.toContain("mutation2");
@@ -686,33 +717,144 @@ describe("T569 a review reads the lane's newest mutation report in its prompt, t
 });
 
 describe("T429 drive names the commits check's rule and commit, today's tooling", () => {
-  const rule = fc.constantFrom("unsigned_commit", "build_touched_exam", "broken_chain", "stale_link");
+  const rule = fc.constantFrom("unsigned_commit", "build_touched_exam", "no_exam_list", "broken_chain", "stale_link");
+
   const answer = fc.record({
     reason: rule,
     sha: fc.stringMatching(/^[0-9a-f]{40}$/),
     step: fc.option(fc.constantFrom("tests", "build", "lead"), { nil: undefined }),
   });
-  const lane = new Set(["tests", "build"]);
-  const held = (a: { reason: string; step: string | undefined }) =>
-    !(a.reason === "stale_link" && !(a.step !== undefined && lane.has(a.step)));
 
-  // Plants: print only the last lines of JSON; drop the commit; name a waived stale link.
-  it("each held answer is named as rule, commit and step, and a waived stale link is not", () => {
+  const quest = new Set(["tests", "build"]);
+
+  const held = (a: { reason: string; step: string | undefined }) =>
+    a.reason !== "unsigned_commit" && !(a.reason === "stale_link" && !(a.step !== undefined && quest.has(a.step)));
+
+  // Plants: print only the last lines of JSON; drop the commit; name a waived stale link; name a
+  // missing signature.
+  it("each held answer is named as rule, commit and step, and a waived stale link or a missing signature is not", () => {
     fc.assert(
       fc.property(fc.array(answer, { minLength: 1, maxLength: 7 }), (answers) => {
         const out = answers.map((a) => JSON.stringify({ _tag: "stuck", ...a })).join("\n");
-        const said = commitsSaid({ code: 1, out, err: "commits: stuck ..." }, lane);
+        const said = commitsSaid({ code: 1, out, err: "commits: stuck ..." }, quest);
+
         const named = answers
           .filter(held)
           .map((a) => `${a.reason} ${a.sha.slice(0, 8)}${a.step ? ` step ${a.step}` : ""}`);
 
         if (named.length === 0) {
           expect(said).toMatch(/^commits check exit 1: /);
+
           return;
         }
 
         const more = named.length > 5 ? `; and ${named.length - 5} more` : "";
         expect(said).toBe(`commits check: ${named.slice(0, 5).join("; ")}${more}`);
+      }),
+      options,
+    );
+  });
+});
+
+// Decision 0161: a hand-run commit is plain, and no hand-run script refuses a step for a missing
+// signature. p34cs4, 2026-11-13: a quest of ten plain commits ended stuck:unsigned.
+describe("0161 a missing signature never holds a step, and the kept checks still do, today's tooling", () => {
+  const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
+  const quest = fc.uniqueArray(fc.constantFrom("tests", "build", "lead")).map((steps) => new Set<string>(steps));
+
+  const plain = fc.array(sha, { minLength: 1, maxLength: 12 }).map((shas) => ({
+    commits: shas.length,
+    // The commits check's own answer for a quest of plain commits: one stuck line each, and exit 1.
+    check: {
+      code: 1,
+      out: shas.map((s) => JSON.stringify({ _tag: "stuck", reason: "unsigned_commit", sha: s })).join("\n"),
+      err: "",
+    },
+  }));
+
+  const kept = fc.record({
+    reason: fc.constantFrom("build_touched_exam", "no_exam_list", "broken_chain"),
+    sha,
+  });
+
+  const done: Answer = { verb: "done", to: null, reason: "", laws: "a.test.ts" };
+
+  const read = (commits: number, unsigned: readonly string[]) => ({
+    head: "c".repeat(40),
+    commits,
+    unsigned,
+    exam: [] as string[],
+    leaks: [] as string[],
+    left: [],
+    manifests: [],
+    plancheck: null,
+    changed: 0,
+    report: "",
+    problem: null,
+  });
+
+  // Plants: hold a missing signature; ask each commit for a `fabrika` note.
+  it("property: a quest of plain commits is held by nothing, and the step's done is done", () => {
+    fc.assert(
+      fc.property(plain, quest, fc.constantFrom("tests", "build", "mutation"), ({ commits, check }, steps, step) => {
+        const unsigned = heldBy(check, steps);
+        expect(unsigned).toEqual([]);
+        expect(decide({ ...ask, step }, read(commits, unsigned), done).outcome).toEqual({
+          kind: "done",
+          part: false,
+          head: "c".repeat(40),
+        });
+      }),
+      options,
+    );
+  });
+
+  // Plants: waive every answer once one is a missing signature; pass any exit 1.
+  it("property: a rule the check still gives holds the step beside any plain commits, and names itself", () => {
+    fc.assert(
+      fc.property(plain, fc.array(kept, { minLength: 1, maxLength: 3 }), quest, ({ commits, check }, rules, steps) => {
+        const out = [check.out, ...rules.map((r) => JSON.stringify({ _tag: "stuck", ...r }))].join("\n");
+        const unsigned = heldBy({ ...check, out }, steps);
+        const named = rules.map((r) => `${r.reason} ${r.sha.slice(0, 8)}`);
+        expect(unsigned).toEqual([`commits check: ${named.join("; ")}`]);
+        const j = decide(ask, read(commits + rules.length, unsigned), done);
+        expect(nameOf(j.outcome)).toBe("stuck:unsigned");
+        expect(j.reason).toBe(unsigned[0]);
+      }),
+      options,
+    );
+  });
+
+  // Plant: read an exit above 1, or an exit 1 with no answer, as a pass.
+  it("scenario: a check that broke, or held with no answer it could name, still holds the step", () => {
+    const steps = new Set(["tests", "build"]);
+    expect(heldBy({ code: 0, out: "", err: "" }, steps)).toEqual([]);
+    expect(heldBy({ code: 1, out: "", err: "commits: no base" }, steps)).toEqual([
+      "commits check exit 1: commits: no base",
+    ]);
+    expect(heldBy({ code: 2, out: "", err: "commits: crashed" }, steps)).toEqual([
+      "commits check exit 2: commits: crashed",
+    ]);
+  });
+
+  // Plants: drop the leak check; drop the exam-path check; drop the moved-head check.
+  it("property: with plain commits, a leak, a build on an exam path and a review that moved the head are still refused", () => {
+    fc.assert(
+      fc.property(plain, quest, ({ commits, check }, steps) => {
+        const clean = read(commits, heldBy(check, steps));
+        const leak = decide(ask, { ...clean, leaks: ["src/a.ts:3"] }, done);
+        expect(nameOf(leak.outcome)).toBe("stuck:leak");
+        expect(leak.reason).toBe("added lines leak, nothing pushed: src/a.ts:3");
+        const exam = decide(ask, { ...clean, exam: ["exam-paths.json"] }, done);
+        expect(nameOf(exam.outcome)).toBe("send:tests:exam_paths");
+        expect(exam.reason).toBe("the build touched exam paths: exam-paths.json");
+        // A leak wins over the exam path, as before.
+        expect(nameOf(decide(ask, { ...clean, leaks: ["src/a.ts:3"], exam: ["exam-paths.json"] }, done).outcome)).toBe(
+          "stuck:leak",
+        );
+        const moved = decide({ ...ask, step: "review" }, clean, done);
+        expect(nameOf(moved.outcome)).toBe("stuck:review_committed");
+        expect(moved.reason).toBe("the review moved the head to cccccccc");
       }),
       options,
     );
@@ -737,10 +879,11 @@ describe("drive asks the lead for the lockfile, today's tooling", () => {
         problem: null,
       },
     } as never)[0];
+
   const manifest = fc.constantFrom("package.json", "apps/fabrika/package.json", "pnpm-workspace.yaml");
 
   // Plant: trust the step's own answer. themes build2 (ticket 385): a box could not refresh the
-  // lockfile, answered send tests, and the lane looped build -> tests -> build.
+  // lockfile, answered send tests, and the quest looped build -> tests -> build.
   it("a lockfile left behind is an ask for the lead, whatever the step answered, and names each manifest", () => {
     fc.assert(
       fc.property(answer, fc.uniqueArray(manifest, { minLength: 1 }), (report, paths) => {
@@ -806,6 +949,7 @@ describe("the box's changes are read from its status, today's tooling", () => {
           report,
           problem: null,
         };
+
         const j = decide({ ...ask, step: "review" }, read);
         expect(nameOf(j.outcome)).toBe("stuck:review_committed");
       }),
@@ -827,6 +971,7 @@ describe("the box's changes are read from its status, today's tooling", () => {
       report: "answer: stuck no network",
       problem: null,
     };
+
     expect(nameOf(decide(ask, read, { verb: "done", to: null, reason: "", laws: null }).outcome)).toBe(
       "stuck:no_commit",
     );
@@ -842,7 +987,7 @@ describe("the box's changes are read from its status, today's tooling", () => {
   });
 
   // Ticket 850: a review asked for plant records that already ran, the tests step answered them with
-  // no file change, and the gate ended it stuck:no_commit until the budget stopped the lane
+  // no file change, and the gate ended it stuck:no_commit until the budget stopped the quest
   // (acpcancel and sjob1, 2026-11-11). Plants run once, all red: drop the plants check (no plants
   // passes); drop the clean-tree check (changed files pass); keep the old stuck for every tests step.
   it("property: a tests step with no commit is done only when it names plants and left its tree clean", () => {
@@ -851,6 +996,7 @@ describe("the box's changes are read from its status, today's tooling", () => {
       plant: fc.string({ maxLength: 20 }),
       result: fc.constantFrom("red" as const, "green" as const),
     });
+
     fc.assert(
       fc.property(fc.array(plant, { maxLength: 4 }), fc.nat({ max: 3 }), (plants, changed) => {
         const read = {
@@ -866,6 +1012,7 @@ describe("the box's changes are read from its status, today's tooling", () => {
           report: "",
           problem: null,
         };
+
         const said: Answer = { verb: "done", to: null, reason: "the records", laws: null, plants };
         const j = decide({ ...ask, step: "tests" }, read, said);
         const records = plants.length > 0 && changed === 0;
@@ -888,10 +1035,12 @@ describe("T341 a step commit's subject says what the step did, today's tooling",
     fc.assert(
       fc.property(text, text, step, fc.boolean(), (prose, reason, s, alone) => {
         const answer = JSON.stringify({ verb: "done", to: null, reason, laws: null });
+
         const subject = commitSubject(
           { ticket: "7", step: s },
           alone ? `${answer}\n` : `\n## ${prose}\n\nmore\n${answer}\n`,
         );
+
         expect(subject).toBe(`T7 ${s}: ${(alone ? reason : prose).slice(0, 72)}`);
         expect(subject).not.toContain("\n");
         expect(subject).not.toContain("{");
@@ -909,6 +1058,7 @@ describe("T341 a step commit's subject says what the step did, today's tooling",
 describe("T341 drive reads what a box holds from outside it, today's tooling", () => {
   const root = mkdtempSync(join(tmpdir(), "drive-box-"));
   const env = { BOXES: root };
+
   const git = (...args: string[]) =>
     spawnSync(
       "git",
@@ -970,6 +1120,7 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
   it("scenario: a case-only rename is named by its new name, on a disk that ignores case or keeps it", () => {
     const top = mkdtempSync(join(tmpdir(), "drive-case-"));
     const box = boxTree(top, "c");
+
     const cgit = (...args: string[]) =>
       spawnSync(
         "git",
@@ -984,6 +1135,7 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
         ],
         { encoding: "utf8" },
       );
+
     spawnSync("git", ["init", "-q", "--separate-git-dir", join(top, "c-gitdata"), box]);
     mkdirSync(join(box, "src"));
 
@@ -1028,6 +1180,7 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
 
 describe("T341 a step's agent runs in its own box, on the row its step allows, today's tooling", () => {
   const dir = mkdtempSync(join(tmpdir(), "drive-row-"));
+
   const env = {
     MAIN: join(dir, "main"),
     BOXES: join(dir, "boxes"),
@@ -1035,21 +1188,27 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
     CODEX_MODEL: "",
     CODEX_EFFORT: "",
   };
+
   const prompt = join(dir, "prompt.md");
   writeFileSync(prompt, "do the step\nRELATED=a.test.ts\n");
+
   // A mutation step's container run, already done: it left its report and said so.
   const boxed: MutboxRun = (args) =>
     Effect.sync(() => {
       const out = args[args.indexOf("--out") + 1] ?? "";
       mkdirSync(out, { recursive: true });
       writeFileSync(join(out, "mutbox.json"), "{}\n");
+
       return { code: 0, out: JSON.stringify({ outcome: "done", reason: "", detail: "" }) };
     });
+
   const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
     "plan" | "tests" | "build" | "mutation" | "review"
   >;
+
   const agent = fc.constantFrom("codex", "claude") as fc.Arbitrary<"codex" | "claude">;
-  const lane = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
+  const quest = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
+
   const drafted = (step: "plan" | "tests" | "build" | "mutation" | "review", agent: "codex" | "claude", box: string) =>
     Effect.gen(function* () {
       const rows = {
@@ -1057,11 +1216,13 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
         "codex-read": Agent.fakeAdapter(() => Agent.saying("done")),
         claude: Agent.fakeAdapter(() => Agent.saying("done")),
       };
+
       const agents = Agent.makeAgents({
         adapters: rows,
         sessions: Agent.memorySessions(),
         reaper: Agent.noReaper,
       });
+
       const sub = {
         deps: {
           ...ask,
@@ -1073,7 +1234,9 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
           report: join(dir, "report.md"),
         },
       };
+
       yield* Stream.runDrain(agentsDraft(env, agents, boxed)(sub as never));
+
       return rows;
     });
 
@@ -1086,7 +1249,7 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
   // Plants: run every step in BOXES; run a plan in a box; run a review on the row that writes.
   it("a plan reads the main checkout and every other step works in its own box, never in a folder above it", () =>
     fc.assert(
-      fc.asyncProperty(steps, agent, lane, fc.integer({ min: 1, max: 99 }), (step, agent, name, n) =>
+      fc.asyncProperty(steps, agent, quest, fc.integer({ min: 1, max: 99 }), (step, agent, name, n) =>
         drafted(step, agent, `${name}-${step}${n}`).pipe(
           Effect.tap((rows) =>
             Effect.sync(() => {
@@ -1107,7 +1270,7 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
 
   it("on Codex a plan and a review start on the row that only reads, and a Claude step never starts on a Codex row", () =>
     fc.assert(
-      fc.asyncProperty(steps, agent, lane, (step, agent, name) =>
+      fc.asyncProperty(steps, agent, quest, (step, agent, name) =>
         drafted(step, agent, `${name}-${step}1`).pipe(
           Effect.tap((rows) =>
             Effect.sync(() => {
@@ -1132,7 +1295,7 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
 describe("T383 drive never passes off an older run's report, today's tooling", () => {
   // Plants: count only the box folders; reuse the highest number taken. p12 review5, 2026-11-09: box.sh refused the run, and drive returned p12-review5.md from
   // 2026-11-08, written for another head, as the step's report (field note 2026-11-09-205).
-  it("property: the next run id is held by no file an older run of that lane and step left", () => {
+  it("property: the next run id is held by no file an older run of that quest and step left", () => {
     const left = fc.array(fc.tuple(fc.integer({ min: 1, max: 6 }), fc.constantFrom(...RunId.FILES)));
     fc.assert(
       fc.property(fc.constantFrom("plan", "review", "build"), left, (step, files) => {
@@ -1157,6 +1320,17 @@ describe("T383 drive never passes off an older run's report, today's tooling", (
     rmSync(boxes, { recursive: true, force: true });
     expect(empty).toBe("p12-build1");
     expect(next).toBe("p12-build3");
+  });
+
+  // Plant: refuse or start over a state file that says `lane`, so an old one's boxes are taken again.
+  it("scenario: a state file drive wrote before decision 0546, naming the quest `lane`, still holds its boxes' run ids", () => {
+    const boxes = mkdtempSync(join(tmpdir(), "drive-names-"));
+    mkdirSync(join(boxes, "state"));
+    const old = { lane: "p12", ticket: "12", branch: "fabrikalfa/p12", steps: [{ step: "build", box: "p12-build4" }] };
+    writeFileSync(join(boxes, "state", "p12.json"), `${JSON.stringify(old, null, "\t")}\n`);
+    const next = RunId.next("p12", "build", runNames(boxes, "p12"));
+    rmSync(boxes, { recursive: true, force: true });
+    expect(next).toBe("p12-build5");
   });
 
   // Plants: return the path whenever the file exists; compare to the ms without the whole second.
@@ -1203,6 +1377,7 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
           report,
           problem: null,
         };
+
         const [read] = machine.update.step_read_ok({ phase: "reading", ask, answer: null, spent: NO_SPENT }, {
           type: "step_read_ok",
           value,
@@ -1211,6 +1386,7 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
         // A stuck answer is never pushed.
         if (read.phase !== "pushing") {
           expect(read.phase === "recording" && read.outcome.kind).toBe("stuck");
+
           return;
         }
 
@@ -1218,6 +1394,7 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
           type: "backup_push_ok",
           value: { ok: landed, detail: landed ? "pushed" : "botpush: push refused" },
         } as never);
+
         const cmd = cmds[0] as { outcome: string; head: string };
         expect(state.phase).toBe("recording");
         expect(cmd.head).toBe(value.head);
@@ -1237,6 +1414,7 @@ describe("a step is told its owned paths first, today's tooling (ticket 430)", (
   const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
     "plan" | "tests" | "build" | "mutation" | "review"
   >;
+
   const owner = fc.constantFrom("tests", "build", "mutation", "lead");
   const owners = fc.dictionary(fc.stringMatching(/^[a-z]{1,6}\/[a-z]{1,6}\.ts$/), owner, { maxKeys: 6 });
 
@@ -1249,13 +1427,16 @@ describe("a step is told its owned paths first, today's tooling (ticket 430)", (
 
         if (step === "plan" || step === "review") {
           expect(head).toBe("");
+
           return;
         }
 
         const listed = [...head.matchAll(/^- (\S+)$/gm)].map((m) => m[1]);
+
         const allowed = Object.keys(given).filter(
           (p) => given[p] === step || (step === "mutation" && given[p] === "tests"),
         );
+
         expect(listed).toEqual(allowed.toSorted());
         expect(head).toContain("answer ask");
         expect(head.endsWith("---\n\n")).toBe(true);
@@ -1347,58 +1528,62 @@ describe("drive holds the Electron lock outside the box, today's tooling", () =>
     const dir = mkdtempSync(join(tmpdir(), "drive-electron-"));
     const brief = join(dir, "brief.md");
     writeFileSync(brief, "brief");
+
     const r = spawnSync(process.execPath, [join(import.meta.dirname, "drive.ts"), "l", "build", brief, "--electron"], {
       encoding: "utf8",
       env: { ...process.env, BOXES: join(dir, "boxes") },
     });
+
     rmSync(dir, { recursive: true, force: true });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("--electron is for --agent claude");
   });
 });
 
-describe("one live process drives a lane, today's tooling", () => {
+describe("one live process drives a quest, today's tooling", () => {
   // Plants: never read the lock's owner; keep a dead owner's lock; free a lock another holds.
   // p39s1, 2026-11-11: a second chain started 18 s after the first, and both took p39s1-tests2.
-  it("scenario: the lane is taken, refused to a live owner, taken over from a dead one, freed only by its own", () => {
-    const boxes = mkdtempSync(join(tmpdir(), "drive-lane-"));
+  it("scenario: the quest is taken, refused to a live owner, taken over from a dead one, freed only by its own", () => {
+    const boxes = mkdtempSync(join(tmpdir(), "drive-quest-"));
     const lock = join(boxes, "state", "l.lock");
     const dead = spawnSync(process.execPath, ["-e", ""]).pid;
     const live = process.ppid;
 
-    expect(holdLane(boxes, "l")).toBeNull();
+    expect(holdQuest(boxes, "l")).toBeNull();
     expect(readFileSync(lock, "utf8")).toBe(String(process.pid));
-    expect(holdLane(boxes, "l")).toBeNull();
+    expect(holdQuest(boxes, "l")).toBeNull();
     writeFileSync(lock, String(live));
-    expect(holdLane(boxes, "l")).toBe(live);
-    freeLane(boxes, "l");
+    expect(holdQuest(boxes, "l")).toBe(live);
+    freeQuest(boxes, "l");
     expect(readFileSync(lock, "utf8")).toBe(String(live));
     writeFileSync(lock, String(dead));
-    expect(holdLane(boxes, "l")).toBeNull();
-    freeLane(boxes, "l");
+    expect(holdQuest(boxes, "l")).toBeNull();
+    freeQuest(boxes, "l");
     const gone = existsSync(lock);
     rmSync(boxes, { recursive: true, force: true });
     expect(gone).toBe(false);
   });
 
-  it("scenario: a step started while another process drives its lane is refused before any box is made", () => {
-    const dir = mkdtempSync(join(tmpdir(), "drive-lane-"));
+  it("scenario: a step started while another process drives its quest is refused before any box is made", () => {
+    const dir = mkdtempSync(join(tmpdir(), "drive-quest-"));
     const boxes = join(dir, "boxes");
     const brief = join(dir, "brief.md");
     writeFileSync(brief, "brief");
     mkdirSync(join(boxes, "state"), { recursive: true });
     writeFileSync(join(boxes, "state", "l.lock"), String(process.pid));
+
     const r = spawnSync(process.execPath, [join(import.meta.dirname, "drive.ts"), "l", "tests", brief], {
       encoding: "utf8",
       env: { ...process.env, BOXES: boxes },
     });
+
     const made = readdirSync(boxes);
     const still = readFileSync(join(boxes, "state", "l.lock"), "utf8");
     rmSync(dir, { recursive: true, force: true });
     expect(r.status).toBe(3);
     expect(JSON.parse(r.stdout)).toMatchObject({
-      outcome: "refused:lane_running",
-      reason: laneRunning("l", process.pid),
+      outcome: "refused:quest_running",
+      reason: questRunning("l", process.pid),
     });
     expect(made).toEqual(["state"]);
     expect(still).toBe(String(process.pid));
@@ -1464,6 +1649,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
   const box = fc.stringMatching(/^[a-z0-9]{1,8}-mutation[1-9]$/);
   const text = fc.stringMatching(/^[A-Za-z0-9 _.,:-]{0,40}$/);
   const line = (outcome: string, reason: string, detail: string) => JSON.stringify({ outcome, reason, detail });
+
   // One mutation draft against a prompt file and a stand-in for mutbox.ts: what the turn ended as,
   // the agents it started, the command lines mutbox got and the report file the step left.
   const drafted = (
@@ -1474,19 +1660,23 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
   ) =>
     Effect.gen(function* () {
       const row = Agent.fakeAdapter(() => Agent.saying("done"));
+
       const agents = Agent.makeAgents({
         adapters: { codex: row, "codex-read": row, claude: row },
         sessions: Agent.memorySessions(),
         reaper: Agent.noReaper,
       });
+
       const calls: ReadonlyArray<string>[] = [];
       const prompt = join(dir, `${name}-prompt.md`);
       const report = join(dir, `${name}.md`);
       mkdirSync(env.BOXES, { recursive: true });
       writeFileSync(prompt, brief);
       rmSync(report, { force: true });
+
       const turned = yield* mutationDraft((args) => {
         calls.push(args);
+
         return mutbox(args);
       })(env, agents, {
         ...ask,
@@ -1498,6 +1688,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         report,
         events: join(dir, `${name}.jsonl`),
       });
+
       return {
         turned,
         started: row.seen.started,
@@ -1506,6 +1697,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         saved: readFileSync(prompt, "utf8"),
       };
     });
+
   // What the reads find after such a step: the box untouched, no commit, no report of an agent's.
   const readNothing = {
     head: ask.base,
@@ -1520,6 +1712,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
     report: "",
     problem: null,
   };
+
   const written = (out: string, summary: string) => {
     mkdirSync(out, { recursive: true });
     writeFileSync(join(out, "mutbox.json"), summary);
@@ -1544,11 +1737,13 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
               : method === "exit"
                 ? { code: 30, out: `${line("done", "", "")}\n` }
                 : { code: exit, out: "not a line" };
+
           return drafted(
             (args) =>
               Effect.sync(() => {
                 // Even with a report on disk, a stuck run hands nothing to an agent.
                 written(args[args.indexOf("--out") + 1] ?? "", "{}\n");
+
                 return said;
               }),
             name,
@@ -1629,10 +1824,12 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         (name, tests, base, root, summary, skip) => {
           const report = `${JSON.stringify({ outcome: skip ? "skip" : "done", ...summary })}\n`;
           const brief = `Use the mutation skill.\nRELATED=${tests.join(",")}\nSeed 119120.\n`;
+
           return drafted(
             (args) =>
               Effect.sync(() => {
                 written(args[args.indexOf("--out") + 1] ?? "", report);
+
                 return { code: skip ? 40 : 0, out: `${line(skip ? "skip" : "done", "", "")}\n` };
               }),
             name,
@@ -1706,11 +1903,13 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
     const dir = mkdtempSync(join(tmpdir(), "drive-mutbox-"));
     const brief = join(dir, "brief.md");
     writeFileSync(brief, "Use the mutation skill. RELATED: a.test.ts\n");
+
     const r = spawnSync(
       process.execPath,
       [join(import.meta.dirname, "drive.ts"), "l", "mutation", brief, "--agent", "claude"],
       { encoding: "utf8", env: { ...process.env, BOXES: join(dir, "boxes") } },
     );
+
     rmSync(dir, { recursive: true, force: true });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("RELATED=<paths>");

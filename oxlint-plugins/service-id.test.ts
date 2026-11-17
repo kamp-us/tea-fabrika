@@ -8,11 +8,15 @@ import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 
 const CODE = "fabrika(service-id)";
+
 const P = "@kampus/libfabrika";
+
 const SRC = "next/packages/libfabrika/src";
+
 const root = resolve(import.meta.dirname, "..");
 
 const word = fc.stringMatching(/^[a-z]{2,6}$/);
+
 const Pascal = word.map((w) => `${w[0]!.toUpperCase()}${w.slice(1)}Svc`);
 
 /** A file of numbered lines, and the lines the rule must fire on. */
@@ -32,6 +36,7 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
         async ({ alias, folder, name, other }) => {
           const at = `${SRC}/${folder}/${name}.ts`;
           const base = `${P}/${folder}/${name}`;
+
           const files = {
             // Barrel import, the curried class form, a second service in the file, and a Reference.
             [at]: file([
@@ -120,6 +125,7 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
               ['export class Old extends Context.Service<Old, {}>()("old/Old") {}', false],
             ]),
           };
+
           const linted = await plant(Object.fromEntries(Object.entries(files).map(([path, f]) => [path, f.text])));
 
           for (const [path, f] of Object.entries(files)) {
@@ -132,7 +138,7 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
   });
 
   // The plan's mapping, old to new, kept here because diagnostics can hold either spelling.
-  // `ProgramRunner` is the next slice's and has no row.
+  // `ProgramRunner` was renamed after it, by ticket 909, and has no row.
   const mapping = [
     ["Id.ts", "Generator", "Id.Generator", "Id.Generator"],
     ["access/ClientManager.ts", "ClientManager", "ClientManager", "access/ClientManager"],
@@ -180,10 +186,12 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
 
     for (const [path, name, old, next] of mapping) {
       const lines = files.get(path) ?? [['import { Context } from "effect";', false]];
+
       const declare = (id: string, n: number) =>
         name === null
           ? `export const notes${n} = () => Context.Reference<number>("${id}", { defaultValue: () => 0 });`
           : `export class ${name}${n === 0 ? "" : "Old"} extends Context.Service<${name}, {}>()("${id}") {}`;
+
       lines.push([declare(`${P}/${next}`, 0), false]);
 
       // The old spelling, as a second class of the same name in its file, so the expected ID is the same.
@@ -207,16 +215,19 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
     }
   });
 
-  it("scenario: replayed over libfabrika's own source, the rule finds only the next slice's ProgramRunner ID", () => {
+  // Law 9 of docs/plan/effect-rules-small.md. The rule blocks since ticket 909, so it starts at zero
+  // (decision 0168). The real tree is the input: no generator can stand in for the IDs that are there.
+  it("scenario: replayed over libfabrika's own source, the rule finds nothing", () => {
     const ran = spawnSync(
       join(root, "node_modules/.bin/oxlint"),
       [`--config=${join(root, ".oxlintrc.json")}`, "--disable-nested-config", "--no-ignore", "--format=json", SRC],
       { cwd: root, encoding: "utf8", maxBuffer: 2 ** 30, timeout: 120_000 },
     );
+
     const report: { readonly diagnostics: ReadonlyArray<{ readonly code?: string; readonly filename: string }> } =
       JSON.parse(ran.stdout);
+
     const hits = report.diagnostics.filter((d) => d.code === CODE).map((d) => d.filename);
-    // The decision 0023 sweep leaves only Runner's ID, which the next slice renames with its other sites.
-    expect(hits).toEqual([`${SRC}/runtime/Runner.ts`]);
+    expect(hits).toEqual([]);
   });
 });

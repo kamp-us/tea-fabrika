@@ -1,29 +1,78 @@
+/**
+ * A machine that picks the next due time of a repeating job. The runner owns the alarm.
+ */
 import type { AnyCmdDef, CmdOf, Reducer, Settled } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
-import { Duration, Option, Result, Schema } from "effect";
+import * as Duration from "effect/Duration";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
+/**
+ * Schema for the job's state: `idle` with the next due time, or `running` with the time of the
+ * timer message that started it. Both keep the period in milliseconds.
+ *
+ * @category models
+ */
 export const Model = Schema.TaggedUnion({
-  idle: { next: Schema.Number, period: Schema.Int },
-  running: { due: Schema.Number, period: Schema.Int },
+  idle: { next: Schema.Finite, period: Schema.Int },
+  running: { due: Schema.Finite, period: Schema.Int },
 });
+
+/**
+ * The job's state: `idle` with the next due time, or `running` with the time of the timer message
+ * that started it.
+ *
+ * @category models
+ */
 export type Model = typeof Model.Type;
 
-const Timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number });
+const Timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite });
 
-export class ScheduledJobError extends Schema.TaggedError<ScheduledJobError>()("ScheduledJobError", {
-  reason: Schema.Literals(["bad_period"]),
-}) {}
+/**
+ * The period given to `make` is not a whole, positive number of milliseconds.
+ *
+ * @category errors
+ */
+export class ScheduledJobError extends Schema.TaggedError<ScheduledJobError, { readonly brand: unique symbol }>()(
+  "ScheduledJobError",
+  {
+    reason: Schema.Literals(["bad_period"]),
+  },
+) {}
 
+/**
+ * Returns the time the runner should wake the job next, or null while the job is running.
+ *
+ * @category getters
+ */
 export const wake = (model: Model): number | null => (model._tag === "idle" ? model.next : null);
 
-/** The runner owns the alarm; this machine only chooses its next due time. */
+/**
+ * Creates the machine for a repeating job, as a `Result` that holds `ScheduledJobError` for a bad
+ * period.
+ *
+ * **Details**
+ *
+ * The machine starts idle and due at time 0, unless it is given a saved state. A timer message at
+ * or after the due time starts the job: the machine runs `work` with the timer's time and the
+ * period. When
+ * the command settles, ok or error, it goes idle again and the next due time is the settle time
+ * plus the period. A timer message that arrives early, or while running, changes nothing.
+ *
+ * **Gotchas**
+ *
+ * The period must come to a whole number of milliseconds. A fraction of a millisecond is refused.
+ *
+ * @category constructors
+ */
 export const make = <C extends AnyCmdDef>(config: {
   readonly period: Duration.Input;
   readonly cmd: C;
   readonly work: (due: number, period: number) => CmdOf<C>;
 }) => {
   if (typeof config.period === "number" && !Number.isSafeInteger(config.period)) {
-    return Result.fail(new ScheduledJobError({ reason: "bad_period" }));
+    return Result.fail(ScheduledJobError.make({ reason: "bad_period" }));
   }
 
   const duration = Duration.fromInput(config.period);
@@ -32,7 +81,7 @@ export const make = <C extends AnyCmdDef>(config: {
   const nanos = Option.flatMap(duration, Duration.toNanos);
 
   if (!Number.isSafeInteger(period) || period <= 0 || Option.isNone(nanos) || nanos.value % 1_000_000n !== 0n) {
-    return Result.fail(new ScheduledJobError({ reason: "bad_period" }));
+    return Result.fail(ScheduledJobError.make({ reason: "bad_period" }));
   }
 
   const settle = (s: Model, m: { readonly at: number }): readonly [Model, readonly CmdOf<C>[]] =>

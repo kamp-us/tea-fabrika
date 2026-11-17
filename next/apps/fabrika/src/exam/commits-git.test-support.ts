@@ -7,14 +7,19 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { runsFor } from "@kampus/vitest";
 import * as fc from "fast-check";
 import { afterAll, expect } from "vitest";
 import { type Role, signedText } from "./commits.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
+
 const PROGRAM = join(import.meta.dirname, "commits.ts");
+
 const EXAM_LIST = readFileSync(join(ROOT, "exam-paths.json"), "utf8");
+
 const TOP = realpathSync(mkdtempSync(join(tmpdir(), "commits-")));
+
 afterAll(() => rmSync(TOP, { recursive: true, force: true }));
 
 const ENV: NodeJS.ProcessEnv = {
@@ -28,6 +33,7 @@ const ENV: NodeJS.ProcessEnv = {
 };
 
 delete ENV.GITHUB_STEP_SUMMARY;
+
 delete ENV.GITHUB_ACTIONS;
 
 const sh = (cwd: string, cmd: string, args: string[], input?: string, env = ENV) => {
@@ -41,7 +47,9 @@ const sh = (cwd: string, cmd: string, args: string[], input?: string, env = ENV)
 };
 
 const KEYS = join(TOP, "keys");
+
 mkdirSync(KEYS, { mode: 0o700 });
+
 type Who = Role | "stranger";
 
 for (const signer of ["tests", "build", "lead", "stranger", "person"]) {
@@ -67,10 +75,13 @@ const stepKeys = (build = "build") =>
   `${[keyLine("tests", "tests"), keyLine("build", build), keyLine("lead", "lead")].join("\n")}\n`;
 
 const GOOD_KEYS = stepKeys();
+
 const personLine = (id: string, signer = "person") => `person:${id} namespaces="git" ${pub(signer)}`;
+
 const PERSON_KEYS = `${GOOD_KEYS}${personLine("github:42")}\n`;
 
 let count = 0;
+
 const repoCount = () => count;
 
 /** A planted repo: `main` with one commit, and the branch `pr` checked out off it. */
@@ -114,6 +125,7 @@ class Repo {
   commit(message = "c") {
     this.git("add", "-A");
     this.git("commit", "-q", "--allow-empty", "-m", message);
+
     return this.head();
   }
 
@@ -131,6 +143,7 @@ class Repo {
       "-m",
       message,
     );
+
     return this.head();
   }
 
@@ -141,12 +154,14 @@ class Repo {
   /** Commits one file under `next/`, the usual product change. */
   change(name: string) {
     this.write(`next/packages/x/src/${name}`, `${name}\n`);
+
     return this.commit(name);
   }
 
   /** Signs a link for a commit the way a step would, with any part planted another way. */
   sign(signer: Who, opts: { step?: Role; ticket?: string; version?: number; ns?: string; sha?: string } = {}) {
     const sha = opts.sha ?? this.head();
+
     const link = {
       step: opts.step ?? (signer === "stranger" ? "build" : signer),
       ticket: opts.ticket ?? "229",
@@ -154,11 +169,13 @@ class Repo {
       from: this.head(`${sha}^1^{tree}`),
       to: this.head(`${sha}^{tree}`),
     };
+
     const args = ["-Y", "sign", "-n", opts.ns ?? "fabrika-step", "-f", join(KEYS, signer)];
     const sig = sh(this.dir, "ssh-keygen", args, signedText(link));
     // oxlint-disable-next-line fabrika/no-hand-tag -- Raw signed input for the git exam, preserved from the moved tests.
     const note = { _tag: "attested", ...link, key: fingerprint(signer), sig };
     this.setNote(sha, JSON.stringify(note));
+
     return note;
   }
 
@@ -173,10 +190,12 @@ class Repo {
 
   run(args: string[], env = ENV, cwd = this.dir) {
     const ran = spawnSync("node", [PROGRAM, ...args], { cwd, env, encoding: "utf8" });
+
     const answers = ran.stdout
       .split("\n")
       .filter((l) => l.startsWith("{"))
       .map((l) => JSON.parse(l) as Record<string, unknown>);
+
     return { code: ran.status, answers, out: ran.stdout, err: ran.stderr };
   }
 
@@ -187,8 +206,11 @@ class Repo {
 
 // oxlint-disable-next-line fabrika/no-hand-tag -- Expected wire answer for the git exam, preserved from the moved tests.
 const DONE = { _tag: "done" };
-const runs = { seed: 119120, numRuns: 5 };
+
+const runs = { seed: 119120, numRuns: runsFor({ fast: 3, full: 5 }) };
+
 const id = fc.stringMatching(/^[A-Za-z0-9._:-]{1,20}$/);
+
 const name = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
 
 const stuck = (reason: string, sha: string, more: object = {}) => ({
@@ -205,6 +227,7 @@ const ask = (...paths: string[]) => ({ _tag: "ask", to: "owner", for: "exam_read
 const verifyCommit = (r: Repo, sha: string, keys = PERSON_KEYS) => {
   const allowed = join(TOP, "git-allowed-signers");
   writeFileSync(allowed, keys);
+
   return spawnSync("git", ["-c", `gpg.ssh.allowedSignersFile=${allowed}`, "verify-commit", sha], {
     cwd: r.dir,
     env: ENV,
@@ -238,6 +261,7 @@ const acceptPgp = (r: Repo) => {
 const personLink = (r: Repo, sha: string, signer = "person") => {
   const signature = /^gpgsig(?:-sha256)? (.*(?:\n .*)*)/m.exec(r.git("cat-file", "commit", sha));
   expect(signature).not.toBeNull();
+
   return {
     // oxlint-disable-next-line fabrika/no-hand-tag -- Raw signed input for the git exam, preserved from the moved tests.
     _tag: "attested",
@@ -256,6 +280,7 @@ const verifies = (repo: Repo, note: { sig: string; step: Role }, text: string) =
   writeFileSync(join(repo.dir, ".allowed"), GOOD_KEYS);
   writeFileSync(join(repo.dir, ".sig"), note.sig);
   const args = ["-Y", "verify", "-f", ".allowed", "-I", note.step, "-n", "fabrika-step", "-s", ".sig"];
+
   return spawnSync("ssh-keygen", args, { cwd: repo.dir, input: text }).status === 0;
 };
 
@@ -269,6 +294,7 @@ const squashed = (r: Repo, notes: Array<{ note: object; commit: string }>, moveM
 
   r.git("merge", "--squash", "-q", "pr");
   const squash = r.commit("squash");
+
   const rows = notes.map(
     ({ note, commit }, i): { date: string; run: string; attested: Array<Record<string, unknown>> } => ({
       date: "2026-11-07",
@@ -289,11 +315,13 @@ const squashed = (r: Repo, notes: Array<{ note: object; commit: string }>, moveM
       ],
     }),
   );
+
   return { squash, rows };
 };
 
 const log = (r: Repo, rows: object[]) => {
   r.write("field/runs.jsonl", `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+
   return r.commit("log");
 };
 
@@ -303,6 +331,7 @@ const twoSteps = (r: Repo) => {
   const n1 = r.sign("tests");
   const c2 = r.change("b.ts");
   const n2 = r.sign("build");
+
   return [
     { note: n1, commit: c1 },
     { note: n2, commit: c2 },

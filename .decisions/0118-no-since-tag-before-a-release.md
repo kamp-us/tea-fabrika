@@ -1,12 +1,12 @@
 ---
 id: 0118
-title: Doc comments in next/ carry no @since tag until libfabrika has a released version
-status: accepted
+title: Doc comments in next/ carry no @since or @stability tag until libfabrika has a released version
+status: amended-in-part by [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md)
 date: 2026-11-11
 tags: [doc-comments, effect, style, since, libfabrika, next]
 ---
 
-# 0118: Doc comments in next/ carry no @since tag until libfabrika has a released version
+# 0118: Doc comments in next/ carry no @since or @stability tag until libfabrika has a released version
 
 ```ts
 /**
@@ -49,3 +49,7 @@ This amends 0023 in part: its doc comment rule stands, minus the one tag.
   anything written before it. That is true today as well.
 - [The doc comments pattern](../.patterns/doc-comments.md) shows Effect's own blocks, which keep
   the tag; its note on our tree now points here.
+
+## Amendments
+
+- 2026-11-15: [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md) drops `@stability` too until the first release, for the same reason as `@since`. The line above that says a module block and a public export carry `@stability` no longer holds. Both tags come back together in the one sweep at the first release.

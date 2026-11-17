@@ -8,7 +8,7 @@
 // A step holds no function: its `name` picks the runner a `Runners` layer gives for it, and its
 // `args` are plain JSON the runner reads with its own schema. So a whole flow is saved to its state
 // file before it starts. `lead` marks a step the runner may only do in the lead session's name (a
-// lead sign, a catch-up that signs); started without `--lead`, the flow parks there with `ask`.
+// lead sign, the merge queue); started without `--lead`, the flow parks there with `ask`.
 
 import { Schema } from "effect";
 
@@ -24,7 +24,9 @@ export const Step = Schema.TaggedUnion({
   check: fields,
   judge: fields,
 });
+
 export type Step = typeof Step.Type;
+
 export type Kind = Step["_tag"];
 
 /** Options a step may take: `lead` for a step only the lead session may run. */

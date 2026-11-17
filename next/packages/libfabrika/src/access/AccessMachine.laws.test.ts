@@ -17,25 +17,34 @@
 // machine's own helpers.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Result } from "effect";
+import * as Result from "effect/Result";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { type Access, access, admitted, type Folded, type MemberEvent, members, type Reason } from "./Access.ts";
 import { allows, EMPTY, foldAccess } from "./AccessFold.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const RUNS = 100;
 
 type Founded = Extract<Folded, { readonly _tag: "founded" }>;
+
 type Unfounded = Extract<Folded, { readonly _tag: "unfounded" }>;
+
 type Key = Founded["keys"] extends ReadonlyMap<string, infer K> ? K : never;
+
 type Standing = Key["_tag"];
 
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const OTHER = "person_01m6v5270hg0000000000000zz";
+
 const TO = "ledger:home";
+
 const SENT = "2026-11-11T09:00:00.000Z";
+
 const SAW = { code: "4417", label: "Mac", location: "Istanbul", method: "compare", check: "touch", has: [] } as const;
+
 const TOOK = { label: "Mac", location: "Istanbul", method: "panel", check: "touch" } as const;
 
 const ADD_SAW = {
@@ -81,13 +90,14 @@ const Choice = fc.record({
   id: fc.nat({ max: 5 }),
   pick: fc.nat(),
   raw: fc.string({ maxLength: 2 }),
-  as: fc.constantFrom("window", "agent"),
+  as: fc.constantFrom("window", "agent", "hands"),
   drops: fc.array(fc.tuple(fc.nat({ max: 3 }), fc.nat()), { maxLength: 3 }),
   founder: fc.constantFrom(P, P, OTHER, ""),
   name: fc.string({ maxLength: 3 }),
   keys: fc.array(fc.string({ maxLength: 2 }), { maxLength: 4 }),
   window: fc.option(fc.string({ maxLength: 2 }), { nil: null }),
 });
+
 type Choice = typeof Choice extends fc.Arbitrary<infer A> ? A : never;
 
 const Walk = fc.array(Choice, { maxLength: 60, size: "max" });
@@ -135,6 +145,7 @@ const personFor = (event: MemberEvent): string | null => {
 };
 
 const keysIn = (model: Folded): ReadonlyMap<string, Key> => (model._tag === "founded" ? model.keys : new Map());
+
 const idsIn = (model: Folded): ReadonlySet<string> => (model._tag === "founded" ? model.ids : new Set());
 
 const at = <A>(xs: ReadonlyArray<A>, n: number): A | undefined => (xs.length === 0 ? undefined : xs[n % xs.length]);
@@ -146,7 +157,7 @@ const withStanding = (model: Folded, test: (key: Key) => boolean): ReadonlyArray
 const SIGNERS: ReadonlyArray<readonly [number, (key: Key) => boolean]> = [
   [5, (k) => k._tag === "live" && k.rank === "person"],
   [3, (k) => k._tag === "live" && k.rank === "recovery"],
-  [1, (k) => k._tag === "live" && (k.rank === "window" || k.rank === "agent")],
+  [1, (k) => k._tag === "live" && (k.rank === "window" || k.rank === "agent" || k.rank === "hands")],
   [1, (k) => k._tag === "revoked"],
   [2, (k) => k._tag === "spent"],
   [2, (k) => k._tag === "replaced"],
@@ -158,7 +169,9 @@ const pickSigner = (model: Folded, c: Choice, n: number): string => {
   const pools = SIGNERS.map(([weight, test]) => [weight, withStanding(model, test)] as const)
     .filter(([, keys]) => keys.length > 0)
     .flatMap(([weight, keys]) => Array.from({ length: weight }, () => keys));
+
   const pool = at([...pools, []], c.pool) ?? [];
+
   return at(pool, c.signer) ?? `stranger:${c.raw}#${n}`;
 };
 
@@ -174,6 +187,7 @@ const pickTarget = (model: Folded, c: Choice, n: number, fresh: string): string 
 
   const live = withStanding(model, (k) => k._tag === "live");
   const stopped = withStanding(model, (k) => k._tag !== "live");
+
   return at(c.aim === 7 ? stopped : c.aim === 6 ? [...keysIn(model).keys()] : live, c.target) ?? `${fresh}#${n}`;
 };
 
@@ -194,6 +208,7 @@ const pickFor = (model: Folded, c: Choice): string =>
 
 const pickId = (model: Folded, c: Choice, refused: ReadonlyArray<string>, n: number, kind: string): string => {
   const accepted = [...idsIn(model)];
+
   return (c.id === 0 ? at(accepted, c.pick) : c.id === 1 ? at(refused, c.pick) : undefined) ?? `${kind}_${c.raw}#${n}`;
 };
 
@@ -369,7 +384,7 @@ const ruled = (pre: Founded, event: MemberEvent): "accepted" | Reason => {
   const signer = signerFor(event) ?? "";
   const rank = standing(pre, signer, personFor(event) ?? "");
 
-  if (rank !== "person" && rank !== "window" && rank !== "agent" && rank !== "recovery") {
+  if (rank !== "person" && rank !== "window" && rank !== "agent" && rank !== "hands" && rank !== "recovery") {
     return rank;
   }
 
@@ -383,6 +398,7 @@ const ruled = (pre: Founded, event: MemberEvent): "accepted" | Reason => {
     }
 
     const target = pre.keys.get(event.revoke.key);
+
     return target === undefined ? "not_member" : target._tag === "live" ? "accepted" : "revoked";
   }
 
@@ -403,7 +419,11 @@ const ruled = (pre: Founded, event: MemberEvent): "accepted" | Reason => {
 const dials = (keys: ReadonlyMap<string, Key>, name: string): boolean => {
   const key = keys.get(name);
 
-  if (key === undefined || key._tag !== "live" || (key.rank !== "window" && key.rank !== "agent")) {
+  if (
+    key === undefined ||
+    key._tag !== "live" ||
+    (key.rank !== "window" && key.rank !== "agent" && key.rank !== "hands")
+  ) {
     return false;
   }
 

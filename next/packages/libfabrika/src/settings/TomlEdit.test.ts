@@ -1,6 +1,8 @@
 // T877, next/: L1-L8 exercise the public service. Layout hints use fast-check;
 // values come from Effect Schema. The model never reads the adapter's edit index.
+// L9 is the Reflect ban's (ticket 1056, slice 5): hostile keys and a scalar in the middle of a path.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { ByteSize, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
@@ -11,8 +13,11 @@ import { Toml, TomlError } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
 const check = { arbitrary: { seed: 119120, runs: 100 }, timeout: 30000 };
+
 const strict = { onExcessProperty: "error" } as const;
+
 const Integer = Schema.Int.check(Schema.isBetween({ minimum: -1000000, maximum: 1000000 }));
+
 // TOML cannot encode lone surrogate code points.
 const Text = Schema.String.check(Schema.isPattern(/^[^\uD800-\uDFFF]*$/u), Schema.isMaxLength(32));
 
@@ -41,7 +46,9 @@ const Input = {
 };
 
 type Path = ReadonlyArray<string>;
+
 type Tree = Readonly<Record<string, unknown>>;
+
 type Hint = { readonly pick: number; readonly key: number; readonly deep: boolean };
 
 const segments = ["leaf", "a.b", "", "雪", 'a"b', "a'b", "a\\b", "a\nb", "__proto__", "constructor", "toString"];
@@ -60,9 +67,13 @@ const layouts = fc.record({
 });
 
 const layout = (seed: number) => fc.sample(layouts, { seed, numRuns: 1 })[0]!;
+
 type Layout = ReturnType<typeof layout>;
+
 const pick = <A>(xs: ReadonlyArray<A>, hint: number): A => xs[hint % xs.length]!;
+
 const same = (a: Path, b: Path) => a.length === b.length && a.every((s, i) => s === b[i]);
+
 const record = (v: unknown): v is Tree => typeof v === "object" && v !== null && !Array.isArray(v);
 
 const frozen = (value: unknown): unknown =>
@@ -91,6 +102,7 @@ const put = (tree: Tree, path: Path, value: unknown): Tree => {
   }
 
   const parent = get(tree, [key]);
+
   return Object.fromEntries([
     ...Object.entries(tree).filter(([name]) => name !== key),
     [key, rest.length === 0 ? value : put(record(parent) ? parent : {}, rest, value)],
@@ -100,6 +112,7 @@ const put = (tree: Tree, path: Path, value: unknown): Tree => {
 const drop = (tree: Tree, path: Path): Tree => {
   const [key, ...rest] = path;
   const parent = key === undefined ? undefined : get(tree, [key]);
+
   return rest.length === 0
     ? Object.fromEntries(Object.entries(tree).filter(([name]) => name !== key))
     : key !== undefined && record(parent)
@@ -110,6 +123,7 @@ const drop = (tree: Tree, path: Path): Tree => {
 const leaves = (tree: Tree, path: Path = []): Array<Path> =>
   Object.entries(tree).flatMap(([key, value]) => {
     const at = [...path, key];
+
     return record(value) && Object.keys(value).length > 0 ? leaves(value, at) : [at];
   });
 
@@ -163,6 +177,7 @@ const fixture = (l: Layout, n: number, trailingComma = false) => {
   const text = lines
     .map((line, i) => line + (i === lines.length - 1 && !l.final ? "" : l.mixed && i % 2 ? "\n" : l.eol))
     .join("");
+
   return { text, value: { untouched: "text # = [ ]", "box.a.b": n, box } };
 };
 
@@ -183,10 +198,11 @@ const document = Effect.fnUntraced(function* (toml: Toml["Service"], text: strin
   const parsed = yield* toml.parse(text);
   expect(parsed.value).toEqual(value);
   retained(text, comments);
+
   return parsed;
 });
 
-const refusal = Effect.fnUntraced(function* (operation: Effect.Effect<string, TomlError>, tag: string, line?: number) {
+const refusal = Effect.fnUntraced(function* (operation: Effect.Effect<unknown, TomlError>, tag: string, line?: number) {
   const exit = yield* Effect.exit(operation);
   expect(Exit.isFailure(exit)).toBe(true);
 
@@ -214,9 +230,43 @@ const refusal = Effect.fnUntraced(function* (operation: Effect.Effect<string, To
   return error;
 });
 
+// The keys a walk down a path must read as own keys: each one names a member every object inherits.
+const hostile = ["__proto__", "constructor", "toString"] as const;
+const Key = Schema.Literals([...hostile, "leaf", "a.b", "雪"]);
+
+// What a write through an inherited key would land on: the prototype, its constructor and its
+// toString. Each entry is one own member of one of them, with its value or accessors.
+const inherited = [Object.prototype, Object, Object.prototype.toString];
+
+const members = () =>
+  inherited.flatMap((owner) =>
+    Object.entries(Object.getOwnPropertyDescriptors(owner)).map(([name, d]) => [owner, name, d.value, d.get, d.set]),
+  );
+
+const unchanged = (before: ReturnType<typeof members>, after: ReturnType<typeof members>) =>
+  after.length === before.length && after.every((member, i) => member.every((x, j) => Object.is(x, before[i]![j])));
+
+// What TOML holds of a JSON value today: no null, no whole number past the safe range, and no
+// lone surrogate in a string or a key.
+const lone = (text: string) => /[\uD800-\uDFFF]/u.test(text);
+
+const writable = (value: unknown): boolean =>
+  value === null
+    ? false
+    : Array.isArray(value)
+      ? value.every(writable)
+      : record(value)
+        ? Object.entries(value).every(([key, child]) => !lone(key) && writable(child))
+        : typeof value === "string"
+          ? !lone(value)
+          : typeof value !== "number" || !Number.isInteger(value) || Number.isSafeInteger(value);
+
+const dotted = (path: Path): string => path.map((key) => JSON.stringify(key)).join(".");
+
 // Read both the model and the reparsed document before selecting a move.
 const selected = (model: Tree, parsed: Tree, hint: Hint): Path => {
   const paths = leaves(model).filter((path) => get(parsed, path) !== undefined);
+
   return pick(paths, hint.pick);
 };
 
@@ -225,6 +275,7 @@ const absent = (model: Tree, parsed: Tree, hint: Hint): Path => {
     parents(model).filter((p) => record(get(parsed, p))),
     hint.pick,
   );
+
   let key = pick(segments, hint.key);
 
   while (get(model, [...parent, key]) !== undefined) {
@@ -269,6 +320,7 @@ describe("T877 public TOML edits, next/", () => {
       Effect.gen(function* () {
         const toml = yield* Toml;
         const l = layout(seed);
+
         // Each slot records source pieces when the fixture is written, before the edit.
         const slots = [
           { prefix: `"a.b"${l.space}`, token: String(initial), suffix: " # keep-0-雪" },
@@ -276,6 +328,7 @@ describe("T877 public TOML edits, next/", () => {
           { prefix: `third${l.space}`, token: `[${initial}, { k = "# inside string" }]`, suffix: " # keep-2-雪" },
           { prefix: `fourth${l.space}`, token: `{ "" = ${initial}, peer = true }`, suffix: " # keep-3-雪" },
         ];
+
         const paths = [["a.b"], ["second"], ["third"], ["fourth"]];
         const endings = slots.map((_, i) => (l.mixed && i % 2 ? "\n" : l.eol));
         const prefix = `# first-雪${l.eol}date = 1979-05-27T07:32:00Z${l.eol}large = 9_223_372_036_854_775_807${l.eol}`;
@@ -287,12 +340,14 @@ describe("T877 public TOML edits, next/", () => {
         for (const [i, hint] of l.hints.entries()) {
           const slot = hint.pick % slots.length;
           const current = slots[slot]!;
+
           const at =
             prefix.length +
             slots
               .slice(0, slot)
               .reduce((n, s, j) => n + s.prefix.length + s.token.length + s.suffix.length + endings[j]!.length, 0) +
             current.prefix.length;
+
           const head = text.slice(0, at);
           const tail = text.slice(at + current.token.length);
           const value = frozen(values[i % values.length]!);
@@ -352,10 +407,12 @@ describe("T877 public TOML edits, next/", () => {
           const l = layout(seed);
           const array = (value: unknown, marker: string) => `[${literal(value)}, "# string text", ${marker}${l.eol}]`;
           const keys = members.map((_, i) => segments[i]!);
-          let markers = members.map((_, i) => `# member-${i}-雪`);
+          const markers = members.map((_, i) => `# member-${i}-雪`);
+
           let inline = `{ ${members
             .map((value, i) => `${keyText(keys[i]!, l.quote)}${l.space}${array(value, markers[i]!)}`)
             .join(", ")} }`;
+
           let model: Tree = Object.fromEntries(members.map((value, i) => [keys[i]!, [value, "# string text"]]));
           let paths: Array<Path> = keys.map((key) => [key]);
           const siblings: Array<string> = [];
@@ -371,7 +428,8 @@ describe("T877 public TOML edits, next/", () => {
             inline = `{ ${head}, child${l.space}${inline}, ${tail} }`;
             model = { before: [first, "# string text"], child: model, after: [last, "# string text"] };
             paths = paths.map((path) => ["child", ...path]);
-            markers = [before, ...markers, after];
+            markers.unshift(before);
+            markers.push(after);
           }
 
           const prefix = `# first-雪${l.eol}`;
@@ -388,9 +446,11 @@ describe("T877 public TOML edits, next/", () => {
             const parsed = yield* toml.parse(text);
             expect(parsed.value).toEqual(model);
             const hint = l.hints[i % l.hints.length]!;
+
             const choices = paths.filter(
               (path) => get(model, path) !== undefined && get(parsed.value, path) !== undefined,
             );
+
             const path = pick(choices, hint.pick);
             const value = frozen(pick(values, hint.key));
             text = yield* operation === "set" ? toml.set(text, path, value) : toml.remove(text, path);
@@ -430,10 +490,12 @@ describe("T877 public TOML edits, next/", () => {
           const next = yield* toml.set(text, path, value);
           model = put(model, path, value);
           yield* document(toml, next, model);
+
           // All old lines are kept verbatim except an inline member's punctuation.
           const oldLines = (text.match(/[^\n]*\n|[^\n]+$/g) ?? []).filter(
             (line) => line.trim().length > 0 && !line.includes("{") && !line.includes("}"),
           );
+
           let end = -1;
 
           for (const line of oldLines) {
@@ -505,6 +567,7 @@ describe("T877 public TOML edits, next/", () => {
         // Drain the current leaves, so inline first/middle/last/only positions all occur.
         for (let i = 0; leaves(model).length > 0; i++) {
           const parsed = yield* document(toml, text, model);
+
           // Empty structural tables stay in the model; they are not assigned leaves.
           const choices = leaves(model).filter(
             (p) => !record(get(model, p)) || (l.style === "inline" && p.length === 1 && p[0] === "box"),
@@ -515,10 +578,12 @@ describe("T877 public TOML edits, next/", () => {
           }
 
           const hint = l.hints[i % l.hints.length]!;
+
           const path = pick(
             choices.filter((p) => get(parsed.value, p) !== undefined),
             hint.pick,
           );
+
           const edited = yield* toml.remove(text, path);
           model = drop(model, path);
 
@@ -570,7 +635,9 @@ describe("T877 public TOML edits, next/", () => {
       Effect.gen(function* () {
         const toml = yield* Toml;
         const l = layout(seed);
+
         type Piece = { readonly text: string; readonly member?: string; readonly comma?: number };
+
         let pieces: Array<Piece> = [{ text: `# before${l.eol}box${l.space}{  ` }];
         const initial = Object.fromEntries(values.map((v, i) => [`k${i}`, v]));
         let model: Tree = initial;
@@ -589,17 +656,21 @@ describe("T877 public TOML edits, next/", () => {
           const parsed = yield* toml.parse(text);
           expect(parsed.value).toEqual({ box: model, other: "unchanged # text" });
           const hint = l.hints[i % l.hints.length]!;
+
           const key = pick(
             Object.keys(model).filter((key) => get(parsed.value, ["box", key]) !== undefined),
             hint.pick,
           );
+
           const at = pieces.findIndex((piece) => piece.member === key);
           const left = pieces.findLastIndex((piece, index) => index < at && piece.comma !== undefined);
           const right = pieces.findIndex((piece, index) => index > at && piece.comma !== undefined);
           const candidates = [...new Set([left, right].filter((index) => index >= 0))];
+
           const choices = (candidates.length === 0 ? [-1] : candidates).map((comma) =>
             pieces.filter((_, index) => index !== at && index !== comma),
           );
+
           const edited = yield* toml.remove(text, ["box", key]);
           expect(choices.map(write)).toContain(edited);
           pieces = choices.find((choice) => write(choice) === edited)!;
@@ -632,6 +703,7 @@ describe("T877 public TOML edits, next/", () => {
           model = put(model, editedPath, value);
           const parsed = yield* document(toml, text, model);
           const path = absent(model, parsed.value, hint);
+
           const bad = pick(
             [
               `broken = ]${l.eol}${text}`,
@@ -641,6 +713,7 @@ describe("T877 public TOML edits, next/", () => {
             ],
             hint.key,
           );
+
           yield* refusal(toml.set(bad, path, value), "Syntax");
           yield* refusal(toml.remove(bad, path), "Syntax");
           yield* document(toml, text, model);
@@ -667,9 +740,11 @@ describe("T877 public TOML edits, next/", () => {
         const hint = l.hints[0]!;
         const parent = pick(["scalar", "array", "rows", "table"], hint.pick);
         const path = parent === "table" ? [parent] : [parent, parent === "rows" ? "0" : pick(segments, hint.key)];
+
         // The explicit parent's own header is the location, even after a child header.
         const line =
           parent === "table" ? beforeTable.split(l.eol).length : parent === "rows" ? 4 : parent === "array" ? 3 : 2;
+
         const set = yield* refusal(toml.set(text, path, 2), "Conflict", line);
         expect(set.reason).toMatchObject({ path });
         yield* refusal(toml.remove(text, path), "Conflict", line);
@@ -694,6 +769,7 @@ describe("T877 public TOML edits, next/", () => {
         cycle.self = cycle;
         const sparse: Array<unknown> = Array.from({ length: 2 });
         Reflect.deleteProperty(sparse, 0);
+
         const bad: ReadonlyArray<unknown> = [
           null,
           undefined,
@@ -760,6 +836,7 @@ describe("T877 public TOML edits, next/", () => {
         const toml = yield* Toml;
         const l = layout(seed);
         const n = Math.abs(initial);
+
         const text =
           [
             `number = +${n}`,
@@ -768,6 +845,7 @@ describe("T877 public TOML edits, next/", () => {
             `array = [${n}, # inside-array${l.eol} true]`,
             `table = { b = 2, a = ${n} }`,
           ].join(l.eol) + (l.final ? l.eol : "");
+
         const parsed = yield* toml.parse(text);
 
         for (const path of Object.keys(parsed.value).map((key) => [key])) {
@@ -790,6 +868,7 @@ describe("T877 public TOML edits, next/", () => {
       Effect.gen(function* () {
         const toml = yield* Toml;
         const l = layout(seed);
+
         const bytes = Setting.make("limits.record", {
           schema: Schema.ByteSize,
           default: ByteSize.bytes(1),
@@ -799,9 +878,11 @@ describe("T877 public TOML edits, next/", () => {
           since: "0.0.0",
           format: "text",
         });
+
         const group = Setting.group({ port: Declarations.port, bytes });
         const file = Files.schema(group, "person");
         let text = `# settings-雪${l.final ? l.eol : ""}`;
+
         const checkedSet = Effect.fnUntraced(function* <A>(
           source: string,
           declaration: Setting.Setting<A>,
@@ -812,6 +893,7 @@ describe("T877 public TOML edits, next/", () => {
           const candidate = yield* toml.set(source, declaration.segments, encoded);
           const parsed = yield* toml.parse(candidate);
           yield* Schema.decodeUnknownEffect(Files.schema(group, scope))(parsed.value, strict);
+
           return candidate;
         });
 
@@ -858,5 +940,63 @@ describe("T877 public TOML edits, next/", () => {
         expect((yield* toml.parse(text)).value).toEqual({ target: value });
       }).pipe(Effect.provide(TomlParser.layer)),
     check,
+  );
+
+  // L9 (reflect ban, slice 5). Plants: read each step of a path with `in` and no own-key check, in
+  // `internal/edit.ts`'s `read` or in `TomlParser.ts`'s `put`; let `check` pass a scalar in the
+  // middle of a path; report a parse failure on line 1. Each one turns this law red.
+  it.effect.prop(
+    "L9 hostile keys are put and read back as own keys, a scalar mid-path is refused as today, and Object.prototype is unchanged",
+    {
+      path: Schema.Array(Key).check(Schema.isBetweenLength(2, 5)),
+      value: Schema.Json,
+      at: Schema.Int,
+      scalar: Scalar,
+    },
+    ({ path, value, at, scalar }) =>
+      Effect.gen(function* () {
+        const toml = yield* Toml;
+        const before = members();
+        // Every run holds each hostile key in the middle of a path and at its end.
+        const middle = 1 + (Math.abs(at) % (path.length - 1));
+        const paths = [path, ...hostile.flatMap((key) => [path.toSpliced(middle, 0, key), [...path, key]])];
+        const seen = { put: 0, refused: 0, midway: 0 };
+
+        for (const p of paths) {
+          for (const v of [value, scalar]) {
+            if (!writable(v)) {
+              yield* refusal(toml.set("", p, v), "Value");
+              seen.refused++;
+              continue;
+            }
+
+            const text = yield* toml.set("", p, v);
+            const parsed = yield* toml.parse(text);
+            expect(parsed.value).toEqual(put({}, p, v));
+            expect(get(parsed.value, p)).toEqual(v);
+            // The same value again reads the key back through the edit walk and keeps the bytes.
+            expect(yield* toml.set(text, p, v)).toBe(text);
+            expect(get((yield* toml.parse(yield* toml.remove(text, p))).value, p)).toBeUndefined();
+            seen.put++;
+          }
+
+          // A scalar in the middle of the path: an edit is a Conflict at the scalar's own line,
+          // and a document that writes through it is a Syntax failure at the line that does.
+          const prefix = p.slice(0, middle);
+          const source = yield* toml.set("", prefix, scalar);
+          const line = (yield* toml.parse(source)).spans.find((span) => same(span.path, prefix))!.line;
+          const set = yield* refusal(toml.set(source, p, 1), "Conflict", line);
+          expect(set.reason).toMatchObject({ path: p });
+          yield* refusal(toml.remove(source, p), "Conflict", line);
+          yield* refusal(toml.parse(`${dotted(prefix)} = ${literal(scalar)}\n${dotted(p)} = 1\n`), "Syntax", 2);
+          seen.midway++;
+        }
+
+        expect(seen.put + seen.refused, "every path was put or refused, with both values").toBe(paths.length * 2);
+        expect(seen.put, "the scalar value is always put").toBeGreaterThanOrEqual(paths.length);
+        expect(seen.midway, "every path met a scalar in its middle").toBe(paths.length);
+        expect(unchanged(before, members()), "Object.prototype, Object and toString keep their members").toBe(true);
+      }).pipe(Effect.provide(TomlParser.layer)),
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 200, full: 1000 }) }, timeout: 30000 },
   );
 });

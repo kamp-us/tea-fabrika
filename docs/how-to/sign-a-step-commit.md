@@ -76,7 +76,7 @@ pnpm commits sign --step tests --ticket 229 --key ~/.fabrika/step-keys/tests
 
 Since [0134](../../.decisions/0134-no-code-stays-only-on-a-local-branch.md), `stepcommit.sh` pushes
 each commit it signs, with a draft pull request when the branch has none, through
-`.agents/skills/lead/scripts/publish.ts`, and a lane pushes each box's commit from the host. By
+`.agents/skills/lead/scripts/publish.ts`, and a quest pushes each box's commit from the host. By
 hand, the lead pushes, notes first, so the check finds every note:
 
 ```sh
@@ -89,7 +89,7 @@ pushed after the branch starts no new run: re-run the job.
 
 **Catch up by merging `main` in, never by rebasing.** A rebased commit's note no longer fits its
 trees and reads `unsigned_commit`. The merge is the lead's commit, so the lead session signs it,
-most often through `land.ts run` or `catchup.sh` (a lane agent stops at `land.ts ready`, ticket 652):
+most often through `land.ts run` (a quest agent stops at `land.ts ready`, ticket 652):
 
 ```sh
 git merge --no-edit origin/main
@@ -104,7 +104,7 @@ pnpm commits sign --step lead --ticket 229 --key ~/.fabrika/step-keys/lead
 | `ask exam_read` | send the owner one line with the paths; merge after the yes. A merge before the owner's read gets a field note ([tier 1](../plan/tier-1.md)) |
 | `stuck unsigned_commit` | sign the commit with your listed person key, or add a fitting note with its step's key |
 | `stuck build_touched_exam` | a builder changed the exam: the change goes back to the test writer |
-| `stuck no_exam_list` | the build commit's parent has no `exam-paths.json` that reads. A commit on top does not clear it, and history is never rewritten: tell the lead, who starts the lane again on a new branch from the last head whose list reads |
+| `stuck no_exam_list` | the build commit's parent has no `exam-paths.json` that reads. A commit on top does not clear it, and history is never rewritten: tell the lead, who starts the quest again on a new branch from the last head whose list reads |
 | `stuck stale_link` | a step's newest link is not the last of its links on the branch: use it, or sign again |
 | `stuck broken_chain` | after the merge only: the logged links have a gap, or do not reach the head's tree. A branch behind `main` is never `broken_chain` ([0098](../../.decisions/0098-the-signed-chain-covers-the-branch-not-main.md) changed it) |
 
@@ -112,16 +112,9 @@ A pull request that touches no `next/**` and no exam path is "not in scope" and 
 
 ## The merge reads one run
 
-The lead never reads a check by its name, since any workflow can name a job `commits`. It reads the
-run of the file `commits.yaml` on the event's head sha:
-
-```sh
-gh run list --workflow commits.yaml --commit <head sha> --json conclusion,event
-```
-
-There must be exactly one `pull_request_target` run, with conclusion `success`. None, two, or any
-other conclusion is red. The lead also checks that the ticket the check printed is the pull request's
-tracker ticket. No row per merge records it yet: that measure is proposed
+Not today. The `commits` workflow is gone and the merge reads no such run, since no step signs a
+commit by hand ([0161](../../.decisions/0161-no-step-signing-by-hand.md)). `pnpm commits check`
+still runs by hand. A row per merge is proposed
 ([autonomy is measured trust](../direction/autonomy-is-measured-trust.md), M1).
 
 ## After the merge
@@ -137,8 +130,8 @@ head merged onto `main` gives the squash's tree
 
 ## The pull request that added the check
 
-The workflow runs `main`'s copy, and `main` had none, so that pull request was checked once by hand,
-reading the keys file and the exam list from its own head, a flag the workflow never passes:
+The workflow ran `main`'s copy, and `main` had none, so that pull request was checked once by hand,
+reading the keys file and the exam list from its own head, a flag the workflow never passed:
 
 ```sh
 pnpm commits check --base origin/main --head HEAD --keys-from head

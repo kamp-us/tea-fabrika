@@ -36,8 +36,13 @@ const answer = [
 
 const sections: Record<string, Record<string, string[]>> = {
   ".agents/skills/review/SKILL.md": { "3. **Check:**": check, "4. **Answer**": answer },
+  // One home a clause (0130, experiment 283): what a law must be is the tests skill's, and what a
+  // loosening.sh hit means is the lead's landing step's.
+  ".agents/skills/tests/SKILL.md": { "## New and changed laws": [exam[0]!] },
   ".agents/skills/lead/SKILL.md": {
     "## Review brief template": [
+      // The brief names the review clauses' one home and repeats none of them.
+      "Use the review skill",
       "Ticket:",
       "Version:",
       "Approved plan:",
@@ -45,21 +50,17 @@ const sections: Record<string, Record<string, string[]>> = {
       "Reviewed head:",
       "Decided notes:",
       "Last fixes:",
-      ...check,
-      ...answer,
     ],
     "9. **Land it**": [
-      "After a successful merge, retain the checked head under refs/keep/pr/<pr> in MAIN.",
-      "Remove the registered catchup-<pr> worktree, exact-branch boxes through box.sh rm, and the driver's linked MAIN worktree on that exact branch. Never remove MAIN itself.",
+      "After the merge, the lead closes the tickets the description names and starts one box cleanup sweep.",
+      "The sweep removes the quest's boxes and its clean, idle linked worktree. Never remove MAIN itself.",
       "Use git worktree remove without force. Keep dirty, locked, ambiguous or unreadable candidates and any box that fails its guard.",
-      "Print one line per retained item and continue. Cleanup never changes a landed merge's success.",
+      "Print one line per retained item and continue.",
       "Saved plans, reports, logs and state/ remain.",
-      ...exam,
+      exam[1]!,
+      exam[2]!,
     ],
-    "## Lane brief template": ["End with `node .agents/skills/lead/scripts/land.ts ready <lane> --tree <path>`."],
-  },
-  "AGENTS.md": {
-    "- **Every pull request, next/ or today's, goes through the pipeline's steps:**": exam,
+    "## Quest brief template": ["End with `node .agents/skills/lead/scripts/land.ts ready <quest> --tree <path>`."],
   },
 };
 
@@ -79,20 +80,18 @@ const tree = (dir: string, whitespace = " ", omit?: [string, string, number], ou
 
     mkdirSync(join(dir, file, ".."), { recursive: true });
     // A skill file also holds slice 1a's clauses, so both checks read one whole tree.
-    const own = file === "AGENTS.md" ? "" : `\n${mainText(file.split("/")[2]!)}`;
-    writeFileSync(join(dir, file), chunks.join("\n") + own);
-
-    if (file !== "AGENTS.md") {
-      const skill = file.split("/")[2]!;
-      mkdirSync(join(dir, ".claude/skills"), { recursive: true });
-      const alias = join(dir, ".claude/skills", skill);
-      rmSync(alias, { recursive: true, force: true });
-      symlinkSync(`../../.agents/skills/${skill}`, alias);
-    }
+    const skill = file.split("/")[2]!;
+    writeFileSync(join(dir, file), `${chunks.join("\n")}\n${mainText(skill)}`);
+    mkdirSync(join(dir, ".claude/skills"), { recursive: true });
+    const alias = join(dir, ".claude/skills", skill);
+    rmSync(alias, { recursive: true, force: true });
+    symlinkSync(`../../.agents/skills/${skill}`, alias);
   }
 
   // The other clause sources hold only the slice 1a and 1b clauses.
-  for (const skill of new Set(allClauses.map(([s]) => s).filter((s) => s !== "lead"))) {
+  const written = new Set(Object.keys(sections).map((file) => file.split("/")[2]!));
+
+  for (const skill of new Set(allClauses.map(([s]) => s).filter((s) => !written.has(s)))) {
     mkdirSync(join(dir, ".agents/skills", skill), { recursive: true });
     writeFileSync(join(dir, ".agents/skills", skill, "SKILL.md"), mainText(skill));
     rmSync(join(dir, ".claude/skills", skill), { recursive: true, force: true });
@@ -108,7 +107,9 @@ const run = (dir: string) =>
   });
 
 const name = fc.stringMatching(/^[a-z][a-z0-9-]{0,10}$/);
+
 const states = ["relative", "absolute", "missing", "copy", "dangling", "wrong", "cycle"] as const;
+
 type State = (typeof states)[number];
 
 describe("skillscheck, today's tooling", () => {
@@ -122,7 +123,7 @@ describe("skillscheck, today's tooling", () => {
           tree(dir, space);
           expect(run(dir).status).toBe(0);
 
-          for (const file of [".agents/skills/lead/SKILL.md", "AGENTS.md"]) {
+          for (const file of [".agents/skills/lead/SKILL.md"]) {
             for (const substitute of ["The lead records both outputs in the PR. Any hit waits on the owner.", ""]) {
               tree(dir, space);
               const path = join(dir, file);
@@ -150,6 +151,7 @@ describe("skillscheck, today's tooling", () => {
   it("T300 generated source trees require links resolving to their own source", () => {
     let clean = 0,
       refused = 0;
+
     fc.assert(
       fc.property(
         fc.record({
@@ -182,8 +184,10 @@ describe("skillscheck, today's tooling", () => {
               for (const [i, n] of names.entries()) {
                 const state = chosen[i] ?? "relative";
                 actual.push(state);
+
                 const source = join(sources, n),
                   alias = join(aliases, n);
+
                 rmSync(alias, { recursive: true, force: true });
 
                 switch (state) {
@@ -214,12 +218,14 @@ describe("skillscheck, today's tooling", () => {
               mkdirSync(join(sources, "_not-a-skill"));
               mkdirSync(join(aliases, "_claude-only"));
               writeFileSync(join(aliases, "_claude-only/SKILL.md"), "# Local\n");
+
               const ran = spawnSync("sh", [script], {
                 cwd: dir,
                 encoding: "utf8",
                 timeout: 5_000,
                 env: { ...process.env, TYPESAFE_API_KEY: undefined },
               });
+
               expect(ran.error).toBeUndefined();
               expect(ran.signal).toBeNull();
               const bad = actual.flatMap((s, i) => (s === "relative" || s === "absolute" ? [] : [names[i]!]));
@@ -255,6 +261,7 @@ describe("skillscheck, today's tooling", () => {
   it("T318 wrapped clauses pass and each missing or misplaced clause fails independently", () => {
     let accepted = 0,
       refused = 0;
+
     fc.assert(
       fc.property(
         fc.record({
@@ -340,13 +347,13 @@ describe("skillscheck, today's tooling", () => {
 
 describe("skillscheck brief templates, today's tooling", () => {
   // Ticket 652: the permission check refuses a subagent the lead key, so a brief template that
-  // hands an agent a lead-only step stops the lane. Each lead-only command, in any template, fails;
+  // hands an agent a lead-only step stops the quest. Each lead-only command, in any template, fails;
   // an unsigned lead commit and the ready handover stay allowed.
   it("T652 property: a lead-only step in any brief template fails, and the unsigned lead commit passes", () => {
     fc.assert(
       fc.property(
         fc.record({
-          template: fc.constantFrom("## Review brief template\n", "## Lane brief template\n"),
+          template: fc.constantFrom("## Review brief template\n", "## Quest brief template\n"),
           space: fc.constantFrom(" ", "\n  "),
         }),
         ({ template, space }) => {
@@ -357,8 +364,9 @@ describe("skillscheck brief templates, today's tooling", () => {
               ["pnpm commits sign --step lead --ticket 1 --key k", 1],
               ["Read ~/.fabrika/step-keys/lead first.", 1],
               ["node .agents/skills/lead/scripts/botpush.mjs . fabrikalfa/x", 1],
-              ["sh .agents/skills/lead/scripts/catchup.sh 1 1", 1],
-              ["node .agents/skills/lead/scripts/land.ts run lane 1", 1],
+              ["node .agents/skills/lead/scripts/land.ts queue 1", 1],
+              ["node .agents/skills/lead/scripts/land.ts merged 1", 1],
+              ["node .agents/skills/lead/scripts/land.ts run quest 1", 1],
               ["stepcommit.sh lead 1 subject file", 1],
               ["stepcommit.sh --commit-only lead 1 subject file", 0],
               ["Say ready to land with the state file.", 0],
@@ -421,16 +429,13 @@ const slice1bClauses = [
     "K20",
     "For a new property, use `@effect/vitest`'s `it.prop` or `it.effect.prop` with an existing Schema, or its own Effect Arbitrary exported beside it; write fast-check data only where Effect has nothing or to push edge cases.",
   ],
-  // Ticket 523, decision 0035: each step skill and the lead skill say the finding rule once.
-  ...["plan", "tests", "build", "mutation", "lead"].map(
-    (skill) =>
-      [
-        skill,
-        "Outside your task",
-        "K21",
-        "Something wrong that your task does not cover is one finding row with proof, then keep going: never a fix, a ticket or only a mention, and never a security hole.",
-      ] as const,
-  ),
+  // Ticket 523, decision 0035: the finding rule has one home, the lead skill (0130, experiment 283).
+  [
+    "lead",
+    "Outside your task",
+    "K21",
+    "Something wrong that your task does not cover is one finding row with proof, then keep going: never a fix, a ticket or only a mention, and never a security hole.",
+  ],
 ] as const;
 
 const allClauses = [...clauses, ...slice1bClauses];
@@ -462,7 +467,7 @@ const clauseTree = (f: (dir: string) => void, program = script) => {
   const dir = mkdtempSync(join(tmpdir(), "clauses-"));
 
   try {
-    // T318's files (review, AGENTS.md) come from its own tree.
+    // T318's files (review, tests) come from its own tree.
     tree(dir);
 
     // Every clause source exists, so one table covers both slices (1b review round 2, finding 5).
@@ -477,6 +482,7 @@ const clauseTree = (f: (dir: string) => void, program = script) => {
     f(dir);
     const ran = spawnSync("sh", [program, dir], { encoding: "utf8", timeout: 5_000 });
     expect(ran.error).toBeUndefined();
+
     return { code: ran.status, text: ran.stdout + ran.stderr };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -493,9 +499,11 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
             const retired = old
               ? "Never rebase, force-push or update-branch.\nRun draft check; every exam path in the files table.\n"
               : "";
+
             writeFileSync(join(dir, ".agents/skills", n, "SKILL.md"), skillText(n, -1, wrap) + retired);
           }
         });
+
         expect(got.code, got.text).toBe(0);
       }),
       { seed: 321, numRuns: 6 },
@@ -535,6 +543,7 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
                 );
               }
             });
+
             expect(got.code, `${check}: ${got.text}`).toBe(1);
             expect(got.text).toContain(`${skill}/SKILL.md: ${check}`);
           }
@@ -558,6 +567,7 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
         expect(source).toContain(before);
         const planted = join(dir, "skillscheck.sh");
         writeFileSync(planted, source.replace(before, after));
+
         const got = clauseTree((tree) => {
           if (plant === "wrong section") {
             writeFileSync(
@@ -566,6 +576,7 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
             );
           }
         }, planted);
+
         expect(got.code).toBe(plant === "retired clause" ? 1 : 0);
         // The law expects the opposite result for this same input.
         expect(() => expect(got.code).toBe(plant === "retired clause" ? 0 : 1)).toThrow();
@@ -591,11 +602,14 @@ describe("T325 slice 1b required clauses, today's tooling", () => {
           const dir = mkdtempSync(join(tmpdir(), "clauses-"));
 
           try {
-            // T318's files (review, AGENTS.md) come from its own tree.
+            // T318's files (review, tests) come from its own tree.
             tree(dir);
+
             const sources = join(dir, ".agents/skills"),
               aliases = join(dir, ".claude/skills");
+
             mkdirSync(aliases, { recursive: true });
+
             const wrap = (text: string) =>
               text
                 .split(" ")
@@ -627,6 +641,7 @@ describe("T325 slice 1b required clauses, today's tooling", () => {
             for (const [skill, heading, , clause] of slice1bClauses) {
               const file = join(sources, skill, "SKILL.md"),
                 text = readFileSync(file, "utf8");
+
               writeFileSync(file, text.replace(wrap(clause), ""));
               const absent = run();
               expect(absent.status).toBe(1);

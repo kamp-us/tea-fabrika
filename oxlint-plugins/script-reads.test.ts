@@ -9,6 +9,7 @@ import { load, reached, scriptReads } from "./script-reads.mjs";
 // every naming form; the oracle walks the generated edges, never the source text. The edge cases
 // the derivation's comment lists are one scenario each below.
 const options = { seed: 119120, numRuns: 100 };
+
 const refs = fc.array(fc.nat({ max: 19 }), { maxLength: 3 });
 
 const model = fc.record({
@@ -22,6 +23,7 @@ type Model = typeof model extends fc.Arbitrary<infer T> ? T : never;
 /** How `from` names `path`: its basename in three spellings, a path relative to `from`, or from the top. */
 const forms = (from: string, path: string, form: number) => {
   const name = posix.basename(path);
+
   return [
     `"${name}"`,
     `join(import.meta.dirname, "${name}")`,
@@ -42,6 +44,7 @@ const build = ({ skills, tests, form }: Model) => {
   const files = skills.flatMap((scripts, s) =>
     scripts.map((edges, i) => ({ path: `.agents/skills/s${s}/scripts/s${s}file${i}.sh`, edges })),
   );
+
   const edges = files.map((f) => [...new Set(f.edges.map((n) => n % files.length))]);
   const tree = new Map<string, string>();
   files.forEach((file, i) => {
@@ -70,6 +73,7 @@ const build = ({ skills, tests, form }: Model) => {
 
     expected.set(path, new Set([...reach].map((n) => files[n]!.path)));
   });
+
   return { files, edges, tree, expected };
 };
 
@@ -125,12 +129,14 @@ describe("reached", () => {
     const test = ".agents/skills/a/scripts/check.test.ts";
     // `..` in the middle, at the end, and as the start or the end of a longer name.
     const segment = fc.constantFrom("x", "y", "..", ".", "..x", "x..", "...");
+
     const token = fc.record({
       top: fc.boolean(),
       ups: fc.nat({ max: 7 }),
       middle: fc.array(segment, { maxLength: 4 }),
       name: fc.option(fc.constantFrom("f.txt", "..f.json", "f..ts")),
     });
+
     // The oracle walks the segments by hand: it never calls the path library the derivation uses.
     const walk = (base: ReadonlyArray<string>, segments: ReadonlyArray<string>) => {
       const stack = [...base];
@@ -145,6 +151,7 @@ describe("reached", () => {
 
       return stack;
     };
+
     fc.assert(
       fc.property(fc.array(token, { minLength: 1, maxLength: 4 }), (tokens) => {
         const named = tokens.map(({ top, ups, middle, name }) => {
@@ -152,12 +159,15 @@ describe("reached", () => {
           // From the top a path starts with a name; a relative one starts with `./` or `../`.
           const text = top ? ["x", ...segments].join("/") : `${ups === 0 ? "./" : ""}${segments.join("/")}`;
           const stack = top ? walk([], ["x", ...segments]) : walk(posix.dirname(script).split("/"), segments);
+
           return { text, path: stack.join("/"), file: name !== null, above: stack[0] === ".." };
         });
+
         const tree = new Map([
           [script, named.map(({ text }) => `read("${text}");`).join("\n")],
           [test, "// Starts the check script."],
         ]);
+
         // Every named file exists, above the repo too, so only the guard keeps those out. A folder never does.
         const files = new Set(named.filter(({ file }) => file).map(({ path }) => path));
         const got = reached(new Map(tree).set(test, `"${posix.basename(script)}"`), (path) => files.has(path), test);
@@ -174,13 +184,16 @@ describe("reached", () => {
       [".agents/skills/a/scripts/plan.sh", "echo plan"],
       [".agents/skills/a/scripts/run.test.ts", 'spawnSync("node", [join(import.meta.dirname, "run.ts")]);'],
     ]);
+
     const test = ".agents/skills/a/scripts/run.test.ts";
     expect([...reached(tree, none, test).keys()]).toEqual([".agents/skills/a/scripts/run.ts"]);
     expect(scriptReads(tree, none, () => "").unreached).toEqual([".agents/skills/a/scripts/plan.sh"]);
+
     const named = new Map(tree).set(
       ".agents/skills/a/scripts/run.ts",
       `// Runs plan.sh, by the step's name.\n${tree.get(".agents/skills/a/scripts/run.ts")}`,
     );
+
     expect(reached(named, none, test).get(".agents/skills/a/scripts/plan.sh")).toBe(".agents/skills/a/scripts/run.ts");
     expect(scriptReads(named, none, () => "").unreached).toEqual([]);
   });
@@ -193,6 +206,7 @@ describe("reached", () => {
       [".agents/skills/a/scripts/box.ts", ""],
       [".agents/skills/a/scripts/box.test.ts", 'const box = join(import.meta.dirname, "box.sh");'],
     ]);
+
     expect(Object.fromEntries(reached(tree, none, ".agents/skills/a/scripts/box.test.ts"))).toEqual({
       ".agents/skills/a/scripts/box.sh": ".agents/skills/a/scripts/box.test.ts",
       ".agents/skills/a/scripts/env.sh": ".agents/skills/a/scripts/box.sh",
@@ -204,17 +218,18 @@ describe("reached", () => {
   it("scenario: a file only read at run time, under BOXES or made by the test, reaches nothing", () => {
     const tree = new Map([
       [
-        ".agents/skills/a/scripts/lane.ts",
+        ".agents/skills/a/scripts/quest.ts",
         [
-          `const state = join(env.BOXES, "state", \`\${lane}.json\`);`,
+          `const state = join(env.BOXES, "state", \`\${quest}.json\`);`,
           'writeFileSync("./out.json", x);',
           'readFileSync("runs/last.json");',
         ].join("\n"),
       ],
-      [".agents/skills/a/scripts/lane.test.ts", '"lane.ts"'],
+      [".agents/skills/a/scripts/quest.test.ts", '"quest.ts"'],
     ]);
-    expect([...reached(tree, none, ".agents/skills/a/scripts/lane.test.ts").keys()]).toEqual([
-      ".agents/skills/a/scripts/lane.ts",
+
+    expect([...reached(tree, none, ".agents/skills/a/scripts/quest.test.ts").keys()]).toEqual([
+      ".agents/skills/a/scripts/quest.ts",
     ]);
     expect(scriptReads(tree, none, () => "")).toEqual({ raw: [], unreached: [] });
   });
@@ -225,6 +240,7 @@ describe("reached", () => {
       [".agents/skills/a/scripts/b.sh", 'sh "$(dirname "$0")/a.sh"'],
       [".agents/skills/a/scripts/a.test.ts", '"a.sh"'],
     ]);
+
     expect(Object.fromEntries(reached(tree, none, ".agents/skills/a/scripts/a.test.ts"))).toEqual({
       ".agents/skills/a/scripts/a.sh": ".agents/skills/a/scripts/a.test.ts",
       ".agents/skills/a/scripts/b.sh": ".agents/skills/a/scripts/a.sh",
@@ -241,6 +257,7 @@ describe("reached", () => {
       "AGENTS.md",
       ".agents/skills/a/SKILL.md",
     ]);
+
     const tree = new Map([
       [
         ".agents/skills/a/scripts/check.ts",
@@ -256,6 +273,7 @@ describe("reached", () => {
       ],
       [".agents/skills/a/scripts/check.test.ts", '"check.ts"'],
     ]);
+
     // rows.ts imports deep.ts, but a file outside the scripts tree is never read for names.
     expect(
       [...reached(tree, (path) => outside.has(path), ".agents/skills/a/scripts/check.test.ts").keys()].sort(),
@@ -288,19 +306,24 @@ describe("scriptReads", () => {
       form: fc.nat({ max: 5 }),
       fixture: fc.option(fc.nat({ max: 3 })),
     });
+
     fc.assert(
       fc.property(fc.array(line, { maxLength: 6 }), (lines) => {
         const targets = ["./run.sh", "../../b/scripts/env.sh", "../../../../exam-paths.json", "./sub/x.ts"];
         const test = ".agents/skills/a/scripts/run.test.ts";
+
         const source = lines
           .map(({ target, form, fixture }, n) => {
             const statement = imports(targets[target]!, form, n);
+
             return fixture === null ? statement : fixtures(statement, fixture);
           })
           .join("\n");
+
         const want = lines
           .filter(({ form, fixture }) => form < 2 && fixture === null)
           .map(({ target }) => ({ test, path: posix.join(posix.dirname(test), targets[target]!) }));
+
         expect(scriptReads(new Map([[test, source]]), none, () => "").raw).toEqual(want);
       }),
       options,
@@ -312,6 +335,7 @@ describe("scriptReads", () => {
       fc.property(model, fc.array(fc.nat({ max: 19 }), { maxLength: 4 }), (input, named) => {
         const { files, tree, expected } = build(input);
         const tools = new Set(named.map((n) => files[n % files.length]!.path));
+
         // Each skill's tool table, plus a basename inside a longer word, which names no tool.
         const prose = (skill: string) =>
           files
@@ -320,6 +344,7 @@ describe("scriptReads", () => {
               tools.has(path) ? `| \`${posix.basename(path)}\` | a tool |` : `prefix${posix.basename(path)}`,
             )
             .join("\n");
+
         const reach = new Set([...expected.values()].flatMap((paths) => [...paths]));
         const want = files.map((f) => f.path).filter((path) => !reach.has(path) && !tools.has(path));
         expect(scriptReads(tree, none, prose).unreached).toEqual(want);
@@ -333,8 +358,10 @@ describe("scriptReads", () => {
       [".agents/skills/a/scripts/flow/run.ts", ""],
       [".agents/skills/a/scripts/run.ts", ""],
     ]);
+
     const prose = (skill: string) =>
       skill === ".agents/skills/a/SKILL.md" ? "| `flow/run.ts <flow-file>` | run one flow |" : "";
+
     expect(scriptReads(tree, none, prose).unreached).toEqual([".agents/skills/a/scripts/run.ts"]);
   });
 });
@@ -347,6 +374,7 @@ describe("load", () => {
         const path = yield* Path.Path;
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "script-reads-" });
         const scripts = ".agents/skills/a/scripts";
+
         const written = {
           [`${scripts}/run.test.ts`]: 'spawnSync("sh", [join(import.meta.dirname, "run.sh")]);',
           [`${scripts}/run.sh`]:

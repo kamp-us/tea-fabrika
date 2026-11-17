@@ -1,7 +1,7 @@
 // PushesProcess.layer: the Pushes service on the repo's own scripts. The leak grep is leakgrep.sh,
 // as it is; a push is botpush.mjs, the bot's one atomic push of the branch and the step notes. A
 // branch outside `fabrikalfa/` is the person's own: the bot sends the notes alone, and git pushes
-// the branch on the person's own login, never forced, as the lane's catch-up does.
+// the branch on the person's own login, never forced.
 import { Effect, Layer } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { lastLine, run } from "./command.ts";
@@ -16,19 +16,73 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
     Pushes,
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-      const ran = (cmd: string, args: ReadonlyArray<string>, cwd: string) =>
-        run(cmd, args, cwd).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
+
+      const ran = (cmd: string, args: ReadonlyArray<string>, cwd: string, stdin?: string) =>
+        run(cmd, args, cwd, stdin === undefined ? {} : { stdin }).pipe(
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        );
 
       const leakGrep = Effect.fn("PushesProcess.leakGrep")(
         function* (dir: string, head: string) {
           const grep = yield* ran("sh", [`${scripts}/leakgrep.sh`, "--commits", `origin/main..${head}`], dir);
 
           if (grep.code !== 0) {
-            return yield* new LeakGrepRefused({ reason: `leakgrep.sh exited ${grep.code}: ${lastLine(grep)}` });
+            return yield* LeakGrepRefused.make({ reason: `leakgrep.sh exited ${grep.code}: ${lastLine(grep)}` });
           }
         },
         Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(new LeakGrepRefused({ reason: `leakgrep.sh could not start: ${e.message}` })),
+          Effect.fail(LeakGrepRefused.make({ reason: `leakgrep.sh could not start: ${e.message}` })),
+        ),
+      );
+
+      const leakChange = Effect.fn("PushesProcess.leakChange")(
+        function* (dir: string, head: string) {
+          const fetched = yield* ran("git", ["-C", dir, "fetch", "-q", "origin", "main", head], dir);
+
+          if (fetched.code !== 0) {
+            return yield* LeakGrepRefused.make({
+              reason: `main and ${head} could not be fetched: ${lastLine(fetched)}`,
+            });
+          }
+
+          // The diff is read whole before the grep starts, so a diff that fails is never an empty pass.
+          const range = `origin/main...${head}`;
+
+          const diff = yield* ran(
+            "git",
+            ["-C", dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=0", range],
+            dir,
+          );
+
+          if (diff.code !== 0) {
+            return yield* LeakGrepRefused.make({ reason: `the diff ${range} does not read: ${lastLine(diff)}` });
+          }
+
+          const grep = yield* ran("sh", [`${scripts}/leakgrep.sh`], dir, `${diff.out}\n`);
+
+          if (grep.code !== 0) {
+            return yield* LeakGrepRefused.make({ reason: `leakgrep.sh exited ${grep.code}: ${lastLine(grep)}` });
+          }
+        },
+        Effect.catchTag("PlatformError", (e) =>
+          Effect.fail(LeakGrepRefused.make({ reason: `the leak grep could not start: ${e.message}` })),
+        ),
+      );
+
+      const leakText = Effect.fn("PushesProcess.leakText")(
+        function* (dir: string, text: string) {
+          // `-` is cat's own name for its stdin. A child's stdin is a socket here, and Linux refuses
+          // to open /dev/stdin on a socket (ENXIO), though macOS allows it.
+          const grep = yield* ran("sh", [`${scripts}/leakgrep.sh`, "--text", "-"], dir, text);
+
+          if (grep.code !== 0) {
+            return yield* LeakGrepRefused.make({
+              reason: `leakgrep.sh --text exited ${grep.code}: ${lastLine(grep)}`,
+            });
+          }
+        },
+        Effect.catchTag("PlatformError", (e) =>
+          Effect.fail(LeakGrepRefused.make({ reason: `the leak grep could not start: ${e.message}` })),
         ),
       );
 
@@ -36,7 +90,7 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
         const pushed = yield* ran(cmd, args, dir);
 
         if (pushed.code !== 0) {
-          return yield* new PushRefused({ reason: `${cmd} exited ${pushed.code}: ${lastLine(pushed)}` });
+          return yield* PushRefused.make({ reason: `${cmd} exited ${pushed.code}: ${lastLine(pushed)}` });
         }
       });
 
@@ -52,10 +106,10 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
           yield* step("git", ["-C", dir, "push", "-q", "origin", `${head}:refs/heads/${branch}`], dir);
         },
         Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(new PushRefused({ reason: `the push could not start: ${e.message}` })),
+          Effect.fail(PushRefused.make({ reason: `the push could not start: ${e.message}` })),
         ),
       );
 
-      return Pushes.of({ leakGrep, push });
+      return Pushes.of({ leakGrep, leakChange, leakText, push });
     }),
   );

@@ -17,10 +17,11 @@
 // Each branch, in this order (each edge case has its law in Unlisted.test.ts):
 //   1. main and origin's HEAD are not branches here
 //   2. no commit that origin/main lacks: nothing to list
-//   3. an open PR on the branch, or on its lane (`x` and its backup `x-wip` are one lane): listed
+//   3. an open PR on the branch, or on its quest (`x` and its backup `x-wip` are one quest): listed
 //      in the open PRs already
 //   4. a MERGED PR on the same name, at this very tip: landed, safe to delete
-//   5. a trial merge into origin/main that changes nothing: landed, whatever road it took
+//   5. a trial merge into origin/main that changes nothing: landed, whatever road it took;
+//      a branch with no common ancestor stays unlisted, even if its tree matches main
 //   6. else no pull request; a MERGED PR on the name at an older tip, or a CLOSED one, is named, but
 //      the commits after it are still not on main
 //   7. local and origin are two lines: either can hold what the other lacks
@@ -37,8 +38,8 @@ export type Landed = { readonly branch: Branch; readonly merged: PullRequest | n
 
 export type Report = { readonly unlisted: ReadonlyArray<Unlisted>; readonly landed: ReadonlyArray<Landed> };
 
-/** A branch's lane: its name without the `-wip` of a lane's backup branch. */
-export const laneName = (branch: string): string => branch.replace(/(-wip)+$/, "");
+/** A branch's quest: its name without the `-wip` of a quest's backup branch. */
+export const questName = (branch: string): string => branch.replace(/(-wip)+$/, "");
 
 export const check = Effect.fn("Unlisted.check")(function* () {
   const branches = yield* Branches;
@@ -46,14 +47,14 @@ export const check = Effect.fn("Unlisted.check")(function* () {
   yield* branches.refresh;
   const listed = yield* branches.list;
   const all = yield* prs.all;
-  const lanes = new Set(all.filter((pr) => pr.state === "OPEN").map((pr) => laneName(pr.head)));
+  const quests = new Set(all.filter((pr) => pr.state === "OPEN").map((pr) => questName(pr.head)));
   const unlisted: Array<Unlisted> = [];
   const landed: Array<Landed> = [];
 
   for (const branch of listed) {
     const ahead = yield* branches.ahead(branch.tip);
 
-    if (ahead === 0 || lanes.has(laneName(branch.name))) {
+    if (ahead === 0 || quests.has(questName(branch.name))) {
       continue;
     }
 

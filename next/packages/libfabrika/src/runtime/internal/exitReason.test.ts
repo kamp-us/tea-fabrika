@@ -36,6 +36,7 @@ describe("P34c slice 1: a captured failure becomes one exit reason", () => {
           failure._tag === "interrupted"
             ? { _tag: "crashed", phase: "interrupted" }
             : { _tag: "crashed", phase: failure._tag === "fresh" ? "step" : "saved_letter", error: failure.error };
+
         const reason = Result.try(() => fromFailure(failure));
         const inBound = failure._tag === "interrupted" || failure.error.length <= ERROR_CLASS_MAX;
         // Inside the bound the reason is exact. Past it, the class is refused here or kept whole for

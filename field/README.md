@@ -5,7 +5,7 @@ happens, so it can be counted later. A few rows are tea-fabrika's own parts run
 on that same work, and each is marked as such.
 
 tea-fabrika is built to fix what goes wrong in fabrika. This folder is the
-half that records what goes wrong (and right) in today's fabrika when it drives live lanes,
+half that records what goes wrong (and right) in today's fabrika when it drives live quests,
 and which part of tea-fabrika would change it.
 
 Three logs. Each new row is its own small file in its log's folder, one JSON object per file,
@@ -13,7 +13,7 @@ and its id is its file name ([0090](../.decisions/0090-each-field-row-is-a-file.
 
 - `notes/`: one observation each. Something broke, cost too much, needed
   a person, or worked well.
-- `runs/`: one agent run each. Which role, which lane, how it ended, and
+- `runs/`: one agent run each. Which role, which quest, how it ended, and
   what it cost.
 - `findings/`: one finding each, from this repo's own work. Something an agent
   found outside its task, and later a person's rating of it.
@@ -40,7 +40,7 @@ JSON lines: `node .agents/skills/lead/scripts/fieldfile.ts <log> <rows>`, run fr
 repo. It names each file by the rules here, prints each path, and writes nothing if a name is taken
 or missing.
 
-A `step` run from a lane has the lane's run id, lane + step + n, such as `p39s1-tests2` (lane
+A `step` run from a quest has the quest's run id, quest + step + n, such as `p39s1-tests2` (quest
 `p39s1`, its 2nd tests run; `RunId.next` in the lead's `runid.ts` makes it), which has no date. Rows
 from before 2026-11-11 have `t<ticket>-<step><n>`, such as `t562-tests1`. Its file puts the row's
 date in front, `2026-11-11-p39s1-tests2.json`, and its `run` becomes that same name. 0090 left this open; this is the plain reading, used by `fieldfile.ts`, and not decided.
@@ -49,12 +49,12 @@ One example per log. A file holds one object; the indent is the writer's choice.
 
 ```jsonc
 // field/notes/2026-11-11-hand-merge-pushed-conflict-markers.json
-{"id": "2026-11-11-hand-merge-pushed-conflict-markers", "date": "2026-11-11", "lanes": ["tea-fabrika#562"],
+{"id": "2026-11-11-hand-merge-pushed-conflict-markers", "date": "2026-11-11", "quests": ["tea-fabrika#562"],
  "stage": "harness", "kind": "failure", "what": "A hand merge pushed conflict markers into a field log.",
  "cause": "two PRs each appended a line", "person": true, "primitive": null, "fix": "one file per row",
  "test": null, "links": []}
 
-// field/runs/2026-11-11-p39s1-tests2.json, a lane's step row
+// field/runs/2026-11-11-p39s1-tests2.json, a quest's step row
 {"date": "2026-11-11", "run": "2026-11-11-p39s1-tests2", "ticket": "usirin/tea-fabrika#562", "pr": null,
  "started": "2026-11-11T09:02:10-08:00", "ended": "2026-11-11T09:20:41-08:00", "parent": null,
  "active": null, "role": "hand", "step": "tests", "model": "gpt-6-astra", "effort": "high",
@@ -83,6 +83,11 @@ The `field` job in [check.yaml](../.github/workflows/check.yaml) runs
 changed path in `field/notes/`, `field/runs/` and `field/findings/`, and reports the number of added
 rows, including zero. Missing history fails the check.
 
+A pull request that changes only row files (`field/<log>/*.json`) and plan files starts no CI run
+at all (ticket 988), so `pnpm lint` runs the same check on your laptop: `field-check.ts --local`
+reads the rows your checkout adds to `origin/main`, committed or not. Run `pnpm lint` before you
+push a row. The field job still checks the rows on the push to main after the merge.
+
 - **An added row file** must be named `<YYYY-MM-DD>-<slug>.json`, hold one JSON object, and pass
   the field rules below. Its id (`id` on a note or a finding, `run` on a run) must be its file name
   without `.json`; a missing or different id fails. A `date` that differs from the name's date
@@ -97,8 +102,8 @@ Each added row must be a valid JSON object. The measured core fields and types i
 [field-schema.ts](../.github/ci/field-schema.ts) also block on errors:
 
 - All three logs require a string `date` shaped as `YYYY-MM-DD`.
-- Notes require string `id`, `stage`, `kind` and `what`, an array `lanes`, and
-  string or null `fix`. If present, `cause`, `primitive` and `test` are string or
+- Notes require string `id`, `stage`, `kind` and `what`, an array `quests` (or `lanes`, on a
+  row written before the rename), and string or null `fix`. If present, `cause`, `primitive` and `test` are string or
   null, `person` is boolean, and `links` is an array of strings.
 - Runs require string `role`; string or null `model`, `effort`, `outcome`, `note`
   and `why`; and finite, nonnegative numbers or null for `tokens`, `tools` and
@@ -120,7 +125,7 @@ Extra fields are allowed. Ticket and PR forms do not block. Unknown facts can
 stay null or absent where the schema allows it. Do not invent zero or success.
 
 Missing README metadata, words outside its stage, kind, role and outcome lists,
-non-string lane members, unusual references, dates, timestamps or URLs, and inconsistent times or
+non-string `quests` or `lanes` members, unusual references, dates, timestamps or URLs, and inconsistent times or
 counts only warn. A `parent` or a rating's `finding` that is neither an old counter id nor a
 `<date>-<slug>` name warns. A finding's `head` that is not a full sha, and a path that is not
 repo-relative, only warn too. Warnings exit with code 0. The tables below guide writers; their
@@ -132,7 +137,7 @@ stricter wording does not add blocking rules.
 |---|---|
 | `id` | its file name, `<date>-<slug>` (`<date>-<nn>` on old rows) |
 | `date` | the day it happened, `YYYY-MM-DD` |
-| `lanes` | the tickets it touched, as `repo#n` |
+| `quests` | the tickets it touched, as `repo#n`. A new row writes `quests`. A row written before 2026-11-15, when a quest was called a lane ([0546](../.decisions/0546-a-lane-is-called-a-quest.md)), says `lanes` and is never edited; a reader reads both keys as the same field |
 | `stage` | where in the pipeline: `report`, `triage`, `plan`, `ruling`, `build`, `review`, `ship`, `harness` (the tools around the pipeline) or `driver` (the agent or person running it) |
 | `kind` | `failure` (a run stopped or did the wrong thing), `friction` (it worked, slowly or by hand), `cost` (it worked, for too much), `success` (worth copying) |
 | `what` | what happened, in plain words |
@@ -148,21 +153,21 @@ stricter wording does not add blocking rules.
 | Field | What it holds |
 |---|---|
 | `date` | as above |
-| `run` | the row's own id, so `parent` can name it: its file name, `<date>-<slug>`. On a `step` row, the lane's run id from its `ended` fact, with the row's date in front (see [How to write a row](#how-to-write-a-row)). Old rows have `<date>-r<nn>`, or a lane's id alone. Added 2026-11-01 |
+| `run` | the row's own id, so `parent` can name it: its file name, `<date>-<slug>`. On a `step` row, the quest's run id from its `ended` fact, with the row's date in front (see [How to write a row](#how-to-write-a-row)). Old rows have `<date>-r<nn>`, or a quest's id alone. Added 2026-11-01 |
 | `ticket` | the ticket the run served, as `<owner>/<repo>#n`: a tracker ticket on this repo's own tracker, or a GitHub issue elsewhere. `null` when there is none. Added 2026-11-01 |
 | `pr` | the pull request the run served, as `<owner>/<repo>#n`, or `null`. A run on both writes both. Added 2026-11-01 |
 | `lane` | old rows only. Before 2026-11-01 one `lane` held either a ticket or a PR, written the same way, so this repo's `#141` is a ticket and its `#267` a PR; read `why` to tell. It stays readable on those rows. New rows write `ticket` and `pr`, never `lane` |
 | `started`, `ended` | when the run started and ended, on the writer's own clock, as ISO 8601 with its offset. `minutes` stays beside them. `ended` is `null` while the run is open, and an open run is unknown, never zero. Added 2026-11-01 |
 | `parent` | the `run` of the run that started this one, or `null`. So a driver is never summed with its children ([agent hours](../docs/direction/agent-hours.md#h2-every-run-on-the-work-counts-failed-ones-too-and-a-driver-never-does)). Added 2026-11-01 |
 | `active` | minutes a model or tool was working, beside the wall-clock `minutes`, where the run can say; `null` until something records it. Added 2026-11-01 |
-| `role` | `operator`, `builder`, `reviewer`, `shipper`, `triager`, `planner`, or `machine` for a lane tea-fabrika's operator machine drove (`legacy/src/operator.ts`, the old first generation), or `acp` for a harness session the `acp` program drove (`packages/fabrika/src/agents/acp/`, experiment 76): no lane (`lane: null`), and leave these out of any baseline. `hand` is a subagent a person's own Claude Code session started by hand, not a lane our machine or today's fabrika ran: `ticket` and `pr` are the tracker ticket and the PR it served (on old rows, `lane`, as `<owner>/<repo>#139`), and `parent` is the `session` row that started it. Leave these out of any baseline too. `session` is a person's own main Claude Code session, logged as a run of its own from 2026-11-01, one row per stretch of work, with `parent: null`. Its `minutes` cover the subagents it started, so a reader never adds it to the rows whose `parent` it is; its `why` says what it did itself. `pipeline` is a whole lane run by today's `pipeline` program (`programs/pipeline`), and its `why` says which parts were this repo's machine. `driver` is a Claude subagent that carried a ticket or a job for the lead session by starting other agents (Claude subagents or Codex steps), from 2026-11-08; its `parent` is the driver that started it, or `null`, and its children name it as their `parent`, so a reader never adds a driver to its children. `step` is one agent run inside such a lane, on one of the steps that runs an agent: `triage`, `plan`, `exam`, `test_writer`, `build`, `mutants`, `review`. Both have `ticket` as `<owner>/<repo>#n` (on old rows, `lane`), a `step` row's `parent` is its `pipeline` row, and their `why` starts `pipeline, tracker ticket <n>, <step>:` (the `pipeline` row leaves out the step). An older row can have the same `lane`, such as a `hand` row on 2026-10-26 with `#117`: that one is work by hand under that number, not this pipeline, and its role and `why` tell them apart. Added 2026-11-01; [the how-to](../docs/how-to/run-a-pipeline-ticket.md) says how to log them |
+| `role` | `operator`, `builder`, `reviewer`, `shipper`, `triager`, `planner`, or `machine` for a quest tea-fabrika's operator machine drove (`legacy/src/operator.ts`, the old first generation), or `acp` for a harness session the `acp` program drove (`packages/fabrika/src/agents/acp/`, experiment 76): no quest (`lane: null`), and leave these out of any baseline. `hand` is a subagent a person's own Claude Code session started by hand, not a quest our machine or today's fabrika ran: `ticket` and `pr` are the tracker ticket and the PR it served (on old rows, `lane`, as `<owner>/<repo>#139`), and `parent` is the `session` row that started it. Leave these out of any baseline too. `session` is a person's own main Claude Code session, logged as a run of its own from 2026-11-01, one row per stretch of work, with `parent: null`. Its `minutes` cover the subagents it started, so a reader never adds it to the rows whose `parent` it is; its `why` says what it did itself. `pipeline` is a whole quest run by today's `pipeline` program (`programs/pipeline`), and its `why` says which parts were this repo's machine. `driver` is a Claude subagent that carried a ticket or a job for the lead session by starting other agents (Claude subagents or Codex steps), from 2026-11-08; its `parent` is the driver that started it, or `null`, and its children name it as their `parent`, so a reader never adds a driver to its children. `step` is one agent run inside such a quest, on one of the steps that runs an agent: `triage`, `plan`, `exam`, `test_writer`, `build`, `mutants`, `review`. Both have `ticket` as `<owner>/<repo>#n` (on old rows, `lane`), a `step` row's `parent` is its `pipeline` row, and their `why` starts `pipeline, tracker ticket <n>, <step>:` (the `pipeline` row leaves out the step). An older row can have the same `lane`, such as a `hand` row on 2026-10-26 with `#117`: that one is work by hand under that number, not this pipeline, and its role and `why` tell them apart. Added 2026-11-01; [the how-to](../docs/how-to/run-a-pipeline-ticket.md) says how to log them |
 | `model`, `effort` | as spawned; `null` for `machine`. On a `hand` row, a model the spawn left unset is the main session's, and an unset effort is `null`. A `shipper` row with `model: null` is a ship stage the ship machine ran (`src/stages/ship/`), with no agent: its `tokens`, `tools` and `costUsd` are 0, and its Cmds are counted on the `machine` row |
-| `outcome` | how it ended, one word: `merged`, `pass`, `fail`, `triaged`, `parked`, `skip`, `stopped`. On a `pipeline` row, from the lane's verb: `done` is `merged`, or `triaged` when triage closed the ticket; `ask` is `parked`; `skip` and `stuck` are `stopped`, with the outcome's name in `why`, such as `stuck:step_stuck` and the step's own word. A lane never ends on `send`. On a `step` row: `done` is `pass`; `send` is `fail`, with where it went in `why`; `ask` is `parked`; `skip` is `skip`, so review's order check counts a skipped mutation step; `stuck` is `stopped` |
+| `outcome` | how it ended, one word: `merged`, `pass`, `fail`, `triaged`, `parked`, `skip`, `stopped`. On a `pipeline` row, from the quest's verb: `done` is `merged`, or `triaged` when triage closed the ticket; `ask` is `parked`; `skip` and `stuck` are `stopped`, with the outcome's name in `why`, such as `stuck:step_stuck` and the step's own word. A quest never ends on `send`. On a `step` row: `done` is `pass`; `send` is `fail`, with where it went in `why`; `ask` is `parked`; `skip` is `skip`, so review's order check counts a skipped mutation step; `stuck` is `stopped` |
 | `why` | for `parked` and `stopped`, the reason in a few words. On a `hand` row, what the run was for, then the reason if it stopped |
-| `tokens`, `tools`, `minutes` | what the run reported when it ended. `tokens` is the size of the run's conversation at its last turn: that is what a Claude Code subagent reports, and what a shell under the machine is logged with, so the two compare. For `machine`: `tokens` is 0, `tools` is the Cmds it sent, `minutes` is the whole lane. For `hand`: they are what the subagent reported when it last finished (`subagent_tokens`, `tool_uses`, `duration_ms`). A subagent that was sent more work after it finished counts as one run, so `tools` and `minutes` cover all of it. All three are `null` when it was stopped before it reported. For `step`: the lane does not capture `tokens`, the last turn's size, so it stays `null`. Its numbers are in each step's printed line and in the fact the lane writes on the ticket when a run ends (`input`, `output`, `cached`, `turns`, `minutes`, `model`, `effort`). `minutes` comes from there, `tools` stays `null`, and `billed` is `input` plus `output`. Nothing writes these rows yet, so a person or agent copies them |
+| `tokens`, `tools`, `minutes` | what the run reported when it ended. `tokens` is the size of the run's conversation at its last turn: that is what a Claude Code subagent reports, and what a shell under the machine is logged with, so the two compare. For `machine`: `tokens` is 0, `tools` is the Cmds it sent, `minutes` is the whole quest. For `hand`: they are what the subagent reported when it last finished (`subagent_tokens`, `tool_uses`, `duration_ms`). A subagent that was sent more work after it finished counts as one run, so `tools` and `minutes` cover all of it. All three are `null` when it was stopped before it reported. For `step`: the quest does not capture `tokens`, the last turn's size, so it stays `null`. Its numbers are in each step's printed line and in the fact the quest writes on the ticket when a run ends (`input`, `output`, `cached`, `turns`, `minutes`, `model`, `effort`). `minutes` comes from there, `tools` stays `null`, and `billed` is `input` plus `output`. Nothing writes these rows yet, so a person or agent copies them |
 | `note` | which note's id explains it, if one does |
-| `driver_caused` | `true` when the run stopped short because of the driver or the setup (told to stop, started on the wrong thing, a plugin reload), not the lane. Leave these out of any baseline |
-| `costUsd`, `billed` | on the rows of a lane the machine drove, where the Agent SDK reports them. `costUsd` is the shell's dollars (on the `machine` row, all its shells'). `billed` is every token the shell was billed for, each turn's input counted again; it is many times `tokens` |
+| `driver_caused` | `true` when the run stopped short because of the driver or the setup (told to stop, started on the wrong thing, a plugin reload), not the quest. Leave these out of any baseline |
+| `costUsd`, `billed` | on the rows of a quest the machine drove, where the Agent SDK reports them. `costUsd` is the shell's dollars (on the `machine` row, all its shells'). `billed` is every token the shell was billed for, each turn's input counted again; it is many times `tokens` |
 | `listUsd` | on a GPT sol or GPT luna row only, where the tokens were saved: what the run's tokens cost at OpenAI's standard API price (`experiments/lib/list-price.ts` says which price and when it was read). GPT sol runs on the ChatGPT plan, which bills no call, so `costUsd` stays `null` on those rows. Added on 2026-10-30 to experiments 159 to 163's triage rows (`STEP=listprice` in `experiments/163-triage-ask.ts`); nothing else on those rows changed <br>From 2026-11-08 also on a Claude Code subagent's row: its tokens priced at Anthropic's list price (the pricing page and the date read are in the row's `why`), written by `.agents/skills/lead/scripts/clauderow.ts` (`clauderow.py` until 2026-11-12) from the subagent's transcript. A Claude subscription bills no call either, so `costUsd` stays `null`. On those rows `inputTokens` counts every input token (uncached, cache writes and cache reads) and `cachedTokens` the cache reads, as on a Codex row; the split of cache writes into 5-minute and 1-hour is in `why`, since the two are priced apart |
 | `corrects` | the `run` of an earlier row that this row puts right. The earlier row stays as written; a reader takes the newest row that names it and leaves the earlier one out of any sum. Its own `run` is the earlier one's with `-c1` (then `-c2`). Added 2026-11-08 |
 | `billing`, `product`, `env` | optional, on any agent run from 2026-11-07, and left out when not known; older rows are not changed. `billing` is how the run was paid: `subscription` or `key` (billed per token), read from Claude's `apiKeySource` on its first `system/init` message or the SDK's `accountInfo()`, or from Codex's auth mode (`chatgpt` or `apiKey`). A Claude subagent's transcript has no `system/init` line, so on a `clauderow.ts` row `billing` is what the lead gave and the row's `why` says so. `product` is the subscription's name as the provider gives it (`max`, `pro`), from Claude's `subscriptionType` or Codex's `planType`, cross-checked with its rate-limit snapshot's `plan_type`. `env` says whether each key variable was set, as `true` or `false` and never the value: `{"ANTHROPIC_API_KEY": false, "ANTHROPIC_AUTH_TOKEN": false, "OPENAI_API_KEY": false, "CODEX_API_KEY": false}`. A run with a key set still runs; this only records it ([the meter on subscriptions](../docs/direction/one-ask-and-one-meter.md#the-meter-on-subscriptions)). Later, not yet on these rows: the last percent of each limit used with its window and reset time, why each turn woke, the context size and cache reads and writes per turn, and how long each ask waited on a person |
@@ -264,7 +269,7 @@ The first questions to ask of these files:
 1. How much of an operator's spend goes on deciding what comes next and on
    waiting, against building and checking? That is the cost the
    `machine-drives` idea claims to remove.
-2. How often does a lane stop for a person, and how many of those stops did a
+2. How often does a quest stop for a person, and how many of those stops did a
    person really need?
 3. Which primitive comes up most in the fixes? That says what to build next.
 4. For each `by` and each `rule` in the findings: how often was it noise? That sets

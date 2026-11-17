@@ -2,6 +2,7 @@
 // the module that owns a driver calls `ExitReasonTest.suite(open)`; `open` acquires one store in a
 // scope and gives it back when that scope closes.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Predicate, Result, Schema, type Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
@@ -62,6 +63,7 @@ const Cell = fc.record({
   other: fcExitReason,
   bad: fc.nat(),
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
 const Tape = fc
@@ -97,6 +99,7 @@ const INSERT = /^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+entries\b/i;
 /** The store's Sql, with a cut that refuses the `after`-th insert of the next call. */
 const cutting = (sql: Sql) => {
   const fault = { after: null as number | null };
+
   const wrapped: Sql = {
     exec: (query, ...params) => {
       if (INSERT.test(query) && fault.after !== null) {
@@ -112,6 +115,7 @@ const cutting = (sql: Sql) => {
     transaction: (step) => sql.transaction(step),
     size: () => sql.size(),
   };
+
   return { sql: wrapped, fault };
 };
 
@@ -130,6 +134,7 @@ const facts = Effect.fnUntraced(function* (sql: Sql, world: World) {
     clientInbox(CLIENT.client),
     ...world.names.flatMap(({ name }) => [`processes/${name}`, `${name}/inbox`]),
   ];
+
   const rows: Array<Entry> = [];
 
   for (const stream of streams) {
@@ -147,6 +152,7 @@ const refused = (answer: Result.Result<unknown, unknown>, message: string, reaso
 };
 
 const decodeExit = Schema.decodeUnknownResult(ExitReason, { onExcessProperty: "error" });
+
 const decodeDown = Schema.decodeUnknownResult(DownReason, { onExcessProperty: "error" });
 
 /** The oracle: what the rows must say, checked against the fold's own world after every prefix. */
@@ -187,6 +193,7 @@ const startRequest = (world: World, slot: number) => {
 
   if (known === undefined) {
     const name = `counter:${slot + 1}`;
+
     return { name, request: Start.cases.first.make({ id: `start:${name}`, name, code: CODE }) };
   }
 
@@ -203,6 +210,7 @@ const startRequest = (world: World, slot: number) => {
 };
 
 const live = (world: World) => world.names.filter((n) => n.live);
+
 const ended = (world: World) => world.names.filter((n) => !n.live);
 
 /** The item a tape cell's number picks; never called on an empty list. */
@@ -220,6 +228,7 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
 const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move> => {
   const ids = world.pids < PIDS.length - 1;
   const lives = live(world).length > 0;
+
   const can: Record<Move, boolean> = {
     start: world.names.length < 3 && ids,
     restart: ended(world).length > 0 && ids,
@@ -234,6 +243,7 @@ const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move>
     retry_other: world.exits.size > 0,
     reopen: true,
   };
+
   return moves.filter((move) => can[move]);
 };
 
@@ -247,13 +257,16 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
     const { sql, fault } = cutting(store.sql);
     const next = ids(...PIDS);
     const world: World = { names: [], exits: new Map(), watches: new Map(), downs: new Map(), pids: 0, refs: 0 };
+
     const as = <A, E>(caller: Caller, call: (p: ProcessManager["Service"]) => Effect.Effect<A, E>) =>
       ProcessManager.use(call).pipe(Effect.provide(layer(sql, caller, next.next)), Effect.result);
+
     /** The writes one exit of `process` makes: its exit, a DOWN per live watch on it, a cancel per watch it holds. */
     const writes = (process: string) => {
       const watches = [...world.watches.values()].filter((w) => w.live);
       const inbound = watches.filter((w) => w.target === process).length;
       const outbound = watches.filter((w) => w.to._tag === "process" && w.to.process === process).length;
+
       return 1 + inbound + outbound;
     };
 
@@ -287,12 +300,14 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
 
           break;
         }
+
         case "watch":
         case "watch_missing": {
           const target =
             move === "watch"
               ? choose(live(world), step.pick).process
               : choose([...world.exits.keys(), choose(PIDS, PIDS.length - 1)], step.pick);
+
           const watchers = [CLIENT, ...live(world).map((n) => Recipient.cases.process.make({ process: n.process }))];
           const to = choose(watchers, step.cut);
           const ref = `watch:${++world.refs}`;
@@ -311,11 +326,13 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
 
           break;
         }
+
         case "cancel": {
           const [key, watch] = choose(
             [...world.watches.entries()].filter(([, w]) => w.live),
             step.pick,
           );
+
           const ref = key.slice(key.lastIndexOf("|") + 1);
           const caller = watch.to._tag === "client" ? brain() : watcher(watch.to.process);
           const answer = yield* as(caller, (p) => p.demonitor(ref, from()));
@@ -323,6 +340,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           watch.live = false;
           break;
         }
+
         case "exit": {
           const target = choose(live(world), step.pick);
           const answer = yield* as(brain(), (p) => p.exit(target.process, copied(step.reason), from()));
@@ -345,6 +363,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
 
           break;
         }
+
         case "retry_equal":
         case "retry_other": {
           const [process, reason] = choose([...world.exits.entries()], step.pick);
@@ -360,6 +379,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           expect(yield* facts(sql, world), "a retry writes nothing").toEqual(before);
           break;
         }
+
         case "bad": {
           const target = choose(live(world), step.pick);
           const answer = yield* as(brain(), (p) => p.exit(target.process, step.bad as ExitReason, from()));
@@ -369,6 +389,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           expect(Result.getOrThrow(still), "the process still lives").toBe(true);
           break;
         }
+
         case "exit_noproc": {
           // noproc is what a monitor answers for a missing target; no process exits with it.
           const target = choose(live(world), step.pick);
@@ -377,6 +398,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           expect(yield* facts(sql, world), "a refused noproc exit writes nothing").toEqual(before);
           break;
         }
+
         case "cut": {
           const target = choose(live(world), step.pick);
           fault.after = step.cut % writes(target.process);
@@ -388,6 +410,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           expect(Result.getOrThrow(still), "the process still lives after the cut").toBe(true);
           break;
         }
+
         case "reopen":
           yield* store.reopen;
           break;
@@ -400,6 +423,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
       for (const { process } of live(world)) {
         const letters = yield* as(brain(), (p) => Stream.runCollect(p.receive(process, 0)));
         expect(Result.isSuccess(letters), "a live process can receive").toBe(true);
+
         const downs = Result.isSuccess(letters)
           ? [...letters.success].flatMap(({ m }) =>
               Predicate.isObject(m) && Predicate.hasProperty(m, "_tag") && m._tag === "DOWN" ? [m] : [],
@@ -430,8 +454,9 @@ const prop = (
         const law = walk(open, moves, done);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+        const checks = { seed: 119120, numRuns: runsFor({ fast: 10, full: 40 }), includeErrorInReport: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-        yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 40, includeErrorInReport: true }));
+        yield* Effect.promise(() => fc.assert(property, checks));
         // An empty flow cannot pass: every move the law is about ran at least once.
         expect([...done].sort()).toEqual(expect.arrayContaining([...required].sort()));
       }),

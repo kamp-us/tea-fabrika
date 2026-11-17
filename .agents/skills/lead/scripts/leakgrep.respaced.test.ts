@@ -6,10 +6,12 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 // Ticket 500, today's tooling (owner, 2026-11-09): an added line is old text when the same diff
-// removes, from the same file, a line equal to it once each run of spaces and tabs is one space,
+// removes, from any of its files (0047, amended 2026-11-14), a line equal to it once each run of
+// spaces and tabs is one space,
 // the ends are trimmed and one last ; or , is dropped. Every diff here is one git itself wrote,
 // with the flags the bot's push reads its diff with, unless a law says it is written by hand.
 const script = process.env.TEST_LEAKGREP ?? join(import.meta.dirname, "leakgrep.sh");
+
 const options = { seed: 500, numRuns: 8 };
 
 // A made-up private word, and one made-up line of each kind the check knows.
@@ -32,14 +34,18 @@ const lab = <A>(
     const words = join(dir, "words");
     mkdirSync(repo);
     writeFileSync(words, `${word}\n`);
+
     const git = (...args: string[]) => {
       const ran = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args], {
         cwd: repo,
         encoding: "utf8",
       });
+
       expect(ran.status, ran.stderr).toBe(0);
+
       return ran.stdout;
     };
+
     git("init", "-q");
 
     const write = (files: Files) => {
@@ -61,6 +67,7 @@ const lab = <A>(
         write(before);
         git("commit", "-q", "--allow-empty", "-m", "before");
         write(after);
+
         return git("diff", "--cached", "--no-ext-diff", "--no-textconv", "--unified=0", ...flags, "HEAD");
       },
       // How many hits the check printed. It never prints the text it matched.
@@ -71,6 +78,7 @@ const lab = <A>(
           encoding: "utf8",
           env: { ...process.env, FABRIKA_LEAK_WORDS: list, TYPESAFE_API_KEY: undefined },
         });
+
         const count = ran.stderr.split("\n").filter((line) => line.startsWith("leakgrep: leak ")).length;
         expect(ran.status, ran.stderr).toBe(count === 0 ? 0 : 1);
         expect(ran.stdout.trim()).toBe(count === 0 ? "leakgrep: added text clean" : "");
@@ -89,17 +97,22 @@ const lab = <A>(
 
 // A line is words with one space between them, most often with a flagged word among them.
 const plain = fc.stringMatching(/^[a-z]{1,8}$/);
+
 const words = fc.array(fc.oneof(plain, fc.constantFrom(...leaks)), { minLength: 1, maxLength: 5 });
+
 const end = fc.constantFrom("", ";", ",");
+
 const line = fc.tuple(words, end).map(([tokens, last]) => tokens.join(" ") + last);
 
 // The same words with other spacing: every gap, both ends, and the one last ; or ,.
 const gap = fc.constantFrom(" ", "  ", "\t", " \t ");
+
 const edge = fc.constantFrom("", " ", "\t", "    ");
 
 const respaced = (text: string) =>
   fc.tuple(fc.array(gap, { minLength: 5, maxLength: 5 }), edge, edge, end).map(([gaps, lead, tail, last]) => {
     const tokens = text.replace(/[;,]$/, "").split(" ");
+
     return lead + tokens.map((token, n) => (n === 0 ? "" : gaps[n]) + token).join("") + last + tail;
   });
 
@@ -169,17 +182,29 @@ describe("T500 leakgrep reads a respaced line as old text, today's tooling", () 
   const old = `\tkeep ${word};`;
   const now = `  keep  ${word}`;
 
-  // pinned: the same text removed from one file and added to another is new text there.
-  // Plant: key removed lines by text alone.
-  it("pinned: a line removed from another file clears nothing", () => {
+  // pinned: the same text removed from one file and added to another is old text: it was already in
+  // the tree the diff starts from (0047, amended 2026-11-14). A move between files, as a split of one
+  // test file into two, adds nothing new. Plant: key removed lines by file and text again.
+  it("pinned: a line moved from another file of the same diff is old text", () => {
     lab(({ diff, hits }) => {
-      expect(hits(diff({ "a.txt": [old], "b.txt": ["safe"] }, { "a.txt": ["safe"], "b.txt": ["safe", now] }))).toBe(1);
+      expect(hits(diff({ "a.txt": [old], "b.txt": ["safe"] }, { "a.txt": ["safe"], "b.txt": ["safe", now] }))).toBe(0);
+    });
+  });
+
+  // pinned: one removed line still clears one added line, across files too. Two added copies against
+  // one removed copy leave one hit. Plant: clear every added copy of a removed text.
+  it("pinned: one line removed from one file clears only one of two copies added elsewhere", () => {
+    lab(({ diff, hits }) => {
+      expect(
+        hits(diff({ "a.txt": [old], "b.txt": ["safe"] }, { "a.txt": ["safe"], "b.txt": ["safe", now, now] })),
+      ).toBe(1);
     });
   });
 
   // scenario: git pairs a renamed file as one file, and then drops its unchanged lines from the diff
-  // already. With rename detection off the new path is a new file, and all of it is new text.
-  it("scenario: a renamed file is one file when git says so, and a new file when it does not", () => {
+  // already. With rename detection off the old path's lines are removed and the new path's added, so
+  // the moved lines are old text either way.
+  it("scenario: a renamed file's lines are old text whether git pairs the rename or not", () => {
     lab(({ diff, hits }) => {
       const rest = Array.from({ length: 20 }, (_, n) => `line ${n}`);
       const before = { "a.txt": [...rest, old] };
@@ -187,7 +212,7 @@ describe("T500 leakgrep reads a respaced line as old text, today's tooling", () 
       const renamed = diff(before, after, "-M");
       expect(renamed).toContain("rename from a.txt");
       expect(hits(renamed)).toBe(0);
-      expect(hits(diff(before, after, "--no-renames"))).toBe(1);
+      expect(hits(diff(before, after, "--no-renames"))).toBe(0);
     });
   });
 
@@ -278,10 +303,12 @@ describe("T500 leakgrep reads a respaced line as old text, today's tooling", () 
       const binary = diff({ "a.bin": [bytes] }, { "a.bin": [bytes + bytes] });
       expect(binary).toContain("Binary files");
       expect(hits(binary)).toBe(0);
+
       const beside = diff(
         { "a.bin": [bytes], "a.txt": ["keep"] },
         { "a.bin": [bytes + bytes], "a.txt": ["keep", now] },
       );
+
       expect(hits(beside)).toBe(1);
     });
   });

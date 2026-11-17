@@ -1,3 +1,8 @@
+---
+state: "decided"
+summary: "Plan is its own stage for every ticket; triage only sorts. An epic is a plan with many tasks, a project is a parent plan. Milestones leave the loop; a roadmap is a view."
+---
+
 # A project is a parent plan; milestones leave the loop
 
 Decided 2026-10-18.
@@ -58,7 +63,7 @@ Its decided rules are in: [0220](../../.decisions/0220-plan-is-the-one-shape.md)
 - A study of demlik's board found that after triage nothing read a milestone
   except one tiebreak when a builder picks its next ticket. Nothing closed
   milestones or campaigns: all five active campaigns had met their end line and
-  were still open. Experiment 85's real lane read no milestone either.
+  were still open. Experiment 85's real quest read no milestone either.
 - Campaign tickets were 92% p1 against 21% elsewhere. A grouping that changes
   how work is priced, without anyone deciding that, is a rule nobody chose.
 - Linear, Shape Up and Jira each keep one clock for work. Longer groupings are

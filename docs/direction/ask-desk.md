@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-02"
+summary: "`next/`, with tryouts in today's version. Most asks take one key: `y` takes the step's rec, `n` refuses it with a required note, `o` opens every pick, each key has a button, and the keys work only where focus is. One asks program with two views: the top bar's popup as the glance, with the rec and `y` and `n` on its rows, and \"open all\" as a tile, a list beside the selected ask, with the ticket tile following on a pipe; five rules for the first tile the app opens with content. Six principles: one queue as a list beside the selected ask, with a count and minutes; the question in one line with the rec's why, cost and percent sure, the evidence folded; three keys; the rec written before the ask and what the person did recorded (`took`: key, time on screen, what was opened, rec shown or hidden), attention counted per merged ticket (from experiment 185); autonomy offered per narrow kind after 30 blind agreements in a row (the rule of three), one press to make and undo, never for the exam, spend or security kinds; code answers what code can, and a stop shows as a stop. An answer may carry an optional `needed` mark: the ask really needed the person, or the agent could have worked it out (decided 2026-11-07). Ticket 117's three asks and its `no_review` stop are the running example. From experiment 196."
+---
+
 # The ask desk: most asks are one key, and the desk learns from the answers
 
 **Decided 2026-11-02.** The owner approved the whole note after a walk of each part: one asks
@@ -109,7 +114,7 @@ const Took = Schema.Struct({
 /** A person's rule: this kind, with this rec, is taken without asking. Person-only, as `answered`. */
 const RuleMade = Schema.TaggedStruct("rule_made", {
 	rule: Id,
-	match: Schema.Struct({for: Automatable, step: LaneStep, rec: Pick, repo: Repo}),
+	match: Schema.Struct({for: Automatable, step: QuestStep, rec: Pick, repo: Repo}),
 	seen: Schema.Struct({blind: Count, agreed: Count}), // what the offer showed: 30 of 30
 	from: Schema.Array(Id),                  // the blind asks it was offered on
 });
@@ -351,7 +356,7 @@ the asks tile has focus.
   other one, with more it opens the rest; either way a one-line note says why, and it goes to the
   step that runs next. `o` lists every pick by number, rec included, for a person who wants to see
   them all. Every key has a click that does the same: a row, "Take rec · approve `y`", "Not the
-  rec… `n`", "Every pick `o`", each pick `1` `2`, "Evidence `space`", "Later `h`", "Open the lane
+  rec… `n`", "Every pick `o`", each pick `1` `2`, "Evidence `space`", "Later `h`", "Open the quest
   `↵`". The buttons come from the program's `commands` ([modes](./modes.md)), so a key
   and its button cannot drift, and each carries `aria-keyshortcuts`, which only names the key: "the
   keyboard behavior must be added via JavaScript event handlers" [w5]. The demo's 132 click and key checks pass in Chromium
@@ -461,12 +466,12 @@ offers one press to make that kind automatic. One press undoes it. Some kinds ne
 ### A6: code answers what code can; a stop shows as a stop
 
 **Lean, 85%.** A stop a step can fix never reaches the desk. A stop that does is drawn as a stop,
-with its why and where the lane goes on, never as a yes or no. A design that adds an ask says what
+with its why and where the quest goes on, never as a yes or no. A design that adds an ask says what
 it costs a person a week.
 
 - **What it means.** The desk's asks are jidoka's `judgment` kind only. An andon stop sits in the
   same queue as its own row: "#117 stopped at exam_merge: no review at this head", with `↵` to open
-  the lane, and no `y` or `n`. A new ask kind's change says why only a person can answer it, as
+  the quest, and no `y` or `n`. A new ask kind's change says why only a person can answer it, as
   jidoka already asks, and now also its weekly cost: asks a week times the person's minutes per ask.
 - **Why.** "Pages with rote, algorithmic responses should be a red flag" [t1]. A rote ask trains a
   rubber stamp [n1], and that stamp would then pollute A5's count.
@@ -482,7 +487,7 @@ it costs a person a week.
   guess.
 - **Cost.** The stop row, about 40 to 60 lines; the rest is PR 11.
 - **Today.** **Breaks.** Ticket 117's `send:reviewer:no_review` at `exam_merge` was a step code could
-  take (PR 11 routes it to `run("review")`). It stopped the lane `stuck:sent_back`, and the asks list
+  take (PR 11 routes it to `run("review")`). It stopped the quest `stuck:sent_back`, and the asks list
   never showed it: the tracker's head says stuck only when the last end is `stuck`
   (`programs/tracker/src/head.ts:115`), and this one was a `send`.
 
@@ -644,7 +649,7 @@ Small fixes offered, not filed. Sizes in lines and agent hours.
 2. **Record `took` on `answered`.** An optional field on the tracker's `answered`
    (`ticket.ts:347-353`): key, ms, opened. About 40 lines, 1 agent hour. Every answer before it
    loses these.
-3. **The lane writes `rec` on `asked`.** For `approve`, the rec is approve when every open question
+3. **The quest writes `rec` on `asked`.** For `approve`, the rec is approve when every open question
    has a lean, with the lowest `sure`. For the rest, the step's own first pick, marked `sure` unknown
    until a step says. About 60 lines, 1 agent hour.
 4. **A required note on `no`.** The ask box refuses `no` with an empty note. About 15 lines.
@@ -655,7 +660,7 @@ Small fixes offered, not filed. Sizes in lines and agent hours.
   groups by kind inside it.
 - **[One ask, one meter](./one-ask-and-one-meter.md)** (proposed) has `answered {pick, note}`. This
   note makes it `answer` (a union) plus `took`, and adds `rec` on `asked`.
-- **[AGENTS.md](../../AGENTS.md#running-the-machine-on-a-real-ticket):** "no agent answers a question
+- **[AGENTS.md](../../AGENTS.md#how-a-change-lands):** "no agent answers a question
   the machine put to a person". A rule does not break it: the person makes the rule, as a person's
   fact, and once it holds the machine does not put that question to a person. `auto` is code's fact
   and never looks like a person's. It does move judgments to code, which

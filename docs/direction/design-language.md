@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-07, the token file's keys included"
+summary: "Both versions. Five levels (principles, foundations, tokens, components, patterns and guides), with a program's note off the map as product; every note sorted (28 keep, 9 merge, 5 split, 2 retire); a guideline page made from doc tags on the part; two token tiers plus the tile's, from one data file with contrast pairs; one focus ring; ARIA snapshots that advise first. Nine calls for the owner."
+---
+
 # Design language: the levels, the page shape, and where each note sits
 
 **Proposed 2026-11-04; most calls decided 2026-11-07.** A draft read on main at `ffa7056f`. The
@@ -112,7 +117,7 @@ const Level = Schema.TaggedUnion({
 | [The tracker is like Linear](../../.decisions/0346-the-tracker-is-built-like-linear.md) | product | merge with tracker views and areas | One program in three notes. |
 | [Tracker views are programs](./tracker-views-are-programs.md) | product | merge into the tracker's page | Its section 7 goes to program guidelines. |
 | [Areas](./areas.md) | product | merge into the tracker's page, once decided | Same program. |
-| [The ticket is the lane's view](./the-ticket-is-the-lane-view.md) | product | merge with what a ticket shows | One view in two notes. |
+| [The ticket is the quest's view](./the-ticket-is-the-lane-view.md) | product | merge with what a ticket shows | One view in two notes. |
 | [What a ticket shows](./what-a-ticket-shows.md) | product | merge | Same. |
 | [A canvas per work](./a-canvas-per-work.md) | product (vision) | keep | A vision, not a guideline. |
 | [Designs on Claude Design](./design-on-claude-design.md) | guide: contributing | keep | Where designs are drawn. |

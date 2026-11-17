@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01"
+summary: "Today's tracker first, then `next/`'s. A ticket's size is an `estimate` in agent hours on a doubling scale (0.25 to 8, more means split), written by the planner before the build and never overwritten. Its `spent` is folded from the ticket's run facts, never typed. An agent hour is one agent's wall clock, summed, failed runs in, drivers out. The rate comes from what merged, per model, starting at experiment 187's 602 lines an hour. Runs record the ticket and the PR as two fields, a start and end, and their parent. Eight principles, each held to Linear's way and to Elm's and OTP's where they have one. Wall clock with waits for now, active time beside it; cap at 8 and split; the rate from the last ten merged tickets, one per model; Tier 1 and the self-fix plan restated at the measured rate; the field log's `lane` split into `ticket` and `pr`."
+---
+
 # Agent hours
 
 **Decided 2026-11-01.** The owner approved every lean: the names `estimate` and `spent`, the
@@ -34,7 +39,7 @@ import {Schema} from "effect";
 const Hours = Schema.Literals([0.25, 0.5, 1, 2, 4, 8]);
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
-/** Written by the lane with each plan version, from the planner's draft. Never overwritten. */
+/** Written by the quest with each plan version, from the planner's draft. Never overwritten. */
 const Estimated = Schema.Struct({
 	type: Schema.Literal("estimated"),
 	plan: Count, // the plan version it sizes
@@ -72,8 +77,8 @@ the scale   over 8, so H4 says split. It went as one PR of 249 files.
 ## Which version
 
 - **Today's tracker first.** Tickets, their `started` and `ended` facts and the watcher's `pr`
-  fact live there now, and [ticket 117](../plan/README.md) is the first real lane. The planner
-  writes the estimate, the lane writes the fact, and the ticket window shows both.
+  fact live there now, and [ticket 117](../plan/README.md) is the first real quest. The planner
+  writes the estimate, the quest writes the fact, and the ticket window shows both.
 - **`next/` later,** when its tracker exists: the same two names and the same fold, with `_tag`.
 - **The field log** (`field/README.md`) changes too, for hand work: see
   [What a run records](#what-a-run-records).
@@ -147,7 +152,7 @@ The rule is [use the industry's names](./use-the-industrys-names.md). The candid
   which hides the failed tries. **We differ:** a failed run is a real cost a planner should learn.
 - **On a real ticket.** On demlik, today's operator agents ran 38.8 hours while the runs they drove
   ran 20.1. Counting both would have tripled the number. In this repo's pipeline the driver is
-  code, so a lane has no driver agent at all. Failed runs were 6% of joined hours (4.4 of 73.9).
+  code, so a quest has no driver agent at all. Failed runs were 6% of joined hours (4.4 of 73.9).
 - **The doubt.** A hand-run "driver" that also does work, such as PR 267's rehearsal run (54
   minutes), is hard to sort. For now it counts, and its row says it drove. `parent` (below) makes
   the line exact.
@@ -170,9 +175,9 @@ The rule is [use the industry's names](./use-the-industrys-names.md). The candid
   it leaves out "Waiting for a test suite to run". The two clash, and the owner picked wall, with
   active kept beside it so Devin's number can be read too.
 - **Linear:** no time, so no answer.
-- **On a real ticket.** On demlik's whole lanes the shipper was 26% of the hours, mostly a
+- **On a real ticket.** On demlik's whole quests the shipper was 26% of the hours, mostly a
   480-second merge-queue watch. Ticket 117's waits on the owner's yes are not agent hours at all:
-  no agent runs while a lane waits on a person.
+  no agent runs while a quest waits on a person.
 - **The doubt, and what settles it.** Waits make a slow CI look like expensive work. Recording
   active time beside wall time is what settles it: when enough tickets have both, the gap between
   them shows whether waits distort the rate. Until then wall is the only number every row has.
@@ -228,7 +233,7 @@ splits at 8. A plan cuts work by what lands whole, and 8 is only the scale's top
 **Decided 2026-11-01, 75%.**
 
 - **What it means.** The plan draft carries `hours`, the `lines` by kind it expects, the `rate` it
-  used and how `sure` it is. The lane writes it as an `estimated` fact with each plan version. A
+  used and how `sure` it is. The quest writes it as an `estimated` fact with each plan version. A
   person may write a new one. Nothing overwrites the old, and calibration uses the planner's own.
 - **Elm and OTP.** None.
 - **The known way.** Scrum: "The Developers who will be doing the work are responsible for the
@@ -249,7 +254,7 @@ splits at 8. A plan cuts work by what lands whole, and 8 is only the scale's top
 - **What it means.** The planner's rate is lines per agent hour over the last ten merged tickets
   that had both an estimate and a `spent`, for the same builder model. Each model has its own rate,
   and a ticket built by one model never moves another's. Before ten exist for a model, its rate
-  starts at experiment 187's whole-lane median, 602, and says so.
+  starts at experiment 187's whole-quest median, 602, and says so.
 - **Elm and OTP.** None.
 - **The known way.** Linear's cycle capacity uses "the velocity of the previous three completed
   cycles". Cohn's velocity is a team's own past.
@@ -258,7 +263,7 @@ splits at 8. A plan cuts work by what lands whole, and 8 is only the scale's top
   point". **We differ:** an unestimated ticket shows as unestimated and is left out of the rate, so
   a missing number never looks like a small one.
 - **On a real ticket.** Every past guess in our docs implied 35 to 160 lines an hour. The
-  whole-lane median was 602. At the measured rate, Tier 1's 12,470 middle lines are about 21 agent
+  whole-quest median was 602. At the measured rate, Tier 1's 12,470 middle lines are about 21 agent
   hours (17 to 45), against the plan's 63 to 92.
 - **The doubt.** Ten tickets is a guess with no source. So is "per model": most rows are one
   model. The first model change shows whether the rate moves.
@@ -296,7 +301,7 @@ active               minutes a model or tool was working, beside   nowhere; need
                      the wall minutes (H3)
 ```
 
-- **Today's pipeline is nearly there.** A lane's runs and its PR already meet on the ticket. The
+- **Today's pipeline is nearly there.** A quest's runs and its PR already meet on the ticket. The
   gaps are hand work, runs that die before `ended`, and the estimate.
 - **Decided 2026-11-01, 85%: the field log splits `lane` into `ticket` and `pr`.** New hand rows
   write the two fields, plus `started`, `ended` and `parent`, and the main session logs a row of
@@ -306,7 +311,7 @@ active               minutes a model or tool was working, beside   nowhere; need
 ## Where this differs from settled notes
 
 - **Tier 1's size** uses "about 150 lines an hour" (`docs/plan/tier-1-detail.md`). Experiment 187
-  measured about 600 for a whole lane and marks 150 wrong. **Decided 2026-11-01, 80%: Tier 1's
+  measured about 600 for a whole quest and marks 150 wrong. **Decided 2026-11-01, 80%: Tier 1's
   size and the self-fix plan's are restated at the measured rate,** in a PR of their own. The old
   numbers stay beside the new ones, marked as an old guess. PR B's actuals are still the better
   test.
@@ -324,7 +329,7 @@ active               minutes a model or tool was working, beside   nowhere; need
 ## What it cannot tell us
 
 - How good a planner's estimate will be. No planner has written one.
-- Whether 602 holds. It comes from 11 whole lanes on one library, with no test writer or mutation
+- Whether 602 holds. It comes from 11 whole quests on one library, with no test writer or mutation
   step, plus one PR here.
 - Whether wall clock or active time is the better unit. Only one kind of wait was ever seen. Active time,
   once runs can record it, sits beside wall time so the two can be compared.

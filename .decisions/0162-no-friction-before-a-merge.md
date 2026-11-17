@@ -1,7 +1,7 @@
 ---
 id: 0162
 title: A pull request whose steps passed lands on green CI and a clean leak check alone, with no wait, re-run, signature or script of ours in between
-status: amended-in-part by [0164](0164-the-bot-stays-without-signing.md)
+status: amended-in-part by [0164](0164-the-bot-stays-without-signing.md), [0174](0174-a-queue-run-follows-its-paths.md), [0179](0179-an-admin-merge-is-the-owners.md), [0530](0530-lead-turns-on-merge-when-ready.md)
 date: 2026-11-13
 tags: [merge, lead, friction, catchup, ci, merge-queue, organization, budget]
 ---
@@ -149,3 +149,15 @@ unsigned commit can merge and the rules above hold from that day.
   - the four steps and the draft pull request at the first commit
     ([0134](0134-no-code-stays-only-on-a-local-branch.md));
   - the settings of GitHub's queue, and when fabrika's own queue takes over from it.
+
+## Amendments
+
+- 2026-11-13: a record of what was set, not a new ruling. On the owner's word of 2026-11-13, the
+  ruleset "main only through a pull request" gained GitHub's `merge_queue` rule, so main now takes
+  changes only through GitHub's merge queue. Its settings as read that day: the merge method is
+  squash; a group holds one pull request (at least 1 and at most 1 to merge, with no wait for
+  more); up to 3 groups build at once; every group must be green (`ALLGREEN`); a group's checks
+  have 60 minutes to answer; and `ci-required` is the one required check. The squash commit takes
+  the pull request's title and description as its title and message. The repo's Actions allow list
+  gained `merge_group`, and `check.yaml` runs on it. This settles the first half of "the settings
+  of GitHub's queue" under "Not decided here"; when fabrika's own queue takes over stays open.

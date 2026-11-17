@@ -1,18 +1,26 @@
-// One stylesheet with its local `@import`s inlined by lightningcss's own bundler, which keeps the
-// cascade: layer order, source order, and a refusal when a remote import follows a bundled one.
-// Each file it reads is checked first (`check`), since the bundler would keep a local `url()` and
-// wrap a `layer` or `supports()` import that the build does not accept.
-// A window's stylesheet is served from the brain's table, which holds scripts and stylesheets only,
-// so any other local file a stylesheet names stops the build instead of answering 404 later.
-// Every file is found and read through Effect's FileSystem and Path, which the caller provides.
-import { Effect, FileSystem, Path } from "effect";
+/**
+ * One stylesheet with its local `@import`s inlined by lightningcss's own bundler, which keeps the
+ * cascade: layer order, source order, and a refusal when a remote import follows a bundled one.
+ * Each file it reads is checked first (`check`), since the bundler would keep a local `url()` and
+ * wrap a `layer` or `supports()` import that the build does not accept.
+ *
+ * A window's stylesheet is served from the brain's table, which holds scripts and stylesheets only,
+ * so any other local file a stylesheet names stops the build instead of answering 404 later.
+ * Every file is found and read through Effect's `FileSystem` and `Path`, which the caller provides.
+ */
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { bundleAsync, transform } from "lightningcss";
 import { BuildError } from "../../runtime/Built.ts";
 
 /** A reference to a scheme (`https:`, `data:`), a host (`//`) or a fragment is not a local file. */
 const remote = (ref: string) => /^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(ref);
+
 const unsupported = "unsupported @import condition";
+
 const encode = (text: string) => new TextEncoder().encode(text);
+
 const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 
 // lightningcss names the bad token in its message; the build's errors name what is broken.
@@ -21,18 +29,18 @@ const refusal = (error: unknown) => {
   const known = message.match(/(?:unsupported @import condition|stylesheet [^:]*)$/)?.[0];
 
   if (known !== undefined) {
-    return new BuildError({ reason: "bundle", message: known, cause: error });
+    return BuildError.make({ reason: "bundle", message: known, cause: error });
   }
 
   if (message.includes("BadString")) {
-    return new BuildError({ reason: "bundle", message: "stylesheet has a broken string", cause: error });
+    return BuildError.make({ reason: "bundle", message: "stylesheet has a broken string", cause: error });
   }
 
   if (message.includes("BadUrl")) {
-    return new BuildError({ reason: "bundle", message: "stylesheet has a broken url()", cause: error });
+    return BuildError.make({ reason: "bundle", message: "stylesheet has a broken url()", cause: error });
   }
 
-  return new BuildError({ reason: "bundle", message: `stylesheet has a broken @import: ${message}`, cause: error });
+  return BuildError.make({ reason: "bundle", message: `stylesheet has a broken @import: ${message}`, cause: error });
 };
 
 // lightningcss reports a rule's start as a 0-based line and a 1-based UTF-16 column, and counts
@@ -59,6 +67,7 @@ const parse = (file: string, text: string) => {
   const at = offsets(text),
     starts: number[] = [],
     imports: number[] = [];
+
   const result = transform({
     filename: file,
     code: encode(text),
@@ -87,6 +96,7 @@ const parse = (file: string, text: string) => {
       },
     },
   });
+
   return { dependencies: result.dependencies ?? [], starts, imports };
 };
 
@@ -103,13 +113,13 @@ const check = Effect.fn("build.css.check")(function* (file: string, text: string
     const bare = yield* Effect.try({ try: () => bareLayer(text.slice(start, end)), catch: refusal });
 
     if (bare) {
-      return yield* new BuildError({ reason: "bundle", message: unsupported });
+      return yield* BuildError.make({ reason: "bundle", message: unsupported });
     }
   }
 
   for (const dependency of dependencies) {
     if (dependency.type === "url" && !remote(dependency.url)) {
-      return yield* new BuildError({ reason: "bundle", message: "stylesheet references a file" });
+      return yield* BuildError.make({ reason: "bundle", message: "stylesheet references a file" });
     }
   }
 });
@@ -118,6 +128,7 @@ const check = Effect.fn("build.css.check")(function* (file: string, text: string
 const cyclic = (edges: ReadonlyMap<string, ReadonlySet<string>>) => {
   const done = new Set<string>(),
     open = new Set<string>();
+
   const visit = (file: string): boolean => {
     if (open.has(file)) {
       return true;
@@ -131,18 +142,37 @@ const cyclic = (edges: ReadonlyMap<string, ReadonlySet<string>>) => {
     const found = [...(edges.get(file) ?? [])].some(visit);
     open.delete(file);
     done.add(file);
+
     return found;
   };
+
   return [...edges.keys()].some(visit);
 };
 
+/**
+ * Inlines one stylesheet's local `@import`s, in order, and answers the whole sheet as text.
+ *
+ * **Details**
+ *
+ * Each file is checked as the bundler reads it. A remote import stays as it is. A failure is a
+ * `BuildError` with `reason: "bundle"` and a message that names what is broken.
+ *
+ * **Gotchas**
+ *
+ * It refuses a `url()` that names a local file, an `@import` with a `layer` or a `supports()`
+ * condition, and a sheet that imports itself through any chain.
+ *
+ * @category constructors
+ */
 export const inlineStylesheet = Effect.fn("build.css")(function* (file: string) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
   const edges = new Map<string, Set<string>>();
   // A resolver's failure reaches the bundler as an Error with our message; `refusal` reads it back.
   const plain = (error: { readonly message?: string | undefined }) => new Error(error.message ?? "");
+
   const found = (specifier: string, from: string): Effect.Effect<string | { external: string }, Error> =>
     remote(specifier)
       ? Effect.succeed({ external: specifier })
@@ -154,11 +184,13 @@ export const inlineStylesheet = Effect.fn("build.css")(function* (file: string) 
           ),
           Effect.mapError(plain),
         );
+
   const checked = (target: string) =>
     fs.readFileString(target).pipe(
       Effect.tap((text) => check(target, text)),
       Effect.mapError(plain),
     );
+
   const bundling = {
     filename: yield* fs.realPath(file).pipe(Effect.mapError(refusal)),
     errorRecovery: false,
@@ -171,11 +203,12 @@ export const inlineStylesheet = Effect.fn("build.css")(function* (file: string) 
         Effect.runPromiseWith(context)(checked(target)),
     },
   };
+
   // oxlint-disable-next-line fabrika/no-promises -- edge: lightningcss takes a resolver only in bundleAsync
   const result = yield* Effect.tryPromise({ try: () => bundleAsync(bundling), catch: refusal });
 
   if (cyclic(edges)) {
-    return yield* new BuildError({ reason: "bundle", message: "stylesheet imports itself" });
+    return yield* BuildError.make({ reason: "bundle", message: "stylesheet imports itself" });
   }
 
   return decode(result.code);

@@ -1,21 +1,47 @@
-// Both settings files are checked whole and strictly before any value is used (settings.md S5).
-// The repo's `fabrika-version` is read first. Each file's Struct is derived from the declarations
-// in its scope; a failure is explained at its key, with the line the Toml service gave.
+/**
+ * Checks both settings files whole and strictly before any value is used.
+ *
+ * **Details**
+ *
+ * The repo's `fabrika-version` is read first. Each file's schema is derived from the declarations whose scope includes that file. A failure is explained at its key, with the line the Toml service gave.
+ */
 import { Effect, Order, Predicate, Schema, SchemaAST, SchemaIssue } from "effect";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
 import type * as Setting from "./Setting.ts";
 import type { TomlDocument } from "./Toml.ts";
 
-export class SettingsError extends Schema.TaggedError<SettingsError>()("SettingsError", {
-  reason: Schema.Literals(["version", "syntax", "unknown", "scope", "invalid", "read"]),
-  message: Schema.String,
-  cause: Schema.optionalKey(Schema.Defect()),
-}) {}
+/**
+ * Error for a settings problem that stops the instance, with a message written for the person who must fix it.
+ *
+ * **Details**
+ *
+ * `reason` says which problem. This folder builds `version` (the repo needs a newer fabrika), `unknown` (no such setting, with a near-miss guess when one key is close), `scope` (the setting exists but not in this file), `invalid` (a value or table the schema refuses), and `read` (a source could not be read, or its value could not be traced to a declaration). `syntax` is built by the loader in `node/settings/Load.ts`, which turns a TOML error into it; that loader also builds `read` for a file it cannot read and `invalid` for a saved snapshot it cannot check. `cause` holds the underlying failure when there is one.
+ *
+ * @category errors
+ */
+export class SettingsError extends Schema.TaggedError<SettingsError, { readonly brand: unique symbol }>()(
+  "SettingsError",
+  {
+    reason: Schema.Literals(["version", "syntax", "unknown", "scope", "invalid", "read"]),
+    message: Schema.String,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
 
+/**
+ * The closing sentence of every settings message: "The instance did not start."
+ *
+ * **Details**
+ *
+ * Other modules import it so their messages end the same way.
+ *
+ * @category models
+ */
 export const STOP = "The instance did not start.";
 
 type Declaration = Setting.Setting<unknown>;
+
 type Path = ReadonlyArray<string>;
 
 interface Place {
@@ -25,7 +51,9 @@ interface Place {
 }
 
 const owner = { person: "a person's", repo: "a repo's" } as const;
+
 const same = (a: Path, b: Path) => a.length === b.length && a.every((s, n) => s === b[n]);
+
 /** Whether `path` is the declaration's own path or one of its tables. */
 const under = (d: Declaration, path: Path) => path.every((s, n) => d.segments[n] === s);
 
@@ -36,6 +64,7 @@ const at = (value: unknown, path: Path) =>
 const leaf = (value: unknown, path: Path): Path => {
   const below = at(value, path);
   const key = Predicate.isObject(below) ? Object.keys(below)[0] : undefined;
+
   return key === undefined ? path : leaf(value, [...path, key]);
 };
 
@@ -56,10 +85,19 @@ const located = (place: Place, path: Path) => {
   return place.file;
 };
 
-/** S5's first message: the key, its value, what it should be, and the stop. */
+/**
+ * Builds the `invalid` error for a value a declaration's schema refuses.
+ *
+ * **Details**
+ *
+ * The message names the location, the key, the value as shown, the schema's title as what was expected, and its description as the rule. Without a title or description it falls back to "a valid value" and "fabrika settings lists every setting." The caller passes `shown`, the text printed for the value.
+ *
+ * @category errors
+ */
 export const refused = (location: string, d: Declaration, shown: string) => {
   const expected = SchemaAST.resolveTitle(d.schema.ast) ?? "a valid value";
   const rule = SchemaAST.resolveDescription(d.schema.ast) ?? "fabrika settings lists every setting.";
+
   return new SettingsError({
     reason: "invalid",
     message: `${location}: ${d.path} = ${shown} is not ${expected}.\n  ${rule} ${STOP}`,
@@ -89,18 +127,28 @@ const struct = (declarations: ReadonlyArray<Declaration>, depth: number): Schema
       [...new Set(declarations.flatMap((d) => d.segments[depth] ?? []))].map((key) => {
         const below = declarations.filter((d) => d.segments[depth] === key);
         const own = below.find((d) => d.segments.length === depth + 1);
+
         return [key, Schema.optionalKey(own === undefined ? struct(below, depth + 1) : Codec.file(own))];
       }),
     ),
   );
 
 /**
- * The schema of one file, shared by validation and the editor's JSON Schema. Declarations are
- * sorted by path, so their order never shows. A file no declaration may be set in refuses every
- * key: Effect's empty Struct would take any object.
+ * Builds the schema of one settings file from the declarations whose scope includes that file.
+ *
+ * **Details**
+ *
+ * Validation and the editor's JSON Schema share this one schema. Declarations are sorted by path, so their order never shows. Every table and key is optional.
+ *
+ * **Gotchas**
+ *
+ * A file no declaration may be set in gets a schema that refuses every key, because Effect's empty Struct would take any object.
+ *
+ * @category constructors
  */
 export const schema = <A>(group: Setting.Group<A>, file: Setting.File): Schema.Codec<unknown, unknown> => {
   const own = group.declarations.filter((d) => d.scope.includes(file)).sort((a, b) => (a.path < b.path ? -1 : 1));
+
   return own.length === 0 ? Schema.Record(Schema.String, Schema.Never) : struct(own, 0);
 };
 
@@ -117,6 +165,7 @@ const explain = (
 
   if (own.some((d) => under(d, path))) {
     const d = own.find((d) => same(d.segments, path));
+
     return d !== undefined
       ? refused(located(place, path), d, shape(at(place.document.value, path)))
       : new SettingsError({
@@ -140,6 +189,7 @@ const explain = (
 
   // A guess names only a key this file may set.
   const near = own.map((d) => d.path).find((p) => distance(p, key.join(".")) <= 2);
+
   return new SettingsError({
     reason: "unknown",
     message:
@@ -152,15 +202,32 @@ type Files = Readonly<Record<Setting.File, Place>>;
 
 const triple = (version: string) => {
   const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number);
+
   return [major, minor, patch] as const;
 };
 
 const greater = Order.isGreaterThan(Order.Tuple([Order.Number, Order.Number, Order.Number]));
 
-/** Whether release `a` is newer than `b`, compared as three whole numbers, never as text. */
+/**
+ * Returns whether release `a` is newer than release `b`.
+ *
+ * **Details**
+ *
+ * Both are split on dots and compared as three whole numbers, so `1.10.0` is newer than `1.9.0`. A missing or non-numeric part counts as zero or compares as `NaN`, so pass checked versions.
+ *
+ * @category combinators
+ */
 export const newer = (a: string, b: string) => greater(triple(a), triple(b));
 
-/** Refuse a repo that needs a newer fabrika, before anything else in either file is read. */
+/**
+ * Fails when the repo's file states a minimum fabrika version that is newer than the running one.
+ *
+ * **Details**
+ *
+ * Succeeds with nothing when the repo's file does not set `fabrika-version`. A value that the version schema refuses fails as `invalid`, and a newer one fails as `version`. Both messages carry the file and line.
+ *
+ * @category combinators
+ */
 export const supported = Effect.fnUntraced(function* (repo: Place, version: string) {
   const d = Declarations.version;
   const wanted = repo.document.value[d.path];
@@ -181,6 +248,15 @@ export const supported = Effect.fnUntraced(function* (repo: Place, version: stri
   }
 });
 
+/**
+ * Checks the repo's file, then the person's file, against the group's declarations.
+ *
+ * **Details**
+ *
+ * First runs `supported` on the repo's file. Then each file is decoded with excess keys refused, and the first issue becomes one `SettingsError`: `invalid`, `scope` or `unknown`. Unknown keys are named, and their values never are. It does not read any source other than the two files, so flags and environment values are not checked here.
+ *
+ * @category combinators
+ */
 export const validate = Effect.fnUntraced(function* <A>(
   group: Setting.Group<A>,
   files: Files,

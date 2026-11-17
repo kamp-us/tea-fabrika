@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-24; 2026-10-25: the planner picks a property's tool, `\"tla\"` only for a design with no code yet (experiment 139); nothing built"
+summary: "Checks split by who checks them: a Property is checked by a tool and lasts as a test; a Criterion is read by a reviewer and ends with the ticket. A Property is `{when, result, why, behavior, tool, stories, code}`, new or existing, with a `p<n>` id in the criteria book and results as `checked` facts from a tool. One main `scenario` per task, with a fixture. Plan has no ask of its own: it answers `done`, and the parent asks the owner once per version. It runs in a box, writes only its `planned` fact, and reads the ticket from our tracker. The owner's approval records the version and a hash of the ticket's text."
+---
+
 # The plan stage
 
 Decided 2026-10-24. Who picks a property's tool was decided 2026-10-25, from
@@ -16,12 +21,12 @@ code still says `at`.
 
 ```ts
 // A sketch: one plan in the names picked 2026-10-24, with the ids the fold gives.
-// The ticket: a child that exits with no outcome row leaves the hosted lane
+// The ticket: a child that exits with no outcome row leaves the hosted quest
 // waiting for good (experiments 115 and 116).
 const plan = {
 	summary: "The hosted lane ends a child that exits with no row.",
 	stories: [
-		{id: "s1", who: "an owner", want: "a lane that ends when its children have ended", why: "so one crashed child never holds the lane"},
+		{id: "s1", who: "an owner", want: "a quest that ends when its children have ended", why: "so one crashed child never holds the quest"},
 	],
 	tasks: [
 		{
@@ -38,7 +43,7 @@ const plan = {
 				tool: "test",
 				stories: ["s1"],
 				code: [], // filled in once the code exists
-				fixture: "a lane with one child that exits before it writes a row",
+				fixture: "a quest with one child that exits before it writes a row",
 			},
 			// Where a task lists its other checks is not picked: these two lists are a sketch.
 			properties: [
@@ -56,7 +61,7 @@ const plan = {
 			criteria: [
 				{
 					id: "c1",
-					when: "a reader opens the lane's child Sub",
+					when: "a reader opens the quest's child Sub",
 					result: "a comment says why a child that is down is read once more",
 					read: "the comment above `child` in packages/pipeline/src/hosted/lane.ts",
 					stories: ["s1"],
@@ -130,7 +135,7 @@ criterion for `serves`:
 - **No `"proof"` until something runs proofs.** A tool word with nothing behind
   it is a choice the planner cannot keep
   ([Make the mistake impossible](./make-the-mistake-impossible.md)).
-- **`"tla"` stays.** In experiment 116, TLC found the hosted lane's hang in 3
+- **`"tla"` stays.** In experiment 116, TLC found the hosted quest's hang in 3
   steps and 118 states, in about 1 second. That write-up still said "do not
   adopt TLA+ now": its spec was a hand copy, and it is worth it only with trace
   validation.
@@ -147,7 +152,7 @@ criterion for `serves`:
   	p.code === "none" && p.about !== "value" ? "tla" : "test";
   ```
 
-  - Why: TLC found the lane's hang from 116's design alone. On code that
+  - Why: TLC found the quest's hang from 116's design alone. On code that
     exists, 139's two spec checks caught none of 46 planted bugs that the
     repo's tests missed, at 4 and 9 times the time.
   - Once the design's code lands, the Property is checked by `"test"`. A spec
@@ -250,7 +255,7 @@ answer({plan_ticket: readTicketAndFetchMain}); // in the app, with its own key
 
 - **No markdown is posted anywhere.** The readable plan shows only in the
   tracker's window, on the ticket's timeline
-  ([The ticket is the lane's one view](./the-ticket-is-the-lane-view.md),
+  ([The ticket is the quest's one view](./the-ticket-is-the-lane-view.md),
   [Data first; markdown is a view](./data-first-markdown-is-a-view.md)).
 - **The owner's approval records the plan version and a hash of the ticket's title
   and body.** The hash is over a JSON pair. Experiment 138 showed that a plain
@@ -306,7 +311,7 @@ something runs proofs.
 - **An id must outlive a reword.** The criteria book already gives `c<n>` from
   a counter for that reason. A property needs the same, so a `checked` fact
   can name it across revisions.
-- **The ask was already the parent's.** Today the lane treats a plan that ends
+- **The ask was already the parent's.** Today the quest treats a plan that ends
   `done` and one that ends `ask:owner:questions` the same way: it writes
   `planned` and waits for the owner (`afterChild`, case `"plan"`, in
   `packages/pipeline/src/stages/lane/machine.ts`). The ledger's fold already
@@ -394,6 +399,6 @@ Nothing here is built. These parts of the code contradict a decision:
   code is written.
 - **The evidence is small.** Experiment 86b is 6 tickets on one repository.
 - **Experiment 139 is one machine.** Its rule for `"tla"` rests on the hosted
-  lane and 46 planted bugs.
+  quest and 46 planted bugs.
 - **Whether properties written by a planner are good tests.** No run has yet
   had a planner write properties and a tool check them on real code.

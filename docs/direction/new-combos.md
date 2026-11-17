@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-24, replacing \"build on the second use\" from the same day"
+summary: "No new move. Four new combos from the six moves: Rate (advise or block from ratings), Controls (red where it must fail, green where it must pass), Brief (one typed view per role; checkers get no chat), Poll (a fact only on change). Two grow: `ask` keeps a hash of what it saw; the CODEOWNERS reader says which files are the exam. All six are built now, before a stage needs them."
+---
+
 # Four new combos and two that grow, built now
 
 Decided 2026-10-24: all six are built now, before any stage needs them. This
@@ -11,7 +16,7 @@ a read that counts (RxJS calls it a key selector). Today's `poll.ts` still says 
 // A sketch. Four new combos and two that grow, all made from the six moves.
 const mode = rate(rule, facts);                    // Rate: advise or block, from "fix" and "noise" counts
 const result = controls(onBad, onGood);            // Controls: red where it must fail, green where it must pass
-const brief = briefFor("reviewer", lane);          // Brief: one typed view per role
+const brief = briefFor("reviewer", quest);         // Brief: one typed view per role
 const ci = poll("ci", {every: "1m", read: checksOf, select: (c) => c.state}); // Poll: a fact only on change
 const approval = ask(owner, plan);                 // ask, grown: the approval keeps a hash of what it saw
 const touched = guarded(diff, rows);               // guarded files, grown: a change to the exam asks the owner

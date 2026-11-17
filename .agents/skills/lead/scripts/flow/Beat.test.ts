@@ -5,9 +5,13 @@ import * as Beat from "./Beat.ts";
 
 // Today's lead tooling: the beat is pure, so these laws step it by hand on fixed clocks.
 const options = { seed: 119120, numRuns: 300 };
+
 const T0 = Date.parse("2026-11-10T19:00:00.000Z");
+
 const phase = fc.constantFrom(...Beat.PHASES);
+
 const ms = (max: number) => fc.integer({ min: 0, max });
+
 const at = (offset: number) => new Date(T0 + offset);
 
 describe("Beat.enter and Beat.tick", () => {
@@ -40,7 +44,7 @@ describe("Beat.enter and Beat.tick", () => {
       fc.property(phase, ms(3_600_000), fc.boolean(), (p, d, heard) => {
         const beat = Beat.tick(Beat.enter(null, p, at(0)), at(d), heard ? at(d) : null);
         const encoded = Schema.encodeSync(Beat.Beat)(beat);
-        expect(Schema.decodeUnknownSync(Beat.Beat)(encoded)).toEqual(beat);
+        expect(Schema.decodeSync(Beat.Beat)(encoded)).toEqual(beat);
       }),
       options,
     );
@@ -48,7 +52,7 @@ describe("Beat.enter and Beat.tick", () => {
 });
 
 describe("Beat.says", () => {
-  it("calls any lane stuck once its beat is quiet past the limit, whatever the phase", () => {
+  it("calls any quest stuck once its beat is quiet past the limit, whatever the phase", () => {
     fc.assert(
       fc.property(phase, ms(Beat.QUIET), fc.integer({ min: 1, max: 86_400_000 }), (p, d, over) => {
         const beat = Beat.enter(null, p, at(0));
@@ -88,7 +92,7 @@ describe("Beat.says", () => {
   });
 
   it("scenario: the 2026-11-10 hung cleanup reads as stuck, in words", () => {
-    // Two lanes read "chain step running for 01:50" while each hung in cleanup with no agent.
+    // Two quests read "chain step running for 01:50" while each hung in cleanup with no agent.
     const beat = Beat.enter(null, "cleanup", at(0));
     expect(Beat.says(beat, at(110 * 60_000))).toEqual({
       stuck: true,

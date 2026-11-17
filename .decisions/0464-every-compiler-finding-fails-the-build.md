@@ -1,7 +1,7 @@
 ---
 id: 0464
 title: Every React Compiler and React rule finding fails the build in every repo, always, and the only exit is use no memo plus an owner-approved row in a ledger that only shrinks
-status: accepted
+status: amended-in-part by [0524](0524-no-list-lets-broken-code-pass.md)
 date: 2026-11-03
 tags: [react, compiler, lint, exam, next]
 ---
@@ -49,3 +49,7 @@ C5 and [which rules are on](../docs/direction/react-compiler.md#which-rules-are-
 - Built in `next/`: `compiler-ledger.json` is empty, and `.oxlintrc.json` sets the rules for
   `next/**/*.tsx`. Today's app does not have the override yet.
 - A ledger row names the file, the function and the `reason`.
+
+## Amendments
+
+- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) replaces `fabrika/no-clock-in-view`, one of the rules named here, with the Effect checker's date, random and UUID checks. `fabrika/one-store-hook` stays.

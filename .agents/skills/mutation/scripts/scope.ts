@@ -6,7 +6,7 @@
  *
  *   git diff --name-only --diff-filter=d BASE HEAD | node .agents/skills/mutation/scripts/scope.ts
  *
- * Of the lead tooling under `.agents/`, only the code that runs lanes is in (0089): the lead's
+ * Of the lead tooling under `.agents/`, only the code that runs quests is in (0089): the lead's
  * chain and drive scripts and the flow runner under `flow/`, each with the tests beside it.
  * Everything outside `.agents/` is in as before. Script names here are built from their stems, so
  * the script-reads lint does not take this file for a reader of those scripts.
@@ -28,8 +28,9 @@ import { Console, Effect, Stdio, Stream } from "effect";
 
 const LEAD = ".agents/skills/lead/scripts/";
 
-/** The lane code's own files and tests (0089's table); the flow runner is a folder. */
-const LANE = ["chain", "drive"].flatMap((stem) => [".ts", ".test.ts"].map((end) => `${LEAD}${stem}${end}`));
+/** The quest code's own files and tests (0089's table); the flow runner is a folder. */
+const QUEST = ["chain", "drive"].flatMap((stem) => [".ts", ".test.ts"].map((end) => `${LEAD}${stem}${end}`));
+
 const FLOW = `${LEAD}flow/`;
 
 /**
@@ -37,7 +38,9 @@ const FLOW = `${LEAD}flow/`;
  * parsers/create-parser.js). A changed `.cjs` or `.mjs` file is sampled like a `.ts` one (ticket 655).
  */
 const EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"] as const;
+
 const DECLARATIONS = [".d.ts", ".d.mts", ".d.cts"] as const;
+
 const TESTS = [".test.ts", ".test.tsx"] as const;
 
 /** The same product rule as a git pathspec, for the sample script's diff: less tests and type-only files. */
@@ -55,8 +58,8 @@ const product = (path: string) =>
 
 const test = (path: string) => TESTS.some((extension) => path.endsWith(extension));
 
-/** Whether the run may mutate this path, or run it as a test: all but lead tooling, lane code kept. */
-export const inScope = (path: string) => !path.startsWith(".agents/") || LANE.includes(path) || path.startsWith(FLOW);
+/** Whether the run may mutate this path, or run it as a test: all but lead tooling, quest code kept. */
+export const inScope = (path: string) => !path.startsWith(".agents/") || QUEST.includes(path) || path.startsWith(FLOW);
 
 /** The changed paths in scope, in their order. */
 export const pick = (paths: ReadonlyArray<string>) => paths.filter(inScope);
@@ -72,6 +75,7 @@ export const related = (changed: ReadonlyArray<string>) => {
   const tests = pick(changed).flatMap((path) => {
     if (product(path)) {
       const stem = path.slice(0, path.lastIndexOf("."));
+
       return TESTS.map((extension) => `${stem}${extension}`);
     }
 

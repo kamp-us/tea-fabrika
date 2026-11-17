@@ -9,6 +9,7 @@
     "dev": "node dev.ts",
     "build": "node build.ts",
     "grant": "node grant.ts",
+    "hands": "node hands.ts",
     "settings": "node cli.ts settings",
     "settings:generate": "node settings-generate.ts",
     "typecheck": "tsc --noEmit -p ."
@@ -17,7 +18,12 @@
     "@kampus/libfabrika": "workspace:*",
     "@effect/platform-node": "catalog:",
     "effect": "catalog:",
-    "oxc-parser": "catalog:"
+    "oxc-parser": "catalog:",
+    "@kampus/tuval": "workspace:*",
+    "@kampus/fabrika-design": "workspace:*",
+    "@manti-ui/styles": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261027.1",
@@ -28,15 +34,19 @@
     "rolldown": "catalog:",
     "fast-check": "catalog:",
     "playwright": "catalog:",
-    "react-dom": "catalog:",
     "@kampus/checklist": "workspace:*",
     "@kampus/inbox": "workspace:*",
     "@kampus/chaos": "workspace:*",
     "@kampus/counter": "workspace:*",
+    "@kampus/tezgah": "workspace:*",
+    "@kampus/vitest": "workspace:*",
     "@alchemy.run/cloudflare": "catalog:",
     "alchemy": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "electron": "45.2.1"
   },
   "volta": {
     "extends": "../../../package.json"

@@ -5,19 +5,24 @@
 // the machine must now hold.
 import { applyCellChecked } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { Attached, Wait } from "../Wire.ts";
 import { connection } from "./connection.ts";
 
 const SEED = 119120;
+
 const RUNS = 100;
+
 const MAX_WAITS = 64;
+
 const MAX_BYTES = 16_384;
 
 type Model = ReturnType<typeof connection.init>[0];
+
 type Saved = typeof Attached.Type;
+
 type W = typeof Wait.Type;
 
 type Msg =
@@ -28,6 +33,7 @@ type Msg =
   | { readonly type: "answered"; readonly wait: W };
 
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
+
 const same = (a: W, b: W) => a.id === b.id && a.stream === b.stream && a.after === b.after;
 
 /** The named state an attachment stands for: busy lives only in the tag. */
@@ -40,8 +46,9 @@ const expected = (saved: Saved | null): unknown => {
     return { _tag: saved._tag, attached: saved };
   }
 
-  const { client, identity, version, watching, waits, busy } = saved;
-  return { _tag: busy ? "busy" : "idle", client, identity, version, watching, waits };
+  const { client, identity, version, watching, waits, busy, has, build } = saved;
+
+  return { _tag: busy ? "busy" : "idle", client, identity, version, watching, waits, has, build };
 };
 
 /** The attachment a loaded state saves, read from the Model alone. */
@@ -54,6 +61,8 @@ const projected = (model: Exclude<Model, { readonly _tag: "unloaded" }>): Saved 
     client: model.client,
     identity: model.identity,
     version: model.version,
+    ...(model.has === undefined ? {} : { has: model.has }),
+    ...(model.build === undefined ? {} : { build: model.build }),
     waits: model.waits,
     watching: model.watching,
     busy: model._tag === "busy",
@@ -66,8 +75,9 @@ const metadata = (model: Model) => {
     return model._tag === "unloaded" ? null : model.attached;
   }
 
-  const { client, identity, version, watching } = model;
-  return { client, identity, version, watching };
+  const { client, identity, version, watching, has, build } = model;
+
+  return { client, identity, version, watching, has, build };
 };
 
 const held = (model: Model): ReadonlyArray<W> => (model._tag === "idle" || model._tag === "busy" ? model.waits : []);
@@ -94,6 +104,7 @@ const reference = (saved: Saved | null, msg: Msg): Saved | null => {
 
   if (msg.type === "waited") {
     const next = { ...saved, waits: [...saved.waits, wait] };
+
     return saved.waits.some((w) => w.id === wait.id) || next.waits.length > MAX_WAITS || bytes(next) > MAX_BYTES
       ? saved
       : next;
@@ -108,12 +119,23 @@ const reference = (saved: Saved | null, msg: Msg): Saved | null => {
 // fast-check, not a Schema arbitrary: the walk aims text at the encoded limit and draws ids from
 // the folded state, which Wait's and Attached's own arbitraries cannot do.
 const units = ["a", "Z", "7", "é", "ß", "€", "流", "😀", "𝄞"];
+
 const text = fc.array(fc.constantFrom(...units), { maxLength: 6 }).map((s) => s.join(""));
+
 const id = fc.oneof(text, fc.integer({ min: -3, max: 80 }));
+
 const streams = ["events", "counter:1/inbox", "ünï/流", "😀"];
+
 const stream = fc.constantFrom(...streams);
+
 const after = fc.nat({ max: 12 });
-const identity = fc.record({ key: text, person: text, as: fc.constantFrom("window" as const, "agent" as const) });
+
+const identity = fc.record({
+  key: text,
+  person: text,
+  as: fc.constantFrom("window" as const, "agent" as const, "hands" as const),
+});
+
 const wait = fc.record({ id, stream, after }).map((w) => Wait.make(w));
 
 const hello = fc.record({
@@ -136,6 +158,8 @@ const observation = fc.oneof(
     .record({
       client: text,
       identity,
+      has: fc.array(text, { maxLength: 3 }),
+      build: text.map((value) => value || "build"),
       version: fc.integer({ min: 0, max: 9 }),
       waits: fc.uniqueArray(wait, { maxLength: 6, selector: (w) => w.id }),
       watching: fc.boolean(),
@@ -153,12 +177,14 @@ const Choice = fc.record({
   shift: fc.integer({ min: -2, max: 2 }),
   unit: fc.constantFrom(...units),
 });
+
 type Choice = typeof Choice extends fc.Arbitrary<infer A> ? A : never;
 
 /** Walk state: the reference attachment and every wait that was once saved. */
 type Fold = { readonly saved: Saved | null; readonly completed: ReadonlyArray<W> };
 
 const online = (fold: Fold) => (fold.saved?._tag === "online" ? fold.saved : null);
+
 const at = <A>(list: ReadonlyArray<A>, pick: number) => list[pick % list.length]!;
 
 /** A stream of exactly `size` UTF-8 bytes, built from `unit` and ASCII padding. */
@@ -166,6 +192,7 @@ const sized = (size: number, unit: string) => {
   const width = new TextEncoder().encode(unit).length;
   const count = Math.max(0, Math.floor(size / width) - 1);
   const head = unit.repeat(count);
+
   return head + "x".repeat(Math.max(0, size - count * width));
 };
 
@@ -173,6 +200,7 @@ const sized = (size: number, unit: string) => {
 const boundary = (saved: Saved & { readonly _tag: "online" }, choice: Choice): W => {
   const probe = Wait.make({ id: choice.wait.id, stream: "", after: choice.wait.after });
   const space = MAX_BYTES - bytes({ ...saved, waits: [...saved.waits, probe] });
+
   return Wait.make({ ...probe, stream: sized(Math.max(0, space + choice.shift), choice.unit) });
 };
 
@@ -222,6 +250,7 @@ const next = (fold: Fold, choice: Choice): Msg => {
     // A reused id on another stream or revision.
     const old = at(saved.waits, pick);
     const other = choice.wait.stream === old.stream && choice.wait.after === old.after;
+
     return {
       type: move % 2 === 0 ? "answered" : "waited",
       wait: { ...choice.wait, id: old.id, after: other ? old.after + 1 : choice.wait.after },
@@ -283,28 +312,26 @@ const walk = (
 };
 
 const Walk = fc.array(Choice, { minLength: 1, maxLength: 160, size: "max" });
+
 const options = { seed: SEED, numRuns: RUNS };
 
 describe("T703 connection machine laws", () => {
   it("type: busy comes only from the state tag, and unauthenticated states hold no waits", () => {
-    fc.assert(
-      fc.property(fc.constant(null), () => {
-        expectTypeOf<Model["_tag"]>().toEqualTypeOf<"unloaded" | "new" | "waiting" | "idle" | "busy">();
-        expectTypeOf<Extract<Model, { readonly busy: unknown }>>().toBeNever();
-        type Unauthenticated = Extract<Model, { readonly _tag: "unloaded" | "new" | "waiting" }>;
-        expectTypeOf<Extract<Unauthenticated, { readonly waits: unknown }>>().toBeNever();
-        expectTypeOf<Extract<Model, { readonly _tag: "new" }>["attached"]>().toEqualTypeOf<
-          typeof Attached.cases.new.Type
-        >();
-        expectTypeOf<Extract<Model, { readonly _tag: "waiting" }>["attached"]>().toEqualTypeOf<
-          typeof Attached.cases.waiting.Type
-        >();
-        expectTypeOf<Extract<Model, { readonly _tag: "idle" }>>().not.toHaveProperty("attached");
-        expectTypeOf<Extract<Model, { readonly _tag: "busy" }>>().not.toHaveProperty("attached");
-        expectTypeOf<Extract<Model, { readonly _tag: "idle" }>["waits"]>().toEqualTypeOf<ReadonlyArray<W>>();
-      }),
-      { seed: SEED, numRuns: 1 },
-    );
+    expectTypeOf<Model["_tag"]>().toEqualTypeOf<"unloaded" | "new" | "waiting" | "idle" | "busy">();
+    expectTypeOf<Extract<Model, { readonly busy: unknown }>>().toBeNever();
+
+    type Unauthenticated = Extract<Model, { readonly _tag: "unloaded" | "new" | "waiting" }>;
+
+    expectTypeOf<Extract<Unauthenticated, { readonly waits: unknown }>>().toBeNever();
+    expectTypeOf<Extract<Model, { readonly _tag: "new" }>["attached"]>().toEqualTypeOf<
+      typeof Attached.cases.new.Type
+    >();
+    expectTypeOf<Extract<Model, { readonly _tag: "waiting" }>["attached"]>().toEqualTypeOf<
+      typeof Attached.cases.waiting.Type
+    >();
+    expectTypeOf<Extract<Model, { readonly _tag: "idle" }>>().not.toHaveProperty("attached");
+    expectTypeOf<Extract<Model, { readonly _tag: "busy" }>>().not.toHaveProperty("attached");
+    expectTypeOf<Extract<Model, { readonly _tag: "idle" }>["waits"]>().toEqualTypeOf<ReadonlyArray<W>>();
   });
 
   it("every Msg keeps the transition table, the metadata and the unrelated waits", () => {

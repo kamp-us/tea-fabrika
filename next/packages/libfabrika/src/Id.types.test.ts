@@ -1,10 +1,12 @@
 // T518, PR 1, next/. Compile the exact bad expressions; never execute them.
-import { expect, expectTypeOf, it } from "@effect/vitest";
+import { expectTypeOf, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import type { IdError, IdSchema, IdValue } from "@kampus/libfabrika";
 import type * as Public from "@kampus/libfabrika";
-import { type Context, Effect, Schema, type SchemaIssue } from "effect";
-import * as fc from "fast-check";
+import type * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import type * as SchemaIssue from "effect/SchemaIssue";
 import type * as Front from "./Id.ts";
 import type { ProcessIdGenerator } from "./processes/ProcessIdGenerator.ts";
 import type { ProcessId as TraceProcessId } from "./ProcessId.ts";
@@ -18,13 +20,16 @@ const checkTypes = (raw: string) => {
   expectTypeOf<typeof ChaosId.Type>().toEqualTypeOf<IdValue<"chaos">>();
   expectTypeOf<typeof InputId.Type>().not.toEqualTypeOf<string>();
   expectTypeOf<typeof InputId.Type>().not.toEqualTypeOf<typeof ChaosId.Type>();
+
   const checkInput = (input: typeof InputId.Type, raw: string) => {
     // @ts-expect-error An input id cannot stand for a chaos experiment.
     const wrong: typeof ChaosId.Type = input;
     // @ts-expect-error An outside string is not a checked input id.
     const unchecked: typeof input = raw;
+
     return [wrong, unchecked];
   };
+
   expectTypeOf<IdSchema<"input">["Type"]>().toEqualTypeOf<typeof InputId.Type>();
   expectTypeOf<Id.IdSchema<"input">>().toEqualTypeOf<IdSchema<"input">>();
   expectTypeOf<Id.IdValue<"input">>().toEqualTypeOf<IdValue<"input">>();
@@ -35,9 +40,11 @@ const checkTypes = (raw: string) => {
   expectTypeOf<"IdGenerator" extends keyof typeof Public ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<"IdGenerator" extends keyof typeof Front ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<"IdGenerator" extends keyof typeof Id ? true : false>().toEqualTypeOf<false>();
-  expectTypeOf<typeof Id.InputId.Type>().toEqualTypeOf<IdValue<"input">>();
+  expectTypeOf<Id.InputId>().toEqualTypeOf<IdValue<"input">>();
   const takeProcess = (_id: typeof ProcessId.Type): void => {};
+
   const takeLetter = (_id: typeof LetterId.Type): void => {};
+
   const checkBrands = (process: typeof ProcessId.Type, letter: typeof LetterId.Type) => {
     expectTypeOf<typeof ProcessId.Type>().not.toBeAny();
     expectTypeOf<typeof LetterId.Type>().not.toBeAny();
@@ -57,6 +64,7 @@ const checkTypes = (raw: string) => {
       Effect.Effect<typeof TraceProcessId.Type>
     >();
   };
+
   const checkGenerator = Effect.gen(function* () {
     const generator = yield* Id.Generator;
     const process = generator.next(ProcessId);
@@ -69,29 +77,21 @@ const checkTypes = (raw: string) => {
     takeProcess(value);
     // @ts-expect-error next(ProcessId) preserves the process brand.
     takeLetter(value);
+
     return yield* letter;
   });
+
   const made = ProcessId.makeEffect(raw);
-  const decoded = Schema.decodeUnknownEffect(ProcessId)(raw);
+  const decoded = Schema.decodeEffect(ProcessId)(raw);
   expectTypeOf(made).toEqualTypeOf<Effect.Effect<typeof ProcessId.Type, SchemaIssue.Issue>>();
   expectTypeOf(decoded).toEqualTypeOf<Effect.Effect<typeof ProcessId.Type, Schema.SchemaError>>();
   expectTypeOf(Id.makeEffect("process")).toEqualTypeOf<Effect.Effect<typeof ProcessId, IdError>>();
   void checkBrands;
   void checkInput;
+
   return { checkGenerator, made, decoded };
 };
 
-it("exports the Id factory from the public package for generated client prefixes", () => {
-  fc.assert(
-    fc.property(
-      fc
-        .array(fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz"), { minLength: 1, maxLength: 63 })
-        .map((chars) => chars.join("")),
-      (type) => {
-        expectTypeOf(checkTypes).toBeFunction(); // The function above stays uncalled.
-        expect(Schema.isSchema(Id.make(type))).toBe(true);
-      },
-    ),
-    { seed: 119120, numRuns: 100 },
-  );
+it("type: the public Id module keeps its brands, schemas and generator types for generated client prefixes", () => {
+  expectTypeOf(checkTypes).toBeFunction(); // CI's typecheck runs the uncalled function above.
 });

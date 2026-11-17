@@ -1,29 +1,76 @@
-import { Context, Schema, type Effect } from "effect";
+/**
+ * The service that reads who belongs and writes membership events to the ledger.
+ */
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { Appended } from "../ledger/Log.ts";
 import type { From } from "../processes/Mailbox.ts";
 import { Rev } from "../Rev.ts";
 import { Reason, type Access, type MemberEvent } from "./Access.ts";
 
-/** What the founding screen gives: the name, the first person keys, and the first window. */
+/**
+ * Schema for what the founding screen gives: the name, the first person keys, and the first
+ * window.
+ *
+ * **Details**
+ *
+ * `window` is null when no window key comes with the founding. When it is present and there is at
+ * least one person key, it hangs under the first person key; with no person keys it is dropped.
+ *
+ * @category models
+ */
 export const Founder = Schema.Struct({
   name: Schema.String,
   keys: Schema.Array(Schema.String),
   window: Schema.NullOr(Schema.String),
 });
+
+/**
+ * The decoded type of `Founder`.
+ *
+ * @category models
+ */
 export type Founder = typeof Founder.Type;
 
-/** What `write` answers. */
+/**
+ * Schema for what `write` answers: taken, ignored or refused.
+ *
+ * **Details**
+ *
+ * `applied` and `ignored` both mean the event is in the log, at `rev`. `ignored` carries the rule's
+ * reason, because an earlier event won the race and the fold skips this one. `refused` means
+ * nothing was written, and its reason is the rule's or the ledger's own.
+ *
+ * @category models
+ */
 export const Written = Schema.TaggedUnion({
   /** In the log, and the fold takes it. */
   applied: { rev: Rev },
-  /** In the log, but an earlier event won the race (flag 6). */
+  /** In the log, but an earlier event won the race. */
   ignored: { rev: Rev, reason: Reason },
   /** Nothing written: the rule's reason, or the ledger's own. */
   refused: { reason: Schema.Union([Reason, Appended.cases.refused.fields.reason]) },
 });
+
+/**
+ * The decoded type of `Written`.
+ *
+ * @category models
+ */
 export type Written = typeof Written.Type;
 
+/**
+ * Service for who belongs: a read of the current view and a write of one event.
+ *
+ * **Details**
+ *
+ * `members` answers the `Access` view folded from the log. `write` takes an event and who is
+ * writing it, and answers with a `Written`.
+ *
+ * @category services
+ */
 export class ClientManager extends Context.Service<
   ClientManager,
   {

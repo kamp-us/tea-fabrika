@@ -17,6 +17,7 @@ import { executionFailure, nodeExecution } from "./Execution.ts";
 import { ProgramDown, stepper } from "./Program.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const RUNS = 100;
 
 /** A property over generated input, each run an Effect on the real code. */
@@ -39,7 +40,9 @@ const holdsSchemaError = (cause: unknown): boolean =>
   Schema.isSchemaError(cause) || (Array.isArray(cause) && cause.some(holdsSchemaError));
 
 const Model = Schema.Struct({ count: Schema.Int });
+
 const Msg = Schema.Struct({ type: Schema.Literal("inc") });
+
 const Refusal = { reason: "limit", now: 3, most: 3 };
 
 /** What a generated program does wrong, if anything. */
@@ -123,12 +126,14 @@ describe("T695, a step's ProgramDown keeps what failed", () => {
       Effect.gen(function* () {
         const run = nodeExecution(program({}));
         const saved = { count: bad };
+
         const work =
           call === "init"
             ? run.init(saved)
             : call === "step"
               ? run.step(saved, { type: "inc" })
               : run.fold(saved, { type: "inc" });
+
         const error = yield* Effect.flip(work);
         expect(error).toBeInstanceOf(ProgramDown);
         expect(error.reason).toBe("saved_state");
@@ -152,6 +157,7 @@ describe("T695, a step's ProgramDown keeps what failed", () => {
           ...(model === undefined ? {} : { model: { count: model } }),
           ...(view === undefined ? {} : { view: { count: view } }),
         };
+
         const error = yield* Effect.flip(nodeExecution(program(faults)).step({ count }, { type: "inc" }));
         expect(error.reason, "the reason stays the one the check returned").toBe("step");
         expect(holdsSchemaError(error.cause), "the cause holds the failed results").toBe(true);
@@ -248,6 +254,7 @@ describe("T695, a declaration that does not load keeps why", () => {
       Effect.gen(function* () {
         const expected = stepper(declared);
         expect(Result.isFailure(expected)).toBe(true);
+
         const error = yield* Effect.flip<unknown, ProgramDown, never>(
           call === "execution"
             ? nodeExecution(declared).init(null)
@@ -256,6 +263,7 @@ describe("T695, a declaration that does not load keeps why", () => {
                 ProgramLoader.layer({ broken: declared }, {}),
               ),
         );
+
         expect(error).toBeInstanceOf(ProgramDown);
         expect((error as ProgramDown).reason).toBe("load");
         expect(Schema.isSchemaError((error as ProgramDown).cause), "the cause is the stepper's SchemaError").toBe(true);

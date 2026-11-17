@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-03, measures proposed; M5 decided 2026-11-07; walked at Tier 6"
+summary: "Both versions. A merge never waits on the owner; a break is fixed forward and names the step that missed it. Trust is a number our checks earn: one record per merge, one per break, and the change failure rate per step (DORA, Google SRE error budgets). A second measure, M5: asks per step that a person marked as needing them (`needed` on `answered`), against those the agent could have worked out."
+---
+
 # Autonomy is measured trust
 
 **Decided 2026-11-03 by the owner:** the rule in [what was decided](#what-was-decided). The
@@ -59,8 +64,8 @@ const failRate = (merges: readonly MergeRow[], broke: readonly BrokeRow[]) => br
 - **M1. A row per merge, written when it merges** (90% sure). The `MergeRow` above, in
   `field/`. What it checked is a fact that exists only at merge time. Write it now, or it is
   gone (record wide). Not built: no code writes it and `field/README.md` gives it no file or
-  fields. At the merge today, `catchup.sh` only comments on each ticket it closes with the pull
-  request and its merge commit (`.agents/skills/lead/scripts/catchup.sh:86`).
+  fields. After the merge today, `land.ts merged` only comments on each ticket it closes with the pull
+  request and its merge commit (`.agents/skills/lead/scripts/pr/Queue.ts`).
 - **M2. A row per break, written when it is found** (85% sure). The `BrokeRow` above. The
   `missed` field is what makes a break useful. It is the step to fix.
 - **M3. Change failure rate, by step, derived** (80% sure). Never stored, rebuilt from the

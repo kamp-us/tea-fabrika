@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-14",
+  "run": "2026-11-14-t979-recheck3",
+  "ticket": "kamp-us/tea-fabrika#979",
+  "pr": "kamp-us/tea-fabrika#1248",
+  "started": "2026-11-14T23:26:00-08:00",
+  "ended": "2026-11-14T23:30:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "P18 slice 2 third recheck, of d67eb0dd9..0cee21ce6 only, in next/: merge-ready. Law E1, which no pull request runs, had shown two bugs in the close path: an untraced Project.leave died for want of a span before it ended the session's watches, and held(session) returned a watch that had already fired. Tracing leave is the pattern 0252 and the code around it use, and it keeps a real traceId (0262); every other caller of the ledger's from runs inside a named span. Filtering held at read time is right, because deliver needs a fired watch to stay live. The new leave law boots the real Project and calls leave with no caller's span; at the fast depth it made 18 closes, 8 on a session with live watches and 5 on one holding a fired watch, so both bugs turn it red. No law got weaker. One finding: outbound still returns watches that already fired.",
+  "tokens": 120549,
+  "tools": 33,
+  "minutes": 4,
+  "note": "Not run by the reviewer: E1 itself, pnpm typecheck and pnpm lint. The test writer's planted breaks were checked by reading, not rerun.",
+  "step": "review"
+}

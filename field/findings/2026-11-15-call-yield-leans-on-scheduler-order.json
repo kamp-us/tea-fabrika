@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-call-yield-leans-on-scheduler-order",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/dev/dev.ts",
+    "line": 183
+  },
+  "says": "In next/, a control call yields once before it reads the life state, so the event fiber folds an exit already in its queue first. That covers only an exit already queued: an exit Alchemy has not reported yet, or one the event fiber has taken but not folded, is not seen, so a call in that crash window can still dial the ended process and answer unreachable. Folding the exit and the start inside Alchemy's lifecycle callback, in place of queueing them, would shorten the window but cannot close it, since the process ends before Alchemy hears of it. The comment at that line now says what holds; the code is unchanged.",
+  "proof": "dev.ts at 9420dfa7b6172d42d2725833fef4cbb9c4c7b4bb: the callback at the RuntimeLifecycle hook only does Queue.offerUnsafe, and settled yields once with Effect.yieldNow, then reads SubscriptionRef.get; the event fiber does Queue.take and SubscriptionRef.get before it folds exited, so it can be between those when the call reads.",
+  "cost": "A call made in the moment a crash happens may fail as unreachable in place of waiting for the replacement.",
+  "head": "9420dfa7b6172d42d2725833fef4cbb9c4c7b4bb",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1316"
+}

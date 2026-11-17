@@ -11,16 +11,89 @@ export interface Plant {
 }
 
 const NUM = "declare const x: number;";
+
 const NUMS = ["declare const x: number;", "declare const y: number;", "declare const z: number;"];
+
 const STR = "declare const s: string;";
+
 const XS = "declare const xs: number[];";
+
 const FN = "declare const f: () => void;";
+
 const P = "declare const p: Promise<number>;";
+
 const TEST = 'import {describe, expect, it, vi} from "vitest";';
 
 const REACT = 'import {Component, createContext, forwardRef, useEffect, useMemo, useState} from "react";';
 
+/**
+ * L1 of the Reflect ban (decision 0554): `Reflect.get`, `Reflect.set`, `Reflect.has` and
+ * `globalThis.Reflect` are refused, in each form oxlint's `no-restricted-properties` resolves, and
+ * the rest of `Reflect` passes. plants.test.ts runs these lines beside this file, a tooling path,
+ * and again in every folder a block of the config lists.
+ * Plant: delete one entry from one block of `.oxlintrc.json`, and that folder's line is not refused.
+ */
+export const REFLECT: Plant = {
+  code: "eslint(no-restricted-properties)",
+  prelude: ["declare const x: object;"],
+  lines: [
+    ['export const a: unknown = Reflect.get(x, "a");', true],
+    ['export const b = Reflect.set(x, "a", 1);', true],
+    ['export const c = Reflect.has(x, "a");', true],
+    ["export const d = globalThis.Reflect;", true],
+    ['export const e: unknown = globalThis.Reflect.get(x, "a");', true],
+    ['export const f: unknown = Reflect["get"](x, "a");', true],
+    ['export const g: unknown = Reflect?.get(x, "a");', true],
+    ["export const { has } = Reflect;", true],
+    ["export const { set: renamed } = Reflect;", true],
+    // 0554 does not decide the rest of Reflect.
+    ["export const h: unknown = Reflect.apply(Math.max, null, [1, 2]);", false],
+    ["export const i = Reflect.ownKeys(x);", false],
+    // Not a call: a comment, a string, a type, another object's member.
+    ["// Reflect.get in a comment", false],
+    ['export const j = "Reflect.get(x)";', false],
+    ["export type Get = typeof Reflect.get;", false],
+    ['export const k = new Map<string, number>().get("a");', false],
+    // A documented miss: an alias of Reflect is not followed, and the review reads for it.
+    ["const R = Reflect;", false],
+    ['export const l: unknown = R.get(x, "a");', false],
+  ],
+};
+
+/**
+ * L1 of the trusted-rules swap (decision 0573): `Data.TaggedError` is refused in each value form
+ * oxlint's `no-restricted-properties` resolves. It stands beside `fabrika/no-data-taggederror`,
+ * which stays because only it refuses the name in a type position (`DATA_TAGGEDERROR` in
+ * plants.test.ts), and the Effect checker's `preferSchemaTaggedError`, which holds every
+ * type-checked class. plants.test.ts runs these lines and ours in every folder of every block that
+ * sets the rule, at the root and at a path under no block.
+ * Plant: delete the `Data.TaggedError` entry from one block of `.oxlintrc.json`, and that folder's
+ * lines are not refused.
+ */
+export const TAGGED_ERROR: Plant = {
+  code: "eslint(no-restricted-properties)",
+  prelude: ['import {Data} from "effect";', "declare const Other: {TaggedError: (n: string) => new () => object};"],
+  lines: [
+    ['export class A extends Data.TaggedError("A") {}', true],
+    ["export const ref = Data.TaggedError;", true],
+    ['export const made = Data.TaggedError("C");', true],
+    ["export const { TaggedError } = Data;", true],
+    ['export const indexed = Data["TaggedError"];', true],
+    ["export const optional = Data?.TaggedError;", true],
+    // Not the ban: another object's member, a comment, a string. A type position is not this
+    // rule's: `fabrika/no-data-taggederror` refuses it, and plants.test.ts holds that in every folder.
+    ['export class B extends Other.TaggedError("B") {}', false],
+    ["// Data.TaggedError in a comment", false],
+    ['export const text = "Data.TaggedError";', false],
+    // A documented miss: an alias of Data is not followed. In a type-checked file the checker's
+    // preferSchemaTaggedError still catches the class; in an untyped script nothing does.
+    ["const D = Data;", false],
+    ['export class E extends D.TaggedError("E") {}', false],
+  ],
+};
+
 const eslint: readonly Plant[] = [
+  REFLECT,
   {
     code: "eslint(no-constant-binary-expression)",
     prelude: ["declare const x: number | undefined;"],
@@ -353,6 +426,25 @@ const oxc: readonly Plant[] = [
     lines: [
       ["export const a = x | {};", true],
       ["export const b = x | 1;", false],
+    ],
+  },
+  // 0559: on for next/ and our tooling by an override, so plants.test.ts also plants it by path.
+  {
+    code: "oxc(no-accumulating-spread)",
+    prelude: [XS],
+    lines: [
+      ["export const a = xs.reduce((acc: number[], x) => [...acc, x], []);", true],
+      ["export const b = xs.reduce((acc: number[], x) => { acc.push(x); return acc; }, []);", false],
+      [
+        "export const c = () => { let out: number[] = []; for (const x of xs) { out = [...out, x]; } return out; };",
+        true,
+      ],
+      ["export const d = () => { const out: number[] = []; for (const x of xs) { out.push(x); } return out; };", false],
+      [
+        "export const e = () => { let m = { k: 1, v: 2 }; for (const x of xs) { m = { ...m, k: m.k + x }; } return m; };",
+        true,
+      ],
+      ["export const f = () => { let k = 1; for (const x of xs) { k += x; } return { k, v: 2 }; };", false],
     ],
   },
 ];

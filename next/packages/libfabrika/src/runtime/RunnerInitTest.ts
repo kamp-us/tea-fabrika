@@ -4,6 +4,7 @@
 // RunnerInitTest.suite(files), acquiring each world's database files in its own scope (0062, 0061).
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -12,12 +13,16 @@ import { A, brain, data, first, from, ids, PIDS, read } from "../processes/Proce
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { Program } from "./Program.ts";
 import { ProgramRunner } from "./Runner.ts";
 
 const SEED = 119120;
+
 const NAME = "counter:1";
+
 const BUILD = "build-a";
+
 const SUCCESSOR = "build-b";
 
 const policy = {
@@ -28,8 +33,11 @@ const policy = {
 };
 
 const person = Writer.cases.person.make({ key: "SHA256:person", for: from().for });
+
 const Model = Schema.Struct({ wake: Schema.NullOr(Schema.Number) });
+
 type Model = typeof Model.Type;
+
 const Msg = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number });
 
 /** Up to 10^12 ms, about 31 years of epoch time, or no wake at all. */
@@ -53,6 +61,7 @@ export const suite = (
     // `throws`: the program's init throws, as a program bug would; `loaded`: what each init was given.
     const controls = { build: BUILD, throws: false, loaded: [] as Array<Model | null> };
     const alarms: Array<number | null> = [];
+
     const machine = Machine.make({
       model: Model,
       msg: Msg,
@@ -70,6 +79,7 @@ export const suite = (
         timer: (s) => [s, []],
       },
     });
+
     const program = Program.make({
       name: "counter",
       machine,
@@ -81,16 +91,20 @@ export const suite = (
       writes: {},
       wake: (s: Model) => s.wake,
     });
+
     const base = () =>
       Layer.mergeAll(
         data(ledger.sql),
         SessionManager.layer(authority.sql, () => Effect.succeed(person), { input: () => false, event: () => false }),
       );
+
     const manager = () => ProcessManager.layer(brain(), next.next).pipe(Layer.provideMerge(base()));
+
     const checked = Layer.effect(
       CheckedWriter,
       Effect.gen(function* () {
         const mailbox = yield* Mailbox;
+
         return {
           append: (i: Incoming) =>
             mailbox.send(NAME, i.id, i.envelope.input, from({ by: i.envelope.by.key, parent: i.envelope.id })),
@@ -99,11 +113,12 @@ export const suite = (
         };
       }),
     ).pipe(Layer.provide(Mailbox.layer));
+
     // One built layer is one life of the object; building it again is a wake with no memory.
     const layer = () =>
       ProgramRunner.layer(
         { id: A, name: NAME, program: "counter", build: controls.build, owner: person },
-        { policy, recovery: { sql: state.sql, name: NAME, capacity: 1024 ** 3 } },
+        { policy, recovery: { sql: state.sql, name: NAME, capacity: 1024 ** 3 }, chunk: ANY_CHUNK },
       ).pipe(
         Layer.provideMerge(
           Layer.mergeAll(
@@ -118,6 +133,7 @@ export const suite = (
           ).pipe(Layer.provideMerge(base())),
         ),
       );
+
     return {
       controls,
       alarms,
@@ -155,8 +171,10 @@ export const suite = (
               Effect.gen(function* () {
                 const w = yield* world({ [BUILD]: wake });
                 yield* w.boot;
+
                 const init = ProgramRunner.use((r) => {
                   expect(r.init, "A2's ProgramRunner.init is missing").toBeTypeOf("function");
+
                   return r.init();
                 });
 
@@ -173,7 +191,7 @@ export const suite = (
               }).pipe(Effect.scoped),
             ),
         ),
-        { seed: SEED, numRuns: 150 },
+        { seed: SEED, numRuns: runsFor({ fast: 15, full: 150 }) },
       );
     });
 

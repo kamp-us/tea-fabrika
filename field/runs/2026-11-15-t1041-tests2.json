@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1041-tests2",
+  "ticket": "kamp-us/tea-fabrika#1041",
+  "pr": "kamp-us/tea-fabrika#1310",
+  "started": "2026-11-15T03:39:00-08:00",
+  "ended": "2026-11-15T03:47:00-08:00",
+  "parent": "2026-11-15-t1041-tests1",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Second tests round for pipe plumbing in next/, on the lead's calls. The plan gets a dated amendment: send_chunks takes `as`, the cap reads where the inbox ends with a new position-only read LedgerTurn.end(stream) (head's rev cannot give a pos without reading the entry's row, body included), L12's refusal is id_reused, L14 goes through Sources.resolve, the node drivers stand in for TestDatabase, and cap is required. A new law, T1041 L7 ledger, in ledger/LedgerTurnEndTest.ts, runs on an in-memory database from LedgerTurnReads.test.ts and on a real file from LedgerTurnReads.integration.test.ts: red today with turn.end is not a function; green on a scratch end that selects only pos; red when the scratch end selects the whole row. With that scratch end in the cap, both halves of L7 were green. Test callers updated so the build touches no test file: StartsTest starts every declaration at its default (old laws stay green), Start.test's L19 list and SettingsInput.test's L3 values gain the two mail settings (red until the declarations exist, green on scratch declarations), StartChild.integration and the two pipeline integration laws pass cap 16,384 (green), and the two LedgerTurn doubles in Rebac.test and Authorization.integration answer end (green).",
+  "plants": [
+    { "law": "T1041 L7 ledger", "plant": "scratch end selects the whole newest row", "result": "red" }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Plants ran on scratch product code that was never committed; the review reruns them on the real build.",
+  "step": "tests"
+}

@@ -2,6 +2,7 @@
 // node:sqlite is the edge: Effect has no synchronous in-memory SQLite handle.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
 import { Result } from "effect";
 import { TestClock } from "effect/testing";
@@ -11,8 +12,11 @@ import { RecordManager } from "../Records.ts";
 import { SpanSink } from "../Sink.ts";
 
 const HOUR = 3_600_000;
+
 const H = 1_790_002_800_000;
+
 const TAG = "fab.gateway.refused";
+
 const PIECE = "gateway.route";
 
 const database = Effect.acquireRelease(
@@ -86,7 +90,7 @@ describe("0140 sums", () => {
           ),
         );
       }),
-    { arbitrary: { seed: 119120, runs: 50 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
   );
   it.effect.prop(
     "tagged spans count in place, off-list values become other, and untagged spans still save",
@@ -137,6 +141,6 @@ describe("0140 sums", () => {
           expect(yield* sink.sums("runtime.rpc", H, H + HOUR)).toEqual([]);
         }).pipe(Effect.provide(world(db)));
       }),
-    { arbitrary: { seed: 119120, runs: 100 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 100 }) } },
   );
 });

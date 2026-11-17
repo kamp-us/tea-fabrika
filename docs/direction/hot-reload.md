@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01"
+summary: "`next/`, Tier 1. Saving a program's file swaps its code in the running app with no restart. Each process of that program takes the new code at its next step, through its own mailbox, and keeps its model when the new state schema decodes it, after an optional upcast (Erlang's `code_change`). If it cannot, that one process is refused and keeps its old code, with Restart on its tile. A bad save never runs. A core change restarts workerd, which loses nothing. A window swaps the view by hash from the brain. Every record names the build that wrote it."
+---
+
 # Hot reload
 
 **Decided 2026-11-01 by the owner:** `next/` has hot reload from day one. Saving a program's file
@@ -28,11 +33,11 @@ guidelines", a private page with the six principles you can press.
 ## Which version
 
 - **`next/`:** true from Tier 1, under `dev.ts`. Tier 1 has programs in the brain and windows, so
-  both reload there. Hands arrive in Tier 4 and a lane in `next/` later, and their rules here are
+  both reload there. Hands arrive in Tier 4 and a quest in `next/` later, and their rules here are
   recorded now so the facts are right from the first entry.
 - **Today's version (`apps/fabrika`):** not changed by this note. To get new code today, a person
   quits, rebuilds, and presses "Stop the old host and start this one", which stops every job. A
-  fix to one program restarts everything, even mid-lane. Tracker ticket 67 is today's ticket for that;
+  fix to one program restarts everything, even mid-quest. Tracker ticket 67 is today's ticket for that;
   see [a tryout in today's version](#a-tryout-in-todays-version).
 
 ## What was decided
@@ -93,7 +98,7 @@ const swap = (to: Hash) =>
 
 *Replaced 2026-11-01:* the shape-guess upcast in the sketch below gives way to a version number and
 a chain of named upgrades ([saved state, S3](./saved-state.md#s3-saved-state-carries-its-shapes-number-and-a-chain-of-named-upgrades)).
-The sketch stays as it was written.
+The sketch stays as it was written. *Set aside 2026-11-15 until the first release:* a saved-shape change wipes the stored data instead ([0572](../../.decisions/0572-pre-release-shape-change-wipes-data.md)).
 
 ```ts
 // A sketch, in the program: a version may carry an upcast from the shape before it.
@@ -154,7 +159,7 @@ model in memory.
 | a program's window view | swaps in the window (below) | the window's model, if it decodes | 1 |
 | the core, libfabrika | restarts workerd, Erlang's `restart_new_emulator` | everything; 56 ms in 183, about 200 ms in experiment 93 | 1 |
 | Electron's main process | restarts it; the brain does not stop | everything | 1 |
-| hands | restart, with terminals in a pty process of their own, as VS Code | terminals and jobs | 4 |
+| hands | restart, with terminals in a pty process of their own, as VS Code | terminals and tasks | 4 |
 
 - **Memory.** Each save keeps about 4 MB in local workerd, and none came back in 20 s (60 saves:
   171 MB to 421 MB). Cloudflare gives no eviction rule for Worker Loader. So local workerd restarts
@@ -208,11 +213,11 @@ decodes it. A mode in that model stays with its window, or goes to null with a l
   Durable Object's code update for up to 300 s and keeps its storage and hibernated sockets
   ([changelog](https://developers.cloudflare.com/changelog/post/2026-10-30-durable-objects-deferred-code-updates/)),
   so a core deploy loses nothing either. 80%.
-- **A live lane pins its own stage programs.** A lane's steps keep the build they started with,
-  for the lane's life. Other programs, such as `trace`, still reload. Why: a lane's result must say
+- **A live quest pins its own stage programs.** A quest's steps keep the build they started with,
+  for the quest's life. Other programs, such as `trace`, still reload. Why: a quest's result must say
   which code judged it. `build` on every record (H6) is what makes this possible later. 70%: the
-  doubt is a person who just fixed a stage and expects the lane to take it. Not in Tier 1, which
-  has no lane in `next/`.
+  doubt is a person who just fixed a stage and expects the quest to take it. Not in Tier 1, which
+  has no quest in `next/`.
 
 ## Protocol first
 
@@ -255,7 +260,7 @@ with fixed seeds, as fast-check properties:
 - Code that failed to load never runs a step.
 - Every `build` on a record has an earlier `code.loaded` for that hash.
 - Only the saved program's processes swap.
-- A pinned lane never changes build (when lanes exist).
+- A pinned quest never changes build (when quests exist).
 
 ## The proposals in one table
 
@@ -269,7 +274,7 @@ with fixed seeds, as fast-check properties:
 | A window | swap the view by hash from the brain; keep its model if it decodes, modes as in [M6](./modes.md#m6-a-mode-stays-where-it-lives) | 60% |
 | Hands | a restart, with terminals in their own process | 60% |
 | What a person sees | a quiet word and icon on the tile; a refusal stays with Restart | 65% |
-| Where it is off | the cloud takes code by deploy only; a lane pins its stage programs | 70% |
+| Where it is off | the cloud takes code by deploy only; a quest pins its stage programs | 70% |
 | The fact to record now | `build` on every record, and the `code.*` facts | 90% |
 
 ## Where this differs from settled notes
@@ -277,7 +282,7 @@ with fixed seeds, as fast-check properties:
 - **[An old host is named, then restarted](./an-old-host-is-named-then-restarted.md)** has "decided
   for later: the host restarts itself onto the new build when no job runs". That is today's
   version. In `next/`, a program change restarts nothing, and a core change restarts workerd while
-  jobs keep running in their hands. Its state check per job becomes a state check per process.
+  tasks keep running in their hands. Its state check per job becomes a state check per process.
 - **[Experiment 173](../../experiments/173-worker-loader.md)'s lean** is one isolate per version by
   content hash. This keeps it, and adds that memory per save is real, so local workerd restarts on
   its mark.
@@ -303,8 +308,8 @@ at 70%, does not apply to `next/`.
 
 ## What it cannot tell us
 
-- No window was reloaded, no hands ran, and no lane ran. Those leans rest on docs and reasoning.
+- No window was reloaded, no hands ran, and no quest ran. Those leans rest on docs and reasoning.
 - A pure step only. Cmds and Subs across a swap were not run.
 - Local only. Cloudflare's eviction of loaded isolates is undocumented.
 - Whether people want refusals to restart by themselves in dev.
-- Whether pinning a lane surprises the person who just fixed a stage.
+- Whether pinning a quest surprises the person who just fixed a stage.

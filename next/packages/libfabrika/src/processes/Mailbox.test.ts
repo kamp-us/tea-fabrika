@@ -13,7 +13,8 @@
 //   Stream with `LedgerError` `bad_row`.
 // - No Layer fails when it is built.
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
@@ -26,39 +27,42 @@ import { type From, type Letter, Mailbox, RunnerMail } from "./Mailbox.ts";
 import { brainOnly, inRunnerSpace } from "./Process.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const READER = "connection:t1";
+
 const PARENT = `in-${Effect.runSync(processId)}-41`;
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const OTHER_TRACE = "5bf92f3577b34da6a3ce929d0e0e4737";
+
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 // The writer's clock is a date text, never a number, so a Letter that took it as its rev shows.
 const SENT = "2026-11-07T21:10:01.204Z";
+
 const LETTER = "letter_01m6v5270hetdrt4r8h9vvjwjr";
 
-// Every ledger is a fresh node:sqlite database in memory, closed after. Never a file: each send is one
-// transaction, and on a file each one waits for the disk to sync. The page law sends about 17,000 letters,
-// so on CI's disk it took 36 to 60 s of waiting that no law here reads (ticket 544). No law in this file
-// closes a ledger and opens it again.
-const opened: Array<DatabaseSync> = [];
-
-const fresh = (): Sql => {
-  const db = new DatabaseSync(":memory:");
-  opened.push(db);
-  return nodeSql(db);
-};
-
-afterAll(() => {
-  for (const db of opened.splice(0)) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
-});
+// Every ledger is a fresh node:sqlite database in memory, closed by its layer's scope (0061). Never a
+// file: each send is one transaction, and on a file each one waits for the disk to sync. The page law
+// sends about 17,000 letters, so on CI's disk it took 36 to 60 s of waiting that no law here reads
+// (ticket 544). No law in this file closes a ledger and opens it again.
+const fresh = Effect.acquireRelease(
+  Effect.sync(() => new DatabaseSync(":memory:")),
+  (db) =>
+    Effect.sync(() => {
+      if (db.isOpen) {
+        db.close();
+      }
+    }),
+).pipe(Effect.map(nodeSql));
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
+
 const onSql = (sql: Sql) => LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(quiet));
+
 /** A Mailbox and the Ledger beneath it, so a test can read and write the log beside it. */
-const mail = () => Mailbox.layer.pipe(Layer.provideMerge(onSql(fresh())));
+const mail = () => Layer.unwrap(fresh.pipe(Effect.map((sql) => Mailbox.layer.pipe(Layer.provideMerge(onSql(sql))))));
 
 const from = (over: Partial<From> = {}): From => ({
   by: "SHA256:t2",
@@ -103,7 +107,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: NoInfer<A>[], law: (a: A
         fc.asyncProperty(arb, (a) => Effect.runPromise(law(a).pipe(Effect.provideContext(context)))),
         {
           seed: SEED,
-          numRuns: 40,
+          numRuns: runsFor({ fast: 4, full: 40 }),
           includeErrorInReport: true,
           examples: examples.map((a): [A] => [a]),
         },
@@ -137,12 +141,13 @@ describe("P33, only the owning runner writes its answers", () => {
 
   // Process ids come from processIds: exact UUIDv7 TypeIDs, not any 26 base32 characters.
   const Nat = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }));
-  const props = { arbitrary: { seed: SEED, runs: 40 } };
+  const props = { arbitrary: { seed: SEED, runs: runsFor({ fast: 4, full: 40 }) } };
   it.effect.prop(
     "runner permission requires its exact name and process id",
     { suffix: Schema.String, process: processIds, step: Nat, count: Nat, m: Schema.Json },
     ({ suffix, process, step, count, m }) => {
       const name = `runner:${suffix}`;
+
       return Effect.gen(function* () {
         for (const [to, pid, allowed] of [
           [name, process, true],
@@ -422,6 +427,7 @@ describe("p21, receive", () => {
       id: fc.constantFrom("letter_a", "letter_b", "letter_c", "letter_d", "letter_e"),
       m: fc.oneof(fc.integer(), fc.string({ maxLength: 5 }), fc.constant(null), fc.record({ n: fc.nat() })),
     });
+
     await fc.assert(
       fc.asyncProperty(fc.array(sendArb, { maxLength: 30 }), (sends) =>
         Effect.runPromise(
@@ -449,7 +455,7 @@ describe("p21, receive", () => {
           }).pipe(Effect.provide(mail())),
         ),
       ),
-      { seed: SEED, numRuns: 60 },
+      { seed: SEED, numRuns: runsFor({ fast: 6, full: 60 }) },
     );
   });
 });
@@ -462,6 +468,7 @@ describe("p21, no Layer fails at build", () => {
         read: () => Stream.fail(new LedgerError({ reason: "unreachable" })),
         wait: () => Effect.fail(new LedgerError({ reason: "unreachable" })),
       });
+
       return Effect.gen(function* () {
         expect((yield* Effect.flip(send("notes:1", LETTER, m))).reason).toBe("unreachable");
         expect((yield* Effect.flip(receive("notes:1"))).reason).toBe("unreachable");

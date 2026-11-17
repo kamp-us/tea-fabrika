@@ -7,7 +7,7 @@
 //   node gcloop.ts plist                                the timer's launchd unit, filled in for this laptop
 //
 // No step's start runs or waits for `box.sh gc` any more. A launchd timer starts a sweep every
-// period (`GC_MINUTES`, default 30), and the catch-up script kicks one after each merge. Like the kubelet's
+// period (`GC_MINUTES`, default 30), and `land.ts merged` kicks one after each merge. Like the kubelet's
 // garbage collection, which runs on its own loop and never inside "start a pod".
 //
 //   a sweep starts       it takes BOXES/state/gc.lock; one is held by a live process: it records
@@ -19,6 +19,18 @@
 //                        before and after; then the lock goes
 //   status               the newest sweep that ran (not a skipped one), and `LATE` when it started
 //                        more than two periods ago, or none is recorded
+//
+// The timer is installed once per laptop, from the main checkout (the unit's template is ../gc.plist):
+//
+//   install     node .agents/skills/lead/scripts/gcloop.ts plist > ~/Library/LaunchAgents/local.tea-fabrika.gc.plist
+//               launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.tea-fabrika.gc.plist
+//   uninstall   launchctl bootout gui/$(id -u)/local.tea-fabrika.gc
+//               rm ~/Library/LaunchAgents/local.tea-fabrika.gc.plist
+//
+// `launchctl list local.tea-fabrika.gc` lists it: its pid while a sweep runs, and the last exit
+// status. The `bootout` line alone stops it. `plist` writes this laptop's Node path and the period
+// into the unit, so a new `GC_MINUTES` or a new Node needs both install lines again. The timer's own
+// output goes to BOXES/state/gc-timer.log.
 //
 // Existing tools looked at for the timer (decision 0040):
 //   - launchd, a user LaunchAgent with StartInterval
@@ -76,6 +88,7 @@ export const Outcome = Schema.TaggedUnion({
   failed: { reason: Schema.String },
   skipped: { reason: Schema.String },
 });
+
 export type Outcome = typeof Outcome.Type;
 
 /** What one sweep removed, read from gc's own lines. */
@@ -85,31 +98,33 @@ export const Removed = Schema.Struct({
   /** `state/<box>.box` files whose box was gone. */
   facts: Schema.Array(Schema.String),
 });
+
 export type Removed = typeof Removed.Type;
 
 /** One sweep, as BOXES/state/gc.jsonl keeps it: one line each, never rewritten. */
 export const Sweep = Schema.Struct({
   startedAt: Schema.String,
   endedAt: Schema.String,
-  ms: Schema.Number,
+  ms: Schema.Finite,
   trigger: Schema.Literals(TRIGGERS),
   /** The period this sweep ran under, in minutes. */
-  minutes: Schema.Number,
-  pid: Schema.Number,
+  minutes: Schema.Finite,
+  pid: Schema.Finite,
   outcome: Outcome,
   /** gc's exit code; `null` when it did not end on its own (skipped, timed out, could not start). */
-  code: Schema.NullOr(Schema.Number),
+  code: Schema.NullOr(Schema.Finite),
   removed: Removed,
   /** Each folder gc kept, with its reason, as gc printed it. */
   kept: Schema.Array(Schema.String),
   /** Folders gc looked at: the ones it removed and the ones it kept. */
-  seen: Schema.Number,
-  freedMb: Schema.Number,
+  seen: Schema.Finite,
+  freedMb: Schema.Finite,
   /** KB free on the boxes' volume before and after, from df; `null` when df said nothing. */
-  freeKb: Schema.Struct({ before: Schema.NullOr(Schema.Number), after: Schema.NullOr(Schema.Number) }),
+  freeKb: Schema.Struct({ before: Schema.NullOr(Schema.Finite), after: Schema.NullOr(Schema.Finite) }),
   /** mutbox's line when its Docker sweep was stopped at its time limit. */
   mutbox: Schema.NullOr(Schema.String),
 });
+
 export type Sweep = typeof Sweep.Type;
 
 const SweepLine = Schema.fromJsonString(Sweep);
@@ -159,6 +174,7 @@ const NOTHING = readOutput("");
 /** The newest sweep that ran, and how many were skipped after it. */
 export const newest = (sweeps: ReadonlyArray<Sweep>) => {
   const at = sweeps.findLastIndex((s) => s.outcome._tag !== "skipped");
+
   return { last: at < 0 ? null : (sweeps[at] ?? null), skipped: sweeps.length - 1 - at };
 };
 
@@ -175,11 +191,13 @@ const ended = (s: Sweep): string => {
 
   const r = s.removed;
   const trees = r.worktrees.length === 1 ? "1 worktree" : `${r.worktrees.length} worktrees`;
+
   return `ok in ${took}, removed ${r.boxes.length} boxes and ${trees}, ${s.freedMb} MB; kept ${s.kept.length}`;
 };
 
 /** Who holds the lock, as it says of itself. */
-export const Holder = Schema.Struct({ pid: Schema.Number, startedAt: Schema.String });
+export const Holder = Schema.Struct({ pid: Schema.Finite, startedAt: Schema.String });
+
 export type Holder = typeof Holder.Type;
 
 const HolderText = Schema.fromJsonString(Holder);
@@ -194,15 +212,18 @@ export const says = (
   const { last, skipped } = newest(sweeps);
   const isLate = late(last, now, minutes);
   const head = isLate ? "gc: LATE: " : "gc: ";
+
   const body =
     last === null
       ? "no sweep recorded"
       : `last swept ${spoken(now - Date.parse(last.startedAt))} ago (${last.trigger}), ${ended(last)}`;
+
   const tail = [
     `every ${minutes}m`,
     ...(skipped > 0 ? [`${skipped} skipped since`] : []),
     ...(going === null ? [] : [`one going for ${spoken(now - Date.parse(going.startedAt))} (pid ${going.pid})`]),
   ];
+
   return { late: isLate, text: `${head}${body}; ${tail.join("; ")}` };
 };
 
@@ -215,16 +236,19 @@ const xml = (text: string) =>
  * with no value is a failure that names it. */
 export const fill = (template: string, values: Readonly<Record<string, string>>): Result.Result<string, string> => {
   const missing = new Set<string>();
+
   const filled = template.replaceAll(/\{\{([a-z]+)\}\}/g, (mark, name: string) => {
     const value = Object.hasOwn(values, name) ? values[name] : undefined;
 
     if (value === undefined) {
       missing.add(mark);
+
       return mark;
     }
 
     return xml(value);
   });
+
   return missing.size === 0
     ? Result.succeed(filled)
     : Result.fail(`the unit file has no value for ${[...missing].join(", ")}`);
@@ -233,11 +257,14 @@ export const fill = (template: string, values: Readonly<Record<string, string>>)
 // ---------------------------------------------------------------- the world
 
 /** The loop could not do its own part: the env, the record or the unit file. */
-export class Broken extends Schema.TaggedError<Broken>()("Broken", { reason: Schema.String }) {}
+export class Broken extends Schema.TaggedError<Broken, { readonly brand: unique symbol }>()("Broken", {
+  reason: Schema.String,
+}) {}
 
 /** One command run to its end: its exit code, stdout and stderr. */
 const exec = Effect.fn("gcloop.exec")(function* (command: string, args: ReadonlyArray<string>) {
   const handle = yield* ChildProcess.make(command, args, { forceKillAfter: Duration.seconds(10) });
+
   const [out, err, code] = yield* Effect.all(
     [
       Stream.mkString(Stream.decodeText(handle.stdout)),
@@ -246,6 +273,7 @@ const exec = Effect.fn("gcloop.exec")(function* (command: string, args: Readonly
     ],
     { concurrency: 3 },
   );
+
   return { code: Number(code), out, err };
 }, Effect.scoped);
 
@@ -256,11 +284,12 @@ export const paths = Effect.fn("gcloop.paths")(
     const env = path.join(import.meta.dirname, "env.sh");
     const r = yield* exec("sh", ["-c", '. "$0" && printf "%s\\n%s" "$MAIN" "$BOXES"', env]);
     const [main = "", boxes = ""] = r.out.split("\n");
+
     return r.code === 0 && main !== "" && boxes !== ""
       ? { main, boxes, state: path.join(boxes, "state") }
-      : yield* new Broken({ reason: `env.sh gave no MAIN or BOXES: ${r.err.trim()}` });
+      : yield* Broken.make({ reason: `env.sh gave no MAIN or BOXES: ${r.err.trim()}` });
   },
-  Effect.catchTag("PlatformError", () => Effect.fail(new Broken({ reason: "env.sh could not run" }))),
+  Effect.catchTag("PlatformError", () => Effect.fail(Broken.make({ reason: "env.sh could not run" }))),
 );
 
 /** KB free on the volume that holds `path`, from `df -k`; `null` when df says nothing usable. */
@@ -268,9 +297,10 @@ const freeKb = Effect.fn("gcloop.freeKb")(
   function* (path: string) {
     const r = yield* exec("df", ["-k", path]);
     const kb = Number(r.out.trim().split("\n").at(-1)?.trim().split(/\s+/)[3]);
+
     return r.code === 0 && Number.isFinite(kb) ? kb : null;
   },
-  Effect.catch(() => Effect.succeed(null)),
+  Effect.orElseSucceed(() => null),
 );
 
 const alive = (pid: number) =>
@@ -287,13 +317,15 @@ const alive = (pid: number) =>
  * gave to another process later must not hold the lock for good. */
 const live = Effect.fn("gcloop.live")(function* (holder: Holder, now: Holder, stale: Duration.Duration) {
   const age = Date.parse(now.startedAt) - Date.parse(holder.startedAt);
+
   return age < Duration.toMillis(stale) && (yield* alive(holder.pid));
 });
 
 const readHolder = Effect.fn("gcloop.readHolder")(function* (lock: string) {
   const fs = yield* FileSystem.FileSystem;
-  const text = yield* fs.readFileString(lock).pipe(Effect.catch(() => Effect.succeed("")));
-  return Schema.decodeUnknownOption(HolderText)(text);
+  const text = yield* fs.readFileString(lock).pipe(Effect.orElseSucceed(() => ""));
+
+  return Schema.decodeOption(HolderText)(text);
 });
 
 const sameHolder = (a: Option.Option<Holder>, b: Option.Option<Holder>): boolean =>
@@ -312,10 +344,12 @@ const take = Effect.fn("gcloop.take")(function* (lock: string, me: Holder, stale
   const fs = yield* FileSystem.FileSystem;
   const mine = `${lock}.${me.pid}`;
   yield* fs.writeFileString(mine, Schema.encodeSync(HolderText)(me));
+
   const link = fs.link(mine, lock).pipe(
     Effect.as(true),
-    Effect.catch(() => Effect.succeed(false)),
+    Effect.orElseSucceed(() => false),
   );
+
   const held = Effect.fn("gcloop.held")(function* () {
     if (yield* link) {
       return null;
@@ -328,9 +362,10 @@ const take = Effect.fn("gcloop.take")(function* (lock: string, me: Holder, stale
     }
 
     const aside = `${lock}.dead.${me.pid}`;
+
     const moved = yield* fs.rename(lock, aside).pipe(
       Effect.as(true),
-      Effect.catch(() => Effect.succeed(false)),
+      Effect.orElseSucceed(() => false),
     );
 
     if (moved) {
@@ -339,6 +374,7 @@ const take = Effect.fn("gcloop.take")(function* (lock: string, me: Holder, stale
       if (!sameHolder(was, holder)) {
         yield* fs.link(aside, lock).pipe(Effect.ignore);
         yield* fs.remove(aside, { force: true }).pipe(Effect.ignore);
+
         return was;
       }
 
@@ -347,6 +383,7 @@ const take = Effect.fn("gcloop.take")(function* (lock: string, me: Holder, stale
 
     return (yield* link) ? null : yield* readHolder(lock);
   });
+
   return yield* held().pipe(Effect.ensuring(fs.remove(mine, { force: true }).pipe(Effect.ignore)));
 });
 
@@ -384,7 +421,7 @@ const append = Effect.fn("gcloop.append")(
     yield* fs.makeDirectory(state, { recursive: true });
     yield* fs.writeFileString(`${state}/gc.jsonl`, `${Schema.encodeSync(SweepLine)(sweep)}\n`, { flag: "a" });
   },
-  Effect.mapError((e) => new Broken({ reason: `the record could not be written: ${e.message}` })),
+  Effect.mapError((e) => Broken.make({ reason: `the record could not be written: ${e.message}` })),
 );
 
 /** One sweep, start to record. It never fails for gc's sake: a gc that fails or hangs is a record. */
@@ -402,6 +439,7 @@ export const sweep = Effect.fn("gcloop.sweep")(function* (ask: Ask) {
     after: number | null,
   ) {
     const now = yield* DateTime.now;
+
     const done = Sweep.make({
       startedAt: me.startedAt,
       endedAt: DateTime.formatIso(now),
@@ -414,7 +452,9 @@ export const sweep = Effect.fn("gcloop.sweep")(function* (ask: Ask) {
       ...read,
       freeKb: { before, after },
     });
+
     yield* append(ask.state, done);
+
     return done;
   });
 
@@ -428,6 +468,7 @@ export const sweep = Effect.fn("gcloop.sweep")(function* (ask: Ask) {
           onNone: () => "a sweep is going",
           onSome: (h) => `a sweep is going (pid ${h.pid}, since ${h.startedAt})`,
         });
+
         return yield* record(Outcome.cases.skipped.make({ reason }), null, NOTHING, null, null);
       }
 
@@ -438,21 +479,25 @@ export const sweep = Effect.fn("gcloop.sweep")(function* (ask: Ask) {
 
       if (Exit.isFailure(ran)) {
         const reason = `${command} could not run`;
+
         return yield* record(Outcome.cases.failed.make({ reason }), null, NOTHING, before, after);
       }
 
       if (Option.isNone(ran.value)) {
         const reason = `stopped after ${spoken(Duration.toMillis(ask.limit))}; the next sweep goes on`;
+
         return yield* record(Outcome.cases.failed.make({ reason }), null, NOTHING, before, after);
       }
 
       const { code, out, err } = ran.value.value;
       const read = readOutput(out);
       const said = err.trim().split("\n").at(-1)?.slice(-300) ?? "";
+
       const outcome =
         code === 0
           ? Outcome.cases.ok.make({})
           : Outcome.cases.failed.make({ reason: `box.sh gc exited ${code}${said === "" ? "" : `: ${said}`}` });
+
       return yield* record(outcome, code, read, before, after);
     }),
   );
@@ -461,8 +506,9 @@ export const sweep = Effect.fn("gcloop.sweep")(function* (ask: Ask) {
 /** Every sweep recorded, oldest first; a line that does not read as one is left out. */
 export const sweeps = Effect.fn("gcloop.sweeps")(function* (state: string) {
   const fs = yield* FileSystem.FileSystem;
-  const text = yield* fs.readFileString(`${state}/gc.jsonl`).pipe(Effect.catch(() => Effect.succeed("")));
-  return text.split("\n").flatMap((line) => Option.toArray(Schema.decodeUnknownOption(SweepLine)(line)));
+  const text = yield* fs.readFileString(`${state}/gc.jsonl`).pipe(Effect.orElseSucceed(() => ""));
+
+  return text.split("\n").flatMap((line) => Option.toArray(Schema.decodeOption(SweepLine)(line)));
 });
 
 /** The status line now, with the live holder of the lock if a sweep is going. */
@@ -470,6 +516,7 @@ export const status = Effect.fn("gcloop.status")(function* (state: string, minut
   const holder = yield* readHolder(`${state}/gc.lock`);
   const going = Option.isSome(holder) && (yield* alive(holder.value.pid)) ? holder.value : null;
   const now = DateTime.toEpochMillis(yield* DateTime.now);
+
   return says(yield* sweeps(state), now, minutes, going);
 });
 
@@ -500,6 +547,7 @@ const kickCommand = Command.make("kick", { trigger }, ({ trigger }) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
     const script = path.join(import.meta.dirname, "gcloop.ts");
+
     const r = yield* exec("sh", [
       "-c",
       'nohup "$0" "$1" sweep --trigger "$2" </dev/null >/dev/null 2>&1 &',
@@ -507,6 +555,7 @@ const kickCommand = Command.make("kick", { trigger }, ({ trigger }) =>
       script,
       trigger,
     ]);
+
     yield* Console.log(r.code === 0 ? `gc: sweep started (${trigger})` : `gc: no sweep started: ${r.err.trim()}`);
   }),
 );
@@ -531,6 +580,7 @@ const plistCommand = Command.make("plist", {}, () =>
     const path = yield* Path.Path;
     const minutes = yield* MINUTES;
     const template = yield* fs.readFileString(path.join(import.meta.dirname, "..", "gc.plist"));
+
     const filled = fill(template, {
       label: LABEL,
       node: process.execPath,
@@ -543,7 +593,7 @@ const plistCommand = Command.make("plist", {}, () =>
     });
 
     if (Result.isFailure(filled)) {
-      return yield* new Broken({ reason: filled.failure });
+      return yield* Broken.make({ reason: filled.failure });
     }
 
     yield* Console.log(filled.success.trimEnd());

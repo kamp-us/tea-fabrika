@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-jobs-flush-after-span-has-no-law",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/gateway/Gateway.ts",
+    "line": 1185
+  },
+  "says": "In next/, the wake-trace plan requires that the gateway's jobs branch runs flush after its gateway.route span ends, so the span is written by that flush, but no law checks it: moving flush inside routeJobs, before the span ends, leaves every law in Jobs.integration.test.ts green.",
+  "proof": "In a scratch copy of next/packages/libfabrika at 977a8fe30, Gateway.ts was edited to put `yield* flush;` before `return Result.isSuccess(woke) ? answer : no(\"unavailable\")` inside routeJobs and to remove the flush after `Effect.exit(routeJobs())`; `vitest run --maxWorkers=1 src/node/gateway/Jobs.integration.test.ts` printed `Tests 9 passed (9)`.",
+  "cost": "A later edit could leave each jobs call's gateway.route span unwritten until some later flush, or lost at shutdown, and no test would go red.",
+  "head": "977a8fe303937a3c3917461e39aa20bfb0b57b60",
+  "ticket": null,
+  "pr": null
+}

@@ -14,9 +14,11 @@
 // Every oracle here is the walk's own model, or the store's raw rows read with SQL: never the
 // product's fold.
 import { describe, expect, it } from "@effect/vitest";
+import { type Runs, runsFor } from "@kampus/vitest";
 import {
   Cause,
   Context,
+  Deferred,
   Effect,
   Exit,
   Fiber,
@@ -35,6 +37,9 @@ import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import type { Entry } from "../ledger/Log.ts";
+import { Model } from "../permissions/Model.ts";
+import * as RelationsMemory from "../permissions/RelationsMemory.ts";
+import { Senders } from "../permissions/Senders.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Children, ChildrenError, type Child, type StartGrant, Started } from "./Children.ts";
@@ -43,7 +48,10 @@ import { type From, Mailbox } from "./Mailbox.ts";
 import { Owner, Recipient, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 
-/** One real store. `reopen` closes it and opens the same file again; `probe.open` counts open handles. */
+/**
+ * One real store. `reopen` opens the same file again, then closes the old handle; `probe.open`
+ * counts open handles.
+ */
 export type Store = {
   readonly sql: Sql;
   readonly reopen: Effect.Effect<void>;
@@ -135,7 +143,7 @@ const POOL = ["merger:1", "merger:2", "merger:3", "worker:1", "worker:2"] as con
 /** The ledger's row limit (`ledger/Log.ts`): a first letter over it is refused whole. */
 const ROW_LIMIT = 2_000_000;
 
-type Answer = Result.Result<typeof Started.Type, ChildrenError>;
+type Answer = Result.Result<Started, ChildrenError>;
 type Reason = ChildrenError["reason"];
 
 /** The first letter's entry id in `<name>/inbox`. */
@@ -251,14 +259,20 @@ const layer = (sql: Sql, next: Effect.Effect<string>, gate?: Gate, seen?: Seen) 
           }),
         ).pipe(Layer.provide(tx));
   const data = Layer.merge(LedgerSql.layer(sql, { reader: "connection:test" }).pipe(Layer.provide(quiet)), gated);
-  return ChildrenLedger.layer({ grants: GRANTS }).pipe(
+  return ChildrenLedger.layer({ grants: GRANTS, fabrika: Model.ref("fabrika", "p42") }).pipe(
     Layer.provideMerge(
       ProcessManager.layer({ ...brain(), by: BRAIN }, next).pipe(
         Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data))),
       ),
     ),
+    // T953: no start here has a member's input behind it, so `StartGrant` judges every one, as before.
+    Layer.provide(RelationsMemory.layer([])),
+    Layer.provide(noSenders),
   );
 };
+
+/** The gateway's answer for these starts: no member's input was delivered to any requester. */
+const noSenders = Layer.succeed(Senders, { sender: () => Effect.succeedNone });
 
 /** A raw value under `tag`, never made by a schema, so it can hold a shape its schema refuses. */
 const raw = (tag: string, fields: object): unknown =>
@@ -999,7 +1013,7 @@ const prop = (
   moves: ReadonlyArray<Move>,
   required: ReadonlyArray<Move>,
   answers: ReadonlyArray<string>,
-  numRuns: number,
+  runs: Runs,
 ) =>
   it.effect(
     name,
@@ -1010,7 +1024,7 @@ const prop = (
         const law = walk(open, moves, done, seen);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-        const checks = { seed: SEED, numRuns, includeErrorInReport: true, endOnFailure: true };
+        const checks = { seed: SEED, numRuns: runsFor(runs), includeErrorInReport: true, endOnFailure: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
         // An empty walk cannot pass: every move and every answer the law is about was reached.
@@ -1434,7 +1448,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["start", "exit", "down", "restart", "retry_unsaved", "reopen"],
       ["start", "exit", "down", "restart", "retry_unsaved"],
       ["started", "name_taken", "already_started", "already_present", "own_name"],
-      200,
+      // 20 walks never answer already_present at this seed.
+      { fast: 60, full: 200 },
     );
 
     it.effect(
@@ -1446,7 +1461,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const turns = fc.scheduler();
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each race
           const property = fc.asyncProperty(turns, Race, (s, p) => Effect.runPromise(Effect.scoped(law(s, p))));
-          const checks = { seed: SEED, numRuns: 100, includeErrorInReport: true, endOnFailure: true };
+          const checks = {
+            seed: SEED,
+            // 20 races never answer already_present at this seed.
+            numRuns: runsFor({ fast: 50, full: 100 }),
+            includeErrorInReport: true,
+            endOnFailure: true,
+          };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, checks));
           expect([...seen].sort(), "every answer a race can give was given").toEqual(
@@ -1484,7 +1505,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ],
       ["start", "retry_saved", "retry_changed", "retry_unsaved", "exit", "down", "restart", "cut_answer", "reopen"],
       ["retried", "id_reused", "cut_answer", "asked_afresh"],
-      200,
+      { fast: 20, full: 200 },
     );
     prop(
       "L4: a start needs a live requester whose program is granted the child's program, as of the start's last turn",
@@ -1492,7 +1513,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["start", "start_stale", "exit", "restart", "exit_between", "retry_unsaved"],
       ["start", "start_stale", "exit_between", "restart"],
       ["started", "stale_sender", "forbidden", "exit_early", "exit_late", "exit_after"],
-      200,
+      { fast: 20, full: 200 },
     );
     prop(
       "L5: every started line keeps its requester, its parent and its code, under a name the brain owns",
@@ -1500,7 +1521,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["start", "exit", "restart", "retry_saved", "reopen"],
       ["start", "retry_saved"],
       ["started", "retried"],
-      200,
+      { fast: 20, full: 200 },
     );
     prop(
       "L6: decode comes first: a bad name is bad_name, any other field off its schema or a letter over the row limit is bad_input, and nothing is written",
@@ -1508,7 +1529,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["start", "bad", "big", "retry_saved", "cut_write"],
       ["bad", "big", "cut_write"],
       ["bad_name", "bad_input", "too_big", "storage"],
-      200,
+      { fast: 20, full: 200 },
     );
 
     it.effect(
@@ -1519,7 +1540,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const law = secrets(open, seen);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
           const property = fc.asyncProperty(Secret, Tape, (x, tape) => Effect.runPromise(Effect.scoped(law(x, tape))));
-          const checks = { seed: SEED, numRuns: 100, includeErrorInReport: true, endOnFailure: true };
+          const checks = {
+            seed: SEED,
+            numRuns: runsFor({ fast: 20, full: 100 }),
+            includeErrorInReport: true,
+            endOnFailure: true,
+          };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, checks));
           expect([...seen].sort()).toEqual(
@@ -1534,10 +1560,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     it.effect("scenario: L13: an interrupted walk gives back every handle its scope acquired", () =>
       Effect.gen(function* () {
         let probe: Store["probe"] | undefined;
+        // Set once the walk holds its store. A count of yields is no wait for real IO.
+        const ready = yield* Deferred.make<void>();
         const held = Effect.scoped(
           Effect.gen(function* () {
             const store = yield* open;
             probe = store.probe;
+            yield* Deferred.succeed(ready, undefined);
             yield* Children.use((c) =>
               c.start(
                 {
@@ -1553,11 +1582,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           }),
         );
         const fiber = yield* Effect.forkChild(held);
-
-        for (let turn = 0; turn < 1000 && probe === undefined; turn++) {
-          yield* Effect.yieldNow;
-        }
-
+        // The walk never ends on its own, so its join wins only when the walk fails before it is ready.
+        yield* Effect.raceFirst(Deferred.await(ready), Fiber.join(fiber));
         yield* Fiber.interrupt(fiber);
         expect(probe, "the walk acquired its store").toBeDefined();
         expect(probe?.open(), "L13: no database handle outlives its scope").toBe(0);

@@ -3,7 +3,9 @@
 // driver too, so they sit here: `telemetry/Sink.ts:393`, and C7 on every stored span output.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer } from "effect";
+import { runsFor } from "@kampus/vitest";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as fc from "fast-check";
 import * as GatewayCauseTest from "../gateway/GatewayCauseTest.ts";
 import { Doorbell, Ledger, type LedgerCalls, LedgerError } from "../ledger/Ledger.ts";
@@ -20,7 +22,9 @@ import { Archive } from "../telemetry/Archive.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
-const RUNS = 100;
+
+const RUNS = runsFor({ fast: 10, full: 100 });
+
 const PROCESS = "process_0000000000e008000000000000";
 
 const opened: Array<DatabaseSync> = [];
@@ -28,6 +32,7 @@ const opened: Array<DatabaseSync> = [];
 const fresh = (): Sql => {
   const db = new DatabaseSync(":memory:");
   opened.push(db);
+
   return nodeSql(db);
 };
 
@@ -67,7 +72,7 @@ RuntimeCauseTest.suite(law, {
   LedgerError,
 });
 
-GatewayCauseTest.suite(law, { fresh, LedgerError });
+GatewayCauseTest.suite(law, { fresh });
 
 const failures: fc.Arbitrary<object> = fc.oneof(
   fc.string().map((message) => new Error(message)),
@@ -90,6 +95,7 @@ describe("T695, the span sink keeps what failed", () => {
     ({ failure, from, span }) =>
       Effect.gen(function* () {
         const sink = SpanSink.layer(throwing(fresh(), failure), { object: PROCESS });
+
         const error = yield* Effect.flip(
           Effect.gen(function* () {
             if (span) {
@@ -100,6 +106,7 @@ describe("T695, the span sink keeps what failed", () => {
             return yield* SpanSink.use((s) => s.summaries(from, from + 3_600_000));
           }).pipe(Effect.provide(sink)),
         );
+
         expect(error.reason).toBe("storage");
         expect(error.cause).toBe(failure);
       }),
@@ -130,17 +137,20 @@ const dump = (sql: Sql): string =>
     .join("\n");
 
 type Flow = "ledger_rejects" | "ledger_decode" | "archive_rejects" | "store_throws";
+
 const flows = fc.constantFrom<Flow>("ledger_rejects", "ledger_decode", "archive_rejects", "store_throws");
 
 /** One failing operation whose failure holds `text`, inside a span the sink stores. */
 const fail = (flow: Flow, text: string, carrier: unknown): Effect.Effect<unknown, unknown> => {
   if (flow === "ledger_rejects" || flow === "ledger_decode") {
     const answer = flow === "ledger_rejects" ? null : { _tag: "ready", rev: { input: text } };
+
     const calls: LedgerCalls = {
       append: () => (answer === null ? Promise.reject(carrier) : Promise.resolve(answer)),
       read: () => (answer === null ? Promise.reject(carrier) : Promise.resolve([{ rev: { input: text } }])),
       wait: () => (answer === null ? Promise.reject(carrier) : Promise.resolve(answer)),
     };
+
     return Ledger.use((ledger) => ledger.wait("notes:1", 0)).pipe(
       Effect.provide(LedgerRemote.layer(calls, { reader: "connection:t1" })),
     );
@@ -158,12 +168,14 @@ const fail = (flow: Flow, text: string, carrier: unknown): Effect.Effect<unknown
   }
 
   const disk = fresh();
+
   const broken: Sql = {
     ...disk,
     exec: () => {
       throw carrier;
     },
   };
+
   const store = ProcessStore.layer(broken, { process: PROCESS }).pipe(
     Layer.provide(
       LedgerSql.layer(disk, { reader: PROCESS }).pipe(
@@ -171,6 +183,7 @@ const fail = (flow: Flow, text: string, carrier: unknown): Effect.Effect<unknown
       ),
     ),
   );
+
   return ProcessStore.use((s) => s.load).pipe(Effect.provide(store));
 };
 

@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-30; the browser test in CI is planned in Tier 1's P18; 2026-10-31: the window's Unix-socket shortcut replaced, every window dials the brain (T3); walked 2026-11-08"
+summary: "Every protocol could be spoken by a browser tab: no Node, no Unix socket, no files, no WebSocket-level frames. A local shortcut carries the same messages. So: one gateway per client, a signed key pair for identity, a text ping for liveness."
+---
+
 # Protocols first, and a browser is always a client
 
 **Decided 2026-10-30,** during the walk of the transport layer. Walked at Tier 1's start (owner, 2026-11-08): the browser client's protocol checks in CI; nothing new to decide, and the check is planned in Tier 1's P18. Every protocol
@@ -49,7 +54,7 @@ Three answers in the transport layer follow from it:
 A browser is also a host, with capabilities of its own (show a notification, read
 the clipboard). It says so in its `has` list, the same way the Mac says `git`, and
 a Cmd that `needs` git never goes to it. That list, and not the word "window",
-is what keeps a job away from a tab. See
+is what keeps a task away from a tab. See
 [brain, hands, window, agent](./brain-hands-window-agent.md).
 
 ## Why

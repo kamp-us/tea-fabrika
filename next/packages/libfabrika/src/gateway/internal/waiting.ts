@@ -15,8 +15,9 @@ const Pending = Schema.Struct({
   clients: Schema.NonEmptyArray(Schema.String),
   pass: Schema.NullOr(Schema.String),
   has: Schema.Array(Schema.String),
-  as: Schema.Literals(["window", "agent"]),
+  as: Schema.Literals(["window", "agent", "hands"]),
 });
+
 type Pending = typeof Pending.Type;
 
 const Model = Schema.TaggedUnion({
@@ -25,6 +26,7 @@ const Model = Schema.TaggedUnion({
   empty: { rows: Schema.Array(Schema.Never), ...Config.fields },
   waiting: { rows: Schema.NonEmptyArray(Pending), ...Config.fields },
 });
+
 type Model = typeof Model.Type;
 
 // The state follows from the rows: `empty` holds none, `waiting` at least one.
@@ -62,8 +64,9 @@ export const Row = Schema.Struct({
   clients: Schema.NonEmptyArray(Schema.String),
   pass: Schema.NullOr(Schema.String),
   has: Schema.Array(Schema.String),
-  as: Schema.Literals(["window", "agent"]),
+  as: Schema.Literals(["window", "agent", "hands"]),
 });
+
 type Row = typeof Row.Type;
 
 const Saved = Schema.Struct({ rows: Schema.Array(Row), ...Config.fields });
@@ -101,6 +104,7 @@ export const Stored = Saved.pipe(
       decode: (saved) => settle(saved, saved.rows.map(toPending)),
       encode: (s) => {
         const pending: ReadonlyArray<Pending> = s.rows;
+
         return { rows: pending.map(toRow), most: s.most, ttl: s.ttl };
       },
     }),
@@ -116,6 +120,7 @@ const expire = (s: Model, at: number): Model => {
   }
 
   const kept = s.rows.filter((r) => r.until > at);
+
   return settle(s, kept);
 };
 
@@ -127,6 +132,7 @@ export const machine = Machine.make({
   types: { ctx: {} as typeof Config.Type },
   init: (loaded, ctx) => {
     const config = Schema.decodeUnknownSync(Config)(ctx);
+
     return [loaded ?? Model.cases.empty.make({ rows: [], ...config }), []];
   },
   update: {
@@ -139,6 +145,7 @@ export const machine = Machine.make({
         const known = old.clients.includes(m.client);
         const clients: Pending["clients"] = known ? old.clients : [...old.clients, m.client];
         const kept = live.rows.map((r) => (r === old ? { ...old, clients } : r));
+
         return [settle(live, kept), []];
       }
 
@@ -153,7 +160,9 @@ export const machine = Machine.make({
         has: m.has,
         as: m.as,
       };
+
       const kept: ReadonlyArray<Pending> = live.rows;
+
       return [settle(live, [...kept, row].slice(-live.most)), []];
     },
     leave: (s, m) => {
@@ -168,9 +177,11 @@ export const machine = Machine.make({
       }
 
       const clients = row.clients.filter((c) => c !== m.client);
+
       const kept = Arr.isReadonlyArrayNonEmpty(clients)
         ? s.rows.map((r) => (r === row ? { ...row, clients } : r))
         : s.rows.filter((r) => r !== row);
+
       return [settle(s, kept), []];
     },
     accepted: (s, m) => {
@@ -179,6 +190,7 @@ export const machine = Machine.make({
       }
 
       const kept = s.rows.filter((r) => !m.keys.includes(r.key));
+
       return [settle(s, kept), []];
     },
   },

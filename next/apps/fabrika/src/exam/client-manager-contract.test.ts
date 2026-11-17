@@ -1,12 +1,15 @@
 import { it, expect } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Schema } from "effect";
 import { rolldown } from "rolldown";
 
 const contract = new URL("../../../../packages/libfabrika/src/access/ClientManager.ts", import.meta.url).pathname;
+
 const forbidden = /\/(ClientManagerLedger|AccessFold|Referee|RefereeSql|LedgerTransactionSql|ledgerStore)\.ts$/;
 
 const inspect = Effect.fnUntraced(function* (names: readonly string[] | null) {
   const loaded = new Set<string>();
+
   const bundle = yield* Effect.acquireRelease(
     Effect.tryPromise(() =>
       rolldown({
@@ -20,6 +23,7 @@ const inspect = Effect.fnUntraced(function* (names: readonly string[] | null) {
             },
             load(id) {
               loaded.add(id);
+
               return id === "\0contract-selection"
                 ? `export { ${names?.join(", ")} } from ${JSON.stringify(contract)};`
                 : null;
@@ -30,6 +34,7 @@ const inspect = Effect.fnUntraced(function* (names: readonly string[] | null) {
     ),
     (bundle) => Effect.promise(() => bundle.close()),
   );
+
   const result = yield* Effect.tryPromise(() => bundle.generate({ format: "esm" }));
   const kept = result.output.flatMap((chunk) => (chunk.type === "chunk" ? Object.keys(chunk.modules) : []));
   expect([...loaded].filter((id) => forbidden.test(id))).toEqual([]);
@@ -51,5 +56,5 @@ it.effect.prop(
 
       yield* inspect(["ClientManager", ...new Set(names)]);
     }).pipe(Effect.scoped),
-  { timeout: 60_000, arbitrary: { seed: 119120, runs: 100 } },
+  { timeout: 60_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 100 }) } },
 );

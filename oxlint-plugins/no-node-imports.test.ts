@@ -5,14 +5,15 @@ import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
-import { noNodeFilesystem } from "./no-node-filesystem.ts";
 import { noNodeImports } from "./no-node-imports.ts";
 
 const CODE = "fabrika(no-node-imports)";
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 // From the top of the repo, so the rule reads each path as oxlint gives it there.
 const tester = new RuleTester({ cwd: join(import.meta.dirname, "..") });
 
@@ -36,6 +37,7 @@ const cli = async (cases: ReadonlyMap<string, Case>) => {
   expect(Object.fromEntries([...cases.keys()].map((path) => [path, result(CODE, path)]))).toEqual(
     Object.fromEntries([...cases].map(([path, { lines }]) => [path, lines])),
   );
+
   return result;
 };
 
@@ -68,6 +70,7 @@ it("every native import form needs a nonempty reason on its own line, in product
         // Node's prefix-only modules are not bare builtins.
         const native = prefix || !["test", "sqlite"].includes(name);
         const from = JSON.stringify(module);
+
         const forms = [
           `import * as a from ${from};`,
           `import a from ${from};`,
@@ -86,6 +89,7 @@ it("every native import form needs a nonempty reason on its own line, in product
           `import a = require(${from});`,
           `type A = import(${from}).X;`,
         ];
+
         const paths = [
           "next/packages/libfabrika/src/native.ts",
           "next/apps/fabrika/src/exam/native.ts",
@@ -95,6 +99,7 @@ it("every native import form needs a nonempty reason on its own line, in product
           "next/e2e/native.ts",
           "packages/fabrika/src/native.ts",
         ];
+
         const lines = forms.flatMap((form, i) =>
           [
             "",
@@ -105,9 +110,11 @@ it("every native import form needs a nonempty reason on its own line, in product
             ` // not edge: ${reason}`,
           ].map((mark, j) => {
             const unique = form.replace(/\b(a|A|X|x)\b/g, (name) => `${name}${i}_${j}`);
+
             return mark === "before" ? `// edge: ${reason}\n${unique}` : unique + mark;
           }),
         );
+
         const body = lines.join("\n");
         const expected: number[] = [];
         let line = 1;
@@ -134,11 +141,11 @@ it("every native import form needs a nonempty reason on its own line, in product
 it("multiline imports use the module string's line; strings and neighboring marks grant nothing", async () => {
   let n = 0;
   const cases = new Map<string, Case>();
-  const products: string[] = [];
   fc.assert(
     fc.property(fc.uuid(), (reason) => {
       const path = "next/apps/fabrika/src/exam/native.ts";
       const product = "next/packages/libfabrika/src/native.ts";
+
       const exam = {
         text: [
           `import {\n readFile\n} from "node:fs"; // edge: ${reason}`,
@@ -150,23 +157,87 @@ it("multiline imports use the module string's line; strings and neighboring mark
         ].join("\n"),
         lines: [6, 7],
       };
+
       const blessed = { text: `import {readFile} from "node:fs"; // edge: ${reason}`, lines: [] };
       check(path, exam);
       check(product, blessed);
-      tester.run("no-node-filesystem", noNodeFilesystem, {
-        valid: [{ code: blessed.text, filename: product }],
-        invalid: [],
-      });
       cases.set(numbered(path, n), exam);
       cases.set(numbered(product, n), blessed);
-      products.push(numbered(product, n));
       n++;
     }),
     { seed: 119120, numRuns: 5 },
   );
-  const result = await cli(cases);
+  await cli(cases);
+});
 
-  for (const product of products) {
-    expect(result("fabrika(no-node-filesystem)", product)).toEqual([]);
-  }
+// L4 of the trusted-rules swap (0573): `fabrika/no-node-filesystem` is gone, so this rule holds every
+// form it held. Its 8 module names and 10 import forms, at its paths: fired in product code, and now
+// at an `exam/` path and a `.d.ts` too, which the old rule skipped; never in a test, a test-support
+// file or `e2e/`; and a line with `// edge: <why>` on it passes. Every run checks all 8 names: a draw
+// of one name per run left `fs` and `node:path/posix` out at this seed (fast-check counts examples
+// inside numRuns).
+// Plant: skip only the bare `fs` specifier in no-node-imports.ts, and the fs lines are not refused.
+const FILESYSTEM = [
+  "node:fs",
+  "node:fs/promises",
+  "fs",
+  "fs/promises",
+  "node:path",
+  "path",
+  "node:path/posix",
+  "node:path/win32",
+] as const;
+
+it("holds every filesystem import form the retired no-node-filesystem held, at its paths", async () => {
+  let n = 0;
+  const cases = new Map<string, Case>();
+  const reached = new Set<string>();
+  fc.assert(
+    fc.property(fc.uuid(), (reason) => {
+      for (const module of FILESYSTEM) {
+        const from = JSON.stringify(module);
+
+        const forms = [
+          `import * as native0 from ${from};`,
+          `import native1 from ${from};`,
+          `import {readFile as read} from ${from};`,
+          `import ${from};`,
+          `export * from ${from};`,
+          `export {readFile as read2} from ${from};`,
+          `const native6 = await import(${from});`,
+          `const native7 = require(${from});`,
+          `import native8 = require(${from});`,
+          `const native9 = import(\`${module}\`);`,
+        ];
+
+        const all = forms.map((_, i) => i + 1);
+
+        const paths = [
+          ["next/packages/libfabrika/src/native.ts", all],
+          ["next/apps/fabrika/src/exam/native.ts", all],
+          ["next/packages/libfabrika/src/native.d.ts", all],
+          ["next/packages/libfabrika/src/native.test.ts", []],
+          ["next/packages/libfabrika/src/native.test-support.ts", []],
+          ["next/apps/fabrika/e2e/native.ts", []],
+        ] as const;
+
+        const edged = { text: forms.map((form) => `${form} // edge: ${reason}`).join("\n"), lines: [] };
+
+        for (const [path, lines] of paths) {
+          const one = { text: forms.join("\n"), lines };
+          check(path, one);
+          cases.set(numbered(path, n), one);
+        }
+
+        check("next/packages/libfabrika/src/native.ts", edged);
+        cases.set(numbered("next/packages/libfabrika/src/native-edged.ts", n), edged);
+        reached.add(module);
+        n++;
+      }
+    }),
+    { seed: 119120, numRuns: 8 },
+  );
+  // Coverage: every name the old rule held was checked.
+  expect([...reached].sort()).toEqual([...FILESYSTEM].sort());
+  await cli(cases);
 });

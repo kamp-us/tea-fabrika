@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-03, shape proposed; walked at Tier 2"
+summary: "Today's version first. A filing records `from`: the pull request, review, run or walk it came out of, since only the filer knows it then. Tickets stay without a type label; area and project wait for experiment 205's designs."
+---
+
 # A ticket says where it came from
 
 **Decided 2026-11-03 by the owner,** from [experiment 205](../../experiments/205-organizing-work.md):
@@ -22,7 +27,7 @@ Its decided rules are in: [0348](../../.decisions/0348-a-filing-records-its-sour
 ## What was decided
 
 - **`from` is written at filing.** Only the filer knows, at that moment, which pull request,
-  review, mutation step, lane run or walk a ticket came out of. Today that lives in the body's
+  review, mutation step, quest run or walk a ticket came out of. Today that lives in the body's
   prose, when the filer bothers. A later reader cannot get it back. By the data rule in
   `AGENTS.md`, a fact that exists only when something is written goes in now.
 - **No type label, for now.** [Sort answers yes or no](./sort-answers-yes-or-no.md) keeps its

@@ -1,3 +1,8 @@
+---
+state: "dropped 2026-10-23, for now: tea already has `@demlik/tea/pbt`; experiment 120 tests schema-made inputs; demlik#734 closed"
+summary: "The checker that walks a tea machine through many orders of messages becomes its own package in demlik, beside tea: laws, worlds and random walks, no every-order search. Each stage's laws and world stay in the pipeline; tests of a running host stay with the host."
+---
+
 # The checker is a tea package
 
 **Dropped 2026-10-23, for now.** No package. With no every-order search, we
@@ -89,7 +94,7 @@ const found = yield* sample((choices) => walk(machine, choices), {ms: 10_000, se
 
 - **What an agent writes for each machine.** Random walks still need a
   world, which is our list of every message and every answer, about 1,500
-  lines for the lanes. A test on the running host with generated inputs,
+  lines for the quests. A test on the running host with generated inputs,
   like experiment 116's, needs no world but needs stand-ins. Nobody has
   measured which one is cheaper to write and trust.
 - **The name.**

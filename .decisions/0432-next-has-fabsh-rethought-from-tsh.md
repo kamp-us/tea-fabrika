@@ -1,7 +1,7 @@
 ---
 id: 0432
 title: In next/, the shell is fabsh, rethought from tsh and never copied, and tsh stays in today's version
-status: accepted
+status: amended-in-part by [0586](0586-fabsh-v1-is-todays-terminal.md)
 date: 2026-11-01
 tags: [tsh, fabsh, shell, names, next, todays-version]
 ---
@@ -22,6 +22,8 @@ the same; no decision file held it.
 
 - `fabsh` is rethought from tsh, never copied
   ([rethink, do not port](../docs/direction/rethink-do-not-port.md)).
+  *2026-11-15: for v1, `fabsh` is today's terminal rebuilt on `next/`'s runtime
+  ([0586](0586-fabsh-v1-is-todays-terminal.md)); the rest of this file holds.*
 - `tsh` stays in today's version until `next/` takes its job over.
 - A `next/` file, note or trace names `fabsh`, never `tsh`.
 

@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01"
+summary: "Both versions, today's quest first. Twelve principles, each with the known way, ticket 117's real run, and the type or test that holds it. A person is asked only for a judgment; red after a build goes back to the builder; prevent, then fix, then stop; a stuck or crashed quest resumes from the step that broke and never starts over; after a judgment the quest goes on from the step before; every stop saves its resume point; a step is idempotent, keyed by its inputs; retries are bounded at one level; a skipped check never looks clean; an ask names where each pick resumes; cost and attention are counted; nobody writes their own exam. From experiment 186, which also lists 35 places in PR 289 that break one."
+---
+
 # Pipeline guidelines: a factory that resumes, and asks a person only to judge
 
 **Decided 2026-11-01.** The owner set P1, P2, P4, P5 and P6, the core of P7 (every step is
@@ -10,7 +15,7 @@ Built from [experiment 186](../../experiments/186-pipeline-guidelines.md), which
 factories, supervisors, durable workflows, CI systems and build caches handle a stop, and
 checked the self-fix plan of [PR 289](https://github.com/usirin/tea-fabrika/pull/289) against
 the result. It is reading, not a measurement. It sits under the note
-[Jidoka and andon](./jidoka-and-andon.md), from PR 289, which applies these rules to today's lane,
+[Jidoka and andon](./jidoka-and-andon.md), from PR 289, which applies these rules to today's quest,
 row by row. Both PR 289 files named here, that note and the plan
 [pipeline-self-fix](../plan/pipeline-self-fix.md), are on main now.
 
@@ -18,13 +23,13 @@ row by row. Both PR 289 files named here, that note and the plan
 // A sketch. A step still answers in the five verbs. What is new is what each one must carry.
 type End =
 	| {readonly _tag: "done"; readonly key: Key}                          // kept; never run again for this key
-	| {readonly _tag: "send"; readonly to: LaneStep; readonly why: Why; readonly evidence: Evidence}
+	| {readonly _tag: "send"; readonly to: QuestStep; readonly why: Why; readonly evidence: Evidence}
 	| {readonly _tag: "ask"; readonly for: Judgment; readonly shows: Shows; readonly picks: Picks}
 	| {readonly _tag: "skip"; readonly why: Why}                          // written, with its why
 	| {readonly _tag: "stuck"; readonly why: Why; readonly resume: Resume}; // andon: the line stopped itself
 
-type Key = {readonly step: LaneStep; readonly inputs: Hash};       // a hash of what the step read
-type Resume = {readonly step: LaneStep; readonly carry: Held};     // saved before the stop is written
+type Key = {readonly step: QuestStep; readonly inputs: Hash};      // a hash of what the step read
+type Resume = {readonly step: QuestStep; readonly carry: Held};    // saved before the stop is written
 type Picks = NonEmpty<{readonly pick: string; readonly resume: Resume}>; // each pick says where it goes on
 
 const route = (end: End, rounds: number): Move => {
@@ -57,14 +62,14 @@ ask:owner:merge     the first time a person is needed after the plan's yes   P1
 - **Today's version (`packages/pipeline`, `programs/pipeline`):** all of it. The self-fix plan on
   PR 289 is its first build. Today's code is the running example, read on main at `02a238ea`.
 - **`next/`:** the same principles, rethought, not ported
-  ([rethink, do not port](./rethink-do-not-port.md)). The lane in `next/` is not designed yet.
+  ([rethink, do not port](./rethink-do-not-port.md)). The quest in `next/` is not designed yet.
   Whoever designs it starts from this note, so the owner does not have to correct it again.
 
 ## The known way
 
 | Who | What they do | What we take |
 |---|---|---|
-| [Toyota, TPS](https://global.toyota/en/company/vision-and-philosophy/production-system/) | Machines "detect the abnormality and stop automatically". "People need only respond when there is an abnormality." | The lane stops itself. A person is called only by a stop. |
+| [Toyota, TPS](https://global.toyota/en/company/vision-and-philosophy/production-system/) | Machines "detect the abnormality and stop automatically". "People need only respond when there is an abnormality." | The quest stops itself. A person is called only by a stop. |
 | [Lean Enterprise Institute: jidoka](https://www.lean.org/lexicon-terms/jidoka/), [andon](https://www.lean.org/lexicon-terms/andon/), [poka-yoke](https://www.lean.org/lexicon-terms/poka-yoke/) | Jidoka "separate[s] men and machines". An andon shows where and what. A shutdown device is "the most powerful", a warning device less so. | Each stop says where and why. A guard beats a warning. |
 | Shigeo Shingo, *Zero Quality Control* (1986) | Inspect at the source, right after the act that can go wrong. | A check runs in code right after the step it checks. |
 | [Erlang/OTP supervisors](https://www.erlang.org/doc/system/sup_princ.html) | `one_for_one`: "only that process is restarted". Intensity and period "default to `1` and `5`". Past it, the supervisor ends and its parent decides. | Restart only what broke, a bounded number of times, then hand up. |
@@ -80,8 +85,8 @@ ask:owner:merge     the first time a person is needed after the plan's yes   P1
 - A parent steps its children by hand and reads their outcomes
   ([outcome names](./outcome-names.md)). These guidelines change only what an outcome carries and
   how the parent routes it. No sixth verb and no new move.
-- OTP's answer to a child that broke is a supervisor with an intensity. The lane is that supervisor
-  for its steps, and a person is the one above it. A restart is a Msg to the lane.
+- OTP's answer to a child that broke is a supervisor with an intensity. The quest is that supervisor
+  for its steps, and a person is the one above it. A restart is a Msg to the quest.
 - The saved state is the model. A resume is `init` from the saved model, never from the blank one.
 
 ## How Linear would do it
@@ -115,14 +120,14 @@ const OURS = {
   waiting, as Linear does for a missed project update. 60%.
 - **Clashes with Linear, decided by the owner on 2026-11-01.**
   1. **A person's `stop` is a saved pause, not an end.** Linear's `stop` is a pause too. The same
-     line goes on from the step that was stopped (P4). A lane a person wants gone closes with its
+     line goes on from the step that was stopped (P4). A quest a person wants gone closes with its
      ticket. 85%.
   2. **A person may speak unasked, by a plain comment.** Linear lets a person "steer the approach"
      of a running session. Here a comment on the ticket is the way in: the running step reads it
      at its next turn, or the next step does when none runs. It never cuts a turn off. The comment's
      fact records `during`, the run that was live when it was written, filled in by code (what the
      person saw, recorded now). A "reply to this step" view is later a filter on `during`. 80%.
-     In `next/`, a lane's room is a second way in, and a person's line there may answer an ask
+     In `next/`, a quest's room is a second way in, and a person's line there may answer an ask
      ([0073](../../.decisions/0073-a-lane-has-a-room.md)); the ticket comment's rules here hold.
   3. **Red goes back on its own, by default.** Linear makes it a loop each team turns on. Here it is
      on, with a repository setting to turn it off. 70%.
@@ -137,7 +142,7 @@ principle with no holder is a wish ([make the mistake impossible](./make-the-mis
 
 **Decided 2026-11-01.**
 
-- **What it means.** The lane asks a person only for a call only a person can make: approve a plan,
+- **What it means.** The quest asks a person only for a call only a person can make: approve a plan,
   change the exam, merge, spend more, decide what a ticket means. Everything else is a factory: it
   is prevented (P3), fixed by a send-back (P2), retried within a bound (P8), or the line stops
   itself with the reason (andon).
@@ -148,7 +153,7 @@ principle with no holder is a wish ([make the mistake impossible](./make-the-mis
   a person as assignee, and a coding session runs on its own, "you'll be notified when your input
   is needed". GitHub's review rules still decide what ships. Linear also lets a person steer a
   running session without being asked; here that door is a plain ticket comment (clash 2).
-- **On ticket 117.** The plan's yes was a real judgment, and it was asked. Then the lane ended stuck
+- **On ticket 117.** The plan's yes was a real judgment, and it was asked. Then the quest ended stuck
   on one stale test, and finding the cause took a read-only agent run by hand. Under P1 the next
   ask after the plan's yes would have been the merge.
 - **What holds it.** `Judgment` is a closed union of literals ("Jidoka and andon" lists 16, with `exam_touched` and `exam_conflict`). A new ask is a new literal, which is a
@@ -167,18 +172,18 @@ principle with no holder is a wish ([make the mistake impossible](./make-the-mis
 - **How Linear would do it. Agree on the route, differ on the default.** A coding session can be
   told to "fix lint issues" or "address review comments", in the same thread, and a loop can start
   on "checks passed or failed". But each is a person's delegation or a loop a person sets up. Our
-  lane does it on its own, within the round bound, because P1 says red is not a judgment. It is
+  quest does it on its own, within the round bound, because P1 says red is not a judgment. It is
   on by default, with a repository setting to turn it off (clash 3).
 - **On ticket 117.** `tsh.test.ts:724` still expected `takes("map")` to be `[]`. It is not an exam
   file, so the builder may change it. Round 2 with that name would most likely have fixed it.
-- **What holds it.** A law: after a build whose `checked` is red with rounds left, the lane's next
+- **What holds it.** A law: after a build whose `checked` is red with rounds left, the quest's next
   step is build, round + 1, with the names in `open`. PR 289's PR 3 writes this test.
 
 ### P3: prevent first, then fix, then stop
 
 **Lean, 85%.**
 
-- **What it means.** Every place the lane stops is one of three classes, in this order of
+- **What it means.** Every place the quest stops is one of three classes, in this order of
   preference. Preventable: a guard makes the state impossible. Fixable: a bounded route fixes it.
   Judgment: only a person can. An andon stop is what is left when the line could neither fix it
   nor ask a narrower question.
@@ -191,7 +196,7 @@ principle with no holder is a wish ([make the mistake impossible](./make-the-mis
   cost a round and cannot work, since the builder may not touch an exam file. Code formatting it
   before the commit makes the state impossible.
 - **What holds it.** Each preventable stop has a law that its state is never reached from `init`.
-  Today's lane already has the pattern: `origin` is refused before any agent starts.
+  Today's quest already has the pattern: `origin` is refused before any agent starts.
 
 ### P4: resume, never redo
 
@@ -199,10 +204,10 @@ principle with no holder is a wish ([make the mistake impossible](./make-the-mis
 [0072](../../.decisions/0072-a-churning-lane-is-redone.md): a change that points the wrong way, or
 is sent back too often, is redone on a fresh branch; a crash or a stuck still resumes as below.
 
-- **What it means.** A stuck or crashed lane is a crash recovery case. It goes on from the step that
-  broke, with the carry it had, and keeps every step that ended `done`. It never starts the lane
-  from scratch. A stop is not the end of the lane's memory. A person's `stop` is a saved pause
-  (clash 1); only a case that is not this lane's to run, or a ticket a person closes, ends a lane
+- **What it means.** A stuck or crashed quest is a crash recovery case. It goes on from the step that
+  broke, with the carry it had, and keeps every step that ended `done`. It never starts the quest
+  from scratch. A stop is not the end of the quest's memory. A person's `stop` is a saved pause
+  (clash 1); only a case that is not this quest's to run, or a ticket a person closes, ends a quest
   for good.
 - **The known way.** OTP `one_for_one`: "only that process is restarted". Temporal's reset keeps
   the history "up to and including the reset point". GitHub's `rerun --failed` runs only the
@@ -220,11 +225,13 @@ is sent back too often, is redone on a fresh branch; a crash or a stuck still re
   cases that cannot restart are a closed list of two (`not_yours`, `merged_elsewhere`), so a new
   stuck reason is restartable by default, never left out by default.
 
-### P5: after a person's judgment, the lane goes on from the step before
+<a id="p5-after-a-persons-judgment-the-lane-goes-on-from-the-step-before"></a>
+
+### P5: after a person's judgment, the quest goes on from the step before
 
 **Decided 2026-11-01.**
 
-- **What it means.** A person's answer never restarts a lane. Each pick goes on from the earliest
+- **What it means.** A person's answer never restarts a quest. Each pick goes on from the earliest
   step the answer makes stale, and keeps everything before it. Redoing finished work wastes money
   and time.
 - **The known way.** Temporal and LangGraph both hold a person's answer inside a running workflow:
@@ -246,7 +253,7 @@ is sent back too often, is redone on a fresh branch; a crash or a stuck still re
 
 **Decided 2026-11-01.**
 
-- **What it means.** Before a stop is written, the lane saves its resume point: the step, the carry
+- **What it means.** Before a stop is written, the quest saves its resume point: the step, the carry
   (plan, version, base, exam commit, head, round, claim) and the evidence (the failing names, the
   first error lines, what could not run). The evidence exists only at the moment of the run, so it
   is saved then or lost for good.
@@ -261,10 +268,10 @@ is sent back too often, is redone on a fresh branch; a crash or a stuck still re
   The mutation step kept only an exit code (`stryker.ts:383-386`), and the copies were deleted. No
   test output exists anywhere.
 - **What holds it.** `stuck` has a required `resume`, and a stuck `over` has a required `Held`:
-  a stop without them is not a value. A law: the fold of the lane's facts equals its saved `Held`
-  at every point a lane can stop, so a lost save can be rebuilt (PR 289's PR 5 has it).
+  a stop without them is not a value. A law: the fold of the quest's facts equals its saved `Held`
+  at every point a quest can stop, so a lost save can be rebuilt (PR 289's PR 5 has it).
 - **Requirement: nothing stale** (owner, 2026-11-09). Once the work is saved, the pipeline removes
-  every workspace its steps ran in (a box, a worktree, a container) when the lane lands, as code with
+  every workspace its steps ran in (a box, a worktree, a container) when the quest lands, as code with
   a law, and frees disk itself before it refuses a step; it never asks a person to clean up
   ([0019](../../.decisions/0019-nothing-stale.md)).
 
@@ -298,8 +305,8 @@ inputs.**
   // When build ends, its fact keeps the key:
   // {_tag: "done", step: "build", key: "b3f1e9…", head: "315df8e6"}
 
-  // On a restart the lane works the key out again:
-  //   same key, and a done fact has it  -> build is skipped; the lane takes head 315df8e6
+  // On a restart the quest works the key out again:
+  //   same key, and a done fact has it  -> build is skipped; the quest takes head 315df8e6
   //   main moved, so base and the key changed -> a code check first: do the tests pass on the
   //     rebased head? yes: a new done fact, no agent paid. no: the builder runs again.
   ```
@@ -321,7 +328,7 @@ inputs.**
   code's checks at the new head. Only the red name goes to build, as round 2, not as a redo of
   round 1.
 - **Today.** A step's intent is `lane/<n>/<count>/<step>` (`intentOf`, `machine.ts:513`): keyed by
-  its place in the lane, not by what it read. That already stops a step from running twice after
+  its place in the quest, not by what it read. That already stops a step from running twice after
   a kill (experiment 175). It cannot tell that a finished step still holds after main moved.
 - **The doubt.** An agent step is not a pure function: the same inputs can give a different draft.
   The key says "this was done, do not pay again", never "this would come out the same". And Bazel
@@ -339,9 +346,9 @@ inputs.**
 
 | What failed | Bound | Where | Source |
 |---|---|---|---|
-| A read or write of our ledger or the code host | until it answers, with backoff | the service that owns it, never the lane | `idempotency.ts` already waits out a ledger with no limit on tries; AWS: retry at one point |
-| A step that could not run (a crash, a box that would not start) | once more, same key | the lane | OTP's default intensity of 1 (per 5 seconds); Buildkite's default of 2 |
-| A send-back (red checks, review findings) | 3 rounds, shared | the lane | **a guess**: today's `MAX_ROUNDS`; one demlik lane needed 3 builds (field note 2026-10-31-02) |
+| A read or write of our ledger or the code host | until it answers, with backoff | the service that owns it, never the quest | `idempotency.ts` already waits out a ledger with no limit on tries; AWS: retry at one point |
+| A step that could not run (a crash, a box that would not start) | once more, same key | the quest | OTP's default intensity of 1 (per 5 seconds); Buildkite's default of 2 |
+| A send-back (red checks, review findings) | 3 rounds, shared | the quest | **a guess**: today's `MAX_ROUNDS`; one demlik quest needed 3 builds (field note 2026-10-31-02) |
 
 - **The known way.** AWS: retries at every layer multiply; three each at five layers is 243 times
   the load. Temporal retries an Activity with no limit by default, backing off to 100 seconds, but
@@ -355,15 +362,15 @@ inputs.**
   Under P8, code's checks run outside the box, once more if they cannot start, then an andon stop
   that says why.
 - **The doubt.** No source names a round count for an agent's repair loop, and 3 is ours. The
-  `step` rows in `field/runs.jsonl` will show the real spread after a few lanes.
-- **What holds it.** A law: build runs at most `MAX_ROUNDS` times per lane, plus one per person's
+  `step` rows in `field/runs.jsonl` will show the real spread after a few quests.
+- **What holds it.** A law: build runs at most `MAX_ROUNDS` times per quest, plus one per person's
   `again`. A law: a step that could not run starts at most twice per key. No step machine retries
-  what the lane retries.
+  what the quest retries.
 
 ### P9: a skipped check never looks clean
 
 **Decided 2026-10-05,** in [make the mistake impossible](./make-the-mistake-impossible.md).
-Restated for the lane.
+Restated for the quest.
 
 - **What it means.** A check has three results: green, red, not run. Not run is never `done`, and a
   check skipped on purpose writes that it skipped and why. A builder's own report decides nothing
@@ -382,7 +389,7 @@ Restated for the lane.
 **Lean, 85%. The resume part follows from P5, which is decided.**
 
 - **What it means.** An ask shows the person what they decide on, in words (the one hash covers
-  it), and lists its picks. Each pick says what it does and where the lane goes on: "again: build
+  it), and lists its picks. Each pick says what it does and where the quest goes on: "again: build
   runs round 4", "stop: saved; the same line goes on at build". A `stop` pick saves its resume
   point too.
 - **The known way.** [One ask](./one-ask-and-one-meter.md): `shows`, `picks`, and a hash of what
@@ -392,7 +399,7 @@ Restated for the lane.
   `select` signal lists options, each with a `label` and a `value`. A person may also reply in free
   text, and Linear says the agent "should always use an LLM to interpret the response". We keep
   code routing on a pick: free text rides along as the `note` on a pick, and a reply with no pick
-  leaves the ask open. A lane's next step is never an agent's guess.
+  leaves the ask open. A quest's next step is never an agent's guess.
 - **On ticket 117.** The plan's yes had picks, approve and no. The rehearsals found the other side:
   a person saw `test_writer asks: ask:owner:cannot_test` with `again`, `go_on`, `stop` and no
   reason ([experiment 178](../../experiments/178-lane-rehearsal.md)).
@@ -405,7 +412,7 @@ Restated for the lane.
 unanswered ask, 60%, added 2026-11-01 from Linear.**
 
 - **What it means.** Every step's dollars go to [the one meter](./one-ask-and-one-meter.md), and
-  every ask is an `asked` and `answered` fact, so asks per lane and minutes from ask to answer are a
+  every ask is an `asked` and `answered` fact, so asks per quest and minutes from ask to answer are a
   view. A restart writes what it kept and what it ran again, so the money a resume saved is a view
   too.
 - **The known way.** SRE caps toil at half of a person's time, and says: "I can only react with a
@@ -426,8 +433,8 @@ unanswered ask, 60%, added 2026-11-01 from Linear.**
   cause is in no count at all.
 - **What holds it.** A view over facts that already exist, so nothing to forget. A cap that blocks
   needs its false alarms measured first (Google, CACM 2018), so none yet.
-- **Record wide.** Decided 2026-11-01, for the whole repo in AGENTS.md: the lane records every
-  measure it can, read or not, as long as recording does not slow the lane and never holds a
+- **Record wide.** Decided 2026-11-01, for the whole repo in AGENTS.md: the quest records every
+  measure it can, read or not, as long as recording does not slow the quest and never holds a
   secret. A count we later wish we had, like the time a person spent finding 117's stop, can never
   be filled in for runs that are already over.
 
@@ -438,7 +445,7 @@ second half is a lean, 75%.**
 
 - **What it means.** No fix route lets the builder change its exam. A builder that touches it gets
   P5's ask, never a quiet pass. The laws that hold P1 to P11 are exam files too: a builder working
-  on the lane cannot loosen the law that holds it.
+  on the quest cannot loosen the law that holds it.
 - **The known way.** Reward hacking, or specification gaming: the cheapest way to pass a check is
   to change it.
 - **How Linear would do it. Agree, by a different guard.** Linear has no exam list. It leans on
@@ -447,11 +454,11 @@ second half is a lean, 75%.**
   edit a loop. The same idea: what checks the agent is out of its reach.
 - **On ticket 117.** The builder may change `tsh.test.ts`, since the test writer did not write it. It
   may not change `window.test.ts`. Code formatting `window.test.ts` (P3) is not the builder's change.
-- **What holds it.** The one exam list names `machine.laws.test.ts` and the lane's other law
+- **What holds it.** The one exam list names `machine.laws.test.ts` and the quest's other law
   files, and the build guard reads that list. Not checked here whether today's list names them
   yet; if it does not, that is a one-line exam change, the owner's own.
-- **The doubt.** A fix to the lane's own laws then always needs the owner. That is slower, on
-  purpose; whether it is too slow shows after a few lane fixes.
+- **The doubt.** A fix to the quest's own laws then always needs the owner. That is slower, on
+  purpose; whether it is too slow shows after a few quest fixes.
 
 ## How a stop routes
 
@@ -461,7 +468,7 @@ second half is a lean, 75%.**
 | Red checks, rounds spent | judgment | ask `rounds_spent`: again or stop | again: build; stop: saved at build |
 | A step that could not run | fixable | once more, on the same key | that step |
 | It could not run twice | andon | `stuck`, with its resume and the error | that step, on the same line |
-| A read of the ledger or the code host failed | fixable | the service waits it out | nothing moves in the lane |
+| A read of the ledger or the code host failed | fixable | the service waits it out | nothing moves in the quest |
 | The builder touched an exam file | judgment | ask `exam_touched`, two picks | build on its head, or the test writer for that file |
 | Main moved while stuck | fixable | rebase if unpushed, merge if pushed, then code's checks | the first step whose check fails |
 | A Property of the plan no test can check | judgment | ask `cannot_test` | the test writer, or build on the person's `go_on` |
@@ -476,7 +483,7 @@ second half is a lean, 75%.**
   it falls back to "a fresh lane on ticket 117, every step again". P4 and P7 say: run again only
   from the earliest step whose output cannot be proved.
 - **[The plan's "who decides"](../plan/README.md#who-decides-what).** "A builder's diff to the exam
-  files ends the lane stuck: nothing the build did is kept." That is today's code, and P5 replaces
+  files ends the quest stuck: nothing the build did is kept." That is today's code, and P5 replaces
   it.
 - **[Read fresh, run alone](./read-fresh-run-alone.md).** Kept. A fresh read is still the truth; P7
   only adds that a changed read changes a key, and a key change runs a check before a redo.
@@ -489,7 +496,7 @@ The full check of PR 289, 35 places in 17 groups, is in
 
 ## What it costs
 
-- A `key` on every `done` fact, and a `resume` on every `stuck`. The lane's facts grow by two
+- A `key` on every `done` fact, and a `resume` on every `stuck`. The quest's facts grow by two
   fields; data first, since a key not written at the time cannot be worked out later for an agent
   step.
 - A `resume` on every pick of every ask kind.
@@ -513,15 +520,15 @@ The full check of PR 289, 35 places in 17 groups, is in
 - A stop that fits none of P3's three classes. Write it down before adding a fourth.
 - Restarts that often find a key change and redo an agent step anyway. Then the cheap checks are
   too weak, and the `restarted` facts will show which.
-- Lanes that loop to the round limit often. Then the bound or the brief is wrong.
+- Quests that loop to the round limit often. Then the bound or the brief is wrong.
 
 ## What it cannot tell us
 
-- No lane has resumed from a saved stop with real agents. Every claim about resume is from the
+- No quest has resumed from a saved stop with real agents. Every claim about resume is from the
   sources and from experiment 175's kill-and-retype on fake agents.
-- How often a send-back fixes a red. No lane has had one with real agents.
+- How often a send-back fixes a red. No quest has had one with real agents.
 - Whether a key by inputs saves real money. That needs restarts with `restarted` facts to count.
-- Whether a person feels the asks that stay as too many. Only the attention count over real lanes
+- Whether a person feels the asks that stay as too many. Only the attention count over real quests
   will say.
 - How Linear's agent runs behave inside, past its docs. Every Linear claim here is from its public
   pages, read 2026-11-01; no Linear session was run.

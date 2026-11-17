@@ -1,7 +1,8 @@
 // next/, W3/W4. Driver-free laws run by the Node module over real scoped SQLite files.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
-import type { Sql } from "../Sql.ts";
+import type { Sql, SqlValue } from "../Sql.ts";
 import { type Update, WatcherManager } from "./Entry.ts";
 import { nth } from "./RepliesTest.ts";
 import type { Database } from "./RepliesTest.ts";
@@ -14,7 +15,8 @@ const failStore = (): never => {
 };
 
 const json = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)));
-const RUNS = 100;
+
+const RUNS = runsFor({ fast: 10, full: 100 });
 
 const Step = Arbitrary.all({
   pick: Arbitrary.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
@@ -22,14 +24,18 @@ const Step = Arbitrary.all({
 });
 
 const Walk = Arbitrary.array(Step, { minLength: 4, maxLength: 20 });
+
 const whole = { type: "whole", rev: 0, view: { count: 0 } } as const;
+
 const patch = { type: "patch", base: 0, rev: 1, patch: [] } as const;
+
 const rows = (sql: Sql) => sql.exec("SELECT * FROM process_watchers");
 
 const build = Effect.fnUntraced(function* (sql: Sql, name: string, publish: WatcherManager["Service"]["publish"]) {
   const context = yield* Layer.build(
     WatchersSql.layer(sql, { name, build: "test" }).pipe(Layer.provide(Layer.succeed(WatcherManager, { publish }))),
   );
+
   return Context.get(context, Watchers);
 });
 
@@ -49,8 +55,25 @@ const fails = Effect.fnUntraced(function* <A, E, R>(
   }
 });
 
+/** Copy saved rows into `sql`'s watcher table, column for column. */
+const restore = (sql: Sql, saved: ReadonlyArray<Record<string, SqlValue>>) => {
+  for (const row of saved) {
+    const columns = Object.keys(row);
+    sql.exec(
+      `INSERT INTO process_watchers (${columns.map((c) => `"${c}"`).join(",")}) VALUES (${columns.map(() => "?").join(",")})`,
+      ...columns.map((c) => row[c] ?? null),
+    );
+  }
+};
+
 export const suite = (database: Database) =>
   describe("saved watchers SQL, next/", () => {
+    // Only W3's fixed fill is shared, as in runtime/internal/watchers.test.ts: its 1026 opens take no
+    // generated value, and each rewrites the whole saved list. The first run makes them through the
+    // layer, checks them and keeps the row they leave; every later run copies that row into its own
+    // fresh database, then keeps the original generated walk and the full drain.
+    const filled: Array<Record<string, SqlValue>> = [];
+
     it.live.prop(
       "W3: names are isolated; refresh, removal and eviction keep a bounded live list",
       [Walk],
@@ -61,6 +84,7 @@ export const suite = (database: Database) =>
             const sql = yield* open;
             const frames: Array<{ client: string; update: Update }> = [];
             const gone = new Set<string>();
+
             const publish: WatcherManager["Service"]["publish"] = (client, update) =>
               Effect.suspend(() => {
                 if (gone.has(client)) {
@@ -68,17 +92,31 @@ export const suite = (database: Database) =>
                 }
 
                 frames.push({ client, update });
+
                 return Effect.void;
               });
+
             const a = yield* build(sql, "counter:a", publish);
             const b = yield* build(sql, "counter:b", publish);
             yield* b.open("isolated", whole);
-            let held: Array<string> = [];
+            const opened = Array.from({ length: 1026 }, (_, i) => `window-${i}`);
+            let held = opened.slice(-1024);
 
-            for (let i = 0; i < 1026; i++) {
-              const client = `window-${i}`;
-              yield* a.open(client, whole);
-              held = [...held, client].slice(-1024);
+            if (filled.length === 0) {
+              for (const client of opened) {
+                yield* a.open(client, whole);
+              }
+
+              frames.length = 0;
+              yield* a.publish(patch);
+              expect(
+                frames.map((f) => f.client),
+                "the fill holds the newest 1024 in order",
+              ).toEqual(held);
+              filled.push(...rows(sql).filter((row) => row.name === "counter:a"));
+              expect(filled, "the fill is one saved row").toHaveLength(1);
+            } else {
+              restore(sql, filled);
             }
 
             for (const step of walk) {
@@ -128,6 +166,7 @@ export const suite = (database: Database) =>
             const sql = yield* open;
             let armed: "read" | "save" | "cleanup" | null = null;
             let hit = false;
+
             const faulty: Sql = {
               ...sql,
               exec: (query, ...params) => {
@@ -140,14 +179,17 @@ export const suite = (database: Database) =>
                 ) {
                   armed = null;
                   hit = true;
+
                   return failStore();
                 }
 
                 return sql.exec(query, ...params);
               },
             };
+
             const frames: Array<string> = [];
             let gone = false;
+
             const watches = yield* build(faulty, "counter:fault", (client) =>
               Effect.suspend(() => {
                 if (gone) {
@@ -155,9 +197,11 @@ export const suite = (database: Database) =>
                 }
 
                 frames.push(client);
+
                 return Effect.void;
               }),
             );
+
             yield* watches.open("held", whole);
 
             for (const [i, step] of walk.entries()) {
@@ -178,9 +222,11 @@ export const suite = (database: Database) =>
               yield* watches.open("held", whole);
               const [row] = rows(sql).filter((r) => r.name === "counter:fault");
               expect(row).toBeDefined();
+
               const column = Object.keys(row ?? {}).find(
                 (k) => typeof (row ?? {})[k] === "string" && String((row ?? {})[k]).startsWith("{"),
               );
+
               expect(column).toBeDefined();
               const original = String((row ?? {})[column ?? "value"]);
               const damaged = step.pick % 2 ? "{bad-json" : JSON.stringify({ ...json(original), v: 999 });
@@ -208,6 +254,7 @@ export const suite = (database: Database) =>
             const routes = new Map<string, "sent" | "gone" | "unknown">();
             const frames: Array<string> = [];
             const attempts: Array<string> = [];
+
             const publish: WatcherManager["Service"]["publish"] = (client) =>
               Effect.suspend(() => {
                 attempts.push(client);
@@ -224,8 +271,10 @@ export const suite = (database: Database) =>
                 }
 
                 frames.push(client);
+
                 return Effect.void;
               });
+
             let watches = yield* build(sql, "fanout:1", publish);
             const held = new Set<string>();
 

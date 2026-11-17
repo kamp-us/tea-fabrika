@@ -1,9 +1,11 @@
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
 import * as Mail from "./Mail.ts";
 import type { merger } from "./Merger.ts";
 
 type Model = ReturnType<typeof merger>["machine"]["model"]["Type"];
+
 type Saved = { readonly name: string; readonly at: number };
 
 type Fault<R> =
@@ -80,6 +82,7 @@ const secret = Arbitrary.schema(
 ).pipe(
   Arbitrary.map(({ prefix, body, form }) => {
     const token = `${prefix}${body}`;
+
     return {
       token,
       text:
@@ -155,12 +158,15 @@ export const suite = (driver: Driver) =>
         expect(yield* replies(h)).toHaveLength(1);
       }),
     );
+
     type Real = { h: World; inspect: Effect.Effect<void, unknown>; token: Redacted.Redacted<string> };
+
     const Cell = Schema.Struct({
       pick: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
       reason: Schema.Literals(["unavailable", "rate_limited", "refused"]),
       move: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     });
+
     const step = Effect.fnUntraced(function* (cell: typeof Cell.Type, m: { n: number }, r: Real) {
       const state = yield* r.h.current().model;
 
@@ -185,6 +191,7 @@ export const suite = (driver: Driver) =>
           "green",
           "crash",
         ];
+
         const move = possible[cell.move % possible.length];
 
         if (move === "reopen") {
@@ -233,15 +240,18 @@ export const suite = (driver: Driver) =>
 
       yield* r.inspect;
     });
+
     const once = Effect.fnUntraced(function* (
       value: typeof secret extends Arbitrary.Arbitrary<infer A> ? A : never,
       commands: ReadonlyArray<typeof Cell.Type>,
     ) {
       const captured = driver.capture();
       const logs: Array<string> = [];
+
       const logger = Logger.map(Logger.formatSimple, (line) => {
         logs.push(line);
       });
+
       yield* Effect.gen(function* () {
         const h = yield* driver.open(Redacted.make(value.text));
         yield* h.host.fail("update", { kind: "fault", reason: "unavailable" });
@@ -252,6 +262,7 @@ export const suite = (driver: Driver) =>
         yield* h.ci.fail("at", { kind: "defect" });
         yield* h.land("initial");
         yield* h.land("busy");
+
         const inspect = Effect.gen(function* () {
           const letters = [...(yield* h.current().letters(NAME)), ...(yield* h.current().letters("queue"))];
           const checkpoint = yield* h.current().checkpoint;
@@ -267,6 +278,7 @@ export const suite = (driver: Driver) =>
             [value.text, value.token, encodeURIComponent(value.text)],
           );
         });
+
         // Drain the scripted failures through the saved alarms before the random walk can abandon.
         yield* inspect;
         yield* finish(h);
@@ -286,6 +298,7 @@ export const suite = (driver: Driver) =>
         yield* inspect;
         const walking = yield* driver.open(Redacted.make(value.text));
         yield* walking.land("walking");
+
         const walk: Real = {
           h: walking,
           token: Redacted.make(value.text),
@@ -305,6 +318,7 @@ export const suite = (driver: Driver) =>
             }),
           ),
         };
+
         const model = { n: 0 };
 
         for (const command of commands) {
@@ -340,10 +354,11 @@ export const suite = (driver: Driver) =>
         expect((yield* h.savedReplies).some((reply) => reply !== null)).toBe(true);
       }).pipe(Effect.withTracer(captured.tracer), Effect.provide(Logger.layer([logger])));
     });
+
     it.effect.prop(
       "S1: [secrets] generated service failures stay out of every durable record, span and log",
       [secret, Arbitrary.array(Arbitrary.schema(Cell), { maxLength: 24 })],
       ([value, commands]) => Effect.scoped(once(value, commands)),
-      { arbitrary: { seed: 119120, runs: 40, size: 24 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 4, full: 40 }), size: 24 } },
     );
   });

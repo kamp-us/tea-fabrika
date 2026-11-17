@@ -1,5 +1,5 @@
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { Attached, Wait, Who } from "../Wire.ts";
 
 const Online = {
@@ -8,6 +8,8 @@ const Online = {
   version: Schema.Int,
   watching: Schema.Boolean,
   waits: Schema.Array(Wait),
+  has: Attached.cases.online.fields.has,
+  build: Attached.cases.online.fields.build,
 };
 
 const Model = Schema.TaggedUnion({
@@ -17,8 +19,10 @@ const Model = Schema.TaggedUnion({
   idle: Online,
   busy: Online,
 });
+
 /** @internal */
 export type Model = typeof Model.Type;
+
 type Online = typeof Model.cases.idle.Type | typeof Model.cases.busy.Type;
 
 const Msg = Schema.Union([
@@ -28,10 +32,12 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("waited"), wait: Wait }),
   Schema.Struct({ type: Schema.Literal("answered"), wait: Wait }),
 ]);
+
 /** @internal */
 export type Msg = typeof Msg.Type;
 
 const MAX_WAITS = 64;
+
 const MAX_BYTES = 16_384;
 
 /**
@@ -41,12 +47,14 @@ const MAX_BYTES = 16_384;
  */
 export const online = (m: Model): m is Online => m._tag === "idle" || m._tag === "busy";
 
-const fields = (s: Online) => ({
+const fields = (s: Omit<Online, "_tag">) => ({
   client: s.client,
   identity: s.identity,
   version: s.version,
   watching: s.watching,
   waits: s.waits,
+  ...(s.has === undefined ? {} : { has: s.has }),
+  ...(s.build === undefined ? {} : { build: s.build }),
 });
 
 /** The named state a saved attachment stands for. */
@@ -59,8 +67,8 @@ const loaded = (attached: typeof Attached.Type): Model => {
     return Model.cases.waiting.make({ attached });
   }
 
-  const { client, identity, version, watching, waits } = attached;
-  const s = { client, identity, version, watching, waits };
+  const s = fields(attached);
+
   return attached.busy ? Model.cases.busy.make(s) : Model.cases.idle.make(s);
 };
 
@@ -85,6 +93,8 @@ export const attachment = (model: Model): typeof Attached.Type | null => {
     waits: model.waits,
     watching: model.watching,
     busy: model._tag === "busy",
+    ...(model.has === undefined ? {} : { has: model.has }),
+    ...(model.build === undefined ? {} : { build: model.build }),
   });
 };
 
@@ -110,6 +120,7 @@ export const connection = Machine.make({
       }
 
       const next = { ...s, waits: [...s.waits, m.wait] };
+
       return [admits(s, next, m.wait) ? next : s, []];
     },
     answered: (s, m) => {
@@ -119,6 +130,7 @@ export const connection = Machine.make({
 
       const { id, stream, after } = m.wait;
       const matching = s.waits.some((w) => w.id === id && w.stream === stream && w.after === after);
+
       return [matching ? { ...s, waits: s.waits.filter((w) => w.id !== id) } : s, []];
     },
   },

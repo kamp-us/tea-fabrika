@@ -5,23 +5,25 @@ import * as LedgerRemote from "@kampus/libfabrika/ledger/LedgerRemote";
 import * as OpenRepository from "@kampus/libfabrika/node/repositories/OpenRepository";
 import * as RepositoriesGit from "@kampus/libfabrika/node/repositories/RepositoriesGit";
 import * as Load from "@kampus/libfabrika/node/settings/Load";
+import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import * as RepositoryTrustLedger from "@kampus/libfabrika/packs/RepositoryTrustLedger";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
-import { Config, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Config, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
 import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import { build } from "./src/build.ts";
 import { localInstance } from "./src/local-instance.ts";
-import { Settings } from "./src/settings.ts";
+import { Founding } from "./src/settings.ts";
 
-class InstanceError extends Schema.TaggedError<InstanceError>()("InstanceError", {
+class InstanceError extends Schema.TaggedError<InstanceError, { readonly brand: unique symbol }>()("InstanceError", {
   reason: Schema.String,
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}
 
 const VERSION = "0.0.0";
+
 const declarations = Declarations.all.declarations;
 
 // Each declared setting is a flag at its own path, as --instance.port. --port stays the port's
@@ -29,16 +31,14 @@ const declarations = Declarations.all.declarations;
 const settings = Object.fromEntries(
   declarations.map((d) => {
     const flag = Flag.String(d.path);
+
     return [d.path, (d === Declarations.port ? Flag.withAlias(flag, "port") : flag).pipe(Flag.withDefault(undefined))];
   }),
 );
 
 // The saved state of a home: its founding facts. A port saved there by an older start is read
 // only to say that it is no longer used.
-const Saved = Settings.mapFields(({ port, rateLimit: _rateLimit, ...fields }) => ({
-  ...fields,
-  port: Schema.optionalKey(port),
-}));
+const Saved = Schema.Struct({ ...Founding.fields, port: Schema.optionalKey(Declarations.port.schema) });
 
 /** The entries that hold a value, as one record. */
 const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
@@ -62,10 +62,12 @@ const words: Array<string> = [];
 for (let n = 2; n < process.argv.length; n++) {
   const word = process.argv[n] ?? "",
     value = process.argv[n + 1];
+
   const flag =
     (/^--(repo|port|name|person|founder|window|parent)$/.test(word) ||
       declarations.some((d) => word === `--${d.path}`)) &&
     value !== undefined;
+
   words.push(flag ? `${word}=${value}` : word);
 
   if (flag) {
@@ -81,30 +83,35 @@ const command = Command.make("dev", flags, (options) => {
       const owner = Number(options.parent);
 
       if (!Number.isSafeInteger(owner) || owner <= 1 || process.ppid !== owner) {
-        return yield* new InstanceError({ reason: "parent_gone" });
+        return yield* InstanceError.make({ reason: "parent_gone" });
       }
 
       yield* Effect.sleep("250 millis");
     }),
   );
+
   const child = Effect.scoped(
     Effect.raceFirst(
       guard,
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem,
           path = yield* Path.Path;
+
         const home = process.env.FABRIKA_HOME ?? path.join(yield* Config.String("HOME"), ".fabrika");
+
         // A person reads their file's name from ~ or FABRIKA_HOME, never as this machine's path.
         const person = {
           path: path.join(home, "fabrika.toml"),
           name: `${process.env.FABRIKA_HOME === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
         };
+
         const loadOptions = {
           person,
           flags: present(declarations.map((d) => [d.path, options.settings[d.path]])),
           env: present(declarations.map((d) => [d.env, process.env[d.env]])),
           version: VERSION,
         };
+
         const prepared =
           options.repo === undefined
             ? undefined
@@ -112,15 +119,21 @@ const command = Command.make("dev", flags, (options) => {
                 Effect.provide(RepositoriesGit.layer({ person: home })),
                 Effect.provide([TomlParser.layer, Digest.layerWebCrypto]),
               );
+
+        // Settings are read once, before anything starts: with the selected repo's file at one
+        // commit, or with no repo file when the start selects none.
         const loaded =
-          prepared ??
-          (yield* Load.load(loadOptions).pipe(
-            Effect.provide([TomlParser.layer, Digest.layerWebCrypto]),
-            Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })),
-          ));
+          prepared === undefined
+            ? yield* Load.load(loadOptions).pipe(
+                Effect.provide([TomlParser.layer, Digest.layerWebCrypto]),
+                Effect.mapError((cause) => InstanceError.make({ reason: "settings", cause })),
+              )
+            : { snapshot: prepared.settings, values: prepared.values };
+
         const { file, state } = yield* Effect.gen(function* () {
           yield* fs.makeDirectory(home, { recursive: true });
           const file = path.join(home, "instance.json");
+
           const saved = (yield* fs.exists(file))
             ? yield* fs
                 .readFileString(file)
@@ -141,17 +154,24 @@ const command = Command.make("dev", flags, (options) => {
             build: "pending",
             ...(saved?.limits === undefined ? {} : { limits: saved.limits }),
           });
+
           return { file, state };
-        }).pipe(Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })));
+        }).pipe(Effect.mapError((cause) => InstanceError.make({ reason: "settings", cause })));
+
         yield* fs
           .writeFileString(file, JSON.stringify(state), { mode: 0o600 })
-          .pipe(Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })));
+          .pipe(Effect.mapError((cause) => InstanceError.make({ reason: "settings", cause })));
         const built = yield* build({ out: path.join(home, "build") });
+
         const instance = yield* localInstance(built, {
-          ...state,
-          port: loaded.values.port,
-          rateLimit: { limit: loaded.values.gatewayLimit, window: loaded.values.gatewayWindow },
+          name: state.name,
+          founding: { person: state.person, founder: state.founder, window: state.window },
+          settings: loaded.snapshot,
+          // The start's record names the commit the repo's settings were read at.
+          repo: prepared === undefined ? null : { revision: prepared.snapshot.commit },
           home,
+          ...(state.limits === undefined ? {} : { limits: state.limits }),
+          ...(state.mail === undefined ? {} : { mail: state.mail }),
         });
 
         if (prepared !== undefined) {
@@ -159,14 +179,15 @@ const command = Command.make("dev", flags, (options) => {
           const { append, read, wait } = instance.project(state.name);
 
           if (append === undefined || read === undefined || wait === undefined) {
-            return yield* new InstanceError({ reason: "ledger_unavailable" });
+            return yield* InstanceError.make({ reason: "ledger_unavailable" });
           }
 
           const calls: LedgerCalls = { append, read, wait };
+
           const selected = yield* OpenRepository.open(prepared, {
             selection: yield* ids.next(Id.InputId),
             request: yield* ids.next(Id.InputId),
-            actor: yield* Schema.decodeUnknownEffect(Id.Person)(state.person),
+            actor: yield* Schema.decodeEffect(Id.Person)(state.person),
             by: "brain",
             build: built.build,
             interactive: process.stdin.isTTY === true,
@@ -180,23 +201,62 @@ const command = Command.make("dev", flags, (options) => {
               ),
             ),
           );
+
           process.stdout.write(`${JSON.stringify(selected)}\n`);
 
           if (selected._tag === "refused") {
-            return yield* new InstanceError({ reason: "repository_refused" });
+            return yield* InstanceError.make({ reason: "repository_refused" });
           }
         }
+
+        yield* Effect.forkScoped(
+          Stream.runForEach(
+            watchPrograms({ ...built.watch, install: instance.install, failed: instance.failed }).pipe(
+              Stream.provideContext(instance.recording),
+            ),
+            (answer) =>
+              Effect.sync(() => {
+                if (answer._tag === "same") {
+                  return;
+                }
+
+                if (answer._tag === "failed") {
+                  process.stdout.write(
+                    `${answer.program} did not load: ${answer.reason === "bundle" ? "syntax error" : answer.reason === "compiler" ? "compiler check failed" : answer.reason === "name" ? "the program name changed" : answer.reason === "too_large" ? "the bundle is too large" : "the module failed to load"}${answer.path === undefined ? "" : ` at ${answer.path}${answer.line === undefined ? "" : `:${answer.line}`}`}\n`,
+                  );
+
+                  return;
+                }
+
+                for (const { name, outcome } of answer.processes) {
+                  const text =
+                    outcome._tag === "swapped"
+                      ? `${name} runs ${answer.hash.slice(0, 8)} now`
+                      : outcome._tag === "refused"
+                        ? `${name} stays on ${outcome.was.slice(0, 8)}: ${outcome.reason === "shape" ? "the new code can't read its state" : outcome.reason === "newer" ? "its state has a newer version" : "the new code could not load"}`
+                        : outcome._tag === "not_now"
+                          ? `${name} will try the new code at the next brain start`
+                          : `${name} already runs this code`;
+
+                  process.stdout.write(`${text}\n`);
+                }
+              }),
+          ),
+        );
 
         process.stdout.write(
           `${JSON.stringify({ ready: `http://127.0.0.1:${loaded.values.port}`, build: built.build })}\n`,
         );
+
         return yield* Effect.never;
       }),
     ),
   );
+
   const parent = Effect.scoped(
     Effect.gen(function* () {
       const path = yield* Path.Path;
+
       // The installed Node spawner closes the detached group even after its leader exits.
       const childProcess = yield* ChildProcess.make(
         process.execPath,
@@ -211,10 +271,11 @@ const command = Command.make("dev", flags, (options) => {
       );
 
       if ((yield* childProcess.exitCode) !== 0) {
-        return yield* new InstanceError({ reason: "child_failed" });
+        return yield* InstanceError.make({ reason: "child_failed" });
       }
     }),
   );
+
   return options.child ? child : parent;
 });
 

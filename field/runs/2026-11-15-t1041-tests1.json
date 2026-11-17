@@ -1,0 +1,127 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1041-tests1",
+  "ticket": "kamp-us/tea-fabrika#1041",
+  "pr": "kamp-us/tea-fabrika#1310",
+  "started": "2026-11-15T03:00:00-08:00",
+  "ended": "2026-11-15T03:35:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests round for pipe plumbing in next/ (plan docs/plan/lanes/t1041-PLAN.md): all 14 laws written, each red today because its product code is missing. Fast: L1 and L2 in runtime/Chunk.test.ts, L3 in processes/internal/programMail.test.ts (with full added to the old L13 reason property), L4 in settings/Mail.test.ts, L5 in runtime/Send.types.test.ts (a type: law, the lead's typecheck), L13 in cloudflare/mail.test.ts. Integration: L6 and L8 in processes/ProgramMailTest.ts, L7 (rows) and L7 (bytes of the newest letter, the lead's call after experiment 295) in processes/ProgramMailReadsTest.ts, L9 to L12 in runtime/ProgramMailTest.ts with fixtures in runtime/internal/chunkPrograms.test-support.ts, L14 in apps/fabrika worker-mail.integration.test.ts. Every law but L5 and L14 was also run green on a scratch build of the plan's product code that was never committed, and each plant was run once on that scratch build and undone; L5 and L14 plants wait for the build. Plan gaps: tea's Cmd input may not hold a field named type, so send_chunks' reader type rides as `as`; the LedgerTurn API has no way to read a stream's newest pos without the whole newest entry, so L7's bytes law needs a small record of its own or a ledger change; TestDatabase does not exist on main yet, so the integration laws keep the existing node driver; StartsTest.ts and three callers of ProgramMailLedger.layer outside the plan's Files table need the build's edits. L7's bytes half is green today, since no cap reads anything yet; it guards the build, and its plant (the cap reads the newest letter whole) was red.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "scratch Chunk.cut lets a chunk be one byte past size",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "scratch Chunk.cut sets last on every chunk",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "scratch Chunk.cut cuts an empty list to no chunks",
+      "result": "red"
+    },
+    {
+      "law": "L2",
+      "plant": "scratch Chunk.join ignores seq gaps",
+      "result": "red"
+    },
+    {
+      "law": "L3",
+      "plant": "scratch programMail.full with > in place of >=",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "scratch mail.chunk upper bound widened to 2 MiB",
+      "result": "red"
+    },
+    {
+      "law": "L6",
+      "plant": "scratch ProgramMailLedger with no cap check",
+      "result": "red"
+    },
+    {
+      "law": "L6",
+      "plant": "scratch ProgramMailLedger checks the cap before the saved receipt",
+      "result": "red"
+    },
+    {
+      "law": "L7 rows",
+      "plant": "scratch cap counts unread by reading the inbox past the ack",
+      "result": "red"
+    },
+    {
+      "law": "L7 bytes",
+      "plant": "scratch cap reads the inbox's newest entry whole",
+      "result": "red"
+    },
+    {
+      "law": "L8",
+      "plant": "scratch ProcessManager.ack accepts a stale life",
+      "result": "red"
+    },
+    {
+      "law": "L8",
+      "plant": "scratch ProcessManager.ack accepts a pos behind the newest",
+      "result": "red"
+    },
+    {
+      "law": "L9",
+      "plant": "scratch runner acks before its checkpoint save",
+      "result": "red"
+    },
+    {
+      "law": "L9",
+      "plant": "scratch runner never acks",
+      "result": "red"
+    },
+    {
+      "law": "L10",
+      "plant": "scratch MailDeliveryLive drops the wake on full",
+      "result": "red"
+    },
+    {
+      "law": "L11",
+      "plant": "scratch send_chunks answers full in place of waiting",
+      "result": "red"
+    },
+    {
+      "law": "L11",
+      "plant": "scratch send_chunks cuts again with the new setting after a restart",
+      "result": "red"
+    },
+    {
+      "law": "L11",
+      "plant": "scratch runner runs a send to the same target past a waiting one",
+      "result": "red"
+    },
+    {
+      "law": "L12",
+      "plant": "scratch send_chunks delivers a part before the cut is checked",
+      "result": "red"
+    },
+    {
+      "law": "L13",
+      "plant": "scratch mail.ts maps a full reply to storage",
+      "result": "red"
+    },
+    {
+      "law": "L13",
+      "plant": "scratch ProcessManager.ack accepts an ended life, through the Project",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 35,
+  "note": "Plants ran on scratch product code written only to check the laws can go green; the review reruns them on the real build. L5 (drop full from send's err) and L14 (hand the default in place of the file's value) are after build.",
+  "step": "tests"
+}

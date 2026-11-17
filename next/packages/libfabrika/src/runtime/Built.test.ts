@@ -14,6 +14,7 @@ import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 
 type Program = { readonly hash: string; readonly source: string };
+
 type Asset = { readonly hash: string; readonly type: string; readonly body: string };
 
 type Built = {
@@ -32,10 +33,12 @@ const load = async () => {
   const file = join(import.meta.dirname, "Built.ts");
   assert(existsSync(file), "P16 not built: shared Built schemas and table validation absent");
   vi.resetModules();
+
   return vi.importActual<Api>(pathToFileURL(file).href);
 };
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+
 // P14 slice 1: a tab's page is one more checked asset type, generated beside scripts and stylesheets.
 // The refusals below keep a bare `text/html` and every other type out.
 const types = ["text/javascript; charset=utf-8", "text/css; charset=utf-8", "text/html; charset=utf-8"] as const;
@@ -79,6 +82,7 @@ describe("P16 checked built tables", () => {
           programs: Object.fromEntries(rows.map(({ name, source }) => [name, { hash: sha(source), source }])),
           assets: Object.fromEntries(assets.map(({ route, type, body }) => [route, { hash: sha(body), type, body }])),
         };
+
         expect(await Effect.runPromise(api.decodeBuilt(raw))).toEqual(raw);
         expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.Built)(raw))).toEqual(raw);
 
@@ -106,10 +110,12 @@ describe("P16 checked built tables", () => {
         async (rows, assets, junk, route, type, other) => {
           const [a, b] = rows as [(typeof rows)[0], (typeof rows)[0]];
           const asset = assets[0]!;
+
           const good = {
             programs: { [a.name]: { hash: sha(a.source), source: a.source } },
             assets: { [asset.route]: { hash: sha(asset.body), type: asset.type, body: asset.body } },
           };
+
           await expect(Effect.runPromise(api.decodeBuilt(good))).resolves.toEqual(good);
 
           for (const raw of [
@@ -152,6 +158,7 @@ describe("P16 checked built tables", () => {
   });
   it("L2: a table with one key that is not a qualified name fails whole, and a good table keeps every key", async () => {
     const api = await load();
+
     // Each break keeps the current key inside it, so a check on one end or one segment passes it.
     const breaks: ReadonlyArray<(key: string) => string> = [
       (key) => key.split("/")[1]!,
@@ -167,15 +174,17 @@ describe("P16 checked built tables", () => {
       (key) => `${key} `,
       (key) => `${key}${"x".repeat(257 - key.length)}`,
     ];
+
     // The walk: start from a completed table, then each step either adds a program under a fresh
     // qualified key, which must decode with every key kept, or mutates one current key, which must
     // fail. A mutation never enters the state, so every later step starts from a good table.
     const tape = fc.array(fc.nat(), { minLength: 2, maxLength: 12 });
     await fc.assert(
       fc.asyncProperty(rows, tape, async (rows, tape) => {
-        let programs: Record<string, Program> = Object.fromEntries(
+        const programs: Record<string, Program> = Object.fromEntries(
           rows.map(({ name, source }) => [name, { hash: sha(source), source }]),
         );
+
         let added = 0,
           refused = 0;
 
@@ -184,7 +193,7 @@ describe("P16 checked built tables", () => {
 
           if (i % 2 === 0) {
             const key = `pack${n % 5}/added${i}`;
-            programs = { ...programs, [key]: { hash: sha(key), source: key } };
+            programs[key] = { hash: sha(key), source: key };
             const decoded = await Effect.runPromise(api.decodeBuilt({ programs, assets: {} }));
             expect(Object.keys(decoded.programs).sort()).toEqual(Object.keys(programs).sort());
             expect(decoded.programs).toEqual(programs);

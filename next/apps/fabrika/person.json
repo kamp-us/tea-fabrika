@@ -2,6 +2,59 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
+    "desktop": {
+      "type": "object",
+      "properties": {
+        "brain-grace": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The time in milliseconds the local runtime gets to end after a SIGTERM, before it is killed.",
+          "default": 5000
+        },
+        "brain-memory": {
+          "type": "string",
+          "description": "The memory the local runtime may hold before the brain replaces it, a byte size such as \"500 MB\".",
+          "default": "500000000 bytes"
+        },
+        "brain-poll": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The interval in milliseconds between brain readiness and shutdown checks.",
+          "default": 100
+        },
+        "brain-start-timeout": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The maximum time in milliseconds to start or reuse a ready local brain.",
+          "default": 60000
+        },
+        "brain-stop-timeout": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The maximum time in milliseconds to confirm the local brain and its children have stopped.",
+          "default": 5000
+        },
+        "brain-throttle": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The delay in whole seconds between crash restarts of the local brain.",
+          "default": 2
+        },
+        "link-ttl": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "How long a one-time browser link lives in milliseconds.",
+          "default": 60000
+        }
+      },
+      "additionalProperties": false
+    },
     "gateway": {
       "type": "object",
       "properties": {
@@ -22,6 +75,27 @@
       },
       "additionalProperties": false
     },
+    "hands": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^SHA256:[A-Za-z0-9+/]{43}$",
+              "title": "a key fingerprint",
+              "description": "A key fingerprint is SHA256: and 43 base64 characters, as ssh-keygen -l prints it."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The fingerprint of the hands key that runs a program's hands commands. Unset, they are refused.",
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
     "instance": {
       "type": "object",
       "properties": {
@@ -32,6 +106,110 @@
           "title": "a port",
           "description": "The port the local instance listens on.",
           "default": 18787
+        }
+      },
+      "additionalProperties": false
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "recovery": {
+          "type": "object",
+          "properties": {
+            "project": {
+              "type": "object",
+              "properties": {
+                "writes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "bytes": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "object",
+                  "properties": {
+                    "writes": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "bytes": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["writes", "bytes"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["writes", "bytes", "message"],
+              "additionalProperties": false
+            },
+            "process": {
+              "type": "object",
+              "properties": {
+                "writes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "bytes": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "object",
+                  "properties": {
+                    "writes": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "bytes": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["writes", "bytes"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["writes", "bytes", "message"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["project", "process"],
+          "additionalProperties": false,
+          "description": "Recovery writes and bytes per rolling minute, plus each accepted message's replay room.",
+          "default": {
+            "project": {
+              "writes": 160,
+              "bytes": "74080 bytes",
+              "message": {
+                "writes": 10,
+                "bytes": "5469 bytes"
+              }
+            },
+            "process": {
+              "writes": 290,
+              "bytes": "207410 bytes",
+              "message": {
+                "writes": 50,
+                "bytes": "18790 bytes"
+              }
+            }
+          }
+        },
+        "storage": {
+          "type": "string",
+          "description": "The most encoded ledger bytes one program may keep, at most decimal one GB.",
+          "default": "1000000000 bytes"
+        },
+        "writes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 13760,
+          "description": "The most ledger writes one program may commit per rolling minute, including admitted steps.",
+          "default": 13760
         }
       },
       "additionalProperties": false

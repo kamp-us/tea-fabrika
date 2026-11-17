@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-24 and 2026-10-26; how PR status arrives leans to a watcher on the ledger's alarm"
+summary: "The tracker is in the first version: tickets are ledger facts, filed through a small form, and only people on the ledger can write one. The first demlik ticket is filed there. An approval covers the text it saw. A ticket's window is its timeline, comments included, and an open ask shows as a box there. No ticket copy goes to GitHub, which stays the code host. The tracker works like Linear: GitHub is an integration through `CodeHost` on the person's own `gh` login, over a list of connected repositories."
+---
+
 # Tickets start in our tracker
 
 Decided 2026-10-24, for the pipeline's first version.
@@ -55,7 +60,7 @@ const view = (facts: TicketFact[]) => [...facts.map(row), ...openAsks(facts).map
     The person says which it is, so nothing guesses.
     ```ts
     {fact: "commented", ticket: "demlik-1", by: "owner", body: "Skip part 2.", asks: "changes"}
-    // the approval before it no longer covers the lane; build waits for a new plan or a new approval
+    // the approval before it no longer covers the quest; build waits for a new plan or a new approval
     ```
   - Only a person in the window can answer a box. No agent writes an answer,
     as [AGENTS.md](../../AGENTS.md) already says.
@@ -147,7 +152,7 @@ run. What would settle it: building the form and seeing how small it is.
 - **demlik asks each pull request to close a GitHub issue.** Its `CLAUDE.md`
   says to write `Closes #N`. Decided 2026-10-24: **no copy of a ticket goes to
   GitHub.** demlik's rule changes instead, since demlik is the test bed.
-  - Stages read the ticket from the lane's own fact, never from a pull
+  - Stages read the ticket from the quest's own fact, never from a pull
     request's body. Today `ticketIn` and review's `no_ticket` check read
     `Closes #N` from the body, so they change.
   - [Experiment 138](../../experiments/138-tracker-on-demlik.md) found no

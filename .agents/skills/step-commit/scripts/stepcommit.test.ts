@@ -9,8 +9,11 @@ import { describe, expect, it } from "vitest";
 // Today's tooling. Git and oxfmt are real. Signing is recorded by a local stub: K1's real-key
 // properties test the signatures; K4 tests which changes may reach a commit at all.
 const root = resolve(import.meta.dirname, "../../../..");
+
 const script = join(import.meta.dirname, "stepcommit.sh");
+
 const word = fc.stringMatching(/^[a-z][a-z0-9]{1,8}$/);
+
 const options = { seed: 321, numRuns: 3, endOnFailure: true };
 
 const each = <A>(values: readonly A[], check: (value: A) => void) => {
@@ -81,6 +84,7 @@ class Repo {
       T321_OXFMT: join(root, "node_modules/.bin/oxfmt"),
       T390_PRS: join(this.dir, "prs.json"),
     };
+
     const stub = String.raw`
 const fs=require("node:fs"),cp=require("node:child_process");
 const args=process.argv.slice(2);
@@ -92,7 +96,9 @@ if(args[0]==="exec"&&args[1]==="oxfmt") {
 }
 console.error("fixture refuses package or network command"); process.exit(97);
 `;
+
     writeFileSync(join(bin, "pnpm"), `#!${process.execPath}\n${stub}`, { mode: 0o755 });
+
     // gh answers the open-PR query from T390_PRS, a JSON file (no file: no open PRs; "fail": exit 1).
     const gh = String.raw`
 const fs=require("node:fs");
@@ -102,7 +108,9 @@ const prs=f&&fs.existsSync(f)?fs.readFileSync(f,"utf8"):JSON.stringify({data:{re
 if(prs.trim()==="fail"){console.error("gh: offline");process.exit(1);}
 process.stdout.write(prs);
 `;
+
     writeFileSync(join(bin, "gh"), `#!${process.execPath}\n${gh}`, { mode: 0o755 });
+
     // The publisher (0134) records its arguments, and fails when T134_PUBLISH says "fail".
     const publish = String.raw`
 const fs=require("node:fs");
@@ -110,10 +118,14 @@ fs.appendFileSync(process.env.T321_CALLS,JSON.stringify(["publish",...process.ar
 if(process.env.T134_PUBLISH==="fail"){console.log("publish: refused: push rejected");process.exit(1);}
 console.log("publish: pushed");
 `;
+
     writeFileSync(join(bin, "publish"), `#!${process.execPath}\n${publish}`, { mode: 0o755 });
     this.env.STEPCOMMIT_PUBLISHER = join(bin, "publish");
     symlinkSync(join(root, "node_modules/.bin/oxfmt"), join(bin, "oxfmt"));
     this.git("init", "-q", "-b", "fabrikalfa/one", `--separate-git-dir=${join(this.dir, "gitdata")}`);
+    put(join(this.dir, "gitdata/info/exclude"), "node_modules/\n");
+    mkdirSync(join(this.repo, "node_modules/.bin"), { recursive: true });
+    symlinkSync(join(root, "node_modules/.bin/oxfmt"), join(this.repo, "node_modules/.bin/oxfmt"));
     put(join(this.repo, "exam-paths.json"), readFileSync(join(root, "exam-paths.json"), "utf8"));
     put(join(this.repo, ".oxfmtrc.json"), '{"useTabs":true,"printWidth":100}\n');
 
@@ -150,13 +162,16 @@ console.log("publish: pushed");
       encoding: "utf8",
       timeout: 10_000,
     });
+
     expect(r.error).toBeUndefined();
+
     return { code: r.status, text: r.stdout + r.stderr, stdout: r.stdout };
   }
 
   git(...args: string[]) {
     const r = this.call("/usr/bin/git", args);
     expect(r.code, r.text).toBe(0);
+
     return r.stdout;
   }
 
@@ -328,6 +343,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
                       : kind === "prefix"
                         ? "src/owned.tsx"
                         : `src/${name}-unknown.ts`;
+
                 r.changed(path);
                 const got = r.commit(step, [(dot ? "./" : "") + path]);
                 expect(got.code).not.toBeNull();
@@ -370,6 +386,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
                     : kind === "beside"
                       ? `docs/shotsx/${name}.png`
                       : "docs/shots/../src/foreign.ts";
+
               r.changed(kind === "escape" ? "src/foreign.ts" : path);
               const got = r.commit(step, [path]);
               expect(got.code).not.toBeNull();
@@ -402,8 +419,11 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
       (name: string) => `fixtures/next/${name}.json`,
       () => ".oxlintrc.json",
     ];
+
     const plain = [(name: string) => `src/${name}-unknown.ts`, (name: string) => `next/${name}/${name}.ts`];
+
     type Row = "none" | "tests" | "build" | "lead" | "build-folder";
+
     fc.assert(
       fc.property(
         word,
@@ -425,10 +445,12 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
             r.changed(path, path.endsWith(".json") ? "[]\n" : 'export const value = "changed";\n');
             const got = r.commit(step, [path]);
             const owner = row === "build-folder" && path.includes("/") ? "build" : row;
+
             const allowed =
               owner === step ||
               (step === "mutation" && owner === "tests") ||
               (step === "tests" && owner === "none" && isExam);
+
             // The build's exam refusal (exit 3) comes before any owner check.
             const code = step === "build" && isExam ? 3 : allowed ? 0 : 1;
             expect(
@@ -471,10 +493,12 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
   // takes no product path. Plants: skip deletions; read the checkout's or HEAD's exam-paths.json.
   it("scenario: a deleted unlisted exam path commits as tests, and a widened exam list takes nothing", () => {
     const fixture = ".agents/skills/lead/scripts/fixture.test.ts";
+
     const widened = (r: Repo) => {
       const list = JSON.parse(readFileSync(join(r.repo, "exam-paths.json"), "utf8"));
       r.changed("exam-paths.json", `${JSON.stringify([...list, { ...list[0], glob: "src/**" }])}\n`);
     };
+
     each(["delete", "delete-build", "widened-before", "widened-same"] as const, (kind) =>
       withRepo(kind === "delete-build" ? [[fixture, "build"]] : [["src/owned.ts", "tests"]], (r) => {
         let paths = [fixture];
@@ -485,7 +509,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
           widened(r);
 
           if (kind === "widened-before") {
-            r.git("commit", "-q", "-am", "an earlier lane commit widens the exam");
+            r.git("commit", "-q", "-am", "an earlier quest commit widens the exam");
             paths = ["src/new-unknown.ts"];
           } else {
             paths = ["exam-paths.json", "src/new-unknown.ts"];
@@ -562,6 +586,31 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
     );
   });
 
+  // Plant: ask the file system whether a path is a folder, which follows a link. A skill's
+  // `.claude/skills/<name>` is a link to its folder, and git keeps a link as one file (ticket 991).
+  it("K4 commits a link to a folder as the one file git keeps, and still refuses the folder itself", () => {
+    fc.assert(
+      fc.property(fc.boolean(), (only) =>
+        withRepo(
+          [
+            [".claude/skills/one", "tests"],
+            ["src/owned.ts", "tests"],
+          ],
+          (r) => {
+            mkdirSync(join(r.repo, ".claude/skills"), { recursive: true });
+            symlinkSync("../../src", join(r.repo, ".claude/skills/one"));
+            expect(r.commit("tests", ["src"], only).code).not.toBe(0);
+            const got = r.commit("tests", [".claude/skills/one"], only);
+            expect(got.code, got.text).toBe(0);
+            expect(r.git("show", "--name-only", "--format=", "HEAD").trim()).toBe(".claude/skills/one");
+            expect(r.git("ls-tree", "HEAD", ".claude/skills/one")).toMatch(/^120000 /);
+          },
+        ),
+      ),
+      { ...options, numRuns: 2 },
+    );
+  });
+
   // Plant: check the working file instead of the staged bytes, or skip staged formatting.
   it("K4 refuses unformatted staged content and accepts formatted content", () => {
     fc.assert(
@@ -584,6 +633,63 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
         );
       }),
       options,
+    );
+  });
+
+  // scenario: package-manager startup is unavailable; the installed formatter still works.
+  it("scenario: staged formatting uses the installed formatter in a folder without a package", () => {
+    withRepo(
+      [
+        ["src/owned.ts", "tests"],
+        ["field/one.json", "tests"],
+      ],
+      (r) => {
+        writeFileSync(
+          join(r.dir, "bin/pnpm"),
+          `#!${process.execPath}\nconsole.error("fixture refuses pnpm exec startup"); process.exit(97);\n`,
+          { mode: 0o755 },
+        );
+        const unavailable = r.call("pnpm", ["exec", "oxfmt", "--version"]);
+        expect(unavailable.code, unavailable.text).toBe(97);
+
+        r.changed(".oxfmtrc.json", '{"useTabs":true,"printWidth":100,"ignorePatterns":["field/**"]}\n');
+        const source = 'export const value = () => {\n\treturn "changed";\n};\n';
+        r.changed("src/owned.ts", source);
+        r.changed("field/one.json", '{"value":1}');
+        const got = r.commit("tests", ["src/owned.ts", "field/one.json"], true);
+        expect(got.code, got.text).toBe(0);
+        expect(r.git("show", "HEAD:src/owned.ts")).toBe(source);
+        expect(r.git("show", "HEAD:field/one.json")).toBe('{"value":1}');
+        expect(r.signs()).toEqual([]);
+        expect(r.published()).toEqual([]);
+      },
+    );
+  });
+
+  // scenario: missing tools and failed starts must not be reported as bad staged formatting.
+  it("scenario: formatter startup failures commit nothing and keep diagnostics free of tool output", () => {
+    each(["missing", "not-executable", "failed"] as const, (kind) =>
+      withRepo([["src/owned.ts", "tests"]], (r) => {
+        const formatter = join(r.repo, "node_modules/.bin/oxfmt");
+        rmSync(formatter);
+
+        if (kind !== "missing") {
+          writeFileSync(formatter, "#!/bin/sh\necho private-staged-text >&2\nexit 23\n", {
+            mode: kind === "failed" ? 0o755 : 0o644,
+          });
+        }
+
+        r.changed("src/owned.ts");
+        const got = r.commit("tests", ["src/owned.ts"]);
+        expect(got.code, got.text).toBe(2);
+        expect(got.text).toContain("formatter_failed:");
+        expect(got.text).not.toContain("not_formatted:");
+        expect(got.text).not.toContain("private-staged-text");
+        expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+        expect(r.git("diff", "--cached", "--name-only")).toBe("");
+        expect(r.signs()).toEqual([]);
+        expect(r.published()).toEqual([]);
+      }),
     );
   });
 
@@ -721,7 +827,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 describe("T390 a lead link never lands on another branch's open PR ticket, today's tooling", () => {
   // Plants: drop the check; compare the branch without its -wip; check --commit-only or other
   // steps; pass when gh cannot be read. PRs 609, 614, 615 and 617, 2026-11-09: field-row PRs signed
-  // lead under a lane's ticket, and the lane's own lead links read as stale_link.
+  // lead under a quest's ticket, and the quest's own lead links read as stale_link.
   it("T390 refuses a signed lead commit exactly when another branch's open PR holds the ticket", () => {
     // scenario: every head place for a signed lead commit on the PR's ticket, then one change at a
     // time (another ticket, another step, --commit-only), since sampling missed the -wip plant.
@@ -731,17 +837,20 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
       step: Owner;
       only: boolean;
     };
+
     const lead = { ticket: "321", step: "lead" as Owner, only: false };
+
     const cases: Case[] = [
       ...(["other", "same", "own-wip", "none"] as const).map((location) => ({ ...lead, location })),
       { ...lead, location: "other", ticket: "999" },
       { ...lead, location: "other", step: "build" },
       { ...lead, location: "other", only: true },
     ];
+
     each(cases, ({ location, ticket, step, only }) =>
       withRepo([["src/owned.ts", step]], (r) => {
         const head = {
-          other: "fabrikalfa/lane",
+          other: "fabrikalfa/quest",
           same: "fabrikalfa/one",
           "own-wip": "fabrikalfa/one-wip",
         };
@@ -756,7 +865,7 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
 
         if (refused) {
           expect(got.code, got.text).toBe(5);
-          expect(got.text).toContain("stale_link: ticket 321's open PR 609 is on fabrikalfa/lane");
+          expect(got.text).toContain("stale_link: ticket 321's open PR 609 is on fabrikalfa/quest");
           expect(got.text).toContain("Sign under a lead ticket");
           expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
           expect(r.git("diff", "--cached", "--name-only")).toBe("");
@@ -778,7 +887,7 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
       [
         "fail\n",
         JSON.stringify(open([], 101)),
-        JSON.stringify(open([{ number: 1, headRefName: "fabrikalfa/lane", commits }])),
+        JSON.stringify(open([{ number: 1, headRefName: "fabrikalfa/quest", commits }])),
       ],
       (answer) =>
         withRepo([["src/owned.ts", "lead"]], (r) => {
@@ -805,7 +914,7 @@ describe("T134 a signed commit leaves the laptop the moment it is made (0134), t
         const got = r.commit("tests", ["src/owned.ts"], only);
         expect(got.code, got.text).toBe(0);
         expect(r.published()).toEqual(only ? [] : [["publish", "fabrikalfa/one"]]);
-        const calls = readFileSync(join(r.dir, "calls"), "utf8");
+        const calls = existsSync(join(r.dir, "calls")) ? readFileSync(join(r.dir, "calls"), "utf8") : "";
         expect(only || calls.indexOf('["commits"') < calls.indexOf('["publish"')).toBe(true);
       }),
     );

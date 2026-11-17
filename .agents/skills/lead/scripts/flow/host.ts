@@ -1,6 +1,6 @@
-// host.ts: the host step, which runs a lane's Electron laws and retakes its shots on the laptop,
+// host.ts: the host step, which runs a quest's Electron laws and retakes its shots on the laptop,
 // outside any box. Today's lead tooling (0064). A box has no screen and no network (0045), so a
-// ticket that changes a program's window names its host commands in the lane brief:
+// ticket that changes a program's window names its host commands in the quest brief:
 //
 //   ## host
 //
@@ -15,9 +15,9 @@
 // chain.ts runs this step between build and review, and the flow runner can run it too
 // (`Step.act("host", args)`). It answers in the five verbs:
 //
-//   skip   no command: the lane brief has no `## host` section
+//   skip   no command: the quest brief has no `## host` section
 //   done   every command exited 0 at the head; any file they changed is one signed build commit,
-//          pushed to the lane's -wip branch, so review sees it at the head it reviews
+//          pushed to the quest's -wip branch, so review sees it at the head it reviews
 //   send   to build, with the last lines of the command that failed or ran past its time limit
 //   stuck  the worktree, the commit or the push failed
 //
@@ -32,12 +32,12 @@ import { Duration, Effect, FileSystem, Option, Path, Schedule, Schema, Stream } 
 import { Digest } from "effect/crypto";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import { repoNode } from "../boxnode.ts";
-import { wipOf } from "../lane.ts";
+import { questKeyed, wipOf } from "../quest.ts";
 import * as Outcome from "./Outcome.ts";
 import { type Runner, StepFailed } from "./Runners.ts";
 
 /**
- * Minutes each host command may run, when the brief names none. The hand host runs of lane
+ * Minutes each host command may run, when the brief names none. The hand host runs of quest
  * askdesk7 took 84 s (e2e.ts --ask-desk) and 62 s (the shots' vitest run); twenty minutes leaves
  * room for a whole e2e.ts run and a cold install, and `CHAIN_HOST_MINUTES` overrides it.
  */
@@ -50,7 +50,7 @@ export const INSTALL = "nice -n 15 pnpm install --frozen-lockfile --silent";
 const TAIL = 20;
 
 /**
- * The commands a lane brief's `## host` section names: each line inside its fenced code blocks,
+ * The commands a quest brief's `## host` section names: each line inside its fenced code blocks,
  * with blank lines and `#` comments left out. Prose outside a fence is never run.
  */
 export const hostCommands = (section: string | undefined): ReadonlyArray<string> => {
@@ -93,28 +93,35 @@ const SAFE_GIT = {
   GIT_CONFIG_VALUE_1: "false",
 };
 
-export const HostArgs = Schema.Struct({
-  /** The main checkout: its git data holds the lane's branch, and its signer signs. */
+const HostFields = Schema.Struct({
+  /** The main checkout: its git data holds the quest's branch, and its signer signs. */
   main: Schema.String,
   boxes: Schema.String,
-  lane: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*$/)),
+  quest: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*$/)),
   ticket: Schema.String,
   branch: Schema.String.check(Schema.isStartingWith("fabrikalfa/")),
-  /** The lane's approved plan, whose owner rows the step commit checks. */
+  /** The quest's approved plan, whose owner rows the step commit checks. */
   plan: Schema.String,
   head: Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/)),
-  /** The run's id, `<lane>-host<n>`: chain.ts takes it from `RunId.next`, and it names the worktree and log. */
+  /** The run's id, `<quest>-host<n>`: chain.ts takes it from `RunId.next`, and it names the worktree and log. */
   name: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*-host[1-9][0-9]*$/)),
   commands: Schema.Array(Schema.String),
-  minutes: Schema.Number.check(Schema.isGreaterThan(0)),
+  minutes: Schema.Finite.check(Schema.isGreaterThan(0)),
 });
+
+/**
+ * The host step's args, as a flow saves them. A flow saved before decision 0546 names the quest
+ * `lane`: it reads as `quest`, and a new flow saves `quest`.
+ */
+export const HostArgs = Schema.Union([HostFields, HostFields.pipe(Schema.encodeKeys({ quest: "lane" }))]);
+
 export type HostArgs = typeof HostArgs.Type;
 
 /** What the host step hands back: its outcome, the head after it, and its log. */
 export type Hosted = { readonly outcome: Outcome.Outcome; readonly head: string; readonly log: string | null };
 
 /** Another live process holds the lock; the take is tried again on its schedule. */
-class Held extends Schema.TaggedError<Held>()("Held", { pid: Schema.Number }) {}
+class Held extends Schema.TaggedError<Held, { readonly brand: unique symbol }>()("Held", { pid: Schema.Finite }) {}
 
 const alive = (pid: number) =>
   Effect.try({ try: () => process.kill(pid, 0), catch: () => "gone" }).pipe(
@@ -129,10 +136,12 @@ const alive = (pid: number) =>
  */
 export const electronLock = Effect.fn("host.electronLock")(function* (lock: string, every: Duration.Input) {
   const fs = yield* FileSystem.FileSystem;
+
   const write = fs.writeFileString(lock, String(process.pid), { flag: "wx" }).pipe(
     Effect.as(true),
     Effect.orElseSucceed(() => false),
   );
+
   const take = Effect.gen(function* () {
     if (yield* write) {
       return;
@@ -141,15 +150,16 @@ export const electronLock = Effect.fn("host.electronLock")(function* (lock: stri
     const owner = Number((yield* fs.readFileString(lock).pipe(Effect.orElseSucceed(() => ""))).trim());
 
     if (Number.isInteger(owner) && owner > 0 && (yield* alive(owner))) {
-      return yield* new Held({ pid: owner });
+      return yield* Held.make({ pid: owner });
     }
 
     yield* fs.remove(lock, { force: true }).pipe(Effect.ignore);
 
     if (!(yield* write)) {
-      return yield* new Held({ pid: 0 });
+      return yield* Held.make({ pid: 0 });
     }
   });
+
   // `Schedule.spaced` never ends, so a held lock is waited on for as long as it is held, and `Held`
   // never leaves the retry.
   const waited = take.pipe(Effect.retry({ schedule: Schedule.spaced(every) }), Effect.orDie);
@@ -168,14 +178,16 @@ export const exec = Effect.fn("host.exec")(
     env: Readonly<Record<string, string | undefined>> = {},
   ) {
     const handle = yield* ChildProcess.make(command, args, { cwd: dir, env: { ...SAFE_GIT, ...env }, extendEnv: true });
+
     const [output, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(handle.all)), handle.exitCode], {
       concurrency: 2,
     });
+
     return { code: Number(code), output } satisfies Ran;
   },
   Effect.scoped,
   (effect, dir, command) =>
-    Effect.mapError(effect, () => new StepFailed({ reason: `${command} could not start in ${dir}` })),
+    Effect.mapError(effect, () => StepFailed.make({ reason: `${command} could not start in ${dir}` })),
 );
 
 /**
@@ -199,6 +211,7 @@ const runLine = Effect.fn("host.runLine")(
     const fs = yield* FileSystem.FileSystem;
     yield* fs.writeFileString(log, `$ ${line}\n`, { flag: "a" });
     const [command, ...args] = commandArgv(line, node);
+
     // Its own process group (the spawner's default), so the scope's end stops everything it started.
     const handle = yield* ChildProcess.make(command, args, {
       cwd: dir,
@@ -206,25 +219,28 @@ const runLine = Effect.fn("host.runLine")(
       extendEnv: true,
       forceKillAfter: "10 seconds",
     });
+
     const [, code] = yield* Effect.all([Stream.run(handle.all, fs.sink(log, { flag: "a" })), handle.exitCode], {
       concurrency: 2,
     });
+
     return Number(code);
   },
   Effect.scoped,
-  (effect, _dir, line) => Effect.mapError(effect, () => new StepFailed({ reason: `\`${line}\` could not start` })),
+  (effect, _dir, line) => Effect.mapError(effect, () => StepFailed.make({ reason: `\`${line}\` could not start` })),
 );
 
 /** The last lines of the log, for a reason. */
 const logTail = Effect.fn("host.logTail")(function* (log: string) {
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs.readFileString(log).pipe(Effect.orElseSucceed(() => ""));
+
   return text.trimEnd().split("\n").slice(-TAIL).join("\n");
 });
 
 /**
  * Run `lines` in order in `dir`, each within `minutes`. The first that exits non-zero or runs past
- * its limit sends the lane to build with the log's last lines, as a red check would; `null` when
+ * its limit sends the quest to build with the log's last lines, as a red check would; `null` when
  * every line exited 0.
  */
 export const runCommands = Effect.fn("host.runCommands")(function* (
@@ -240,11 +256,13 @@ export const runCommands = Effect.fn("host.runCommands")(function* (
 
     if (Option.isNone(ended)) {
       const tail = yield* logTail(log);
+
       return Outcome.send("build", `host: \`${line}\` ran past its ${minutes}-minute limit and was stopped:\n${tail}`);
     }
 
     if (ended.value !== 0) {
       const tail = yield* logTail(log);
+
       return Outcome.send("build", `host: \`${line}\` exited ${ended.value}:\n${tail}`);
     }
   }
@@ -260,11 +278,12 @@ export const worktree = Effect.fn("host.worktree")(function* (main: string, dir:
   yield* Effect.acquireRelease(
     git("worktree", "add", "-q", "--detach", dir, head).pipe(
       Effect.flatMap((r) =>
-        r.code === 0 ? Effect.void : Effect.fail(new StepFailed({ reason: `git worktree add failed: ${r.output}` })),
+        r.code === 0 ? Effect.void : Effect.fail(StepFailed.make({ reason: `git worktree add failed: ${r.output}` })),
       ),
     ),
     () => git("worktree", "remove", "--force", dir).pipe(Effect.ignore),
   );
+
   return dir;
 });
 
@@ -283,15 +302,18 @@ export const changedPaths = (porcelain: string): ReadonlyArray<string> =>
 const boxFacts = Effect.fn("host.boxFacts")(function* (a: HostArgs, name: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+
   const plan = yield* fs
     .readFile(a.plan)
-    .pipe(Effect.mapError(() => new StepFailed({ reason: `the plan ${a.plan} cannot be read` })));
+    .pipe(Effect.mapError(() => StepFailed.make({ reason: `the plan ${a.plan} cannot be read` })));
+
   const first = plan.indexOf(10);
   const second = first === -1 ? -1 : plan.indexOf(10, first + 1);
   const body = second === -1 ? new Uint8Array() : plan.subarray(second + 1);
   const digest = yield* Digest.Digest;
   const sha = yield* digest.digestHex(Digest.sha256, body);
   const facts = path.join(a.boxes, "state", `${name}.box`);
+
   const text = [
     `ticket: ${a.ticket}`,
     `branch: ${a.branch}`,
@@ -299,10 +321,11 @@ const boxFacts = Effect.fn("host.boxFacts")(function* (a: HostArgs, name: string
     `plan: ${a.plan}`,
     `plan-sha256: ${sha}`,
   ];
+
   yield* Effect.acquireRelease(
     fs
       .writeFileString(facts, `${text.join("\n")}\n`)
-      .pipe(Effect.mapError(() => new StepFailed({ reason: `${facts} cannot be written` }))),
+      .pipe(Effect.mapError(() => StepFailed.make({ reason: `${facts} cannot be written` }))),
     () => fs.remove(facts, { force: true }).pipe(Effect.ignore),
   );
 }, Effect.provide(Digest.layerWebCrypto));
@@ -313,7 +336,7 @@ const short = (sha: string) => sha.slice(0, 8);
 export const host = Effect.fn("host.run")(function* (a: HostArgs) {
   if (a.commands.length === 0) {
     return {
-      outcome: Outcome.skip("the lane brief has no `## host` section, so no host command ran"),
+      outcome: Outcome.skip("the quest brief has no `## host` section, so no host command ran"),
       head: a.head,
       log: null,
     } satisfies Hosted;
@@ -326,17 +349,19 @@ export const host = Effect.fn("host.run")(function* (a: HostArgs) {
   const scripts = path.join(import.meta.dirname, "..");
   yield* fs
     .writeFileString(log, `host ${name} at ${a.head}\n`)
-    .pipe(Effect.mapError(() => new StepFailed({ reason: `${log} cannot be written` })));
+    .pipe(Effect.mapError(() => StepFailed.make({ reason: `${log} cannot be written` })));
   yield* electronLock(path.join(a.boxes, "state", "electron.lock"), "20 seconds");
   const dir = yield* worktree(a.main, path.join(a.boxes, name), a.head);
+
   const tmp = yield* fs
     .makeTempDirectoryScoped({ directory: "/tmp", prefix: "fh" })
-    .pipe(Effect.mapError(() => new StepFailed({ reason: "no temp folder in /tmp" })));
-  yield* fs.makeDirectory(`${tmp}/home`).pipe(Effect.mapError(() => new StepFailed({ reason: `${tmp}/home` })));
+    .pipe(Effect.mapError(() => StepFailed.make({ reason: "no temp folder in /tmp" })));
+
+  yield* fs.makeDirectory(`${tmp}/home`).pipe(Effect.mapError(() => StepFailed.make({ reason: `${tmp}/home` })));
   const node = yield* repoNode(dir);
   yield* fs
     .writeFileString(log, `node: ${node ?? "the laptop's own (the repo names none)"}\n`, { flag: "a" })
-    .pipe(Effect.mapError(() => new StepFailed({ reason: `${log} cannot be written` })));
+    .pipe(Effect.mapError(() => StepFailed.make({ reason: `${log} cannot be written` })));
   const failed = yield* runCommands(dir, [INSTALL, ...a.commands], hostEnv(tmp), log, a.minutes, node);
   const ran = `${a.commands.length} host commands`;
 
@@ -364,6 +389,7 @@ export const host = Effect.fn("host.run")(function* (a: HostArgs) {
   yield* boxFacts(a, name);
   const subject = `T${a.ticket} build: the host run retook ${paths.length} files at ${short(a.head)}`;
   const stepcommit = path.join(scripts, "..", "..", "step-commit", "scripts", "stepcommit.sh");
+
   const committed = yield* exec(dir, "sh", [stepcommit, "build", a.ticket, subject, ...paths], {
     BOXES: a.boxes,
     STEPCOMMIT_BOX: name,
@@ -379,7 +405,7 @@ export const host = Effect.fn("host.run")(function* (a: HostArgs) {
   }
 
   const head = (yield* exec(dir, "git", ["rev-parse", "HEAD"])).output.trim();
-  // Pushed before the branch moves, so a failed push leaves the lane where review would find it.
+  // Pushed before the branch moves, so a failed push leaves the quest where review would find it.
   const pushed = yield* exec(a.main, "node", [path.join(scripts, "botpush.mjs"), a.main, wipOf(a.branch), head]);
 
   if (pushed.code !== 0) {
@@ -406,29 +432,34 @@ export const host = Effect.fn("host.run")(function* (a: HostArgs) {
 }, Effect.scoped);
 
 /**
- * The host step's outcome as drive.ts names a step's in the lane's state file: `verb:to:reason`,
+ * The host step's outcome as drive.ts names a step's in the quest's state file: `verb:to:reason`,
  * so readers of that file need no second shape.
  */
 export const outcomeName = (o: Outcome.Outcome): string =>
   o._tag === "done" ? "done" : o._tag === "send" ? `send:${o.to}:host_failed` : `${o._tag}:host`;
 
 /**
- * Write the host step's entry into the lane's state file (`state/<lane>.json`, drive.ts's), as a
- * step's: a done step that committed moves the lane's head, so the next step starts from it.
+ * Write the host step's entry into the quest's state file (`state/<quest>.json`, drive.ts's), as a
+ * step's: a done step that committed moves the quest's head, so the next step starts from it.
  */
-export const recordInLane = Effect.fn("host.recordInLane")(function* (
-  a: Pick<HostArgs, "boxes" | "lane" | "name" | "head">,
+export const recordInQuest = Effect.fn("host.recordInQuest")(function* (
+  a: Pick<HostArgs, "boxes" | "quest" | "name" | "head">,
   hosted: Hosted,
   ended: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const state = path.join(a.boxes, "state", `${a.lane}.json`);
+  const state = path.join(a.boxes, "state", `${a.quest}.json`);
   const text = yield* fs.readFileString(state).pipe(Effect.orElseSucceed(() => ""));
-  const saved: typeof LaneFile.Type = Schema.decodeUnknownOption(Schema.fromJsonString(LaneFile))(text).pipe(
-    Option.getOrElse(() => ({ lane: a.lane, steps: [] })),
+
+  const saved: typeof QuestFile.Type = Schema.decodeOption(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+    Option.map(questKeyed),
+    Option.flatMap(Schema.decodeUnknownOption(QuestFile)),
+    Option.getOrElse(() => ({ quest: a.quest, steps: [] })),
   );
+
   const done = hosted.outcome._tag === "done";
+
   const entry = {
     step: "host",
     box: a.name,
@@ -443,12 +474,13 @@ export const recordInLane = Effect.fn("host.recordInLane")(function* (
     kept: false,
     ended,
   };
-  const lane = { ...saved, head: done ? hosted.head : saved.head, steps: [...saved.steps, entry] };
-  yield* fs.writeFileString(`${state}.tmp`, `${JSON.stringify(lane, null, "\t")}\n`);
+
+  const quest = { ...saved, head: done ? hosted.head : saved.head, steps: [...saved.steps, entry] };
+  yield* fs.writeFileString(`${state}.tmp`, `${JSON.stringify(quest, null, "\t")}\n`);
   yield* fs.rename(`${state}.tmp`, state);
 });
 
-/** A host entry of the lane's state file, as `recordInLane` writes it. */
+/** A host entry of the quest's state file, as `recordInQuest` writes it. */
 const HostEntry = Schema.Struct({
   step: Schema.Literal("host"),
   outcome: Schema.String,
@@ -457,15 +489,19 @@ const HostEntry = Schema.Struct({
   why: Schema.String,
 });
 
-/** The last host entry among the lane's state file's steps, as a review is told it; `null` when none ran. */
+/** The last host entry among the quest's state file's steps, as a review is told it; `null` when none ran. */
 export const lastHost = (steps: ReadonlyArray<unknown>): string | null => {
   const last = steps.findLast(Schema.is(HostEntry));
+
   return last === undefined ? null : `${last.outcome} at ${last.head}: ${last.why}`;
 };
 
-/** The lane's state file, read loosely: what drive.ts wrote stays as it is. */
-const LaneFile = Schema.StructWithRest(
-  Schema.Struct({ lane: Schema.String, head: Schema.optional(Schema.String), steps: Schema.Array(Schema.Unknown) }),
+/**
+ * The quest's state file, read loosely: what drive.ts wrote stays as it is, except a `lane` key
+ * from before decision 0546, which `questKeyed` reads as `quest`.
+ */
+const QuestFile = Schema.StructWithRest(
+  Schema.Struct({ quest: Schema.String, head: Schema.optional(Schema.String), steps: Schema.Array(Schema.Unknown) }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 );
 
@@ -475,8 +511,9 @@ type Spawns = ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | 
 export const runners: Readonly<Record<string, Runner<Spawns>>> = {
   host: Effect.fn("host.runner")(function* (step) {
     const args = yield* Schema.decodeUnknownEffect(HostArgs)(step.args).pipe(
-      Effect.mapError((e) => new StepFailed({ reason: `${step.name}'s args do not parse: ${e.message}` })),
+      Effect.mapError((e) => StepFailed.make({ reason: `${step.name}'s args do not parse: ${e.message}` })),
     );
+
     return Outcome.answer((yield* host(args)).outcome);
   }),
 };

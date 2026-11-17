@@ -1,13 +1,18 @@
+---
+state: "decided; step 5's gate in CI (experiment 117); generated laws, four reason labels and K20, 2026-11-08"
+summary: "Pick the riskiest promise; test the real code first (TLA+ only for a design with no code, a proof only past a bound); show each check failing on a planted break; a failure stays a failure; record what each check covers, and CI goes red when that code changes unchecked. Every law uses generated inputs unless it has a reason labeled `vector:`, `format:`, `pinned:` or `scenario:`. Review checks that the property or label is present and fits. A shape check is a lint rule or a type. K20 uses existing Schemas or their Effect Arbitraries for new properties, with fast-check for unsupported cases and edges."
+---
+
 # Five steps for every check
 
-Decided 2026-10-22. Step 5's gate is built in experiment 117 and runs in CI
-as `pnpm promises`.
+Decided 2026-10-22. Step 5's gate was built in experiment 117 (the `promises` tool, deleted
+2026-11-14).
 
 ```ts
 // A sketch: one promise as data, cut short from experiment 117's record.
 {
-	promise: "A lane never waits forever for a child.",
-	harm: "A child that dies before its outcome row leaves the lane stuck, and nobody is told.",
+	promise: "A quest never waits forever for a child.",
+	harm: "A child that dies before its outcome row leaves the quest stuck, and nobody is told.",
 	tool: "property test",                                    // step 2: the real code
 	plant: "the wait ignores the child's EXIT",                // step 3: a break it must catch
 	covers: ["packages/pipeline/src/hosted/lane.ts#handlers"], // step 5: what it covers
@@ -57,7 +62,8 @@ Decided 2026-11-08 by the owner, after PR 516's laws were all example tests.
 - **A hand-picked example stays only as a pinned case of a named past bug,** in fast-check's
   `examples`, with the bug named beside it.
 - **A check on the shape of code is a lint rule or a type,** not a test.
-- **Four kinds of law may be a fixed test, and the test's name says which** (owner, 2026-11-08).
+- **Five kinds of law may be a fixed test, and the test's name says which** (owner, 2026-11-08;
+  the fifth, `type:`, 2026-11-14).
   Anything else is a property. A hand-picked example that checks a general rule is a miss.
 
 | Label | What it is | Example |
@@ -66,6 +72,7 @@ Decided 2026-11-08 by the owner, after PR 516's laws were all example tests.
 | `format:` | A fixed format the code must write or read exactly | the `keybindings.toml` a person would write by hand |
 | `pinned:` | A named past bug, kept so it never comes back | the duplicate-id bug |
 | `scenario:` | One scripted run against the outside world | a real Electron window opens; a real `git push` lands |
+| `type:` | A check only the compiler makes, with no samples to draw ([0527](../../.decisions/0527-type-laws-get-a-type-label.md)) | no service of `access/` fails with the ledger's error |
 
 ```ts
 // A sketch: one law, with one pinned case of a named past bug.
@@ -85,7 +92,7 @@ it("scenario: the app opens a real window on a fresh home", () => {/* ... */});
 checks general rules with generated inputs.
 [Hypothesis's `@example`](https://hypothesis.readthedocs.io/en/latest/tutorial/replaying-failures.html#using-example-to-run-a-specific-input)
 keeps explicit inputs alongside generated cases, as fast-check's `examples` does for `pinned:`.
-The four labels name why a fixed case exists; they do not claim that one example checks a general
+The five labels name why a fixed case exists; they do not claim that one example checks a general
 rule.
 
 The plan names the generator, or a label with its reason, for each law. The test writer keeps that
@@ -113,7 +120,7 @@ an unsupported generator with a nearby reason. This rule cannot prove generator 
 
 ## Why
 
-- **Experiment 115:** a check on a hand-written copy of the lane found the
+- **Experiment 115:** a check on a hand-written copy of the quest found the
   hang, but nothing tied the copy to the code. It could go stale and stay
   green.
 - **Experiment 116:** three tools found the same bug. Only the property test
@@ -138,6 +145,6 @@ an unsupported generator with a nearby reason. This rule cannot prove generator 
 ## What would change it
 
 - A bug that property tests on the real code keep missing and TLA+ catches.
-  *2026-10-25: experiment 139 looked for one on the hosted lane and found
+  *2026-10-25: experiment 139 looked for one on the hosted quest and found
   none in 46 planted bugs.*
 - Records that cost more to keep up than the stale checks they catch.

@@ -6,6 +6,7 @@
 // and published patches.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
 import { Writer } from "../access/SessionManager.ts";
 import { SinkError } from "../coordination/index.ts";
@@ -15,6 +16,7 @@ import { Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, type Update, WatcherManager } from "./Entry.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input } from "./Program.ts";
 import type { RepliesError } from "./Replies.ts";
@@ -22,12 +24,18 @@ import { capture, nat, nth, parsed, sentinel, text, unleaked } from "./RepliesTe
 import { ProgramRunner, Sent } from "./Runner.ts";
 
 const SEED = 119120;
-const RUNS = 100;
+
+const RUNS = runsFor({ fast: 10, full: 100 });
+
 const NAME = "drafts:1";
+
 const PROGRAM = "drafts";
+
 const CAPACITY = 1024 ** 3;
+
 /** The brain's writer key: the harness's process table trusts only this writer. */
 export const BRAIN = "SHA256:brain";
+
 const TRACE = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
 
 /** What the runner's process store reads from the context: the inbox's ledger. Named through the
@@ -42,8 +50,11 @@ export type Harness = {
   readonly services: (inbox: Sql, manager: Sql) => Layer.Layer<StoreNeeds | Mailbox | ProcessManager>;
 };
 
-/** The tables main's runner, inbox and process table write. Any other table a runner writes here
- *  holds terminal replies. */
+/** The table that keeps terminal replies, by its own name, so the reply fault lands only on a reply write. */
+const REPLIES = "process_replies";
+
+/** The tables main's runner, inbox and process table write. Every other table a runner writes here is
+ *  read for a stored reply and scanned for leaked secrets, so a new table cannot hide one. */
 const KNOWN = new Set([
   "entries",
   "rings",
@@ -77,6 +88,7 @@ const KNOWN = new Set([
 const WRITE = /^\s*(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|REPLACE\s+INTO|UPDATE|DELETE\s+FROM)\s+["`]?(\w+)/i;
 
 const Model = Schema.Struct({ notes: Schema.Record(Schema.String, Schema.Int) });
+
 type Model = typeof Model.Type;
 
 const Save = Schema.Struct({
@@ -101,6 +113,7 @@ const program = {
   view: { data: Model, select: (s: Model) => s },
   refuse: (s: Model, m: typeof Save.Type) => {
     const now = s.notes[m.note] ?? 0;
+
     return m.base === now ? null : { reason: "changed_elsewhere", now };
   },
   inputs: { save: Input.cases.write.make({ schema: Save, description: "Save a note", personOnly: false }) },
@@ -110,7 +123,9 @@ const program = {
 } as const;
 
 const NOTES = ["a", "b", "c"] as const;
+
 const BODIES = ["", "same text", "  spaced  \n"] as const;
+
 const lower = text("abcdefghijklmnopqrstuvwxyz0123456789", 8);
 
 /** One move's entropy. Which move it is, and its parameters, are read against the walk's state. */
@@ -123,7 +138,9 @@ const Step = Arbitrary.all({
   key: lower,
   for: lower,
 });
+
 type Step = typeof Step extends Arbitrary.Arbitrary<infer A> ? A : never;
+
 const Walk = Arbitrary.array(Step, { minLength: 4, maxLength: 24 });
 
 type Move =
@@ -149,15 +166,15 @@ const Malformed = Schema.TaggedStruct("refused", { reason: Schema.Struct({ text:
 /** A letter the record answered: the delivery as first sent, and its first terminal answer. */
 type Answered = { readonly letter: Incoming; readonly first: Sent; readonly note: string; readonly base: number };
 
-/** The armed faults: the recording flush, and the next write to a reply table. */
+/** The armed faults: the recording flush, and the next write to the reply table. */
 type Control = { flush: boolean; reply: boolean; hits: number };
 
-/** The recovery connection with one armed fault: its next write to a table main never had. */
+/** The recovery connection with one armed fault: its next write to the reply table, never another's. */
 const faulty = (sql: Sql, control: Control): Sql => ({
   exec: (query, ...params) => {
     const table = WRITE.exec(query)?.[1];
 
-    if (control.reply && table !== undefined && !KNOWN.has(table)) {
+    if (control.reply && table === REPLIES) {
       control.reply = false;
       control.hits++;
       throw new Error("disk I/O error");
@@ -196,9 +213,10 @@ const replyCells = (sql: Sql): ReadonlyArray<string> =>
 
 let counter = 0;
 
-const inputId = (): typeof InputId.Type => {
+const inputId = (): InputId => {
   counter = (counter + 1) % 1024;
   const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
+
   return Schema.decodeUnknownSync(InputId)(
     `input_0000000000e0080000000000${alphabet[counter >> 5]}${alphabet[counter % 32]}`,
   );
@@ -237,6 +255,7 @@ const walk = (
       const processes = Context.get(coordination, ProcessManager);
       mailbox = Context.get(coordination, Mailbox);
       const owner = Writer.cases.person.make({ key: "SHA256:owner", for: "person-owner" });
+
       const meta = {
         by: BRAIN,
         for: "brain",
@@ -258,6 +277,7 @@ const walk = (
       }
 
       const live = yield* processes.status(NAME).pipe(Effect.orDie);
+
       const dependencies = Layer.mergeAll(
         ProgramLoader.layer({ [PROGRAM]: program }, {}),
         ProcessStore.layer(inbox, { process: live.state.process }),
@@ -265,6 +285,7 @@ const walk = (
           CheckedWriter,
           Effect.gen(function* () {
             const mailbox = yield* Mailbox;
+
             return CheckedWriter.of({
               append: (i) =>
                 mailbox.send(NAME, i.id, i.envelope.input, {
@@ -295,20 +316,25 @@ const walk = (
             }
 
             control.flush = false;
+
             return Effect.fail(new SinkError({ reason: "storage", held: 0 }));
           }),
         }),
       ).pipe(Layer.provideMerge(Layer.succeedContext(coordination)));
+
       const context = yield* Layer.build(
         ProgramRunner.layer(
           { id: live.state.process, name: NAME, program: PROGRAM, build: "test", owner },
-          { recovery: { sql: faulty(inbox, control), name: NAME, capacity: CAPACITY } },
+          { recovery: { sql: faulty(inbox, control), name: NAME, capacity: CAPACITY }, chunk: ANY_CHUNK },
         ).pipe(Layer.provide(dependencies)),
       ).pipe(Scope.provide(scope));
+
       runner = Context.get(context, ProgramRunner);
       yield* runner.open("watch");
+
       return { inbox, runner };
     });
+
     let live = yield* connect();
     yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
 
@@ -319,6 +345,7 @@ const walk = (
     });
 
     const patches = () => published.filter((u) => u.type === "patch").length;
+
     const inboxCount = Effect.suspend(() =>
       mailbox === undefined ? Effect.die("no connection") : Stream.runCount(mailbox.read(NAME, 0)).pipe(Effect.orDie),
     );
@@ -326,6 +353,7 @@ const walk = (
     /** The observable effects: accepted letters in the inbox, patches, and the view. */
     const observe = Effect.fnUntraced(function* () {
       const opened = yield* live.runner.open("watch");
+
       return {
         letters: yield* inboxCount,
         patches: patches(),
@@ -341,8 +369,10 @@ const walk = (
       view: { notes: Object.fromEntries([...versions].sort(([a], [b]) => a.localeCompare(b))) },
       rev: accepted,
     });
+
     const sorted = (view: unknown) => {
       const notes = (view as Model).notes;
+
       return { notes: Object.fromEntries(Object.entries(notes).sort(([a], [b]) => a.localeCompare(b))) };
     };
 
@@ -382,6 +412,7 @@ const walk = (
       }
 
       answered.push({ letter: sent, first: answer, note, base });
+
       return sent;
     });
 
@@ -418,6 +449,7 @@ const walk = (
       const intact = answered.filter((a) => !damaged.has(a.letter.id));
       const stored = intact.filter((a) => a.first._tag === "refused");
       const futures = answered.filter((a) => a.first._tag === "refused" && a.base > current(a.note));
+
       const moves = enabled.filter((move) =>
         move === "older"
           ? NOTES.some((note) => current(note) > 0)
@@ -429,6 +461,7 @@ const walk = (
                 ? stored.length > 0
                 : true,
       );
+
       const move = nth(moves, step.pick);
       const note = nth(NOTES, step.kind);
 
@@ -455,6 +488,7 @@ const walk = (
         const input = prior.letter.envelope.input as typeof Save.Type;
         const parts = prior.first._tag === "refused" ? 3 : 1;
         const part = step.pick % parts;
+
         const changed: Incoming =
           part === 0
             ? {
@@ -472,6 +506,7 @@ const walk = (
                   ),
                 },
               };
+
         secrets.push(step.secret);
         const before = yield* observe();
         expect(yield* live.runner.msg(changed), "a changed binding borrows no answer").toEqual(
@@ -535,6 +570,7 @@ const walk = (
         const json = JSON.parse(value) as Record<string, unknown>;
         const kind = nth(DAMAGE, step.kind);
         const fields = ["parent", "by", "for", "digest", "answer"] as const;
+
         const cell =
           kind === "json"
             ? `${value.slice(0, -1)}${step.secret}`
@@ -547,6 +583,7 @@ const walk = (
                 : kind === "accepted"
                   ? JSON.stringify({ ...json, answer: Sent.cases.accepted.make({ rev: n + 1, pos: n + 1 }) })
                   : JSON.stringify({ ...json, answer: Malformed.make({ reason: { text: step.secret } }) });
+
         secrets.push(step.secret);
         live.inbox.exec(`UPDATE "${table}" SET "${column}"=? WHERE "${column}"=?`, cell, value);
         damaged.set(prior.letter.id, cell);

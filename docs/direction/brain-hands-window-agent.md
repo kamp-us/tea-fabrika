@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-31, 70% sure"
+summary: "In the new version, \"peer\" is gone, and so is \"node\" for a machine. Hands, a window and an agent dial the brain. `client` means any of them, only when talking about the door's protocol. A `host` is a place hands can run: a Mac, a VM or a browser profile. What it can do is its capabilities, `has` on the wire. Hands and window are tasks, not places: hands take a task with a lease, windows mirror one view, and one tab may do both. The names are for reading; `has` is what keeps a task away from a tab. A tab that runs tasks is proposed, not decided."
+---
+
 # Brain, hands, window, agent
 
 **Decided 2026-10-31.** This note is about the new version: `next/` and
@@ -18,7 +23,7 @@ no `FABRIKA_REPO` setting picks one. It is built in today's app now; its plan is
 
 **Tier 1 builds the shape.** Each platform Layer says what its host can do, and
 the hello carries that list from the first day, because old hellos can never get
-it back. **Proposed, not decided:** a tab that runs jobs. That waits until hands
+it back. **Proposed, not decided:** a tab that runs tasks. That waits until hands
 are built for real, with the queue and leases. *Changed 2026-11-10 by
 [0068](../../.decisions/0068-tiers-carry-every-part.md):* hands get a thin, working slice before
 Tier 4, and the queue and leases harden it there.
@@ -35,7 +40,7 @@ Layer.succeed(Host, {platform: "browser", has: ["screen", "clipboard", "notify"]
 
 {"key": "ed25519:mac...", "has": ["git", "files", "agents"]}              // the Mac's hands
 {"key": "ed25519:w1...", "tab": "t1", "has": ["screen", "clipboard", "notify"]} // a tab
-// A Cmd that `needs` git never goes to that tab. How a client says it takes jobs
+// A Cmd that `needs` git never goes to that tab. How a client says it takes tasks
 // at all is not designed yet: a tab that only draws has capabilities too.
 ```
 
@@ -48,7 +53,7 @@ client." When one kind is meant, name that kind.
 
 | Word | Means | Say it like |
 |---|---|---|
-| hands | what takes jobs from the queue | "the Mac's hands took c-41" |
+| hands | what takes tasks from the queue | "the Mac's hands took c-41" |
 | window | what draws and sends a person's keys | "two windows show build:7" |
 | agent | an agent, through the bridge | "the agent posts a fact" |
 | client | any of the three, at the door | "the client signs its hello" |
@@ -57,13 +62,13 @@ client." When one kind is meant, name that kind.
 
 A ledger entry's `sentAt` is "the writer's own clock", and its `arrivedAt` the referee's (renamed from `said` and `at` on 2026-11-05).
 
-## Hands and window are jobs, not places
+## Hands and window are roles, not places
 
 They do different work, and they fail differently.
 
 ```ts
 // A sketch. Ticket #7.
-// Hands: one takes each job, with a lease.
+// Hands: one takes each task, with a lease.
 //   the Mac's hands claim c-41 and crash; the lease runs out; the VM's hands take c-41
 // Windows: all of them mirror one view.
 //   w1 and w2 show build:7; w1 dies; w2 still shows it, and nothing is lost
@@ -73,7 +78,7 @@ Temporal splits the work the same way:
 [Workers run tasks, Clients start and query](https://docs.temporal.io/develop/typescript/client/temporal-client).
 
 The split is about the work, so one tab can do both: draw as a window and take
-jobs as hands. A Mac window draws while the Mac's hands run elsewhere. A browser
+tasks as hands. A Mac window draws while the Mac's hands run elsewhere. A browser
 tab has no elsewhere, so it may hold both.
 
 ## Capabilities
@@ -84,9 +89,9 @@ tab has no elsewhere, so it may hold both.
   rule here, and it reads as a sentence.
 - **Capabilities are what stops a tab from getting a build.** Not the names. A
   tab can't run a process, so it never says it has one, and the queue never
-  offers it that job.
+  offers it that task.
 - **A capability says "can", never "may".** A client can claim anything in its
-  hello. A false claim gets it jobs it fails. Whether a client may do something
+  hello. A false claim gets it tasks it fails. Whether a client may do something
   is a grant, on the ledger.
 
 ## Why a browser is a host
@@ -94,10 +99,10 @@ tab has no elsewhere, so it may hold both.
 These are ideas, and none is tried yet.
 
 - Real browser checks: screenshots in real layouts, a real Safari.
-- Jobs that need a person there: passkeys, login flows, clipboard, file picker.
+- Tasks that need a person there: passkeys, login flows, clipboard, file picker.
 - Hands with no install: a collaborator on Windows, or a phone.
 - With the laptop closed: the cloud brain has no hands, and an open tab could do
-  browser-safe jobs.
+  browser-safe tasks.
 - A sealed program could run in a Web Worker, since it names no platform.
 
 VS Code does this. Its
@@ -106,7 +111,7 @@ runs extensions in a browser Web Worker, and `extensionKind` says which side an
 extension prefers.
 
 The limits are real. A tab can't start a process, so there's no `claude`, no
-`git` command and no real build. Closing a tab kills its job, and the lease
+`git` command and no real build. Closing a tab kills its task, and the lease
 handles that like a crash. Only one tab in a profile should act as the hands, and
 [Web Locks](https://developer.mozilla.org/docs/Web/API/Web_Locks_API) can pick
 it.
@@ -115,7 +120,7 @@ it.
 
 - **A window is a set of hands with a small `has`, and there is one word.** This
   was the strongest, because every client speaks the same wire. It wasn't picked
-  because the work differs: one set of hands takes a job with a lease, and all
+  because the work differs: one set of hands takes a task with a lease, and all
   windows mirror one view. Calling both "hands" makes people ask which window
   holds a lease. What it got right stayed: a tab may be both.
 - **`host` for every client.** A host is where things run, and a client is what
@@ -123,7 +128,7 @@ it.
   key already belongs to the profile.
 - **`host` means only a computer.** That's how
   [RFC 1122](https://www.rfc-editor.org/rfc/rfc1122.txt) uses it, and it was this
-  note's first answer. It left no word for a browser that runs jobs.
+  note's first answer. It left no word for a browser that runs tasks.
 
 ## Why not the other words
 
@@ -145,15 +150,15 @@ it.
 
 **How sure:** 70%, for the words and for a browser host. Four doubts:
 
-- **Job code beside the window's key.** It could sign as that window, so a job
+- **Task code beside the window's key.** It could sign as that window, so a task
   must run sandboxed before a tab runs anything we didn't write. Nobody has
   designed that yet.
-- **Whether enough real jobs exist for a browser.** A first browser job would
+- **Whether enough real tasks exist for a browser.** A first browser task would
   settle it.
 - **Capabilities that change.** A tab can lose the screen when it's hidden, while
   the hello is said only once. Today's `has` assumes they don't change.
-- **Saying "I take jobs".** `has` describes the host, so it can't also say whether
-  this client wants work. That needs its own answer before a tab runs a job.
+- **Saying "I take tasks".** `has` describes the host, so it can't also say whether
+  this client wants work. That needs its own answer before a tab runs a task.
 
 ## What it cannot tell us
 

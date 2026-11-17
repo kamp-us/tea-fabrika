@@ -83,3 +83,58 @@ export const Receipt = Schema.Struct({
 );
 /** @internal */
 export type Receipt = typeof Receipt.Type;
+
+// T936 slice 2: the pure part of a recovery save. Given the text each receipt row holds, it says
+// which receipts a save must write and how many bytes that adds, with no read per receipt.
+const encodeReceipt = Schema.encodeSync(Schema.fromJsonString(Receipt));
+
+const encoder = new TextEncoder();
+const bytes = (text: string) => encoder.encode(text).length;
+
+/** @internal What one save writes: each receipt whose text differs from its row, and the bytes that adds. */
+export type Changes = {
+  readonly changed: ReadonlyArray<{ readonly letter: string; readonly text: string }>;
+  readonly growth: number;
+};
+
+/**
+ * @internal The journal states in which the runner does a program's own work: waiting for a message,
+ * checking a fresh one, or stepping it. Every other state is the brain keeping or restoring the
+ * process, so its writes are recovery writes (0147). Extra fields are ignored, so any journal in
+ * one of these states decodes, and the runner reads its own journal by the same schema.
+ */
+export const Work = Schema.TaggedUnion({ idle: {}, checking: {}, stepping: {} });
+
+/**
+ * @internal A saved journal read by its shape alone, so a store below the supervisor can tell
+ * recovery from work without the supervisor's whole schema.
+ */
+export const JournalState = Schema.Struct({
+  v: Schema.Literal(2),
+  name: Text,
+  journal: Schema.Record(Schema.String, Schema.Unknown),
+});
+
+/**
+ * @internal Compares each receipt's text with the text its row holds in `rows`, keyed by letter. A
+ * receipt equal to its row is skipped. A changed one adds the difference in bytes, and a new one
+ * also adds its key, `name` and letter, as the row's own bytes.
+ */
+export const changes = (name: string, rows: ReadonlyMap<string, string>, receipts: Iterable<Receipt>): Changes => {
+  const changed: Array<{ readonly letter: string; readonly text: string }> = [];
+  let growth = 0;
+
+  for (const receipt of receipts) {
+    const text = encodeReceipt(receipt);
+    const prior = rows.get(receipt.letter);
+
+    if (prior === text) {
+      continue;
+    }
+
+    growth += prior === undefined ? bytes(text) + bytes(name) + bytes(receipt.letter) : bytes(text) - bytes(prior);
+    changed.push({ letter: receipt.letter, text });
+  }
+
+  return { changed, growth };
+};

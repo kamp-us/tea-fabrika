@@ -6,13 +6,17 @@ import { createRequire, syncBuiltinESMExports } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { pathToFileURL } from "node:url";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 
 const ROOT = resolve(import.meta.dirname, "../../../../..");
+
 const require = createRequire(import.meta.resolve("@alchemy.run/cloudflare"));
+
 const manifest = require.resolve("@alchemy.run/cloudflare-runtime/package.json");
+
 const exports = JSON.parse(readFileSync(manifest, "utf8")).exports;
 
 const load = (name: string) => import(pathToFileURL(resolve(dirname(manifest), exports[`./core/${name}`].import)).href);
@@ -29,8 +33,10 @@ type Event = { worker: string } & (
 const spawned = () => {
   const children: Array<{ pid: number; closed: boolean; crash: () => void }> = [];
   const sockets: Array<string> = [];
+
   const mock = vi.spyOn(childProcess, "spawn").mockImplementation(() => {
     const control = new PassThrough();
+
     const child = Object.assign(new childProcess.ChildProcess(), {
       pid: 27000 + children.length,
       stdin: new PassThrough(),
@@ -40,6 +46,7 @@ const spawned = () => {
       closed: false,
       kill: () => {
         child.crash();
+
         return true;
       },
       crash: () => {
@@ -55,6 +62,7 @@ const spawned = () => {
         });
       },
     });
+
     children.push(child);
     queueMicrotask(() => {
       child.emit("spawn");
@@ -66,9 +74,12 @@ const spawned = () => {
         ].join("\n"),
       );
     });
+
     return child;
   });
+
   syncBuiltinESMExports();
+
   return {
     children,
     sockets,
@@ -85,9 +96,11 @@ describe("P12 Alchemy lifecycle patch", () => {
     const registration = /^ {2}['"]?@alchemy\.run\/cloudflare-runtime@2\.0\.0-beta\.85['"]?: (.+)$/m.exec(workspace);
     expect(registration, "the lifecycle patch must survive a clean pnpm install").not.toBeNull();
     expect(existsSync(join(ROOT, registration![1]!))).toBe(true);
+
     const hash = createHash("sha256")
       .update(readFileSync(join(ROOT, registration![1]!)))
       .digest("hex");
+
     expect(readFileSync(join(ROOT, "pnpm-lock.yaml"), "utf8")).toContain(
       `'@alchemy.run/cloudflare-runtime@2.0.0-beta.85': ${hash}`,
     );
@@ -103,19 +116,23 @@ describe("P12 Alchemy lifecycle patch", () => {
         const { Storage } = await load("globals/Storage");
         const events: Array<Event> = [];
         const os = spawned();
+
         const observed = Layer.effect(
           Workerd,
           Effect.gen(function* () {
             const live = yield* Workerd;
+
             return {
               ...live,
               serve: (config: { sockets: Array<{ name: string }> }, ...args: Array<unknown>) => {
                 os.sockets.splice(0, os.sockets.length, ...config.sockets.map((s) => s.name));
+
                 return live.serve(config, ...args);
               },
             };
           }),
         ).pipe(Layer.provide(WorkerdLive));
+
         const runtime: Layer.Layer<unknown> = RuntimeLive.pipe(
           Layer.provide(observed),
           Layer.provide(Layer.succeed(Storage, { name: "storage" })),
@@ -123,12 +140,14 @@ describe("P12 Alchemy lifecycle patch", () => {
           Layer.provide(Layer.succeed(Docker, {})),
           Layer.provide(Layer.succeed(RuntimeLifecycle, (event: Event) => events.push(event))),
         );
+
         const wait = (test: () => boolean) =>
           Effect.gen(function* () {
             while (!test()) {
               yield* Effect.sleep("10 millis");
             }
           }).pipe(Effect.timeout("15 seconds"));
+
         const worker = {
           name,
           compatibilityDate: "2026-10-12",
@@ -217,7 +236,7 @@ describe("P12 Alchemy lifecycle patch", () => {
           os.restore();
         }
       }),
-      { seed: 119120, numRuns: 3, examples: [["p12-lifecycle"]] },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }), examples: [["p12-lifecycle"]] },
     );
   });
 });

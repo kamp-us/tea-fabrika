@@ -9,6 +9,7 @@
 // own account, never against the runner's saved model.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Clock, type Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -18,6 +19,7 @@ import { type From, Mailbox } from "../processes/Mailbox.ts";
 import { Activity, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { Supervision } from "./internal/supervisor.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input, ProgramDown } from "./Program.ts";
@@ -41,10 +43,15 @@ export type Rig = {
 };
 
 const NAME = "counter:1";
+
 const BUILD = "build-a";
+
 const SEED = 119120;
-const RUNS = 40;
+
+const RUNS = runsFor({ fast: 10, full: 40 });
+
 const CUTS = ["after_observation", "after_dead", "after_exit", "after_start", "after_checkpoint"] as const;
+
 const pid = (n: number): string => `process_0000000000e00800${String(n).padStart(10, "0")}`;
 
 const from = (): From => ({
@@ -69,6 +76,7 @@ const Msg = Schema.Union([
 /** An Error whose class is named `name`, as a program's own error class would be. */
 const thrown = (name: string): Error => {
   const named = { [name]: class extends Error {} }[name] ?? Error;
+
   return new named("private failure text");
 };
 
@@ -101,12 +109,14 @@ const Cell = fc.record({
   cut: fc.option(fc.constantFrom(...CUTS), { nil: null }),
   error: fc.stringMatching(/^[A-Z][A-Za-z0-9_]{0,15}$/),
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
 const Limits = fc.record({
   wiring: fc.option(fc.integer({ min: 1, max: 4 }), { nil: undefined }),
   program: fc.option(fc.integer({ min: 1, max: 4 }), { nil: undefined }),
 });
+
 type Limits = typeof Limits extends fc.Arbitrary<infer A> ? A : never;
 
 const Tape = fc.array(Cell, { minLength: 2, maxLength: 8 });
@@ -128,6 +138,7 @@ type Account = {
 const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
   const ledger = yield* rig.open;
   const state = yield* rig.open;
+
   const controls = {
     throws: false,
     error: "TypeError",
@@ -144,9 +155,11 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
     steps: new Map<string, number>(),
     inits: [] as Array<unknown>,
   };
+
   let alarm: number | null = null;
   let n = 0;
   const next = Effect.sync(() => pid(++n));
+
   const ledgerSql: Sql = {
     exec: (query, ...params) => {
       if (controls.loseEntry !== null && /^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+entries\b/i.test(query)) {
@@ -163,6 +176,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
     transaction: (step) => ledger.sql.transaction(step),
     size: () => ledger.sql.size(),
   };
+
   const stateSql: Sql = {
     exec: (query, ...params) => {
       if (controls.saveFail && /^\s*(INSERT|UPDATE|REPLACE|DELETE)/i.test(query)) {
@@ -174,7 +188,9 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
     transaction: (step) => state.sql.transaction(step),
     size: () => state.sql.size(),
   };
+
   const coordination = rig.coordination(ledgerSql, next);
+
   const program = {
     name: "counter",
     ...(limits.program === undefined ? {} : { maxDeliveries: limits.program }),
@@ -184,6 +200,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
       cmds: [],
       init: (loaded) => {
         controls.inits.push(loaded ?? null);
+
         return [loaded ?? { count: 0 }, []];
       },
       update: {
@@ -218,11 +235,13 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
     writes: {},
     wake: () => null,
   } as const;
+
   const layer = () => {
     const loader = Layer.effect(
       ProgramLoader,
       Effect.gen(function* () {
         const real = yield* ProgramLoader;
+
         return {
           load: (name: string, build?: string) =>
             Effect.map(real.load(name, build), (loaded) => ({
@@ -234,11 +253,20 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
                   controls.transport
                     ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
                     : loaded.execution.step(model, msg),
+                fresh: (model: unknown, msg: unknown) =>
+                  controls.transport
+                    ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
+                    : loaded.execution.fresh(model, msg),
+                update: (model: unknown, msg: unknown) =>
+                  controls.transport
+                    ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
+                    : loaded.execution.update(model, msg),
               },
             })),
         };
       }),
     ).pipe(Layer.provide(ProgramLoader.layer({ counter: program }, {})));
+
     const checked = Layer.effect(
       CheckedWriter,
       Effect.map(Mailbox, (mailbox) => ({
@@ -248,6 +276,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
         own: () => Effect.die("no write declared"),
       })),
     );
+
     return ProgramRunner.layer(
       { id: A0, name: NAME, program: "counter", build: BUILD, owner: person },
       {
@@ -258,6 +287,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
           backoff: { minMs: 1, maxMs: 1, resetAfterMs: 1_000_000 },
         },
         recovery: { sql: stateSql, name: NAME, capacity: 1024 ** 3 },
+        chunk: ANY_CHUNK,
         fault: (cut) =>
           Effect.suspend(() => {
             if (controls.cut !== cut) {
@@ -266,6 +296,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
 
             controls.cut = "";
             controls.hits.push(cut);
+
             return Effect.fail(new LedgerError({ reason: "unreachable" }));
           }),
       },
@@ -287,8 +318,10 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
       ),
     );
   };
+
   /** One live runner, as an object keeps one between calls; a reopen ends it and builds another. */
   let live: Context.Context<ProgramRunner> | null = null;
+
   const current = Effect.suspend(() =>
     live !== null
       ? Effect.succeed(live)
@@ -298,18 +331,23 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
           }),
         ),
   );
+
   const runner = <A, E>(f: (r: ProgramRunner["Service"]) => Effect.Effect<A, E>) =>
     Effect.flatMap(current, (built) => ProgramRunner.use(f).pipe(Effect.provide(built), Effect.exit));
+
   const manager = <A, E>(f: (p: ProcessManager["Service"]) => Effect.Effect<A, E>) =>
     ProcessManager.use(f).pipe(Effect.provide(coordination));
+
   const store = <A, E>(f: (s: ProcessStore["Service"]) => Effect.Effect<A, E>) =>
     ProcessStore.use(f).pipe(
       Effect.provide(ProcessStore.layer(stateSql, { process: A0 }).pipe(Layer.provide(coordination))),
     );
+
   const recovery = <A, E>(f: (s: RecoveryStore["Service"]) => Effect.Effect<A, E>) =>
     RecoveryStore.use(f).pipe(
       Effect.provide(RecoveryStore.layer(stateSql, { name: NAME, capacity: 1024 ** 3, schema: Supervision })),
     );
+
   const reopen = Effect.andThen(ledger.reopen, state.reopen).pipe(
     Effect.andThen(
       Effect.sync(() => {
@@ -317,6 +355,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
       }),
     ),
   );
+
   /** Places a letter behind the live process's checkpoint, as an accepted turn the next load folds. */
   const place = (process: string, id: string) =>
     Effect.gen(function* () {
@@ -334,11 +373,13 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
       }
 
       yield* own.save(saved, [{ id, rev: sent.rev, pos: sent.pos }]);
+
       return true;
     }).pipe(
       Effect.provide(ProcessStore.layer(stateSql, { process: A0 }).pipe(Layer.provideMerge(coordination))),
       Effect.orDie,
     );
+
   /** Drives recovery to a live, loaded successor: open resumes saved work, due runs a due wait. */
   const settle = Effect.gen(function* () {
     for (let round = 0; round < 12; round++) {
@@ -359,6 +400,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
 
     expect.fail("recovery did not settle to a live successor");
   });
+
   const input = (id: string, m: unknown): Incoming => ({
     id,
     envelope: {
@@ -371,14 +413,18 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
     seen: 0,
     span: { traceId: from().traceId, spanId: "00f067aa0ba902b7" },
   });
+
   let inputs = 0;
   const bodies = new Map<string, Incoming>();
+
   /** The same delivery each time a letter is resent: its id and its body. */
   const letter = (id: string, m: unknown): Incoming => {
     const known = bodies.get(id) ?? input(id, m);
     bodies.set(id, known);
+
     return known;
   };
+
   return {
     controls,
     rows: () => rig.rows(ledgerSql),
@@ -413,8 +459,10 @@ const law = (
     () =>
       Effect.gen(function* () {
         const done = new Set<string>();
+
         const law = (limits: Limits, tape: ReadonlyArray<Cell>) =>
           Effect.scoped(walk(rig, limits, tape, moves, done)).pipe(Effect.provide(TestClock.layer()));
+
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Limits, Tape, (limits, tape) => Effect.runPromise(law(limits, tape)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
@@ -430,6 +478,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
     const w = yield* world(rig, limits);
     yield* w.boot;
     const limit = limits.program ?? limits.wiring ?? 3;
+
     const a: Account = {
       process: A0,
       pids: 1,
@@ -441,24 +490,29 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
       steps: new Map(),
       freshInit: null,
     };
+
     // One good letter, so the live process has a checkpoint a saved letter can sit behind.
     expect(Exit.isSuccess(yield* w.runner((r) => r.msg(w.letter("good-0", { type: "add", n: 1 }))))).toBe(true);
     a.letters.set("good-0", { errors: [], dead: null, accepted: true });
+
     /** A recovery the runner performs: the next process ID is its successor. */
     const recovered = () => {
       a.successors++;
       a.process = pid(++a.pids);
     };
+
     const crashed = (phase: "step" | "saved_letter", error: string) => ExitReason.cases.crashed.make({ phase, error });
 
     for (const [index, cell] of tape.entries()) {
       const open = [...a.letters].filter(([id, l]) => id.startsWith("poison") && l.dead === null);
       const dead = [...a.letters].filter(([, l]) => l.dead !== null);
+
       const options = allowed.filter(
         (move) =>
           (move !== "resend" || open.length + dead.length > 0) &&
           (move !== "restart_again" && move !== "restart_conflict" ? true : a.requests.size > 0),
       );
+
       const move = nth(options, cell.move);
       const cut = cell.cut;
       w.controls.cut = cut ?? "";
@@ -495,6 +549,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           recovered();
           break;
         }
+
         case "add": {
           const id = `add-${index}`;
           const sent = yield* w.runner((r) => r.msg(w.letter(id, { type: "add", n: 1 })));
@@ -507,6 +562,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
 
           break;
         }
+
         case "saved": {
           const id = `saved-${index}`;
 
@@ -525,6 +581,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           recovered();
           break;
         }
+
         case "transport": {
           const id = open.length > 0 && cell.pick % 2 === 0 ? nth(open, cell.pick)[0] : `poison-${index}`;
           const known = a.letters.get(id) ?? { errors: [], dead: null, accepted: false };
@@ -536,6 +593,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           expect(Exit.isFailure(sent), "transport loss fails the call, and decides nothing").toBe(true);
           break;
         }
+
         case "interrupt": {
           const marker = Activity.cases.stepping.make({ process: a.process, letter: `cut-${index}`, build: BUILD });
           const process = a.process;
@@ -546,6 +604,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           recovered();
           break;
         }
+
         case "restart": {
           const id = `restart-${index}`;
           const build = cell.pick % 2 === 0 ? BUILD : "build-b";
@@ -558,6 +617,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           a.freshInit = true;
           break;
         }
+
         case "restart_again": {
           // An equal retry answers from saved work: no second exit, no second successor.
           const [id, build] = nth([...a.requests], cell.pick);
@@ -565,6 +625,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           expect(Exit.isSuccess(yield* w.runner((r) => r.restart({ id, build })))).toBe(true);
           break;
         }
+
         case "restart_conflict": {
           const [id, build] = nth([...a.requests], cell.pick);
           w.controls.cut = "";
@@ -572,6 +633,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           expect(Exit.isFailure(refused), "a request ID reused with another build is refused").toBe(true);
           break;
         }
+
         case "foreign": {
           // Crash, then another starter places a successor while this recovery waits.
           const id = `poison-${index}`;
@@ -605,6 +667,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           recovered();
           break;
         }
+
         case "save_fail": {
           // Nothing the failed save described is durable, and nothing of it is installed.
           const id = `poison-${index}`;
@@ -621,6 +684,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           yield* w.settle;
           break;
         }
+
         case "lost_observation": {
           // The step throws as the store goes down. Its class was never captured, so no fact may claim
           // it; the saved attempt stays, and reopening records one interruption for it.
@@ -649,6 +713,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           );
           break;
         }
+
         case "lost_write": {
           // The dead or exit write of this crash fails before it commits; recovery writes it once.
           const id = `poison-${index}`;
@@ -666,6 +731,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           recovered();
           break;
         }
+
         case "reopen":
           yield* w.reopen;
           yield* w.settle;
@@ -688,10 +754,12 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
 const check = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof world>>, a: Account, limit: number) {
   const rows = w.rows();
   const lifecycle = rows.filter((row) => row.stream === `processes/${NAME}`);
+
   const exits = lifecycle
     .filter((row) => row.event === "exited")
     .map((row) => row.body as { process: string; reason: unknown })
     .map(({ process, reason }) => ({ process, reason }));
+
   // J2, J12: each exit once, in order, with its producer's reason, through every cut and retry.
   expect(exits, "each exit is written once with its slice-1 reason").toEqual(a.exits);
   // J2, J6, J7: one successor per recovery; a cut start or transfer never starts another.

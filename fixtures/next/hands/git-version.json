@@ -1,0 +1,7 @@
+{
+  "about": "Real `git --version` stdout, each saved once from a real git (P39 slice 4b, law C4's vector for C1). `stdout` is the bytes git printed, newline included; `version` is what `Commands.execute` answers for it.",
+  "vectors": [
+    { "from": "Homebrew git on macOS", "stdout": "git version 2.40.1\n", "version": "git version 2.40.1" },
+    { "from": "Apple's git on macOS", "stdout": "git version 2.39.3 (Apple Git-146)\n", "version": "git version 2.39.3 (Apple Git-146)" }
+  ]
+}

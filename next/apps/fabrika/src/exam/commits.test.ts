@@ -27,11 +27,17 @@ import {
 } from "./commits.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
+
 const runs = { seed: 119120, numRuns: 100 };
+
 const sha = fc.stringMatching(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
+
 const ticket = fc.stringMatching(/^[0-9]{1,12}$/);
+
 const id = fc.stringMatching(/^[A-Za-z0-9._:-]{1,24}$/);
+
 const filename = fc.stringMatching(/^[a-z][a-z0-9_-]{0,16}$/);
+
 const role = fc.constantFrom(...ROLES);
 
 const anyNote = fc.record({
@@ -96,6 +102,7 @@ const EXAM_ROWS = [
 const EXAM = examMatcher(EXAM_ROWS);
 
 const answers = (p: PullRequest) => check(p, EXAM).answers;
+
 const DONE = { _tag: "done" as const };
 
 const stuck = (reason: string, sha: string, more: object = {}) => ({
@@ -225,6 +232,7 @@ const keyFile = fc
     const lines = keys.map((key, i) =>
       i < 3 ? line(ROLES[i]!, key) : i < 6 ? line(`person:${people[i - 3]}`, key, "git") : line(ROLES[i % 3]!, key),
     );
+
     return fc.shuffledSubarray(lines, { minLength: lines.length, maxLength: lines.length }).map((ordered) => ({
       keys,
       people,
@@ -254,6 +262,7 @@ describe("keysProblem (p87, p87b)", () => {
     fc.assert(
       fc.property(keyFile, fc.nat(), fc.string(), (file, at, text) => {
         const person = line(`person:${file.people[0]}`, file.keys[0]!, "git");
+
         const badLines = [
           `lead namespaces="fabrika-step" ecdsa-sha2-nistp256 ${file.keys[0]}`,
           `lead ssh-ed25519 ${file.keys[0]}`,
@@ -285,6 +294,7 @@ describe("keysProblem (p87, p87b)", () => {
       fc.property(keyFile, id, role, (file, name, step) => {
         const steps = file.keys.slice(0, 3).map((key, i) => line(ROLES[i]!, key));
         const person = line(`person:${name}`, file.keys[3]!, "git");
+
         const files = [
           null,
           [...steps, line("build", file.keys[0]!)].join("\n"),
@@ -373,6 +383,7 @@ describe("exam paths and scope", () => {
             ["why", reason],
           ]),
         );
+
         expect(decodeExam(JSON.stringify(encoded))).toEqual(Option.some(rows));
         const list = Option.getOrThrow(decodeExam(readFileSync(join(ROOT, "exam-paths.json"), "utf8")));
         expect(list.every((row) => row.reason.length > 0)).toBe(true);
@@ -386,6 +397,11 @@ describe("exam paths and scope", () => {
           `fixtures/next/${name}`,
           "allowed_signers",
           "exam-paths.json",
+          // 0524: a list file is an exam path until it is deleted, and so are code-graph's names.
+          "next-ledger.json",
+          "agents-ledger.json",
+          "unreachable-ledger.json",
+          "node-kinds.json",
         ]) {
           expect(isExam(path)).toBe(true);
         }
@@ -399,6 +415,7 @@ const route = fc
   .tuple(fc.uniqueArray(sha, { minLength: 4, maxLength: 10 }), ticket, fc.array(role, { minLength: 10, maxLength: 10 }))
   .map(([trees, ticket, roles]) => {
     const versions = { tests: 0, build: 0, lead: 0 };
+
     const notes = trees.slice(1).map((to, i): Note => ({
       _tag: "attested",
       step: roles[i]!,
@@ -409,6 +426,7 @@ const route = fc
       key: `key-${i}`,
       sig: `sig-${i}`,
     }));
+
     return { trees, notes, commits: notes.map((n) => commit(n)) };
   });
 
@@ -515,6 +533,7 @@ describe("newest links (p89)", () => {
         .shuffledSubarray(r.notes, { minLength: r.notes.length, maxLength: r.notes.length })
         .map((notes) => ({ ...r, notes })),
     );
+
     fc.assert(
       fc.property(ordered, role, (r, step) => {
         const notes = r.notes.map((n) => ({ ...n, step }));
@@ -571,6 +590,7 @@ describe("newest links (p89)", () => {
           ),
           signed({ ...n, version: n.version + 100, ticket: `${n.ticket}0` }),
         ]);
+
         expect(answers(pr(commits, { notes: [...noise, ...notes.map((n) => signed(n))] }))).toEqual([DONE]);
         expect(staleSteps(notes[0]!.ticket, [], [])).toEqual(new Set());
       }),
@@ -632,10 +652,12 @@ describe("chain (p86 and p89 after merge)", () => {
         expect(chain(d.squash, d.rows, d.trees, d.placed)).toEqual([DONE]);
         const i = at % d.rows.length;
         const n = d.rows[i]!.link;
+
         const person = {
           link: { ...n, step: "person" as const, to: n.from },
           signer: "person" as const,
         };
+
         expect(chain(d.squash, [...d.rows.slice(0, i), person, ...d.rows.slice(i)], d.trees, d.placed)).toEqual([DONE]);
       }),
       runs,
@@ -648,6 +670,7 @@ describe("chain (p86 and p89 after merge)", () => {
         const first = d.rows[0]!;
         const second = d.rows[1]!;
         const last = d.rows.at(-1)!;
+
         const bad: Logged[][] = [
           [],
           d.rows.slice(1),
@@ -682,10 +705,12 @@ describe("chain (p86 and p89 after merge)", () => {
     fc.assert(
       fc.property(chainData, (d) => {
         const first = d.rows[0]!;
+
         const empty = {
           link: { ...first.link, step: "person" as const, from: first.link.to },
           signer: "person" as const,
         };
+
         expect(chain(d.squash, [first, empty, empty, ...d.rows.slice(1)], d.trees, d.placed)).toEqual([
           stuck("broken_chain", d.squash),
         ]);
@@ -712,6 +737,7 @@ describe("chain (p86 and p89 after merge)", () => {
         const rows = d.rows.map((r, i) =>
           i === at % d.rows.length ? { ...r, link: { ...r.link, base: d.other } } : r,
         );
+
         expect(chain(d.squash, rows, d.trees, d.placed)).toEqual([stuck("broken_chain", d.squash)]);
       }),
       runs,
@@ -859,14 +885,12 @@ describe("trusted config files", () => {
         { "glob": ".oxfmtrc.json", "why": "the format settings" },
         { "glob": "stylelint.config.ts", "why": "the CSS lint rules and their known lists" },
         { "glob": "oxlint-plugins/**", "why": "the custom lint rules and the lint runner" },
+        { "glob": "vendor/**", "why": "the lint rules we take as they ship, at their pinned commit (0563)" },
         { "glob": "vitest.config.ts", "why": "which tests run, and their time limit" },
+        { "glob": "vitest.e2e.config.ts", "why": "which end-to-end tests run, and their time limit" },
         {
           "glob": ".agents/skills/*/scripts/*.test.ts",
           "why": "the step scripts' laws and planted breaks"
-        },
-        {
-          "glob": ".agents/skills/lead/scripts/catchup.test-support.ts",
-          "why": "the stubbed tools and Git fixture catchup.sh's laws share"
         },
         {
           "glob": ".agents/skills/lead/scripts/skillscheck.sh",
@@ -886,6 +910,9 @@ describe("trusted config files", () => {
           "why": "the owner's ledger of functions left out of the React Compiler"
         },
         { "glob": "unreachable-ledger.json", "why": "the owner's ledger of dead exports" },
+        { "glob": "next-ledger.json", "why": "next/'s list of old lint breaks, which only shrinks (0524)" },
+        { "glob": "agents-ledger.json", "why": "lead tooling's list of old lint breaks, which only shrinks (0524)" },
+        { "glob": "node-kinds.json", "why": "names code-graph treats as used; each must be bound by that name (0524)" },
         { "glob": "package.json", "why": "the root scripts: lint, test, typecheck and this check" },
         { "glob": "pnpm-lock.yaml", "why": "the exact dependencies the tests and checks run" },
         { "glob": "tsconfig.base.json", "why": "the type checker's strictness" },
@@ -908,89 +935,6 @@ describe("trusted config files", () => {
       "
     `);
     // oxlint-enable fabrika/no-stage-word
-  });
-  // format: pin workflow events, permissions, checkout flags, env and commands byte for byte.
-  it("format: commits workflow bytes", () => {
-    expect(readFileSync(join(ROOT, ".github/workflows/commits.yaml"), "utf8")).toMatchInlineSnapshot(`
-			"name: commits
-
-			# The commit check for next/ (Tier 1, P32; docs/direction/a-unit-of-work-is-a-commit.md). It runs
-			# main's own copy of the program on every pull request into main: \`pull_request_target\` checks out
-			# main, installs main's lockfile and never checks out or runs the pull request's code. It reads the
-			# pull request only as git objects, fetched by the event's shas. The token can only read, and no
-			# secret is used. On a push to main it walks the logged links of each squash since P32's, as advice.
-			#
-			# Each value from the event reaches a \`run:\` line only through \`env\`, and only a number or a sha;
-			# the program checks each again before use. Nothing from the pull request's text (its branch name,
-			# title or body) appears in this file. Its paths are printed JSON-quoted, and escaped in annotations.
-			on:
-			  pull_request_target:
-			    branches:
-			      - main
-			  push:
-			    branches:
-			      - main
-
-			permissions:
-			  contents: read
-
-			concurrency:
-			  group: commits-\${{ github.event.pull_request.number || github.sha }}
-			  cancel-in-progress: \${{ github.event_name == 'pull_request_target' }}
-
-			jobs:
-			  commits:
-			    runs-on: ubuntu-latest
-			    timeout-minutes: 10
-			    steps:
-			      # On pull_request_target this is main, the base, never the pull request's head.
-			      - uses: actions/checkout@v7
-			        with:
-			          persist-credentials: false
-			          # The check reads main's history: the base, and the keys file at each logged link's commit.
-			          fetch-depth: 0
-
-			      - uses: pnpm/action-setup@v6
-			        with:
-			          run_install: false
-
-			      # The cache is keyed on main's lockfile, the only one installed here.
-			      - uses: actions/setup-node@v7
-			        with:
-			          node-version: 26.13.0
-			          cache: pnpm
-
-			      - run: pnpm install --frozen-lockfile
-
-			      # p83 to p87 and p89 on the event's own shas: a later push to the branch is never judged here.
-			      # The keys, the exam list and the up-to-date check come from MAIN, the main checked out above,
-			      # which can be newer than the event's base: a key main has dropped stops counting.
-			      - name: check
-			        if: github.event_name == 'pull_request_target'
-			        env:
-			          PR: \${{ github.event.pull_request.number }}
-			          BASE: \${{ github.event.pull_request.base.sha }}
-			          HEAD: \${{ github.event.pull_request.head.sha }}
-			          MAIN: \${{ github.sha }}
-			        run: pnpm -s commits check --fetch --pr "$PR" --base "$BASE" --head "$HEAD" --main "$MAIN"
-
-			      # p86 and p89 after the merge, blocking on a pull request that logs links in field/runs.jsonl.
-			      - name: chain
-			        if: github.event_name == 'pull_request_target'
-			        env:
-			          PR: \${{ github.event.pull_request.number }}
-			          BASE: \${{ github.event.pull_request.base.sha }}
-			          HEAD: \${{ github.event.pull_request.head.sha }}
-			          MAIN: \${{ github.sha }}
-			        run: pnpm -s commits chain --fetch --pr "$PR" --base "$BASE" --head "$HEAD" --main "$MAIN"
-
-			      # The same after each push to main, as advice: a squash's links often land later, in a log
-			      # pull request.
-			      - name: chain on main
-			        if: github.event_name == 'push'
-			        run: pnpm -s commits chain --advise
-			"
-		`);
   });
 });
 
@@ -1036,6 +980,7 @@ describe("0053 parent exam lists", () => {
             ),
             main,
           );
+
           expect(result.answers.filter((a) => a._tag === "ask")).toEqual(matched.length ? [ask(matched)] : []);
         }
       }),

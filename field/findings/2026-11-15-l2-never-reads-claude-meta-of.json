@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-l2-never-reads-claude-meta-of",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-fable-5-2",
+  "rule": "missing_test",
+  "location": {
+    "path": "packages/fabrika/src/agents/acp/adapter.ts",
+    "line": 181
+  },
+  "says": "In today's version, L2 never reads the options the ACP adapter sends for a Claude turn: that path sends `claudeMetaOf(turn)`, not the harness's meta, and no test checks its `env`.",
+  "proof": "adapter.ts:181 picks `claudeMetaOf(turn)` for claude; harness.run-as-node.laws.test.ts:137 and 155 read only `h.meta`, and builder-acp.run-as-node.laws.test.ts:112 reads only `builderHarness`'s meta. adapter.test.ts:23 reads only `systemPrompt` from `claudeMetaOf`.",
+  "cost": "Dropping `env` in `claudeMetaOf` would hand the switch to the Claude CLI's commands on that path with every law green.",
+  "head": "5fcc56dbca9c7e184324b0c6b81da93893b25d74",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1339"
+}

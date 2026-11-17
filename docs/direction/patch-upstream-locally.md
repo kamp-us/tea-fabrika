@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-07"
+summary: "Both versions. When our work needs a change in a package we do not own (tea, Manti, Effect), we `pnpm patch` it, file the upstream issue the same day, and keep building; the bump that takes the release deletes the patch. A patch goes through the pipeline's steps like any change."
+---
+
 # Patch upstream locally, and never wait for a release
 
 **Decided 2026-11-07 (owner).** Both versions. Amended in part by
@@ -26,6 +31,9 @@ gh issue create -R kamp-us/demlik ...  # 2. file the same change upstream
     ([0042's amendment](../../.decisions/0042-platform-pieces-go-through-alchemy.md#amendments)).
     Each such patch carries, at its `patchedDependencies` row, a comment with the gap's name and
     `not reported, 0042 amendment 2026-11-09`, so a later bump still knows why the patch exists.
+  - **One proved bug per issue (owner, 2026-11-09):** an upstream issue reports one bug we proved,
+    with its repro. A list of missing features found by reading is patched locally and not reported
+    in bulk.
 - **A patch stays small and goes when the release lands.** The pull request that bumps to the version
   with the fix deletes the patch file, and its tests prove the fix still holds.
 - **The patch is a change like any other.** It goes through the pipeline's steps: tests first, then the

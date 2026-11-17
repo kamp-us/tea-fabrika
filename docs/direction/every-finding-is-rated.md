@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-24: an unrated finding counts as noise once its change ships; the rest proposed; walked at Tier 6"
+summary: "A user rates each finding \"fix\" or \"noise\", as a fact of its own; a finding never rated counts as noise once its change ships, as Google counts an effective false positive. Proposed: one finding shape for review, mutation and the scheduled jobs, on SARIF's core, in `@kampus/fabrika`; while a rule advises, only \"fix\" sends a finding back; a rule blocks once its noise stays near 0."
+---
+
 # Every finding is rated
 
 Decided 2026-10-24: **a finding the user never rated counts as noise once its
@@ -31,7 +36,7 @@ const noise = (rule: Rule) => count(rule, "noise") / (count(rule, "fix") + count
   - "fix": counts as fix.
   - "noise": counts as noise.
   - no click, and the change ships: counts as noise.
-  - no click, and the lane is still open: not counted yet.
+  - no click, and the quest is still open: not counted yet.
 - **Code never writes a rating.** Only a user does. "Counts as noise" is
   worked out from the facts when the count is made; nothing is written for it.
 - **One exception: the test writer's own `noise` call** (added 2026-10-25).

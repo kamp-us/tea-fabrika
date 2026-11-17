@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-25"
+summary: "When the app finds a host on another link version, it names both and offers \"stop the old host and start this one\". On another build, it attaches with a banner and the same button. First, each machine's saved state is checked against its own schema with tea's `migrate`, so old state is refused, not loaded on trust."
+---
+
 # An old host is named, then restarted
 
 **Decided 2026-10-25 by the owner.** Tracker ticket 12. Sections 1, 2 and 3
@@ -49,7 +54,9 @@ migrate: (raw) => {
   - *Walked back 2026-11-01 for state carried forward:* this no longer holds
     there. A saved model carries its shape's number and a chain of named
     upgrades ([saved state, S3](./saved-state.md#s3-saved-state-carries-its-shapes-number-and-a-chain-of-named-upgrades)).
-    The schema is still the last check.
+    The schema is still the last check. *Set aside 2026-11-15 until the first
+    release:* a saved-shape change wipes the stored data instead
+    ([0572](../../.decisions/0572-pre-release-shape-change-wipes-data.md)).
 - **This is Elm's answer.** Elm reads saved data through a `Decoder`, and a
   failed decode is an error to handle, never a guess
   ([Json.Decode](https://package.elm-lang.org/packages/elm/json/latest/Json-Decode)).
@@ -90,7 +97,7 @@ migrate: (raw) => {
     attaches.
   - Running jobs stop. Their saved lists stay, and each comes back with
     `attach %n`, through the state check above.
-  - Reconnect never retries a refused host. The reconnect lane (tracker
+  - Reconnect never retries a refused host. The reconnect quest (tracker
     ticket 10) has that rule as a state, `refused`.
 
 ```ts
@@ -118,7 +125,7 @@ const restart = Effect.gen(function* () {
 - **Cost:** small. A button, a stop by pid, and a wait for exit.
 - **How sure: 75%.** The doubt: attaching a job back may send a half-finished
   paid call, or a real comment, a second time. One test on one real job, in
-  this lane, would settle it.
+  this quest, would settle it.
 - **Built 2026-10-26.**
   - `Found` is a type in `apps/fabrika/src/messages.ts`, with `Lost`
     (reconnecting, stopped, restarting) beside it. The window draws them in one
@@ -184,8 +191,8 @@ const restart = Effect.gen(function* () {
 
 1. The state check (section 1). It touches only the program's storage and the
    machines' schemas, so it can start now.
-2. Sections 2 and 3, after the reconnect lane (ticket 10) merges. Both change
-   `attach` and the window, which that lane changes too.
+2. Sections 2 and 3, after the reconnect quest (ticket 10) merges. Both change
+   `attach` and the window, which that quest changes too.
 
 ## What it cannot tell us
 

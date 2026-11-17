@@ -14,6 +14,7 @@ const pixels = (nodes: valueParser.Node[]) => {
       found = true;
     }
   });
+
   return found;
 };
 
@@ -33,6 +34,7 @@ const hasUnit = (nodes: valueParser.Node[], units: RegExp) => {
       found = true;
     }
   });
+
   return found;
 };
 

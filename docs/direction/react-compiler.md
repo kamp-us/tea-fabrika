@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-03"
+summary: "`next/` from its first `.tsx` file; today's app as the owner's tryout. Strict: every Compiler finding fails the build, in every repo, always, with no setting and no advice level, as React's own Rules of React; the only exit is `\"use no memo\"` with an owner-approved `compiler-ledger.json` row, and a false alarm is a bug to fix. Six principles: render is pure, and a view never reads the clock, so the time comes through a Cmd and the Compiler's own purity check blocks; refs only in effects and handlers; nothing changes after render; one store hook, and its value is what you draw, held by a rule of ours since a dropped value compiles and freezes the app; the Compiler skips nothing that is not named, and the build owns that check, which `lint:compiler` also calls; memoizing is the Compiler's job, so no `memo` per tile, and tiles get plain values and read their own part. `react/refs`, `react/immutability`, `react/display-name` block; oxlint's `react/purity` stays off, since the build's check covers it. No Babel: oxc's native port of the Compiler runs in Rolldown (lean 85%). Lands in Tier 1's exam PR and PR A. From experiments 194, 195 and 176."
+---
+
 # React Compiler from day one
 
 **Decided 2026-11-03.** The owner approved the six principles, the shape and the smaller calls
@@ -386,7 +391,7 @@ is outside the repo until the owner files it.
 - **Lean, 70%: two tickets, after ticket 117.** First the window code follows C1 to C4, with no
   build change. Then the Compiler in the build, the rules in `.oxlintrc.json`, and the skip check.
   Why two: compiling before the store hook lands freezes the app, so the order is the risk, and
-  the first ticket is worth having alone. Cost: two lanes' overhead. Doubt: one lane could order
+  the first ticket is worth having alone. Cost: two quests' overhead. Doubt: one quest could order
   the two tasks itself.
 - **Ticket A:** the desk's one store hook (176, pick 2, about 30 edits); `Palette` numbers its rows
   before render; `useTip` takes `useId` and derives `quiet`; the time through the model, not the 8

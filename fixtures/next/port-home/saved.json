@@ -1,0 +1,78 @@
+{
+  "founding": {
+    "person": "person_01m6v5270hf3c8x2q7w9z4k5mn",
+    "founder": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQcgBfMvyfxZjqg0tC5jAj9x5hiL3USTpnE9VNcGm6h",
+    "window": "FByAF8y_J_FmOqDS0LmMCP3HmGIvdRJOmcT1U1wabqE"
+  },
+  "key": {
+    "note": "test key: made fresh for this fixture by its writer in port-home.laws.test.ts; it guards nothing",
+    "jwk": {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "x": "FByAF8y_J_FmOqDS0LmMCP3HmGIvdRJOmcT1U1wabqE",
+      "d": "9lG3jOfsVyFxdrs5kGCTEC98HFK2_byaM1ssVTLCn2g"
+    }
+  },
+  "seen": {
+    "table": [
+      {
+        "name": "checklist:1",
+        "process": "process_01m7d9vbqmfbns226eb2ye5hcp"
+      },
+      {
+        "name": "counter:1",
+        "process": "process_01m7d9vbpvfhca8tm879770rce"
+      }
+    ],
+    "streams": {
+      "processes/counter:1": [
+        {
+          "id": "counter:1",
+          "stream": "processes/counter:1",
+          "pos": 1,
+          "rev": 3,
+          "arrivedAt": 1794669129436,
+          "by": "brain:port-home",
+          "for": "person_01m6v5270hf3c8x2q7w9z4k5mn",
+          "sentAt": "2026-11-14T15:12:09.411Z",
+          "seen": 0,
+          "parent": null,
+          "traceId": "a2165ac4d7280771cf361fb5bf994123",
+          "build": "3a66a10b35ed418bede3938ddb7c01148202dc54e336782ca38cae6404283c73",
+          "_tag": "started",
+          "body": {
+            "process": "process_01m7d9vbpvfhca8tm879770rce",
+            "name": "counter:1",
+            "program": "fabrika/counter",
+            "hash": "bad7aafc7f097fd27069f9ea312d86a69e549dbf31ba23c514dcadf5011034ef",
+            "asked": "brain:port-home"
+          }
+        }
+      ],
+      "processes/checklist:1": [
+        {
+          "id": "checklist:1",
+          "stream": "processes/checklist:1",
+          "pos": 1,
+          "rev": 5,
+          "arrivedAt": 1794669129460,
+          "by": "brain:port-home",
+          "for": "person_01m6v5270hf3c8x2q7w9z4k5mn",
+          "sentAt": "2026-11-14T15:12:09.436Z",
+          "seen": 0,
+          "parent": null,
+          "traceId": "a2165ac4d7280771cf361fb5bf994123",
+          "build": "3a66a10b35ed418bede3938ddb7c01148202dc54e336782ca38cae6404283c73",
+          "_tag": "started",
+          "body": {
+            "process": "process_01m7d9vbqmfbns226eb2ye5hcp",
+            "name": "checklist:1",
+            "program": "fabrika/checklist",
+            "hash": "96e835290ee77d88f25c644efb8dfb25f5242c6f9141eaa41451c5615231c566",
+            "asked": "brain:port-home"
+          }
+        }
+      ]
+    }
+  }
+}

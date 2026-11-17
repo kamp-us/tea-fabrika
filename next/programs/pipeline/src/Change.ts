@@ -7,6 +7,7 @@ export const Kind = Schema.Literals(["rows", "docs", "code"]);
 const compiles = (glob: string) => {
   try {
     picomatch(glob);
+
     return true;
   } catch {
     return false;
@@ -60,18 +61,24 @@ export const verdict = (
   current: typeof Ci.Checks.Type,
 ): typeof Verdict.Type => {
   const asked = Arr.dedupeWith(checks, (a, b) => a.name === b.name && a.source === b.source);
+
   const matches = (c: typeof Check.Type, r: typeof Ci.CheckRun.Type) =>
     c.name === r.name && (c.source === undefined || c.source === r.source);
+
   const selected = current.filter((r) => asked.some((c) => matches(c, r)));
+
   const red = selected.filter(
     (r) => r.status._tag === "done" && (r.status.conclusion === "failure" || r.status.conclusion === "timed_out"),
   );
+
   const lost = selected.filter(
     (r) =>
       r.status._tag === "done" && (r.status.conclusion === "cancelled" || r.status.conclusion === "startup_failure"),
   );
+
   const pending = asked.filter((c) => {
     const runs = selected.filter((r) => matches(c, r));
+
     return runs.length === 0 || runs.some((r) => r.status._tag !== "done");
   });
 

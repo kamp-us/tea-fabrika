@@ -9,6 +9,8 @@ the order from before that day: `fabsh` and pipes in Tier 2, agents in Tier 5, r
 and thin slices in Tier 1. The changed Tier 1 is written, and 0159 and that section win wherever
 this page differs.
 
+**Changed 2026-11-13 ([0185](../../.decisions/0185-tier-2-runs-agents-after-the-four-primitives.md)): the changed Tier 1 is the milestone named "4 primitives", and Tier 2 then builds hands and an agent fabrika starts for real.** They move forward from Tiers 4 and 5. The Tier 2, Tier 4 and Tier 5 sections below still show the old sorting until the Tier 2 plan is written. Recovery and the other cloud rows (P26, P27, P28, P29, P36) wait behind Tier 2, which amends 0159's amendment of the same day.
+
 **Approved by the owner on 2026-11-13: what Tier 1 is now.** Tier 1 is the four primitives,
 `fabsh`, pipes, `summon` and `join`, working for real in `next/`, on the base its built rows
 already give. Done is seen in the Electron app and in a browser tab, built side by side. The pieces, in build order, and the mark on every row are in
@@ -40,7 +42,8 @@ Three of Tier 1's own rows come with them (owner, 2026-11-13,
   as it lands.
 
 The 12 rows the four do not need wait, and none leaves the plan. Recovery and the rest of the
-cloud rows (P26, P27, P28, P29, P36) are the first work after done. Until then daily work lives
+cloud rows (P26, P27, P28, P29, P36) are the first work after done (changed by 0185: they wait
+behind Tier 2). Until then daily work lives
 only in the laptop's ledger; the owner accepted that risk on 2026-11-13. The tables below still
 show the order from before 2026-11-13.
 
@@ -54,18 +57,18 @@ thin working slice in Tier 1, and later tiers harden it
 
 ```text
 core idea                          thin slice   built for real in
-hands                              Tier 1 P39   Tier 4
+hands                              Tier 1 P39   Tier 2 (0185)
 programs written outside fabrika   Tier 1 P40   Tiers 5 and 7
 programs working together          Tier 1 P41   Tiers 2 and 4
 a person starting a program        Tier 1 P42   Tier 2
-an agent fabrika starts            Tier 1       Tier 5   (no row yet)
-a flow fabrika runs                Tier 1 P43   Tier 6   (P43: the merge queue, for landing changes)
+an agent fabrika starts            Tier 1       Tier 2 (0185)   (no row yet)
+a flow fabrika runs                Tier 1 P43   Tier 6          (P43: the merge queue, for landing changes)
 
                 transport   data   coordination   app   desktop
 Tier 1 works    ---------------------------------------------->  a checklist a person fills and agents check with a note through MCP, read from any window or a phone, plus the six slices
 Tier 2 programs ---------------------------------------------->  your own tickets: fabsh, tracker | ticket; notes, its first real app
 Tier 3 few      ---------------------------------------------->  a few people share one fabrika, from browsers and phones
-Tier 4 hands    ---------------------------------------------->  hands take jobs: a Cloudflare container, a Mac, a VM, a first tab (proposed split)
+Tier 4 hands    ---------------------------------------------->  hands take tasks: a Cloudflare container, a Mac, a VM, a first tab (proposed split)
 Tier 5 agents   ---------------------------------------------->  an agent does a job, a person watches (proposed split)
 Tier 6 daily    ---------------------------------------------->  real tickets, the full pipeline, today's version retires
 Tier 7 others   ---------------------------------------------->  someone else can install it
@@ -122,7 +125,7 @@ before any builder starts. The size of each, their order and whether Tier 1 spli
 
 | Core idea | Row | What the slice must do | Hardened in |
 |---|---|---|---|
-| Hands | P39 | A program can ask for a command and see it run. A machine that runs jobs dials in with a key granted as `hands` and asks for work with `jobs.take`; the first job is `git --version` on one host a person selects ([0102](../../.decisions/0102-hands-is-a-grant-rank-and-work-is-taken.md)). | Tier 4: competing claims, leases and moving a job to another host |
+| Hands | P39 | A program can ask for a command and see it run. A machine that runs tasks dials in with a key granted as `hands` and asks for work with `tasks.take`; the first task is `git --version` on one host a person selects ([0102](../../.decisions/0102-hands-is-a-grant-rank-and-work-is-taken.md)). | Tier 4: competing claims, leases and moving a task to another host |
 | Programs written outside fabrika's own source | P40 | A person can run a program the app's source does not list, as a repo's own pack listed in `fabrika.toml` by a `from` that starts with `./` ([0083](../../.decisions/0083-every-program-in-a-pack.md), [0084](../../.decisions/0084-own-pack-listed-by-path.md)). That path, not a second way to load a program. The cold author check runs on it. | Tier 5: a repo's own pack; Tier 7: packs from elsewhere and the lock file |
 | Programs working together | P41 | One program can reach another. A program may send mail to another program's named mailbox and get a reply, beside pipes, and the host carries it ([0103](../../.decisions/0103-a-program-may-mail-another-by-name.md)). | Tier 2: typed pipes; Tier 4: a program that starts another |
 | A person starting a program | P42 | A person can start a program while the app runs. | Tier 2: `fabsh` |
@@ -239,7 +242,7 @@ This tier builds hands for real. It hardens Tier 1's hands slice, P39, which run
 person selects, with no competing claims or leases
 ([0102](../../.decisions/0102-hands-is-a-grant-rank-and-work-is-taken.md)).
 
-- **Transport:** hands as a client; how a client says it takes jobs.
+- **Transport:** hands as a client; how a client says it takes tasks.
 - **Data:** the queue, claims, leases; every container job records its run seconds and who started
   it, from the first job (owner, 2026-11-08, [experiment 229](../../experiments/229-browser-only-friends.md)
   row 31).
@@ -250,7 +253,7 @@ person selects, with no competing claims or leases
   sibling strategies, links and trap exit, since Tier 1 has no process that starts another (owner,
   2026-11-06). A program that starts another hardens Tier 1's slice of programs working together.
 - **App:** secrets; `kill -9` from chaos through real hands, and `kill_brain` as a chaos button.
-- **Desktop (Tuval):** terminal tile; a first tab that runs a job.
+- **Desktop (Tuval):** terminal tile; a first tab that runs a task.
 
 ### Tier 5: agents (proposed split)
 
@@ -276,7 +279,7 @@ slices: an agent fabrika starts, and programs written outside fabrika's source (
 Decided by the owner, for when agents run as programs:
 
 - **A person's stop is final.** No restart, resume or resend brings that run back. Only a new start
-  does. This is about the run. A lane a person stops is still a saved pause
+  does. This is about the run. A quest a person stops is still a saved pause
   ([pipeline guidelines](../direction/pipeline-guidelines.md), clash 1): it goes on later with a new
   run of the stopped step, never the stopped run. The owner confirmed this reading the same day.
 - **A step's schema check never adds a "fix your answer" turn.** An answer that does not fit ends the
@@ -439,3 +442,7 @@ Git history keeps the old wording.
   [the four primitives first](./tier-1.md#the-four-primitives-first). Pieces come in from Tiers 2,
   4 and 5 and from no tier. The Electron app, the thin menu bar and the cloud instance are built
   beside them; 12 rows wait, and recovery is the first work after done.
+- 2026-11-13, [0185](../../.decisions/0185-tier-2-runs-agents-after-the-four-primitives.md): the
+  changed Tier 1 is named "4 primitives", and hands and an agent fabrika starts move forward from
+  Tiers 4 and 5 to Tier 2; the Tier 2, 4 and 5 sections are not resorted yet. Tier 2 comes right
+  after the 4 primitives, and recovery and the other cloud rows wait behind it.

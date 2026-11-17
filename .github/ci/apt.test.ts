@@ -1,10 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, onTestFinished } from "vitest";
 
-// Today's CI. Covers apt.sh, the apt step of the test job and of next's chromium step. No root
+// Today's CI. Covers apt.sh, the apt step of next's chromium step. No root
 // and no network: a fake `apt-get` fails while the Azure mirror is listed, for the verbs a case
 // names, and a fake `timeout` runs its command at once.
 const script = new URL("./apt.sh", import.meta.url).pathname;
@@ -38,19 +38,29 @@ const oneLine =
 
 // Fails the verbs `DEAD` names while a host in `DOWN` is one this run would ask: each direct
 // source, and the top of the mirror list for every `mirror+file:` source. `all` fails every call.
+// A passing update leaves the lists as apt does: Microsoft's Release file always, as the runner
+// image lists packages.microsoft.com, and Ubuntu's for the release only while a source names
+// Ubuntu's archive (run 43676389337's image had none, and its update still passed).
 const fakeAptGet = String.raw`#!/bin/sh
 echo "$*" >>"$LOG"
 case " $DEAD " in *" all "*) exit 100 ;; esac
-case " $DEAD " in *" $1 "*) ;; *) exit 0 ;; esac
 top=$(head -n 1 "$APT_ETC/apt-mirrors.txt" 2>/dev/null | cut -f 1)
 uris=$(cat "$APT_ETC/sources.list.d/ubuntu.sources" "$APT_ETC/sources.list" 2>/dev/null |
   grep -oE '(https?|mirror\+file):[^ ]*' || true)
-for uri in $uris; do
-  case $uri in mirror+file:*) uri=$top ;; esac
-  host=$(echo "$uri" | sed -E 's#^[a-z]+://([^/]*).*#\1#')
-  [ -n "$host" ] || exit 100
-  case " $DOWN " in *" $host "*) exit 100 ;; esac
-done
+case " $DEAD " in *" $1 "*)
+  for uri in $uris; do
+    case $uri in mirror+file:*) uri=$top ;; esac
+    host=$(echo "$uri" | sed -E 's#^[a-z]+://([^/]*).*#\1#')
+    [ -n "$host" ] || exit 100
+    case " $DOWN " in *" $host "*) exit 100 ;; esac
+  done
+esac
+if [ "$1" = update ]; then
+  rm -f "$APT_LISTS"/*Release
+  printf 'Origin: microsoft-ubuntu-%s-prod %s\nSuite: %s\n' "$CODENAME" "$CODENAME" "$CODENAME" \
+    >"$APT_LISTS/packages.microsoft.com_dists_$CODENAME"_InRelease
+  [ -z "$uris" ] || printf 'Origin: Ubuntu\nSuite: %s\n' "$CODENAME" >"$APT_LISTS/ubuntu_dists_$CODENAME"_InRelease
+fi
 exit 0
 `;
 
@@ -61,13 +71,20 @@ exec "$@"
 
 type Files = Partial<Record<"apt-mirrors.txt" | "sources.list.d/ubuntu.sources" | "sources.list", string>>;
 
-const box = (files: Files) => {
+// `release` is os-release's VERSION_CODENAME; empty leaves the line out.
+const box = (files: Files, release = "noble") => {
   const root = mkdtempSync(join(tmpdir(), "apt-"));
   onTestFinished(() => rmSync(root, { recursive: true, force: true }));
+
   const etc = join(root, "etc"),
-    bin = join(root, "bin");
+    bin = join(root, "bin"),
+    lists = join(root, "lists"),
+    osRelease = join(root, "os-release");
+
   mkdirSync(join(etc, "sources.list.d"), { recursive: true });
   mkdirSync(bin);
+  mkdirSync(lists);
+  writeFileSync(osRelease, `NAME="Ubuntu"\n${release === "" ? "" : `VERSION_CODENAME=${release}\n`}ID=ubuntu\n`);
 
   for (const [name, text] of Object.entries(files)) {
     writeFileSync(join(etc, name), text);
@@ -83,24 +100,32 @@ const box = (files: Files) => {
 
   const log = join(root, "log");
   writeFileSync(log, "");
+
   const run = (args: string[], dead: string[] = [], down: string[] = [azure]) =>
     spawnSync("sh", [script, ...args], {
       encoding: "utf8",
       env: {
         PATH: `${bin}:${process.env["PATH"]}`,
         APT_ETC: etc,
+        APT_LISTS: lists,
+        OS_RELEASE: osRelease,
+        CODENAME: release,
         LOG: log,
         DEAD: dead.join(" "),
         DOWN: down.join(" "),
       },
     });
+
   const read = (name: keyof Files) => readFileSync(join(etc, name), "utf8");
+  const has = (name: keyof Files) => existsSync(join(etc, name));
   const calls = () => readFileSync(log, "utf8").split("\n").filter(Boolean);
   const list = `mirror+file:${join(etc, "apt-mirrors.txt")}`;
-  return { run, read, calls, list };
+
+  return { run, read, has, calls, list };
 };
 
 const azure = "azure.archive.ubuntu.com";
+
 const canonical = [azure, "archive.ubuntu.com", "security.ubuntu.com"];
 
 // The image's list once the first fallback ran: Azure gone, the three outside mirrors at its end.
@@ -113,8 +138,11 @@ const chain =
 
 // The image points its main stanza at the mirror list and leaves security as it is.
 const imageSources = deb822.replace("http://azure.archive.ubuntu.com/ubuntu/", "mirror+file:/etc/apt/apt-mirrors.txt");
+
 const image = { "apt-mirrors.txt": mirrors, "sources.list.d/ubuntu.sources": imageSources };
+
 const install = ["install", "expect", "zsh"];
+
 const installCall = "install -y --no-install-recommends expect zsh";
 
 it("scenario: mirror fine, one try and no file changes", () => {
@@ -197,8 +225,56 @@ it("scenario: no mirror list, one-line sources.list reads a list written from th
   expect(apt.read("apt-mirrors.txt").split("\n")[0]).toBe("https://archive.ubuntu.com/ubuntu/\tpriority:2");
 });
 
-it("scenario: no mirror list and no sources file, a warning and the tries go on", () => {
-  const apt = box({});
+// The deb822 file the fallback writes when no source names Ubuntu's archive.
+const written = (list: string) =>
+  [
+    "Types: deb",
+    `URIs: ${list}`,
+    "Suites: resolute resolute-updates resolute-backports resolute-security",
+    "Components: main restricted universe multiverse",
+    "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg",
+    "",
+  ].join("\n");
+
+it("scenario: no Ubuntu source, update passes on Microsoft's lists alone, so try 1 fails and try 2 reads written sources", () => {
+  const apt = box({}, "resolute");
+  const result = apt.run(["update"]);
+  expect(result.status).toBe(0);
+  expect(apt.calls()).toEqual(["update", "update"]);
+  expect(apt.read("sources.list.d/ubuntu.sources")).toBe(written(apt.list));
+  // The image's chain, whole: no mirror failed, so none left it.
+  expect(apt.read("apt-mirrors.txt")).toBe(
+    "http://azure.archive.ubuntu.com/ubuntu/\tpriority:1\n" + "https://archive.ubuntu.com/ubuntu/\tpriority:2\n",
+  );
+  expect(result.stdout).toContain("::warning::apt-get update fetched no list of Ubuntu's resolute archive");
+  expect(result.stdout).toContain("::warning::no apt source names Ubuntu's archive, wrote");
+  expect(result.stdout).not.toContain("dropping");
+});
+
+it("scenario: no Ubuntu source on install, the install waits for the written sources", () => {
+  const apt = box({}, "resolute");
+  expect(apt.run(install).status).toBe(0);
+  expect(apt.calls()).toEqual(["update", "update", installCall]);
+});
+
+it("scenario: a sources file that names no Ubuntu host is replaced, and a mirror list already there is kept", () => {
+  const apt = box({ "apt-mirrors.txt": mirrors, "sources.list.d/ubuntu.sources": "" }, "resolute");
+  expect(apt.run(["update"]).status).toBe(0);
+  expect(apt.read("sources.list.d/ubuntu.sources")).toBe(written(apt.list));
+  expect(apt.read("apt-mirrors.txt")).toBe(mirrors);
+});
+
+it("scenario: mirror fine, Ubuntu's lists are there, so nothing is written", () => {
+  const apt = box({ "sources.list": oneLine }, "jammy");
+  const result = apt.run(["update"]);
+  expect(result.status).toBe(0);
+  expect(apt.calls()).toEqual(["update"]);
+  expect(apt.has("sources.list.d/ubuntu.sources")).toBe(false);
+  expect(apt.has("apt-mirrors.txt")).toBe(false);
+});
+
+it("scenario: no Ubuntu source and no release in os-release, a warning and the tries go on", () => {
+  const apt = box({}, "");
   const result = apt.run(["fallback"]);
   expect(result.status).toBe(0);
   expect(result.stdout).toContain("::warning::no apt mirror list or Ubuntu sources");

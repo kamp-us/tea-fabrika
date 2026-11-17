@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-scheduled-file-with-no-shard-row",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "vitest.shards.ts",
+    "line": 91
+  },
+  "says": "In today's CI, next/apps/fabrika/e2e/reload.test-support.integration.test.ts, a scheduled next-integration file added in 48c455d6c after the three measured runs, has no row in vitest.shards.full.json or vitest.shards.json. So the scheduled split counts it as the merge-line median, 0.4 s, and starts it last on its leg, the way watch.laws started before this fix. Nothing names a scheduled file that has no full-depth row.",
+  "proof": "A node script at 1250d8a8d over nextFiles() and the two tables printed: next+integration files 331, full rows 330, no full row 1 ['next/apps/fabrika/e2e/reload.test-support.integration.test.ts'], no row at all 1 (the same file), median measured 0.4. The file runs runsFor({ fast: 3, full: 20 }) and runsFor({ fast: 8, full: 40 }) (lines 120 and 176).",
+  "cost": "If that file, or the next new heavy integration file, is slow at full depth, a leg can start it too late and the job's limit cancels the leg again with no failed test: the sev1 this pull request fixes.",
+  "head": "1250d8a8d35a63828630fb48f777e90385043048",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1374"
+}

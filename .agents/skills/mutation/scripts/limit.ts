@@ -31,8 +31,10 @@ import { Argument, Command } from "effect/cli";
 
 /** The decided fast check's test limit, in ms. */
 export const FLOOR = 10_000;
+
 /** `vitest.config.ts`'s own test limit, in ms. */
 export const CEILING = 60_000;
+
 /** Room over the slowest plain time, from the measures above. */
 export const FACTOR = 3;
 
@@ -57,6 +59,7 @@ export const slowest = (report: typeof Report.Type): number =>
       const tests = file.assertionResults.flatMap((test) => (typeof test.duration === "number" ? [test.duration] : []));
       const span = file.startTime === undefined || file.endTime === undefined ? 0 : file.endTime - file.startTime;
       const setup = span - tests.reduce((sum, ms) => sum + ms, 0);
+
       return [...tests, setup];
     }),
   );

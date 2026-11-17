@@ -1,8 +1,22 @@
+/**
+ * The local runtime's control entrypoint: a private, token-guarded way to call a fixed set of
+ * methods on the Project, a Process, the Record, the Worker Loader or the bucket.
+ */
 import { Effect, Equal, Redacted, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
+import { httpContext } from "./fetch.ts";
 import { workerLoader, type ProgramSource } from "./index.ts";
 import { ProcessClient, ProjectClient, RecordClient } from "./platform.ts";
-import { checkedPut, bucketHead, processStub, projectStub, recordStub, rpc, type Env } from "./runtime.ts";
+import {
+  checkedPut,
+  bucketHead,
+  processStub,
+  projectStub,
+  recordStub,
+  rpc,
+  settingsFailure,
+  type Env,
+} from "./runtime.ts";
 
 const Request = Schema.Struct({
   target: Schema.Literals(["project", "process", "record", "loader", "bucket"]),
@@ -31,6 +45,8 @@ const methods = {
     "leave",
     "online",
     "brain",
+    "codeInstall",
+    "codeFailed",
   ]),
   process: new Set(["msg", "open", "due", "restart", "abort", "activity", "recover", "savedAlarm"]),
   record: new Set(["write", "read", "content", "deleteContent"]),
@@ -42,6 +58,10 @@ const dispatch = Effect.fnUntraced(function* (
   request: typeof Request.Type,
 ) {
   const { target, project, name, method, args } = request;
+
+  if (target === "loader" || target === "bucket") {
+    yield* settingsFailure(httpContext(env));
+  }
 
   if (target === "loader") {
     const loaded = yield* workerLoader(env.LOADER, programs).load(name, project);
@@ -62,6 +82,7 @@ const dispatch = Effect.fnUntraced(function* (
       const [key, bytes, checksum] = yield* Schema.decodeUnknownEffect(
         Schema.Tuple([Schema.String, Schema.Array(Schema.Number), Schema.String]),
       )(args).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+
       return yield* checkedPut(env.MEASUREMENTS, key, Uint8Array.from(bytes), checksum);
     }
 
@@ -69,6 +90,7 @@ const dispatch = Effect.fnUntraced(function* (
       const [key] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Schema.String]))(args).pipe(
         Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
       );
+
       return yield* bucketHead(env.MEASUREMENTS, key);
     }
 
@@ -98,11 +120,26 @@ const dispatch = Effect.fnUntraced(function* (
             processStub(env, project, yield* rpc(ProjectClient.make(projectStub(env, project)).processObject(name))),
           )
         : RecordClient.make(recordStub(env, project, name));
+
   // Only the fixed internal method set above is callable. Public fetch never reaches this entrypoint.
   const answer: Effect.Effect<unknown, unknown> = Reflect.apply(Reflect.get(client, method), client, args);
+
   return yield* target === "process" && method === "abort" ? answer.pipe(Effect.ignore) : rpc(answer);
 });
 
+/**
+ * Answers one control request: a JSON body naming a target, a project, a name, a method and its
+ * arguments.
+ *
+ * **Details**
+ *
+ * A request whose bearer token is not `token` gets a 403, and a body that does not decode gets a 400
+ * with reason `bad_input`. Only the listed methods of each target are called; another fails with
+ * reason `unknown_method`, and a Project `commit` that names its own `process` with reason
+ * `reserved`. A success answers `{ value }`, and a failure a 500 with `{ error: { reason } }`.
+ *
+ * @category combinators
+ */
 export const control = Effect.fn("runtime.control")(function* (
   request: globalThis.Request,
   env: Env,
@@ -124,6 +161,7 @@ export const control = Effect.fn("runtime.control")(function* (
   }
 
   const answer = yield* Effect.result(dispatch(env, programs, input.success));
+
   return Result.isSuccess(answer)
     ? Response.json({ value: answer.success ?? null })
     : Response.json(

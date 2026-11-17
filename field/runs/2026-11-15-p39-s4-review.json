@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-p39-s4-review",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1315",
+  "started": "2026-11-15T07:24:23-08:00",
+  "ended": "2026-11-15T07:31:40-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "The one review of P39 slice 4a (the hands client) at c2ce4f498, in next/: sent back to build, two blocking classes. (1) On the Worker, a hands key's parked jobs.wait is rung at the wrong connection object: cloudflare/connection.ts:81 and :167 route jobs.wait with no reader, so the door's default reader String(client) (gateway/Gateway.ts:1130) is saved as the ring's target, and the referee rings env.CONNECTION.getByName(to) (cloudflare/runtime.ts:818), while the hands' socket lives on the object named by its URL path (cloudflare/fetch.ts:91). The real hands would never wake. No law reaches it: G2 runs the Node door, which ignores the reader, and E1's door copies the reroute without a reader and rings every driver (hands-client.test.ts:249, :289). (2) Why a finish was refused for good is kept only in the machine's holding state (client/HandsMachine.ts:349) and in no journal entry, ledger row or span, so it is lost when the process ends (AGENTS.md, the data shape comes first). Four finding rows: two clients on one key both run a job; a listed job no take can get is polled every 30 s forever; holding stops all new work on that link; forTarget reads a key's whole history on every list. The rest holds: list and wait give pointers and a rev only, take stays the one way a command reaches a machine, the recovery table is right for one client, the transport change parks only jobs.wait today, the dial move keeps the window's laws, no loosening.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "Plants, each run once on one file and undone with git checkout, git status clean after each: H1, a failed journal write of executing treated as written, red (H3 and H4 also red, sharing the check); G1, forTarget also answers finished jobs, red (JobsLedger.integration.test.ts, 92 s); H3, a finish refused conflict retried like unavailable, red; S1, the private key's PKCS#8 base64 put in the hello's build through the test's own start options, red on frames, so S1's scanner works. The started time is the first scratch file's clock; the reading before it has no clock reading. Not run: pnpm typecheck, pnpm lint, E1, H2, H5, W1, G2. main merges clean (4 commits behind).",
+  "driver_caused": false,
+  "step": "review",
+  "costUsd": null,
+  "billed": null
+}

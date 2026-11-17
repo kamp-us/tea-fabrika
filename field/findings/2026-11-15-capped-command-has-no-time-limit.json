@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-capped-command-has-no-time-limit",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/client/internal/capped.ts",
+    "line": 64
+  },
+  "says": "In next/, a hands command whose child prints less than the cap and never closes its output never answers: capped.ts waits on stdout and stderr with no time limit, so the job stays executing for good.",
+  "proof": "A scratch vitest case (outside the worktree) ran CommandsNode.layer over Spawner.test-support.ts's fake with one 19-byte stdout chunk and endless: true, wrapped in Effect.timeoutOption(\"3 seconds\"): it printed ANSWER {\"_id\":\"Option\",\"_tag\":\"None\"} closes=1 spawns=1, so execute gave no answer and the child's scope closed only because the timeout interrupted it.",
+  "cost": "A git wrapper or a grandchild that holds the pipe open leaves the hands stuck in executing with no result and no report; Result has no reason for it, so the fix needs a deadline and a reason chosen in a plan.",
+  "head": "84a62cde5e31d1d1049b24f6430598c2a2059fd6",
+  "ticket": null,
+  "pr": null
+}

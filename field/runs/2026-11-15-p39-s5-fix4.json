@@ -1,0 +1,45 @@
+{
+  "date": "2026-11-15",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1331",
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "tokens": null,
+  "tools": null,
+  "costUsd": null,
+  "billed": null,
+  "driver_caused": false,
+  "step": "tests",
+  "run": "2026-11-15-p39-s5-fix4",
+  "started": "2026-11-15T16:04:00-08:00",
+  "ended": "2026-11-15T16:33:00-08:00",
+  "parent": "2026-11-15-p39-s5-review2",
+  "outcome": "pass",
+  "minutes": 29,
+  "why": "Tests round 4 of P39 slice 4b, in next/: the plant runs the recheck owed for the four host-only laws, each run in CI full run (scheduled.yaml), on two plant branches cut from 8e101db24 and never pushed to the pull request branch. All four laws went red on their own named test with their own message. Branch A (C5, E2 and J2 plants) run 43778519950: C5 red in job 133010218283, next (3), at CommandsNode.integration.test.ts:77 with C5: pid is gone once execute answered: expected true to be false; E2 red in job 133010218283 at hands-launcher.integration.test.ts:266 with E2: the waiting line names the key file own key, a fingerprint other than the stored one; J2 red in job 133010218158, next (4), property failed after 19 tests, P/8/0 after a SIGKILL at 49 ms reads bad_entry (Expected a valid JSON string). Branch B (S2 plant alone) run 43778559206: S2 red in job 133013899790, next (3), at hands-launcher.integration.test.ts:415 with S2: [secrets] the private half is not in stdout, while E2 passed in the same job.",
+  "note": "Branch A also set the stop step to if: false, so no red leg cancelled the others before their law ran; that is why A tooling (2) leg went red in workflow-lint scheduled.test.ts (SC4, the stop step), a result of this harness edit, not of product code. Other laws that also caught A plants: C1 in CommandsNode.laws.test.ts (job 133010218173) for the C5 plant, K3 in KeyFile.integration.test.ts (job 133010218173) and K1 in KeyFile.laws.test.ts (job 133010218202) for the E2 plant; S2 in A was red too, since E2 plant stops its flow, and is not counted. Run B ended cancelled: its own stop step canceled it once S2 went red in next (3), the expected fail-fast; no leg timed out in either run. Both plant branches were deleted from origin after their runs were read. No test ran on this laptop, and no product file changed on the pull request branch.",
+  "plants": [
+    {
+      "law": "node/client/CommandsNode.integration.test.ts C5",
+      "plant": "internal/capped.ts answers output_limit with the child in a scope that is never closed (branch A, run 43778519950, job 133010218283)",
+      "result": "red"
+    },
+    {
+      "law": "apps/fabrika/src/hands-launcher.integration.test.ts E2",
+      "plant": "KeyFile.ts never reuses a stored key, so each current() writes a fresh key file (branch A, run 43778519950, job 133010218283)",
+      "result": "red"
+    },
+    {
+      "law": "node/client/JournalSqlite.integration.test.ts J2",
+      "plant": "KeyValueStore.layerFileSystem in place of JournalSqlite.layer in JournalSqlite.child.test-support.ts and in the J2 reopen only (branch A, run 43778519950, job 133010218158)",
+      "result": "red"
+    },
+    {
+      "law": "apps/fabrika/src/hands-launcher.integration.test.ts S2",
+      "plant": "hands.ts prints the stored JWK in the online line (branch B, run 43778559206, job 133013899790)",
+      "result": "red"
+    }
+  ]
+}

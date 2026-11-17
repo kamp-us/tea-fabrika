@@ -64,6 +64,7 @@ interface Play {
 }
 
 const ANSWER = { verb: "done", to: null, reason: "three laws green", laws: null };
+
 const usage = { input_tokens: 1000, cached_input_tokens: 400, output_tokens: 50 };
 
 const answered = (report: string, thread = "thread-1"): Play => ({
@@ -107,6 +108,7 @@ const world = (plays: ReadonlyArray<Play>, node: { pin: string; said: string } |
     }
 
     const env = { ...process.env, PATH: `${dir}:${process.env.PATH ?? ""}`, FAKE_DIR: dir, SHELL: "/bin/zsh" };
+
     const agents = Agent.makeAgents({
       adapters: {
         "codex-exec": yield* codexExecAdapter({ access: "write", env, pin }),
@@ -115,6 +117,7 @@ const world = (plays: ReadonlyArray<Play>, node: { pin: string; said: string } |
       sessions: yield* Agent.fileSessions(`${dir}/sessions`),
       reaper: Agent.noReaper,
     });
+
     const calls = Effect.gen(function* () {
       const count = Number((yield* fs.readFileString(`${dir}/count`).pipe(Effect.orElseSucceed(() => "0"))).trim());
       const argv: string[][] = [];
@@ -125,9 +128,10 @@ const world = (plays: ReadonlyArray<Play>, node: { pin: string; said: string } |
 
       return argv;
     });
+
     const ask = (over: Partial<TurnAsk<Answer>> = {}): TurnAsk<Answer> => ({
       provider: "codex-exec",
-      session: "lane-build1",
+      session: "quest-build1",
       folder: `${dir}/work`,
       prompt: "Add a function and its laws.",
       system: "You are the build step.",
@@ -139,11 +143,14 @@ const world = (plays: ReadonlyArray<Play>, node: { pin: string; said: string } |
       report: `${dir}/report.md`,
       ...over,
     });
+
     const turn = (over: Partial<TurnAsk<Answer>> = {}, retry = { tries: 6, waitSeconds: 0 }) =>
       runTurn(agents, ask(over)).pipe(Effect.provideService(CapacityRetry, retry));
+
     const read = (path: string) => fs.readFileString(path).pipe(Effect.orElseSucceed(() => ""));
     /** The probe's folder, then its arguments; empty when no probe ran. */
     const probed = read(`${dir}/probe`).pipe(Effect.map((text) => text.split("\0").slice(0, -1)));
+
     return { dir, calls, turn, read, probed };
   });
 
@@ -230,12 +237,15 @@ describe("codex-exec: the typed answer", () => {
           ran(
             Effect.gen(function* () {
               const answer = JSON.stringify(ANSWER);
+
               const said = (id: string, text: string) => ({
                 type: "item.completed",
                 item: { id, type: "agent_message", text },
               });
+
               const [start, tool, toolDone] = answered("").lines;
               const tools = [start, tool, toolDone].filter((l) => l !== undefined);
+
               const w = yield* world([
                 {
                   lines: [
@@ -250,6 +260,7 @@ describe("codex-exec: the typed answer", () => {
                   last: answer,
                 },
               ]);
+
               const t = yield* w.turn();
               expect(yield* w.calls).toHaveLength(1);
               expect(answerIn(t)).toEqual(ANSWER);
@@ -267,10 +278,12 @@ describe("codex-exec: the typed answer", () => {
         // The resumed turn says the thread's running total, as Codex 0.167.0 did for real.
         const total = { input_tokens: 1300, cached_input_tokens: 500, output_tokens: 60 };
         const again = answered(JSON.stringify(ANSWER));
+
         const resumed: Play = {
           ...again,
           lines: again.lines.map((l) => ("usage" in l ? { type: "turn.completed", usage: total } : l)),
         };
+
         const w = yield* world([answered("All three laws pass."), resumed]);
         const t = yield* w.turn();
         const calls = yield* w.calls;
@@ -316,6 +329,7 @@ describe("codex-exec: the typed answer", () => {
           },
           answered(JSON.stringify(ANSWER)),
         ]);
+
         const t = yield* w.turn();
         expect(yield* w.calls).toHaveLength(1);
         expect(t).toMatchObject({ _tag: "failed", reason: "broke" });
@@ -342,7 +356,7 @@ describe("codex-exec: the session", () => {
       Effect.gen(function* () {
         const w = yield* world([answered(JSON.stringify(ANSWER)), answered(JSON.stringify(ANSWER))]);
         yield* w.turn();
-        yield* w.turn({ session: "lane-review1" });
+        yield* w.turn({ session: "quest-review1" });
         expect((yield* w.calls).every((argv) => !argv.includes("resume"))).toBe(true);
       }),
     ));
@@ -352,7 +366,7 @@ describe("codex-exec: the session", () => {
       Effect.gen(function* () {
         const w = yield* world([answered(JSON.stringify(ANSWER)), answered(JSON.stringify(ANSWER))]);
         yield* w.turn();
-        yield* w.turn({ provider: "codex-exec-read", session: "lane-review1" });
+        yield* w.turn({ provider: "codex-exec-read", session: "quest-review1" });
         const [write = [], read = []] = yield* w.calls;
         expect(write).toContain('sandbox_mode="workspace-write"');
         expect(read).toContain('sandbox_mode="read-only"');
@@ -363,6 +377,7 @@ describe("codex-exec: the session", () => {
 describe("codex-exec: the box's Node", () => {
   const pin = "26.13.0";
   const version = fc.tuple(fc.nat(30), fc.nat(30), fc.nat(30)).map((v) => `v${v.join(".")}`);
+
   /** A probe answer that is not the pin on both lines: another Node, a missing line, or nothing. */
   const notPin = fc
     .oneof(
@@ -411,6 +426,7 @@ describe("codex-exec: the box's Node", () => {
         (access, resume) => {
           const route = routeArgs(access);
           expect(route).toContain("allow_login_shell=false");
+
           const args = execArgs({
             access,
             folder: "/w",
@@ -421,6 +437,7 @@ describe("codex-exec: the box's Node", () => {
             system: null,
             last: "/l",
           });
+
           // Only the options count, before `resume` and the prompt, where `codex exec` reads them.
           const flags = args.slice(0, resume === null ? -1 : args.indexOf("resume"));
           expect(flags.join("\0")).toContain(route.join("\0"));
