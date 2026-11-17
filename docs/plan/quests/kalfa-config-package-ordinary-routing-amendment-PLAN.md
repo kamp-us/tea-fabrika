@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0585, 0590 and 0595; body 7458e448bad2
+Approved by the lead agent, builds 0585, 0590 and 0595; body c4b73d23406a
 Plancheck-Version: 3
 
 # Plan amendment: route ordinary Kalfa laws through the existing next project
@@ -129,6 +129,17 @@ this one cache entry is already present in its exact position and apply only rem
 never duplicate it or replace the live workflow wholesale with the private version.
 
 
+The same early application permission covers only the existing final-line stdout-drain fix in
+`oxlint-plugins/lint.ts`. Actual59f check44194933168 failed this node leg with advice-only output
+and no final summary; its saved log and empty artifact inventory do not identify the blocker.
+The package branch still force-exits, while shared repair52e already uses process.exitCode for
+this proven truncation defect. Change only that final statement. Keep the exact clean predicate,
+exit status, diagnostics, rules, ledgers, ignored paths and failure handling. No config guess,
+local lint, test, compiler or probe is authorized. Same author/reviewer, then normal CI shows the
+actual remaining diagnostic. Do not call the red source clean or inherit another source's proof.
+On later shared integration this identical line is already applied; preserve it without another
+copy or rewrite of the wrapper. The other routing/archive changes remain private.
+
 ## Saved proof safety
 
 Keep `recordName`, `matched`, `tested`, `vouches`, their API calls and artifact names unchanged.
@@ -187,6 +198,7 @@ The first two paths were already approved. The next 11 routing paths and the six
 |---|---|---|---|
 | .github/ci/changes.mjs | tests | tests | Already owned: canonical expanded filter and strict saved-selection decoding; preserve seven-path additions and existing proof/tree behavior. |
 | .github/workflows/check.yaml | tests | tests | Early independent application: only the Kalfa tsc-cache entry in workspace order. All FILTER/routing/delivery hunks remain private until integration; preserve keys, anchor and jobs. |
+| oxlint-plugins/lint.ts | tests | tests | Early independent diagnostic repair: only final process.exit(clean ? 0 : 1) becomes process.exitCode = clean ? 0 : 1, matching the already-reviewed shared repair. Keep the predicate and all lint behavior unchanged. |
 | oxlint-plugins/anti-slop.ts | tests | tests | Extraction guard repair: include Kalfa in WHOLE, ROOTS and folder membership; preserve every zero-lock rule, error level, vendor pin and other scope. |
 | oxlint-plugins/anti-slop.test.ts | tests | tests | Extend existing scope/zero-lock coverage to the declared Kalfa folders; no reduced domain, count, skip or disabled rule. |
 | vitest.shards.json | tests | tests | Translate only moved Toml.types and TomlParser keys to Kalfa; retain exact values 0 and 0.2 and all other rows. |
