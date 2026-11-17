@@ -200,21 +200,79 @@ const fixture = Effect.gen(function* () {
 
 const fixtureValue = (source: string) => {
   const parsed = parseSync("watcher-fixture.mjs", source);
+
+  const top = new Set(
+    parsed.program.body.flatMap((statement) =>
+      statement.type === "ExpressionStatement" && statement.expression.type === "AssignmentExpression"
+        ? [statement.expression]
+        : [],
+    ),
+  );
+
   const assignments: Array<{ right: Expression; nested: boolean }> = [];
   const declarations: Array<{ name: string; init: Expression | null; nested: boolean; grouped: boolean }> = [];
+  let shadowed = false;
+  let writes = 0;
   let depth = 0;
   const enter = () => depth++;
   const leave = () => depth--;
 
+  const bind = (node: { readonly type: string; readonly name?: string } | null) => {
+    if (node?.type === "Identifier" && node.name === "globalThis") {
+      shadowed = true;
+    }
+  };
+
   new Visitor({
-    FunctionDeclaration: enter,
+    FunctionDeclaration(node) {
+      enter();
+      bind(node.id);
+      node.params.forEach(bind);
+    },
     "FunctionDeclaration:exit": leave,
-    FunctionExpression: enter,
+    FunctionExpression(node) {
+      enter();
+      bind(node.id);
+      node.params.forEach(bind);
+    },
     "FunctionExpression:exit": leave,
-    ArrowFunctionExpression: enter,
+    ArrowFunctionExpression(node) {
+      enter();
+      node.params.forEach(bind);
+    },
     "ArrowFunctionExpression:exit": leave,
+    ClassDeclaration(node) {
+      bind(node.id);
+    },
+    ClassExpression(node) {
+      bind(node.id);
+    },
+    ImportDeclaration(node) {
+      for (const specifier of node.specifiers) {
+        bind(specifier.local);
+      }
+    },
+    CatchClause(node) {
+      bind(node.param);
+    },
+    ObjectPattern(node) {
+      for (const property of node.properties) {
+        bind(property.type === "RestElement" ? property.argument : property.value);
+      }
+    },
+    ArrayPattern(node) {
+      node.elements.forEach(bind);
+    },
+    AssignmentPattern(node) {
+      bind(node.left);
+    },
+    RestElement(node) {
+      bind(node.argument);
+    },
     VariableDeclaration(node) {
       for (const declaration of node.declarations) {
+        bind(declaration.id);
+
         if (declaration.id.type === "Identifier") {
           declarations.push({
             name: declaration.id.name,
@@ -227,17 +285,24 @@ const fixtureValue = (source: string) => {
     },
     AssignmentExpression(node) {
       const left = node.left;
+      bind(left);
 
       if (
-        node.operator === "=" &&
         left.type === "MemberExpression" &&
-        !left.computed &&
         left.object.type === "Identifier" &&
         left.object.name === "globalThis" &&
-        left.property.type === "Identifier" &&
-        left.property.name === "__p15"
+        ((!left.computed && left.property.type === "Identifier" && left.property.name === "__p15") ||
+          (left.computed && left.property.type === "Literal" && left.property.value === "__p15") ||
+          (left.computed &&
+            left.property.type === "TemplateLiteral" &&
+            left.property.expressions.length === 0 &&
+            left.property.quasis[0]?.value.cooked === "__p15"))
       ) {
-        assignments.push({ right: node.right, nested: depth > 0 });
+        writes++;
+
+        if (node.operator === "=" && !left.computed) {
+          assignments.push({ right: node.right, nested: !top.has(node) });
+        }
       }
     },
   }).visit(parsed.program);
@@ -257,8 +322,8 @@ const fixtureValue = (source: string) => {
 
   return {
     errors: parsed.errors.length,
-    assignments: assignments.length,
-    facts: assignments.slice(0, 4).map(({ right, nested }) => {
+    assignments: writes,
+    facts: (shadowed ? [] : assignments.slice(0, 4)).map(({ right, nested }) => {
       const own = right.type === "ArrayExpression" ? right.elements[1] : undefined;
 
       const bindings =
@@ -612,12 +677,23 @@ describe("P15 slice 1: the watcher", () => {
               expect(code.hash).toBe(yield* hash(code.source));
 
               expect(
-                new RegExp(`\\b(?:var|let|const) own\\s*=\\s*${value}\\s*;`).test(code.source),
-                `the installed bundle contains this save's module value: ${JSON.stringify({
-                  value,
-                  syntax: fixtureValue(code.source),
-                })}`,
-              ).toBe(true);
+                fixtureValue(code.source),
+                "the installed bundle's fixture assignment contains this save's module value",
+              ).toEqual({
+                errors: 0,
+                assignments: 1,
+                facts: [
+                  {
+                    right: "ArrayExpression",
+                    length: 2,
+                    nested: false,
+                    own: "Literal",
+                    value,
+                    bindings: 0,
+                    candidates: [],
+                  },
+                ],
+              });
               installs.set(loaded.hash, code);
               bytes = new TextEncoder().encode(code.source).byteLength;
             }),
