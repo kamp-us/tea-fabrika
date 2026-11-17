@@ -36,6 +36,17 @@ it.prop(
           "watcher-r1",
           "host-pin",
           "host-discovery-timeout",
+        ];
+      },
+      (w: Record<string, unknown>) => {
+        map(map(map(map(w["on"])["workflow_dispatch"])["inputs"])["case"])["options"] = [
+          "checklist-pid",
+          "watcher-r1",
+          "host-pin",
+          "host-discovery-timeout",
+          "host-requested-pin",
+          "host-pnpm-path",
+          "host-env-order",
           "arbitrary-command",
         ];
       },
