@@ -7,7 +7,7 @@ import { cases } from "./plant-cases.ts";
 import { observation } from "./plant.ts";
 
 // Plant: use JSON failureMessages alone, dropping the actual fast-check cause.
-it.effect("contract: the installed reporter preserves a real fast-check assertion and restoration", () =>
+it.effect("scenario: a real child is needed to prove the installed reporter preserves fast-check causes", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
