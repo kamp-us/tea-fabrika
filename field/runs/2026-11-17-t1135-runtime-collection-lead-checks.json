@@ -1,0 +1,61 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1135-runtime-collection-lead-checks",
+  "ticket": "kamp-us/tea-fabrika#1135",
+  "pr": null,
+  "started": "2026-11-17T13:09:42.769Z",
+  "ended": "2026-11-17T13:14:24.620Z",
+  "parent": "2026-11-17-t1135-runtime-collection-repair",
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling passed normal format, all 30 compiler projects and all 18 normal lint parts at clean b176267d4eedafc1c07fbfaa2f1535893e9be9cc. The independent source reader passed the runtime-collection repair at 030252aaf. The checked successor adds only the immutable first-failure note, with all three reviewed blobs unchanged. No runtime collection or measurement result is claimed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 4.697516666666667,
+  "note": "The first actual comparison remains failed before test execution. Repaired runtime collection is owed on eligible CI after trusted-main landing. The net scanner flagged the list option and parser import; the lead read both changes and found no weakened input, assertion, count or deadline.",
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "driver_caused": false,
+  "head": "b176267d4eedafc1c07fbfaa2f1535893e9be9cc",
+  "plan": "b5252222cb408a8e998c42c3c1b98ae2299797f876d3b1f16d2bd416d9eacc09",
+  "checks": {
+    "node": "26.13.0",
+    "pnpm": "12.16.1",
+    "paidKeyUnset": true,
+    "lockOverrides": false,
+    "phases": {
+      "format": {
+        "started": "2026-11-17T13:09:42.769Z",
+        "ended": "2026-11-17T13:10:16.221Z",
+        "pid": 31318,
+        "code": 0
+      },
+      "typecheck": {
+        "started": "2026-11-17T13:13:18.191Z",
+        "ended": "2026-11-17T13:13:31.637Z",
+        "pid": 42475,
+        "code": 0
+      },
+      "lint": {
+        "started": "2026-11-17T13:13:51.294Z",
+        "ended": "2026-11-17T13:14:24.620Z",
+        "pid": 44627,
+        "code": 0
+      }
+    },
+    "compilerProjects": 30,
+    "fullLintParts": 18,
+    "trackedFilesPreserved": 5258,
+    "modesPreserved": true,
+    "headPreserved": true,
+    "indexPreserved": true,
+    "protectedFilesPreserved": true,
+    "tsgoClear": true,
+    "actualAdapters": null
+  }
+}

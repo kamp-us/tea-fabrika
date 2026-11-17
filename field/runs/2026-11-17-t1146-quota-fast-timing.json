@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1146-quota-fast-timing",
+  "ticket": "1146",
+  "pr": null,
+  "started": "2026-11-17T13:05:50Z",
+  "ended": "2026-11-17T13:19:34.664822+00:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's CI serving both versions: add the missing fast QuotaRunner timing row at346.2seconds from actual ready/queue run samples224.1/346.2, attempt1, jobs134017776388/134021830466. The prior0.4second fallback underweighted this file. Existing larger-of-two policy and sample ledger retained. Actual allocator preserves81selected files and chooses3ofexisting5legs with quota file alone.",
+  "note": "Today's CI data repair, tracker1146; speed incident1333 remains open. Same81files; fixed top-five fixture and sample data changed, all64law titles/assertions retained.64allocator laws plus scoped lint,format,rowlint pass. Normal frozen install completed before trusted helper. Active minutes and costs were not captured; elapsed interval includes an idle gap. Actual wall gain remains UNPROVEN. No compiler,full typed API lint,full lint,CI,sign,push or Arm occurred. Commit-only packaging uses TESTS and leaves signing/publication to the lead.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "branch": "fabrikalfa/1333-quota-fast-timing",
+  "files": [
+    "vitest.shards.json",
+    "vitest.shards.test.ts"
+  ],
+  "base": "ad9082bc34bf32a21aa7a30e1b00e10f68cc6170"
+}

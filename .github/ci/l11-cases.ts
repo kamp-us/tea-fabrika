@@ -220,7 +220,7 @@ export const argv = (request: Request, report: string, list = false, reporter?: 
   }
 
   return list
-    ? [...args, `--json=${report}`]
+    ? [...args, "--staticParse=false", `--json=${report}`]
     : [
         ...args,
         "--reporter=json",
