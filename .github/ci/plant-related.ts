@@ -1,4 +1,4 @@
-// Today's automatic CI. The existing plant engine runs serially in the fixture's integration leg.
+// Today's automatic CI. Each existing integration leg runs its assigned checklist cases serially.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Cause, DateTime, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
@@ -12,12 +12,32 @@ import { execute, ExerciseError } from "./plant.ts";
 export const fixture = "next/apps/fabrika/src/checklist-instance.laws.integration.test.ts";
 
 const origin = "a062f7a2515aa1917dfae05d3af95e3705b88812";
+
 const catalog = cases["checklist-body"].source;
+
 export const checklistCases = Schema.decodeUnknownSync(Schema.Array(Request.fields.case))(Object.keys(cases)).filter(
   (key) => key.startsWith("checklist-"),
 );
 
+const keys = checklistCases;
+
+/** The nine pinned cases use the reporter's existing causal gate; PID adds its current frame. */
+
+export const accepted = (key: Request["case"], model: Model): boolean => {
+  if (!keys.includes(key) || model._tag !== "recorded") {
+    return false;
+  }
+
+  return (
+    key !== "checklist-pid" ||
+    (model.broken.diagnostic === "AssertionError: a notice names its process" &&
+      model.broken.assertion?.line === 828 &&
+      model.broken.assertion.column === 68)
+  );
+};
+
 /** No broader CI change or global trigger alone requests these fixed fixture faults. */
+
 export const wanted = (paths: readonly string[] | null): boolean =>
   paths === null ||
   paths.some(
@@ -59,8 +79,11 @@ const Manifest = Schema.Struct({
 });
 
 const Installed = Schema.Struct({ version: Schema.String });
+
 const Catalog = Schema.Struct({ catalog: Schema.Struct({ vitest: Schema.String }) });
+
 const Versions = Schema.Struct({ node: Schema.String, pnpm: Schema.String, vitest: Schema.String });
+
 const Event = Schema.Struct({
   pull_request: Schema.optionalKey(
     Schema.Struct({
@@ -70,7 +93,9 @@ const Event = Schema.Struct({
   ),
   merge_group: Schema.optionalKey(Schema.Struct({ head_sha: Request.fields.sha, base_sha: Request.fields.sha })),
 });
+
 const fail = (reason: string) => ExerciseError.make({ reason });
+
 const bytesEqual = (left: Uint8Array, right: Uint8Array) =>
   left.length === right.length && left.every((byte, index) => byte === right[index]);
 
@@ -78,24 +103,41 @@ const automatic = Effect.fn("plant.related")(function* (input: unknown) {
   const environment = yield* Schema.decodeUnknownEffect(Environment)(input).pipe(
     Effect.mapError(() => fail("automatic_environment")),
   );
+
   const fs = yield* FileSystem.FileSystem;
+
   const path = yield* Path.Path;
+
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
   const digest = yield* Digest.Digest;
+
   const root = path.resolve(".");
+
   const directory = path.join(environment.RUNNER_TEMP, "plant-related");
+
   const assignment = yield* Schema.decodeUnknownEffect(
     Schema.fromJsonString(Schema.Record(Schema.String, Schema.Array(Request.fields.case))),
   )(environment.PLANTS).pipe(Effect.mapError(() => fail("automatic_owner_or_catalog")));
+
   const selected = assignment[environment.LEG] ?? [];
+
   const legs = Object.keys(assignment).toSorted((a, b) => Number(a) - Number(b));
+
   const assigned = legs.flatMap((leg) => assignment[leg] ?? []);
+
   const observations: Effect.Success<ReturnType<typeof execute>>[] = [];
+
   const started = DateTime.formatIso(yield* DateTime.now);
+
   let source: string | null = null;
+
   let base: string | null = null;
+
   let tree: string | null = null;
+
   let versions: typeof Versions.Type | null = null;
+
   const facts = {
     kind: "automatic-checklist-faults",
     origin,
@@ -114,6 +156,7 @@ const automatic = Effect.fn("plant.related")(function* (input: unknown) {
   const write = (state: string, reason: string | null) =>
     Effect.gen(function* () {
       yield* fs.makeDirectory(directory, { recursive: true });
+
       yield* fs.writeFileString(
         path.join(directory, "result.json"),
         JSON.stringify(
@@ -145,6 +188,7 @@ const automatic = Effect.fn("plant.related")(function* (input: unknown) {
           stdin: "ignore",
         }),
       );
+
       const [exit, output] = yield* Effect.all(
         [
           process.exitCode,
@@ -190,6 +234,7 @@ const automatic = Effect.fn("plant.related")(function* (input: unknown) {
     if (environment.GITHUB_EVENT_NAME === "pull_request" && event.pull_request !== undefined) {
       source = event.pull_request.head.sha;
       base = event.pull_request.base.sha;
+
       yield* git(["merge-base", "--is-ancestor", source, environment.GITHUB_SHA]);
     } else if (
       environment.GITHUB_EVENT_NAME === "merge_group" &&
@@ -202,8 +247,11 @@ const automatic = Effect.fn("plant.related")(function* (input: unknown) {
 
     yield* git(["merge-base", "--is-ancestor", base, environment.GITHUB_SHA]);
     tree = (yield* git(["rev-parse", "HEAD^{tree}"])).trim();
+
     yield* write("incomplete", "attempt_unfinished");
+
     yield* git(["merge-base", "--is-ancestor", origin, catalog]);
+
     yield* git(["merge-base", "--is-ancestor", catalog, environment.GITHUB_SHA]);
 
     if (
@@ -227,8 +275,11 @@ const automatic = Effect.fn("plant.related")(function* (input: unknown) {
       Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Ordinary))),
       Effect.mapError(() => fail("ordinary_full_suite")),
     );
+
     const files = environment.FILES.split(/\s+/).filter(Boolean);
+
     const suites = ordinary.testResults.filter((suite) => suite.name === path.join(root, fixture));
+
     const suite = suites[0];
 
     if (
@@ -257,7 +308,9 @@ const automatic = Effect.fn("plant.related")(function* (input: unknown) {
             file === "pnpm-workspace.yaml",
         )
         .toSorted();
+
     const previous = manifests(yield* git(["ls-tree", "-r", "--name-only", "-z", catalog]));
+
     const current = manifests(yield* git(["ls-tree", "-r", "--name-only", "-z", environment.GITHUB_SHA]));
 
     if (JSON.stringify(previous) !== JSON.stringify(current)) {
@@ -275,12 +328,16 @@ const automatic = Effect.fn("plant.related")(function* (input: unknown) {
     const manifest = yield* fs
       .readFileString(path.join(root, "package.json"))
       .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Manifest))));
+
     const workspace = Schema.decodeUnknownSync(Catalog)(
       parse(yield* fs.readFileString(path.join(root, "pnpm-workspace.yaml"))),
     );
+
     const installed = Schema.decodeUnknownSync(Installed)(vitest);
+
     const pnpm = (yield* command("pnpm", ["--version"])).trim();
     versions = Versions.make({ node: process.versions.node, pnpm, vitest: installed.version });
+
     yield* write("incomplete", "attempt_unfinished");
 
     if (
@@ -295,9 +352,13 @@ const automatic = Effect.fn("plant.related")(function* (input: unknown) {
 
     for (const key of keys) {
       const selected = cases[key];
+
       const target = path.join(root, selected.file);
+
       const original = yield* fs.readFile(target);
+
       const info = yield* fs.lstat(target);
+
       const catalogBytes = new TextEncoder().encode(yield* git(["show", `${catalog}:${selected.file}`]));
 
       if (info.type !== "File" || info.mode !== 0o100644 || !bytesEqual(original, catalogBytes)) {
@@ -306,9 +367,13 @@ const automatic = Effect.fn("plant.related")(function* (input: unknown) {
 
       if ("hashes" in selected) {
         pinned++;
+
         const prepared = yield* prepare(key, original);
+
         const edited = yield* derive(key, prepared);
+
         const hashes = [original, prepared, edited];
+
         const expected = [selected.hashes.source, selected.hashes.prepared, selected.hashes.edited];
 
         if (selected.source !== catalog) {
@@ -338,13 +403,14 @@ const automatic = Effect.fn("plant.related")(function* (input: unknown) {
         install: false,
       });
       observations.push(result);
+
       yield* write("incomplete", "attempt_unfinished");
 
       if (!result.cleanup.restored) {
         return yield* fail("exercise_incomplete");
       }
 
-      complete &&= Model.isAnyOf(["recorded"])(result.model);
+      complete &&= accepted(key, result.model);
     }
 
     if (!complete) {
@@ -352,14 +418,18 @@ const automatic = Effect.fn("plant.related")(function* (input: unknown) {
     }
 
     yield* write("recorded", null);
+
     return true;
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.gen(function* () {
         const error = Cause.findErrorOption(cause);
+
         const reason =
           Option.isSome(error) && Schema.is(ExerciseError)(error.value) ? error.value.reason : "automatic_setup_or_io";
+
         yield* write("incomplete", reason);
+
         return false;
       }),
     ),

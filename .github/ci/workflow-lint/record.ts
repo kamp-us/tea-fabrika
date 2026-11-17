@@ -6,6 +6,7 @@ import { isTimings, TIMED_LEGS } from "./time-tables.ts";
 // Q1. The record a ready pull request run leaves for the merge queue: its pass of changes.mjs, on a
 // ready pull request alone, the merge commit the run checks out, and the upload of what it wrote
 // under the name it printed. `retention-days` is a setting (0069), so only its being there is held.
+
 const RECORD = "node .github/ci/changes.mjs --record";
 
 const RECORD_IF = "github.event_name=='pull_request'&&!github.event.pull_request.draft";
@@ -24,6 +25,7 @@ export const record: Rule = ({ jobs }, require) => {
     outputs = map(changes["outputs"]);
 
   const changeSteps = steps(changes);
+
   const sizing = changeSteps.find((s) => s["id"] === "size");
 
   // Q1. A merge queue group a ready pull request run already tested skips its tests (changes.mjs's
@@ -32,9 +34,13 @@ export const record: Rule = ({ jobs }, require) => {
   // changes printed through the very expressions of changes' outputs, so the selection it records
   // is the one the jobs ran. It and its upload may fail without failing the run: then no record, and
   // the group runs its tests.
+
   const recordStep = changeSteps.filter((s) => s["run"] === RECORD);
+
   const recorder = recordStep[0];
+
   const recordEnv = map(recorder?.["env"]);
+
   const selected = Object.fromEntries([...FLAGS, "next", "filter"].map((name) => [name.toUpperCase(), outputs[name]]));
   require(recordStep.length === 1 &&
     recorder?.["id"] === "record" &&
@@ -52,8 +58,11 @@ export const record: Rule = ({ jobs }, require) => {
     Object.entries(selected).every(
       ([key, expected]) => compact(recordEnv[key]) === compact(expected),
     ), "Q1: the record step reads the run's event, the merge commit it tests, and changes' outputs as changes exposes them");
+
   const uploads = changeSteps.filter((s) => uses(s, "actions/upload-artifact"));
+
   const upload = uploads[0];
+
   const kept = map(upload?.["with"])["retention-days"];
   require(uploads.length === 1 &&
     recorder !== undefined &&
@@ -76,6 +85,7 @@ export const record: Rule = ({ jobs }, require) => {
   // workflow that uploads one, whatever action does it, beside the test legs' timings uploads: each
   // in a job of TIMED_LEGS (next alone since 0539), with exactly TT2's `with:`, so its name is
   // `timings-...` and never a record's.
+
   for (const [name, job] of Object.entries(jobs)) {
     for (const step of allSteps(map(job)).filter((s) => uses(s, "actions/checkout"))) {
       const given = map(step["with"]);

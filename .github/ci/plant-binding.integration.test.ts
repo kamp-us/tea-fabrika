@@ -15,25 +15,34 @@ it.each([
   await Effect.runPromise(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
+
       const path = yield* Path.Path;
+
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
       const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "plant-binding-" });
+
       const root = path.join(temporary, "source");
+
       const target = path.join(root, "next/packages/libfabrika/src/cloudflare/runtime.ts");
 
       const git = Effect.fn("binding.test.git")(function* (args: readonly string[]) {
         const child = yield* spawner.spawn(ChildProcess.make("git", args, { cwd: root, stdin: "ignore" }));
+
         const [exit, stdout] = yield* Effect.all(
           [child.exitCode, child.stdout.pipe(Stream.decodeText(), Stream.mkString), child.stderr.pipe(Stream.runDrain)],
           { concurrency: "unbounded" },
         );
 
         expect(Number(exit)).toBe(0);
+
         return stdout.trim();
       }, Effect.scoped);
 
       yield* fs.makeDirectory(path.dirname(target), { recursive: true });
+
       yield* fs.writeFileString(target, "p.publish(client, { ...update, pid: active })\n");
+
       yield* fs.writeFileString(
         path.join(root, "package.json"),
         JSON.stringify({
@@ -43,22 +52,33 @@ it.each([
           engines: { node: "26.13.0" },
         }),
       );
+
       yield* fs.writeFileString(path.join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+
       yield* fs.writeFileString(path.join(root, "pnpm-workspace.yaml"), "catalog:\n  vitest: 5.0.5\n");
+
       yield* git(["init", "-q"]);
+
       yield* git(["config", "user.name", "binding-test"]);
+
       yield* git(["config", "user.email", "binding@example.invalid"]);
+
       yield* git(["add", "."]);
+
       yield* git(["commit", "-q", "-m", "catalog"]);
+
       const catalog = yield* git(["rev-parse", "HEAD"]);
 
       if (fault === "nonancestor") {
         yield* git(["checkout", "--orphan", "unrelated"]);
+
         yield* git(["add", "."]);
+
         yield* git(["commit", "-q", "-m", "unrelated"]);
       } else {
         if (fault === "different lock") {
           yield* fs.writeFileString(path.join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\nchanged: true\n");
+
           yield* git(["add", "pnpm-lock.yaml"]);
         }
 
@@ -72,6 +92,7 @@ it.each([
       }
 
       const before = yield* fs.readFileString(target);
+
       const result = yield* execute(
         {
           PATH: process.env["PATH"] ?? "",
@@ -94,6 +115,7 @@ it.each([
 
       if (Exit.isFailure(result)) {
         const error = Cause.findErrorOption(result.cause);
+
         expect(Option.isSome(error) && Schema.is(ExerciseError)(error.value) ? error.value.reason : null).toBe(reason);
       }
 

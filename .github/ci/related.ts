@@ -19,6 +19,7 @@ export type Sizing = Readonly<Record<Project, { readonly most: number; readonly 
 };
 
 /** Separate project legs keep their existing full-depth counts and test-step limits. */
+
 export const select = (
   files: Readonly<Record<Project, readonly string[]>>,
   sizing: Sizing,
@@ -26,6 +27,7 @@ export const select = (
   plants = false,
 ) => {
   const groups = slots(run);
+
   const all = PROJECTS.flatMap((project) => files[project]);
 
   if (all.some((path) => /\s/.test(path)) || new Set(all).size !== all.length) {
@@ -33,6 +35,7 @@ export const select = (
   }
 
   const legs: Record<string, readonly string[]> = {};
+
   const projects: Record<string, Project> = {};
 
   for (const project of PROJECTS) {
@@ -58,6 +61,7 @@ export const select = (
   }
 
   const integration = Object.keys(legs).filter((leg) => projects[leg] === "next-integration");
+
   const assignment: Record<string, readonly Request["case"][]> = plants
     ? Object.fromEntries(
         integration.map((leg, offset) => [
@@ -89,6 +93,7 @@ export const outputs = (selection: ReturnType<typeof select>): string[] => [
 if (import.meta.main) {
   const run = whole("RUN_NUMBER", process.env["RUN_NUMBER"]);
   slots(run);
+
   const root = fileURLToPath(new URL("../../", import.meta.url));
 
   const git = (args: readonly string[]): string => {
@@ -102,6 +107,7 @@ if (import.meta.main) {
   };
 
   const head = git(["rev-parse", "--verify", "HEAD^{commit}"]);
+
   const expected = process.env["HEAD"];
 
   if (!validSha(head) || head !== expected) {
@@ -109,6 +115,7 @@ if (import.meta.main) {
   }
 
   const from = process.env["BASE"];
+
   const base = from !== undefined && validSha(from) ? git(["merge-base", from, head]) : null;
 
   const changed =
@@ -119,9 +126,13 @@ if (import.meta.main) {
           .filter(Boolean);
 
   const triggers = changed?.filter(isTrigger) ?? [];
+
   const full = changed === null || triggers.length > 0;
+
   const narrowed = !full && base !== null ? [`--changed=${base}`] : [];
+
   const integration = list(root, ["--project", "next-integration", ...narrowed]);
+
   const plants = wanted(changed);
 
   const files = {
@@ -147,8 +158,11 @@ if (import.meta.main) {
   };
 
   const selected = select(files, sizing, run, plants);
+
   const lines = outputs(selected);
+
   const record = { base, head, at: new Date().toISOString(), changed, triggers, full, ...selected };
+
   const target = process.env["RECORD"];
 
   if (target) {
@@ -157,6 +171,7 @@ if (import.meta.main) {
 
   console.log(JSON.stringify(record));
   console.log(lines.join("\n"));
+
   const output = process.env["GITHUB_OUTPUT"];
 
   if (output) {

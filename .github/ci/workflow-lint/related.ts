@@ -40,8 +40,11 @@ const mapped = (job: Record<string, unknown>) => {
 
 const selector = (workflow: Record<string, unknown>) => {
   const job = map(map(workflow["jobs"])["select"]);
+
   const set = steps(job).find((step) => step["id"] === "set");
+
   const env = map(set?.["env"]);
+
   const outputs = map(job["outputs"]);
 
   return (
@@ -57,6 +60,7 @@ const selector = (workflow: Record<string, unknown>) => {
 };
 
 /** T1 permits tooling only on this exact bounded check job, never another PR workflow. */
+
 export const relatedWorkload = (
   workflow: Record<string, unknown>,
   name: string,
@@ -76,10 +80,13 @@ export const relatedWorkload = (
 
 export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
   const select = map(jobs["select"]);
+
   const related = map(jobs["related"]);
   require(selector(workflow), "R1: related selection uses the shared control group, tested source and exact outputs");
   require(select["timeout-minutes"] === 10, "R1: related selection keeps its ten-minute job limit");
+
   const set = steps(select).find((step) => step["id"] === "set");
+
   const env = map(set?.["env"]);
   require(env["MOST_INTEGRATION"] === 5 &&
     env["MOST_TOOLING"] === 2 &&
@@ -100,7 +107,9 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
   require(JSON.stringify(related["needs"]) === JSON.stringify(["changes", "select"]) &&
     compact(related["if"]) ===
       "!cancelled()&&needs.select.result=='success'&&needs.select.outputs.run=='true'", "R1: related tests follow a successful nonempty selector");
+
   const strategy = map(related["strategy"]);
+
   const matrix = map(strategy["matrix"]);
   require(strategy["max-parallel"] === 9 &&
     strategy["fail-fast"] === true &&
@@ -108,6 +117,7 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
     compact(matrix["shard"]) ===
       `fromJSON(needs.select.outputs.legs||'["1"]')`, "R1: related tests keep the nine-slot cap and one logical matrix axis");
   require(!("name" in related), "R1: related keeps default logical matrix names, including an unexpanded skipped job");
+
   const commands = steps(related).filter((step) => typeof step["run"] === "string");
   require(JSON.stringify(commands.map((step) => step["run"])) ===
     JSON.stringify([
@@ -133,6 +143,7 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
   }
 
   const faults = commands.find((step) => step["run"] === "node .github/ci/plant-related.ts");
+
   const integration = commands.find((step) => step["run"] === INTEGRATION);
   require(faults !== undefined &&
     integration !== undefined &&
@@ -151,10 +162,15 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
     (step) =>
       uses(step, "actions/checkout") &&
       map(step["with"])["persist-credentials"] === false &&
+      map(step["with"])["fetch-depth"] === 0 &&
+      map(step["with"])["filter"] === "blob:none" &&
       !("ref" in map(step["with"])),
-  ), "R1: related tests use the same tested commit as selection");
+  ), "R1: related tests use the tested commit with complete ancestry and blobless history");
+
   const next = map(jobs["next"]);
+
   const nextSlots = lookup(map(next["concurrency"])["group"], false);
+
   const shards = legs(next);
   require(held(next) &&
     Object.keys(nextSlots).length === shards.length &&

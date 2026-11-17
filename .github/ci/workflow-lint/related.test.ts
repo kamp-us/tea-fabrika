@@ -7,6 +7,7 @@ import { lintWorkflow } from "../workflow-lint.ts";
 const text = readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8");
 
 const Fault = Schema.Literals([
+  "fault_history",
   "fault_assignment",
   "fault_order",
   "fault_slot",
@@ -34,19 +35,27 @@ it.prop(
   { fault: Fault },
   ({ fault }) => {
     expect(lintWorkflow(text)).toEqual([]);
+
     const workflow = parse(text);
+
     const selector = workflow.jobs.select.steps.find((step: { id?: string }) => step.id === "set");
+
     const integration = workflow.jobs.related.steps.find((step: { name?: string }) => step.name === "integration");
 
     const faults = workflow.jobs.related.steps.find((step: { name?: string }) => step.name === "checklist faults");
 
     switch (fault) {
+      case "fault_history":
+        delete workflow.jobs.related.steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/checkout@"))
+          .with["fetch-depth"];
+        break;
       case "fault_assignment":
         faults.env.PLANTS = "{}";
         break;
       case "fault_order": {
         const index = workflow.jobs.related.steps.indexOf(faults);
         workflow.jobs.related.steps.splice(index, 1);
+
         const before = workflow.jobs.related.steps.indexOf(integration);
         workflow.jobs.related.steps.splice(before, 0, faults);
         break;

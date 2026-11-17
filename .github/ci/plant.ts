@@ -50,6 +50,7 @@ const Reporter = Schema.Struct({
 
 export const observation = (key: Request["case"], root: string, raw: string, exit: number, ms: number): Observation => {
   const missing = (reason: string) => Observation.cases.incomplete.make({ reason });
+
   const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Reporter))(raw);
 
   if (Option.isNone(decoded)) {
@@ -57,7 +58,9 @@ export const observation = (key: Request["case"], root: string, raw: string, exi
   }
 
   const report = decoded.value;
+
   const selected = cases[key];
+
   const suites = report.testResults.filter((suite) => suite.name === `${root}/${selected.test}`);
 
   if (suites.length !== 1 || report.testResults.length !== 1) {
@@ -199,6 +202,7 @@ export const diffOptions = [
 ] as const;
 
 /** Head, index, mode and the complete NUL-delimited inventory must agree with the sole expected edit. */
+
 export const unchanged = (before: Snapshot, after: Snapshot, bytes: Uint8Array, file: string) =>
   before.head === after.head &&
   before.index === after.index &&
@@ -209,9 +213,13 @@ export const unchanged = (before: Snapshot, after: Snapshot, bytes: Uint8Array, 
 
 const perform = Effect.fn("plant.exercise")(function* (input: unknown, tested?: string) {
   const request = yield* decodeRequest(input).pipe(Effect.mapError(() => fail("request_invalid")));
+
   const workspace = yield* Workspace;
+
   const digest = yield* Digest.Digest;
+
   const before = yield* workspace.inspect;
+
   const head = yield* Schema.decodeUnknownEffect(Request.fields.sha)(tested ?? request.sha).pipe(
     Effect.mapError(() => fail("request_invalid")),
   );
@@ -221,6 +229,7 @@ const perform = Effect.fn("plant.exercise")(function* (input: unknown, tested?: 
   }
 
   const originalHash = yield* digest.digestHex(Digest.sha256, before.bytes);
+
   const selected = cases[request.case];
 
   if ("hashes" in selected && (before.mode !== 0o100644 || originalHash !== selected.hashes.source)) {
@@ -228,8 +237,11 @@ const perform = Effect.fn("plant.exercise")(function* (input: unknown, tested?: 
   }
 
   const prepared = yield* prepare(request.case, before.bytes).pipe(Effect.mapError(() => fail("source_unsupported")));
+
   const expected = yield* derive(request.case, prepared).pipe(Effect.mapError(() => fail("source_unsupported")));
+
   const preparedHash = yield* digest.digestHex(Digest.sha256, prepared);
+
   const editedHash = yield* digest.digestHex(Digest.sha256, expected);
 
   if ("hashes" in selected && (preparedHash !== selected.hashes.prepared || editedHash !== selected.hashes.edited)) {
@@ -258,6 +270,7 @@ const perform = Effect.fn("plant.exercise")(function* (input: unknown, tested?: 
 
   const restore = Effect.gen(function* () {
     yield* workspace.write(before.bytes, before.mode);
+
     yield* verify(before.bytes);
 
     return yield* digest.digestHex(Digest.sha256, (yield* workspace.inspect).bytes);
@@ -280,7 +293,9 @@ const perform = Effect.fn("plant.exercise")(function* (input: unknown, tested?: 
             Effect.gen(function* () {
               if (cmd.phase === "broken") {
                 yield* workspace.write(expected, before.mode);
+
                 yield* verify(expected);
+
                 const bytes = yield* workspace.diff;
 
                 if (bytes.length === 0) {
@@ -293,9 +308,13 @@ const perform = Effect.fn("plant.exercise")(function* (input: unknown, tested?: 
               }
 
               const bytes = cmd.phase === "broken" ? expected : prepared;
+
               const observed = yield* verify(bytes);
+
               yield* Ref.update(observedHashes, (hashes) => ({ ...hashes, [cmd.phase]: observed }));
+
               const answer = yield* workspace.test(cmd.phase);
+
               yield* verify(bytes);
 
               return answer;
@@ -329,6 +348,7 @@ const perform = Effect.fn("plant.exercise")(function* (input: unknown, tested?: 
 });
 
 /** The manual core always requires its catalog commit as the actual checkout. */
+
 export const exercise = (input: unknown) => perform(input);
 
 const Event = Schema.Struct({
@@ -394,6 +414,7 @@ type ExerciseResult = Effect.Success<ReturnType<typeof exercise>> & {
 };
 
 /** The real attempt boundary persists known facts before setup and keeps only closed failure reasons. */
+
 export const attempt = Effect.fn("plant.attempt")(function* <E, R>(
   input: unknown,
   body: (environment: Environment, request: Request) => Effect.Effect<ExerciseResult, E, R>,
@@ -405,6 +426,7 @@ export const attempt = Effect.fn("plant.attempt")(function* <E, R>(
   );
 
   const fs = yield* FileSystem.FileSystem;
+
   const path = yield* Path.Path;
 
   const facts = yield* Ref.make<typeof Attempt.Type & Partial<Omit<ExerciseResult, "request">>>({
@@ -425,6 +447,7 @@ export const attempt = Effect.fn("plant.attempt")(function* <E, R>(
 
   const write = Effect.fn("plant.writeAttempt")(function* (result: Record<string, unknown>) {
     yield* fs.makeDirectory(directory, { recursive: true });
+
     yield* fs.writeFileString(
       path.join(directory, "result.json"),
       JSON.stringify({ ...(yield* Ref.get(facts)), ...result }, null, 2),
@@ -450,12 +473,19 @@ export const attempt = Effect.fn("plant.attempt")(function* <E, R>(
     );
 
     yield* write(unfinished);
+
     const request = yield* decodeRequest(event.inputs).pipe(Effect.mapError(() => fail("request_invalid")));
+
     yield* Ref.update(facts, (known) => ({ ...known, source: request.sha, request }));
+
     yield* write(unfinished);
+
     const result = yield* body(environment, request);
+
     yield* Ref.update(facts, (known) => ({ ...known, ...result }));
+
     const complete = result.cleanup.restored && Model.isAnyOf(["recorded"])(result.model);
+
     yield* write({
       ...result,
       state: complete ? "recorded" : "incomplete",
@@ -492,6 +522,7 @@ type Checkout = {
 };
 
 /** The same real Git, filesystem and child-process adapter serves both entry points. */
+
 export const execute = Effect.fn("plant.execute")(function* (
   environment: RuntimeEnvironment,
   request: Request,
@@ -500,11 +531,17 @@ export const execute = Effect.fn("plant.execute")(function* (
   yield* decodeRequest(request).pipe(Effect.mapError(() => fail("request_invalid")));
 
   const fs = yield* FileSystem.FileSystem;
+
   const path = yield* Path.Path;
+
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
   const runner = path.resolve(checkout.runner);
+
   const source = path.resolve(checkout.source);
+
   const selected = cases[request.case];
+
   const scratch = yield* fs.makeTempDirectoryScoped({ directory: environment.RUNNER_TEMP, prefix: "plant-private-" });
 
   const childEnv = {
@@ -597,10 +634,13 @@ export const execute = Effect.fn("plant.execute")(function* (
   });
 
   yield* regular;
+
   const original = yield* fs.readFile(target);
+
   const digest = yield* Digest.Digest;
 
   // Only this real adapter can use a tested head that differs from the catalog commit.
+
   if (checkout.head !== request.sha) {
     yield* git(source, ["merge-base", "--is-ancestor", request.sha, checkout.head]);
 
@@ -623,7 +663,9 @@ export const execute = Effect.fn("plant.execute")(function* (
             file === "pnpm-workspace.yaml",
         )
         .toSorted();
+
     const catalogFiles = manifests(yield* git(source, ["ls-tree", "-r", "--name-only", "-z", request.sha]));
+
     const testedFiles = manifests(yield* git(source, ["ls-tree", "-r", "--name-only", "-z", checkout.head]));
 
     if (JSON.stringify(catalogFiles) !== JSON.stringify(testedFiles)) {
@@ -650,10 +692,13 @@ export const execute = Effect.fn("plant.execute")(function* (
         ),
       ),
     );
+
     const workspace = Schema.decodeUnknownSync(Schema.Struct({ catalog: Schema.Struct({ vitest: Schema.String }) }))(
       parse(yield* fs.readFileString(path.join(source, "pnpm-workspace.yaml"))),
     );
+
     const installed = yield* child(source, "pnpm", ["--version"], "pnpm-version");
+
     const pnpm = (yield* fs.readFileString(path.join(scratch, "pnpm-version.out"))).trim();
 
     if (
@@ -671,7 +716,9 @@ export const execute = Effect.fn("plant.execute")(function* (
   }
 
   const prepared = yield* prepare(request.case, original).pipe(Effect.mapError(() => fail("source_unsupported")));
+
   yield* derive(request.case, prepared).pipe(Effect.mapError(() => fail("source_unsupported")));
+
   if (checkout.install) {
     const install = yield* child(source, "pnpm", ["install", "--frozen-lockfile"], "source-install");
 
@@ -682,10 +729,15 @@ export const execute = Effect.fn("plant.execute")(function* (
 
   const inspect = Effect.gen(function* () {
     const info = yield* regular;
+
     const bytes = yield* fs.readFile(target);
+
     const head = (yield* git(source, ["rev-parse", "HEAD"])).trim();
+
     const index = (yield* git(source, ["write-tree"])).trim();
+
     const status = yield* git(source, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
+
     const summary = yield* git(source, ["diff", "--no-ext-diff", "--no-textconv", "--summary", "--no-renames"]);
 
     return { bytes, mode: info.mode, head, index, status, summary };
@@ -696,7 +748,9 @@ export const execute = Effect.fn("plant.execute")(function* (
     write: (bytes, mode) =>
       Effect.gen(function* () {
         yield* regular;
+
         yield* fs.writeFile(target, bytes);
+
         yield* fs.chmod(target, mode);
       }).pipe(Effect.mapError(() => fail("restore_or_edit_failed"))),
     diff: git(source, [...diffOptions, "--", selected.file]).pipe(Effect.map((text) => new TextEncoder().encode(text))),
@@ -709,6 +763,7 @@ export const execute = Effect.fn("plant.execute")(function* (
         );
 
         const result = yield* child(source, "nice", args, phase);
+
         const raw = yield* fs.readFileString(report).pipe(Effect.orElseSucceed(() => ""));
 
         return observation(request.case, source, raw, result.exit, result.ms);
