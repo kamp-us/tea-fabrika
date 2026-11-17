@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0585, 0590 and 0595; body f1b3a2c4ddf7
+Approved by the lead agent, builds 0585, 0590 and 0595; body 5895760b1a6a
 Plancheck-Version: 3
 
 # Plan amendment: route ordinary Kalfa laws through the existing next project
@@ -96,6 +96,27 @@ unrestricted ordinary project with the two-root fallback selection. An added ord
 fail this comparison until its fallback is updated. Do not broaden `today`, tooling or integration
 membership to make that comparison pass.
 
+## Current extraction guard feedback
+
+Actual draft086 compiler passed, while ordinary lint identified omitted Kalfa guard membership and
+old timing-table paths. These six exact additional paths restore the same existing checks for the
+moved files. This is not a broader allow-list or a weaker gate. Keep all taken anti-slop rules,
+zero-lock failures and vendor identity; Kalfa must be inspected alongside the existing roots.
+Recognize the actual declared Kalfa package/source folders without dropping any old folder.
+
+Translate the two moved timing-table keys in both tables and retain values 0 and 0.2 exactly.
+The stale-row guard currently filters only next/. It must also check Kalfa rows against the same
+real configured file selection; moving the keys alone would lose that guard. Preserve missing-row
+fallback, every existing next/ and visual case, unrelated-root exclusions and all timing values.
+
+These six extraction guards/timing paths are independent of the active repair's catalog and the
+private automatic adapter. The SAME tests author may apply them on the owned package branch now,
+together with existing-owned layer array-order and local fixture-type fixes, for normal automatic
+draft feedback. Do not edit the CI repair worktree, catalog, acceptance or original private patch.
+The thirteen ordinary-routing paths remain private until their real integration base is available.
+Only the six exact extraction paths gain this early application permission. Final combined source
+review and actual CI still remain; no unrun guard, host or archive proof is implied.
+
 ## Saved proof safety
 
 Keep `recordName`, `matched`, `tested`, `vouches`, their API calls and artifact names unchanged.
@@ -148,13 +169,18 @@ execution is authorized. A plant not actually run remains explicitly unrun.
 ## Files
 
 All these files belong to the same tests step because they are CI selection/guards or their laws.
-The first two paths were already approved. The remaining 11 paths are this amendment's exact
-added ownership. No other delivery-patch path needs another edit for ordinary routing.
+The first two paths were already approved. The next 11 routing paths and the six extraction guard/timing paths are this amendment's exact added ownership. No other delivery-patch path needs another edit for ordinary routing.
 
 | File | Owner | Product lines expected | Change |
 |---|---|---|---|
 | .github/ci/changes.mjs | tests | tests | Already owned: canonical expanded filter and strict saved-selection decoding; preserve seven-path additions and existing proof/tree behavior. |
 | .github/workflows/check.yaml | tests | tests | Already owned: expanded FILTER fallbacks in sizing and ordinary next job only; keep every retained delivery-patch hunk. |
+| oxlint-plugins/anti-slop.ts | tests | tests | Extraction guard repair: include Kalfa in WHOLE, ROOTS and folder membership; preserve every zero-lock rule, error level, vendor pin and other scope. |
+| oxlint-plugins/anti-slop.test.ts | tests | tests | Extend existing scope/zero-lock coverage to the declared Kalfa folders; no reduced domain, count, skip or disabled rule. |
+| vitest.shards.json | tests | tests | Translate only moved Toml.types and TomlParser keys to Kalfa; retain exact values 0 and 0.2 and all other rows. |
+| vitest.shards.full.json | tests | tests | Same two key translations and unchanged duration values in the full-depth table. |
+| .github/ci/shard-rows.ts | tests | tests | Guard stale rows under both next/ and Kalfa against actual existing configured discovery; preserve missing-row fallback and unrelated-root behavior. |
+| .github/ci/shard-rows.test.ts | tests | tests | Retain existing stale/selected/fallback/visual cases and add Kalfa membership and stale-row cases; no guard weakening. |
 | .github/ci/legs.ts | tests | tests | Add: ordinary project discovery without next-only path; exact-reader decoding and fail-open full behavior. |
 | .github/ci/legs.test.ts | tests | tests | Add: O1/O2 against actual ordinary discovery and existing sizing/shard contracts. |
 | .github/ci/changes.test.ts | tests | tests | Add: O3, new full-filter expectations and explicit old-filter refusal; retain exact reuse tests. |
