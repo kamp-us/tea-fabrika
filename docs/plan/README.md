@@ -65,6 +65,19 @@ agreed rule scopes while keeping program code, comments and literal contents. Th
 uses its native stack. The PRs link their independent reviews and CI evidence. This slice supplies
 neither the later package move nor the CLI.
 
+*2026-11-17, extraction source:* ticket 1076 slice 2 moves the engine into
+`kalfa/config/` as private `@kalfa/config`, used by `next/`. Source at
+`85919fe41730cdc48ba3fbe4bfa53e93e1ba9fbf` passed its independent source recheck.
+The existing tests moved unchanged. The package consumer law is authored, but has not run.
+Seven approved CI discovery and archive-delivery edits wait for the active CI repair to land.
+The ordinary-test selector also needs a narrow scope addition to reach `kalfa/`.
+This slice remains a draft. Ordinary draft checks supply no consumer or archive proof.
+No tested archive is available yet. Its
+[approved amendment](./quests/kalfa-config-package-amendment-PLAN.md) keeps the CLI in slice 3.
+After successful CI and landing, another project installs the tested archive with
+`npm install ./kalfa-config-0.0.0.tgz effect@4.1.3`.
+The prerequisite settings and spacing pair lands first.
+
 Today's lead tooling adds a separate manual [L11 exercise](../../.github/workflows/l11-exercise.yaml), ticket 1135,
 for `next/` ticket 1129. It fixes one source pair, compares ordinary whole-file runs and private generated inputs,
 and declares ten serial clean jobs. Fixed output faults restore every edited file and publish only decoded facts.
