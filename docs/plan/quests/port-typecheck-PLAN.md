@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0113, 0410, 0033, 0563; body a58db1a88a8c
+Approved by the lead agent, builds 0113, 0410, 0033, 0563, 0567; body 26106961aa6e
 Plancheck-Version: 3
 
 ```ts
@@ -827,7 +827,9 @@ No law is loosened or moved. N3 and N4 stay as written.
 
 - **The tests step** writes N7 in `scripts/typecheck-lock.test.ts` and shows it red on today's code.
   It turns the 16 hand `_tag` comparisons in `scripts/typecheck.test.ts` (6) and
-  `scripts/typecheck-lock.test.ts` (10) into the unions' matchers or `Predicate.isTagged`. It adds
+  `scripts/typecheck-lock.test.ts` (10) into each known union's own matcher, then Effect's
+  `Match` module when no own matcher exists. `Predicate.isTagged` is only for unknown input
+  ([0567](../../../.decisions/0567-a-tagged-value-is-matched.md)). It adds
   `scripts/typecheck.ts`, `scripts/typecheck/**`, `scripts/typecheck.test.ts` and
   `scripts/typecheck-lock.test.ts` to the
   `anti-slop-effect/no-manual-tag-comparison` block in `.oxlintrc.json` (L3). L3 is then red on
@@ -837,9 +839,11 @@ No law is loosened or moved. N3 and N4 stay as written.
   and never removes a live `.break` that is not its own: the release of `.break` removes it only
   when it still names this process. It fixes the comment at `LocksFile.ts:100`. It turns the 8
   product `_tag` comparisons into the unions' matchers (`Seen.match`, `Liveness.match`,
-  `Listing.match`) or `Predicate.isTagged`: `LocksFile.ts:19, 104, 108, 117, 168, 175`,
-  `Look.ts:84` and `Typecheck.ts:69`. `NodeModulesFs.ts:20` sits inside `Effect.catchIf`, which the
-  rule skips, and may stay. Then N7, N3, N4 and `pnpm lint` are green, and the build runs N7's
+  `Listing.match`), then Effect's `Match` module where needed: `LocksFile.ts:19, 104, 108,
+  117, 168, 175`, `Look.ts:84` and `Typecheck.ts:69`. Typed PlatformError reasons in
+  `LocksFile.ts` and `NodeModulesFs.ts` use `Effect.catchReason`; an exemption inside
+  `Effect.catchIf` does not exempt known values from 0567. Each existing handler and unmatched
+  error stays the same. Then N7, N3, N4 and `pnpm lint` are green, and the build runs N7's
   plant once and records it in its row.
 - **The same reviewer** rechecks (0177).
 
