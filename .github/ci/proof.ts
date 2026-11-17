@@ -36,8 +36,8 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { DateTime } from "effect";
-import { Config, ConfigProvider, Effect, Option } from "effect";
+import { DateTime, Config, ConfigProvider, Effect, Option } from "effect";
+
 import vitestPackage from "vitest/package.json" with { type: "json" };
 import { testConfig } from "../../vitest.config.ts";
 import { rowsAt } from "../../vitest.shards.ts";

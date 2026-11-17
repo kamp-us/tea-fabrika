@@ -12,13 +12,13 @@ import {
   TezgahView as View,
   tezgahName,
 } from "@kampus/libfabrika/tezgah/Workspace";
-import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import { Config, Effect, Schema } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec, DateTime, Effect, Formatter, Option, Schema, Config } from "effect";
+
+
+
+
+
+
 import type { Page } from "playwright";
 import { expect } from "vitest";
 import { PERSON, type reader } from "./p14.test-support.ts";

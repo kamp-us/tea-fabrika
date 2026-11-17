@@ -7,7 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -17,21 +17,26 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
-import {
-  Config,
-  ConfigProvider,
-  Effect,
-  Fiber,
-  FileSystem,
-  Layer,
-  Option,
-  Path,
-  Redacted,
-  Schema,
-  Stream,
-} from "effect";
-import { Digest } from "effect/crypto";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import {
   Branch,
   DefaultUnknown,
@@ -53,7 +58,7 @@ const failure = (operation: string, cause: unknown, unknown = false) =>
   });
 
 /** One variable of this process's environment through Config; unset is `undefined`. */
-const variable = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
+const variable = (name: string) => Config.String(name).Function.pipe(Config.option, Config.map(Option.getOrUndefined));
 
 /**
  * What a git command takes from this process's environment, read at each command as process.env
@@ -135,8 +140,8 @@ export const layer = (options: { readonly person: string }) =>
               }),
             );
 
-            const errors = yield* child.stderr.pipe(Stream.runCollect, Effect.forkScoped);
-            const bytes = yield* child.stdout.pipe(Stream.runCollect);
+            const errors = yield* child.stderr.Function.pipe(Stream.runCollect, Effect.forkScoped);
+            const bytes = yield* child.stdout.Function.pipe(Stream.runCollect);
             const code = yield* child.exitCode;
             const stderr = yield* Fiber.join(errors);
             const size = Arr.reduce(bytes, 0, (n, part) => n + part.length);
@@ -156,7 +161,7 @@ export const layer = (options: { readonly person: string }) =>
 
             return output;
           }),
-        ).pipe(
+        ).Function.pipe(
           Effect.mapError((cause) => (cause._tag === "RepositoriesError" ? cause : failure(args[0] ?? "read", cause))),
         );
       });
@@ -170,26 +175,26 @@ export const layer = (options: { readonly person: string }) =>
 
       const text = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
         // Git adds one newline. Other whitespace can belong to a directory or remote path.
-        return pipe(yield* decode(yield* run(cwd, args)), Str.replace(/\n$/, ""));
+        return Function.pipe(yield* decode(yield* run(cwd, args)), Str.replace(/\n$/, ""));
       });
 
       return Repositories.of({
         open: Effect.fn("repositories.open")(
           function* (selected: string): Effect.fn.Return<Repository, RepositoriesError> {
             // Only local metadata commands see the clone. None can invoke a transport or repository code.
-            const root = yield* text(selected, ["rev-parse", "--show-toplevel"]).pipe(
+            const root = yield* text(selected, ["rev-parse", "--show-toplevel"]).Function.pipe(
               Effect.flatMap((directory) => fs.realPath(directory)),
               Effect.mapError((cause) => failure("location", cause, true)),
             );
 
-            const common = yield* text(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).pipe(
+            const common = yield* text(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).Function.pipe(
               Effect.flatMap((directory) => fs.realPath(directory)),
               Effect.mapError((cause) => failure("location", cause, true)),
             );
 
             const format = yield* Schema.decodeUnknownEffect(Schema.Literals(["sha1", "sha256"]))(
               yield* text(root, ["rev-parse", "--show-object-format"]),
-            ).pipe(Effect.mapError((cause) => failure("object format", cause)));
+            ).Function.pipe(Effect.mapError((cause) => failure("object format", cause)));
 
             const destination = yield* text(root, [
               "config",
@@ -197,9 +202,9 @@ export const layer = (options: { readonly person: string }) =>
               "--no-includes",
               "--get",
               "remote.origin.url",
-            ]).pipe(Effect.mapError((cause) => failure("origin", cause, true)));
+            ]).Function.pipe(Effect.mapError((cause) => failure("origin", cause, true)));
 
-            if (destination === "" || pipe(destination, Str.startsWith("-")) || pipe(destination, Str.includes("\n"))) {
+            if (destination === "" || Function.pipe(destination, Str.startsWith("-")) || Function.pipe(destination, Str.includes("\n"))) {
               return yield* failure("origin", "invalid destination", true);
             }
 
@@ -227,12 +232,12 @@ export const layer = (options: { readonly person: string }) =>
 
                   return yield* run(directory, args, path.join(common, "objects"));
                 }),
-              ).pipe(
+              ).Function.pipe(
                 Effect.mapError((cause) => (cause._tag === "RepositoriesError" ? cause : failure("Git read", cause))),
               );
             });
 
-            const effective = yield* isolated(["ls-remote", "--get-url", "--", remote]).pipe(
+            const effective = yield* isolated(["ls-remote", "--get-url", "--", remote]).Function.pipe(
               Effect.flatMap(decode),
               Effect.mapBoth({
                 onFailure: (cause) => failure("origin", cause, true),
@@ -241,19 +246,19 @@ export const layer = (options: { readonly person: string }) =>
             );
 
             // Host URL rewrites apply; credentials are authority, never destination identity.
-            const identity = pipe(
+            const identity = Function.pipe(
               effective,
               Str.replace(/^(https?:\/\/)[^/@]*@/i, "$1"),
               Str.replace(/^(ssh:\/\/)[^/@]*@/i, "$1"),
               Str.replace(/^[^/@:]+@(?=[^/:]+:)/, ""),
             );
 
-            const key = yield* hash(Formatter.formatJson([common, identity])).pipe(
+            const key = yield* hash(Formatter.formatJson([common, identity])).Function.pipe(
               Effect.flatMap(Schema.decodeUnknownEffect(Hash)),
               Effect.mapError((cause) => failure("fingerprint", cause)),
             );
 
-            const advertised = yield* isolated(["ls-remote", "--symref", "--", remote, "HEAD"]).pipe(
+            const advertised = yield* isolated(["ls-remote", "--symref", "--", remote, "HEAD"]).Function.pipe(
               Effect.flatMap(decode),
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
@@ -262,33 +267,33 @@ export const layer = (options: { readonly person: string }) =>
 
             const symbolic = Arr.filter(
               lines,
-              (line) => pipe(line, Str.startsWith("ref: ")) && pipe(line, Str.endsWith("\tHEAD")),
+              (line) => Function.pipe(line, Str.startsWith("ref: ")) && Function.pipe(line, Str.endsWith("\tHEAD")),
             );
 
             if (symbolic.length !== 1) {
               return yield* failure("default branch", "missing or ambiguous HEAD", true);
             }
 
-            const ref = pipe(symbolic[0] ?? "", Str.slice(5, -5));
+            const ref = Function.pipe(symbolic[0] ?? "", Str.slice(5, -5));
 
-            if (!pipe(ref, Str.startsWith("refs/heads/"))) {
+            if (!Function.pipe(ref, Str.startsWith("refs/heads/"))) {
               return yield* failure("default branch", "not a branch", true);
             }
 
-            const branch = yield* Schema.decodeEffect(Branch)(pipe(ref, Str.slice(11))).pipe(
+            const branch = yield* Schema.decodeEffect(Branch)(Function.pipe(ref, Str.slice(11))).Function.pipe(
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
 
             const heads = Arr.filter(
               lines,
-              (line) => !pipe(line, Str.startsWith("ref: ")) && pipe(line, Str.endsWith("\tHEAD")),
+              (line) => !Function.pipe(line, Str.startsWith("ref: ")) && Function.pipe(line, Str.endsWith("\tHEAD")),
             );
 
             if (heads.length !== 1) {
               return yield* failure("default branch", "missing HEAD object", true);
             }
 
-            const advertisedCommit = yield* Schema.decodeEffect(ObjectId)(pipe(heads[0] ?? "", Str.slice(0, -5))).pipe(
+            const advertisedCommit = yield* Schema.decodeEffect(ObjectId)(Function.pipe(heads[0] ?? "", Str.slice(0, -5))).Function.pipe(
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
 
@@ -301,9 +306,9 @@ export const layer = (options: { readonly person: string }) =>
               "--",
               remote,
               ref,
-            ]).pipe(Effect.mapError((cause) => failure("fetch", cause, true)));
+            ]).Function.pipe(Effect.mapError((cause) => failure("fetch", cause, true)));
 
-            const commit = yield* isolated(["rev-parse", "--verify", `${advertisedCommit}^{commit}`]).pipe(
+            const commit = yield* isolated(["rev-parse", "--verify", `${advertisedCommit}^{commit}`]).Function.pipe(
               Effect.flatMap(decode),
               Effect.map(Str.replace(/\n$/, "")),
               Effect.flatMap(Schema.decodeUnknownEffect(ObjectId)),
@@ -319,15 +324,15 @@ export const layer = (options: { readonly person: string }) =>
 
               const [record] = yield* Schema.decodeUnknownEffect(
                 Schema.Tuple([Schema.NonEmptyString, Schema.Literal("")]),
-              )(Str.split(listed, "\0")).pipe(Effect.mapError((cause) => failure("tree", cause)));
+              )(Str.split(listed, "\0")).Function.pipe(Effect.mapError((cause) => failure("tree", cause)));
 
-              const tab = pipe(record, Str.indexOf("\t"));
+              const tab = Function.pipe(record, Str.indexOf("\t"));
 
-              if (Option.isNone(tab) || pipe(record, Str.slice(tab.value + 1)) !== file) {
+              if (Option.isNone(tab) || Function.pipe(record, Str.slice(tab.value + 1)) !== file) {
                 return yield* failure("tree", "unexpected path");
               }
 
-              const fields = pipe(record, Str.slice(0, tab.value), Str.split(" "));
+              const fields = Function.pipe(record, Str.slice(0, tab.value), Str.split(" "));
 
               const [mode, type, id] = yield* Schema.decodeUnknownEffect(
                 Schema.Tuple([
@@ -335,7 +340,7 @@ export const layer = (options: { readonly person: string }) =>
                   Schema.Literals(["blob", "tree", "commit"]),
                   ObjectId,
                 ]),
-              )(fields).pipe(Effect.mapError((cause) => failure("tree", cause)));
+              )(fields).Function.pipe(Effect.mapError((cause) => failure("tree", cause)));
 
               return { mode, type, id };
             });
@@ -380,7 +385,7 @@ export const layer = (options: { readonly person: string }) =>
             const bytes = yield* read(file);
             const body = bytes === null ? null : yield* decode(bytes);
 
-            const documentHash = yield* hash(body === null ? "absent" : body).pipe(
+            const documentHash = yield* hash(body === null ? "absent" : body).Function.pipe(
               Effect.mapError((cause) => failure("hash", cause)),
             );
 
@@ -389,7 +394,7 @@ export const layer = (options: { readonly person: string }) =>
             return {
               snapshot: { key, branch, commit, file, text: body, hash: documentHash },
               read,
-              resolve: yield* Sources.resolver({ root, person: options.person, commit, entry, read }).pipe(
+              resolve: yield* Sources.resolver({ root, person: options.person, commit, entry, read }).Function.pipe(
                 Effect.provideService(FileSystem.FileSystem, fs),
                 Effect.provideService(Path.Path, path),
               ),

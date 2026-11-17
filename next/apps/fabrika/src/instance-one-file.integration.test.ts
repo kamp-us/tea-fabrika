@@ -14,16 +14,19 @@ import { Id } from "@kampus/libfabrika";
 import { workerLoader } from "@kampus/libfabrika/workers";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, String as Str } from "effect";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import { Config, ConfigProvider, Effect, Layer, Option, Schema } from "effect";
+import { Array as Arr, String as Str, Config, ConfigProvider, Effect, Layer, Option, Schema, Formatter } from "effect";
 import { SecureRandom } from "effect/crypto";
-import * as Effect from "effect/Effect";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
+import { FetchHttpClient, HttpClient } from "effect/http";
+
+
+
+
+
+
+
+
+
+
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -42,6 +45,17 @@ const homes: string[] = [];
 const runs = { seed: 119120, numRuns: 3 };
 
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
+
+// One GET's status through Effect's fetch client, for this file's Promise code. The request has its
+// own scope, so closing it releases the unread body.
+const status = (url: string) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const client = HttpClient.withScope(yield* HttpClient.HttpClient);
+
+      return (yield* client.get(url)).status;
+    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+  );
 
 // The platform's loader and stub types come from the code under test, never by their ambient
 // names (0042, tests included).
@@ -683,7 +697,7 @@ describe("P16 copied-file real instance, serial", () => {
           });
 
           const target = `http://127.0.0.1:${port}/probe-${n}`;
-          expect((await fetch(target)).ok).toBe(true);
+          expect(await status(target)).toBe(200);
           hits = 0;
           symlinkSync(join(APP, "node_modules"), join(h, "node_modules"));
           const file = join(h, "sealed.ts");
@@ -973,8 +987,7 @@ describe("P16 copied-file real instance, serial", () => {
                           }
 
                           // Every embedded route must answer from this one file. P14 is absent on this base.
-                          const missing = await fetch(`${runtime.url}/p16-missing.js`);
-                          expect(missing.status).toBe(404);
+                          expect(await status(`${runtime.url}/p16-missing.js`)).toBe(404);
                         } finally {
                           a.ws.close();
                           b.ws.close();

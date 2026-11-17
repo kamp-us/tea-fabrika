@@ -116,26 +116,12 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import {
-  Array as Arr,
-  pipe,
-  String as Str,
-  Clock,
-  Context,
-  DateTime,
-  Duration,
-  Effect,
-  Formatter,
-  Layer,
-  Option,
-  Record as Rec,
-  Result,
-  Schedule,
-  Schema,
-} from "effect";
+import { Array as Arr, pipe, String as Str, Clock, Context, DateTime, Duration, Effect, Formatter, Layer, Option, Record as Rec, Result, Schedule, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import type { Config } from "effect";
-import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
+
+
+
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";

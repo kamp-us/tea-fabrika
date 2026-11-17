@@ -14,15 +14,18 @@ import { Id } from "@kampus/libfabrika";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Array as Arr, String as Str } from "effect";
-import * as Clock from "effect/Clock";
-import * as DateTime from "effect/DateTime";
-import * as Deferred from "effect/Deferred";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
+import { Array as Arr, String as Str, Clock, DateTime, Deferred, Effect, Fiber, Formatter, Option, Schema } from "effect";
+import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/http";
+
+
+
+
+
+
+
+
+
+
 import { afterEach, describe, expect } from "vitest";
 import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
@@ -39,6 +42,24 @@ const SENT = "2026-11-08T04:00:00.000Z";
 
 // A bound on one wait for an observable fact after a kill, as worker-supervision's WAIT is.
 const WAIT = 25_000;
+
+// One request through Effect's fetch client, for this file's Promise code: its status, headers and
+// body, read whole before the request's own scope closes and releases it. It fails when nothing
+// listens at the address.
+const exchange = (request: HttpClientRequest.HttpClientRequest) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const client = HttpClient.withScope(yield* HttpClient.HttpClient);
+      const response = yield* client.execute(request);
+
+      return {
+        ok: response.status >= 200 && response.status < 300,
+        status: response.status,
+        headers: response.headers,
+        text: yield* response.text,
+      };
+    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+  );
 
 it(
   "pinned: checklist stays reachable after its first add on the real dev.ts, including a later subscriber",
@@ -273,7 +294,7 @@ const launch = async (
     try {
       // The page is served while startup is still flushing the lifecycle outbox.
       // dev.ts emits ready only after that flush. Read history after its ready message.
-      if (Str.includes(`{"ready":${JSON.stringify(url)},"build":`)(output) && (await fetch(url)).ok) {
+      if (Str.includes(`{"ready":${JSON.stringify(url)},"build":`)(output) && (await exchange(HttpClientRequest.get(url))).ok) {
         break;
       }
     } catch {
@@ -824,11 +845,11 @@ describe("P12 real dev.ts wire", () => {
       sentAt: SENT,
     });
 
-    const granted = await fetch(`${s.url}/grant`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text, armored: s.key.proof(text) }),
-    });
+    const granted = await exchange(
+      HttpClientRequest.post(`${s.url}/grant`, {
+        body: HttpBody.jsonUnsafe({ text, armored: s.key.proof(text) }),
+      }),
+    );
 
     expect(granted.ok).toBe(true);
     const notification = await other.next((f) => typeof f !== "string" && f.method === "client.granted");
@@ -932,7 +953,9 @@ describe("P12 real dev.ts wire", () => {
       c = await connected(s);
 
     expect(await statusWithHost(s.url, "wrong.test")).toBe(421);
-    expect((await fetch(s.url, { headers: { origin: "https://foreign.test" } })).status).toBe(403);
+    expect((await exchange(HttpClientRequest.get(s.url, { headers: { origin: "https://foreign.test" } }))).status).toBe(
+      403,
+    );
     // Every routed call is recorded, so reader c's own reads add rows here. Only rows
     // written by anyone other than c's key could come from a stranger.
     const notC = (rows: ReadonlyArray<Entry>) => Arr.filter(rows, (r) => r.by !== s.key.fingerprint);
@@ -1056,22 +1079,24 @@ describe("P12 real dev.ts wire", () => {
     // Only POST /grant and GET /grant/client/KEY reach the grant routes. P14 slice 2 (ticket 828): the
     // app's build carries its tab, so `/` is the built page and `/window.js` the script it loads, each
     // with its type and its ETag over the real wire; a write elsewhere still gets the plain answer.
-    const root = await fetch(s.url);
+    const root = await exchange(HttpClientRequest.get(s.url));
     expect(root.status).toBe(200);
-    expect(root.headers.get("content-type")).toBe("text/html; charset=utf-8");
-    const page = await root.text();
+    expect(root.headers["content-type"]).toBe("text/html; charset=utf-8");
+    const page = root.text;
     expect(page, "/ is the tab's page").toContain('<script type="module" src="/window.js"></script>');
-    expect(root.headers.get("etag")).toBe(`"${createHash("sha256").update(page).digest("hex")}"`);
-    const script = await fetch(`${s.url}/window.js`);
+    expect(root.headers.etag).toBe(`"${createHash("sha256").update(page).digest("hex")}"`);
+    const script = await exchange(HttpClientRequest.get(`${s.url}/window.js`));
     expect(script.status).toBe(200);
-    expect(script.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
-    const scriptBody = await script.text();
-    expect(script.headers.get("etag")).toBe(`"${createHash("sha256").update(scriptBody).digest("hex")}"`);
+    expect(script.headers["content-type"]).toBe("text/javascript; charset=utf-8");
+    const scriptBody = script.text;
+    expect(script.headers.etag).toBe(`"${createHash("sha256").update(scriptBody).digest("hex")}"`);
     expect(page, "the page names the script it loads by its build").toContain(
       `<meta name="fabrika-build" content="${createHash("sha256").update(scriptBody).digest("hex")}">`,
     );
-    const posted = await fetch(`${s.url}/elsewhere`, { method: "POST", body: "{}" });
-    expect(await posted.text()).toBe("fabrika");
+    const posted = await exchange(
+      HttpClientRequest.post(`${s.url}/elsewhere`, { body: HttpBody.text("{}", "text/plain;charset=UTF-8") }),
+    );
+    expect(posted.text).toBe("fabrika");
     const home = mkdtempSync(join(tmpdir(), "p12-w-"));
     homes.push(home);
     const env: NodeJS.ProcessEnv = { ...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1" };

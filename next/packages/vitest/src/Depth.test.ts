@@ -1,7 +1,9 @@
 // Decision 0535: one setting picks how many cases a law over real IO runs. `fast` is the default, the
 // 3-hour schedule says `full`, and a `fast` count is held between `LEAST` and the law's full count.
 import { expect, it } from "@effect/vitest";
-import { Config, Effect, Option } from "effect";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import { decodeDepth, depth, LEAST, runsAt, runsFor } from "./Depth.ts";
 

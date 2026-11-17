@@ -11,6 +11,8 @@ import { runsFor } from "@kampus/vitest";
 import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { FetchHttpClient } from "effect/http";
+
+
 import { vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { rssStandIn } from "./rss.fixture.ts";
@@ -80,10 +82,17 @@ const sandbox = Effect.gen(function* () {
   return folder;
 });
 
+// One stand-in takes every request: the entry's own client is handed it (`fetchClient`), and the
+// global `fetch` is the same stand-in for the scope, so a request on any other path is seen too.
 const spyOnFetch = (impl: typeof fetch) =>
   Effect.acquireRelease(
-    Effect.sync(() => vi.spyOn(globalThis, "fetch").mockImplementation(impl)),
-    () => Effect.sync(() => vi.restoreAllMocks()),
+    Effect.sync(() => {
+      const fetched = vi.fn(impl);
+      vi.stubGlobal("fetch", fetched);
+
+      return fetched;
+    }),
+    () => Effect.sync(() => vi.unstubAllGlobals()),
   );
 
 // No real signal leaves these laws: every `process.kill` reaches this spy, and each law checks that
@@ -97,11 +106,10 @@ const spyOnKill = Effect.acquireRelease(
 // real `ps` and never replaces it. Every other command runs for real.
 const quietMemory = rssStandIn(() => 0).pipe(Layer.provide(NodeServices.layer));
 
-// The entry's own client, whose `fetch` is the global one at the moment of each request: a real
-// process reads the global once, and a law stubs it anew on every run.
-const fetchClient = FetchHttpClient.layer.pipe(
-  Layer.provide(Layer.succeed(FetchHttpClient.Fetch, (input, init) => globalThis.fetch(input, init))),
-);
+// The entry's own client, sending through this run's stand-in: a real process hands it the global
+// `fetch` once, and a law hands it a new stand-in on every run.
+const fetchClient = (fetched: typeof fetch) =>
+  FetchHttpClient.layer.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetched)));
 
 /** A stubbed `fetch` call's body as text, sent as a string or as the client's bytes. */
 const bodyText = (options: RequestInit | undefined): string =>
@@ -171,7 +179,7 @@ it.live.prop(
       const result = yield* Effect.scoped(
         startDev({ build: "quota-start", brain: "unused.mjs", programs: {} }, config),
       ).pipe(
-        Effect.provide(fetchClient),
+        Effect.provide(fetchClient(fetched)),
         Effect.provide(ProcessIdGenerator.layer),
         Effect.provide(SecureRandom.layerWebCrypto),
         Effect.provide(filesWithoutSync),
@@ -194,7 +202,7 @@ it.live.prop(
           const { startDev } = yield* Effect.promise(() => import("./instance.ts"));
           const folder = yield* sandbox;
           const events: Array<typeof BrainEvent.Type> = [];
-          yield* spyOnFetch(async (_url, options) => {
+          const fetched = yield* spyOnFetch(async (_url, options) => {
             const call = JSON.parse(bodyText(options)) as {
               method: string;
               args: Array<typeof BrainEvent.Type>;
@@ -220,7 +228,7 @@ it.live.prop(
             yield* Effect.scoped(
               startDev({ build, brain: "unused.mjs", programs: {} }, RecordWireTest.startupFixture(config)),
             ).pipe(
-              Effect.provide(fetchClient),
+              Effect.provide(fetchClient(fetched)),
               Effect.provide(ProcessIdGenerator.layer),
               Effect.provide(SecureRandom.layerWebCrypto),
               Effect.provide(quietMemory),
@@ -248,7 +256,7 @@ it.live.prop(
       const reached = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
       const events: Array<typeof BrainEvent.Type> = [];
-      yield* spyOnFetch(async (_url, options) => {
+      const fetched = yield* spyOnFetch(async (_url, options) => {
         const call = JSON.parse(bodyText(options)) as {
           method: string;
           args: Array<typeof BrainEvent.Type>;
@@ -287,7 +295,7 @@ it.live.prop(
       }).pipe(
         Effect.ensuring(Deferred.succeed(release, undefined)),
         Effect.scoped,
-        Effect.provide(fetchClient),
+        Effect.provide(fetchClient(fetched)),
         Effect.provide(ProcessIdGenerator.layer),
         Effect.provide(SecureRandom.layerWebCrypto),
         Effect.provide(quietMemory),

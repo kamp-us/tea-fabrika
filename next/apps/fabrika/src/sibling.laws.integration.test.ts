@@ -3,15 +3,18 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { String as Str } from "effect";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
+import { String as Str, Effect, FileSystem, Formatter, Layer, Path, Schedule, Schema } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
+
+
+
+
+
+
+
 import { noTracking, scopedEnv } from "./env.test-support.ts";
+
+
 import { heldPort } from "./port.test-support.ts";
 
 it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call lookup plant fails (A2, real workerd)", () =>
@@ -73,17 +76,17 @@ it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call looku
             ),
           );
 
-          const reply = yield* Effect.tryPromise(() => fetch(`http://127.0.0.1:${port.port}`)).pipe(
+          const reply = yield* HttpClient.get(`http://127.0.0.1:${port.port}`).pipe(
             Effect.retry({ times: 100, schedule: Schedule.spaced("100 millis") }),
           );
 
-          const body = yield* Effect.promise(() => reply.text());
-          expect(reply.ok).toBe(!bare);
+          const body = yield* reply.text;
+          expect(reply.status >= 200 && reply.status < 300).toBe(!bare);
           expect(bare ? body : yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(body)).toEqual(
             bare ? expect.stringContaining("Pong") : { path: ["ping.hit", "pong.back", "ping.leaf"], n: 3 },
           );
         }),
       );
     }
-  }).pipe(Effect.provide(NodeServices.layer)),
+  }).pipe(Effect.provide([NodeServices.layer, FetchHttpClient.layer])),
 );

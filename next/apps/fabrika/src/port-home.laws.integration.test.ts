@@ -44,21 +44,22 @@ import { describe, expect, it } from "@effect/vitest";
 import { Activity } from "@kampus/libfabrika/processes/Process";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Array as Arr, String as Str } from "effect";
-import * as Clock from "effect/Clock";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import { Clock, Config, ConfigProvider, Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
+import { Array as Arr, String as Str, Clock, Config, ConfigProvider, Effect, FileSystem, Layer, Path, Predicate, Schema, Formatter, Option, Order } from "effect";
 import { SecureRandom } from "effect/crypto";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Order from "effect/Order";
-import * as Path from "effect/Path";
-import * as Predicate from "effect/Predicate";
-import * as Schema from "effect/Schema";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import { build } from "./build.ts";
 import { keptEnv } from "./env.test-support.ts";
 import { localInstance } from "./local-instance.ts";

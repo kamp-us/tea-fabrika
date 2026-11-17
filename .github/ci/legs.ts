@@ -28,8 +28,8 @@ import { appendFileSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Record as Rec } from "effect";
-import { Config, ConfigProvider, Effect, Option } from "effect";
+import { Record as Rec, Config, ConfigProvider, Effect, Option } from "effect";
+
 import { assign, measured, median } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";

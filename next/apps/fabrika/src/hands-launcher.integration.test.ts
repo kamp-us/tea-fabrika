@@ -31,20 +31,24 @@ import { build } from "@kampus/libfabrika/build";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Array as Arr, String as Str } from "effect";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import { Config, ConfigProvider, Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import { Array as Arr, String as Str, Config, ConfigProvider, Effect, FileSystem, Option, Path, Queue, Schema, Stream, Formatter } from "effect";
 import { SecureRandom } from "effect/crypto";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
+import { FetchHttpClient, HttpBody, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
-import * as Queue from "effect/Queue";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import * as fc from "fast-check";
 import { keptEnv } from "./env.test-support.ts";
 import type { Project as LauncherProject } from "./hands-launcher.test-support.ts";
@@ -322,15 +326,11 @@ const flow = Effect.fnUntraced(
           },
         });
 
-        const reply = yield* call("grant failed", () =>
-          fetch(`${url}/grant`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ text: value, armored: root.sign(value) }),
-          }),
-        );
+        const reply = yield* HttpClient.post(`${url}/grant`, {
+          body: HttpBody.jsonUnsafe({ text: value, armored: root.sign(value) }),
+        });
 
-        expect(reply.ok, "E2: the person key's grant is accepted").toBe(true);
+        expect(reply.status >= 200 && reply.status < 300, "E2: the person key's grant is accepted").toBe(true);
         const online = yield* one.next("online");
         expect(online.fingerprint, "E2: online is the same key").toBe(waiting.fingerprint);
         yield* call("task request failed", () => method(project, "requestHandsTask")(waiting.fingerprint));
@@ -400,7 +400,7 @@ const flow = Effect.fnUntraced(
     } satisfies Seen;
   },
   Effect.scoped,
-  Effect.provide(SecureRandom.layerWebCrypto),
+  Effect.provide([SecureRandom.layerWebCrypto, FetchHttpClient.layer]),
   Effect.provide(NodeServices.layer),
 );
 

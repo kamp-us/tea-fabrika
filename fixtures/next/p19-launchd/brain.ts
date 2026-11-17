@@ -1,7 +1,7 @@
 // P19 next/. This tiny job proves normal exit policy; L13 also starts the full local instance.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Formatter, Schedule } from "effect";
-import { Config, Effect, FileSystem, Option, Schedule } from "effect";
+import { Effect, FileSystem, Formatter, Schedule, Config, Option } from "effect";
+
 
 NodeRuntime.runMain(Effect.scoped(Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;

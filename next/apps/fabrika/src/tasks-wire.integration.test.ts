@@ -7,15 +7,18 @@ import { it, expect } from "@effect/vitest";
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
 import { Task, Result } from "@kampus/libfabrika/tasks/Task";
-import { Array as Arr, String as Str } from "effect";
+import { Array as Arr, String as Str, Effect, FileSystem, Formatter, Path, Queue, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Path from "effect/Path";
-import * as Queue from "effect/Queue";
-import * as Schema from "effect/Schema";
+import { FetchHttpClient, HttpBody, HttpClient } from "effect/http";
+
+
+
+
+
+
+
 import { keptEnv } from "./env.test-support.ts";
+
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -290,17 +293,11 @@ it.live(
           saw: { label: "test", location: "test", code: "1234", method: "command", check: "touch", has: ["git"] },
         });
 
-        const reply = yield* Effect.tryPromise({
-          try: () =>
-            fetch(`${url}/grant`, {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: Formatter.formatJson({ text: value, armored: root.sign(value) }),
-            }),
-          catch: (cause: unknown) => CallError.make({ message: "grant failed", cause }),
+        const reply = yield* HttpClient.post(`${url}/grant`, {
+          body: HttpBody.jsonUnsafe({ text: value, armored: root.sign(value) }),
         });
 
-        expect(reply.ok).toBe(true);
+        expect(reply.status >= 200 && reply.status < 300).toBe(true);
       });
 
       yield* grant(hands, "hands");
@@ -361,14 +358,8 @@ it.live(
         saw: { label: "test", location: "test", method: "command", check: "touch" },
       });
 
-      yield* Effect.tryPromise({
-        try: () =>
-          fetch(`${url}/grant`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: Formatter.formatJson({ text: revoke, armored: root.sign(revoke) }),
-          }),
-        catch: (cause: unknown) => CallError.make({ message: "revoke failed", cause }),
+      yield* HttpClient.post(`${url}/grant`, {
+        body: HttpBody.jsonUnsafe({ text: revoke, armored: root.sign(revoke) }),
       });
 
       for (const [method, params] of [
@@ -386,6 +377,10 @@ it.live(
       }
 
       yield* socket(url, hands, "revoked", false);
-    }).pipe(Effect.scoped, Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(NodeServices.layer)),
+    }).pipe(
+      Effect.scoped,
+      Effect.provide([SecureRandom.layerWebCrypto, FetchHttpClient.layer]),
+      Effect.provide(NodeServices.layer),
+    ),
   180_000,
 );
