@@ -1,23 +1,11 @@
-// Today's manual lead tooling for two next/ laws. Raw child output stays in the scoped scratch directory.
+// Today's manual lead tooling. Raw child output stays in the scoped scratch directory.
 import { run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import {
-  Cause,
-  Clock,
-  Context,
-  DateTime,
-  Effect,
-  FileSystem,
-  Option,
-  Path,
-  Ref,
-  RegExp as Regex,
-  Schema,
-  Stream,
-} from "effect";
+import { Cause, Clock, Context, DateTime, Effect, FileSystem, Option, Path, Ref, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { argv, cases, decodeRequest, derive, Request } from "./plant-cases.ts";
+import { Failure } from "./plant-errors.ts";
 import { machine, Model, Observation, type Phase } from "./plant-machine.ts";
 
 export class ExerciseError extends Schema.TaggedError<ExerciseError, { readonly brand: unique symbol }>()(
@@ -51,48 +39,12 @@ const Reporter = Schema.Struct({
           status: Schema.String,
           duration: Schema.optionalKey(Schema.NullOr(Schema.Finite)),
           failureMessages: Schema.NullOr(Schema.Array(Schema.String)),
+          meta: Schema.optionalKey(Schema.Struct({ plant: Schema.NullOr(Failure) })),
         }),
       ),
     }),
   ),
 });
-
-/** Diagnostics are a closed vocabulary. No substring copied from source or child output is public. */
-const diagnostic = (key: Request["case"], messages: readonly string[]) => {
-  const [message] = messages;
-
-  if (message === undefined || messages.length !== 1) {
-    return null;
-  }
-
-  const text = message.split(/\n\s+at /)[0] ?? "";
-
-  if (!text.includes("AssertionError")) {
-    return null;
-  }
-
-  if (key === "checklist-pid" && text.includes("a notice names its process")) {
-    return "AssertionError: a notice names its process";
-  }
-
-  if (key === "watcher-r1") {
-    const received = /AssertionError: expected \{\s*_tag: 'same'/.test(text)
-      ? "same"
-      : text.includes("AssertionError: expected { Object (_tag, program, ...) }")
-        ? "unknown"
-        : null;
-
-    const expected =
-      /to match object \{\s*_tag: '(loaded)'\s*\}/.exec(text)?.[1] ??
-      /to match object \{\s*_tag: '(failed)',\s*reason: 'bundle'\s*\}/.exec(text)?.[1];
-
-    if (received !== null && expected !== undefined) {
-      return `AssertionError: expected _tag ${expected}; received _tag ${received}`;
-    }
-  }
-
-  return null;
-};
 
 export const observation = (key: Request["case"], root: string, raw: string, exit: number, ms: number): Observation => {
   const missing = (reason: string) => Observation.cases.incomplete.make({ reason });
@@ -186,7 +138,7 @@ export const observation = (key: Request["case"], root: string, raw: string, exi
     return Observation.cases.passed.make({ ...details, exit: 0 });
   }
 
-  const safe = diagnostic(key, target.failureMessages ?? []);
+  const safe = target.meta?.plant ?? null;
 
   if (
     target.status === "failed" &&
@@ -198,21 +150,11 @@ export const observation = (key: Request["case"], root: string, raw: string, exi
     report.numFailedTestSuites > 0 &&
     safe !== null
   ) {
-    const frame = new RegExp(`${Regex.escape(selected.test)}:([0-9]+):([0-9]+)`).exec(
-      (target.failureMessages ?? []).join("\n"),
-    );
+    if (selected.project === "tooling" && safe.assertion === null) {
+      return missing("unclear");
+    }
 
-    const assertion =
-      frame === null
-        ? null
-        : Option.getOrNull(
-            Schema.decodeUnknownOption(Observation.cases.failed.fields.assertion)({
-              line: Number(frame[1]),
-              column: Number(frame[2]),
-            }),
-          );
-
-    return Observation.cases.failed.make({ ...details, category: "assertion", diagnostic: safe, assertion });
+    return Observation.cases.failed.make({ ...details, category: "assertion", ...safe });
   }
 
   return missing("unclear");
@@ -639,7 +581,12 @@ const main = attempt(process.env, (environment, request) =>
       test: (phase) =>
         Effect.gen(function* () {
           const report = path.join(scratch, `${phase}.json`);
-          const result = yield* child(source, "nice", argv(request.case, report), phase);
+
+          const args = argv(request.case, report).map((arg) =>
+            arg === "--reporter=json" ? `--reporter=${path.join(runner, ".github/ci/plant-reporter.ts")}` : arg,
+          );
+
+          const result = yield* child(source, "nice", args, phase);
           const raw = yield* fs.readFileString(report).pipe(Effect.orElseSucceed(() => ""));
 
           return observation(request.case, source, raw, result.exit, result.ms);
