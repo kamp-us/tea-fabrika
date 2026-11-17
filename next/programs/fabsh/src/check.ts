@@ -339,11 +339,7 @@ const checkedPipe = (
 
 /** Diagnostics for every pipe, including nested substitutions and later statements. */
 export const pipeErrors = (parsed: Parsed, programs: ProgramList): ReadonlyArray<Refused> => {
-  if (Schema.is(Refused)(parsed)) {
-    return [];
-  }
-
-  const errors: Refused[] = [];
+  const errors = new Map<number, Refused>();
   const visit = (pipeline: Pipeline): void => {
     for (let i = 0; i < pipeline.bars.length; i += 1) {
       const from = pipeline.commands[i]!;
@@ -355,7 +351,8 @@ export const pipeErrors = (parsed: Parsed, programs: ProgramList): ReadonlyArray
         const result = wire(writer, reader, from.out?.name ?? null, to.into?.name ?? null);
 
         if (Result.isFailure(result)) {
-          errors.push(refusal(pipeline.bars[i]!.start, result.failure));
+          const at = pipeline.bars[i]!.start;
+          errors.set(at, refusal(at, result.failure));
         }
       }
     }
@@ -367,11 +364,17 @@ export const pipeErrors = (parsed: Parsed, programs: ProgramList): ReadonlyArray
     }
   };
 
-  for (const statement of parsed.statements) {
-    Statement.matchOrElse(statement, { run: ({ pipeline }) => visit(pipeline) }, () => {});
+  if (Schema.is(Refused)(parsed)) {
+    for (const pipeline of parsed.pipelines) {
+      visit(pipeline);
+    }
+  } else {
+    for (const statement of parsed.statements) {
+      Statement.matchOrElse(statement, { run: ({ pipeline }) => visit(pipeline) }, () => {});
+    }
   }
 
-  return errors;
+  return [...errors.values()].sort((a, b) => a.at - b.at);
 };
 
 const Accepted = Schema.TaggedStruct("checked", { statements: Schema.Array(Statement) });

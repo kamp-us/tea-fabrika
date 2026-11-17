@@ -25,6 +25,7 @@ export const Refused = Schema.TaggedStruct("refused", {
   reason: Schema.String,
   status: Schema.Int,
   guess: Schema.NullOr(Schema.String),
+  pipelines: Schema.Array(Schema.suspend((): Schema.Schema<Pipeline> => PipelineSchema)),
 });
 
 export type Refused = typeof Refused.Type;
@@ -88,7 +89,7 @@ const Parsed = Schema.TaggedStruct("parsed", { statements: Schema.Array(Statemen
 export type Parsed = typeof Parsed.Type | Refused;
 
 export const refusal = (at: number, reason: string, status = 2, guess: string | null = null): Refused =>
-  Refused.make({ at, reason, status, guess });
+  Refused.make({ at, reason, status, guess, pipelines: [] });
 
 /** The rest of an agent or room line is prose, including shell punctuation. */
 const said = (line: string): Statement | null => {
@@ -144,10 +145,7 @@ export function parse(line: string): Parsed {
 
   const read = words(line);
 
-  if (read.open) {
-    return refusal(line.length, "a quote is not closed");
-  }
-
+  const readable: Pipeline[] = [];
   const tokens = read.tokens;
   let pos = 0;
   const peek = () => tokens[pos];
@@ -310,15 +308,24 @@ export function parse(line: string): Parsed {
       const head = yield* command();
       const commands = [head];
       const bars: At[] = [];
+      const slot = readable.length;
+      const snapshot = (): Pipeline => ({
+        commands,
+        bars,
+        at: { start: head.at.start, end: commands.at(-1)!.at.end },
+      });
+      readable.push(snapshot());
 
       while (op("|")) {
         const bar = peek()!;
-        bars.push({ start: bar.start, end: bar.end });
         pos += 1;
-        commands.push(yield* command());
+        const next = yield* command();
+        bars.push({ start: bar.start, end: bar.end });
+        commands.push(next);
+        readable[slot] = snapshot();
       }
 
-      return { commands, bars, at: { start: head.at.start, end: commands.at(-1)!.at.end } };
+      return readable[slot]!;
     });
 
   const result = Result.gen(function* () {
@@ -398,5 +405,14 @@ export function parse(line: string): Parsed {
 
     return Parsed.make({ statements });
   });
-  return Result.match(result, { onFailure: (reason) => reason, onSuccess: (parsed) => parsed });
+  const refused = (reason: Refused): Refused =>
+    Refused.make({
+      ...(read.open ? refusal(line.length, "a quote is not closed") : reason),
+      pipelines: readable,
+    });
+
+  return Result.match(result, {
+    onFailure: refused,
+    onSuccess: (parsed) => (read.open ? refused(refusal(line.length, "a quote is not closed")) : parsed),
+  });
 }

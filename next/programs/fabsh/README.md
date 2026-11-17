@@ -7,7 +7,7 @@ It is pure code for a parent program to step. S1 opens no terminal or tile and s
 | Entry | Contract |
 | --- | --- |
 | `./words` | `words(line)` reads quotes, escapes, operators and comments, keeping source offsets. |
-| `./grammar` | `parse(line)` reads statements, pipes, flags, named inputs, substitutions and agent or room prose. A syntax refusal is a value. |
+| `./grammar` | `parse(line)` reads statements, pipes, flags, named inputs, substitutions and agent or room prose. A syntax refusal is a value. It retains completed pipeline reads for highlighting, even if later syntax is incomplete. |
 | `./check` | `check(parsed, programs)` checks the entire line before any program can start. The catalog maps shell names to flag and port declarations with Effect Schemas; `table` records whether a program prints a table. Missing programs return status 127; other refusals return 2, with a source position and a reason. |
 | `./roles` | `roles(line, programs, cursor)` assigns each word its role. The cursor defaults to the line end. Its current word is left unjudged. Finished unknown programs and incompatible pipes get an error role. |
 | `./complete` | `complete(line, programs, jobs, talk)` returns the replaced word and unique candidates. It reads the same declarations and pipe-fit check. Jobs may include stages with process IDs and their input declarations. |
