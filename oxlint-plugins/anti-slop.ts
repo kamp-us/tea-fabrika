@@ -10,7 +10,7 @@
 // the zero lock: one more oxlint run, with the taken rules over the whole scope, fails on a folder
 // with no hit of a rule that the rule's list does not name, and on a listed glob that is not a folder
 // of the scope. It keeps no list of its own: the folders still waiting are the scope's folders minus
-// the rule's list.
+// the rule's list. The typecheck port is today's lead tooling and joins as four exact globs.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -44,8 +44,22 @@ const PLUGINS = [
 /** The four globs of the whole scope. A rule's list becomes these once every folder is on it. */
 export const WHOLE: ReadonlyArray<string> = ["next/**", ".agents/**", "oxlint-plugins/**", ".github/ci/**"];
 
-/** The folders the zero lock's run reads: the scope, as the four globs name it. */
-const ROOTS = ["next", ".agents", "oxlint-plugins", ".github/ci"];
+/** The typecheck port's four globs, as its lint blocks name them. */
+const TYPECHECK = [
+  "scripts/typecheck.ts",
+  "scripts/typecheck/**",
+  "scripts/typecheck.test.ts",
+  "scripts/typecheck-lock.test.ts",
+];
+
+/** The folders and files the zero lock's run reads. */
+const ROOTS = [
+  "next",
+  ".agents",
+  "oxlint-plugins",
+  ".github/ci",
+  ...TYPECHECK.map((glob) => glob.replace(/\/\*\*$/, "")),
+];
 
 const LIBFABRIKA = "next/packages/libfabrika/src";
 
@@ -57,13 +71,14 @@ const subfolders = (root: string, path: string): ReadonlyArray<string> =>
 
 /**
  * The folders of the scope, read from the disk, each as the glob a rule's list names it by: each
- * tooling folder, the files of libfabrika outside a module, each module of libfabrika, each other
- * package, each program and the app. A new folder is one of them from its first file.
+ * tooling folder, the typecheck port, the files of libfabrika outside a module, each module of
+ * libfabrika, each other package, each program and the app. A new folder is one of them from its first file.
  */
 export const folders = (root: string): ReadonlyArray<string> => [
   ".agents/**",
   ".github/ci/**",
   "oxlint-plugins/**",
+  ...TYPECHECK,
   `${LIBFABRIKA}/*`,
   ...subfolders(root, LIBFABRIKA),
   ...subfolders(root, "next/packages").filter((glob) => glob !== "next/packages/libfabrika/**"),

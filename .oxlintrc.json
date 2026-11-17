@@ -2874,7 +2874,10 @@
         "next/programs/checklist/**",
         "next/programs/counter/**",
         "next/programs/inbox/**",
-        "next/programs/tezgah/**"
+        "next/programs/tezgah/**",
+        "scripts/typecheck.ts",
+        "scripts/typecheck.test.ts",
+        "scripts/typecheck-lock.test.ts"
       ],
       "rules": { "anti-slop/max-ternary-depth": ["error", { "maxDepth": 2 }] }
     },
@@ -2891,7 +2894,10 @@
         "next/packages/vitest/**",
         "next/programs/chaos/**",
         "next/programs/checklist/**",
-        "next/programs/inbox/**"
+        "next/programs/inbox/**",
+        "scripts/typecheck.ts",
+        "scripts/typecheck/**",
+        "scripts/typecheck-lock.test.ts"
       ],
       "rules": { "anti-slop/require-safety-comment-for-type-assertion": ["error", { "markers": ["SAFETY"] }] }
     },
@@ -2908,7 +2914,11 @@
         "next/packages/libfabrika/src/schedules/**",
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/vitest/**",
-        "next/programs/inbox/**"
+        "next/programs/inbox/**",
+        "scripts/typecheck.ts",
+        "scripts/typecheck/**",
+        "scripts/typecheck.test.ts",
+        "scripts/typecheck-lock.test.ts"
       ],
       "rules": { "anti-slop/no-unknown-parameters": "error" }
     },
@@ -2929,7 +2939,11 @@
         "next/packages/vitest/**",
         "next/programs/chaos/**",
         "next/programs/inbox/**",
-        "next/programs/tezgah/**"
+        "next/programs/tezgah/**",
+        "scripts/typecheck.ts",
+        "scripts/typecheck/**",
+        "scripts/typecheck.test.ts",
+        "scripts/typecheck-lock.test.ts"
       ],
       "rules": { "anti-slop/no-unknown-returns": "error" }
     },
@@ -2947,7 +2961,11 @@
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
-        "next/programs/inbox/**"
+        "next/programs/inbox/**",
+        "scripts/typecheck.ts",
+        "scripts/typecheck/**",
+        "scripts/typecheck.test.ts",
+        "scripts/typecheck-lock.test.ts"
       ],
       "rules": { "anti-slop/no-runtime-typeof": "error" }
     },
@@ -2963,7 +2981,9 @@
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/tezgah/**",
         "next/packages/vitest/**",
-        "next/programs/chaos/**"
+        "next/programs/chaos/**",
+        "scripts/typecheck.ts",
+        "scripts/typecheck/**"
       ],
       "rules": { "anti-slop-effect/no-manual-tagged-construction": "error" }
     },
@@ -2984,7 +3004,11 @@
         "next/packages/libfabrika/src/tezgah/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
-        "next/programs/inbox/**"
+        "next/programs/inbox/**",
+        "scripts/typecheck.ts",
+        "scripts/typecheck/**",
+        "scripts/typecheck.test.ts",
+        "scripts/typecheck-lock.test.ts"
       ],
       "rules": { "anti-slop-effect/no-manual-tagged-type": "error" }
     },
@@ -3018,7 +3042,10 @@
         "next/packages/tuval/**",
         "next/packages/vitest/**",
         "next/programs/inbox/**",
-        "next/programs/tezgah/**"
+        "next/programs/tezgah/**",
+        "scripts/typecheck.ts",
+        "scripts/typecheck.test.ts",
+        "scripts/typecheck-lock.test.ts"
       ],
       "rules": { "anti-slop-effect/prefer-effect-match": "error" }
     },
@@ -3051,7 +3078,8 @@
         "next/programs/counter/**",
         "next/programs/inbox/**",
         "next/programs/pipeline/**",
-        "next/programs/tezgah/**"
+        "next/programs/tezgah/**",
+        "scripts/typecheck.ts"
       ],
       "rules": { "anti-slop/require-readable-spacing": "error" }
     }

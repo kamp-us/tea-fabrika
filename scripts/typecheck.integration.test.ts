@@ -6,7 +6,7 @@
 // one. These laws start processes, so under 0584 they are `.integration.` and run in the full run.
 // Ticket 766 ported the script to `scripts/typecheck.ts` (0113); these laws start it with node.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";

@@ -338,6 +338,27 @@ describe("L5 no block for a taken rule says off or warn", () => {
   });
 });
 
+// The approved typecheck-port amendment adds these four globs, rather than all of scripts/.
+// Plant: drop the port from folders(); its listed globs are then refused.
+describe("L8 the zero lock covers the typecheck port, today's tooling", () => {
+  it("scenario: the port's four globs are in scope and no taken rule lists a refused glob", () => {
+    const scope = folders(ROOT);
+
+    expect(scope).toEqual(
+      expect.arrayContaining([
+        "scripts/typecheck.ts",
+        "scripts/typecheck/**",
+        "scripts/typecheck.test.ts",
+        "scripts/typecheck-lock.test.ts",
+      ]),
+    );
+
+    for (const rule of TAKEN) {
+      expect(lock(scope, listed(rule), new Map()).refused, rule).toEqual([]);
+    }
+  });
+});
+
 describe("L7 the config loads the fork's two plugins only from vendor/anti-slop/", () => {
   const VENDORED = {
     "anti-slop": "vendor/anti-slop/src/index.ts",
