@@ -70,8 +70,9 @@ neither the later package move nor the CLI.
 `85919fe41730cdc48ba3fbe4bfa53e93e1ba9fbf` passed its independent source recheck.
 The existing tests moved unchanged. The package consumer law is authored, but has not run.
 Seven approved CI discovery and archive-delivery edits wait for the active CI repair to land.
-The ordinary-test selector also needs a narrow scope addition to reach `kalfa/`.
-This slice remains a draft. Ordinary draft checks supply no consumer or archive proof.
+The approved ordinary-test routing is prepared privately and has not run.
+[The extraction draft](https://github.com/kamp-us/tea-fabrika/pull/1583) keeps merge automation off.
+Ordinary draft checks supply no consumer or archive proof.
 No tested archive is available yet. Its
 [approved amendment](./quests/kalfa-config-package-amendment-PLAN.md) keeps the CLI in slice 3.
 After successful CI and landing, another project installs the tested archive with
