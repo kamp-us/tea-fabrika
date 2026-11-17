@@ -6,7 +6,7 @@ import { complete, type Jobs } from "../complete.ts";
 import { roles } from "../roles.ts";
 import { words, Token } from "../words.ts";
 import { spot } from "./cells.ts";
-import { keys, Key, printable } from "./keys.ts";
+import { keys, Key, pending, printable } from "./keys.ts";
 import {
   back,
   BELL,
@@ -47,8 +47,8 @@ type Prompt = typeof Prompt.Type;
 const Mode = Schema.TaggedUnion({
   prompt: PromptFields,
   search: { search: Search, typed: Prompt },
-  busy: { ahead: Schema.Array(Schema.String) },
-  asking: { job: Schema.Int },
+  busy: { ahead: Schema.Array(Schema.String), flushes: Schema.Array(Schema.Int) },
+  asking: { job: Schema.Int, ahead: Schema.Array(Schema.String), flushes: Schema.Array(Schema.Int) },
   ended: {},
 });
 
@@ -83,6 +83,7 @@ interface Context {
 
 const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("keys"), data: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("flush") }),
   Schema.Struct({ type: Schema.Literal("ready") }),
   Schema.Struct({ type: Schema.Literal("size"), cols: Schema.Int }),
   Schema.Struct({ type: Schema.Literal("printed"), text: Schema.String }),
@@ -91,7 +92,11 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("jobs"), jobs: Schema.declare<Jobs>((value) => value instanceof Map) }),
   Schema.Struct({ type: Schema.Literal("talk"), talk: TalkSchema }),
   Schema.Struct({ type: Schema.Literal("status"), text: Schema.NullOr(Schema.String) }),
-  Schema.Struct({ type: Schema.Literal("asked"), job: Schema.Int }),
+  Schema.Struct({
+    type: Schema.Literal("asked"),
+    job: Schema.Int,
+    text: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  }),
   Schema.Struct({ type: Schema.Literal("ended") }),
 ]);
 
@@ -152,7 +157,7 @@ const display = (s: Model) =>
     {
       prompt: ({ line }) => ({
         plain: PROMPT + line.left + line.right,
-        colored: PROMPT + paint(line.left + line.right, roles(line.left + line.right, s.programs)),
+        colored: PROMPT + paint(line.left + line.right, roles(line.left + line.right, s.programs, line.left.length)),
         at: spot(PROMPT + line.left, s.cols),
       }),
       search: ({ search }) => {
@@ -253,7 +258,7 @@ const accepted = (s: Model, line: string): Step => {
   return [
     {
       ...s,
-      mode: Mode.cases.busy.make({ ahead: [] }),
+      mode: Mode.cases.busy.make({ ahead: [], flushes: [] }),
       history: history([...s.history, line], s.historyLimit),
       last: null,
     },
@@ -289,7 +294,11 @@ const atPrompt = (s: Model, mode: Prompt, key: Key): Step => {
     return [{ ...next, ring }, cmds];
   };
   const recall = (count: number): Step => {
-    const back = Math.max(0, Math.min(s.history.length, count));
+    if (count < 0 || count > s.history.length || (count > 0 && s.history.length === 0)) {
+      return bell(s);
+    }
+
+    const back = count;
     const typed = mode.recall?.typed ?? mode.line;
     const line = back === 0 ? typed : { left: s.history[s.history.length - back] ?? "", right: "" };
     return redraw(s, {
@@ -520,23 +529,23 @@ const one = (s: Model, key: Key): Step => {
     prompt: (mode) => atPrompt(s, mode, key),
     search: (mode) => inSearch(s, mode, key),
     busy: (): Step => [s, []],
-    asking: ({ job }): Step =>
-      Key.match(key, {
-        text: ({ text }): Step =>
-          /^[yn]$/i.test(text)
-            ? [
-                { ...s, mode: Mode.cases.busy.make({ ahead: [] }) },
-                [answer({ job, allow: text.toLowerCase() === "y" })],
-              ]
-            : bell(s),
+    asking: (mode): Step => {
+      const answered = (allow: boolean): Step => {
+        const feedback = `  ${allow ? "y: allowed once" : "n: refused"}${NEWLINE}`;
+        const bytes = s.status === null ? feedback : "\r\x1b[J" + feedback + statusRow(s.status, s.cols);
+        return [
+          { ...s, mode: Mode.cases.busy.make({ ahead: mode.ahead, flushes: mode.flushes }) },
+          [write({ bytes }), answer({ job: mode.job, allow })],
+        ];
+      };
+
+      return Key.match(key, {
+        text: ({ text }): Step => (/^[yn]$/i.test(text) ? answered(text.toLowerCase() === "y") : bell(s)),
         command: ({ command: action }): Step =>
-          action === "interrupt"
-            ? [{ ...s, mode: Mode.cases.busy.make({ ahead: [] }) }, [interrupt({})]]
-            : action === "accept-line"
-              ? [{ ...s, mode: Mode.cases.busy.make({ ahead: [] }) }, [answer({ job, allow: false })]]
-              : bell(s),
+          action === "interrupt" ? queued(s, mode, "\x03") : action === "accept-line" ? answered(false) : bell(s),
         unknown: () => bell(s),
-      }),
+      });
+    },
     ended: (): Step => [s, []],
   });
   // Only a yank or yank-pop leaves a replacement span available for Alt-Y.
@@ -548,51 +557,92 @@ const one = (s: Model, key: Key): Step => {
   return [{ ...next, mode, last: command }, outputs];
 };
 
-const queued = (s: Model, ahead: ReadonlyArray<string>, data: string): Step => {
+type Ahead = Pick<Extract<typeof Mode.Type, { readonly _tag: "busy" }>, "ahead" | "flushes">;
+
+const queued = (s: Model, mode: Ahead, data: string): Step => {
   if (data.includes("\x03")) {
     const rest = data.slice(data.lastIndexOf("\x03") + 1).replaceAll("\x04", "");
     const [framing] = keys.init(null, undefined);
-    return [{ ...s, framing, mode: Mode.cases.busy.make({ ahead: rest === "" ? [] : [rest] }) }, [interrupt({})]];
+    return [
+      { ...s, framing, status: null, mode: Mode.cases.busy.make({ ahead: rest === "" ? [] : [rest], flushes: [] }) },
+      [write({ bytes: (s.status === null ? "" : "\r\x1b[J") + "^C" + NEWLINE }), interrupt({})],
+    ];
   }
 
   const text = data.replaceAll("\x04", "");
-  return [{ ...s, mode: Mode.cases.busy.make({ ahead: text === "" ? ahead : [...ahead, text] }) }, []];
+  return [
+    {
+      ...s,
+      mode: Mode.cases.busy.make({ ahead: text === "" ? mode.ahead : [...mode.ahead, text], flushes: mode.flushes }),
+    },
+    [],
+  ];
 };
 
-const input = (s: Model, data: string): Step => {
+const input = (s: Model, data: string, flush = false): Step => {
   if (Mode.guards.busy(s.mode)) {
-    return queued(s, s.mode.ahead, data);
+    if (flush) {
+      const text = s.mode.ahead.join("");
+      const flushes =
+        text.endsWith("\x1b") && s.mode.flushes.at(-1) !== text.length
+          ? [...s.mode.flushes, text.length]
+          : s.mode.flushes;
+      return [{ ...s, mode: Mode.cases.busy.make({ ...s.mode, flushes }) }, []];
+    }
+
+    return queued(s, s.mode, data);
   }
 
-  if (Mode.guards.search(s.mode) && data === "\x1b") {
-    return one(s, Key.cases.command.make({ command: "cancel" }));
-  }
-
-  const [framing] = applyCell(keys, s.framing, { type: "data", data });
-  let current = { ...s, framing };
+  const [framing] = applyCell(keys, s.framing, flush ? { type: "flush" } : { type: "data", data });
+  let current: Model = { ...s, framing };
   const outputs: Output[] = [];
 
-  for (let at = 0; at < framing.keys.length; at += 1) {
-    const event = framing.keys[at]!.key;
+  for (;;) {
+    const event = current.framing.keys[0];
 
-    if (Mode.guards.busy(current.mode)) {
-      // Preserve the original bytes after Enter, so type-ahead is decoded only when ready.
-      const rest = framing.keys
-        .slice(at)
-        .map((event) => event.raw)
-        .join("");
-      const [next, cmds] = queued(current, current.mode.ahead, rest);
-      current = next;
-      outputs.push(...cmds);
+    if (event === undefined) {
       break;
     }
 
-    const [next, cmds] = one(current, event);
+    const suffix = pending(current.framing);
+    const [next, cmds] = one(current, event.key);
     current = next;
     outputs.push(...cmds);
+
+    if (Mode.guards.busy(current.mode)) {
+      // The child has read only this key. Its pending text is the exact untouched suffix.
+      const [fresh] = keys.init(null, undefined);
+      const [queuedModel, queuedCmds] = queued({ ...current, framing: fresh }, current.mode, suffix);
+      current = queuedModel;
+      outputs.push(...queuedCmds);
+      break;
+    }
+
+    const [framing] = applyCell(keys, current.framing, { type: "data", data: "" });
+    current = { ...current, framing };
   }
 
   return [current, outputs];
+};
+
+const ready = (s: Model, mode: Ahead): Step => {
+  const [framing] = keys.init(null, undefined);
+  const next: Model = { ...s, framing, mode: prompt(), status: null };
+  let current = next;
+  const outputs: Output[] = [write({ bytes: (s.status === null ? "" : "\r\x1b[J") + drawn(next) })];
+  const text = mode.ahead.join("") + pending(s.framing);
+  let from = 0;
+
+  for (const at of mode.flushes) {
+    const [after, cmds] = input(current, text.slice(from, at));
+    const [flushed, more] = input(after, "", true);
+    current = flushed;
+    outputs.push(...cmds, ...more);
+    from = at;
+  }
+
+  const [after, cmds] = input(current, text.slice(from));
+  return [after, [...outputs, ...cmds]];
 };
 
 const statusRow = (text: string, cols: number): string => {
@@ -636,15 +686,13 @@ export const editor = Machine.make({
   },
   update: {
     keys: (s, msg) => input(s, msg.data),
+    flush: (s): Step => input(s, "", true),
     ready: (s): Step =>
       Mode.matchOrElse(
         s.mode,
         {
-          busy: ({ ahead }): Step => {
-            const next = { ...s, mode: prompt(), status: null };
-            const [after, cmds] = input(next, ahead.join(""));
-            return [after, [write({ bytes: (s.status === null ? "" : "\r\x1b[J") + drawn(next) }), ...cmds]];
-          },
+          busy: (mode) => ready(s, mode),
+          asking: (mode) => ready(s, mode),
         },
         (): Step => [s, []],
       ),
@@ -691,7 +739,30 @@ export const editor = Machine.make({
             [write({ bytes: "\r\x1b[J" + (msg.text === null ? "" : statusRow(msg.text, s.cols)) })],
           ]
         : [s, []],
-    asked: (s, msg): Step => [{ ...s, mode: Mode.cases.asking.make({ job: msg.job }) }, []],
+    asked: (s, msg): Step =>
+      Mode.matchOrElse(
+        s.mode,
+        {
+          busy: (mode): Step =>
+            msg.text === null
+              ? [s, []]
+              : [
+                  { ...s, mode: Mode.cases.asking.make({ job: msg.job, ahead: mode.ahead, flushes: mode.flushes }) },
+                  [],
+                ],
+          asking: (mode): Step => [
+            {
+              ...s,
+              mode:
+                msg.text === null
+                  ? Mode.cases.busy.make({ ahead: mode.ahead, flushes: mode.flushes })
+                  : Mode.cases.asking.make({ ...mode, job: msg.job }),
+            },
+            [],
+          ],
+        },
+        (): Step => [s, []],
+      ),
     ended: (s): Step => [{ ...s, mode: Mode.cases.ended.make({}) }, [write({ bytes: "\x1b[?2004l" })]],
   },
 });

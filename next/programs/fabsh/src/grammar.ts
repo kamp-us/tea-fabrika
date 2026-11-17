@@ -220,7 +220,13 @@ export function parse(line: string): Parsed {
           }
         } else if (depth === 0 && help === null && ["--help", "-h"].includes(t.text)) {
           const next = tokens[scan + 1];
-          help = { at: t, name: next !== undefined && Token.guards.word(next) ? { name: next.text, at: next } : null };
+          help = {
+            at: t,
+            name:
+              next !== undefined && Token.guards.word(next) && !["--help", "-h"].includes(next.text)
+                ? { name: next.text, at: next }
+                : null,
+          };
         }
       }
 

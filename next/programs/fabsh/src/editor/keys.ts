@@ -125,86 +125,103 @@ const START = "\x1b[200~";
 
 const END = "\x1b[201~";
 
-/** A byte reader is a child tea machine, so partial paste marks survive any frame split. */
+/** The unconsumed bytes, including the opening paste mark when a paste is incomplete. */
+export const pending = (state: typeof Model.Type): string =>
+  Frame.match(state.frame, {
+    normal: ({ pending }) => pending,
+    paste: ({ pending }) => START + pending,
+  });
+
+/** Read one key. The untouched suffix stays after it, even if the parent enters busy. */
+const read = (state: typeof Model.Type, more: string): typeof Model.Type => {
+  let frame = state.frame;
+  let data = frame.pending + more;
+
+  for (;;) {
+    if (Frame.guards.paste(frame)) {
+      const end = data.indexOf(END);
+
+      if (end < 0) {
+        return { frame: Frame.cases.paste.make({ pending: data }), keys: [] };
+      }
+
+      const text = [...data.slice(0, end).replaceAll(/\r\n|\r|\n|\t/g, " ")].filter(printable).join("");
+      const raw = START + data.slice(0, end) + END;
+      data = data.slice(end + END.length);
+      frame = Frame.cases.normal.make({ pending: "" });
+
+      if (text !== "") {
+        return {
+          frame: Frame.cases.normal.make({ pending: data }),
+          keys: [{ raw, key: Key.cases.text.make({ text }) }],
+        };
+      }
+
+      continue;
+    }
+
+    if (data === "") {
+      return { frame: Frame.cases.normal.make({ pending: "" }), keys: [] };
+    }
+
+    if (data.startsWith(START)) {
+      frame = Frame.cases.paste.make({ pending: "" });
+      data = data.slice(START.length);
+      continue;
+    }
+
+    if (START.startsWith(data) || data === "\x18") {
+      return { frame: Frame.cases.normal.make({ pending: data }), keys: [] };
+    }
+
+    let end = 1;
+
+    if (data.startsWith("\x1b[")) {
+      const final = /[\x40-\x7e]/.exec(data.slice(2));
+
+      if (final === null) {
+        return { frame: Frame.cases.normal.make({ pending: data }), keys: [] };
+      }
+
+      end = 3 + final.index;
+    } else if (data.startsWith("\x1bO")) {
+      if (data.length < 3) {
+        return { frame: Frame.cases.normal.make({ pending: data }), keys: [] };
+      }
+
+      end = 3;
+    } else if (data.startsWith("\x1b") || data.startsWith("\x18\x15")) {
+      end = 2;
+    } else if (printable(data.charAt(0))) {
+      while (end < data.length && printable(data.charAt(end))) {
+        end += 1;
+      }
+    }
+
+    const raw = data.slice(0, end);
+    return { frame: Frame.cases.normal.make({ pending: data.slice(end) }), keys: [{ raw, key: key(raw) }] };
+  }
+};
+
+/** The parent drains one key at a time. Only flush declares a pending Esc standalone. */
 export const keys = Machine.make({
   model: Model,
-  msg: Schema.Struct({ type: Schema.Literal("data"), data: Schema.String }),
+  msg: Schema.Union([
+    Schema.Struct({ type: Schema.Literal("data"), data: Schema.String }),
+    Schema.Struct({ type: Schema.Literal("flush") }),
+  ]),
   cmds: [],
   init: () => [{ frame: Frame.cases.normal.make({ pending: "" }), keys: [] }, []],
   update: {
-    data: (state, msg) => {
-      const events: Array<typeof Input.Type> = [];
-      let frame = state.frame;
-      let data = frame.pending + msg.data;
-
-      for (;;) {
-        if (Frame.guards.paste(frame)) {
-          const end = data.indexOf(END);
-
-          if (end < 0) {
-            frame = Frame.cases.paste.make({ pending: data });
-            break;
+    data: (state, msg) => [read(state, msg.data), []],
+    flush: (state) => [
+      Frame.guards.normal(state.frame) && state.frame.pending === "\x1b"
+        ? {
+            frame: Frame.cases.normal.make({ pending: "" }),
+            keys: [{ raw: "\x1b", key: key("\x1b") }],
           }
-
-          const text = [...data.slice(0, end).replaceAll(/\r\n|\r|\n|\t/g, " ")].filter(printable).join("");
-
-          if (text !== "") {
-            events.push({ raw: START + data.slice(0, end) + END, key: Key.cases.text.make({ text }) });
-          }
-
-          data = data.slice(end + END.length);
-          frame = Frame.cases.normal.make({ pending: "" });
-          continue;
-        }
-
-        if (data === "") {
-          frame = Frame.cases.normal.make({ pending: "" });
-          break;
-        }
-
-        if (data.startsWith(START)) {
-          frame = Frame.cases.paste.make({ pending: "" });
-          data = data.slice(START.length);
-          continue;
-        }
-
-        if (START.startsWith(data) || data === "\x18") {
-          frame = Frame.cases.normal.make({ pending: data });
-          break;
-        }
-
-        let end = 1;
-
-        if (data.startsWith("\x1b[")) {
-          const final = /[\x40-\x7e]/.exec(data.slice(2));
-
-          if (final === null) {
-            frame = Frame.cases.normal.make({ pending: data });
-            break;
-          }
-
-          end = 3 + final.index;
-        } else if (data.startsWith("\x1bO")) {
-          if (data.length < 3) {
-            frame = Frame.cases.normal.make({ pending: data });
-            break;
-          }
-
-          end = 3;
-        } else if (data.startsWith("\x1b") || data.startsWith("\x18\x15")) {
-          end = 2;
-        } else if (printable(data.charAt(0))) {
-          while (end < data.length && printable(data.charAt(end))) {
-            end += 1;
-          }
-        }
-
-        const raw = data.slice(0, end);
-        events.push({ raw, key: key(raw) });
-        data = data.slice(end);
-      }
-
-      return [{ frame, keys: events }, []];
-    },
+        : { ...state, keys: [] },
+      [],
+    ],
   },
 });

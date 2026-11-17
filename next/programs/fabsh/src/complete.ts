@@ -6,6 +6,11 @@ import { Token, words } from "./words.ts";
 export interface Job {
   readonly program: string;
   readonly inputs: Declaration["inputs"];
+  readonly stages?: ReadonlyArray<{
+    readonly process: string;
+    readonly program: string;
+    readonly inputs: Declaration["inputs"];
+  }>;
 }
 
 export type Jobs = ReadonlyMap<number, Job>;
@@ -133,7 +138,9 @@ export function complete(
       return result([]);
     }
 
-    return result(["as", ...(talk.offers?.[rest[0]!] ?? []).filter((name) => !rest.includes(name))]);
+    return result(
+      rest.length >= 3 ? ["as"] : ["as", ...(talk.offers?.[rest[0]!] ?? []).filter((name) => !rest.includes(name))],
+    );
   }
 
   if (head === "dismiss") {
@@ -148,10 +155,14 @@ export function complete(
     const [job, input] = rest;
 
     if (job === undefined) {
-      return result([...jobs.keys()].map((number) => `%${number}`));
+      return result(
+        [...jobs].flatMap(([number, entry]) => [`%${number}`, ...(entry.stages ?? []).map((stage) => stage.process)]),
+      );
     }
 
-    const entry = jobs.get(Number(job.replace(/^%/, "")));
+    const numbered = /^%[0-9]+$/.test(job) ? jobs.get(Number(job.slice(1))) : undefined;
+    const stage = [...jobs.values()].flatMap((entry) => entry.stages ?? []).find((entry) => entry.process === job);
+    const entry = stage ?? numbered?.stages?.[0] ?? numbered;
 
     if (entry === undefined || (head !== "tell" && head !== "close")) {
       return result([]);
@@ -200,6 +211,8 @@ export function complete(
     ...Object.keys(program.flags)
       .filter((name) => !given.has(name))
       .map((name) => `--${name}`),
-    ...(word.startsWith("-") ? ["--help", "--all"] : Object.keys(program.inputs).map((name) => `${name}=`)),
+    ...(word.startsWith("-") ? [] : Object.keys(program.inputs).map((name) => `${name}=`)),
+    ...(rest.length === 0 || word.startsWith("-") ? ["--help"] : []),
+    ...(word.startsWith("-") && program.table === true && !given.has("all") ? ["--all"] : []),
   ]);
 }

@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { check, type ProgramList } from "./check.ts";
+import { check, pipeErrors, type ProgramList } from "./check.ts";
 import { BUILTINS, parse, Refused } from "./grammar.ts";
 import { Token, words } from "./words.ts";
 
@@ -26,7 +26,7 @@ export const Span = Schema.Struct({ start: Schema.Int, end: Schema.Int, role: Ro
 export type Span = typeof Span.Type;
 
 /** Coloring reads the same words and checker as Enter and completion. */
-export function roles(line: string, programs: ProgramList): ReadonlyArray<Span> {
+export function roles(line: string, programs: ProgramList, cursor = line.length): ReadonlyArray<Span> {
   const lead = line.length - line.trimStart().length;
 
   if (line.charAt(lead) === "@" || /^#[^\s]+/.test(line.slice(lead))) {
@@ -57,7 +57,7 @@ export function roles(line: string, programs: ProgramList): ReadonlyArray<Span> 
 
   for (let i = 0; i < read.tokens.length; i += 1) {
     const token = read.tokens[i]!;
-    const unfinished = !read.trailing && i === read.tokens.length - 1;
+    const unfinished = Token.guards.word(token) && token.start <= cursor && cursor <= token.end;
     const role = Token.match(token, {
       op: (t): Role => {
         if (t.op === "|") {
@@ -107,14 +107,22 @@ export function roles(line: string, programs: ProgramList): ReadonlyArray<Span> 
     spans.push({ ...comment, role: Role.cases.comment.make({}) });
   }
 
-  const checked = check(parse(line), programs);
+  const parsed = parse(line);
+  const checked = check(parsed, programs);
+  const diagnostics = [...pipeErrors(parsed, programs), ...(Schema.is(Refused)(checked) ? [checked] : [])];
 
-  if (Schema.is(Refused)(checked)) {
-    const span = spans.find((s) => s.start <= checked.at && checked.at < s.end);
-    const last = read.tokens.at(-1);
+  for (const error of diagnostics) {
+    const span = spans.find((s) => s.start <= error.at && error.at < s.end);
 
-    if (span !== undefined && !(last !== undefined && !read.trailing && span.start === last.start)) {
-      spans[spans.indexOf(span)] = { ...span, role: Role.cases.error.make({ reason: checked.reason }) };
+    if (span === undefined || Role.isAnyOf(["program", "builtin"])(span.role)) {
+      continue;
+    }
+
+    const token = read.tokens.find((t) => t.start === span.start);
+    const unfinished = token !== undefined && Token.guards.word(token) && token.start <= cursor && cursor <= token.end;
+
+    if (!unfinished) {
+      spans[spans.indexOf(span)] = { ...span, role: Role.cases.error.make({ reason: error.reason }) };
     }
   }
 

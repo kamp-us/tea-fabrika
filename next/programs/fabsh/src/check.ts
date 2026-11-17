@@ -3,6 +3,7 @@ import { type Command, type Parsed, Refused, refusal, Statement, Value, type Pip
 
 export interface Declaration {
   readonly name: string;
+  readonly table?: boolean;
   readonly flags: Readonly<
     Record<string, { readonly schema: Schema.ConstraintDecoder<unknown>; readonly required: boolean }>
   >;
@@ -224,10 +225,23 @@ const checkedPipe = (
       const name = asked.help.name?.name;
 
       if (name !== undefined) {
-        const part = name.replace(/^--|^[<>]|=$/g, "");
+        const part = name.startsWith("--")
+          ? name.slice(2)
+          : name.startsWith(">") || name.startsWith("<")
+            ? name.slice(1)
+            : name.endsWith("=")
+              ? name.slice(0, -1)
+              : name;
+        const fields = name.startsWith("--")
+          ? [declared.flags]
+          : name.startsWith(">")
+            ? [declared.outputs]
+            : name.startsWith("<") || name.endsWith("=")
+              ? [declared.inputs]
+              : [declared.flags, declared.inputs, declared.outputs];
 
-        if (![declared.flags, declared.inputs, declared.outputs].some((fields) => Object.hasOwn(fields, part))) {
-          return yield* Result.fail(refusal(asked.help.at.start, `${declared.name} has no part named ${name}`));
+        if (!fields.some((names) => Object.hasOwn(names, part))) {
+          return yield* Result.fail(refusal(asked.help.name!.at.start, `${declared.name} has no part named ${name}`));
         }
       }
 
@@ -270,6 +284,12 @@ const checkedPipe = (
         return yield* Result.fail(refusal(command.out.at.start, ">output needs a pipe or $( ) to take it"));
       }
 
+      if (command.all !== null && declared.table !== true) {
+        return yield* Result.fail(
+          refusal(command.all.start, `--all shows every row of a table, and ${declared.name} prints no table`),
+        );
+      }
+
       const seen = new Set<string>();
 
       for (const flag of command.flags) {
@@ -296,12 +316,10 @@ const checkedPipe = (
         }
       }
 
-      const told = new Set<string>();
-
       for (const input of command.told) {
         const shape = own(declared.inputs, input.name);
 
-        if (shape === undefined || told.has(input.name) || wires[i - 1]?.input === input.name) {
+        if (shape === undefined || wires[i - 1]?.input === input.name) {
           return yield* Result.fail(
             refusal(
               input.at.start,
@@ -312,13 +330,49 @@ const checkedPipe = (
           );
         }
 
-        told.add(input.name);
         yield* checkedValue(input.value, shape, programs);
       }
     }
 
     return wires;
   });
+
+/** Diagnostics for every pipe, including nested substitutions and later statements. */
+export const pipeErrors = (parsed: Parsed, programs: ProgramList): ReadonlyArray<Refused> => {
+  if (Schema.is(Refused)(parsed)) {
+    return [];
+  }
+
+  const errors: Refused[] = [];
+  const visit = (pipeline: Pipeline): void => {
+    for (let i = 0; i < pipeline.bars.length; i += 1) {
+      const from = pipeline.commands[i]!;
+      const to = pipeline.commands[i + 1]!;
+      const writer = programs.get(from.program.name);
+      const reader = programs.get(to.program.name);
+
+      if (writer !== undefined && reader !== undefined) {
+        const result = wire(writer, reader, from.out?.name ?? null, to.into?.name ?? null);
+
+        if (Result.isFailure(result)) {
+          errors.push(refusal(pipeline.bars[i]!.start, result.failure));
+        }
+      }
+    }
+
+    for (const command of pipeline.commands) {
+      for (const given of [...command.flags, ...command.told]) {
+        Value.matchOrElse(given.value, { sub: ({ pipeline }) => visit(pipeline) }, () => {});
+      }
+    }
+  };
+
+  for (const statement of parsed.statements) {
+    Statement.matchOrElse(statement, { run: ({ pipeline }) => visit(pipeline) }, () => {});
+  }
+
+  return errors;
+};
 
 const Accepted = Schema.TaggedStruct("checked", { statements: Schema.Array(Statement) });
 
