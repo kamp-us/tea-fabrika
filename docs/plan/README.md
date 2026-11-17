@@ -55,6 +55,16 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-17:* [Settings slice 1](https://github.com/kamp-us/tea-fabrika/pull/1427), ticket 1076,
+generalizes the engine in `next/`. One `App` value supplies the settings file names, environment
+prefix, home variable, version key and list command. Fabrika keeps its existing names through its
+own binding. The engine stays inside libfabrika; moving it to `@kalfa/config` and adding
+`kalfa config get|set` remain later slices. The dependent
+[readable-spacing child](https://github.com/kamp-us/tea-fabrika/pull/1525), ticket 1057, applies the
+agreed rule scopes while keeping program code, comments and literal contents. The complete pair
+uses its native stack. The PRs link their independent reviews and CI evidence. This slice supplies
+neither the later package move nor the CLI.
+
 Today's lead tooling adds a separate manual [L11 exercise](../../.github/workflows/l11-exercise.yaml), ticket 1135,
 for `next/` ticket 1129. It fixes one source pair, compares ordinary whole-file runs and private generated inputs,
 and declares ten serial clean jobs. Fixed output faults restore every edited file and publish only decoded facts.
