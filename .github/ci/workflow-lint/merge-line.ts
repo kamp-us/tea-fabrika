@@ -111,7 +111,7 @@ export const lintNoTooling = (path: string, text: string): string[] => {
 
   return events.includes("pull_request") || events.includes("merge_group")
     ? toolingJobs(workflow, path === ".github/workflows/check.yaml").map(
-        (job) => `${path}: T1: ${job} runs no tooling test outside the bounded automatic route`,
+        (job) => `${path}: T1: ${job} runs no tooling test (0539)`,
       )
     : [];
 };
