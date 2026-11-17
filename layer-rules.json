@@ -391,7 +391,7 @@
       "name": "next-settings",
       "layer": 2,
       "paths": ["next/packages/libfabrika/src/settings"],
-      "imports": ["next-telemetry", "next-shared"]
+      "imports": ["next-telemetry", "next-shared", "kalfa-config"]
     },
     {
       "name": "next-telemetry",
