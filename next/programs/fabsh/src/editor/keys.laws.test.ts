@@ -5,6 +5,8 @@ import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Match, Schema } from "effect";
 import { editor } from "./editor.ts";
 
+type Model = ReturnType<typeof editor.init>[0];
+
 type EditorCmd = ReturnType<typeof editor.init>[1][number];
 
 type EditorMsg = typeof editor.msg.Type;
