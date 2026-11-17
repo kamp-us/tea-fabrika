@@ -131,11 +131,15 @@ export const layer: Layer.Layer<Locks, never, FileSystem.FileSystem | Processes>
         }),
       );
 
-    /** Lets the lock go: the running command's file, then the label if it still names us. */
+    /** Lets our lock go: only its holder removes the child guard and then its label. */
     const release = (lock: string) =>
       Effect.gen(function* () {
-        yield* fs.remove(`${lock}.child`, { force: true });
-        yield* removeIfOurs(lock);
+        const now = yield* read(lock);
+
+        if (Option.isSome(now) && now.value.text === label) {
+          yield* fs.remove(`${lock}.child`, { force: true });
+          yield* removeIfOurs(lock);
+        }
       }).pipe(Effect.catch((e) => Console.error(`typecheck: the lock ${lock} was not let go cleanly: ${e.message}`)));
 
     /** Names a holder for the waiting line: its pid, and its command line where ps can read it. */

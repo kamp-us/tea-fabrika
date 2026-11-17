@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0113, 0410, 0033, 0563, 0567; body 26106961aa6e
+Approved by the lead agent, builds 0113, 0410, 0033, 0563, 0567, 0411 and 0579; body 54dc8f0528c9
 Plancheck-Version: 3
 
 ```ts
@@ -370,9 +370,9 @@ the stand-ins, timings and assertions do not.
 | E5, the six "a <shape> node_modules ends as <outcome>" scenarios; invocation | test | scenario: link, broken link, link with a failed install, file, folder, missing | patch before the link goes, remove the target, or go on after a failed install | scripts/caps.test.ts |
 | E6, "holds one typecheck lock through success, failure and an interrupted waiter"; invocation, and its `existsSync` names `typecheck.ts`; 4 runs | test | fc.record: exit code 0, 1 or 2 and cancel, 4 runs | release the label while the compiler is alive | scripts/caps.test.ts |
 | I1 to I6, 1419's six laws: two at once run one after the other and the waiter names the holder; waits on an uncovered compiler with one line; takes a stale lock at once and in silence (and the label reads `<pid>\n`); no wait on `--lsp`; CI never waits; one line where pgrep is refused; invocation | test | scenario: 1419's stand-ins, a node linked under the law's compiler name | 1419's plants, each as written above its law | scripts/typecheck.integration.test.ts |
-| N1, on the test layers, the program's outcome for any run: the commands in order (install only after a link), every line printed, the exit code (first non-zero, 128 plus a signal, 1 for an install that leaves no folder), and the lock held from before the first command until after the last; 100 runs | test | fc.record: shape from `Shape`, each command's `Ended`, `CI` set or not, a `Listing` with or without `--lsp` args, refused or not | release before the last command; print the wait for an `--lsp` process; read `refused` as none in silence; patch before `unlink` | scripts/typecheck.test.ts |
-| N2, `judge` over generated looks: held exactly when the label's or the child's pid is running and started before its file's mtime plus 2 s; `empty`, `unreadable`, `gone` and `reused` each stale; no label is free; 200 runs | test | fc.record: label absent, empty, junk or a pid; child absent or a pid; each pid gone, running before or after its file, or with no start time | read an empty label as held (today's left-over file waits for good); drop the start-time check | scripts/typecheck-lock.test.ts |
-| N3, `LocksFile.layer` on an in-memory FileSystem (`FileSystem.layerNoop` over a map) and `ProcessesTest`: any sequence of takes, releases, kills and pid reuses never has two live holders, and a take after its holder is gone holds at once; 100 runs | test | fc.commands: take, release, kill with or without a running child, reuse a pid | release a label that names another pid; break without re-reading | scripts/typecheck-lock.test.ts |
+| N1, on the test layers, the program's outcome for any run: the commands in order (install only after a link), every line printed, the exit code (first non-zero, 128 plus a signal, 1 for an install that leaves no folder), and the lock held from before the first command until after the last; 100 runs | test | Effect Arbitrary: Run | release before the last command; print the wait for an `--lsp` process; read `refused` as none in silence; patch before `unlink` | scripts/typecheck.test.ts |
+| N2, `judge` over generated looks: held exactly when the label's or the child's pid is running and started before its file's mtime plus 2 s; `empty`, `unreadable`, `gone` and `reused` each stale; no label is free; 200 runs | test | Effect Arbitrary: Label | read an empty label as held (today's left-over file waits for good); drop the start-time check | scripts/typecheck-lock.test.ts |
+| N3, `LocksFile.layer` on an in-memory FileSystem (`FileSystem.layerNoop` over a map) and `ProcessesTest`: any sequence of takes, releases, kills and pid reuses never has two live holders, and a take after its holder is gone holds at once; 100 runs | test | Effect Arbitrary: Moves | release a label that names another pid; break without re-reading | scripts/typecheck-lock.test.ts |
 | N4, the break race, fixed order: two takers both read a gone holder's label, then A removes it and links its own, then B removes and links. With `.break`, B finds A holding and waits | test | scenario: Mercurial's race, ordered by latches in the in-memory FileSystem | break without `.break`: two holders | scripts/typecheck-lock.test.ts |
 | N5, `CommandsProcess.layer` spawns with `detached: false`, inherited output and no stdin, and maps a signal to `signaled` | test | scenario: one real `node -e` child that exits 3, and one that kills itself with SIGTERM | leave Effect's default `detached`: the child's group differs from ours | scripts/typecheck.test.ts |
 | N6, `ProcessesPs.layer` reads pgrep's exits 0, 1 and 2+ as listed, listed empty and refused, and `ps`'s args and etime | test | vector: pgrep and ps output saved from a real run on Linux and on macOS | read exit 2 as listed: refused is lost | scripts/typecheck.test.ts |
@@ -1046,6 +1046,112 @@ more small lint change inside the same fix round, done by the tests step.
 - Whether the owner reads 0563's tooling list as closed (the call above, 85%).
 - The 3 `effect-arbitrary.test.ts` hits stay outside every lock until some later work brings
   `scripts/` whole into the scope.
+
+## Amendment, 2026-11-17: N1, N2 and N3 use the decided property runner
+
+The lead accepts this narrow correction under 0411 and 0579. This amendment replaces the three
+laws' generator and runner descriptions above. It changes no product behavior or earlier field
+record. The previous approved body was `26106961aa6e`; this edited body returns unsigned for the
+lead's whole read and approval.
+
+### Inputs and checks kept
+
+- N1 uses `it.effect.prop` with `Run`, a Schema for the same four command exit codes, three signals,
+  folder shapes, optional overrides and pgrep answers. Pgrep still has at most three distinct pids
+  from 2 through 99,999 and zero through three extra polls. Repeating the success member in the
+  command-outcome union keeps the old 3:1:1 weighting of success, nonzero exit and signal. Every
+  assertion and the aggregate coverage check stay. Counts remain 100 fast and 300 full.
+- N2 uses `it.prop` with Schemas for the original absent, empty, junk and pid labels, optional child
+  pid and liveness choices. Label pids remain 100 through 199, child pids 300 through 399, and
+  start-time offsets 0 through 100,000 on either side of the same two-second boundary. The mapping
+  still gives `judge` the same label text, mtime and liveness values. Every assertion and coverage
+  case stays. Counts remain 200 fast and 1,000 full.
+- N3 uses `it.effect.prop` with `Moves`, a Schema array of at most 80 move descriptions and an
+  explicit generation size of 80. Each description maps to an existing take, release, cancel,
+  kill, child-end, pid-reuse, old-label-write or old-end move. The three holder pids, boolean child
+  choice, each move's `check(world)`, the walk, clock steps and all assertions stay unchanged.
+  Counts remain 100 fast and 300 full. Invalid moves are skipped by the same precondition as before,
+  including when evaluating a shrunk sequence. The generator adds no filter that drops a sequence.
+
+The installed `@effect/vitest` 4.1.3 uses Effect's native `Arbitrary`, not fast-check. The new draws
+are not byte-identical to `fc.commands` or the earlier `fc.record` draws. The lead accepted that
+change while requiring the same available inputs, bounds, preconditions, walk semantics, case
+counts and shrink reach. Effect's array shrinker removes prefixes and interior blocks while
+preserving the order and values of retained moves, and also shrinks their fields. There is no
+unsupported-command exception: these move descriptions are expressible as Schemas. The old
+`endOnFailure: true` hand runners did not shrink a failing input; native shrinking is now enabled.
+
+### Shared seed, one place
+
+`scripts/vitest.setup.ts` sets seed 119120 once for fast-check's global configuration and Effect
+Arbitrary's check and sample defaults. No law sets a seed. This changes the default seed for a law
+that previously had none; explicit seeds in unrelated existing laws are unchanged. No case count,
+size or other default is set globally. This setup file is already used by the tooling project.
+
+The three properties keep their aggregate coverage assertions outside the generated callbacks'
+checks, through the test context's `onTestFinished`. A missing required outcome still fails the law.
+The unused Promise-based property runners, their `PropertyFailed` wrapper and their related edge
+comments are removed. Existing real-process laws and their guards are not changed or run locally.
+
+### Existing tools and proof
+
+Read the installed Effect 4.1.3 `Arbitrary` and `Schema` sources and `@effect/vitest`'s
+`registerProp` and `makeTester`. Native `Schema.Array` generation and its documented block-removal
+and element shrinking replace `fc.commands`; the existing move factories and preconditions are
+reused. Schema's `arbitraryConstraint.uniqueBy` keeps pgrep pids unique during generation, with a
+matching Schema filter also validating shrunk arrays. No new package or product helper is added.
+
+Each of N1, N2 and N3 is checked with an existing behavior break, restored byte for byte afterward:
+N1 waits on `--lsp`, N2 ignores the start-time check, N3 removes another pid's label. The tests step
+records the actual outcomes in its new run row, without changing older rows. Narrow safe runs cover
+N1 and the in-memory lock file. Process/group/signal proof stays on eligible disposable CI, and a
+full branch proof still runs after this repair because the PR changes rerun-trigger files.
+
+### Files and owners
+
+| File | Owner | Product lines expected | Change |
+|---|---|---|---|
+| scripts/typecheck.test.ts | tests | tests | N1's Schema inputs and native Effect property runner; same assertions and coverage |
+| scripts/typecheck-lock.test.ts | tests | tests | N2 and N3's Schema inputs and native property runners; same move preconditions and walk |
+| scripts/vitest.setup.ts | tests | tests | one seed default for fast-check and native Effect Arbitrary |
+| docs/plan/quests/port-typecheck-PLAN.md | lead | docs | this unsigned amendment, for the lead to reread and approve |
+| field/runs/2026-11-17-t766-property-runners.json | tests | docs | the repair's actual safe checks, restored controls and remaining remote proof |
+
+No new owner question. This follows the existing decisions and the lead's confirmed preservation
+requirements. No law, process guard, compiler limit or product code is weakened.
+
+### The release bug the new full-depth walk found
+
+N3's full 300-case run found a real ownership failure at case 262. This seven-move sequence
+reproduces it with no planted product break:
+
+1. 501 takes the lock, then 502 waits.
+2. An old script writes its pid over 501's label, then ends. The accepted migration limit excludes
+   displaced 501; 502 can now take the lock.
+3. 503 waits. Wrapper 502 dies while its command 602 still runs, so 502's child guard must hold 503.
+4. 501 releases. The old `release` unconditionally removes `.child` before checking the label's
+   owner, so it removes 502's guard and 503 starts beside command 602.
+
+Both 502's command and 503 are new, undisplaced holders. This is not the accepted overlap with
+501. The lead authorizes the bounded ownership fix under N3: `LocksFile.release` checks that the
+label still names this process before removing either the child guard or the label. An ordinary
+holder still removes both files; a repeated release is harmless; a displaced holder removes
+neither. The existing final label check remains. No timeout, process handling, lock-acquisition
+algorithm or accepted migration limit changes.
+
+The constant seven-move regression is written first and fails on the unchanged product. It uses
+the same in-memory walk and expects 503 to wait while 602 runs. After the release fix, that
+regression and N1, N2, N3, N4 and N7 must pass. Removing the new ownership guard must turn the
+regression red again; restore it byte for byte afterward. The run row keeps the original full-run
+failure and the exact seven-move proof as well as the restored results.
+
+| File | Owner | Product lines expected | Change |
+|---|---|---|---|
+| scripts/typecheck/LocksFile.ts | build | 5 | the existing N3 ownership rule protects both child guard and label on release |
+| scripts/typecheck-lock.test.ts | tests | tests | the seven-move T766 regression, red before the release fix |
+
+No new owner question. This applies the approved lock ownership invariant to both files and
+keeps the same assertions, input reach and global seed.
 
 ## Findings
 

@@ -4,6 +4,7 @@
 // on ProcessesTest, so no law takes a real lock, starts a process or sends a signal. A "kill" here
 // is the table saying a pid is gone while that holder's scope is never closed, as SIGKILL runs no
 // finalizer (0061).
+import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import {
   ByteSize,
@@ -20,8 +21,6 @@ import {
   Scope,
 } from "effect";
 import { TestClock, TestConsole } from "effect/testing";
-import fc from "fast-check";
-import { describe, expect, it } from "vitest";
 import { type Held, Locks } from "./typecheck/Locks.ts";
 import * as LocksFile from "./typecheck/LocksFile.ts";
 import { judge, Liveness, Seen } from "./typecheck/Look.ts";
@@ -45,35 +44,32 @@ const Standing = Schema.TaggedUnion({
 
 type Standing = typeof Standing.Type;
 
-const standing = fc.oneof(
-  fc.constant(Standing.cases.gone.make({})),
-  fc.integer({ min: 0, max: 100_000 }).map((d) => Standing.cases.before.make({ startedAt: AT + SLACK - 1_000 - d })),
-  fc.integer({ min: 0, max: 100_000 }).map((d) => Standing.cases.after.make({ startedAt: AT + SLACK + 1_000 + d })),
-  fc.constant(Standing.cases.unknown.make({})),
-);
+const Offset = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100_000 }));
 
-/** A label as a waiter can find it: absent, empty, unreadable, or a pid. */
-const Label = Schema.TaggedUnion({
-  absent: {},
-  empty: { text: Schema.String },
-  junk: { text: Schema.String },
-  pid: { pid: Schema.Int, text: Schema.String },
+const StandingInput = Schema.TaggedUnion({
+  gone: {},
+  before: { offset: Offset },
+  after: { offset: Offset },
+  unknown: {},
 });
 
-const labelText = fc.oneof(
-  fc.constant(Label.cases.absent.make({})),
-  fc.constantFrom("", "\n").map((text) => Label.cases.empty.make({ text })),
-  // "0" names the caller's process group to kill(2), never a holder.
-  fc
-    .constantFrom("abc\n", "12 34\n", "-5\n", "0x1f\n", "0\n", "4101x\n")
-    .map((text) => Label.cases.junk.make({ text })),
-  fc.integer({ min: 100, max: 199 }).map((pid) => Label.cases.pid.make({ pid, text: `${pid}\n` })),
-);
+const standing = (input: typeof StandingInput.Type): Standing =>
+  StandingInput.match(input, {
+    gone: () => Standing.cases.gone.make({}),
+    before: ({ offset }) => Standing.cases.before.make({ startedAt: AT + SLACK - 1_000 - offset }),
+    after: ({ offset }) => Standing.cases.after.make({ startedAt: AT + SLACK + 1_000 + offset }),
+    unknown: () => Standing.cases.unknown.make({}),
+  });
 
-const childText = fc.option(
-  fc.integer({ min: 300, max: 399 }).map((pid) => ({ pid, text: `${pid}\n` })),
-  { nil: undefined },
-);
+/** A label as a waiter can find it: absent, empty, unreadable, or one of the original pids. */
+const Label = Schema.TaggedUnion({
+  absent: {},
+  empty: { text: Schema.Literals(["", "\n"]) },
+  junk: { text: Schema.Literals(["abc\n", "12 34\n", "-5\n", "0x1f\n", "0\n", "4101x\n"]) },
+  pid: { pid: Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 199 })) },
+});
+
+const Child = Schema.UndefinedOr(Schema.Int.check(Schema.isBetween({ minimum: 300, maximum: 399 })));
 
 const toLiveness = (s: Standing): Liveness =>
   Standing.match(s, {
@@ -86,57 +82,67 @@ const toLiveness = (s: Standing): Liveness =>
 const holds = Standing.isAnyOf(["before", "unknown"]);
 
 describe("T766 judge reads one look at the typecheck lock, today's tooling", () => {
-  // N2. Plants (each run once, recorded in the tests run row): read an empty label as held (today's
-  // left-over file then waits for good); drop the start-time check (a reused pid holds for good).
-  it("property: held exactly when the label's or the child's pid runs and started before its file; else stale, or free with no label", () => {
-    const seen = new Set<string>();
-    fc.assert(
-      fc.property(labelText, childText, standing, standing, (label, child, labelPid, childPid) => {
-        const liveness = (pid: number) =>
-          Label.guards.pid(label) && pid === label.pid
-            ? toLiveness(labelPid)
-            : child !== undefined && pid === child.pid
-              ? toLiveness(childPid)
-              : Liveness.cases.gone.make({});
-        const got = judge({
-          label: Label.guards.absent(label) ? Option.none() : Option.some({ text: label.text, at: AT }),
-          child: child === undefined ? Option.none() : Option.some({ text: child.text, at: AT }),
-          liveness,
-        });
-        // Held by the child where its pid holds, else stale for `reason`.
-        const byChild = (reason: "empty" | "unreadable" | "gone" | "reused"): Seen =>
-          child !== undefined && holds(childPid)
-            ? Seen.cases.held.make({ pid: child.pid, by: "child" })
-            : Seen.cases.stale.make({ reason });
-        const want = Label.match(label, {
-          absent: () => Seen.cases.free.make({}),
-          empty: () => byChild("empty"),
-          junk: () => byChild("unreadable"),
-          pid: ({ pid }) =>
-            holds(labelPid)
-              ? Seen.cases.held.make({ pid, by: "label" })
-              : byChild(Standing.guards.gone(labelPid) ? "gone" : "reused"),
-        });
-        seen.add(
-          Seen.match(want, { free: () => "free", held: (h) => `held by ${h.by}`, stale: (s) => `stale ${s.reason}` }),
+  const seen = new Set<string>();
+  let coverageRegistered = false;
+  // N2. Plants: read an empty label as held; drop the start-time check.
+  it.prop(
+    "property: held exactly when the label's or the child's pid runs and started before its file; else stale, or free with no label",
+    { label: Label, child: Child, labelPid: StandingInput, childPid: StandingInput },
+    ({ label, child: childValue, labelPid: labelInput, childPid: childInput }, ctx) => {
+      if (!coverageRegistered) {
+        coverageRegistered = true;
+        ctx.onTestFinished(() =>
+          expect([...seen].toSorted()).toEqual(
+            [
+              "free",
+              "held by child",
+              "held by label",
+              "stale empty",
+              "stale gone",
+              "stale reused",
+              "stale unreadable",
+            ].toSorted(),
+          ),
         );
-        expect(got).toEqual(want);
-      }),
-      { seed: 119120, numRuns: runsFor({ fast: 200, full: 1_000 }), endOnFailure: true },
-    );
-    // Coverage: every answer judge can give is reached.
-    expect([...seen].toSorted()).toEqual(
-      [
-        "free",
-        "held by child",
-        "held by label",
-        "stale empty",
-        "stale gone",
-        "stale reused",
-        "stale unreadable",
-      ].toSorted(),
-    );
-  });
+      }
+
+      const child = childValue === undefined ? undefined : { pid: childValue, text: `${childValue}\n` };
+      const labelPid = standing(labelInput),
+        childPid = standing(childInput);
+      const liveness = (pid: number) =>
+        Label.guards.pid(label) && pid === label.pid
+          ? toLiveness(labelPid)
+          : child !== undefined && pid === child.pid
+            ? toLiveness(childPid)
+            : Liveness.cases.gone.make({});
+      const got = judge({
+        label: Label.guards.absent(label)
+          ? Option.none()
+          : Option.some({ text: Label.guards.pid(label) ? `${label.pid}\n` : label.text, at: AT }),
+        child: child === undefined ? Option.none() : Option.some({ text: child.text, at: AT }),
+        liveness,
+      });
+      // Held by the child where its pid holds, else stale for `reason`.
+      const byChild = (reason: "empty" | "unreadable" | "gone" | "reused"): Seen =>
+        child !== undefined && holds(childPid)
+          ? Seen.cases.held.make({ pid: child.pid, by: "child" })
+          : Seen.cases.stale.make({ reason });
+      const want = Label.match(label, {
+        absent: () => Seen.cases.free.make({}),
+        empty: () => byChild("empty"),
+        junk: () => byChild("unreadable"),
+        pid: ({ pid }) =>
+          holds(labelPid)
+            ? Seen.cases.held.make({ pid, by: "label" })
+            : byChild(Standing.guards.gone(labelPid) ? "gone" : "reused"),
+      });
+      seen.add(
+        Seen.match(want, { free: () => "free", held: (h) => `held by ${h.by}`, stale: (s) => `stale ${s.reason}` }),
+      );
+      expect(got).toEqual(want);
+    },
+    { arbitrary: { runs: runsFor({ fast: 200, full: 1_000 }) } },
+  );
 });
 
 // ---------------------------------------------------------------- a disk in memory
@@ -314,7 +320,11 @@ type World = {
 };
 
 /** A move of the walk. `run` queues its Effect on the world; the law runs it, then settles. */
-type Move = fc.Command<World, { act: Effect.Effect<void> | undefined }>;
+type Move = {
+  readonly check: (world: World) => boolean;
+  readonly run: (world: World, queued: { act: Effect.Effect<void> | undefined }) => void;
+  readonly toString: () => string;
+};
 
 const move = (name: string, check: (w: World) => boolean, act: (w: World) => Effect.Effect<void>): Move => ({
   check,
@@ -450,19 +460,32 @@ const oldEndsMove = move(
     }),
 );
 
-const moves = fc.commands(
-  [
-    ...HOLDERS.map((pid) => fc.constant(takeMove(pid))),
-    ...HOLDERS.map((pid) => fc.constant(releaseMove(pid))),
-    ...HOLDERS.map((pid) => fc.constant(cancelMove(pid))),
-    ...HOLDERS.map((pid) => fc.boolean().map((withChild) => killMove(pid, withChild))),
-    ...HOLDERS.map((pid) => fc.constant(childEndsMove(pid))),
-    ...HOLDERS.map((pid) => fc.constant(reuseMove(pid))),
-    ...HOLDERS.map((pid) => fc.constant(oldWritesMove(pid))),
-    fc.constant(oldEndsMove),
-  ],
-  { maxCommands: 80, size: "max" },
-);
+const Holder = Schema.Literals(HOLDERS);
+
+const MoveInput = Schema.TaggedUnion({
+  take: { pid: Holder },
+  release: { pid: Holder },
+  cancel: { pid: Holder },
+  kill: { pid: Holder, withChild: Schema.Boolean },
+  end: { pid: Holder },
+  reuse: { pid: Holder },
+  oldWrites: { pid: Holder },
+  oldEnds: {},
+});
+
+const Moves = Schema.Array(MoveInput).check(Schema.isMaxLength(80));
+
+const moveFrom = (input: typeof MoveInput.Type): Move =>
+  MoveInput.match(input, {
+    take: ({ pid }) => takeMove(pid),
+    release: ({ pid }) => releaseMove(pid),
+    cancel: ({ pid }) => cancelMove(pid),
+    kill: ({ pid, withChild }) => killMove(pid, withChild),
+    end: ({ pid }) => childEndsMove(pid),
+    reuse: ({ pid }) => reuseMove(pid),
+    oldWrites: ({ pid }) => oldWritesMove(pid),
+    oldEnds: () => oldEndsMove,
+  });
 
 /** After a settle: who holds now, and what that breaks. */
 const look = (w: World, after: string) => {
@@ -541,44 +564,53 @@ const walk = (cmds: Iterable<Move>) => {
   }).pipe(Effect.provide(Layer.mergeAll(TestClock.layer(), TestConsole.layer)));
 };
 
-/** fast-check's report, with its counterexample, as the law's typed failure. */
-class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", { cause: Schema.Defect() }) {}
-
 describe("T766 LocksFile keeps one holder through takes, releases, kills and reused pids, today's tooling", () => {
-  // N3. Plants (each run once, recorded in the tests run row): release a label that names another
-  // pid; break a stale lock without looking again under `.break`; wait inside an uninterruptible
-  // acquire, so a canceled waiter never ends.
-  it("property: never two live holders, a gone holder's lock is taken at once, and a release removes only its own label", () => {
-    const ran = new Set<string>();
-    const law = (cmds: Iterable<Move>) =>
-      Effect.map(walk(cmds), (w) => {
-        for (const name of w.ran) {
+  const ran = new Set<string>();
+  let coverageRegistered = false;
+  // N3. Plants: release another pid's label; break without rereading; make a waiter uninterruptible.
+  // Effect's Schema array shrinks by removing blocks and shrinking fields. The existing check(world)
+  // still decides whether each generated move runs, including after a sequence has been shrunk.
+  it.effect.prop(
+    "property: never two live holders, a gone holder's lock is taken at once, and a release removes only its own label",
+    { moves: Moves },
+    ({ moves }, ctx) => {
+      if (!coverageRegistered) {
+        coverageRegistered = true;
+        ctx.onTestFinished(() =>
+          expect([...ran].toSorted()).toEqual(["cancel", "end", "kill", "old", "release", "reuse", "take"].toSorted()),
+        );
+      }
+
+      return Effect.map(walk(moves.map(moveFrom)), (world) => {
+        for (const name of world.ran) {
           ran.add(name);
         }
 
-        expect(w.broken).toEqual([]);
+        expect(world.broken, world.broken.join("\n")).toEqual([]);
       });
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest awaits the Promise a test hands back
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        // fast-check's own report, its counterexample included, is the failure the test shows.
-        yield* Effect.orDie(
-          // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property runs on Promises
-          Effect.tryPromise({
-            try: () =>
-              fc.assert(
-                // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits the Promise a property hands back
-                fc.asyncProperty(moves, (cmds) => Effect.runPromise(law(cmds))),
-                { seed: 119120, numRuns: runsFor({ fast: 100, full: 300 }), endOnFailure: true },
-              ),
-            catch: (cause) => new PropertyFailed({ cause }),
-          }),
-        );
-        // Coverage: every kind of move ran in some walk.
-        expect([...ran].toSorted()).toEqual(["cancel", "end", "kill", "old", "release", "reuse", "take"].toSorted());
-      }),
-    );
-  });
+    },
+    { arbitrary: { runs: runsFor({ fast: 100, full: 300 }), size: 80 } },
+  );
+
+  // T766: the seven-move counterexample found by N3 at full depth. The old-overlap allowance
+  // excludes displaced 501, but both 502's child and 503 are new, undisplaced holders.
+  it.effect("pinned: T766 a displaced holder leaves the next holder's running-child guard intact", () =>
+    Effect.map(
+      walk([
+        takeMove(501),
+        takeMove(502),
+        oldWritesMove(501),
+        oldEndsMove,
+        takeMove(503),
+        killMove(502, true),
+        releaseMove(501),
+      ]),
+      (world) => {
+        expect(world.broken, world.broken.join("\n")).toEqual([]);
+        expect(world.got.has(503), "503 waits while 502's command still runs").toBe(false);
+      },
+    ),
+  );
 
   // N4. Mercurial's race (`mercurial/lock.py`, `_testlock`: "must do this with another lock held, or
   // can race and break valid lock"), in the two orders that break a lock held by a live process.

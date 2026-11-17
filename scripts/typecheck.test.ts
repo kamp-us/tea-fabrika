@@ -8,7 +8,6 @@ import { runsFor } from "@kampus/vitest";
 import { ConfigProvider, Effect, Fiber, Layer, PlatformError, Schema, Sink, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { TestClock, TestConsole } from "effect/testing";
-import fc from "fast-check";
 import { Ended } from "./typecheck/Commands.ts";
 import * as CommandsTest from "./typecheck/CommandsTest.ts";
 import * as LocksTest from "./typecheck/LocksTest.ts";
@@ -37,48 +36,49 @@ const drive = <A, E>(fiber: Fiber.Fiber<A, E>) =>
     return yield* Fiber.join(fiber);
   });
 
-/** One way a command ends. */
-const ended = fc.oneof(
-  { weight: 3, arbitrary: fc.constant(Ended.cases.exited.make({ code: 0 })) },
-  fc.constantFrom(1, 2, 127).map((code) => Ended.cases.exited.make({ code })),
-  fc.constantFrom(...Object.keys(SIGNALS)).map((signal) => Ended.cases.signaled.make({ signal })),
-);
+// The old oneof weights were 3 success, 1 nonzero code, 1 signal. Repeated union members keep them.
+const Success = Schema.TaggedStruct("exited", { code: Schema.Literal(0) });
 
-/** A process pgrep finds under the compiler's name: an editor's language server, a compiler, or one ps cannot read. */
-const found = fc.record({
-  pid: fc.integer({ min: 2, max: 99_999 }),
-  args: fc.constantFrom("tsgo --lsp --stdio", "tsgo -p next/tsconfig.json", "node_modules/.bin/tsgo --watch", ""),
+const End = Schema.Union([
+  Success,
+  Success,
+  Success,
+  Schema.TaggedStruct("exited", { code: Schema.Literals([1, 2, 127]) }),
+  Schema.TaggedStruct("signaled", { signal: Schema.Literals(["SIGINT", "SIGKILL", "SIGTERM"]) }),
+]);
+
+const Found = Schema.Struct({
+  pid: Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 99_999 })),
+  args: Schema.Literals(["tsgo --lsp --stdio", "tsgo -p next/tsconfig.json", "node_modules/.bin/tsgo --watch", ""]),
 });
 
-/** How pgrep answers in a run: it cannot list processes here, or it lists `found` for `polls` looks. */
+/** pgrep refuses, or lists at most three distinct pids for zero through three extra polls. */
 const Pgrep = Schema.TaggedUnion({
   refused: {},
   listed: {
-    found: Schema.Array(Schema.Struct({ pid: Schema.Int, args: Schema.String })),
-    polls: Schema.Int,
+    found: Schema.Array(Found).check(
+      Schema.isMaxLength(3),
+      Schema.makeFilter<ReadonlyArray<typeof Found.Type>>(
+        (rows) => new Set(rows.map((row) => row.pid)).size === rows.length,
+        { arbitraryConstraint: { uniqueBy: (row: typeof Found.Type) => row.pid } },
+      ),
+    ),
+    polls: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 })),
   },
 });
 
-const run = fc.record({
-  shape: fc.constantFrom(...Shape.literals),
-  install: fc.record({ ended, leavesFolder: fc.boolean() }),
-  patch: ended,
-  check: ended,
-  ci: fc.boolean(),
-  lock: fc.option(fc.constantFrom("/tmp/tc-law/typecheck.lock"), { nil: undefined }),
-  compiler: fc.option(fc.constantFrom("tcwlaw"), { nil: undefined }),
-  pgrep: fc.oneof(
-    fc.constant(Pgrep.cases.refused.make({})),
-    fc
-      .record({
-        found: fc.uniqueArray(found, { selector: (f) => f.pid, maxLength: 3 }),
-        polls: fc.integer({ min: 0, max: 3 }),
-      })
-      .map((listed) => Pgrep.cases.listed.make(listed)),
-  ),
+const Run = Schema.Struct({
+  shape: Shape,
+  install: Schema.Struct({ ended: End, leavesFolder: Schema.Boolean }),
+  patch: End,
+  check: End,
+  ci: Schema.Boolean,
+  lock: Schema.UndefinedOr(Schema.Literal("/tmp/tc-law/typecheck.lock")),
+  compiler: Schema.UndefinedOr(Schema.Literal("tcwlaw")),
+  pgrep: Pgrep,
 });
 
-type Run = typeof run extends fc.Arbitrary<infer R> ? R : never;
+type Run = typeof Run.Type;
 
 const status = (e: Ended) =>
   Ended.match(e, {
@@ -227,46 +227,34 @@ const actual = (r: Run) => {
   }).pipe(Effect.provide(layer));
 };
 
-/** fast-check's report, with its counterexample, as the law's typed failure. */
-class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", { cause: Schema.Defect() }) {}
-
 describe("T766 the typecheck's program on its test layers, today's tooling", () => {
-  // N1. Plants (each run once, recorded in the tests run row): release the lock before the last
-  // command; print the wait for an `--lsp` process; read `refused` as none in silence; patch
-  // before `unlink`.
-  it("property: the commands run in order under one lock, with today's lines and exit code", () => {
-    const seen = new Set<string>();
-    const law = (r: Run) =>
-      Effect.map(actual(r), (got) => {
-        const want = expected(r);
-        seen.add(r.shape);
+  const seen = new Set<string>();
+  let coverageRegistered = false;
+  const checkCoverage = () => {
+    expect([...seen].toSorted()).toEqual(
+      ["a line", "failed", "folder", "link", "missing", "other", "passed", "signaled", "silent"].toSorted(),
+    );
+  };
+  // N1. Plants: release before the last command; wait on --lsp; hide a refused pgrep; patch before unlink.
+  it.effect.prop(
+    "property: the commands run in order under one lock, with today's lines and exit code",
+    { run: Run },
+    ({ run }, ctx) => {
+      if (!coverageRegistered) {
+        coverageRegistered = true;
+        ctx.onTestFinished(checkCoverage);
+      }
+
+      return Effect.map(actual(run), (got) => {
+        const want = expected(run);
+        seen.add(run.shape);
         seen.add(want.code === 0 ? "passed" : want.code > 128 ? "signaled" : "failed");
         seen.add(want.lines.length > 0 ? "a line" : "silent");
         expect(got).toEqual(want);
       });
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest awaits the Promise a test hands back
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        // fast-check's own report, its counterexample included, is the failure the test shows.
-        yield* Effect.orDie(
-          // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property runs on Promises
-          Effect.tryPromise({
-            try: () =>
-              fc.assert(
-                // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits the Promise a property hands back
-                fc.asyncProperty(run, (r) => Effect.runPromise(law(r))),
-                { seed: 119120, numRuns: runsFor({ fast: 100, full: 300 }), endOnFailure: true },
-              ),
-            catch: (cause) => new PropertyFailed({ cause }),
-          }),
-        );
-        // Coverage: every shape, each way a run ends, and runs with and without a line.
-        expect([...seen].toSorted()).toEqual(
-          ["a line", "failed", "folder", "link", "missing", "other", "passed", "signaled", "silent"].toSorted(),
-        );
-      }),
-    );
-  });
+    },
+    { arbitrary: { runs: runsFor({ fast: 100, full: 300 }) } },
+  );
 });
 
 /** What one made-up pgrep or ps run prints and how it exits, or `missing` for a command not on PATH. */
