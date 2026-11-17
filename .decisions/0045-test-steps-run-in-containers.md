@@ -1,7 +1,7 @@
 ---
 id: 0045
 title: A step that needs ports, sockets or its own processes runs in a container with its own network, never behind a hole in the laptop sandbox
-status: accepted
+status: amended-in-part by [0594](0594-safe-checks-direct-mac-ci.md)
 date: 2026-11-09
 tags: [sandbox, container, docker, network, mutation, stryker, lead, tooling, sockets, loopback]
 ---
@@ -11,6 +11,9 @@ tags: [sandbox, container, docker, network, mutation, stryker, lead, tooling, so
 **What this decides:** the fence around a step that runs tests or tools is a container with a
 private network, where anything may listen and nothing crosses the edge except what we pass; the
 laptop's own sandbox stays as it is, for steps that only read and edit files.
+
+[0594](0594-safe-checks-direct-mac-ci.md) changes where ordinary safe checks run; the remaining
+container isolation rules below still hold where a check needs that isolation.
 
 **Before:**
 

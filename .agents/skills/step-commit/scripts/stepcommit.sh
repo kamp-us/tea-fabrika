@@ -151,8 +151,16 @@ try:
         # Keep the pinned config beside the staged copy, so exclusions have the same relative
         # paths as the checkout. Nested config is still disabled.
         env = dict(os.environ, PATH=str(root / "node_modules/.bin") + os.pathsep + os.environ["PATH"])
-        if files and subprocess.run(["pnpm", "exec", "oxfmt", "--check", "--disable-nested-config", "--no-error-on-unmatched-pattern", *config_args, *files], cwd=tmp, env=env, capture_output=True).returncode:
-            refuse("not_formatted: staged files need formatting")
+        if files:
+            formatter = root / "node_modules/.bin/oxfmt"
+            try:
+                formatted = subprocess.run([str(formatter), "--check", "--disable-nested-config", "--no-error-on-unmatched-pattern", *config_args, *files], cwd=tmp, env=env, capture_output=True)
+            except OSError:
+                refuse("formatter_failed: installed formatter could not start", 2)
+            if formatted.returncode == 1:
+                refuse("not_formatted: staged files need formatting")
+            if formatted.returncode:
+                refuse(f"formatter_failed: installed formatter exited {formatted.returncode}", 2)
 except SystemExit:
     git("--literal-pathspecs", "restore", "--staged", "--", *staged)
     raise

@@ -2,9 +2,10 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import { Schema } from "effect";
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
 
 // Today's tooling. A `pnpm patch` file under patches/ quotes upstream's removed and context lines
 // byte for byte, so nobody can reword them. Inside a patch's hunk those quoted lines skip the
@@ -279,6 +280,252 @@ describe("leakgrep reads upstream text a patch only quotes, today's tooling", ()
             expect(ran.status, mode).toBe(1);
             expect(ran.stderr, mode).toContain(`leak ${kind}`);
           }
+        }),
+        options,
+      );
+    });
+  }
+});
+
+// How the check reads a second commit that rewrites the file at `path` from `before` to `after`, in
+// --commits mode. That mode reads a commit's diff with no context lines, so git's hunk starts at the
+// first changed line, which is often in the middle of one of the patch's own hunks.
+const rewrite = (path: string, before: ReadonlyArray<string>, after: ReadonlyArray<string>): Read => {
+  const dir = mkdtempSync(join(tmpdir(), "lg-patches-"));
+
+  try {
+    const repo = join(dir, "repo");
+    const words = join(dir, "words");
+    mkdirSync(repo);
+    writeFileSync(words, `${word}\n`);
+
+    const git = (...args: string[]) => {
+      const ran = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args], {
+        cwd: repo,
+        encoding: "utf8",
+      });
+
+      expect(ran.status, ran.stderr).toBe(0);
+    };
+
+    git("init", "-q");
+    const file = join(repo, path);
+    mkdirSync(dirname(file), { recursive: true });
+
+    for (const [n, lines] of [before, after].entries()) {
+      writeFileSync(file, lines.map((line) => `${line}\n`).join(""));
+      git("add", "-A");
+      git("commit", "-q", "-m", `patch ${n}`);
+    }
+
+    const ran = spawnSync("sh", [script, "--commits", "HEAD~1..HEAD"], {
+      cwd: repo,
+      encoding: "utf8",
+      env: { ...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined },
+    });
+
+    expect(ran.stdout + ran.stderr).not.toContain(word);
+    expect(ran.stdout + ran.stderr).not.toContain(dir);
+
+    return { status: ran.status, stderr: ran.stderr };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+// A patch's hunks, two or three, each one to six marked lines. Every line names its hunk and place,
+// so git's diff lines the two commits up by them, whatever the filler holds.
+const hunkLines = fc
+  .array(fc.array(fc.tuple(fc.constantFrom(" ", "-", "+"), filler), { minLength: 1, maxLength: 6 }), {
+    minLength: 2,
+    maxLength: 3,
+  })
+  .map((hunks) => hunks.map((lines, h) => lines.map(([mark, text], n) => `${mark}h${h}n${n} ${text}`)));
+
+type Hunks = ReadonlyArray<ReadonlyArray<string>>;
+
+// Each hunk's own `@@` header in the first commit.
+const header = (h: number) => `@@ -${h * 20 + 1},3 +${h * 20 + 1},3 @@`;
+
+// One pnpm patch file: git's four header lines, then each hunk under the header `head` gives it (none
+// when `head` gives null).
+const patchText = (hunks: Hunks, head: (h: number) => string | null = header) => [
+  "diff --git a/dist/index.js b/dist/index.js",
+  "index 1111111..2222222 100644",
+  "--- a/dist/index.js",
+  "+++ b/dist/index.js",
+  ...hunks.flatMap((lines, h) => {
+    const top = head(h);
+
+    return top === null ? lines : [top, ...lines];
+  }),
+];
+
+// The three shapes an outer added line takes inside a patch's hunk: `+ ` (the patch's context), `+-`
+// (its removed line) and `++` (its added line).
+const marks = [" ", "-", "+"] as const;
+
+// Hunk `h` with one new line of each mark, holding `text`, put in at the places `at` names.
+const plantIn = (hunks: Hunks, h: number, at: ReadonlyArray<number>, text: string): Hunks =>
+  hunks.map((lines, n) =>
+    n === h
+      ? marks.reduce<ReadonlyArray<string>>(
+          (acc, mark, i) => acc.toSpliced(Math.min(at[i] ?? 0, acc.length), 0, `${mark}planted${i} ${text}`),
+          lines,
+        )
+      : lines,
+  );
+
+const places = fc.array(fc.nat({ max: 8 }), { minLength: 3, maxLength: 3 });
+
+describe("leakgrep reads a pushed commit's lines inside a patches/ file's hunks by the new file, today's tooling", () => {
+  // Red on main: --commits reads a patch's hunks from the top of git's own hunk, which here starts
+  // inside the patch's hunk with no `@@` in it, so every planted dash fails. Plant: mark every added
+  // line of a patches/ file as quoted makes it pass, which shows the red is the quote decision.
+  it("an em dash a commit adds inside a patches/ file's hunk passes when git's hunk starts mid-hunk", () => {
+    fc.assert(
+      fc.property(hunkLines, places, filler, (hunks, at, text) => {
+        // Every hunk gets all three shapes, so the first and the later hunks are both read each run.
+        const after = hunks.reduce((acc, _, h) => plantIn(acc, h, at, `${text}${dash}`), hunks);
+        expect(patchText(after).filter((line) => line.includes(dash))).toHaveLength(3 * hunks.length);
+
+        const ran = rewrite("patches/upstream@1.0.0.patch", patchText(hunks), patchText(after));
+        expect(ran.status, ran.stderr).toBe(0);
+      }),
+      options,
+    );
+  });
+
+  // Red on main where git's hunk that holds a plant starts below the patch's `@@`, or the commit only
+  // removes that `@@`: main never reads a removed outer line. Plant: as above.
+  for (const change of ["renumbers", "removes"] as const) {
+    it(`an em dash a commit adds inside a patches/ file's hunk passes when the commit ${change} its @@ line`, () => {
+      let apart = false;
+      fc.assert(
+        fc.property(hunkLines, fc.nat(), places, filler, (hunks, pick, at, text) => {
+          // A removed `@@` joins hunk k to the hunk before it, so k is never the first hunk then.
+          const k = change === "removes" ? 1 + (pick % (hunks.length - 1)) : pick % hunks.length;
+          const after = plantIn(hunks, k, at, `${text}${dash}`);
+
+          const head = (h: number) =>
+            h !== k ? header(h) : change === "removes" ? null : `@@ -${h * 20 + 1},4 +${h * 20 + 1},7 @@`;
+
+          // Whether a plant sits below the first three lines of its hunk, so git cuts a hunk of its own.
+          apart ||= (after[k] ?? []).findLastIndex((line) => line.includes(dash)) >= 3;
+
+          const ran = rewrite("patches/upstream@1.0.0.patch", patchText(hunks), patchText(after, head));
+          expect(ran.status, ran.stderr).toBe(0);
+        }),
+        options,
+      );
+      // Coverage: a plant git reads in a hunk away from the changed `@@` line was reached.
+      expect(apart).toBe(true);
+    });
+  }
+
+  // Plant: find the text anywhere among quoted lines, ignoring its new-file line number.
+  // Schemas keep multiple hunks, mixed markers, and malformed patch counts as edge cases.
+  for (const mark of marks) {
+    it.prop(
+      `an outer ${JSON.stringify(mark)} line matching a quoted line at another new-file number still fails`,
+      {
+        hunks: Schema.Array(
+          Schema.Array(Schema.String.check(Schema.isPattern(/^[ +-][abcxyz019 =;(){}.,']{0,12}$/))).check(
+            Schema.isMinLength(1),
+            Schema.isMaxLength(6),
+          ),
+        ).check(Schema.isMinLength(2), Schema.isMaxLength(3)),
+        text: Schema.String.check(Schema.isPattern(/^[abcxyz019 =;(){}.,']{0,12}$/)),
+        pick: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+        at: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 8 })),
+      },
+      ({ hunks, text, pick, at }) => {
+        const repeated = `${mark}same ${text}${dash}`;
+        const selected = pick % hunks.length;
+
+        const quoted = hunks.map((lines, n) =>
+          n === selected ? lines.toSpliced(Math.min(at, lines.length), 0, repeated) : lines,
+        );
+
+        const after = patchText(quoted).toSpliced(4, 0, repeated);
+        expect(after.filter((line) => line.includes(dash))).toEqual([repeated, repeated]);
+
+        const ran = rewrite("patches/upstream@1.0.0.patch", patchText(hunks), after);
+        expect(ran.status, ran.stderr).toBe(1);
+        expect(ran.stderr).toContain("leak em_dash");
+      },
+      { arbitrary: { runs: options.numRuns } },
+    );
+  }
+
+  // Plant: mark every added line of a patches/ file as quoted, headers and preamble included.
+  it("an em dash on a patches/ file's @@ line that a commit adds still fails", () => {
+    fc.assert(
+      fc.property(hunkLines, fc.nat(), (hunks, pick) => {
+        const k = pick % hunks.length;
+        const head = (h: number) => (h === k ? `${header(h)} ${dash}` : header(h));
+
+        const ran = rewrite("patches/upstream@1.0.0.patch", patchText(hunks), patchText(hunks, head));
+        expect(ran.status, ran.stderr).toBe(1);
+        expect(ran.stderr).toContain("leak em_dash");
+      }),
+      options,
+    );
+  });
+
+  // Each place outside every hunk where a commit can add a line to a patch, beside the ones the
+  // drafts above read: the file's first line, git's index line, and a line in a hunk that holds no
+  // mark of its own (git's `\` note).
+  const outside: ReadonlyArray<readonly [string, (lines: ReadonlyArray<string>) => ReadonlyArray<string>]> = [
+    ...headers,
+    ["first", (lines) => [`note ${dash}`, ...lines]],
+    ["index", (lines) => lines.with(1, `${lines[1]}${dash}`)],
+    ["unmarked", (lines) => lines.toSpliced(6, 0, `\\ note ${dash}`)],
+  ];
+
+  // Plants: as above.
+  for (const [place, plant] of outside) {
+    it(`an em dash on a patches/ file's ${place} line that a commit adds outside a hunk still fails`, () => {
+      fc.assert(
+        fc.property(hunkLines, (hunks) => {
+          const after = plant(patchText(hunks));
+          expect(after.filter((line) => line.includes(dash))).toHaveLength(1);
+
+          const ran = rewrite("patches/upstream@1.0.0.patch", patchText(hunks), after);
+          expect(ran.status, ran.stderr).toBe(1);
+          expect(ran.stderr).toContain("leak em_dash");
+        }),
+        options,
+      );
+    });
+  }
+
+  // Plant: as above, and skip every shape on a quoted line, not only the style ones.
+  for (const [kind, leak] of secrets) {
+    it(`a ${kind} a commit adds inside a patches/ file's hunk still fails`, () => {
+      fc.assert(
+        fc.property(hunkLines, fc.nat(), places, leak, (hunks, pick, at, text) => {
+          const after = plantIn(hunks, pick % hunks.length, at, text);
+
+          const ran = rewrite("patches/upstream@1.0.0.patch", patchText(hunks), patchText(after));
+          expect(ran.status, ran.stderr).toBe(1);
+          expect(ran.stderr).toContain(`leak ${kind}`);
+        }),
+        options,
+      );
+    });
+  }
+
+  // Plant: as above, and read any file shaped like a patch as one, wherever it lives.
+  for (const path of elsewhere) {
+    it(`an em dash a commit adds inside a hunk of ${path} still fails`, () => {
+      fc.assert(
+        fc.property(hunkLines, fc.nat(), places, (hunks, pick, at) => {
+          const after = plantIn(hunks, pick % hunks.length, at, dash);
+
+          const ran = rewrite(path, patchText(hunks), patchText(after));
+          expect(ran.status, ran.stderr).toBe(1);
+          expect(ran.stderr).toContain("leak em_dash");
         }),
         options,
       );
