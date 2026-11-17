@@ -156,7 +156,7 @@ const hashed = (algorithm: typeof Digest.sha256 | typeof Digest.sha512, bytes: U
   Digest.Digest.use((digest) => digest.digest(algorithm, bytes)).pipe(Effect.provide(Digest.layerWebCrypto));
 
 const fingerprint = (bytes: Uint8Array) =>
-  hashed(Digest.sha256, bytes).pipe(Effect.map((sum) => `SHA256:${Base64.encode(sum).replace(/=+$/, "")}`));
+  hashed(Digest.sha256, bytes).pipe(Effect.map((sum) => `SHA256:${Str.replace(/=+$/, "")(Base64.encode(sum))}`));
 
 const signedBytes = (text: string, space: string = SPACE) =>
   hashed(Digest.sha512, utf8(text)).pipe(

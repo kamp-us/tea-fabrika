@@ -94,7 +94,7 @@ const keyFingerprint = Effect.fnUntraced(
     const bytes = yield* Effect.fromResult(Base64Url.decode(x));
     const hashed = yield* Digest.Digest.use((digest) => digest.digest(Digest.sha256, bytes));
 
-    return `SHA256:${Base64.encode(hashed).replace(/=+$/, "")}`;
+    return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(hashed))}`;
   },
   Effect.provide(Digest.layerWebCrypto),
   Effect.orDie,

@@ -774,9 +774,9 @@ it("a proof passes the door's SSHSIG check for its text and key only, and the fi
           }
 
           // ssh-keygen's fingerprint is over the whole blob the key line carries, not the 32 raw bytes.
-          const blob = yield* Effect.fromResult(Base64.decode(key.line.slice("ssh-ed25519 ".length)));
+          const blob = yield* Effect.fromResult(Base64.decode(Str.slice("ssh-ed25519 ".length)(key.line)));
           const hashed = yield* Digest.Digest.use((digest) => digest.digest(Digest.sha256, blob));
-          expect(key.sshFingerprint).toBe(`SHA256:${Base64.encode(hashed).replace(/=+$/, "")}`);
+          expect(key.sshFingerprint).toBe(`SHA256:${Str.replace(/=+$/, "")(Base64.encode(hashed))}`);
           expect(key.sshFingerprint).not.toBe(key.fingerprint);
 
           // A known seed gives the same identity each time, so a saved key keeps its name.
