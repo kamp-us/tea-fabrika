@@ -86,7 +86,7 @@ export class PullRequests extends Context.Service<
     /** Every pull request of the repo, open, closed and merged. Fails when one read cannot hold all. */
     readonly all: Effect.Effect<ReadonlyArray<PullRequest>, PullRequestsError>;
     /** Opens a draft pull request from `branch` into main, and answers its number. */
-    readonly draft: (branch: string, text: Text) => Effect.Effect<number, PullRequestsError>;
+    readonly draft: (branch: string, text: Text, head: string) => Effect.Effect<number, PullRequestsError>;
     /** Sets the title and description of pull request `number`. */
     readonly edit: (number: number, text: Text) => Effect.Effect<void, PullRequestsError>;
     /** Marks draft pull request `number` ready for review. */
