@@ -27,7 +27,7 @@ property.prop(
     expect(judge({ ...needs, select: { result: "failure", outputs: { run } } }).pass).toBe(false);
     expect(judge({ ...needs, select: { result: "success", outputs: {} } }).pass).toBe(false);
   },
-  { arbitrary: { seed: 119120, numRuns: 100 } },
+  { arbitrary: { seed: 119120, runs: 100, size: 100 } },
 );
 
 type Job = { result?: unknown; outputs?: Record<string, unknown> };
@@ -246,6 +246,9 @@ const paths = fc.option(
   { nil: null },
 );
 
+const needed = (flags: Readonly<Record<string, boolean>>, name: (typeof gated)[number]) =>
+  gates[name].some((flag) => flags[flag]);
+
 /** The needs one run gives when every job its flags turned on passed, from changes.mjs's own flags. */
 const ran = (flags: Record<string, boolean>): Record<string, Job> => {
   const outputs = {
@@ -256,7 +259,7 @@ const ran = (flags: Record<string, boolean>): Record<string, Job> => {
 
   // A job runs when any of its flags is on: check for lint or for field rows.
   for (const name of gated) {
-    needs[name] = { result: gates[name].some((flag) => flags[flag]) ? "success" : "skipped" };
+    needs[name] = { result: needed(flags, name) ? "success" : "skipped" };
   }
 
   return needs;
@@ -272,7 +275,7 @@ it("property: a merge queue's group passes with the jobs its paths skip; it fail
       (p, name, end) => {
         const group = jobs(p, "merge_group", false);
         expect(judge(ran(group)).pass).toBe(true);
-        fc.pre(group[name]);
+        fc.pre(needed(group, name));
         const needs = ran(group);
         needs[name] = { result: end };
         expect(judge(needs).pass).toBe(false);
@@ -293,7 +296,7 @@ it("property: a push passes with the jobs its paths skip; it fails when a job it
       (p, name, end) => {
         const push = jobs(p, "push", false);
         expect(judge(ran(push)).pass).toBe(true);
-        fc.pre(push[name]);
+        fc.pre(needed(push, name));
         const needs = ran(push);
         needs[name] = { result: end };
         expect(judge(needs).pass).toBe(false);
@@ -359,7 +362,7 @@ it("property: a draft passes with its heavy jobs skipped; a ready PR fails when 
         expect(judge(ran(jobs(p, "pull_request", true))).pass).toBe(true);
         const ready = jobs(p, "pull_request", false);
         expect(judge(ran(ready)).pass).toBe(true);
-        fc.pre(ready[name]);
+        fc.pre(needed(ready, name));
         const needs = ran(ready);
         needs[name] = { result: end };
         expect(judge(needs).pass).toBe(false);

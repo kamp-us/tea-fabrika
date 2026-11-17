@@ -63,5 +63,5 @@ it.prop(
 
     expect(lintWorkflow(JSON.stringify(workflow))).not.toEqual([]);
   },
-  { arbitrary: { seed: 119120, numRuns: 100 } },
+  { arbitrary: { seed: 119120, runs: 100, size: 100 } },
 );

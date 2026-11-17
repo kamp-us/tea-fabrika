@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 import { outputs, select, type Sizing } from "./related.ts";
 
-const options = { arbitrary: { seed: 119120, numRuns: 100 } };
+const options = { arbitrary: { seed: 119120, runs: 100, size: 100 } };
 
 const sizing: Sizing = {
   "next-integration": { most: 5, limit: 100 },
