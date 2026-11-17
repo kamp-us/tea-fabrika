@@ -109,6 +109,16 @@ export const record: Rule = ({ jobs }, require) => {
         "retention-days": 7,
       },
     ],
+    [
+      "related",
+      "checklist fault observations",
+      {
+        name: `checklist-faults-\${{ matrix.shard }}`,
+        path: `\${{ runner.temp }}/plant-related/result.json`,
+        "if-no-files-found": "error",
+        "retention-days": 90,
+      },
+    ],
   ] as const;
 
   const reportUploads = reports.flatMap(([job, name, expected]) => {
@@ -116,7 +126,10 @@ export const record: Rule = ({ jobs }, require) => {
       (step) =>
         uses(step, "actions/upload-artifact") &&
         step["name"] === name &&
-        compact(step["if"]) === "!cancelled()" &&
+        compact(step["if"]) ===
+          (name === "checklist fault observations"
+            ? "!cancelled()&&fromJSON(needs.select.outputs.plants)[matrix.shard]!=null"
+            : "!cancelled()") &&
         Object.keys(step).length === 4 &&
         sameEntries(Object.entries(map(step["with"])), Object.entries(expected)),
     );

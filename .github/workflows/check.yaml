@@ -541,6 +541,7 @@ jobs:
       files: ${{ steps.set.outputs.files }}
       projects: ${{ steps.set.outputs.projects }}
       slots: ${{ steps.set.outputs.slots }}
+      plants: ${{ steps.set.outputs.plants }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -598,6 +599,15 @@ jobs:
           FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
           FABRIKA_TEST_DEPTH: full
         run: pnpm exec vitest run --project next-integration $FILES --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/related.json"
+      - name: checklist faults
+        if: fromJSON(needs.select.outputs.plants)[matrix.shard] != null
+        timeout-minutes: *related-integration-limit
+        env:
+          FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
+          FABRIKA_TEST_DEPTH: full
+          PLANTS: ${{ needs.select.outputs.plants }}
+          LEG: ${{ matrix.shard }}
+        run: node .github/ci/plant-related.ts
       - name: tooling
         if: fromJSON(needs.select.outputs.projects)[matrix.shard] == 'tooling'
         timeout-minutes: *related-tooling-limit
@@ -613,6 +623,14 @@ jobs:
           path: ${{ runner.temp }}/related.json
           if-no-files-found: error
           retention-days: 7
+      - name: checklist fault observations
+        if: ${{ !cancelled() && fromJSON(needs.select.outputs.plants)[matrix.shard] != null }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: checklist-faults-${{ matrix.shard }}
+          path: ${{ runner.temp }}/plant-related/result.json
+          if-no-files-found: error
+          retention-days: 90
       - name: time table
         if: always()
         continue-on-error: true

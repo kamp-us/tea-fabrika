@@ -50,7 +50,9 @@ const selector = (workflow: Record<string, unknown>) => {
     set?.["run"] === "node .github/ci/related.ts" &&
     env["RUN_NUMBER"] === `\${{ github.run_number }}` &&
     env["HEAD"] === `\${{ github.sha }}` &&
-    ["run", "legs", "files", "projects", "slots"].every((key) => outputs[key] === `\${{ steps.set.outputs.${key} }}`)
+    ["run", "legs", "files", "projects", "slots", "plants"].every(
+      (key) => outputs[key] === `\${{ steps.set.outputs.${key} }}`,
+    )
   );
 };
 
@@ -111,6 +113,7 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
     JSON.stringify([
       "pnpm install --frozen-lockfile",
       INTEGRATION,
+      "node .github/ci/plant-related.ts",
       TOOLING,
       "node .github/ci/time-table.ts",
     ]), "R1: only the declared integration and tooling workloads run");
@@ -128,6 +131,21 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
       step["continue-on-error"] ===
         undefined, `R1: ${project} runs each selected file at full depth within its existing limit`);
   }
+
+  const faults = commands.find((step) => step["run"] === "node .github/ci/plant-related.ts");
+  const integration = commands.find((step) => step["run"] === INTEGRATION);
+  require(faults !== undefined &&
+    integration !== undefined &&
+    commands.indexOf(faults) > commands.indexOf(integration) &&
+    compact(faults["if"]) === "fromJSON(needs.select.outputs.plants)[matrix.shard]!=null" &&
+    faults["timeout-minutes"] === 17 &&
+    faults["continue-on-error"] === undefined &&
+    Object.keys(map(faults["env"])).length === 4 &&
+    compact(map(faults["env"])["FILES"]) === FILES &&
+    map(faults["env"])["FABRIKA_TEST_DEPTH"] === "full" &&
+    map(faults["env"])["PLANTS"] === `\${{ needs.select.outputs.plants }}` &&
+    map(faults["env"])["LEG"] ===
+      `\${{ matrix.shard }}`, "R1: checklist faults follow each leg's ordinary files in its held integration slot and existing limit");
 
   require(steps(related).some(
     (step) =>

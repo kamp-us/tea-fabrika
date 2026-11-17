@@ -5,7 +5,7 @@ import { cases, type Request } from "./plant-cases.ts";
 export const Failure = Schema.Struct({
   diagnostic: Schema.Literals([
     "AssertionError: a notice names its process",
-    "AssertionError: the update reached the client unchanged",
+    "AssertionError: the update its Process published reached the client unchanged",
     "AssertionError: the client heard the checklist's views",
     "AssertionError: checklist notice count differs",
     "AssertionError: alarm completion waits for the real callback",

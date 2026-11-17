@@ -59,7 +59,10 @@ Today's CI, serving both versions, adds automatic related integration and toolin
 ready pull requests and queue groups, ticket 1155. Related visual tests join the existing next
 matrix without requiring a label. Global triggers select every file, and selected laws run at
 full depth. All test jobs share the existing nine groups and one control group. The original
-regression suite remains intact. The source is prepared; CI validation and review remain due.
+regression suite remains intact. The [automatic checklist fault runner](../../field/notes/2026-11-17-automatic-checklist-faults.json)
+assigns the ten existing cases once across the existing integration legs, after each leg's ordinary files. The fixture's full100 suite stays in its one owning leg. It binds the catalog
+source and actual tested merge separately while preserving exact image and dependency checks.
+Actual runtime, fault evidence and final review remain due.
 
 In `next/`, ticket 1153 reuses the Node quota fixture's admission services within one World
 and one limits generation. Every input still sends; each limits setter creates a fresh cache key,

@@ -131,21 +131,21 @@ export const cases = {
       "L13: notices name their process each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
     selector:
       "L13: notices name their process > each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
-    source: "27039e9455026f37327259a5411260cb4d441ba8",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: "              heard.push({ client, news: structuredClone(news) });",
     after:
-      "              const delivered = Schema.is(Notice)(news) ? { ...news, params: { ...news.params, rev: -1 } } : news;\n              heard.push({ client, news: structuredClone(delivered) });",
+      "              const delivered = News.guards.view(news) ? { ...news, update: { ...news.update, rev: -1 } } : news;\n              heard.push({ client, news: structuredClone(delivered) });",
     preparation: [],
     hashes: {
-      source: "87cf843c2c5544d89551ff99a8259b8aec681973c36314a8c6f0fb18f8509904",
-      prepared: "87cf843c2c5544d89551ff99a8259b8aec681973c36314a8c6f0fb18f8509904",
-      edited: "dfc6983e043ab66b3790f3e88e1f2efd017110b59a93bbac7a825bee7de3d20b",
+      source: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
+      prepared: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
+      edited: "061a14624cb441a033477a741668f2e46d8d87ab64ff670b3bfa486f9564c8ee",
     },
     failures: [
       {
-        diagnostic: "AssertionError: the update reached the client unchanged",
-        line: 840,
-        column: 91,
+        diagnostic: "AssertionError: the update its Process published reached the client unchanged",
+        line: 830,
+        column: 99,
       },
     ],
   },
@@ -157,25 +157,25 @@ export const cases = {
       "L13: notices name their process each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
     selector:
       "L13: notices name their process > each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
-    source: "27039e9455026f37327259a5411260cb4d441ba8",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: "              heard.push({ client, news: structuredClone(news) });",
     after:
-      '              if (Schema.is(Notice)(news) && published.filter((h) => Schema.is(Schema.Struct({ type: Schema.Literals(["whole", "patch"]) }))(h.news)).length === 1) {\n                return;\n              }\n\n              heard.push({ client, news: structuredClone(news) });',
+      "              if (News.guards.view(news) && published.filter((h) => Schema.is(Published)(h.news)).length === 1) {\n                return;\n              }\n\n              heard.push({ client, news: structuredClone(news) });",
     preparation: [],
     hashes: {
-      source: "87cf843c2c5544d89551ff99a8259b8aec681973c36314a8c6f0fb18f8509904",
-      prepared: "87cf843c2c5544d89551ff99a8259b8aec681973c36314a8c6f0fb18f8509904",
-      edited: "3144b346f9ac98548a756c2a309ef83599e0252fece52f977ecb80d470fa1f30",
+      source: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
+      prepared: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
+      edited: "d95cdb439345596c7f54d64d469e71f95c51761fd832685da47f74496e18421d",
     },
     failures: [
       {
         diagnostic: "AssertionError: the client heard the checklist's views",
-        line: 837,
+        line: 828,
         column: 80,
       },
       {
         diagnostic: "AssertionError: checklist notice count differs",
-        line: 838,
+        line: 829,
         column: 38,
       },
     ],
@@ -188,7 +188,7 @@ export const cases = {
       "L13: notices name their process successive sends land and a client joining after the first send opens the current checklist",
     selector:
       "L13: notices name their process > successive sends land and a client joining after the first send opens the current checklist",
-    source: "27039e9455026f37327259a5411260cb4d441ba8",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: "                              yield* Effect.void;",
     after: "                              yield* Deferred.succeed(work.done, undefined);",
     preparation: [
@@ -235,14 +235,14 @@ export const cases = {
       },
     ],
     hashes: {
-      source: "87cf843c2c5544d89551ff99a8259b8aec681973c36314a8c6f0fb18f8509904",
-      prepared: "da5ed53689af965741a4684f4c53285f4c013d65bfb8bef7c308102a3b4161b9",
-      edited: "1fbd13adcee585a4fa8d6635f8e16b675b123ea9b098d2181d1d39fbd40e64c8",
+      source: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
+      prepared: "d097eed69883a94ee40d8824e84844567672012f97a6e3e71001167c3ed45336",
+      edited: "5a166e8c8fc6b26afa845cc793052ac228037237c557a1c01a662bbfb116db15",
     },
     failures: [
       {
         diagnostic: "AssertionError: alarm completion waits for the real callback",
-        line: 779,
+        line: 769,
         column: 107,
       },
     ],
@@ -255,7 +255,7 @@ export const cases = {
       "L13: notices name their process successive sends land and a client joining after the first send opens the current checklist",
     selector:
       "L13: notices name their process > successive sends land and a client joining after the first send opens the current checklist",
-    source: "27039e9455026f37327259a5411260cb4d441ba8",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: '          yield* Effect.forEach(due, (work) => Deferred.await(work.done), { concurrency: "unbounded" });',
     after: "          yield* Effect.void;",
     preparation: [
@@ -306,14 +306,14 @@ export const cases = {
       },
     ],
     hashes: {
-      source: "87cf843c2c5544d89551ff99a8259b8aec681973c36314a8c6f0fb18f8509904",
-      prepared: "ac72eaebcf7807fbc420a1d50d48db7c49aa0eac02f9353aa2faec49298649a2",
-      edited: "30f002b04b283c0795ac241b046c8cee7c436c38b44e5d83d600f088c110946f",
+      source: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
+      prepared: "5ab79a9bd1333b20874fcfd26659f7fbb4c1d799fac4a441b78b2b2a9cf79087",
+      edited: "ea0866f9735cb11103994209e889f2a5e23cb57ecb7d6ff28711d589f4aa24ef",
     },
     failures: [
       {
         diagnostic: "AssertionError: settled stays pending while the callback is held",
-        line: 780,
+        line: 770,
         column: 98,
       },
     ],
@@ -326,7 +326,7 @@ export const cases = {
       "L13: notices name their process successive sends land and a client joining after the first send opens the current checklist",
     selector:
       "L13: notices name their process > successive sends land and a client joining after the first send opens the current checklist",
-    source: "27039e9455026f37327259a5411260cb4d441ba8",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: "          for (const work of due) {\n            alarms.delete(work);\n          }",
     after: "          for (const work of due) {\n            alarms.delete(work);\n          }\n\n          return;",
     preparation: [
@@ -377,14 +377,14 @@ export const cases = {
       },
     ],
     hashes: {
-      source: "87cf843c2c5544d89551ff99a8259b8aec681973c36314a8c6f0fb18f8509904",
-      prepared: "e06e8591c63a7478875fe7d981aebddc944ace52618c4fc94b8d3b53ef4ddea5",
-      edited: "2eba932c86e465964cd3d55608300c64c1a491cd28226514874b2f9b6348f613",
+      source: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
+      prepared: "15a20a30009ce885e2fce5b77164a70dde147c44286ecefb7bf7a13abda32852",
+      edited: "4ce6941d2ad4b4780a411b994b63f4a078052b9bca5ac9e0a225b2f521a1eeda",
     },
     failures: [
       {
         diagnostic: "AssertionError: settled includes the rescheduled due callback",
-        line: 786,
+        line: 776,
         column: 95,
       },
     ],
@@ -397,7 +397,7 @@ export const cases = {
       "L13: notices name their process successive sends land and a client joining after the first send opens the current checklist",
     selector:
       "L13: notices name their process > successive sends land and a client joining after the first send opens the current checklist",
-    source: "27039e9455026f37327259a5411260cb4d441ba8",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: "          Deferred.doneUnsafe(pending.work.done, Effect.void);",
     after:
       "          Deferred.doneUnsafe(pending.work.done, Effect.void);\n\n          for (const active of running) {\n            Deferred.doneUnsafe(active.done, Effect.void);\n          }",
@@ -449,14 +449,14 @@ export const cases = {
       },
     ],
     hashes: {
-      source: "87cf843c2c5544d89551ff99a8259b8aec681973c36314a8c6f0fb18f8509904",
-      prepared: "951b21bb82caf768b7009313a17fece337e5c767440421681970c3ce779de759",
-      edited: "ef764cdd9d6b087251195f2c97d2352be0f4cd0b39f3d5d6ef42450fa9b940f1",
+      source: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
+      prepared: "a7a798a65be92dabc32d25540c0b9fd6ef4b328a4bb0c7af5d53669e47fde6a5",
+      edited: "84c27c3333f5eeb55c26c33219671a09008dc0abee7d7797245997872305facf",
     },
     failures: [
       {
         diagnostic: "AssertionError: canceling a schedule keeps the running call pending",
-        line: 786,
+        line: 776,
         column: 114,
       },
     ],
@@ -469,7 +469,7 @@ export const cases = {
       "L13: notices name their process successive sends land and a client joining after the first send opens the current checklist",
     selector:
       "L13: notices name their process > successive sends land and a client joining after the first send opens the current checklist",
-    source: "27039e9455026f37327259a5411260cb4d441ba8",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: "          Deferred.doneUnsafe(pending.work.done, Effect.void);",
     after:
       "          Deferred.doneUnsafe(pending.work.done, Effect.void);\n\n          for (const active of running) {\n            Deferred.doneUnsafe(active.done, Effect.void);\n          }",
@@ -521,14 +521,14 @@ export const cases = {
       },
     ],
     hashes: {
-      source: "87cf843c2c5544d89551ff99a8259b8aec681973c36314a8c6f0fb18f8509904",
-      prepared: "1c7eda62183a128ff73c16b082fc05889454bef0c0872988a809873fe214e3f4",
-      edited: "ad935ce016118a7e697e804b8c0d8c52473f8e91f218645182271c6d389a3291",
+      source: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
+      prepared: "e82cf996bf5a94d236f5c3022e0e3ee02748a427946fd6ea3817455ddbf9c678",
+      edited: "13c9dae45705b697abede18a004fc6656235918bd9198b6c665b4b5da016c09b",
     },
     failures: [
       {
         diagnostic: "AssertionError: canceling a schedule keeps the running call pending",
-        line: 786,
+        line: 776,
         column: 114,
       },
     ],
@@ -541,7 +541,7 @@ export const cases = {
       "L13: notices name their process successive sends land and a client joining after the first send opens the current checklist",
     selector:
       "L13: notices name their process > successive sends land and a client joining after the first send opens the current checklist",
-    source: "27039e9455026f37327259a5411260cb4d441ba8",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: "                          }).pipe(\n                            Effect.ensuring(",
     after:
       "                          }).pipe(\n                            Effect.catch(() => Effect.void),\n                            Effect.ensuring(",
@@ -587,14 +587,14 @@ export const cases = {
       },
     ],
     hashes: {
-      source: "87cf843c2c5544d89551ff99a8259b8aec681973c36314a8c6f0fb18f8509904",
-      prepared: "e5eb025fb38d1abe0fb6b2a855eeb4dc25d7c0eb6567433790c8a378db4c01a7",
-      edited: "4e2e5782d6f6e53ec9423974cab221c015d360ebc6bed3b1aa0c38aa48ef4511",
+      source: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
+      prepared: "ea8d42e1ae68ac5f544227f17c5c29ea7a4e009e29936308d6963e61ff3ed073",
+      edited: "c976a384dc41751fc74e96f21b588314333033e1cb03618d23de85405378ef9a",
     },
     failures: [
       {
         diagnostic: "AssertionError: alarm failure reaches the completion waiter",
-        line: 810,
+        line: 800,
         column: 91,
       },
     ],
@@ -607,7 +607,7 @@ export const cases = {
       "L13: notices name their process successive sends land and a client joining after the first send opens the current checklist",
     selector:
       "L13: notices name their process > successive sends land and a client joining after the first send opens the current checklist",
-    source: "27039e9455026f37327259a5411260cb4d441ba8",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: "                                running.delete(work);",
     after:
       "                                running.delete(work);\n                                alarms.delete(work);",
@@ -649,14 +649,14 @@ export const cases = {
       },
     ],
     hashes: {
-      source: "87cf843c2c5544d89551ff99a8259b8aec681973c36314a8c6f0fb18f8509904",
-      prepared: "2fd6f3e43846951664bdd7ef40842ac2674f1cfce42b5e865183c06f7e11eaa3",
-      edited: "e6c92f5b5b8c9e73ff84755939aa80a22fee87f95b1569994820b2925b43ccc9",
+      source: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
+      prepared: "a0a10cef5b8e134ea8a2b87f89930e2f58b715fdac29bdc1b25e30574d77bf3c",
+      edited: "5b43a4afb1e77c9f783623dbe1ca34526f419a477da4cf15e17255d035d0ed27",
     },
     failures: [
       {
         diagnostic: "AssertionError: alarm failure reaches the completion waiter",
-        line: 810,
+        line: 800,
         column: 91,
       },
     ],

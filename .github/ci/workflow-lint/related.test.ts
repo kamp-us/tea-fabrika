@@ -7,6 +7,13 @@ import { lintWorkflow } from "../workflow-lint.ts";
 const text = readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8");
 
 const Fault = Schema.Literals([
+  "fault_assignment",
+  "fault_order",
+  "fault_slot",
+  "fault_depth",
+  "fault_limit",
+  "fault_soft",
+  "fault_upload",
   "matrix_name",
   "selection_report",
   "results_report",
@@ -31,7 +38,36 @@ it.prop(
     const selector = workflow.jobs.select.steps.find((step: { id?: string }) => step.id === "set");
     const integration = workflow.jobs.related.steps.find((step: { name?: string }) => step.name === "integration");
 
+    const faults = workflow.jobs.related.steps.find((step: { name?: string }) => step.name === "checklist faults");
+
     switch (fault) {
+      case "fault_assignment":
+        faults.env.PLANTS = "{}";
+        break;
+      case "fault_order": {
+        const index = workflow.jobs.related.steps.indexOf(faults);
+        workflow.jobs.related.steps.splice(index, 1);
+        const before = workflow.jobs.related.steps.indexOf(integration);
+        workflow.jobs.related.steps.splice(before, 0, faults);
+        break;
+      }
+      case "fault_slot":
+        faults.if = "true";
+        break;
+      case "fault_depth":
+        faults.env.FABRIKA_TEST_DEPTH = "fast";
+        break;
+      case "fault_limit":
+        faults["timeout-minutes"] = 18;
+        break;
+      case "fault_soft":
+        faults["continue-on-error"] = true;
+        break;
+      case "fault_upload":
+        workflow.jobs.related.steps.find(
+          (step: { name?: string }) => step.name === "checklist fault observations",
+        ).with.path = "other.json";
+        break;
       case "matrix_name":
         workflow.jobs.related.name = `related (\${{ matrix.shard }})`;
         break;
