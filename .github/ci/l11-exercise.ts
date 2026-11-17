@@ -509,8 +509,9 @@ const complete = (events: readonly Trace[]): Reason | null => {
 };
 
 export const equality = (left: string, right: string): Result.Result<{ cuts: number; events: number }, Reason> => {
+  // Identical bytes share validation within this call; neither input can skip it.
   const before = readTrace(left);
-  const after = readTrace(right);
+  const after = left === right ? before : readTrace(right);
 
   if (Result.isFailure(before)) {
     return Result.fail(before.failure);
@@ -520,14 +521,14 @@ export const equality = (left: string, right: string): Result.Result<{ cuts: num
     return Result.fail(after.failure);
   }
 
-  const reason = complete(before.success) ?? complete(after.success);
+  const reason = complete(before.success) ?? (before === after ? null : complete(after.success));
 
   if (reason !== null) {
     return Result.fail(reason);
   }
 
   // Encode through the same schema to compare complete ordered values, independent of JSON key order.
-  if (JSON.stringify(normalized(before.success)) !== JSON.stringify(normalized(after.success))) {
+  if (before !== after && JSON.stringify(normalized(before.success)) !== JSON.stringify(normalized(after.success))) {
     return Result.fail("trace_mismatch");
   }
 
