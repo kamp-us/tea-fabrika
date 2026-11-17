@@ -132,7 +132,9 @@ All on main in `next/`, read 2026-11-13.
 - **The checklist program** and **the thin inbox program** (P44, P45's slice 1). The app's table
   still holds one program, `fabrika/counter` (`next/apps/fabrika/src/table.ts:7`).
 
-No code in `next/` names `fabsh`, `summon`, a room or a registry of names (searched 2026-11-13).
+`next/programs/fabsh` now holds the v1 S1 reader and pure editor. Its execution proof is pending
+automatic CI. The terminal in a tile, saved shared history and process control remain later slices
+of [the approved plan](./quests/fabsh-v1-PLAN.md).
 
 ### What is missing, piece by piece
 
@@ -273,17 +275,15 @@ In build order. "Decide first" lists only what no decision answers yet.
 - Designed by: [0275](../../.decisions/0275-the-shell-is-a-regular-program.md),
   [0432](../../.decisions/0432-next-has-fabsh-rethought-from-tsh.md), S1 of the summon guidelines,
   [fabsh grows into a language](../direction/fabsh-grows-into-a-language.md) (proposed).
-- In code now: nothing named `fabsh` is on main (checked 2026-11-15). *Added 2026-11-15: the program
-  is built on the draft
-  [PR 1232](https://github.com/kamp-us/tea-fabrika/pull/1232) (slices 1 and 2a: it takes a line,
-  echoes each letter at once, reads each word's role, answers built-ins and starts a program). It
-  waits for the owner's walk of the fabsh guidelines
-  ([PR 1254](https://github.com/kamp-us/tea-fabrika/pull/1254)).* Today's `tsh` has 12 built-in words
-  (`packages/fabrika/src/shell/grammar.ts:83`), which maps the jobs and is not copied.
-- Not built: the program, its line editor in its model, its view with local echo (0275), the
-  reader that gives every word a role (S1), and the built-ins.
-- Decide first: S1, and with it what a line may hold and which built-in words `fabsh` has (both
-  listed as not decided in 0159).
+- In this S1 change: `next/programs/fabsh` holds the reader, grammar, declaration checks,
+  role coloring, completion and pure tea line editor, with its generated Ghostty cell table.
+  The six law suites are authored. Behavior, compiler, lint and fault proof remain pending
+  automatic CI. Nothing is presented as a working terminal in a tile yet.
+- Not built in S1: the program and terminal window, the runtime key and screen frames, saved shared
+  history, terminal settings, local echo and process or job control. These are S2 to S4 of
+  [the approved v1 plan](./quests/fabsh-v1-PLAN.md).
+- Decided first: 0586 fixes the v1 grammar and twelve built-ins from today's terminal. Before S2,
+  the look step still chooses the palette assignment, prompt treatment, padding and error mark.
 - *2026-11-15 ([0586](../../.decisions/0586-fabsh-v1-is-todays-terminal.md)): `fabsh` v1 is today's
   terminal rebuilt on `next/`'s runtime: a Ghostty terminal in a tile, today's line editor, `tsh`'s
   grammar, built-ins, completion and pipes, and syntax highlighting, set under `[terminal]` with
