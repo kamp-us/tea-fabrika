@@ -1,0 +1,64 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-host-runtime-remaining-faults-lead",
+  "ticket": "kamp-us/tea-fabrika#1133",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-17T09:57:42.271216+00:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling: the independent source reader sent cfb85d676 back for one env-order context mismatch, then passed exact cfb85d676..5fee1e570 after the strict actual setup-path fix. The lead read all changed source and records. An ordinary merge of main f966dac3a preserved all 11 reviewed runner/test/record paths byte-for-byte; a lead docs commit updates the fixed case count to seven. At resulting 9bf929467, normal format and all 18 lint parts passed, then the canonical whole compiler passed 30 projects. Three read safe unit files passed all 20 tests. No protected law or fixture ran locally.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "This passes the stated source and local checks only. The real reporter child fixture and three new host fault triplets remain unproved; no merge-ready or product proof is claimed.",
+  "costUsd": null,
+  "billed": null,
+  "source": "9bf9294677062ef1e2ae87d5fd5af992e255e1f4",
+  "sourceReview": {
+    "first": "cfb85d676f93628775dd5e4592096321a7538296",
+    "firstResult": "send",
+    "fix": "5fee1e57020af810ebcf9e8f38ef1f81619d11be",
+    "fixResult": "source pass",
+    "limits": "Read-only source judgment; no test or runtime execution by that reader."
+  },
+  "compiler": {
+    "started": "2026-11-17T09:55:02.642315+00:00",
+    "ended": "2026-11-17T09:55:15.775365+00:00",
+    "seconds": 13.13261379100004,
+    "exit": 0,
+    "projects": 30,
+    "node": "26.13.0",
+    "pnpm": "12.16.1",
+    "trackedFiles": 5198,
+    "sourceUnchanged": true,
+    "indexUnchanged": true,
+    "headUnchanged": true,
+    "lockUnchanged": true,
+    "compilersAfter": 0
+  },
+  "lint": {
+    "parts": 18,
+    "seconds": 32.9,
+    "exit": 0
+  },
+  "safeTests": {
+    "files": 3,
+    "passed": 20,
+    "seconds": 2.59
+  },
+  "selection": {
+    "kind": "changed",
+    "base": "f966dac3ad5d3b268e055bc6892674e23c15815e",
+    "files": 42,
+    "legs": 2,
+    "listedOnly": true,
+    "protected": ".github/ci/plant-reporter.integration.test.ts",
+    "local": "Only the three inspected in-memory unit paths ran. The complete listed selection is reserved for eligible disposable CI."
+  }
+}

@@ -28,6 +28,29 @@ it.prop(
         map(map(map(w["on"])["workflow_dispatch"])["inputs"])["patch"] = { type: "string" };
       },
       (w: Record<string, unknown>) => {
+        map(map(map(map(w["on"])["workflow_dispatch"])["inputs"])["case"])["options"] = ["checklist-pid", "watcher-r1"];
+      },
+      (w: Record<string, unknown>) => {
+        map(map(map(map(w["on"])["workflow_dispatch"])["inputs"])["case"])["options"] = [
+          "checklist-pid",
+          "watcher-r1",
+          "host-pin",
+          "host-discovery-timeout",
+        ];
+      },
+      (w: Record<string, unknown>) => {
+        map(map(map(map(w["on"])["workflow_dispatch"])["inputs"])["case"])["options"] = [
+          "checklist-pid",
+          "watcher-r1",
+          "host-pin",
+          "host-discovery-timeout",
+          "host-requested-pin",
+          "host-pnpm-path",
+          "host-env-order",
+          "arbitrary-command",
+        ];
+      },
+      (w: Record<string, unknown>) => {
         map(map(w["jobs"])["exercise"])["runs-on"] = "self-hosted";
       },
       (w: Record<string, unknown>) => {

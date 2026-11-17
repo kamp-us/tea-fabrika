@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-node-dev-plan",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": null,
+  "started": "2026-11-15T20:31:06-08:00",
+  "ended": "2026-11-15T20:44:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Plan step for the mock sweep in next/packages/libfabrika/src/node/dev (docs/plan/quests/mock-node-dev-PLAN.md), in next/. Counted on main at f7169af: 15 vi.spyOn (fetch 7, process.kill 6, console 2), 2 toHaveBeenCalled matches, no vi.fn. The fetch spies need no product change, since startDev already reaches fetch through HttpClient; process.kill moves behind a new Signals service with a Node layer and a Recorder test layer; console goes to Effect's TestConsole plus eslint/no-console in libfabrika product files. The lock is vitest/no-restricted-vi-methods for fn, spyOn and stubGlobal on the folder. Two open questions for the owner: how watch.ts hands on Rolldown's warnings, and whether the secrets law may stop seeing an outside package's direct console writes. Ordered before the Reflect ban's slice 9, which waits on pull request 1366. plancheck --draft passed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 13,
+  "note": "A cloud step session, no subagents. The model is left null because the session did not read its serving model. No test, install beyond the frozen-lockfile setup, or typecheck ran: the plan step only reads.",
+  "step": "plan"
+}
