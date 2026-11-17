@@ -9,6 +9,7 @@ import { ChildProcessSpawner } from "effect/process";
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { assert, describe, TestRunner } from "vitest";
+import { parseCLI } from "vitest/node";
 import * as Cases from "./l11-cases.ts";
 import * as Exercise from "./l11-exercise.ts";
 import L11Reporter, { Attribution, Metadata, causal } from "./l11-reporter.ts";
@@ -140,6 +141,13 @@ it.prop(
 
     expect(Result.isSuccess(Cases.decode({ case: name, sha: Cases.cached }))).toBe(true);
     const chosen = Cases.Request.make({ case: name, sha: Cases.cached });
+    // Plant: omit runtime collection. Vitest's default static parser cannot expand looped registrations.
+    const listed = parseCLI(Cases.argv(chosen, "private.json", true).slice(1));
+    const executed = parseCLI(Cases.argv(chosen, "private.json").slice(1));
+    expect(listed.options.staticParse).toBe(false);
+    expect(executed.options.staticParse).toBeUndefined();
+    expect(listed.filter).toEqual([Cases.file]);
+    expect(listed.options.json).toBe("private.json");
     const pattern = Cases.argv(chosen, "private.json").find((arg) => arg.startsWith("--testNamePattern="));
     expect(Cases.argv(chosen, "private.json").includes("--disableConsoleIntercept")).toBe(name === "l11-inputs");
     expect(
@@ -357,7 +365,18 @@ it.prop(
 
     const before = trace(secret);
     const after = structuredClone(before);
-    expect(Result.isSuccess(Exercise.equality(stdout(before), stdout(after)))).toBe(true);
+    const input = stdout(before);
+    expect(Result.isSuccess(Exercise.equality(input, stdout(after)))).toBe(true);
+    // Plant: accept identical text before validation. Equal inputs may both be invalid or incomplete.
+
+    for (const invalid of [
+      Cases.tracePrefix + JSON.stringify({ ...before[0], extra: secret }),
+      Cases.tracePrefix + JSON.stringify(secret),
+      stdout(before.slice(0, 1)),
+    ]) {
+      expect(Exercise.equality(invalid, invalid)).toEqual(Result.fail("trace_incomplete"));
+    }
+
     const at = after.findIndex((event) => event._tag === "pick");
     const pick = after[at];
 
@@ -386,8 +405,8 @@ it.prop(
         break;
     }
 
-    expect(Result.isFailure(Exercise.equality(stdout(before), stdout(after)))).toBe(true);
-    expect(Result.isFailure(Exercise.equality(stdout(before), ""))).toBe(true);
+    expect(Result.isFailure(Exercise.equality(input, stdout(after)))).toBe(true);
+    expect(Result.isFailure(Exercise.equality(input, ""))).toBe(true);
   },
   options,
 );
