@@ -1,0 +1,18 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-local-signal-guard-match",
+  "parent": "2026-11-16-local-signal-guard-followup",
+  "role": "hand",
+  "step": "lead",
+  "ticket": "tea-fabrika#1130",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "note": "Today's tooling: the review found manual tag checks in the new hostFiles guard, against decision 0567. HostRun and starter results are plain tagged types with no own matcher, so the three checks now use Effect Match.valueTags. Both HostRun cases and all seven starter cases have explicit handlers. This changes the branching form and preserves the existing refusal and allowance behavior. Caps and box remain prohibited locally; exact remote proof and the final compiler are the lead's work.",
+  "why": "Use the decided matching form for known tagged values in the new guard.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null
+}

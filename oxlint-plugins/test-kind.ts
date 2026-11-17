@@ -99,7 +99,7 @@ const literal = (node: Argument | undefined): string | null =>
       : null;
 
 /** What one module's own code opens: oxc-parser's tree, fed to starters.ts's reader. */
-const read = (file: string, source: string) => {
+export const openers = (file: string, source: string) => {
   const each = reader<null>();
   new Visitor({
     ImportDeclaration(node) {
@@ -151,10 +151,10 @@ const read = (file: string, source: string) => {
 
 /** What each module's own code opens, read once per module. */
 const opener = (modules: ReadonlyMap<string, Module>) => {
-  const known = new Map<string, ReturnType<typeof read>>();
+  const known = new Map<string, ReturnType<typeof openers>>();
 
   return (file: string) => {
-    const found = known.get(file) ?? read(file, modules.get(file)?.source ?? "");
+    const found = known.get(file) ?? openers(file, modules.get(file)?.source ?? "");
     known.set(file, found);
 
     return found;

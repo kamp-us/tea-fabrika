@@ -32,7 +32,7 @@ import { PERSON, type reader } from "./p14.test-support.ts";
 type Reader = Effect.Success<ReturnType<typeof reader>>;
 
 /** The workspace the tab shows: the browser entry starts its window on workspace 1. */
-export const WORKSPACE = 1;
+const WORKSPACE = 1;
 
 /** How far a drawn tile's edge may sit from where the drawn rule puts it, in CSS pixels: the
  *  browser's rounding of flex shares to layout units, never a divider or a padding. */
@@ -142,7 +142,7 @@ export const tell = (r: Reader, pid: string, m: unknown, letter: string) =>
 
 /** What the tab draws: how many mains, each region in document order with its name and box, the
  *  main's box, the names of every element marked `aria-current`, and the polite region's words. */
-export type Drawn = {
+type Drawn = {
   readonly mains: number;
   readonly regions: ReadonlyArray<{ readonly name: string; readonly box: Box | null }>;
   readonly main: Box | null;
@@ -355,13 +355,13 @@ export const processId = (r: Reader, name: string) =>
 /** Where DOM focus is in a tab: the name of the tile region holding it (null outside every tile),
  *  the `data-cursor` key of the nearest element around it that carries one (0165), and the first
  *  `data-cursor` key in that region, the top of the tile. */
-export type DomFocus = {
+type DomFocus = {
   readonly region: string | null;
   readonly cursor: string | null;
   readonly first: string | null;
 };
 
-export const domFocus = (page: Page): Effect.Effect<DomFocus> =>
+const domFocus = (page: Page): Effect.Effect<DomFocus> =>
   promised(() =>
     page.evaluate(() => {
       const active = document.activeElement;
@@ -405,7 +405,7 @@ const STRIP = /^\s*- button "(open (?:[^"\\]|\\.)*)"/;
 export type FoldDrawn = Drawn & { readonly strips: ReadonlyArray<{ readonly name: string; readonly box: Box | null }> };
 
 /** Reads what the tab draws now, strips included, by role and accessible name. */
-export const foldDrawn = (page: Page): Effect.Effect<FoldDrawn> =>
+const foldDrawn = (page: Page): Effect.Effect<FoldDrawn> =>
   Effect.gen(function* () {
     const d = yield* drawn(page);
     const main = page.getByRole("main").first();

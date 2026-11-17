@@ -66,8 +66,14 @@ export const layer = (dir: string): Layer.Layer<Branches, never, ChildProcessSpa
       const behind = (tip: string) =>
         Effect.map(git(["rev-list", "--count", `${tip}..origin/main`]), (ran) => Number(Str.trim(ran.out)));
 
-      // merge-tree exits 0 with the merged tree's oid on its first line, 1 on a conflict.
+      // No common ancestor means retained work, even when the trees happen to match.
       const landsEmpty = Effect.fn("BranchesGit.landsEmpty")(function* (tip: string) {
+        const base = yield* git(["merge-base", "origin/main", tip], [0, 1]);
+
+        if (base.code === 1) {
+          return false;
+        }
+
         const merged = yield* git(["merge-tree", "--write-tree", "origin/main", tip], [0, 1]);
         const main = yield* git(["rev-parse", "origin/main^{tree}"]);
 

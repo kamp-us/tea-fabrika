@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-port-scripts-0113-plan",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": null,
+  "started": "2026-11-15T21:49:12-08:00",
+  "ended": "2026-11-15T22:10:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Cloud twin plan step, tracker ticket 766, plan: the plan for ticket 766's sweep in our tooling (docs/plan/quests/port-scripts-0113-PLAN.md): fifteen shell and Python scripts become TypeScript and Effect in 16 slices folded into three integrator pull requests (leaves, the commit path, the box and mutation runner), with a lint step that refuses a tracked .sh or .py file outside a list that only shrinks, and apt.sh kept as a marked edge. plancheck.sh --draft passes on main's version and on PR 1454's. Three open questions for the owner: whether the five checks 0585 sends to @kalfa/ci port now in place, the mutation container's entry, and oxc-parser for loosening.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 21,
+  "note": "Cloud twin plan step, run by hand in one session with no subagents. The date is the UTC day the brief named; the times are Pacific. The end time was read before the commit, so it is a few minutes early. Model and tokens are not recorded here.",
+  "step": "plan",
+  "costUsd": null,
+  "billed": null,
+  "driver_caused": false
+}

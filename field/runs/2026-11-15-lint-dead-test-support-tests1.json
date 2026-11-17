@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-lint-dead-test-support-tests1",
+  "ticket": "lint-dead-test-support",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-15T23:53:07-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for lead tooling slice lint-dead-test-support, on branch fabrikalfa/lint-dead-test-support from origin/main 701a651. The owner ruled that pnpm lint:dead flagging exports of *.test-support.ts files (0538) as only-called-from-tests is a gap in our node-kinds.json, not a code-graph bug. Read the installed code-graph first (0054): @demlik/code-graph 0.15.0 (pnpm-lock.yaml, with a local patch), node_modules/@demlik/code-graph/dist/index.js. There testSupportFilePatterns is a record of named groups of regular expressions, not globs, tested against each file's path from the scanned root (NodeKindRulesSchema, compileGroup, matchingRules). Its default holds two groups, test-directory and test-helper-module, with no .test-support. pattern. A matching file's exports are withheld as test-support-surface, never dead or only-called-from-tests (judge, findUnreachable). --node-kinds is read by resolveNodeKindRules and loadOverrides, which spread the file over the defaults by top-level key, so setting testSupportFilePatterns replaces both default groups unless the file writes them again. pnpm lint:dead is the root package.json script code-graph . --unreachable --ci --node-kinds node-kinds.json, gated against unreachable-ledger.json, which holds no test-support entry today. Three laws in one new file, next/apps/fabrika/src/exam/unreachable.integration.test.ts, each a fast-check property that plants a generated tree in a temp folder with the real node-kinds.json and runs the real code-graph binary (so it is an integration law, 0584). Law 1 is red on main for the planned reason: expected [ 'next/a.test-support.ts:haa' ] to deeply equal []. Laws 2 and 3 are green on main. All three are green against a saved, uncommitted node-kinds.json holding the two default groups plus test-support-module [\\.test-support\\.tsx?$]. Law 3 was added because the replace-not-merge rule above means a config that names only the new group drops code-graph's default helper folders.",
+  "plants": [
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export of a .test-support.ts file that only tests use is not flagged",
+      "plant": "node-kinds.json as on main, with no testSupportFilePatterns",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export nothing uses is still flagged as dead beside test support",
+      "plant": "node-kinds.json with the defaults, the test-support-module group, and an over-wide group plant [\\.ts$]",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export in a default test-helper folder that only tests use is not flagged",
+      "plant": "node-kinds.json with testSupportFilePatterns holding only test-support-module, without the default groups",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Start time was not read at the start, so it is null; the first planted file in the scratch folder is from 2026-11-15T23:43:44-08:00. Each plant ran once on a copy of node-kinds.json and the real file was restored by copy; git status shows no change to it. node-kinds.json is an exam path in exam-paths.json, and stepcommit.sh refuses a build commit of an exam path (a build may not commit exam paths; answer send to tests), so the tests step commits the config entry too, in its own second commit after the laws were seen red on main: the two default groups written again plus test-support-module. At that head all three laws and next/apps/fabrika/src/exam/node-kinds.test.ts pass, and pnpm lint:dead passes (unreachable ledger: PASS, 3 recorded findings, none new; the ledger is unchanged). No build step is needed. The field example is next/packages/libfabrika/src/Id.test-support.ts:generatorWith on branch fabrikalfa/mock-lib-top-s1. Tests ran with nice -n 15 pnpm exec vitest run --maxWorkers=3 on the one new file only.",
+  "step": "tests"
+}

@@ -76,21 +76,15 @@ if (!hidden.ok) {
 // The one config at the top of the repo, on purpose. On its own, oxlint obeys a config in any folder
 // and a `.eslintignore` where it runs, and either could take a folder out of the checks. The config's
 // own `ignorePatterns` still apply, and those are read in review.
-const ran = spawnSync(
-  join(ROOT, "node_modules", ".bin", "oxlint"),
-  [
-    `--config=${join(ROOT, ".oxlintrc.json")}`,
-    "--disable-nested-config",
-    "--no-ignore",
-    "--format=json",
-    ...process.argv.slice(2),
-  ],
-  { cwd: process.cwd(), encoding: "utf8", maxBuffer: 2 ** 30 },
-);
-
 /** What oxlint said, or `null` when it did not finish and report: that must never read as clean. */
-const read = (): readonly Diagnostic[] | null =>
-  Result.getOrNull(
+const lint = (args: readonly string[]): readonly Diagnostic[] | null => {
+  const ran = spawnSync(
+    join(ROOT, "node_modules", ".bin", "oxlint"),
+    [`--config=${join(ROOT, ".oxlintrc.json")}`, "--disable-nested-config", "--no-ignore", "--format=json", ...args],
+    { cwd: process.cwd(), encoding: "utf8", maxBuffer: 2 ** 30 },
+  );
+
+  const read = Result.getOrNull(
     Result.try((): readonly Diagnostic[] | null => {
       const report: {
         readonly diagnostics?: readonly Diagnostic[];
@@ -101,10 +95,27 @@ const read = (): readonly Diagnostic[] | null =>
     }),
   );
 
-const diagnostics = read();
+  if (read !== null) {
+    return read;
+  }
+
+  console.error(`oxlint did not finish: status ${ran.status}\n${ran.stdout}\n${ran.stderr}`);
+
+  return null;
+};
+
+// Oxlint's fix report keeps positions from before its edits. Read fresh diagnostics against the
+// rewritten files before fingerprinting lines or pruning entries. A plain lint run still runs once.
+const FIXES = new Set(["--fix", "--fix-suggestions", "--fix-dangerously"]);
+
+const args = process.argv.slice(2);
+
+const fixed = lint(args);
+
+const diagnostics =
+  fixed === null || !Arr.some(args, (arg) => FIXES.has(arg)) ? fixed : lint(Arr.filter(args, (arg) => !FIXES.has(arg)));
 
 if (diagnostics === null) {
-  console.error(`oxlint did not finish: status ${ran.status}\n${ran.stdout}\n${ran.stderr}`);
   process.exit(2);
 }
 

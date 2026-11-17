@@ -1,0 +1,58 @@
+name: plant-exercise
+
+# This records a temporary break. It supplies no branch proof or automatic plant verdict.
+on:
+  workflow_dispatch:
+    inputs:
+      case:
+        description: Fixed temporary break
+        required: true
+        type: choice
+        options: [checklist-pid, watcher-r1, host-pin, host-discovery-timeout]
+      sha:
+        description: Exact source commit, forty lowercase hex characters
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  exercise:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Fail a dispatch on another ref. A skipped green job would hide a bad request.
+      - name: trusted main
+        run: test "$GITHUB_REF" = refs/heads/main
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          submodules: false
+          lfs: false
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+          path: source
+          persist-credentials: false
+          submodules: false
+          lfs: false
+      - uses: ./.github/actions/pnpm
+      - name: install trusted tooling
+        shell: bash
+        run: |
+          if ! pnpm install --frozen-lockfile > "$RUNNER_TEMP/plant-install.out" 2>&1; then
+            echo 'plant-exercise: trusted install failed'
+            exit 1
+          fi
+      - name: exercise
+        timeout-minutes: 17
+        run: nice -n 19 node .github/ci/plant.ts
+      - name: sanitized observations
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: plant-exercise
+          path: ${{ runner.temp }}/plant-exercise/result.json
+          if-no-files-found: error

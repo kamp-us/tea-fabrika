@@ -53,7 +53,7 @@ export const NAME = "checklist, t1";
 const TILES = [{ id: "tile_1", name: PROCESS }];
 
 /** One row of the checklist as the backend shows it. */
-export type Row = { readonly name: string; readonly checked: boolean };
+type Row = { readonly name: string; readonly checked: boolean };
 
 /** What the suite asks of a client, whatever draws it. */
 export type Backend = {
@@ -346,7 +346,7 @@ export const served = (h: Home) =>
     return { dev, control, facts, from, hash: source.hash };
   }).pipe(Effect.provide(NodeServices.layer));
 
-export type Served = Effect.Success<ReturnType<typeof served>>;
+type Served = Effect.Success<ReturnType<typeof served>>;
 
 /** A local binding's calls, as the dev command hands them out. */
 type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;

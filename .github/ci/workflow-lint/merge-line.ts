@@ -34,6 +34,9 @@ const VITEST_VARS: Record<string, (value: unknown) => boolean> = {
 // A vitest flag that picks another config or root, which could hold projects of any name.
 const ELSEWHERE = /(?:^|\s)(?:--config|-c|--root|-r|--dir|--workspace)(?:[=\s]|$)/;
 
+// Only these complete literal conditions prove a job cannot run on a PR or merge group.
+const DISPATCH_ONLY = /^github\.event_name=='workflow_dispatch'(?:&&inputs\.suite=='[a-z][a-z0-9-]*')?$/;
+
 /** A step's script as shell commands: `\`-continued lines joined, then cut at every separator. */
 const shellCommands = (script: string) =>
   script
@@ -54,6 +57,7 @@ const toolingJobs = (workflow: Record<string, unknown>): string[] => {
   const outer = { ...map(workflow["env"]) };
 
   return Rec.toEntries(map(workflow["jobs"]))
+    .filter(([, job]) => !DISPATCH_ONLY.test(compact(map(job)["if"])))
     .filter(([, job]) =>
       steps(map(job)).some((step) => {
         if (typeof step["run"] !== "string") {

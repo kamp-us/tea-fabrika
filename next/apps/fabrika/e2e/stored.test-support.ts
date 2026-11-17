@@ -7,7 +7,7 @@ import type { PlatformError } from "effect";
 import { instanceDatabase } from "../src/instance-database.test-support.ts";
 
 /** An instance's home, and the stop that ends every process that writes in it. */
-export type Instance<E> = { readonly dir: string; readonly stop: Effect.Effect<void, E> };
+type Instance<E> = { readonly dir: string; readonly stop: Effect.Effect<void, E> };
 
 /** Check every file and SQLite cell, twice: once while the instance runs, and once after its stop.
  *

@@ -297,6 +297,101 @@ const PLANTS: Readonly<Record<(typeof FIVE)[number], { readonly file: string; re
 const planted = (folder: string) =>
   Rec.fromEntries(Arr.map(Rec.values(PLANTS), ({ file, text }) => [`${folder}/${file}`, text]));
 
+describe("T1087 fixes and ledger matching read the same source", () => {
+  const config = {
+    categories: { correctness: "off" },
+    jsPlugins: ["./oxlint-plugins/index.ts"],
+    ignorePatterns: ["oxlint-plugins/**", "node_modules/**"],
+    rules: { "fabrika/no-promises": "error", "fabrika/padding-line-between-statements": "error" },
+    overrides: [{ files: ["next/**", ".agents/**"], rules: { "fabrika/no-promises": "error" } }],
+  };
+
+  const known = "export const known = async () => 2;";
+  const fresh = "export const fresh = async () => 3;";
+  const before = `export function first() {\n  return 1;\n}\n${known}\n\n${fresh}\n`;
+  const after = before.replace(`}\n${known}`, `}\n\n${known}`);
+
+  const folders = [
+    { folder: ".agents", ledger: "agents-ledger.json" },
+    { folder: "next", ledger: "next-ledger.json" },
+  ];
+
+  const entries = (file: string) => [
+    { file, rule: "fabrika(no-promises)", code: known },
+    { file, rule: "fabrika(padding-line-between-statements)", code: known },
+    { file, rule: "fabrika(no-promises)", code: "export const fresh = async () => 1;" },
+    { file, rule: "fabrika(no-promises)", code: "export const deleted = async () => 0;" },
+  ];
+
+  const files = () =>
+    Object.fromEntries(
+      folders.flatMap(({ folder, ledger }) => [
+        [`${folder}/unit.ts`, before],
+        [ledger, `${JSON.stringify({ entries: entries(`${folder}/unit.ts`) })}\n`],
+      ]),
+    );
+
+  it.each(["--fix", "--fix-suggestions", "--fix-dangerously"])(
+    "scenario: %s keeps a moved unchanged finding, prunes fixed, changed and deleted entries, and blocks new code",
+    (flag) => {
+      const fixture = repo(config, files());
+      rmSync(join(fixture.at, "vendor"));
+
+      try {
+        const fixed = fixture.lint("--threads=1", flag);
+        expect(fixed.status, fixed.out).toBe(1);
+        expect(fixed.out).toContain("oxlint: 2 blocking, 0 advice");
+
+        for (const { folder, ledger } of folders) {
+          expect(readFileSync(join(fixture.at, folder, "unit.ts"), "utf8")).toBe(after);
+          expect(fixed.out).toContain(`${folder}/unit.ts:7:22 fabrika(no-promises)`);
+          expect(fixed.out).toContain(`${ledger}: pruned 3 fixed entries`);
+          expect(JSON.parse(readFileSync(join(fixture.at, ledger), "utf8"))).toEqual({
+            entries: [entries(`${folder}/unit.ts`)[0]],
+          });
+        }
+
+        const checked = fixture.lint("--threads=1");
+        expect(checked.status, checked.out).toBe(1);
+        expect(checked.out).toContain("oxlint: 2 blocking, 0 advice");
+        expect(checked.out).not.toContain("pruned");
+
+        for (const { folder } of folders) {
+          writeFileSync(join(fixture.at, folder, "unit.ts"), after.replace(`\n${fresh}\n`, "\n"));
+        }
+
+        const clean = fixture.lint("--threads=1");
+        expect(clean.status, clean.out).toBe(0);
+        expect(clean.out).toContain("oxlint: 0 blocking, 0 advice, 1 in agents-ledger.json, 1 in next-ledger.json");
+        expect(clean.out).not.toContain("pruned");
+      } finally {
+        fixture.done();
+      }
+    },
+  );
+
+  it("scenario: a scoped fix matches moved findings and leaves both ledgers byte-identical", () => {
+    const original = files();
+    const fixture = repo(config, original);
+    rmSync(join(fixture.at, "vendor"));
+
+    try {
+      const fixed = fixture.lint("--threads=1", "--fix", ".agents/unit.ts");
+      expect(fixed.status, fixed.out).toBe(1);
+      expect(fixed.out).toContain("oxlint: 1 blocking, 0 advice");
+      expect(fixed.out).toContain(".agents/unit.ts:7:22 fabrika(no-promises)");
+      expect(readFileSync(join(fixture.at, ".agents/unit.ts"), "utf8")).toBe(after);
+      expect(readFileSync(join(fixture.at, "next/unit.ts"), "utf8")).toBe(before);
+
+      for (const { ledger } of folders) {
+        expect(readFileSync(join(fixture.at, ledger), "utf8")).toBe(original[ledger]);
+      }
+    } finally {
+      fixture.done();
+    }
+  });
+});
+
 describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean folder and advises in a dirty one", () => {
   it.each(FIVE)(
     "scenario: %s blocks in next/clean, advises in next/dirty, and a warning of another rule still fails",
