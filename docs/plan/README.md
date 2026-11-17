@@ -55,6 +55,13 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+Today's CI, serving both versions, adds automatic related integration and tooling checks for
+ready pull requests and queue groups, ticket 1155. Related visual tests join the existing next
+matrix without requiring a label. Global triggers select every file, and selected laws run at
+full depth. All test jobs share the existing nine groups and one control group. The original
+regression suite remains intact. The source is prepared; CI validation and review remain due.
+
+
 In `next/`, ticket 1151 changes Q18's final entry check to collect stepped IDs once per entries
 snapshot, then check every expected message against that set. Its exact existence rule, all
 40 generated histories, seed, calls, limits and timeout stay unchanged. Temporary proof from the

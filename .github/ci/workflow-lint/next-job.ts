@@ -15,7 +15,7 @@ import {
   SHARD_OF,
   steps,
   VISUAL_FILES,
-  VISUAL_LABEL,
+  VISUAL_ROUTE,
 } from "./shared.ts";
 import { TIME_TABLE } from "./time-tables.ts";
 
@@ -49,17 +49,11 @@ export const nextLaws: Rule = ({ jobs }, require) => {
     JSON.stringify(allLegs) === JSON.stringify(expectedLegs) &&
     Object.keys(matrix).length ===
       1, "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries");
-  // E10 (0536). The visual tests never start unasked: the full fallback runs only on a pull request
-  // with the `visual` label, and every other unsized run, the merge queue and main among them, gets
-  // the vitest legs alone; the schedule runs the visual tests. Plants, each run once on check.yaml
-  // and restored: the full fallback alone, as before (red); `github.event_name == 'push' ||` beside
-  // the label (red); the vitest fallback with e2e-1 (red).
+  // Eligible visual tests run automatically on the PR, queue and main line.
   const { when, plain } = fallbacks(nextJob);
-  require(compact(when) === compact(VISUAL_LABEL) &&
+  require(compact(when) === compact(VISUAL_ROUTE) &&
     JSON.stringify(plain) ===
-      JSON.stringify(
-        VITEST_LEGS,
-      ), "E10: next's full fallback runs only with the visual label, else the vitest legs 1 to 5 alone");
+      JSON.stringify(VITEST_LEGS), "E10: next's full fallback includes visual tests on the PR, queue and main line");
   require(strategy["fail-fast"] === false, "next lets every shard finish");
 
   // The vitest step's paths, unquoted so each path is its own argument. On a sized run (a pull
@@ -100,6 +94,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   const testStep = nextSteps.find((s) => s["run"] === nextCommand);
   require(testStep !==
     undefined, "E11: next's vitest step runs the next project alone, with --shard and no exclusions");
+  require(map(testStep?.["env"])["FABRIKA_TEST_DEPTH"] === "full", "E11: next runs selected laws at full depth");
   const shard = map(testStep?.["env"])["SHARD"];
   // E3. The one `if` the vitest step may carry. Without it an e2e leg asks vitest for `e2e-1/5`.
   require(compact(testStep?.["if"]) ===
@@ -118,6 +113,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
     JSON.stringify(["FILTER", "SHARD"]), "next's vitest step's env is SHARD and FILTER alone");
   // E2. The same for the end-to-end step, over the count of e2e legs.
   const e2eStep = nextSteps.find((s) => s["run"] === e2eCommand);
+  require(map(e2eStep?.["env"])["FABRIKA_TEST_DEPTH"] === "full", "E11: visual laws run at full depth");
   const e2eShard = map(e2eStep?.["env"])["SHARD"];
   require(typeof e2eShard === "string" &&
     new RegExp(`^${SHARD_OF}/${denominator("e2e", e2eCount)}$`).test(

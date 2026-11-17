@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { it as property } from "@effect/vitest";
+import { Schema } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { jobs } from "./changes.mjs";
@@ -8,6 +10,25 @@ import { gated, gates, judge } from "./required.mjs";
 // Today's CI for both versions. Covers required.mjs, the `ci-required` job's verdict. Each law
 // names the edge case it holds from the list at the top of required.mjs.
 const options = { seed: 119120, numRuns: 100 };
+
+property.prop(
+  "an empty related selection permits a skip only after successful explicit selection",
+  { run: Schema.Literals(["false", "true", "", "unknown"]) },
+  ({ run }) => {
+    const needs = {
+      changes: { result: "success", outputs: { related: "true" } },
+      check: { result: "success" },
+      typecheck: { result: "success" },
+      next: { result: "success" },
+      select: { result: "success", outputs: { run } },
+      related: { result: "skipped" },
+    };
+    expect(judge(needs).pass).toBe(run === "false");
+    expect(judge({ ...needs, select: { result: "failure", outputs: { run } } }).pass).toBe(false);
+    expect(judge({ ...needs, select: { result: "success", outputs: {} } }).pass).toBe(false);
+  },
+  { arbitrary: { seed: 119120, numRuns: 100 } },
+);
 
 type Job = { result?: unknown; outputs?: Record<string, unknown> };
 
@@ -28,7 +49,10 @@ const green = fc.tuple(...gated.map(() => fc.constantFrom("true", "false"))).map
   const needs: Record<string, Job> = { changes: { result: "success", outputs } };
 
   for (const name of gated) {
-    needs[name] = { result: outputs[name] === "false" ? "skipped" : "success", outputs: {} };
+    needs[name] = {
+      result: gates[name].every((flag) => outputs[flag] === "false") ? "skipped" : "success",
+      outputs: {},
+    };
   }
 
   return needs;
@@ -87,7 +111,9 @@ it("10: check, which also holds the field row check, skips only when check and f
       needs["check"] = { result: "skipped", outputs: {} };
       const others = gated.filter((other) => other !== "check" && needs[other]!.result === "skipped");
       const meant = check === "false" && rows === "false";
-      expect(judge(needs).pass).toBe(meant && others.every((job) => needs["changes"]!.outputs![job] === "false"));
+      expect(judge(needs).pass).toBe(
+        meant && others.every((job) => gates[job].every((flag) => needs["changes"]!.outputs![flag] === "false")),
+      );
       expect(judge(needs).lines).toContain(
         meant ? "check: skipped, as changes said, pass" : "check: skipped, but it should have run, fail",
       );
@@ -101,6 +127,8 @@ it("scenario: the gates are the jobs check.yaml gates, with check on its own fla
     check: ["check", "field"],
     typecheck: ["typecheck"],
     next: ["next"],
+    select: ["related"],
+    related: ["related"],
   });
 });
 
@@ -162,7 +190,9 @@ it("the verdict passes exactly when every job passes on its own", () => {
           (needs[name]!.result === "skipped" &&
             (gated as readonly string[]).includes(name) &&
             top.changes === "success" &&
-            outputs[name] === "false" &&
+            (Object.entries(gates).find(([gate]) => gate === name)?.[1] ?? []).every(
+              (flag) => outputs[flag] === "false",
+            ) &&
             (name !== "check" || top.field === "false"));
 
         expect(judge(needs).pass).toBe(Object.keys(needs).every(passes));
@@ -185,18 +215,20 @@ it("scenario: the main reads NEEDS from env, prints one line per job and exits 1
   const good = JSON.stringify({
     changes: {
       result: "success",
-      outputs: { check: "false", field: "false", typecheck: "false", next: "true" },
+      outputs: { check: "false", field: "false", typecheck: "false", next: "true", related: "false" },
     },
     check: { result: "skipped", outputs: {} },
     typecheck: { result: "skipped", outputs: {} },
     next: { result: "success", outputs: {} },
+    select: { result: "skipped", outputs: {} },
+    related: { result: "skipped", outputs: {} },
   });
 
   const ok = run(good);
   expect(ok.status).toBe(0);
   expect(ok.stdout).toContain("check: skipped, as changes said, pass\n");
   expect(ok.stdout).toContain("typecheck: skipped, as changes said, pass\n");
-  expect(ok.stdout.trim().split("\n")).toHaveLength(5);
+  expect(ok.stdout.trim().split("\n")).toHaveLength(7);
   expect(run(good.replace('"next":{"result":"success"', '"next":{"result":"failure"')).status).toBe(1);
   expect(run("{not json").status).toBe(1);
   expect(run(undefined).status).toBe(1);
@@ -216,7 +248,10 @@ const paths = fc.option(
 
 /** The needs one run gives when every job its flags turned on passed, from changes.mjs's own flags. */
 const ran = (flags: Record<string, boolean>): Record<string, Job> => {
-  const outputs = Object.fromEntries(Object.entries(flags).map(([name, on]) => [name, String(on)]));
+  const outputs = {
+    ...Object.fromEntries(Object.entries(flags).map(([name, on]) => [name, String(on)])),
+    related: "false",
+  };
   const needs: Record<string, Job> = { changes: { result: "success", outputs } };
 
   // A job runs when any of its flags is on: check for lint or for field rows.

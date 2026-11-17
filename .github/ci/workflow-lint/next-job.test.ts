@@ -17,7 +17,7 @@ import {
   setLegs,
   sizedLegs,
   step,
-  visualLabel,
+  visualRoute,
   vitestShard,
   wiring,
   type Workflow,
@@ -138,29 +138,29 @@ const plants: Plant[] = [
     },
   ],
   [
-    "E10: the full fallback runs on main too, as before the schedule",
+    "E10: the full fallback omits queue and main",
     (w) => {
       w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
-        visualLabel,
-        `(github.event_name == 'push' || ${visualLabel})`,
-      );
-    },
-  ],
-  [
-    "E10: the full fallback runs in the merge queue",
-    (w) => {
-      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
-        visualLabel,
-        `(github.event_name == 'merge_group' || ${visualLabel})`,
-      );
-    },
-  ],
-  [
-    "E10: the full fallback runs on any pull request",
-    (w) => {
-      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
-        visualLabel,
+        visualRoute,
         "github.event_name == 'pull_request'",
+      );
+    },
+  ],
+  [
+    "E10: the full fallback omits PR and queue",
+    (w) => {
+      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
+        visualRoute,
+        "github.event_name == 'push'",
+      );
+    },
+  ],
+  [
+    "E10: the full fallback omits PR and main",
+    (w) => {
+      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
+        visualRoute,
+        "github.event_name == 'merge_group'",
       );
     },
   ],

@@ -184,7 +184,7 @@ it("property: a run of all of next/ with no base commit, or an event off the mer
           .map(([event, scope, visual]): Run => ({ event, scope, base, visual })),
       ),
       ({ selected, table }, run) => {
-        const asked = run.event === "pull_request" && run.visual;
+        const asked = ["pull_request", "merge_group", "push"].includes(run.event) || run.visual;
         expect(size(run, selected, full, limit, table)).toEqual({ vitest: full.vitest, e2e: asked ? full.e2e : 0 });
       },
     ),
@@ -234,14 +234,14 @@ it("property: a merge queue group and a push to main size their legs as a pull r
   );
 });
 
-it("property: a sized pull request without the visual label starts no end-to-end leg, whatever it selected", () => {
+it("property: a sized pull request selects related visual files without requiring a label", () => {
   // 0536. Plant, run once on legs.ts and restored: size e2e as if every pull request asked (red).
   fc.assert(
     fc.property(picked(), ({ selected, table }) => {
       const legs = size(plainPr, selected, full, limit, table);
-      expect(legs.e2e).toBe(0);
+      expect(legs.e2e).toBe(size(pr, selected, full, limit, table).e2e);
       expect(legs.vitest).toBe(size(pr, selected, full, limit, table).vitest);
-      expect(shards(legs).some((leg) => leg.startsWith("e2e-"))).toBe(false);
+      expect(shards(legs).filter((leg) => leg.startsWith("e2e-")).length).toBe(legs.e2e);
     }),
     options,
   );
@@ -428,7 +428,9 @@ it("scenario: the main prints the full matrix to GITHUB_OUTPUT in the merge queu
 
   expect(done.status).toBe(0);
   // 0536: the merge queue never starts the visual legs.
-  expect(readFileSync(output, "utf8")).toBe('shards=["1","2","3","4","5"]\nvitest=5\ne2e=0\nnext=true\n');
+  expect(readFileSync(output, "utf8")).toBe(
+    'shards=["e2e-1","e2e-2","1","2","3","4","5"]\nvitest=5\ne2e=2\nnext=true\n',
+  );
 });
 
 // PR 1235: the reader tests (changes.mjs's `readers`) read source as text, so `--changed` misses
@@ -525,7 +527,10 @@ it("property: the size step prints the base only on a sized run with an end-to-e
     fc.property(picked(), fc.oneof(line, unsized, readersRun), ({ selected, table }, run) => {
       const legs = size(run, selected, full, limit, table);
       const printed = outputs(run, legs, selected).filter((out) => out.startsWith("base="));
-      const sized = run.scope === "all" && /^[a-f0-9]{40}$/.test(run.base) && !/^0+$/.test(run.base);
+      const sized =
+        ["pull_request", "merge_group", "push"].includes(run.event) &&
+        /^[a-f0-9]{40}$/.test(run.base) &&
+        !/^0+$/.test(run.base);
       expect(printed).toEqual(sized && legs.e2e > 0 ? [`base=${run.base}`] : []);
     }),
     options,
@@ -540,5 +545,18 @@ it("scenario: a vitest file whose path holds a space throws, so the step prints 
   // reader tests alone are sized now, so this is a queue group with no base).
   expect(outputs({ event: "merge_group", scope: "all", base: "", visual: false }, full, selected)).not.toContain(
     "files=next/a b.test.ts",
+  );
+});
+
+it("property: global rerun selection never narrows owed visual files a second time", () => {
+  fc.assert(
+    fc.property(picked(), line, ({ selected, table }, run) => {
+      const legs = size(run, selected, full, limit, table);
+      expect(outputs(run, legs, selected, true).some((line) => line.startsWith("base="))).toBe(false);
+      expect(outputs(run, legs, selected, true).filter((line) => !line.startsWith("base="))).toEqual(
+        outputs(run, legs, selected).filter((line) => !line.startsWith("base=")),
+      );
+    }),
+    options,
   );
 });
