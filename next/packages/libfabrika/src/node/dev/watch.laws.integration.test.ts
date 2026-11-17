@@ -525,9 +525,24 @@ describe("P15 slice 1: the watcher", () => {
                 from: required.length === 1 ? "boot" : "watch",
               });
               expect(code.hash).toBe(yield* hash(code.source));
-              expect(code.source, "the installed bundle contains this save's module value").toMatch(
-                new RegExp(`\\b(?:var|let|const) own\\s*=\\s*${value}\\s*;`),
-              );
+
+              const own = Array.from(
+                code.source.matchAll(
+                  /\b(?:var|let|const)\s+(own[$\w]{0,44})\s*=\s*(-?\d{1,9}(?:\.\d{1,9})?)(?=\s*[,;])/g,
+                ),
+                (match) => ({ name: match[1], value: Number(match[2]) }),
+              ).slice(0, 8);
+
+              expect(
+                new RegExp(`\\b(?:var|let|const) own\\s*=\\s*${value}\\s*;`).test(code.source),
+                `the installed bundle contains this save's module value: ${JSON.stringify({
+                  value,
+                  program: selected.name,
+                  from: code.from,
+                  own,
+                  fixture: code.source.includes("globalThis.__p15"),
+                })}`,
+              ).toBe(true);
               installs.set(loaded.hash, code);
               bytes = new TextEncoder().encode(code.source).byteLength;
             }),
