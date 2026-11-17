@@ -1,0 +1,17 @@
+{
+  "id": "2026-11-17-rotation-guard-rollout",
+  "date": "2026-11-17",
+  "quests": ["tea-fabrika#1149"],
+  "stage": "harness",
+  "kind": "success",
+  "what": "Today's lead tooling, serving both versions, prepares the shared-group checker for changed-proof slot rotation. This slice changes only the guard and its tests, plus this record and the plan. The current producer and scheduled workflow remain unchanged.",
+  "cause": "Proof admission runs the trusted local checker against exact-head workflow text. A producer using the new group form cannot use its own candidate checker to approve that form. The checker must land first.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Accept the legacy direct group or the exact closed identity lookup over groups 1 to 9, with a group-1 fallback and exact workflow run-number and output wiring. Unknown output uses conservative serialization rather than successful validation. A later producer slice must reject invalid run numbers before writing output.",
+  "test": "Independent generated laws cover legacy and new forms, every full-map permutation, and rejection of missing, duplicate, private and out-of-range groups. Deliberately accepting an unbounded lookup or ignoring the wiring made the laws fail, then exact source bytes were restored. The producer slice and actual wait comparison remain open.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0595-scheduled-runs-share-slots.md",
+    "https://docs.github.com/en/actions/reference/workflows-and-actions/contexts"
+  ]
+}
