@@ -123,6 +123,9 @@ console.log("publish: pushed");
     this.env.STEPCOMMIT_PUBLISHER = join(bin, "publish");
     symlinkSync(join(root, "node_modules/.bin/oxfmt"), join(bin, "oxfmt"));
     this.git("init", "-q", "-b", "fabrikalfa/one", `--separate-git-dir=${join(this.dir, "gitdata")}`);
+    put(join(this.dir, "gitdata/info/exclude"), "node_modules/\n");
+    mkdirSync(join(this.repo, "node_modules/.bin"), { recursive: true });
+    symlinkSync(join(root, "node_modules/.bin/oxfmt"), join(this.repo, "node_modules/.bin/oxfmt"));
     put(join(this.repo, "exam-paths.json"), readFileSync(join(root, "exam-paths.json"), "utf8"));
     put(join(this.repo, ".oxfmtrc.json"), '{"useTabs":true,"printWidth":100}\n');
 
@@ -633,6 +636,63 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
     );
   });
 
+  // scenario: package-manager startup is unavailable; the installed formatter still works.
+  it("scenario: staged formatting uses the installed formatter in a folder without a package", () => {
+    withRepo(
+      [
+        ["src/owned.ts", "tests"],
+        ["field/one.json", "tests"],
+      ],
+      (r) => {
+        writeFileSync(
+          join(r.dir, "bin/pnpm"),
+          `#!${process.execPath}\nconsole.error("fixture refuses pnpm exec startup"); process.exit(97);\n`,
+          { mode: 0o755 },
+        );
+        const unavailable = r.call("pnpm", ["exec", "oxfmt", "--version"]);
+        expect(unavailable.code, unavailable.text).toBe(97);
+
+        r.changed(".oxfmtrc.json", '{"useTabs":true,"printWidth":100,"ignorePatterns":["field/**"]}\n');
+        const source = 'export const value = () => {\n\treturn "changed";\n};\n';
+        r.changed("src/owned.ts", source);
+        r.changed("field/one.json", '{"value":1}');
+        const got = r.commit("tests", ["src/owned.ts", "field/one.json"], true);
+        expect(got.code, got.text).toBe(0);
+        expect(r.git("show", "HEAD:src/owned.ts")).toBe(source);
+        expect(r.git("show", "HEAD:field/one.json")).toBe('{"value":1}');
+        expect(r.signs()).toEqual([]);
+        expect(r.published()).toEqual([]);
+      },
+    );
+  });
+
+  // scenario: missing tools and failed starts must not be reported as bad staged formatting.
+  it("scenario: formatter startup failures commit nothing and keep diagnostics free of tool output", () => {
+    each(["missing", "not-executable", "failed"] as const, (kind) =>
+      withRepo([["src/owned.ts", "tests"]], (r) => {
+        const formatter = join(r.repo, "node_modules/.bin/oxfmt");
+        rmSync(formatter);
+
+        if (kind !== "missing") {
+          writeFileSync(formatter, "#!/bin/sh\necho private-staged-text >&2\nexit 23\n", {
+            mode: kind === "failed" ? 0o755 : 0o644,
+          });
+        }
+
+        r.changed("src/owned.ts");
+        const got = r.commit("tests", ["src/owned.ts"]);
+        expect(got.code, got.text).toBe(2);
+        expect(got.text).toContain("formatter_failed:");
+        expect(got.text).not.toContain("not_formatted:");
+        expect(got.text).not.toContain("private-staged-text");
+        expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+        expect(r.git("diff", "--cached", "--name-only")).toBe("");
+        expect(r.signs()).toEqual([]);
+        expect(r.published()).toEqual([]);
+      }),
+    );
+  });
+
   // Plant: run oxfmt against the working file, ignoring the bytes git add actually staged.
   it("K4 a formatted working file cannot hide unformatted staged bytes", () => {
     fc.assert(
@@ -854,7 +914,7 @@ describe("T134 a signed commit leaves the laptop the moment it is made (0134), t
         const got = r.commit("tests", ["src/owned.ts"], only);
         expect(got.code, got.text).toBe(0);
         expect(r.published()).toEqual(only ? [] : [["publish", "fabrikalfa/one"]]);
-        const calls = readFileSync(join(r.dir, "calls"), "utf8");
+        const calls = existsSync(join(r.dir, "calls")) ? readFileSync(join(r.dir, "calls"), "utf8") : "";
         expect(only || calls.indexOf('["commits"') < calls.indexOf('["publish"')).toBe(true);
       }),
     );

@@ -1,4 +1,5 @@
-// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC18).
+// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC19).
+import { Result, Schema } from "effect";
 import { parse } from "yaml";
 import {
   allSteps,
@@ -28,6 +29,26 @@ const TOOLING_PROJECT = "--project tooling";
 // red run opens one `ci-scheduled` issue. Half of the organization's 20 runners at most, so pull
 // requests keep theirs.
 const RUNNERS = 10;
+
+const CONTROL_GROUP = "scheduled-control";
+
+const TEST_GROUP = "scheduled-test-";
+
+const TEST_SLOTS = Array.from({ length: RUNNERS - 1 }, (_, i) => String(i + 1));
+
+const decodeSlots = Schema.decodeResult(
+  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Finite]))),
+);
+
+/** Reads only a closed JSON lookup on the full matrix's shard, not an arbitrary expression. */
+const slotsOf = (value: unknown): Record<string, unknown> => {
+  const match =
+    typeof value === "string"
+      ? /^scheduled-test-\$\{\{\s*fromJSON\('([^']*)'\)\[matrix\.shard\]\s*\}\}$/i.exec(value)
+      : null;
+
+  return Result.getOrElse(decodeSlots(match?.[1] ?? ""), () => ({}));
+};
 
 // What the workflow's token may do: read runs (the time tables) and the checkout. Canceling a run takes
 // `actions: write`, and a run anything canceled ends `cancelled`, never `failure`.
@@ -183,15 +204,13 @@ const depth = (jobs: Record<string, unknown>, name: string, seen: readonly strin
  * of legs, so the measured split (vitest.shards.ts) and each leg's `/N` hold for both.
  */
 export const lintScheduled = (text: string, check: string): string[] => {
-  let source: unknown;
+  const parsed = Result.try((): unknown => parse(text));
 
-  try {
-    source = parse(text);
-  } catch {
+  if (Result.isFailure(parsed)) {
     return ["scheduled.yaml: invalid YAML"];
   }
 
-  const workflow = map(source),
+  const workflow = map(parsed.success),
     on = map(workflow["on"]),
     jobs = map(workflow["jobs"]);
 
@@ -494,6 +513,50 @@ export const lintScheduled = (text: string, check: string): string[] => {
   require([...atOnce.values()].every(
     (machines) => machines <= RUNNERS,
   ), `SC6: its jobs take at most ${RUNNERS} machines at once, half of the 20 runners`);
+
+  // SC19. Fixed job groups reserve the same nine test slots and one control slot across
+  // participating scheduled workflows. The outer workflow group still serializes runs here.
+  const fullSlots = slotsOf(map(map(jobs[TESTS_JOB])["concurrency"])["group"]);
+  const fullShards = listed(map(jobs[TESTS_JOB]));
+  const fullMatrix = map(map(map(jobs[TESTS_JOB])["strategy"])["matrix"]);
+
+  const slotValues = Object.values(fullSlots).map((slot) =>
+    typeof slot === "number" && Number.isInteger(slot) ? String(slot) : slot,
+  );
+
+  const fullGroup =
+    Object.keys(fullMatrix).length === 1 &&
+    fullShards.length === TEST_SLOTS.length &&
+    Object.keys(fullSlots).length === fullShards.length &&
+    fullShards.every((shard) => typeof shard === "string" && Object.hasOwn(fullSlots, shard)) &&
+    new Set(slotValues).size === TEST_SLOTS.length &&
+    TEST_SLOTS.every((slot) => slotValues.includes(slot));
+
+  for (const name of [GATE_JOB, SELECT_JOB, VERDICT, TESTS_JOB, CHANGED_JOB]) {
+    const held = map(map(jobs[name])["concurrency"]);
+    const group = held["group"];
+
+    const shared =
+      name === TESTS_JOB
+        ? fullGroup
+        : name === CHANGED_JOB
+          ? typeof group === "string" &&
+            /^scheduled-test-\$\{\{\s*matrix\.shard\s*\}\}$/i.test(group) &&
+            typeof selectEnv["MOST"] === "number" &&
+            Number.isInteger(selectEnv["MOST"]) &&
+            selectEnv["MOST"] >= 1 &&
+            selectEnv["MOST"] <= TEST_SLOTS.length
+          : typeof group === "string" && group.toLowerCase() === CONTROL_GROUP;
+
+    require(Object.keys(held).length === 3 &&
+      held["queue"] === "max" &&
+      held["cancel-in-progress"] === false &&
+      shared, `SC19: ${name} shares its fixed job slots across runs, keeps every waiting job and cancels none`);
+  }
+
+  const reserved = [CONTROL_GROUP, ...TEST_SLOTS.map((slot) => `${TEST_GROUP}${slot}`)];
+  require(typeof concurrency["group"] === "string" &&
+    !reserved.includes(concurrency["group"].toLowerCase()), "SC19: the workflow group never holds a shared job group");
 
   // SC7. All of next/ on check.yaml's full matrix, each leg's `/N` its kind's count, nothing
   // narrowed. A `--changed`, a `$FILTER` or a list would make it the merge line's selection again.

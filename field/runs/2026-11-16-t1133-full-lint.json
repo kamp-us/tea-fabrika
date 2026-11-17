@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1133-full-lint",
+  "ticket": "1133",
+  "pr": null,
+  "started": "2026-11-16T22:35:18-08:00",
+  "ended": "2026-11-16T22:35:55-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling full18-part lint at 0fd5b50069bbdb555e42d21fbfbd461c522d791e, actual exit 0. Native pnpm12.16.1 and direct/pnpm/Python-child Node26.13 were verified; paid key absent. No compiler, tests, formatting mutation, adapter or protected law ran alongside this single API lint. Exact source/index/HEAD and ledger preservation are recorded privately. Unknown session usage and list price stay null.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 0.6298389284666579,
+  "costUsd": null,
+  "listUsd": null,
+  "billing": null
+}

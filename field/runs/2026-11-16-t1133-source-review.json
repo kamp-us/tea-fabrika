@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1133-source-review",
+  "ticket": "1133",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-16T21:28:58-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "step": "review",
+  "model": null,
+  "effort": null,
+  "outcome": "fail",
+  "why": "Source-only review at 2345f15da04431ed4caeb4569924394809352369 of all twelve paths. Two blocking classes: watcher diagnostic requires formatted diff text absent from installed Vitest JSON failureMessages, and early incomplete attempts discard already validated caller/case/source/time/reason facts. No source edits or test/compiler/adapter/CI actions ran. Actual adapter proof remains owed after tooling bootstrap and before affected product review.",
+  "note": "Review start timestamp was not captured, so started/minutes remain null. Private report manual-plant-source-review.md. No public run row was requested or committed. No formal product or runtime-proof approval.",
+  "costUsd": null,
+  "listUsd": null,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "billing": null
+}

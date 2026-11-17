@@ -150,8 +150,9 @@ For every agent, whatever its step. A step's skill adds its own rules and its ow
   flows and `chain.ts`, never a quest agent ([0064](./.decisions/0064-the-lead-drives-with-flows.md),
   [the lead skill](./.agents/skills/lead/SKILL.md#run-a-whole-quest-with-chaints)); a fix round is one agent, and the same
   reviewer rechecks ([0177](./.decisions/0177-fix-round-is-one-agent.md)); a law that needs the real
-  machine runs before the first review, and on the owner's Mac only after the lead's read and the
-  owner's yes ([0178](./.decisions/0178-host-only-laws-run-first.md)); a quest stops at its second
+  machine runs before the first review ([0178](./.decisions/0178-host-only-laws-run-first.md)), with
+  launchd, real Electron and process-signal laws off the owner's laptop on eligible disposable CI
+  ([0594](./.decisions/0594-safe-checks-direct-mac-ci.md)); a quest stops at its second
   sent-back review ([0176](./.decisions/0176-second-send-back-stops-lane.md)), unless its faults are
   named, located and inside the plan, when the lead decides one more fix round itself
   ([0564](./.decisions/0564-lead-decides-further-fix-rounds.md)); no number caps a pull
@@ -343,11 +344,15 @@ these caps. Each one came from a laptop that became unusable.
   needs what CI lacks (Electron shots, a stage with workerd) still runs here.
 - **With two or more code agents running:** `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at
   the very end. `tsgo` takes about 8 cores, so small jobs add up.
-- **At most 12 code agents, one `pnpm typecheck` at a time across all of them, one Electron test app
-  and one Docker box** ([0012](./.decisions/0012-twelve-agents-at-once.md)). Wait while
+- **Count actual productive workers** under
+  [0597](./.decisions/0597-eight-workers-before-twelve.md), which holds the staffing targets,
+  fresh verification and immediate replacement rules. Keep one file owner, fresh steps,
+  independent review and required proof.
+- **Shared resources stay capped:** one `pnpm typecheck` at a time, one Electron test app and one
+  Docker box ([0012](./.decisions/0012-twelve-agents-at-once.md)). Wait while
   `pgrep -x tsgo` finds one (`pgrep -f tsgo` also matches the waiting shell, so that loop never
   ends); in a step's box, skip the wait, since `pnpm typecheck` takes its own lock. Two type checks
-  at once, not the agent count, is what froze the laptop. If it feels slow, drop back to 8 agents.
+  at once froze the laptop before; reduce demand if it feels slow.
 - Never run the sandbox runtime or a shimmed tool with `env -i` or `HOME` unset while a
   version-manager shim is on `PATH`: one run made about 7,000 processes. Set `ulimit -u` in a
   subshell first.
@@ -360,8 +365,12 @@ these caps. Each one came from a laptop that became unusable.
   keeps it out of the person's way: its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`,
   never `focus()` or `show()`. Shots come only from `page.screenshot`.
 - A wait or poll loop runs in the background.
-- A step that needs ports, sockets or its own processes runs in a container, never behind a hole in
-  the laptop sandbox ([0045](./.decisions/0045-test-steps-run-in-containers.md)).
+- Ordinary safe checks run directly in parallel, under the caps above. For launchd, real Electron
+  or real process signals, use eligible disposable CI off the owner's laptop. Read
+  [0594](./.decisions/0594-safe-checks-direct-mac-ci.md) for the split and what remains of
+  [0045](./.decisions/0045-test-steps-run-in-containers.md). Read the selected tests and cleanup
+  before a direct run: a plain filename is not clearance. When `--changed` reaches these laws,
+  run explicit verified-safe paths locally and obtain their remote proof separately.
 
 ### Tool facts that cost us time
 

@@ -1,0 +1,72 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-leakgrep-patch-blob-quotes-tests",
+  "ticket": "leakgrep",
+  "pr": null,
+  "started": "2026-11-16T01:16:06-08:00",
+  "ended": "2026-11-16T01:26:07-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for the leakgrep-patch-blob-quotes slice, today's lead tooling. New laws in .agents/skills/lead/scripts/leakgrep.patches.test.ts, in their own describe: each builds a temp repo whose second commit rewrites a pnpm patch under patches/, and reads it with leakgrep.sh --commits HEAD~1..HEAD, so git's --unified=0 hunk starts inside one of the patch's own hunks. Three laws are red on main for the planned reason: an em dash the commit adds inside the patch's hunk (as + , +- and ++ lines) still fails, whether the patch's @@ line is untouched, renumbered or removed, because main's Quotes reads the patch's hunks only from the top of git's own hunk. Fifteen fail-closed laws are green on main and must stay green: an em dash on a @@ line the commit adds, on any line outside the patch's hunks (the first line, the diff, index and +++ lines, a free line before the first @@, an unmarked backslash line inside a hunk), a key, machine path, private word or canvas link inside a hunk, and an em dash inside a hunk of a file that is not under patches/. The build makes the three red laws green by reading the new blob's own line structure.",
+  "laws": [
+    {
+      "law": ".agents/skills/lead/scripts/leakgrep.patches.test.ts: an em dash a commit adds inside a patches/ file's hunk passes when git's hunk starts mid-hunk",
+      "red": "AssertionError: leakgrep: leak em_dash at added line 6 of commit <id>: expected 1 to be +0"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/leakgrep.patches.test.ts: an em dash a commit adds inside a patches/ file's hunk passes when the commit renumbers its @@ line",
+      "red": "AssertionError: leakgrep: leak em_dash at added line 11 of commit <id>: expected 1 to be +0"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/leakgrep.patches.test.ts: an em dash a commit adds inside a patches/ file's hunk passes when the commit removes its @@ line",
+      "red": "AssertionError: leakgrep: leak em_dash at added line 7 of commit <id>: expected 1 to be +0"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/leakgrep.patches.test.ts: an em dash on a patches/ file's @@ line that a commit adds still fails",
+      "red": "not red on main, a fail-closed guard: main already flags it"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/leakgrep.patches.test.ts: an em dash on a patches/ file's <place> line that a commit adds outside a hunk still fails, for context-before-hunk, added-before-hunk, diff-line, new-file-line, first, index and unmarked",
+      "red": "not red on main, a fail-closed guard: main already flags each"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/leakgrep.patches.test.ts: a <kind> a commit adds inside a patches/ file's hunk still fails, for key, machine_path, private_word and canvas",
+      "red": "not red on main, a fail-closed guard: main already flags each"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/leakgrep.patches.test.ts: an em dash a commit adds inside a hunk of <path> still fails, for docs/upstream@1.0.0.patch, next/patches/upstream@1.0.0.patch and notes/upstream.md",
+      "red": "not red on main, a fail-closed guard: main already flags each"
+    }
+  ],
+  "plants": [
+    {
+      "law": "the three red laws (mid-hunk, renumbers, removes)",
+      "plant": "leakgrep.sh copy: every added outer line of a patches/ file inside git's hunk is quoted",
+      "result": "green"
+    },
+    {
+      "law": "an em dash on a patches/ file's @@ line, and each of the seven outside-a-hunk places, that a commit adds still fails",
+      "plant": "leakgrep.sh copy: every added outer line of a patches/ file inside git's hunk is quoted",
+      "result": "red"
+    },
+    {
+      "law": "a key, machine_path, private_word and canvas a commit adds inside a patches/ file's hunk still fails",
+      "plant": "leakgrep.sh copy: every added outer line of a patches/ file is quoted, and a quoted line skips every shape",
+      "result": "red"
+    },
+    {
+      "law": "an em dash a commit adds inside a hunk of docs/upstream@1.0.0.patch, next/patches/upstream@1.0.0.patch and notes/upstream.md still fails",
+      "plant": "leakgrep.sh copy: every added outer line of a patch-looking file is quoted, and every path counts as a patch",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "Each plant ran once on a copy of leakgrep.sh in the scratchpad through TEST_LEAKGREP, so no product file was touched. The first plant turning the three red laws green shows their red is the quote decision, not a test bug. The other four leakgrep test files: 58 passed. The patches file: 3 failed, 36 passed. pnpm format, pnpm lint (with NODE_OPTIONS=--max-old-space-size=6144) and the list ratchet pass. No typecheck in this step.",
+  "step": "tests"
+}

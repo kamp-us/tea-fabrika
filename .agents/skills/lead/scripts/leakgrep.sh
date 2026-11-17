@@ -31,7 +31,7 @@ else
 fi
 python3 - "$input" "$mode" "$@" <<'PY'
 from pathlib import Path
-import os, re, subprocess, sys
+import functools, os, re, subprocess, sys
 diagnostics = os.fdopen(3, 'w')
 
 def refuse(why):
@@ -100,6 +100,18 @@ class Quotes:
         if line.startswith('@@ '): self.in_hunk = True; return False
         return self.in_hunk and line.startswith(('-', ' ', '+'))
 
+# The lines inside a patch file's hunks, by their line number in the file as one commit holds it. When
+# the file cannot be read or is not UTF-8 there are none, so every shape reads its lines.
+@functools.cache
+def quoted_lines(commit, path):
+    ran = subprocess.run(['git', 'cat-file', 'blob', f'{commit}:{path}'], capture_output=True, stdin=subprocess.DEVNULL)
+    try:
+        lines = [] if ran.returncode else ran.stdout.decode('utf-8').split('\n')
+    except UnicodeError:
+        lines = []
+    quotes = Quotes()
+    return {number: line for number, line in enumerate(lines, 1) if quotes.quoted(line)}
+
 # Ticket 500 (owner, 2026-11-09): a line that only changes spacing is old text. Two lines hold the
 # same text when they are equal after each run of spaces and tabs becomes one space, the ends are
 # trimmed and one last ; or , is dropped. Runs are collapsed, never deleted, so two words never join.
@@ -111,7 +123,8 @@ def same_text(line):
 
 # The hits of one diff or one draft, as (line number in the input, place, kind), and how many flagged
 # lines were read as old text. A place is the new file's header and the line's number in that file.
-def scan(text, mode, clears=True, draft=None):
+# A commit's diff names that commit, which holds the new side of every file in it.
+def scan(text, mode, clears=True, draft=None, commit=None):
     added = []
     # The hits of each removed line, by text. Only a hunk under git's own `diff --git` header counts, so
     # a removal clears a line in any file of the same diff, never another commit's diff or a diff git did
@@ -125,9 +138,11 @@ def scan(text, mode, clears=True, draft=None):
     in_hunk = False
     old_header = False
     path = None
-    # In a diff, a patch file's lines are read from the top of each hunk git wrote for it: a hunk that
-    # starts inside one of the patch's own hunks has no `@@` to start from, so all its lines keep every
-    # shape. A draft is read from its first line.
+    # A commit's diff often starts a hunk inside one of the patch's own hunks, so each of its lines is
+    # quoted only when the patch file the commit holds has that same line inside a hunk at that same
+    # number. A diff on stdin names no commit: a patch file's lines are read from the top of each hunk
+    # git wrote for it, and a hunk that starts inside one of the patch's own hunks has no `@@` to start
+    # from, so all its lines keep every shape. A draft is read from its first line.
     quotes = Quotes() if mode != 'diff' and is_patch(draft) else None
     new = 0
     for number, line in enumerate(text.split('\n'), 1):
@@ -141,14 +156,16 @@ def scan(text, mode, clears=True, draft=None):
                 in_hunk = True
                 start = re.match(r'@@ -\S+ \+(\d+)', line)
                 new = int(start.group(1)) if start else 0
-                quotes = Quotes() if path and path.startswith('+++ b/') and is_patch(path[6:]) else None
+                patch = start and path and path.startswith('+++ b/') and is_patch(path[6:])
+                quotes = (quoted_lines(commit, path[6:]) if commit else Quotes()) if patch else None
             header = line.startswith('+++ ') and not in_hunk and old_header
             old_header = line.startswith('--- ') and not in_hunk
             if header: path = line
             if line.startswith('-') and in_hunk and file is not None:
                 removed.setdefault((part, same_text(line[1:])), []).append(kinds_of(line[1:]))
             if in_hunk and line.startswith((' ', '+')): new += 1
-            quoted = in_hunk and line.startswith((' ', '+')) and quotes is not None and quotes.quoted(line[1:])
+            quoted = in_hunk and line.startswith((' ', '+')) and quotes is not None and (
+                quotes.get(new - 1) == line[1:] if commit else quotes.quoted(line[1:]))
             if not line.startswith('+') or header:
                 continue
             added.append((number, part if in_hunk and file is not None else None, (path, new - 1) if in_hunk else (None, number), line[1:], quoted))
@@ -180,7 +197,7 @@ def git(*args):
 def commit_hits(commit, parents):
     # The diff flags are the ones the bot's push reads its net diff with.
     # Decision 0047: a merge clears nothing, so a respaced line in a merge is new text.
-    read = [scan(git('diff', '--no-ext-diff', '--no-textconv', '--no-color', '--unified=0', parent, commit, '--'), 'diff', len(parents) < 2)
+    read = [scan(git('diff', '--no-ext-diff', '--no-textconv', '--no-color', '--unified=0', parent, commit, '--'), 'diff', len(parents) < 2, commit=commit)
             for parent in parents or [git('hash-object', '-t', 'tree', '--stdin').strip()]]
     hits, respaced = read[0]
     # A merge: a line is new only when it is new against every parent. What one parent already
