@@ -66,7 +66,7 @@ describe(${JSON.stringify(suite)}, () => { test(${JSON.stringify(selected.title.
             "-t",
             argv("checklist-pid", report).at(-1) ?? "(?!)",
           ],
-          { cwd: root, stdin: "ignore", env: { PLANT_CASE: "checklist-pid" } },
+          { cwd: root, stdin: "ignore", env: { PLANT_CASE: "checklist-pid" }, extendEnv: true },
         ),
       );
 
