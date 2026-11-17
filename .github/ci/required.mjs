@@ -66,10 +66,12 @@ export const judge = (needs) => {
   for (const [name, job] of Object.entries(needs)) {
     const result = field(job, "result");
     const flags = Object.entries(gates).find(([gate]) => gate === name)?.[1] ?? [];
+
     const empty =
       name === "related" &&
       field(needs["select"], "result") === "success" &&
       field(field(needs["select"], "outputs"), "run") === "false";
+
     const meant = empty || (flags.length > 0 && flags.every((flag) => field(outputs, flag) === "false"));
     const ok = result === "success" || (result === "skipped" && meant);
     const shown = typeof result === "string" && result !== "" ? result : "no result";

@@ -22,6 +22,7 @@ it.prop(
       "next-integration": Array.from({ length: integration }, (_, index) => `next/a-${index}.integration.test.ts`),
       tooling: Array.from({ length: tooling }, (_, index) => `.github/ci/a-${index}.test.ts`),
     };
+
     const result = select(files, sizing, run);
     const all = Object.values(result.legs).flat();
     expect(all.toSorted()).toEqual(Object.values(files).flat().toSorted());
@@ -41,9 +42,11 @@ it.prop(
     const emitted = Object.fromEntries(
       outputs(result).map((line) => {
         const at = line.indexOf("=");
+
         return [line.slice(0, at), line.slice(at + 1)];
       }),
     );
+
     expect(emitted["run"]).toBe(String(all.length > 0));
     expect(JSON.parse(emitted["legs"]!)).toEqual(Object.keys(result.legs));
     expect(JSON.parse(emitted["projects"]!)).toEqual(result.projects);

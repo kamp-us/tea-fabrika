@@ -16,6 +16,7 @@ const slots = Array.from({ length: 9 }, (_, index) => String(index + 1));
 
 const lookup = (value: unknown, rotated: boolean): Record<string, string> => {
   const expression = typeof value === "string" ? compact(value) : "";
+
   const match = rotated
     ? /^scheduled-test-\$\{\{\s*fromJSON\('([^']*)'\)\[fromJSON\(needs\.select\.outputs\.slots\)\[matrix\.shard\]\]\|\|'1'\s*\}\}$/i.exec(
         expression,
@@ -47,8 +48,8 @@ const selector = (workflow: Record<string, unknown>) => {
     held(job) &&
     map(job["concurrency"])["group"] === "scheduled-control" &&
     set?.["run"] === "node .github/ci/related.ts" &&
-    env["RUN_NUMBER"] === "${{ github.run_number }}" &&
-    env["HEAD"] === "${{ github.sha }}" &&
+    env["RUN_NUMBER"] === `\${{ github.run_number }}` &&
+    env["HEAD"] === `\${{ github.sha }}` &&
     ["run", "legs", "files", "projects", "slots"].every((key) => outputs[key] === `\${{ steps.set.outputs.${key} }}`)
   );
 };
@@ -85,7 +86,7 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
     set?.["timeout-minutes"] === 5 &&
     set?.["continue-on-error"] === undefined, "R1: selection preserves project counts and limits and fails loudly");
   require(env["BASE"] ===
-    "${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}", "R1: selection uses the event's actual base");
+    `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}`, "R1: selection uses the event's actual base");
   require(steps(select).some(
     (step) =>
       uses(step, "actions/checkout") &&

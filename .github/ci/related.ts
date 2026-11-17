@@ -77,16 +77,19 @@ if (import.meta.main) {
 
   const from = process.env["BASE"];
   const base = from !== undefined && validSha(from) ? git(["merge-base", from, head]) : null;
+
   const changed =
     base === null
       ? null
       : git(["diff", "--name-only", "-z", `${base}...${head}`])
           .split("\0")
           .filter(Boolean);
+
   const triggers = changed?.filter(isTrigger) ?? [];
   const full = changed === null || triggers.length > 0;
   const narrowed = !full && base !== null ? [`--changed=${base}`] : [];
   const integration = list(root, ["--project", "next-integration", ...narrowed]);
+
   const files = {
     "next-integration": withReaders(
       integration,
@@ -108,6 +111,7 @@ if (import.meta.main) {
     },
     table: rowsAt("full"),
   };
+
   const selected = select(files, sizing, run);
   const lines = outputs(selected);
   const record = { base, head, at: new Date().toISOString(), changed, triggers, full, ...selected };

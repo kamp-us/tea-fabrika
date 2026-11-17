@@ -94,7 +94,7 @@ export const record: Rule = ({ jobs }, require) => {
       "selected files",
       {
         name: "related-set",
-        path: "${{ runner.temp }}/related-set.json",
+        path: `\${{ runner.temp }}/related-set.json`,
         "if-no-files-found": "ignore",
         "retention-days": 90,
       },
@@ -103,13 +103,14 @@ export const record: Rule = ({ jobs }, require) => {
       "related",
       "results",
       {
-        name: "results-related-${{ matrix.shard }}",
-        path: "${{ runner.temp }}/related.json",
+        name: `results-related-\${{ matrix.shard }}`,
+        path: `\${{ runner.temp }}/related.json`,
         "if-no-files-found": "error",
         "retention-days": 7,
       },
     ],
   ] as const;
+
   const reportUploads = reports.flatMap(([job, name, expected]) => {
     const found = allSteps(map(jobs[job])).filter(
       (step) =>
@@ -119,7 +120,9 @@ export const record: Rule = ({ jobs }, require) => {
         Object.keys(step).length === 4 &&
         sameEntries(Object.entries(map(step["with"])), Object.entries(expected)),
     );
+
     require(found.length === 1, `Q1: ${job} uploads only its exact related report once`);
+
     return found;
   });
 

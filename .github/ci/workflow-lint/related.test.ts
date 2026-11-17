@@ -33,7 +33,7 @@ it.prop(
 
     switch (fault) {
       case "matrix_name":
-        workflow.jobs.related.name = "related (${{ matrix.shard }})";
+        workflow.jobs.related.name = `related (\${{ matrix.shard }})`;
         break;
       case "selection_report":
         workflow.jobs.select.steps.find((step: { name?: string }) => step.name === "selected files").with.name =
@@ -41,7 +41,7 @@ it.prop(
         break;
       case "results_report":
         workflow.jobs.related.steps.find((step: { name?: string }) => step.name === "results").with.path =
-          "${{ runner.temp }}/tested.json";
+          `\${{ runner.temp }}/tested.json`;
         break;
       case "next_pool":
         delete workflow.jobs.next.concurrency;
@@ -50,7 +50,7 @@ it.prop(
         delete workflow.jobs.related.concurrency;
         break;
       case "private_group":
-        workflow.jobs.related.concurrency.group += "-${{ github.run_id }}";
+        workflow.jobs.related.concurrency.group += `-\${{ github.run_id }}`;
         break;
       case "cancel":
         workflow.jobs.related.concurrency["cancel-in-progress"] = true;
@@ -62,7 +62,7 @@ it.prop(
         integration.run = integration.run.replace("next-integration", "today");
         break;
       case "head":
-        selector.env.HEAD = "${{ github.event.pull_request.head.sha }}";
+        selector.env.HEAD = `\${{ github.event.pull_request.head.sha }}`;
         break;
       case "join":
         workflow.jobs["ci-required"].needs.pop();

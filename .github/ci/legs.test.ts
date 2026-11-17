@@ -527,10 +527,12 @@ it("property: the size step prints the base only on a sized run with an end-to-e
     fc.property(picked(), fc.oneof(line, unsized, readersRun), ({ selected, table }, run) => {
       const legs = size(run, selected, full, limit, table);
       const printed = outputs(run, legs, selected).filter((out) => out.startsWith("base="));
+
       const sized =
         ["pull_request", "merge_group", "push"].includes(run.event) &&
         /^[a-f0-9]{40}$/.test(run.base) &&
         !/^0+$/.test(run.base);
+
       expect(printed).toEqual(sized && legs.e2e > 0 ? [`base=${run.base}`] : []);
     }),
     options,

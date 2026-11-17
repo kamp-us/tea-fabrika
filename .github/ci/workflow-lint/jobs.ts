@@ -11,6 +11,7 @@ export const jobLaws: Rule = ({ jobs }, require) => {
     if (name === "related") {
       continue;
     }
+
     const job = map(jobs[name]);
     const flags = gates[name].map((flag) => `needs.changes.outputs.${flag} != 'false'`).join(" || ");
     require(job["needs"] === "changes", `${name} needs changes`);

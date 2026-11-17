@@ -23,6 +23,7 @@ property.prop(
       select: { result: "success", outputs: { run } },
       related: { result: "skipped" },
     };
+
     expect(judge(needs).pass).toBe(run === "false");
     expect(judge({ ...needs, select: { result: "failure", outputs: { run } } }).pass).toBe(false);
     expect(judge({ ...needs, select: { result: "success", outputs: {} } }).pass).toBe(false);
@@ -255,6 +256,7 @@ const ran = (flags: Record<string, boolean>): Record<string, Job> => {
     ...Object.fromEntries(Object.entries(flags).map(([name, on]) => [name, String(on)])),
     related: "false",
   };
+
   const needs: Record<string, Job> = { changes: { result: "success", outputs } };
 
   // A job runs when any of its flags is on: check for lint or for field rows.

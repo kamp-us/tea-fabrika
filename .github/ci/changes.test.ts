@@ -2063,6 +2063,7 @@ it("property: a green historical partial run cannot skip the new automatic proje
         repository: { id: 1 },
         head_repository: { id: 1 },
       };
+
       const required = { name: "ci-required", conclusion: "success" };
       const selected = { name: "select", conclusion: "success" };
       const related = { name: empty ? "related" : "related (1)", conclusion: empty ? "skipped" : "success" };
