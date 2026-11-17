@@ -14,6 +14,7 @@ import { failFast } from "./workflow-lint/fail-fast.ts";
 import { lintHost } from "./workflow-lint/host.ts";
 import { lintIssues } from "./workflow-lint/issues.ts";
 import { jobLaws } from "./workflow-lint/jobs.ts";
+import { lintL11 } from "./workflow-lint/l11.ts";
 import { lintNoTooling, mergeLine } from "./workflow-lint/merge-line.ts";
 import { nextLaws } from "./workflow-lint/next-job.ts";
 import { lintPlant } from "./workflow-lint/plant.ts";
@@ -94,6 +95,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       ...lintCiSpeed(read(".github/workflows/ci-speed.yaml")),
       ...lintHost(read(".github/workflows/host.yaml")),
       ...lintPlant(read(".github/workflows/plant.yaml")),
+      ...lintL11(read(".github/workflows/l11-exercise.yaml")),
     ];
 
     const manifest: unknown = JSON.parse(read("package.json"));

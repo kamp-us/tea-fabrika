@@ -55,10 +55,49 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
-Today's lead tooling adds a manual [plant exercise](../../.github/workflows/plant.yaml) for two `next/` laws, ticket 1133.
-It accepts only a fixed case and an exact source commit, then records baseline, broken and restored observations.
-The real Git and Vitest adapters remain unexercised until the trusted-main workflow runs after landing.
-Those results still need the lead's judgment before either affected product review, and supply no branch proof.
+In `next/`, ticket 1151 changes Q18's final entry check to collect stepped IDs once per entries
+snapshot, then check every expected message against that set. Its exact existence rule, all
+40 generated histories, seed, calls, limits and timeout stay unchanged. Temporary proof from the
+actual source passed 40 generated inputs, 11 fixed cases and three deliberate faults. A separate
+build check verified the actual source and proof. Initial Linux Q18 passed; the final review then
+required the existing Effect tag guard under decision 0567. That correction preserves the same
+predicate and workload. Corrected-head Linux proof and the same review remain due. Earlier timing
+observations remain tied to their original source; no controlled speedup is claimed.
+
+Today's scheduled CI, serving both versions, swaps the shared groups of full-run browser leg 2
+and core leg 4. A [branch proof's second leg waited 705 seconds](../../field/notes/2026-11-17-shared-test-slot-wait.json),
+with another group empty for the last 286 seconds. This changes which full leg a small proof waits
+behind, within the same nine test groups and one control group. Fixed groups can still leave other
+groups unused. Actual CI comparison remains due; this change has no measured speedup yet.
+
+Today's changed-proof selector [rotates its shared groups by workflow run number](../../field/notes/2026-11-17-changed-proof-slot-rotation.json).
+Logical leg names and test files stay put; retries keep their assignment. The
+[guard-first slice](../../field/notes/2026-11-17-rotation-guard-rollout.json) checks the closed
+nine-group form and its input/output wiring. Invalid run numbers stop selection before any output
+or record write. An unknown map value falls back to group 1 and serializes conservatively;
+malformed JSON may fail evaluation. Runs can still collide. Live matrix proof and the actual
+after-landing wait comparison remain due; no speedup is claimed.
+
+Today's lead tooling adds a separate manual [L11 exercise](../../.github/workflows/l11-exercise.yaml), ticket 1135,
+for `next/` ticket 1129. It fixes one source pair, compares ordinary whole-file runs and private generated inputs,
+and declares ten serial clean jobs. Fixed output faults restore every edited file and publish only decoded facts.
+The actual adapters remain unexercised until the workflow runs on disposable CI after landing. Row, initialization,
+Runner and the original L11 product-workload CPU-profile gaps stay open.
+A [local CPU profile of the pure equality test](../../field/notes/2026-11-17-l11-equality-runtime.json)
+found repeated strict line decoding dominated its time. Reusing successful decodes within one comparison reduced the
+unchanged 100-run test from 19.0 s to 7.0 s locally. It does not attribute CPU time in the Runner or L11 product workload.
+CI's CPU cause remains unproved. These measurements supply no
+branch proof or reliability claim.
+
+Today's lead tooling has a manual [plant exercise](../../.github/workflows/plant.yaml), ticket 1133.
+It accepts seven fixed cases and an exact source commit, then records baseline, broken and restored observations.
+Its real Git and Vitest adapters ran on trusted main for [checklist notice PIDs](../../field/notes/2026-11-17-checklist-pid-fault-exercise.json)
+in `next/`, and [host pinning and discovery](../../field/notes/2026-11-17-host-runtime-fault-exercises.json) in today's lead tooling.
+The [three remaining host faults](../../field/notes/2026-11-17-host-remaining-fault-exercises.json) now have the same actual observations:
+ignoring the requested pin, omitting the native pnpm directory and reversing prepared-environment precedence.
+Each accepted exercise passed before the deliberate break, failed at its intended assertion, then passed after restoration.
+The watcher case and six other checklist fault or probe groups still need their own evidence.
+These exercises supply neither whole-product review nor branch proof; the affected product tickets remain open.
 
 *2026-11-13:* the order of work changed ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)). The next thing built in `next/` is `fabsh`,
 pipes, `summon` and `join`, working for real, with whatever they need (the window, a second tile and its

@@ -20,34 +20,26 @@ import {
   Writer,
 } from "../coordination/index.ts";
 import { nodeExecution, type Execution, type Declaration } from "./Execution.ts";
-import { type Patch } from "./Patch.ts";
 import { ProgramDown, stepper, type Stepper } from "./Program.ts";
 
 /** A function type whose parameters are checked both ways, as a method's are. */
 type Code<A extends ReadonlyArray<unknown>, R> = { call(...args: A): R }["call"];
 
-/**
- * A view as JSON. One runner serves every program, so the type stays open: each program's own
- * client decodes its view.
- *
- * @category models
- */
-export type View = unknown;
-
-/**
- * What a watcher is sent: the whole view once, then one patch per installed step. `rev` is the inbox
- * position of the last installed letter, so other streams leave no gaps.
- *
- * @category models
- */
-export type Update =
-  | { readonly type: "whole"; readonly rev: number; readonly view: View }
-  | {
-      readonly type: "patch";
-      readonly base: number;
-      readonly rev: number;
-      readonly patch: ReadonlyArray<Patch>;
-    };
+export type {
+  /**
+   * A view as JSON, re-exported so the runner's names come from one place.
+   *
+   * @category models
+   */
+  View,
+  /**
+   * What a watcher is sent, the whole view or one patch, re-exported so the runner's names come
+   * from one place.
+   *
+   * @category models
+   */
+  Update,
+} from "./News.ts";
 
 /**
  * Schema for the gateway's delivery of one input: its stable letter id, the stamped envelope, the

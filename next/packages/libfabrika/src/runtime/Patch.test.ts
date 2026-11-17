@@ -1,6 +1,10 @@
 // p22. RFC 6902 patches are checked with an independent small applicator, never patch's own apply.
 import { describe, expect, it } from "@effect/vitest";
+import { Schema } from "effect";
 import * as fc from "fast-check";
+
+/** A value the walk built, checked as the JSON the diff takes: the check hands back the same value. */
+const json = Schema.decodeUnknownSync(Schema.Json);
 
 type Patch = {
   readonly op: "add" | "remove" | "replace";
@@ -75,7 +79,7 @@ describe("p22 whole view plus patches", () => {
         let watcher: unknown = structuredClone(views[0]);
 
         for (const next of views.slice(1)) {
-          watcher = apply(watcher, diff(watcher, next));
+          watcher = apply(watcher, diff(json(watcher), json(next)));
           expect(watcher).toEqual(next);
         }
       }),
@@ -188,7 +192,7 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
             p.some((k) => (UNSAFE as ReadonlyArray<string>).includes(k)),
           ),
         );
-        const ops = diff(before, after);
+        const ops = diff(json(before), json(after));
         const beforeCopy = structuredClone(before);
         const opsCopy = structuredClone(ops);
         const got = apply(before, ops);

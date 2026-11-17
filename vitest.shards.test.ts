@@ -65,19 +65,18 @@ it("vector: L5 known next timings are the median of three runs, or the larger of
 
 it("scenario: L6 the five measured heaviest next files occupy the five vitest machines with bounded loads", async () => {
   // Today's CI: the real table, the real file set and the workflow's own count of vitest machines,
-  // since the law is about today's split. The names are the five heaviest by the rows of runs
-  // 43544589151, 43551626086 and 43556494864, all integration files once RepositoriesGit's row was
-  // refreshed from memory git. The sixth heaviest shares a machine with the fifth.
+  // since the law is about today's split. The integration samples and QuotaRunner's two fast
+  // samples below name these five heaviest rows. The sixth heaviest shares a machine with the fifth.
   // Keep these names independent of the table so an accidentally tiny row cannot hide the file.
   // Plants, each run once on a copy of the table filled from integrationSamples, and restored: set the
   // Watchers row to 1.0, so it lands beside another of the five (red); add a leg "6" to the
   // workflow's next matrix, so the count no longer matches the five names (red).
   const heaviest = [
+    "next/packages/libfabrika/src/node/QuotaRunner.test.ts",
     "next/packages/libfabrika/src/node/Watchers.integration.test.ts",
     "next/packages/libfabrika/src/node/StartChild.integration.test.ts",
     "next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts",
     "next/packages/libfabrika/src/node/StartChildBoundary.integration.test.ts",
-    "next/apps/fabrika/src/start-child.laws.integration.test.ts",
   ];
   const machines = vitestLegs(readFileSync(join(import.meta.dirname, ".github/workflows/check.yaml"), "utf8")).length;
   expect(machines).toBe(heaviest.length);
@@ -98,7 +97,7 @@ it("scenario: L6 the five measured heaviest next files occupy the five vitest ma
 //   C: run 43657535864, a merge queue group of PR 1202 at bb299109b.
 // A sample is the sum of the file's test times as the verbose reporter printed them in that
 // run's job log, to one decimal. The job ids are kept because GitHub drops job logs after 90 days.
-// All 157 files have three samples. A 158th, ArchiveCryptoFailure.test.ts, was deleted after
+// The original 157 files have three samples. A 158th, ArchiveCryptoFailure.test.ts, was deleted after
 // these runs (ticket 996), and its samples went with it. Three files took over 60 s in these runs and were split
 // after them, every law moved unchanged: runner-contract.test.ts, readers.laws.test.ts and
 // RepositoriesGit.test.ts. Each part's sample is the sum of its own tests' times in the same log.
@@ -250,6 +249,8 @@ const nextSamples = {
   "next/packages/libfabrika/src/node/ErrorCause.test.ts": [4.0, 3.4, 4.4],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/node/ErrorCause.types.test.ts": [0.0, 0.0, 0.0],
+  // Fast runs 44076978833/44078183666, attempt 1, jobs 134017776388/134021830466.
+  "next/packages/libfabrika/src/node/QuotaRunner.test.ts": [224.1, 346.2],
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/node/dev/DevLife.laws.test.ts": [0.1, 0.2, 0.1],
   // A job 132637025443, B job 132638385672, C job 132639432685.
