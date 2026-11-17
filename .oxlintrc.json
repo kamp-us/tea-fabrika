@@ -2417,7 +2417,6 @@
         "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/settings/**",
-        "kalfa/config/src/**",
         "next/packages/libfabrika/src/telemetry/**",
         "next/packages/libfabrika/src/transport/**"
       ],
@@ -2468,6 +2467,7 @@
       // The Reflect ban in next/, where JSON.parse blocks. An override replaces a rule's options, so
       // the JSON.parse entry of next/**/* is written out again.
       "files": [
+        "kalfa/config/src/**",
         "next/apps/fabrika/*",
         "next/apps/fabrika/e2e/node/**",
         "next/apps/fabrika/src/entry/**",
@@ -2531,7 +2531,6 @@
         "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/settings/**",
-        "kalfa/config/src/**",
         "next/packages/libfabrika/src/telemetry/**",
         "next/packages/libfabrika/src/transport/**"
       ],
@@ -2586,7 +2585,6 @@
         "next/packages/libfabrika/src/node/**/*{.test.ts,.test.tsx}",
         "next/packages/libfabrika/src/runtime/**/*{.test.ts,.test.tsx}",
         "next/packages/libfabrika/src/settings/**/*{.test.ts,.test.tsx}",
-        "kalfa/config/src/**/*{.test.ts,.test.tsx}",
         "next/packages/libfabrika/src/transport/**/*{.test.ts,.test.tsx}",
         "next/programs/chaos/src/*{.test.ts,.test.tsx}",
         "next/programs/pipeline/src/*{.test.ts,.test.tsx}"
