@@ -1,12 +1,14 @@
 ---
 id: 0596
 title: At most eight tracker tickets are active
-status: accepted
+status: superseded by [0597](0597-eight-workers-before-twelve.md)
 date: 2026-11-16
 tags: [operations, tickets, agents, resources]
 ---
 
 # 0596: At most eight tracker tickets are active
+
+Current staffing follows [0597](0597-eight-workers-before-twelve.md); this file is the earlier ticket-count rule.
 
 **What this decides:** the operating cap counts active tracker tickets rather than agents.
 
