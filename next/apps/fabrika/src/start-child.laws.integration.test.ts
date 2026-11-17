@@ -718,6 +718,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
 
   const law = Effect.fnUntraced(function* (secret: string, commands: Iterable<fc.AsyncCommand<object, SecretWalk>>) {
     let moves = 0;
+    const secretForms = forms(secret);
 
     const step = Effect.fnUntraced(function* (pick: SecretPick) {
       // The model records completed cuts only. Pick an unvisited operation that its prepared
@@ -729,7 +730,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
         return yield* Effect.die("empty storage inventory");
       }
 
-      const marker = forms(secret)[pick.encoding] ?? secret;
+      const marker = secretForms[pick.encoding] ?? secret;
 
       const fault = Object.assign(new Error(`SQLITE_FULL at ${marker}`), {
         name: marker,
@@ -772,7 +773,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
       outputs.log.push(...(printed ?? []));
 
       for (const [output, texts] of Object.entries(outputs)) {
-        if (texts.some((text) => forms(secret).some((form) => text.includes(form)))) {
+        if (texts.some((text) => secretForms.some((form) => text.includes(form)))) {
           leaks.add(`${cut.path}/${cut.operation} ${cut.statement} -> ${output}`);
         }
       }
