@@ -61,11 +61,13 @@ with another group empty for the last 286 seconds. This changes which full leg a
 behind, within the same nine test groups and one control group. Fixed groups can still leave other
 groups unused. Actual CI comparison remains due; this change has no measured speedup yet.
 
-Today's lead tooling adds [guard support for rotated changed-proof groups](../../field/notes/2026-11-17-rotation-guard-rollout.json)
-before changing the workflow. The checker accepts the current direct assignment and the closed
-nine-group form, with the exact run-number input and slot-output wiring. It rejects private,
-missing, duplicate or out-of-range groups. The producer and workflow stay unchanged in this slice;
-their rotation follows after the trusted checker lands. Actual wait comparison remains due.
+Today's changed-proof selector [rotates its shared groups by workflow run number](../../field/notes/2026-11-17-changed-proof-slot-rotation.json).
+Logical leg names and test files stay put; retries keep their assignment. The
+[guard-first slice](../../field/notes/2026-11-17-rotation-guard-rollout.json) checks the closed
+nine-group form and its input/output wiring. Invalid run numbers stop selection before any output
+or record write. An unknown map value falls back to group 1 and serializes conservatively;
+malformed JSON may fail evaluation. Runs can still collide. Live matrix proof and the actual
+after-landing wait comparison remain due; no speedup is claimed.
 
 Today's lead tooling adds a separate manual [L11 exercise](../../.github/workflows/l11-exercise.yaml), ticket 1135,
 for `next/` ticket 1129. It fixes one source pair, compares ordinary whole-file runs and private generated inputs,
