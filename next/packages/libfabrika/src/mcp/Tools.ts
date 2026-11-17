@@ -337,14 +337,13 @@ export const list = (programs: ReadonlyArray<AnyProgram>): Result.Result<Readonl
     }
 
     const tool = Result.try({
-      try: () => {
-        return Tool.make({
+      try: () =>
+        Tool.make({
           name,
           description: input.description,
           inputSchema: Schema.decodeUnknownSync(Schema.Json)(listed.success),
           ...(input._tag === "read" ? { annotations: { readOnlyHint: true as const } } : {}),
-        });
-      },
+        }),
       catch: (cause) => new ToolsError({ reason: "unsupported_schema", tool: name, cause }),
     });
 
