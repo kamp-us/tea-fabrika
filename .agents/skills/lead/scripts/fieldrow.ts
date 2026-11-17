@@ -20,7 +20,19 @@
 //     left out. `redacted` is the count in `<events>.redacted`, when redact.sh wrote one.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Config, ConfigProvider, Console, DateTime, Effect, FileSystem, Layer, Option, Result, Schema } from "effect";
+import {
+  Config,
+  ConfigProvider,
+  Console,
+  DateTime,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Record as R,
+  Result,
+  Schema,
+} from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { rounded } from "./clauderow.ts";
 
@@ -183,7 +195,7 @@ const row = Effect.fn("fieldrow.row")(function* (ask: Ask) {
   const ended = yield* bound("ended", ask.ended, changed);
 
   const usage = Option.getOrNull(Option.flatMap(text, (held) => summed(held)));
-  const rate = LIST[ask.model];
+  const rate = Option.getOrUndefined(R.get(LIST, ask.model));
 
   const usd =
     rate === undefined || usage === null
