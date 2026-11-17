@@ -18,6 +18,7 @@ const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
 const CODE = /\.[cm]?[jt]sx?$/;
 
 const TEST = /(?:\.test\.tsx?|Test\.ts|\.test-support\.ts)$/;
+
 /** code-graph 0.15.0's `TEST_FILE` in `isTestFile`: the files whose exports it never judges. */
 const UNJUDGED = /\.((test|spec)(-d)?|type-test)\.tsx?$/;
 
