@@ -39,6 +39,7 @@ import { ProcessId } from "../ProcessId.ts";
 import * as Audit from "../runtime/Audit.ts";
 import { Incoming } from "../runtime/Entry.ts";
 import { MailWakeups } from "../runtime/MailWakeups.ts";
+import { News } from "../runtime/News.ts";
 import { type ProgramDown } from "../runtime/Program.ts";
 import { type RecoveryStoreError } from "../runtime/RecoveryStore.ts";
 import { type RepliesError } from "../runtime/Replies.ts";
@@ -340,7 +341,7 @@ type Options<A, RNext, RDeliver, RNotify> = {
     | WatchersError,
     RDeliver
   >;
-  readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError, RNotify>;
+  readonly notify: (client: string, news: News) => Effect.Effect<void, LedgerError, RNotify>;
   readonly audit?: (process: string, message: unknown) => Effect.Effect<Schema.Json, Audit.AuditError, RDeliver>;
   readonly inputs: {
     readonly schema: Schema.Codec<A, unknown>;
@@ -380,7 +381,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const write = options.write ?? turn.withPermit;
   const flush = sink.flush.pipe(Effect.provideService(RecordManager, records), Effect.provideService(Archive, archive));
   const clock = Effect.clockWith((c) => c.currentTimeMillis);
-  const notify = Effect.fn("gateway.notify")(function* (client: string, news: unknown) {
+  const notify = Effect.fn("gateway.notify")(function* (client: string, news: News) {
     const result = yield* Effect.exit(options.notify(client, news).pipe(Effect.provideContext(context)));
     yield* Effect.annotateCurrentSpan("fab.gateway.notified", Exit.isSuccess(result));
   });
@@ -1066,7 +1067,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             for (const row of pending) {
               for (const client of row.clients) {
                 const nonce = yield* challenge(ConnectionId.make(client));
-                yield* notify(client, { method: "client.granted", params: { nonce } });
+                yield* notify(client, News.cases.granted.make({ nonce }));
               }
             }
 
@@ -1080,7 +1081,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
               const key = yield* store.atomic(() => store.get(name, Schema.String));
 
               if (key !== null && "reason" in admitted(latest, key)) {
-                yield* notify(client, { close: 4003 });
+                yield* notify(client, News.cases.close.make({ code: 4003 }));
               }
             }
           }

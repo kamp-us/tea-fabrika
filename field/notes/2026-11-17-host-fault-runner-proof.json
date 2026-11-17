@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-17",
+  "stage": "harness",
+  "kind": "success",
+  "person": false,
+  "primitive": null,
+  "id": "2026-11-17-host-fault-runner-proof",
+  "quests": [
+    "tea-fabrika#1133"
+  ],
+  "what": "Today's lead-tooling fault runner passed its exact-head branch proof, including the real-child reporter fixture, before the three new host faults were exercised.",
+  "cause": "The earlier branch proof could not start its first reporter child because the explicit child environment replaced inherited PATH. The correction retains the inherited environment and selects reporter identity from the exact closed case.",
+  "fix": "The corrected runner merged as pull request 1559. Historical failed proof and correction rows remain unchanged.",
+  "test": "Run 44063752096 tested head 4564bb74342d67e84975908d8d3acb6e7df58899 against f966dac3ad5d3b268e055bc6892674e23c15815e. All 42 selected files and 1503 tests passed, with no pending, skipped or failed assertion. The real-child reporter fixture passed in 4674.572819 ms. Earlier run 44060666895 failed before its first child phase with spawn pnpm ENOENT in the job log.",
+  "limits": "The branch proof and fixed reporter fixture do not themselves prove the three host runtime fault cases. Those require separate actual baseline, broken and restored observations.",
+  "head": "4564bb74342d67e84975908d8d3acb6e7df58899",
+  "merge": "73ee28e71d9d4e283e8ab2c295bd0917409b9eb3",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1559",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44063752096",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44060666895"
+  ]
+}
