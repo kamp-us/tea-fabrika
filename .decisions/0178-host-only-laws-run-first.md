@@ -1,7 +1,7 @@
 ---
 id: 0178
 title: A law that can only run on the real machine runs before the first review, and on the owner's Mac only after the lead's read and the owner's yes
-status: accepted
+status: amended-in-part by [0594](0594-safe-checks-direct-mac-ci.md)
 date: 2026-11-13
 tags: [lead, lane, build, review, plan, host, electron, launchd, fixtures, vector, kill, signal, process-group, safety]
 ---
@@ -11,6 +11,9 @@ tags: [lead, lane, build, review, plan, host, electron, launchd, fixtures, vecto
 **What this decides:** a test that needs the real machine (launchd, the real Electron app, a real
 OS process or socket) is run right after the build, before any review starts, and never at the end
 of the lane.
+
+[0594](0594-safe-checks-direct-mac-ci.md) moves launchd, real Electron and process-signal laws to
+disposable macOS CI; the requirement to obtain their proof before the first review stays.
 
 **Before:**
 
