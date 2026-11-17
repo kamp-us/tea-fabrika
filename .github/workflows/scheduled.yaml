@@ -84,18 +84,18 @@ on:
   # main's run writes the issue.
   workflow_dispatch:
 
-# One run at a time, and a running one is never cut short: a newer one waits its turn. `queue: max`
-# lets up to 100 wait, first in first out. GitHub's default keeps one waiting and cancels it when a
-# newer run queues, so a hand-started branch run could cancel main's waiting scheduled run: two of
-# the first three scheduled runs waited 10 and 13 minutes behind a hand-started one (GitHub's docs,
+# One run per ref at a time, and a running one is never cut short. Main's push, catch-up and hand
+# starts share a queue; each branch proof has its own. `queue: max` lets up to 100 wait, first in
+# first out. GitHub's default keeps one waiting and cancels it when a newer run queues. Under the
+# old global group, two of the first three scheduled runs waited 10 and 13 minutes behind a
+# hand-started one (GitHub's docs,
 # "Control the concurrency of workflows and jobs").
 concurrency:
-  group: scheduled
+  group: scheduled-${{ github.ref }}
   queue: max
   cancel-in-progress: false
 
-# Prepare shared job slots before independent workflow queues: nine test groups and one control
-# group across participating scheduled workflows. The workflow queue above remains in place.
+# Nine shared test groups and one control group cap jobs across participating refs and runs.
 
 # `actions: read` lets each leg's time table read its own job's steps, and no more: a token that
 # cannot write actions cannot cancel a run. `contents: read` is the checkout's. The report job alone
@@ -113,9 +113,9 @@ env:
 jobs:
   # The gate (0581): whether this run starts the tests. A hand start always does; a push or the
   # catch-up does when no full run on main started within the gap, and only on a head that has had
-  # none (gate.mjs). It runs while this run holds the `scheduled` group, so every run ahead of it
-  # has ended. It reads the run list with the workflow's own token, which cannot cancel a run, and
-  # its summary line says why. When it cannot read GitHub it fails and gives no `start`: the tests
+  # none (gate.mjs). The ref's workflow group holds this run, so earlier runs on main have ended
+  # before main's gate reads them. It reads runs with the workflow's own token, which cannot cancel
+  # a run, and its summary line says why. When it cannot read GitHub it fails and gives no `start`: the tests
   # skip and the report judges the run red. No install: the runner's own Node runs gate.mjs.
   #
   # Every way it ends with no `start` ends the job `failure`, so the report judges the run red:
