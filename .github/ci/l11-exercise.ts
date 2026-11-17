@@ -272,7 +272,10 @@ export const plant = (seen: Observation): Reason | null =>
 
 const decodeTrace = Schema.decodeUnknownResult(Schema.fromJsonString(Trace));
 
-const parsedTrace = (stdout: string): { readonly events: readonly Trace[]; readonly reason: Reason | null } => {
+const parsedTrace = (
+  stdout: string,
+  decoded?: Map<string, Trace>,
+): { readonly events: readonly Trace[]; readonly reason: Reason | null } => {
   const events: Trace[] = [];
 
   for (const line of stdout.split("\n")) {
@@ -280,22 +283,30 @@ const parsedTrace = (stdout: string): { readonly events: readonly Trace[]; reado
       continue;
     }
 
-    const decoded = decodeTrace(line.slice(Cases.tracePrefix.length), {
+    const known = decoded?.get(line);
+
+    if (known !== undefined) {
+      events.push(known);
+      continue;
+    }
+
+    const result = decodeTrace(line.slice(Cases.tracePrefix.length), {
       onExcessProperty: "error",
     });
 
-    if (Result.isFailure(decoded)) {
+    if (Result.isFailure(result)) {
       return { events, reason: "trace_incomplete" };
     }
 
-    events.push(decoded.success);
+    decoded?.set(line, result.success);
+    events.push(result.success);
   }
 
   return { events, reason: events.length === 0 ? "trace_missing" : null };
 };
 
-const readTrace = (stdout: string): Result.Result<readonly Trace[], Reason> => {
-  const parsed = parsedTrace(stdout);
+const readTrace = (stdout: string, decoded: Map<string, Trace>): Result.Result<readonly Trace[], Reason> => {
+  const parsed = parsedTrace(stdout, decoded);
 
   return parsed.reason === null ? Result.succeed(parsed.events) : Result.fail(parsed.reason);
 };
@@ -509,8 +520,11 @@ const complete = (events: readonly Trace[]): Reason | null => {
 };
 
 export const equality = (left: string, right: string): Result.Result<{ cuts: number; events: number }, Reason> => {
-  const before = readTrace(left);
-  const after = readTrace(right);
+  // Repeated lines share strict decoding only within this comparison; every position stays in the trace.
+  const decoded = new Map<string, Trace>();
+  // Identical bytes share validation within this call; neither input can skip it.
+  const before = readTrace(left, decoded);
+  const after = left === right ? before : readTrace(right, decoded);
 
   if (Result.isFailure(before)) {
     return Result.fail(before.failure);
@@ -520,14 +534,14 @@ export const equality = (left: string, right: string): Result.Result<{ cuts: num
     return Result.fail(after.failure);
   }
 
-  const reason = complete(before.success) ?? complete(after.success);
+  const reason = complete(before.success) ?? (before === after ? null : complete(after.success));
 
   if (reason !== null) {
     return Result.fail(reason);
   }
 
   // Encode through the same schema to compare complete ordered values, independent of JSON key order.
-  if (JSON.stringify(normalized(before.success)) !== JSON.stringify(normalized(after.success))) {
+  if (before !== after && JSON.stringify(normalized(before.success)) !== JSON.stringify(normalized(after.success))) {
     return Result.fail("trace_mismatch");
   }
 
