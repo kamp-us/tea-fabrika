@@ -24,7 +24,7 @@ export default class PlantReporter extends JsonReporter {
           (key) => module.moduleId.endsWith(`/${cases[key].test}`) && names.join(" ") === cases[key].title,
         );
 
-        test.meta().plant = key === undefined ? null : failure(key, test.result().errors ?? []);
+        Object.assign(test.meta(), { plant: key === undefined ? null : failure(key, test.result().errors ?? []) });
       }
     }
 
