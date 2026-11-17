@@ -107,7 +107,11 @@ const scheduled = fc
     const full = w.jobs["tests"]!.concurrency;
 
     if (Array.isArray(shards) && full !== undefined && "group" in full) {
-      const pairs = Arr.map(shards, (shard, i) => [shard, numeric ? Number(slots[i]) : slots[i]]);
+      const pairs = Arr.map(shards, (shard, i): [string, string | number | undefined] => [
+        shard,
+        numeric ? Number(slots[i]) : slots[i],
+      ]);
+
       const values = Rec.fromEntries(upper ? Arr.reverse(pairs) : pairs);
       full["group"] = `scheduled-test-\${{${gap}fromJSON('${JSON.stringify(values)}')[matrix.shard]${gap}}}`;
     }

@@ -1,0 +1,65 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-effect-e88-canonical-compiler-red",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-17T10:22:11.090662Z",
+  "ended": "2026-11-17T10:25:44.568773+00:00",
+  "parent": "2026-11-17-effect-e88-string-followup",
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "fail",
+  "why": "The exact-head whole compiler found one inferred array where Record.fromEntries requires a key/value pair. The bounded test-only fix passed the existing laws; a fresh whole compiler remains pending.",
+  "note": "Today's CI tooling serves both versions. The canonical compiler at the checked head exited1:6 packages started,2 completed and one TS2345 diagnostic was reported. The recursive runner then killed the3 remaining sibling checks. The mapped callback now declares its two-element tuple return type; its shard and numeric-or-text slot values are unchanged. No assertion, expected value, seed, count or deadline changed. Scoped formatting and lint passed. The existing scheduled-workflow file passed232 tests, none failed or skipped. A first scoped lint requested one blank line, which was added. The earlier archive formatter could not read Git metadata; the later normal live formatter reported3 lint diagnostics in preserved untracked probes and changed no tracked or probe bytes. Full lint did not start. No protected runtime, dispatch or push occurred. Exact model, usage and billing are unavailable.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "checkedHead": "2fb0ef273364daf3d1f3bfa7a73b60dc57fb5778",
+  "mergeReady": false,
+  "compiler": {
+    "exit": 1,
+    "packagesStarted": 6,
+    "packagesDone": 2,
+    "diagnostic": {
+      "file": ".github/ci/workflow-lint/scheduled.test.ts",
+      "line": 111,
+      "code": "TS2345",
+      "reason": "Mapped any[][] is not Iterable<readonly [string | symbol, any]>."
+    },
+    "ended": "2026-11-17T10:22:12.819711Z",
+    "logSha256": "832429fe9e89d094bdb93b2880cdd5e74c3f613d3a4547500c473ad4e774693b",
+    "released": true
+  },
+  "fix": {
+    "path": ".github/ci/workflow-lint/scheduled.test.ts",
+    "sha256": "9241660a441db37b88e69d7e6588acab7aee5921d63c14b1409ccc4bc806896d",
+    "change": "Callback return annotation [string, string | number | undefined], plus one required blank line.",
+    "formatExit": 0,
+    "scopedLintExit": 0,
+    "passed": 232,
+    "failed": 0,
+    "skipped": 0
+  },
+  "preserved": {
+    "trackedFiles": 5366,
+    "liveCacheFiles": 30,
+    "index": true,
+    "scratch": true,
+    "lockInode": true
+  },
+  "pending": [
+    "Fresh exact-head canonical whole compiler",
+    "Full normal lint and typed API results",
+    "All39 protected whole files",
+    "R5/R6 failure and restoration proof",
+    "Fresh formal whole-diff review",
+    "Lead publication and landing"
+  ],
+  "driver_caused": null
+}
