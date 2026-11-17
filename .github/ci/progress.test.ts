@@ -1,10 +1,22 @@
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, ManagedRuntime, Path, Result, Schema } from "effect";
+import {
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  FileSystem,
+  Layer,
+  ManagedRuntime,
+  Path,
+  PlatformError,
+  Result,
+  Schema,
+} from "effect";
 import { TestConsole } from "effect/testing";
 import ProgressReporter, { recording } from "./progress-reporter.ts";
 import * as Progress from "./progress.ts";
-import { collect, markdown as timingMarkdown } from "./time-table.ts";
+import { collect, markdown as timingMarkdown, Unread } from "./time-table.ts";
 
 class CallbackFailure extends Schema.TaggedError<CallbackFailure, { readonly brand: unique symbol }>()(
   "CallbackFailure",
@@ -276,8 +288,25 @@ it.prop(
 
 it.effect.prop(
   "[secrets] P5 callback projection drops titles, private values and machine paths from journal, artifact and Markdown",
-  { canary: Schema.String.check(Schema.isPattern(/^[A-Z]{12}$/)), key: Count, complete: Schema.Boolean },
-  ({ canary, key, complete }) =>
+  {
+    canary: Schema.String.check(Schema.isPattern(/^[A-Z]{12}$/)),
+    key: Count,
+    complete: Schema.Boolean,
+    faults: Schema.UniqueArray(
+      Schema.Literals([
+        "valid",
+        "not_found",
+        "permission",
+        "string",
+        "syntax",
+        "report_shape",
+        "job_read",
+        "job_shape",
+        "progress_read",
+      ]),
+    ).check(Schema.isMinLength(9), Schema.isMaxLength(9)),
+  },
+  ({ canary, key, complete, faults }) =>
     Effect.gen(function* () {
       const path = yield* Path.Path;
       // Plants: copy title into raw journal, timing JSON or Markdown, once per named output.
@@ -383,6 +412,95 @@ it.effect.prop(
       for (const output of outputs) {
         for (const marker of [canary, root, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)]) {
           expect(output).not.toContain(marker);
+        }
+      }
+
+      const report = `${root}/results.json`;
+
+      const missing = PlatformError.systemError({
+        _tag: "NotFound",
+        module: "FileSystem",
+        method: "readFile",
+        pathOrDescriptor: report,
+      });
+
+      const denied = PlatformError.systemError({
+        _tag: "PermissionDenied",
+        module: "FileSystem",
+        method: "readFile",
+        pathOrDescriptor: report,
+        description: encodeURIComponent(secret),
+      });
+
+      expect(missing.message).toContain(report);
+
+      const valid = JSON.stringify({
+        testResults: [{ name: module.moduleId, status: "passed", startTime: 0, endTime: 1, assertionResults: [{}] }],
+      });
+
+      // The real cutoff exposed the report path in a PlatformError, before the P8 receipt could return.
+      for (const fault of faults) {
+        const actual = yield* collect(
+          { ...env, HEAD: leg.sha, JOB_ID: "1", REPORT: report },
+          root,
+          {
+            job: () =>
+              fault === "job_read"
+                ? Effect.fail(Unread.make({ cause: new Error(`${report} ${JSON.stringify(secret)}`) }))
+                : Effect.succeed({
+                    steps: fault === "job_shape" ? secret : [{ name: "time table", status: "in_progress" }],
+                  }),
+            read: (file) => {
+              if (file.endsWith("vitest-progress.ndjson")) {
+                return fault === "progress_read" ? Effect.fail(Unread.make({ cause: missing })) : Effect.succeed(text);
+              }
+
+              switch (fault) {
+                case "not_found":
+                  return Effect.fail(Unread.make({ cause: missing }));
+                case "permission":
+                  return Effect.fail(Unread.make({ cause: denied }));
+                case "string":
+                  return Effect.fail(Unread.make({ cause: `${report} ${encodeURIComponent(secret)}` }));
+                case "syntax":
+                  return Effect.succeed(`${JSON.stringify(secret)} trailing`);
+                case "report_shape":
+                  return Effect.succeed(JSON.stringify({ testResults: secret }));
+                default:
+                  return Effect.succeed(valid);
+              }
+            },
+          },
+          0,
+        );
+
+        expect(actual.files._tag).toBe(
+          ["not_found", "permission", "string", "syntax", "report_shape"].includes(fault) ? "unavailable" : "read",
+        );
+        expect(actual.steps._tag).toBe(["job_read", "job_shape"].includes(fault) ? "unavailable" : "read");
+        expect(actual.progress).toEqual(
+          fault === "progress_read" ? Progress.Progress.cases.unavailable.make({ reason: "unread" }) : result,
+        );
+
+        if (actual.files._tag === "read") {
+          expect(actual.files.rows).toEqual([
+            { path: `next/item-${key}.test.ts`, seconds: 0.001, tests: 1, result: "passed" },
+          ]);
+        }
+
+        for (const output of [JSON.stringify(actual), timingMarkdown(actual)]) {
+          for (const marker of [
+            canary,
+            root,
+            report,
+            secret,
+            JSON.stringify(secret).slice(1, -1),
+            JSON.stringify(report).slice(1, -1),
+            encodeURIComponent(secret),
+            encodeURIComponent(report),
+          ]) {
+            expect(output).not.toContain(marker);
+          }
         }
       }
 

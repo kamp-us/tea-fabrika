@@ -90,12 +90,15 @@ const Report = Schema.Struct({
   ),
 });
 
-/** An error's message on one line, short enough for a table's note. */
-export const reasonOf = (error: unknown): string =>
-  (error instanceof Error ? error.message : String(error)).replaceAll(/\s+/g, " ").trim().slice(0, 300) ||
-  "no reason given";
-
-const unavailable = <A>(reason: string): Section<A> => ({ _tag: "unavailable", reason });
+const unavailable = <A>(
+  reason:
+    | "the jobs API answer is not a job"
+    | "the report is not Vitest's JSON"
+    | "the jobs API could not be read"
+    | "the report could not be read"
+    | "JOB_ID is not set"
+    | "REPORT is not set",
+): Section<A> => ({ _tag: "unavailable", reason });
 
 /** The job's steps, in order, from a jobs API answer. */
 export const readSteps = (input: unknown): Section<Step> => {
@@ -111,7 +114,7 @@ export const readSteps = (input: unknown): Section<Step> => {
           end: step.completed_at ?? null,
         })),
       }
-    : unavailable(`the jobs API answer is not a job: ${reasonOf(decoded.failure)}`);
+    : unavailable("the jobs API answer is not a job");
 };
 
 /** Each test file of a Vitest JSON report, its path from `root`. */
@@ -128,7 +131,7 @@ export const readFiles = (input: unknown, root: string): Section<TestFile> => {
           result: file.status,
         })),
       }
-    : unavailable(`the report is not Vitest's JSON: ${reasonOf(decoded.failure)}`);
+    : unavailable("the report is not Vitest's JSON");
 };
 
 /**
@@ -235,9 +238,7 @@ const stepsOf = (id: string | undefined, io: Io, pause: Duration.Input): Effect.
   id
     ? io.job(id).pipe(
         Effect.map(readSteps),
-        Effect.catch((error) =>
-          Effect.succeed(unavailable<Step>(`the jobs API could not be read: ${reasonOf(error.cause)}`)),
-        ),
+        Effect.catch(() => Effect.succeed(unavailable<Step>("the jobs API could not be read"))),
         Effect.repeat({ until: settled, times: TRIES - 1, schedule: Schedule.spaced(pause) }),
       )
     : Effect.succeed(unavailable("JOB_ID is not set"));
@@ -247,9 +248,7 @@ const filesOf = (path: string | undefined, root: string, io: Io): Effect.Effect<
     ? io.read(path).pipe(
         Effect.flatMap((text) => Effect.try({ try: () => JSON.parse(text), catch: (cause) => Unread.make({ cause }) })),
         Effect.map((report) => readFiles(report, root)),
-        Effect.catch((error) =>
-          Effect.succeed(unavailable<TestFile>(`the report could not be read: ${reasonOf(error.cause)}`)),
-        ),
+        Effect.catch(() => Effect.succeed(unavailable<TestFile>("the report could not be read"))),
       )
     : Effect.succeed(unavailable("REPORT is not set"));
 
@@ -330,7 +329,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   await Effect.runPromise(
     collect(env, process.cwd(), io).pipe(
       Effect.flatMap(write),
-      Effect.catch((error) => Effect.sync(() => console.log(`time-table: unavailable: ${reasonOf(error.cause)}`))),
+      Effect.catch(() => Effect.sync(() => console.log("time-table: output unavailable"))),
     ),
   );
   process.exitCode = 0;
