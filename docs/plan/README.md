@@ -55,6 +55,14 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+In `next/`, ticket 1153 reuses the Node quota fixture's admission services within one World
+and one limits generation. Every input still sends; each limits setter creates a fresh cache key,
+and failed setup remains retryable. Existing laws, workloads, SQL operations, seeds and timeouts
+stay in place. Temporary proof passed 82 cases with three caught faults, scoped lint and the
+narrow libfabrika compiler passed, and an independent build read passed without changes.
+The whole unchanged quota suite on eligible Linux and final review remain due. The proof uses
+no real SQL, and no speedup is claimed.
+
 In `next/`, ticket 1151 changes Q18's final entry check to collect stepped IDs once per entries
 snapshot, then check every expected message against that set. Its exact existence rule, all
 40 generated histories, seed, calls, limits and timeout stay unchanged. Temporary proof from the
