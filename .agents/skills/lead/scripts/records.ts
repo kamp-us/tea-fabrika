@@ -6,6 +6,7 @@
 //   node records.ts list <folder>      one line per record, then `next NNNN` for a numbered folder
 //   node records.ts next <folder>      only the next free number
 //   node records.ts find <words>...    the records these words are about, best first
+//   node records.ts find --read-only <words>...    use origin/main as already fetched, with no writes
 //   node records.ts resolve <id>...    each decision's status, and the live one a superseded one names
 //
 // <folder> is `.decisions`, `experiments`, `.patterns`, `docs/direction` or `.runbooks`, with or
@@ -22,9 +23,11 @@
 // `--all` shows each record as itself. A shortlist is never a clearance: a record that says the same
 // thing in other words is not found.
 //
-// It fetches origin's main first, then reads `origin/main` through git (`ls-tree`, `cat-file`),
-// never the working tree, so a file that is only local or only on an unmerged branch never takes a
-// number or a line. The next number is the highest on main plus one, never a gap below it: a gap
+// It fetches origin's main first, unless `find --read-only` was asked, then reads `origin/main`
+// through git (`ls-tree`, `cat-file`). Read-only discovery needs origin/main fetched beforehand,
+// and can miss newer records. Neither route reads the working tree, so a file that is only local
+// or only on an unmerged branch never takes a number or a line. The next number is the highest on
+// main plus one, never a gap below it: a gap
 // is a number some pull request held and never merged, as phoenix's `fabrika adr next` says. An
 // open pull request can still hold the same number; the adr skill's check of open pull requests
 // covers that.
@@ -685,7 +688,7 @@ export const batchTexts = (bytes: Uint8Array): ReadonlyArray<string | undefined>
 };
 
 /**
- * The files under `roots` on origin/main that `keep` takes, after a fetch: each path with its text,
+ * The files under `roots` on origin/main that `keep` takes: each path with its text,
  * in the order `keep` gives. A root that main does not hold, as `.runbooks/` before its first
  * runbook, reads as no files.
  */
@@ -693,11 +696,14 @@ const filesAt = Effect.fn("records.filesAt")(function* (
   repo: string,
   roots: ReadonlyArray<string>,
   keep: (paths: ReadonlyArray<string>) => ReadonlyArray<string>,
+  readOnly = false,
 ) {
-  const fetched = yield* git(repo, ["fetch", "-q", "origin", "main"]);
+  if (!readOnly) {
+    const fetched = yield* git(repo, ["fetch", "-q", "origin", "main"]);
 
-  if (fetched.code !== 0) {
-    return yield* Unknown.make({ reason: `cannot fetch origin main: ${fetched.err}` });
+    if (fetched.code !== 0) {
+      return yield* Unknown.make({ reason: `cannot fetch origin main: ${fetched.err}` });
+    }
   }
 
   const listed = yield* git(repo, ["ls-tree", "-r", "-z", "--name-only", BASE, "--", ...roots]);
@@ -721,9 +727,12 @@ const filesAt = Effect.fn("records.filesAt")(function* (
 const recordsAt = (repo: string, folder: Folder) => filesAt(repo, [`${folder}/`], (paths) => inOrder(folder, paths));
 
 /** Every entry `find` ranks, from origin/main: the searched folders' records and the glossary's rows. */
-const entriesAt = (repo: string) =>
-  filesAt(repo, [...searched.map((folder) => `${folder}/`), GLOSSARY], (paths) =>
-    paths.filter((path) => path === GLOSSARY || searched.some((folder) => isRecord(folder, path))),
+const entriesAt = (repo: string, readOnly: boolean) =>
+  filesAt(
+    repo,
+    [...searched.map((folder) => `${folder}/`), GLOSSARY],
+    (paths) => paths.filter((path) => path === GLOSSARY || searched.some((folder) => isRecord(folder, path))),
+    readOnly,
   ).pipe(Effect.map((files) => files.flatMap((file) => readEntries(file.path, file.text))));
 
 const FolderArgument = Argument.ChoiceWithValue("folder", [
@@ -782,9 +791,15 @@ const findCommand = Command.make(
     words: Argument.String("words").pipe(Argument.atLeast(1)),
     limit: Flag.Int("limit").pipe(Flag.withDefault(8)),
     all: Flag.Boolean("all").pipe(Flag.withDefault(false)),
+    readOnly: Flag.Boolean("read-only").pipe(
+      Flag.withDefault(false),
+      Flag.withDescription(
+        "Read already-fetched origin/main without fetching or writing; newer records may be missing",
+      ),
+    ),
   },
-  Effect.fn("records.find")(function* ({ words, limit, all }) {
-    const entries = yield* entriesAt(process.cwd());
+  Effect.fn("records.find")(function* ({ words, limit, all, readOnly }) {
+    const entries = yield* entriesAt(process.cwd(), readOnly);
     yield* Console.log(foundLines(find(words.join(" "), entries, { limit, all })).join("\n"));
   }),
 );

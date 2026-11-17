@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-16-t1133-causal-reporter",
+  "date": "2026-11-16",
+  "quests": ["tea-fabrika#1133"],
+  "stage": "harness",
+  "kind": "failure",
+  "what": "Today's temporary-break runner could not identify next/'s PID assertion when fast-check wrapped it in Error.cause. Vitest's ordinary JSON failureMessages contain the outer property failure only.",
+  "cause": "The runner's matcher test used a bare AssertionError and missed the installed fast-check and Vitest reporting path.",
+  "person": false,
+  "primitive": null,
+  "fix": "A trusted Vitest JSON reporter reads structured causal errors and adds only a closed diagnostic and the assertion's own position. The runner requires that witness. Generic property failures, unrelated assertions, multiple errors and causal cycles stay incomplete. No product assertion, seed, count, depth or deadline changed.",
+  "test": "The safe reporter fixture runs real fc.assert through installed Vitest for baseline, intended failure, restoration and an unrelated assertion. Removing cause traversal made the fixture fail because the intended failure became incomplete. Removing the AssertionError name check also made the causal-identity law fail. Both edits were restored. Restoring traversal passed the narrow checks. Actual product adapters and disposable CI were not run.",
+  "links": []
+}

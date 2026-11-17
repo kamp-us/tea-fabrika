@@ -1,0 +1,43 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-checks-held-merge",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1521",
+  "started": "2026-11-16T00:07:00-08:00",
+  "ended": "2026-11-16T00:26:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "lead",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Lead tooling, on the owner's ruling, in our tooling and next/ config. Law L3 of decision 0573 in oxlint-plugins/effect-checks-held.test.ts now reads each tracked tsconfig the way the Effect checker does (0577): it follows the extends chain and merges the plugin block key by key, through the resolver that oxlint-plugins/effect-checks.test.ts already had, now moved to oxlint-plugins/test-helpers/effect-config.ts and shared by both tests. With that, the base's one line covers every project, and the 12 copied preferSchemaTaggedError lines from PR kamp-us/tea-fabrika#1516 are gone. The helper first went in as effect-config.ts and then effect-config.test-support.ts; lint:dead refused both, since our code-graph config does not yet list the .test-support.ts suffix in testSupportFilePatterns (the owner ruled that gap is ours to fix, in its own pull request), so for now it lives in a test-helpers/ folder, which code-graph knows.",
+  "laws": [
+    {
+      "law": "oxlint-plugins/effect-checks-held.test.ts: L3 scenario: preferSchemaTaggedError stays at error in every tracked tsconfig, for every path",
+      "red": "changed law, green on the change: the merged level is error in every tracked tsconfig once the 12 copied lines are removed"
+    }
+  ],
+  "plants": [
+    {
+      "law": "oxlint-plugins/effect-checks-held.test.ts: L3 scenario: preferSchemaTaggedError stays at error in every tracked tsconfig, for every path",
+      "plant": "next/programs/counter/tsconfig.json's checker block sets preferSchemaTaggedError to warning",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/effect-checks-held.test.ts: L3 scenario: preferSchemaTaggedError stays at error in every tracked tsconfig, for every path",
+      "plant": "tsconfig.base.json sets preferSchemaTaggedError to off, in its block and its override, with no package naming it",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/effect-checks-held.test.ts: L3 scenario: preferSchemaTaggedError stays at error in every tracked tsconfig, for every path",
+      "plant": "next/programs/chaos/tsconfig.json drops its extends, so it never inherits the base",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 19,
+  "note": "Plant 1 failed with 6 lines, the counter block and 5 of its overrides at warning. Plant 2 failed first on the base assertion ('tsconfig.base.json names the check: expected off to be error'); run again with that assertion taken out, the merged list alone gave 239 lines, '.agents/tsconfig.json: preferSchemaTaggedError is off' first. Plant 3 failed with 'next/programs/chaos/tsconfig.json: preferSchemaTaggedError is off', the checker's schema default. Each plant ran once and was restored. A Data.TaggedError class planted in next/programs/counter/src, with the copied line gone, gave 'error effect(preferSchemaTaggedError)' from effect-tsgo diagnostics on that project, exit 1; the plant was deleted. pnpm format, pnpm lint (18 parts passed) and one pnpm typecheck pass. effect-checks-held.test.ts and effect-checks.test.ts each pass alone under nice -n 19 with --maxWorkers=1.",
+  "step": "lead"
+}

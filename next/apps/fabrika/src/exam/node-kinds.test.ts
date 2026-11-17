@@ -3,8 +3,10 @@
 // bound by that same string somewhere else in next/, as the platform binds a class by its name.
 //
 // The glob is package-relative, as in code-graph 0.15.0's `conventionMatcher`: "src/brain.ts" matches
-// `src/brain.ts` inside the nearest folder with a package.json. Test files are left out, as code-graph
-// and exam-paths.json class them.
+// `src/brain.ts` inside the nearest folder with a package.json. A glob's homes leave out only the files
+// code-graph never judges, its own test-file pattern (`isTestFile`): with the repo's patch it judges a
+// test-support file's exports, so a convention may name one. A binding elsewhere still leaves out every
+// test and test-support file, as exam-paths.json classes them.
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, matchesGlob } from "node:path";
 import { Schema } from "effect";
@@ -16,6 +18,8 @@ const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
 const CODE = /\.[cm]?[jt]sx?$/;
 
 const TEST = /(?:\.test\.tsx?|Test\.ts|\.test-support\.ts)$/;
+/** code-graph 0.15.0's `TEST_FILE` in `isTestFile`: the files whose exports it never judges. */
+const UNJUDGED = /\.((test|spec)(-d)?|type-test)\.tsx?$/;
 
 const Kinds = Schema.fromJsonString(
   Schema.Struct({
@@ -72,7 +76,7 @@ const problems = (text: string) => {
   const found: string[] = [];
 
   for (const [name, { files, exports }] of Object.entries(kinds.entryExportConventions)) {
-    const homes = tracked.filter((p) => CODE.test(p) && !TEST.test(p) && matchesGlob(inPackage(p), files));
+    const homes = tracked.filter((p) => CODE.test(p) && !UNJUDGED.test(p) && matchesGlob(inPackage(p), files));
 
     if (homes.length === 0) {
       found.push(`${name}: its glob ${files} matches no file`);

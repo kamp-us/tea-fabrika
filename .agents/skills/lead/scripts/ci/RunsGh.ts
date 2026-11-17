@@ -14,7 +14,7 @@ const RunsBody = Schema.fromJsonString(
   Schema.Struct({
     workflow_runs: Schema.Array(
       Schema.Struct({
-        id: Schema.Number,
+        id: Schema.Finite,
         head_sha: Schema.String,
         status: Schema.String,
         conclusion: Schema.NullOr(Schema.String),
@@ -25,7 +25,7 @@ const RunsBody = Schema.fromJsonString(
 
 /** The runs in one page of a workflow's runs, in GitHub's order, newest first. */
 export const runsIn = (body: string): Effect.Effect<ReadonlyArray<Run>, Schema.SchemaError> =>
-  Effect.map(Schema.decodeUnknownEffect(RunsBody)(body), ({ workflow_runs }) =>
+  Effect.map(Schema.decodeEffect(RunsBody)(body), ({ workflow_runs }) =>
     workflow_runs.map((r) => ({ id: r.id, head: r.head_sha, status: r.status, conclusion: r.conclusion })),
   );
 
@@ -39,7 +39,7 @@ const JobsBody = Schema.fromJsonString(
   Schema.Struct({
     jobs: Schema.Array(
       Schema.Struct({
-        id: Schema.Number,
+        id: Schema.Finite,
         name: Schema.String,
         status: Schema.String,
         conclusion: Schema.NullOr(Schema.String),
@@ -50,13 +50,19 @@ const JobsBody = Schema.fromJsonString(
   }),
 );
 
+const Head = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
+
+const RefBody = Schema.fromJsonString(
+  Schema.Struct({ object: Schema.Struct({ type: Schema.Literal("commit"), sha: Head }) }),
+);
+
 /** A run's jobs, each with its steps; a job that lists none has none. */
 export const jobsIn = (body: string): Effect.Effect<ReadonlyArray<Job>, Schema.SchemaError> =>
-  Effect.map(Schema.decodeUnknownEffect(JobsBody)(body), ({ jobs }) =>
+  Effect.map(Schema.decodeEffect(JobsBody)(body), ({ jobs }) =>
     jobs.map((j) => ({ id: j.id, name: j.name, status: j.status, conclusion: j.conclusion, steps: j.steps ?? [] })),
   );
 
-/** `repo` is `owner/name`; `cwd` is any folder gh may start in. */
+/** `repo` is `owner/name`; `cwd` is the trusted repo checkout whose SC19 checker reads candidate YAML. */
 export const layer = (repo: string, cwd: string): Layer.Layer<Runs, never, ChildProcessSpawner.ChildProcessSpawner> =>
   Layer.effect(
     Runs,
@@ -69,14 +75,14 @@ export const layer = (repo: string, cwd: string): Layer.Layer<Runs, never, Child
           const ran = yield* run("gh", ["api", "-X", "GET", path, ...query], cwd);
 
           if (ran.code !== 0) {
-            return yield* new RunsError({ reason: `gh api ${path} exited ${ran.code}: ${lastLine(ran)}` });
+            return yield* RunsError.make({ reason: `gh api ${path} exited ${ran.code}: ${lastLine(ran)}` });
           }
 
           return ran.out;
         },
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(new RunsError({ reason: `gh could not start: ${e.message}` })),
+          Effect.fail(RunsError.make({ reason: `gh could not start: ${e.message}` })),
         ),
       );
 
@@ -85,7 +91,7 @@ export const layer = (repo: string, cwd: string): Layer.Layer<Runs, never, Child
         const body = yield* gh(path, ["-f", `branch=${branch}`, "-f", `per_page=${NEWEST}`]);
 
         return yield* runsIn(body).pipe(
-          Effect.mapError(() => new RunsError({ reason: `the ${workflow} runs on ${branch} did not parse` })),
+          Effect.mapError(() => RunsError.make({ reason: `the ${workflow} runs on ${branch} did not parse` })),
         );
       });
 
@@ -93,10 +99,52 @@ export const layer = (repo: string, cwd: string): Layer.Layer<Runs, never, Child
         const body = yield* gh(`repos/${repo}/actions/runs/${id}/jobs`, ["-f", "per_page=100"]);
 
         return yield* jobsIn(body).pipe(
-          Effect.mapError(() => new RunsError({ reason: `run ${id}'s jobs did not parse` })),
+          Effect.mapError(() => RunsError.make({ reason: `run ${id}'s jobs did not parse` })),
         );
       });
 
-      return Runs.of({ on, jobs });
+      const preflight = Effect.fn("RunsGh.preflight")(
+        function* (branch: string, head: string) {
+          yield* Schema.decodeEffect(Head)(head).pipe(
+            Effect.mapError(() => RunsError.make({ reason: "proof needs an exact forty-character commit SHA" })),
+          );
+
+          const ref = yield* gh(`repos/${repo}/git/ref/heads/${encodeURIComponent(branch)}`, []);
+
+          const found = yield* Schema.decodeEffect(RefBody)(ref).pipe(
+            Effect.mapError(() => RunsError.make({ reason: `the branch head of ${branch} did not parse` })),
+          );
+
+          if (found.object.sha !== head) {
+            return yield* RunsError.make({
+              reason: `${branch} moved from ${head} to ${found.object.sha}; read its current head first`,
+            });
+          }
+
+          const text = yield* gh(`repos/${repo}/contents/.github/workflows/scheduled.yaml`, [
+            "-f",
+            `ref=${head}`,
+            "-H",
+            "Accept: application/vnd.github.raw+json",
+          ]);
+
+          // Run the trusted local linter, never code read from the requested branch.
+          const checked = yield* run("node", [".github/ci/workflow-lint/scheduled.ts", "--job-slots"], cwd, {
+            stdin: text,
+          });
+
+          if (checked.code !== 0 || checked.out.trim() !== "scheduled job slots conform") {
+            return yield* RunsError.make({
+              reason: `new proof on ${branch} at ${head} refused: ${lastLine(checked) || "the trusted job-slot check did not confirm conformance"}`,
+            });
+          }
+        },
+        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        Effect.catchTag("PlatformError", (e) =>
+          Effect.fail(RunsError.make({ reason: `the proof preflight could not start: ${e.message}` })),
+        ),
+      );
+
+      return Runs.of({ on, jobs, preflight });
     }),
   );
