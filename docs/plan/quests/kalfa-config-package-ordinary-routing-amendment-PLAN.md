@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0585, 0590 and 0595; body 5895760b1a6a
+Approved by the lead agent, builds 0585, 0590 and 0595; body 7458e448bad2
 Plancheck-Version: 3
 
 # Plan amendment: route ordinary Kalfa laws through the existing next project
@@ -114,8 +114,20 @@ private automatic adapter. The SAME tests author may apply them on the owned pac
 together with existing-owned layer array-order and local fixture-type fixes, for normal automatic
 draft feedback. Do not edit the CI repair worktree, catalog, acceptance or original private patch.
 The thirteen ordinary-routing paths remain private until their real integration base is available.
-Only the six exact extraction paths gain this early application permission. Final combined source
-review and actual CI still remain; no unrun guard, host or archive proof is implied.
+The six extraction paths and the single independent cache entry below gain early application
+permission. Final combined source review and actual CI still remain; no unrun guard, host or
+archive proof is implied.
+
+The live package workflow has no Kalfa tsc-cache entry although its workspace declares kalfa/*.
+Add exactly kalfa/*/node_modules/.cache/tsc after the packages/* entry and before programs/* in
+the existing cache anchor. The unchanged restore/save anchor, cache keys and current jobs remain.
+This is the same C4 ordering contract already reviewed in the immutable private v2 packet. No
+selector, archive/upload, fault adapter, token, event, catalog or dependency hunk may be applied
+with it. The thirteen ordinary-routing paths otherwise remain private, including every other
+check.yaml hunk. Keep all previous packet hashes untouched. On later integration, verify that
+this one cache entry is already present in its exact position and apply only remaining changes;
+never duplicate it or replace the live workflow wholesale with the private version.
+
 
 ## Saved proof safety
 
@@ -174,7 +186,7 @@ The first two paths were already approved. The next 11 routing paths and the six
 | File | Owner | Product lines expected | Change |
 |---|---|---|---|
 | .github/ci/changes.mjs | tests | tests | Already owned: canonical expanded filter and strict saved-selection decoding; preserve seven-path additions and existing proof/tree behavior. |
-| .github/workflows/check.yaml | tests | tests | Already owned: expanded FILTER fallbacks in sizing and ordinary next job only; keep every retained delivery-patch hunk. |
+| .github/workflows/check.yaml | tests | tests | Early independent application: only the Kalfa tsc-cache entry in workspace order. All FILTER/routing/delivery hunks remain private until integration; preserve keys, anchor and jobs. |
 | oxlint-plugins/anti-slop.ts | tests | tests | Extraction guard repair: include Kalfa in WHOLE, ROOTS and folder membership; preserve every zero-lock rule, error level, vendor pin and other scope. |
 | oxlint-plugins/anti-slop.test.ts | tests | tests | Extend existing scope/zero-lock coverage to the declared Kalfa folders; no reduced domain, count, skip or disabled rule. |
 | vitest.shards.json | tests | tests | Translate only moved Toml.types and TomlParser keys to Kalfa; retain exact values 0 and 0.2 and all other rows. |
