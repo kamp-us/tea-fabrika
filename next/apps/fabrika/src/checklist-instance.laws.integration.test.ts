@@ -37,14 +37,15 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import { tezgah } from "@kampus/tezgah";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, String as Str } from "effect";
-import * as Cause from "effect/Cause";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
+import { Array as Arr, String as Str, Cause, DateTime, Effect, Exit, Formatter, Option, Schema, Duration, Fiber } from "effect";
+
+
+
+
+
+
+
+
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -221,7 +222,14 @@ type Entry = {
   object: ReturnType<typeof processObject>;
   readonly db: DatabaseSync;
   readonly ctx: DurableObjectState;
-  timer: ReturnType<typeof setTimeout> | undefined;
+  timer: Fiber.Fiber<void> | undefined;
+};
+
+/** Cancels a pending alarm the way clearTimeout did: the interrupt lands before this returns. */
+const cancel = (timer: Fiber.Fiber<void> | undefined) => {
+  if (timer !== undefined) {
+    Effect.runFork(Fiber.interrupt(timer));
+  }
 };
 
 /** What a client was sent, and what each Process published for it, in order. */
@@ -329,14 +337,17 @@ const world = (options: { readonly lacks?: string } = {}) =>
                   return;
                 }
 
-                clearTimeout(entry.timer);
+                cancel(entry.timer);
 
                 if (at !== null && !closed) {
-                  entry.timer = setTimeout(
-                    () => {
-                      entry!.object.call("alarm", []).catch(() => {});
-                    },
-                    Math.max(0, at - DateTime.toEpochMillis(DateTime.nowUnsafe())),
+                  entry.timer = Effect.runFork(
+                    Effect.sleep(Duration.millis(Math.max(0, at - DateTime.toEpochMillis(DateTime.nowUnsafe())))).pipe(
+                      Effect.andThen(
+                        Effect.sync(() => {
+                          entry!.object.call("alarm", []).catch(() => {});
+                        }),
+                      ),
+                    ),
                   );
                 }
               });
@@ -444,7 +455,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
           closed = true;
 
           for (const p of processes.values()) {
-            clearTimeout(p.timer);
+            cancel(p.timer);
             await p.object.runtime.dispose();
             p.db.close();
           }
@@ -506,7 +517,7 @@ const admit = (w: World) =>
     return client;
   });
 
-const settle = Effect.promise(() => new Promise<void>((done) => setTimeout(done, 50)));
+const settle = Effect.sleep("50 millis");
 
 describe("L21: the boot list", () => {
   it("each entry starts once, in order; a reopen starts none again and reads each entry's first placing", async () => {

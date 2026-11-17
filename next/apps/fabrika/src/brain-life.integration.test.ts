@@ -11,6 +11,7 @@ import { FetchHttpClient, HttpClient } from "effect/http";
 
 
 
+
 import { heldPort } from "./port.test-support.ts";
 
 const homes: Array<string> = [];
@@ -28,7 +29,7 @@ const home = () => {
   return h;
 };
 
-const pause = () => new Promise<void>((done) => setTimeout(done, 25));
+const pause = () => Effect.runPromise(Effect.sleep("25 millis"));
 
 // One GET's status through Effect's fetch client. The request has its own scope, so closing it
 // releases the unread body; it fails when nothing listens at the address.
@@ -335,7 +336,7 @@ describe("P12 local brain life", () => {
 
       expect(pending, details()).toEqual(expect.arrayContaining([expect.objectContaining({ _tag: "braked" })]));
       // Wait past every installed backoff. No new child or outer HTTP restart is allowed.
-      await new Promise<void>((done) => setTimeout(done, 2000));
+      await Effect.runPromise(Effect.sleep("2 seconds"));
       expect(
         Arr.filter(tree(s.child.pid!), (r) => /\/workerd(?:\s|$)/.test(r.command)),
         details(),
@@ -361,7 +362,7 @@ describe("P12 local brain life", () => {
       }
 
       await expect(Effect.runPromise(status(s.url))).rejects.toThrow();
-      await new Promise<void>((done) => setTimeout(done, 1100));
+      await Effect.runPromise(Effect.sleep("1100 millis"));
       expect(Arr.filter(descendants, living)).toEqual([]);
     },
   );

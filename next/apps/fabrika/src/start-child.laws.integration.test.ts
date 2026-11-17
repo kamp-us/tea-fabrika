@@ -12,18 +12,19 @@ import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, String as Str } from "effect";
-import * as Clock from "effect/Clock";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as ManagedRuntime from "effect/ManagedRuntime";
-import * as Option from "effect/Option";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
-import * as Scope from "effect/Scope";
+import { Array as Arr, String as Str, Clock, DateTime, Effect, Exit, Layer, Logger, ManagedRuntime, Option, Result, Schema, Scope, Duration } from "effect";
+
+
+
+
+
+
+
+
+
+
+
+
 import * as fc from "fast-check";
 import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
@@ -71,7 +72,7 @@ type Fixture = Effect.Success<ReturnType<typeof childInstance>>;
 // The instance's private local capability, read call by call as ticket 402's test reads it.
 type Instance = Fixture["instance"] & Record<string, any>;
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /** The wall clock in ms, for the polls that wait on real workerd. */
 const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());

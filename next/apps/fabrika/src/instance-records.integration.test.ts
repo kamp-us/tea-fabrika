@@ -17,14 +17,16 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { CommitReply, SigningReply } from "@kampus/libfabrika/workers/bindings";
-import { Array as Arr, String as Str } from "effect";
+import { Array as Arr, String as Str, Duration, Effect, Layer, Schema, Stream, DateTime, Option } from "effect";
 import { SecureRandom } from "effect/crypto";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
+
+
+
+
+
+
+
+
 import { rolldown } from "rolldown";
 import { describe, expect, it } from "vitest";
 import { changeEnv, noTracking } from "./env.test-support.ts";
@@ -408,7 +410,7 @@ export class Control extends Brain.Control {
   }
 };
 
-const pause = (ms = 20) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 20) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /** The wall clock in ms, for the waits and the wakes set against real workerd. */
 const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());

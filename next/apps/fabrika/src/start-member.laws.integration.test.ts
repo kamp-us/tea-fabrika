@@ -7,13 +7,14 @@
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
 import { ProjectService } from "@kampus/libfabrika/workers/runtime";
-import { Array as Arr, String as Str } from "effect";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as Scope from "effect/Scope";
+import { Array as Arr, String as Str, DateTime, Effect, Exit, Option, Schema, Scope, Duration } from "effect";
+
+
+
+
+
+
+
 import { describe, expect, it, vi } from "vitest";
 import { childHome, childProject, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
 
@@ -39,7 +40,7 @@ vi.mock("virtual:fabrika-built", () => ({
 /** Bounded waits tied to observable facts. */
 const WAIT = 25_000;
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /** The wall clock in ms, for the polls that wait on real workerd. */
 const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());

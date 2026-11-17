@@ -15,13 +15,15 @@ import { NodeServices } from "@effect/platform-node";
 import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
-import { Array as Arr, String as Str } from "effect";
+import { Array as Arr, String as Str, Duration, Effect, Schema, Scope, DateTime, Option } from "effect";
 import { SecureRandom } from "effect/crypto";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as Scope from "effect/Scope";
+
+
+
+
+
+
+
 import { expect, it } from "vitest";
 import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -170,7 +172,7 @@ export const program = Program.make({name: "m13/parent", machine, state: {v: 1, 
 // The instance's private local capability, read call by call as worker-mail's test reads it.
 type Instance = any;
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /** The wall clock in ms, for the polls that wait on real workerd. */
 const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());

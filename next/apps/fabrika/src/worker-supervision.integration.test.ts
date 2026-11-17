@@ -8,14 +8,16 @@ import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Array as Arr, String as Str } from "effect";
+import { Array as Arr, String as Str, Duration, Effect, Layer, Schema, DateTime, Formatter, Option } from "effect";
 import { SecureRandom } from "effect/crypto";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
+
+
+
+
+
+
+
+
 import { describe, expect } from "vitest";
 import { changeEnv, noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -195,7 +197,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
   }
 };
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /** The wall clock in ms, for the polls that wait on real workerd. */
 const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());

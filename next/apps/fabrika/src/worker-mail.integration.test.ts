@@ -7,14 +7,16 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Array as Arr, String as Str } from "effect";
+import { Array as Arr, String as Str, Duration, Effect, Schema, Scope, DateTime, Formatter, Option } from "effect";
 import { SecureRandom } from "effect/crypto";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as Scope from "effect/Scope";
+
+
+
+
+
+
+
+
 import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
 import { noTracking, scopedEnv } from "./env.test-support.ts";
@@ -394,7 +396,7 @@ const world = async (
   );
 };
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(

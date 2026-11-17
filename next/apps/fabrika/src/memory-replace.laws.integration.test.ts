@@ -12,16 +12,19 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Array as Arr, String as Str } from "effect";
-import * as Clock from "effect/Clock";
+import { Array as Arr, String as Str, Clock, Duration, Effect, Layer, Predicate, Stream, DateTime, Option } from "effect";
 import { SecureRandom } from "effect/crypto";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
 import { ChildProcess } from "effect/process";
-import * as Stream from "effect/Stream";
+
+
+
+
+
+
+
+
+
+
 import { describe, expect } from "vitest";
 import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -104,7 +107,7 @@ type Key = ReturnType<typeof identity>;
 
 type Instance = any;
 
-const pause = (ms = POLL) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = POLL) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /** The wall clock in ms, for the polls that wait on real workerd. */
 const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
