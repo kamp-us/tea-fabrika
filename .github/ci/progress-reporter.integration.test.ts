@@ -1,7 +1,7 @@
 // Today's CI diagnostics. Real Vitest and SIGKILL proof belongs only on disposable CI.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Cause, Clock, Console, Deferred, Effect, Exit, Fiber, FileSystem, Path, Stream } from "effect";
+import { Cause, Clock, Console, Deferred, Effect, Exit, Fiber, FileSystem, Path, Queue, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { collect, legOf, markdown, Unread, type Io, type Timings } from "./time-table.ts";
 
@@ -140,7 +140,47 @@ for (let i = 0; i < ${cases}; i++) test("probe " + i, async () => { process.stdo
 
   if (mode === "cutoff") {
     expect(yield* handle.isRunning).toBe(true);
-    before = yield* collect(environment, scratch, io, 0);
+
+    // Worker stdout can precede Vitest's throttled reporter RPC. A decoded append is the acknowledgement.
+    const observation = Effect.scoped(
+      Effect.gen(function* () {
+        const watching = yield* Deferred.make<void>();
+
+        const changes = yield* Stream.toQueue(
+          fs.watch(scratch, { onReady: () => void Deferred.doneUnsafe(watching, Effect.void) }),
+          { capacity: "unbounded" },
+        );
+
+        yield* Effect.raceFirst(Deferred.await(watching), Queue.take(changes));
+        let current = yield* collect(environment, scratch, io, 0);
+
+        while (
+          !(
+            current.progress &&
+            current.progress._tag !== "unavailable" &&
+            current.progress.active.some(
+              (event) => event._tag === "test" && event.phase === "started" && event.file === "probe.test.ts",
+            ) &&
+            current.progress.events.some(
+              (event) => event._tag === "hook" && event.hook === "beforeEach" && event.phase === "ended",
+            )
+          )
+        ) {
+          yield* Queue.take(changes);
+          current = yield* collect(environment, scratch, io, 0);
+        }
+
+        return current;
+      }),
+    );
+
+    before = yield* Effect.raceFirst(observation, Effect.exit(handle.exitCode).pipe(Effect.as(null)));
+    expect(before).not.toBeNull();
+
+    if (before === null) {
+      return yield* Effect.fail(Unread.make({ cause: "child ended before journal acknowledgement" }));
+    }
+
     expect(before.files._tag).toBe("unavailable");
     expect(before.progress?._tag).toBe("partial");
 
