@@ -1,4 +1,4 @@
-Approved by the lead agent, builds checklist completion proof and 0093/0594; body bbb67d207a23
+Approved by the lead agent, builds current typed checklist proof and 0093/0594; body eb7d2a7f7b5d
 Plancheck-Version: 3
 # Checklist1126 remaining fault groups
 
@@ -303,3 +303,225 @@ None.
 
 The approved scope retains the existing limits. Actual runtime proof, cleanup and the final checklist review remain required.
 
+
+## Current source amendment, 2026-11-17
+
+### Scope and precedence
+
+The earlier sections remain the historical planning record for source
+`27039e9455026f37327259a5411260cb4d441ba8`. This section replaces that source,
+its law blob and full-file hashes, all nine prepared/broken image hashes,
+all nine expected assertion locations, the two notification fault strings,
+the body diagnostic and all nine dispatch source values. The replacements
+below govern these nine cases. All other requirements in the earlier plan remain.
+
+This is today's CI tooling for next/ checklist laws. It adds no case, public
+request field, matcher rule, runner phase, setting or product change. The nine
+catalog records and the exact body Failure literal are the bounded change.
+The other seven catalog cases and their behavior remain unchanged.
+
+### Exact current source and complete dependency lock
+
+- Source commit: `a062f7a2515aa1917dfae05d3af95e3705b88812`.
+- Actual main used for integration: `bc358e659e0499a4d50d2cc6d2483c36c24ad216`.
+- Source parents, in order: `27039e9455026f37327259a5411260cb4d441ba8`,
+  `bc358e659e0499a4d50d2cc6d2483c36c24ad216`.
+- Source tree: `0f173e9cd69bee2678896aebf3d1150ebd410a02`.
+- Law Git blob: `10082e6777e1e5c080d326c930d8d5cbee134b6c`.
+- Law full-file SHA256: `08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f`.
+- Complete `pnpm-lock.yaml` SHA256 on both source and the integrated main:
+  `1800791fae8716cfb063adc7bd50822a0bfe07d7980eb599543e07c948032c95`.
+
+The trusted runner must use the same complete dependency lock as this source.
+The earlier complete lock SHA256
+`02d1d1c629105e240ea3b473df3dbb0f89874cfaf5f57352c6d8492da133da4c`
+differs and cannot establish current dependency equality. Existing complete-lock
+checks remain. No source-lock overlay or guard override is added.
+
+The source is the repaired historical completion code plus main's typed News
+migration. It keeps `w.settled` and main's typed reader and assertions.
+All 29 expect assertions remain. The pid/body checks now use `update.pid`
+and `update`; the other 27 assertions are byte-identical to the repaired
+historical source. The full six-test file, generators, depth and seed fields,
+mandatory milk/bread example and input bounds remain.
+
+| File | Change | Owner | Product lines expected |
+|---|---|---|---|
+| pnpm-lock.yaml | Read-only complete-file equality check; no dependency edit | tests | 0 |
+
+This read-only row records the lock used by the existing checks. It authorizes
+no lock change. The earlier files table still owns the catalog, causal reader,
+existing tests and disposable source copies.
+
+### Exact 27 image hashes
+
+These are the full SHA256 values of the nine ORIGINAL, PREPARED and BROKEN images.
+PREPARED is the baseline image. BROKEN applies the one existing fault to it.
+For every row, the restored phase equals PREPARED and final cleanup equals ORIGINAL.
+These planned values must still be checked against bytes actually observed in each run.
+
+| Case | ORIGINAL SHA256 | PREPARED SHA256 | BROKEN SHA256 |
+|---|---|---|---|
+| checklist-body | `08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f` | `08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f` | `061a14624cb441a033477a741668f2e46d8d87ab64ff670b3bfa486f9564c8ee` |
+| checklist-drop-notify | `08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f` | `08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f` | `d95cdb439345596c7f54d64d469e71f95c51761fd832685da47f74496e18421d` |
+| checklist-early-complete | `08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f` | `d097eed69883a94ee40d8824e84844567672012f97a6e3e71001167c3ed45336` | `5a166e8c8fc6b26afa845cc793052ac228037237c557a1c01a662bbfb116db15` |
+| checklist-held-call | `08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f` | `5ab79a9bd1333b20874fcfd26659f7fbb4c1d799fac4a441b78b2b2a9cf79087` | `ea0866f9735cb11103994209e889f2a5e23cb57ecb7d6ff28711d589f4aa24ef` |
+| checklist-due-reschedule | `08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f` | `15a20a30009ce885e2fce5b77164a70dde147c44286ecefb7bf7a13abda32852` | `4ce6941d2ad4b4780a411b994b63f4a078052b9bca5ac9e0a225b2f521a1eeda` |
+| checklist-running-replace | `08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f` | `a7a798a65be92dabc32d25540c0b9fd6ef4b328a4bb0c7af5d53669e47fde6a5` | `84c27c3333f5eeb55c26c33219671a09008dc0abee7d7797245997872305facf` |
+| checklist-running-delete | `08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f` | `e82cf996bf5a94d236f5c3022e0e3ee02748a427946fd6ea3817455ddbf9c678` | `13c9dae45705b697abede18a004fc6656235918bd9198b6c665b4b5da016c09b` |
+| checklist-alarm-failure | `08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f` | `ea8d42e1ae68ac5f544227f17c5c29ea7a4e009e29936308d6963e61ff3ed073` | `c976a384dc41751fc74e96f21b588314333033e1cb03618d23de85405378ef9a` |
+| checklist-late-failure | `08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f` | `a0a10cef5b8e134ea8a2b87f89930e2f58b715fdac29bdc1b25e30574d77bf3c` | `5b43a4afb1e77c9f783623dbe1ca34526f419a477da4cf15e17255d035d0ed27` |
+
+### Exact predicted causal assertions
+
+These locations replace every old frame for these nine cases. All are predictions
+from the exact new broken bytes. An actual eligible run must confirm the matching
+causal AssertionError, with the existing whole strict schema and frame checks.
+
+| Case | Closed diagnostic | Predicted line:column |
+|---|---|---|
+| checklist-body | `AssertionError: the update its Process published reached the client unchanged` | `830:99` |
+| checklist-drop-notify | `AssertionError: the client heard the checklist's views` | `828:80` |
+| checklist-drop-notify | `AssertionError: checklist notice count differs` | `829:38` |
+| checklist-early-complete | `AssertionError: alarm completion waits for the real callback` | `769:107` |
+| checklist-held-call | `AssertionError: settled stays pending while the callback is held` | `770:98` |
+| checklist-due-reschedule | `AssertionError: settled includes the rescheduled due callback` | `776:95` |
+| checklist-running-replace | `AssertionError: canceling a schedule keeps the running call pending` | `776:114` |
+| checklist-running-delete | `AssertionError: canceling a schedule keeps the running call pending` | `776:114` |
+| checklist-alarm-failure | `AssertionError: alarm failure reaches the completion waiter` | `800:91` |
+| checklist-late-failure | `AssertionError: alarm failure reaches the completion waiter` | `800:91` |
+
+The drop-notify count route still requires the existing terminal numeric
+strictEqual/Object.is mismatch with unequal finite nonnegative counts at its
+exact frame. Equal counts, unrelated assertions, generic property wrappers,
+missing frames and changed locations remain refused.
+
+### Exact typed News fault replacements
+
+Both notification cases keep this unique anchor:
+
+~~~ts
+              heard.push({ client, news: structuredClone(news) });
+~~~
+
+For checklist-body, replace that anchor with these exact bytes:
+
+~~~ts
+              const delivered = News.guards.view(news) ? { ...news, update: { ...news.update, rev: -1 } } : news;
+              heard.push({ client, news: structuredClone(delivered) });
+~~~
+
+Only the delivered revision is corrupted. The independently recorded Process
+publication remains unchanged. This replaces the old Notice/params fault with
+the current typed News/update fault.
+
+For checklist-drop-notify, replace the same anchor with these exact bytes:
+
+~~~ts
+              if (News.guards.view(news) && published.filter((h) => Schema.is(Published)(h.news)).length === 1) {
+                return;
+              }
+
+              heard.push({ client, news: structuredClone(news) });
+~~~
+
+This still omits only the first matching view delivery. Later deliveries append
+normally. `News.guards.view` and `Schema.is(Published)` follow the typed reader
+already on main. The source law itself is unchanged by either catalog fault.
+
+In `.github/ci/plant-errors.ts`, the Failure diagnostic literal is exactly:
+
+~~~text
+AssertionError: the update its Process published reached the client unchanged
+~~~
+
+That one literal replaces the historical
+`AssertionError: the update reached the client unchanged`.
+The whole strict Failure validation remains. No generalized message match,
+additional accepted diagnostic or fallback is introduced.
+
+### Preserved probes, cases and execution contract
+
+All ordered neutral preparation strings and all seven alarm fault mappings remain
+byte-identical to their existing records. The seven alarm cases are early-complete,
+held-call, due-reschedule, running-replace, running-delete, alarm-failure and
+late-failure, each with its existing checklist- prefix.
+
+The other seven catalog records remain byte-identical: checklist-pid, watcher-r1,
+host-pin, host-discovery-timeout, host-requested-pin, host-pnpm-path and host-env-order.
+The catalog remains 16 cases in the same order. No L3 construction is included.
+
+The same phases and safeguards remain: exact source/head/index/mode/inventory,
+unique anchors, checked image hashes, prepared baseline PASS, one intended causal
+broken RED, prepared restored PASS and ORIGINAL final cleanup. An unrelated
+failure, timeout, setup error, broken PASS, skipped selected law, incomplete cleanup
+or absent result remains incomplete evidence. Temporary probe scope still releases
+its gate and awaits independent callback-return records before disposal.
+
+Retain full 100 and fast 10 runs for the selected source laws, seed 119120,
+all generated walks and siblings, every original assertion and input bound,
+the mandatory example, fixed selectors, one worker, no file parallelism,
+the shared 60000 ms test limit, 17-minute exercise step and 20-minute job limit.
+There is no new timer, wait, polling loop, retry rule or relaxed count.
+The existing pure tests and real reporter fixture read their matching diagnostic
+and position expectations from the catalog. Their source needs no edit for these
+fixed values. Real reporter compatibility still requires eligible disposable CI.
+
+### Historical receipts and current proof
+
+The historical body run
+https://github.com/kamp-us/tea-fabrika/actions/runs/44085847607
+used the historical source and recorded baseline PASS, intended body RED at840:91 and restored PASS.
+The historical drop-notify run
+https://github.com/kamp-us/tea-fabrika/actions/runs/44088724095
+used the historical source and recorded baseline PASS, intended count RED at838:38 and restored PASS.
+Both receipts remain unchanged and earn no current-source credit. The historical
+PID receipt remains separate and is not one of this nine-case repin.
+
+The old full-file proof
+https://github.com/kamp-us/tea-fabrika/actions/runs/44021915255
+passed six laws at the historical source. Its product tree and complete dependency lock differ
+from this integrated source. It does not prove the current six-test file or graph.
+Fresh product review, applicable branch proof and actual main-full results remain required.
+
+Syntax parsing of 27 images and the passing pure checks do not prove typed fault
+compilation, actual causal frames, runtime scheduling or resource release. They do
+not replace the current-source full-file proof, real reporter fixture or nine actual
+fault triplets. No new current-source runtime outcome is claimed in this amendment.
+
+### Current dispatch values
+
+These commands replace the nine historical source commands above. They describe
+separate serial runs, not a batch or loop. Publication of the exact source and reviewed
+catalog on trusted main must complete before dispatch. The lead owns dispatch under the
+existing shared slots and records actual per-phase hashes, outcomes and cleanup.
+This draft executes none of these commands.
+
+~~~sh
+gh workflow run plant.yaml --repo kamp-us/tea-fabrika --ref main -f case=checklist-body -f sha=a062f7a2515aa1917dfae05d3af95e3705b88812
+
+gh workflow run plant.yaml --repo kamp-us/tea-fabrika --ref main -f case=checklist-drop-notify -f sha=a062f7a2515aa1917dfae05d3af95e3705b88812
+
+gh workflow run plant.yaml --repo kamp-us/tea-fabrika --ref main -f case=checklist-early-complete -f sha=a062f7a2515aa1917dfae05d3af95e3705b88812
+
+gh workflow run plant.yaml --repo kamp-us/tea-fabrika --ref main -f case=checklist-held-call -f sha=a062f7a2515aa1917dfae05d3af95e3705b88812
+
+gh workflow run plant.yaml --repo kamp-us/tea-fabrika --ref main -f case=checklist-due-reschedule -f sha=a062f7a2515aa1917dfae05d3af95e3705b88812
+
+gh workflow run plant.yaml --repo kamp-us/tea-fabrika --ref main -f case=checklist-running-replace -f sha=a062f7a2515aa1917dfae05d3af95e3705b88812
+
+gh workflow run plant.yaml --repo kamp-us/tea-fabrika --ref main -f case=checklist-running-delete -f sha=a062f7a2515aa1917dfae05d3af95e3705b88812
+
+gh workflow run plant.yaml --repo kamp-us/tea-fabrika --ref main -f case=checklist-alarm-failure -f sha=a062f7a2515aa1917dfae05d3af95e3705b88812
+
+gh workflow run plant.yaml --repo kamp-us/tea-fabrika --ref main -f case=checklist-late-failure -f sha=a062f7a2515aa1917dfae05d3af95e3705b88812
+~~~
+
+No historical runner or previous source receipt can stand in for those runs.
+Keep planned hashes separate from observed hashes, raw generated content private,
+and missing counters null. No new policy, permission, budget or infrastructure
+is introduced. The earlier estimate stays a historical planning allowance.
+
+### Current amendment open questions
+
+None.
