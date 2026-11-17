@@ -56,7 +56,7 @@ request goes by hand, by its own agent, and is logged.
 ## Where we are now
 
 Today's lead tooling has a manual [plant exercise](../../.github/workflows/plant.yaml), ticket 1133.
-It accepts four fixed cases and an exact source commit, then records baseline, broken and restored observations.
+It accepts seven fixed cases and an exact source commit, then records baseline, broken and restored observations.
 Its real Git and Vitest adapters ran on trusted main for [checklist notice PIDs](../../field/notes/2026-11-17-checklist-pid-fault-exercise.json)
 in `next/`, and [host pinning and discovery](../../field/notes/2026-11-17-host-runtime-fault-exercises.json) in today's lead tooling.
 Each accepted exercise passed before the deliberate break, failed at its intended assertion, then passed after restoration.

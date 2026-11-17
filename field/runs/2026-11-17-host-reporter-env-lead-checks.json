@@ -1,0 +1,46 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-host-reporter-env-lead-checks",
+  "ticket": "kamp-us/tea-fabrika#1133",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1559",
+  "started": null,
+  "ended": "2026-11-17T10:18:51.396968+00:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling: the lead and same independent source reader read exact eb6c5c59c..2ea54a286 and confirmed that extendEnv true restores the protected fixture's inherited environment while preserving its closed case, four phases, counts and assertions. At fixed 2ea54a286 normal format passed without changes, then the canonical whole compiler passed all 30 projects, then all 18 normal lint parts passed in 33.1 seconds. These are source and local checks only. The protected child fixture did not run locally. Old scheduled run 44060666895 targets eb6c and cannot prove this fix. A new exact-head eligible CI proof remains owed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "The three original host fault triplets still wait on trusted-main runner landing. Existing 20 safe unit passes were not rerun for this unchanged unit source; no new unit result is claimed.",
+  "costUsd": null,
+  "billed": null,
+  "source": "2ea54a28640ad25bc3434a5b350fc2ae6f193ff9",
+  "compiler": {
+    "started": "2026-11-17T10:17:11.624662+00:00",
+    "ended": "2026-11-17T10:17:15.297549+00:00",
+    "seconds": 3.672715041997435,
+    "exit": 0,
+    "projects": 30,
+    "trackedFiles": 5201,
+    "sourceUnchanged": true,
+    "indexUnchanged": true,
+    "headUnchanged": true,
+    "lockUnchanged": true,
+    "compilersAfter": 0,
+    "node": "26.13.0",
+    "pnpm": "12.16.1"
+  },
+  "lint": {
+    "parts": 18,
+    "seconds": 33.1,
+    "exit": 0
+  },
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44060666895"
+  ]
+}
