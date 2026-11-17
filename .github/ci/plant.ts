@@ -469,6 +469,7 @@ const main = attempt(process.env, (environment, request) =>
       GITHUB_RUN_ID: environment.GITHUB_RUN_ID,
       GITHUB_RUN_ATTEMPT: environment.GITHUB_RUN_ATTEMPT,
       FABRIKA_TEST_DEPTH: "full",
+      PLANT_CASE: request.case,
     };
 
     const child = Effect.fn("plant.child")(
