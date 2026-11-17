@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-tea-s2-tests-repair",
+  "ticket": "1061",
+  "pr": "kamp-us/tea-fabrika#1431",
+  "started": "2026-11-17T04:34:30-08:00",
+  "ended": "2026-11-17T04:42:47-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Bounded tests repair in next/ on published 2a248bacead2fc31193096afc8ddb8d86390e447, keeping the committed tea 0.27.0 patch hash 9d5a56045039187660b87c0b7e24ebea4c98c6bfeccd5235594909272bc72f0a. Sixteen test and support files repair Msg makers and keys, generated pick tags, the arm-to-armed fields, recovery boom input, TaggedUnion case access, Menu message inference and full case fields, Project audit input decoding, and the admission name reader. Watcher updates and nested whole/patch wire notes retain type under 0569; wrong-wire tests now corrupt type. Existing assertions, cases, counts, limits and held slice 6/G1-G3 stay. No product, patch, lockfile or wipe changes.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 8.29,
+  "costUsd": null,
+  "billed": null,
+  "note": "Pinned Node 26.13.0 and pnpm 12.16.1; frozen offline install. Safe tests ran separately with TYPESAFE_API_KEY unset, nice 19 and one worker: Chunk 2, handsDelivery 1, Menu 12, client Tezgah 10, WindowMachine 51, tezgah program 8, RunnerRecovery 4 and unchanged MsgKey 3, all green, 91 tests total. Scoped format and oxlint on the 16 changed files passed, 0 blocking and 37 existing advice diagnostics; list ratchet against the starting head passed. No new law or plant was added or run. Typecheck, full lint, typed API lint, integration/visual/workerd tests and original patch plants were not run in this bounded repair. Final integrated-head proof, patch-scope ruling, current-main integration, whole-PR review and the named 0572 landing steps remain the lead's work."
+}

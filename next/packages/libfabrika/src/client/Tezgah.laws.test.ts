@@ -22,7 +22,7 @@ import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
 import { type Tile, type TileId, TezgahView, Workspace } from "../tezgah/Workspace.ts";
 import * as Keys from "./Keys.ts";
-import { optimisticState, type PendingMutation, type TezgahClient, tezgahMachine } from "./Tezgah.ts";
+import { optimisticState, type PendingMutation, type TezgahClient, TezgahMsg, tezgahMachine } from "./Tezgah.ts";
 import {
   type Handling,
   handle,
@@ -190,12 +190,16 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
           kind === "whole"
             ? { ...Tag.cases.server.make({}), rev: rev + skew, view: target }
             : kind === "next"
-              ? { type: "patch", base: rev, rev: rev + 1, patch: diff(shown, target) }
+              ? TezgahMsg.cases.patch.make({ base: rev, rev: rev + 1, patch: diff(shown, target) })
               : kind === "gap_base"
-                ? { type: "patch", base: rev - skew, rev: rev + 1, patch: diff(shown, target) }
+                ? TezgahMsg.cases.patch.make({ base: rev - skew, rev: rev + 1, patch: diff(shown, target) })
                 : kind === "gap_rev"
-                  ? { type: "patch", base: rev, rev: rev + 1 + skew, patch: diff(shown, target) }
-                  : { type: "patch", base: rev - skew - 1, rev: rev - skew + 1, patch: diff(shown, target) };
+                  ? TezgahMsg.cases.patch.make({ base: rev, rev: rev + 1 + skew, patch: diff(shown, target) })
+                  : TezgahMsg.cases.patch.make({
+                      base: rev - skew - 1,
+                      rev: rev - skew + 1,
+                      patch: diff(shown, target),
+                    });
         const [next, cmds] = both(m, msg);
         const asks = cmds.filter((c) => c._tag === "ask").length;
 
@@ -838,13 +842,16 @@ const Cursor = fc.oneof(
   fc.string({ minLength: 81, maxLength: CURSOR_MOST }),
 );
 
-const Pick = fc.record({
-  type: fc.constant("pick" as const),
-  win: fc.integer({ min: 0, max: 1 }),
-  move: fc.nat(),
-  pick: fc.nat(),
-  cursor: Cursor,
-});
+const PickTag = Schema.TaggedStruct("pick", {});
+
+const Pick = fc
+  .record({
+    win: fc.integer({ min: 0, max: 1 }),
+    move: fc.nat(),
+    pick: fc.nat(),
+    cursor: Cursor,
+  })
+  .map((fields) => ({ ...PickTag.make({}), ...fields }));
 type Pick = typeof Pick extends fc.Arbitrary<infer A> ? A : never;
 
 const Desk = fc.record({

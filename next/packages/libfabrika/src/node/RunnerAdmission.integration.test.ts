@@ -2,7 +2,7 @@
 import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite handle for referee transactions
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, Predicate, type Scope } from "effect";
+import { Effect, FileSystem, Layer, Option, Path, Predicate, Schema, type Scope } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -165,7 +165,7 @@ const door: ProjectAuditTest.Harness["door"] =
             schema: input,
             raw: [],
             personOnly: [],
-            name: (m: typeof input.Type) => m._tag,
+            name: (m: typeof input.Type) => Option.getOrUndefined(Schema.decodeUnknownOption(Schema.String)(m["_tag"])),
           },
           events: { personOnly: [] },
         }).pipe(

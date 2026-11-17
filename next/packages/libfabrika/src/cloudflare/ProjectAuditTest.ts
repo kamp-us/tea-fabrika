@@ -325,7 +325,9 @@ const projectWalk = Effect.fnUntraced(function* (
 
         if (move === "valid") {
           expect(recorded.input).toEqual(
-            selector === "default" ? Tag.cases.add.make({}) : { ...Tag.cases.add.make({}), n: m.n, parent: binding.id },
+            selector === "default"
+              ? Tag.cases.add.make({})
+              : { ...Tag.cases.add.make({}), n: Schema.decodeUnknownSync(WireAdd)(m).n, parent: binding.id },
           );
         }
 

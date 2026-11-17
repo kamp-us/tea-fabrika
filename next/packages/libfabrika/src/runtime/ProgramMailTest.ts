@@ -2683,12 +2683,15 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         ctx,
         {
           outside: {
-            start: fc.record({ type: fc.constant("start" as const), ref, value: fc.integer({ min: 0, max: 100 }) }),
-            answer: fc.record({
-              type: fc.constant("answer" as const),
-              ref,
-              value: fc.integer({ min: -100, max: 100 }),
-            }),
+            start: fc
+              .record({ ref, value: fc.integer({ min: 0, max: 100 }) })
+              .map((fields) => RequesterMsg.cases.start.make(fields)),
+            answer: fc
+              .record({
+                ref,
+                value: fc.integer({ min: -100, max: 100 }),
+              })
+              .map((fields) => RequesterMsg.cases.answer.make(fields)),
           },
           answers: {
             send: {

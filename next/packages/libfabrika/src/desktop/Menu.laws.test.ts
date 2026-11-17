@@ -10,14 +10,6 @@ import * as Menu from "./Menu.ts";
 import { PersonCheck } from "./PersonCheck.ts";
 import * as PersonCheckTest from "./PersonCheckTest.ts";
 
-/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
- *  A law hands over only the fields it reads, so a case holds the key alone. */
-const Tag = Schema.TaggedUnion({
-  rows: {},
-  open_browser: {},
-  opened: {},
-});
-
 const options = (numRuns: number) => ({ seed: Test.seed, numRuns });
 
 const signed = (cmds: ReadonlyArray<Test.Command>) =>
@@ -614,7 +606,7 @@ describe("browser link start switch", () => {
       const machine = Menu.machine({ linkTtl: Test.ttl, browserLink: enabled });
       const initial = machine.init(null, Test.ctx)[0];
       expect(Menu.view(initial).some((i) => i._tag === "action" && i.id === "open_browser")).toBe(enabled);
-      const msgs: ReadonlyArray<Test.Msg> = [{ ...Tag.cases.open_browser.make({}), cmd: Test.cmdId(3) }];
+      const msgs: ReadonlyArray<Test.Msg> = [Test.Messages.cases.open_browser.make({ cmd: Test.cmdId(3) })];
       const trace = foldEvents(machine, Test.ctx, null, msgs);
       expect(trace.steps.flatMap((s) => s.cmds).filter((c) => c._tag === "open")).toHaveLength(enabled ? 1 : 0);
     },
@@ -632,12 +624,13 @@ it.effect.prop(
     Effect.gen(function* () {
       const settings = yield* Declarations.all.parse(ConfigProvider.fromUnknown({ desktop: { "link-ttl": lifetime } }));
       const machine = Menu.machine({ linkTtl: settings.desktopLinkTtl, browserLink: true });
+      // fast-check: edge cases -- the guided walk draws exactly one tick before, at and after this generated lifetime.
       const flows = arbGuidedSequence(
         machine,
         Test.ctx,
         {
           outside: {
-            open_browser: Test.command.map((cmd) => ({ ...Tag.cases.open_browser.make({}), cmd })),
+            open_browser: Test.command.map((cmd) => Test.Messages.cases.open_browser.make({ cmd })),
             rows: fc
               .record({
                 at: fc.constantFrom(lifetime - 1, lifetime, lifetime + 1),
@@ -646,12 +639,12 @@ it.effect.prop(
                   { maxLength: 1 },
                 ),
               })
-              .map((fields) => ({ ...Tag.cases.rows.make({}), ...fields })),
+              .map((fields) => Test.Messages.cases.rows.make(fields)),
           },
           answers: {
             open: {
               draw: fc.constant("loaded-digest"),
-              make: (pending, digest): Test.Msg => ({ ...Tag.cases.opened.make({}), cmd: pending.cmd, digest, at: 0 }),
+              make: (pending, digest): Test.Msg => Test.Messages.cases.opened.make({ cmd: pending.cmd, digest, at: 0 }),
             },
           },
         },

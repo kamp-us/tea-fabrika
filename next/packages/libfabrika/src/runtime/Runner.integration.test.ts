@@ -290,9 +290,9 @@ class ViewedRunner extends Context.Service<ViewedRunner, Runner>()(
 ) {}
 
 type Update =
-  | { readonly _tag: "whole"; readonly rev: number; readonly view: Model }
+  | { readonly type: "whole"; readonly rev: number; readonly view: Model }
   | {
-      readonly _tag: "patch";
+      readonly type: "patch";
       readonly rev: number;
       readonly base: number;
       readonly patch: ReadonlyArray<{
@@ -443,7 +443,7 @@ const worldOn = async (
     readonly storage?: ActivityStorage;
     readonly onStep?: () => void;
     readonly noPorts?: boolean;
-    readonly addPort?: Schema.Codec<(typeof Msg.members)[0]["Type"]>;
+    readonly addPort?: Schema.Codec<typeof Msg.cases.add.Type>;
     readonly execution?: (actual: Execution) => Execution;
   } = {},
 ) => {
@@ -966,7 +966,7 @@ describe("ticket 884, next/ brain mail", () => {
 
   it.live.prop(
     "B1: brain letters step a machine without ports once each and survive a storage reopen",
-    [Arbitrary.array(Arbitrary.schema(Msg.members[0]), { minLength: 1, maxLength: 30 })],
+    [Arbitrary.array(Arbitrary.schema(Msg.cases.add), { minLength: 1, maxLength: 30 })],
     ([msgs]) =>
       onDisks(async (world) => {
         const w = await world({ noPorts: true });
@@ -1090,7 +1090,7 @@ describe("ticket 884, next/ brain mail", () => {
       onDisks(async (world) => {
         const checked: Array<number> = [];
         const w = await world({
-          addPort: Msg.members[0].check(
+          addPort: Msg.cases.add.check(
             Schema.makeFilter((m) => {
               checked.push(m.n);
 

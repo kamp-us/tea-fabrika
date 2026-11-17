@@ -25,7 +25,7 @@ describe("T1041: what a program sees of a full inbox and a chunked send", () => 
     expectTypeOf<"too_big">().toExtend<ChunksTag>();
     expectTypeOf<"forbidden" | "no_name" | "stale_sender" | "bad_message" | "id_reused">().toExtend<ChunksTag>();
     expectTypeOf<Extract<ChunksTag, "full">>().toBeNever();
-    expectTypeOf<(typeof rows.Type)["type"]>().toEqualTypeOf<"rows">();
+    expectTypeOf<(typeof rows.Type)["_tag"]>().toEqualTypeOf<"rows">();
     expectTypeOf<(typeof rows.Type)["items"]>().toEqualTypeOf<ReadonlyArray<typeof Row.Type>>();
     expectTypeOf<(typeof rows.Type)["part"]>().toEqualTypeOf<typeof Chunk.Part.Type>();
   });

@@ -29,6 +29,7 @@ import { ProgramRunner } from "./Runner.ts";
 const Tag = Schema.TaggedUnion({
   inc: {},
   put: {},
+  boom: {},
 });
 
 const PID = Effect.runSync(processId);

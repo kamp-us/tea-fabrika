@@ -1320,7 +1320,7 @@ describe("L9: the records the window emits", () => {
 
           for (const pid of changed) {
             const whole =
-              m.type === "open_ok" || (m.type === "view" && (m.note as { type?: unknown }).type === "whole");
+              m._tag === "open_ok" || (m._tag === "view" && (m.note as { type?: unknown }).type === "whole");
             expect(rows.filter((r) => r["pid"] === pid && r["result"] === "whole")).toHaveLength(whole ? 1 : 0);
 
             if (!whole) {
@@ -2164,7 +2164,7 @@ const FAMILIES: Readonly<Record<string, Family>> = {
     good: (p, after, v) =>
       sameAs(p, after, { ...Tag.cases.view.make({}), pid: PID_A, note: { pid: PID_A, type: "whole", ...v } }),
     drop: ["pid", "type"],
-    wrong: { pid: 7, ...Tag.cases.other.make({}) },
+    wrong: { pid: 7, type: "other" },
   },
   // P18 slice 2: ledger.wait answers the rev it woke at; the window waits on its inbox once online.
   Woke: {
@@ -2206,7 +2206,7 @@ const FAMILIES: Readonly<Record<string, Family>> = {
         note: { pid: PID_A, type: "patch", patch: [], ...v },
       }),
     drop: ["pid", "type"],
-    wrong: { pid: 7, ...Tag.cases.other.make({}) },
+    wrong: { pid: 7, type: "other" },
   },
 };
 
@@ -3414,12 +3414,15 @@ const deskView = (d: Desk) => ({
   })),
 });
 
-const DeskPick = fc.record({
-  type: fc.constant("pick" as const),
-  move: fc.nat(),
-  pick: fc.nat(),
-  ms: fc.integer({ min: 0, max: 5_000 }),
-});
+const DeskPickTag = Schema.TaggedStruct("pick", {});
+
+const DeskPick = fc
+  .record({
+    move: fc.nat(),
+    pick: fc.nat(),
+    ms: fc.integer({ min: 0, max: 5_000 }),
+  })
+  .map((fields) => ({ ...DeskPickTag.make({}), ...fields }));
 type DeskPick = typeof DeskPick extends fc.Arbitrary<infer A> ? A : never;
 
 type DeskWorld = {

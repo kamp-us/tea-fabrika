@@ -688,25 +688,28 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
 });
 
 /** L9's blind draw: which kind of move, and which target the fold picks in the state it reached. */
-const Pick = fc.record({
-  type: fc.constant("pick" as const),
-  kind: fc.constantFrom<Kind>(
-    "attach",
-    "reattach",
-    "reattach",
-    "attach_reused",
-    "attach_reused",
-    "split_right",
-    "split_down",
-    "answer",
-    "close",
-    "reused",
-    "reused",
-    "unknown",
-    "unknown",
-  ),
-  pick: fc.nat(),
-});
+const PickTag = Schema.TaggedStruct("pick", {});
+
+const Pick = fc
+  .record({
+    kind: fc.constantFrom<Kind>(
+      "attach",
+      "reattach",
+      "reattach",
+      "attach_reused",
+      "attach_reused",
+      "split_right",
+      "split_down",
+      "answer",
+      "close",
+      "reused",
+      "reused",
+      "unknown",
+      "unknown",
+    ),
+    pick: fc.nat(),
+  })
+  .map((fields) => ({ ...PickTag.make({}), ...fields }));
 
 describe("Desk S2a L9: tezgah refuses what names nothing", () => {
   it("L9: a reused tile id, an unknown from or a missing workspace is refused with its reason and writes nothing", async () => {
@@ -834,27 +837,28 @@ const Cursor = fc.oneof(
 
 const VIAS = [{ _tag: "key", keys: "ctrl+b o" }, { _tag: "click" }, { _tag: "key", keys: "f6" }] as const;
 
-const FocusPick = fc.record({
-  type: fc.constant("pick" as const),
-  kind: fc.constantFrom(
-    "split_right",
-    "split_down",
-    "answer",
-    "answer",
-    "attach",
-    "close",
-    "focus",
-    "focus",
-    "focus",
-    "focus",
-    "focus_far",
-    "split_cursor",
-    "split_cursor",
-  ),
-  pick: fc.nat(),
-  cursor: Cursor,
-  sentAt: fc.integer({ min: 0, max: 10_000_000 }),
-});
+const FocusPick = fc
+  .record({
+    kind: fc.constantFrom(
+      "split_right",
+      "split_down",
+      "answer",
+      "answer",
+      "attach",
+      "close",
+      "focus",
+      "focus",
+      "focus",
+      "focus",
+      "focus_far",
+      "split_cursor",
+      "split_cursor",
+    ),
+    pick: fc.nat(),
+    cursor: Cursor,
+    sentAt: fc.integer({ min: 0, max: 10_000_000 }),
+  })
+  .map((fields) => ({ ...PickTag.make({}), ...fields }));
 type FocusPick = typeof FocusPick extends fc.Arbitrary<infer A> ? A : never;
 
 const iso = (ms: number) => new Date(Date.UTC(2026, 10, 14) + ms).toISOString();
