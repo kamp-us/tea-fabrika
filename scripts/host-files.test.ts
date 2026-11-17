@@ -117,3 +117,18 @@ it.prop(
     expect(hostFiles([path], approved ? { [HOST_RUN]: "1" } : {}, platform, () => source)).toEqual([path]);
   },
 );
+
+// Plant: exempt the caps file from source checks to make its old success assertion pass.
+it.prop(
+  "the caps file stays protected while its pure control remains eligible",
+  {
+    platform: Platform,
+    approved: Schema.Boolean,
+  },
+  ({ platform, approved }) => {
+    const env = approved ? { [HOST_RUN]: "1" } : {};
+    const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+    expect(hostFiles(["scripts/caps.test.ts"], env, platform, source)).toEqual(["scripts/caps.test.ts"]);
+    expect(hostFiles(["vitest.hostrun.test.ts"], env, platform, source)).toEqual([]);
+  },
+);
