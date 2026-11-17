@@ -78,17 +78,8 @@ describe("the quest brief's host commands", () => {
     });
   });
 
-  it("pinned: a command runs under the repo's Node through volta, since apps/fabrika names none of its own", () => {
-    expect(commandArgv("node e2e.ts", "26.13.0")).toEqual([
-      "volta",
-      "run",
-      "--node",
-      "26.13.0",
-      "sh",
-      "-c",
-      "node e2e.ts",
-    ]);
-    expect(commandArgv("node e2e.ts", null)).toEqual(["sh", "-c", "node e2e.ts"]);
+  it("pinned: a command's nonlogin shell keeps its prepared runtime PATH", () => {
+    expect(commandArgv("node e2e.ts")).toEqual(["sh", "-c", "node e2e.ts"]);
   });
 
   it("vector: the repo's Node is volta.node, else engines.node, and a range or no pin is none", () =>
@@ -119,6 +110,103 @@ describe("the quest brief's host commands", () => {
 });
 
 describe("the host step's outcomes", () => {
+  it("scenario: an explicit pin keeps direct and nested pnpm on that Node, even when the manifest differs", () =>
+    ran(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* temp;
+        const pin = process.versions.node;
+
+        for (const folder of ["current", "native", "shim", "old"]) {
+          yield* fs.makeDirectory(`${dir}/${folder}`);
+        }
+
+        yield* fs.symlink(process.execPath, `${dir}/current/node`);
+        yield* fs.writeFileString(`${dir}/package.json`, JSON.stringify({ volta: { node: "0.0.0" } }));
+
+        const scripts = {
+          "native/pnpm": '#!/bin/sh\nif [ "$1" = exec ]; then shift; fi\nexec "$@"\n',
+          "old/node": "#!/bin/sh\nprintf 'v0.0.0\\n'\n",
+          "shim/pnpm": `#!/bin/sh
+base=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+PATH="$base/old:$PATH"
+export PATH
+exec "$base/native/pnpm" "$@"
+`,
+          "shim/volta": `#!/bin/sh
+base=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+if [ "$1" = which ]; then printf '%s\\n' "$base/native/pnpm"; exit; fi
+shift
+shift
+pin=$1
+shift
+printf '%s\\n' "$pin" >> "$base/discovery"
+if [ "$1" = node ]; then printf '%s\\nv%s\\n' "$base/current/node" "$pin"; exit; fi
+PATH="$base/current:$PATH"
+export PATH
+exec "$@"
+`,
+        };
+
+        for (const [name, text] of Object.entries(scripts)) {
+          yield* fs.writeFileString(`${dir}/${name}`, text);
+          yield* fs.chmod(`${dir}/${name}`, 0o755);
+        }
+
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            const before = { PATH: process.env.PATH, HOST_RUNTIME_REMOVE: process.env.HOST_RUNTIME_REMOVE };
+            process.env.PATH = `${dir}/shim:${before.PATH ?? ""}`;
+            process.env.HOST_RUNTIME_REMOVE = "fixture parent";
+
+            return before;
+          }),
+          (before) =>
+            Effect.sync(() => {
+              for (const [key, value] of Object.entries(before)) {
+                if (value === undefined) {
+                  delete process.env[key];
+                } else {
+                  process.env[key] = value;
+                }
+              }
+            }),
+        );
+        const log = `${dir}/log`;
+        const probe = "node --version; pnpm exec node --version; pnpm exec sh -c 'pnpm exec node --version'";
+        const env = { ...hostEnv(dir), HOST_RUNTIME_REMOVE: undefined, HOST_RUNTIME_KEEP: "fixture child" };
+
+        const result = yield* runCommands(
+          dir,
+          [
+            probe,
+            `node -e 'console.log(JSON.stringify({keep:process.env.HOST_RUNTIME_KEEP,removed:process.env.HOST_RUNTIME_REMOVE===undefined,home:process.env.FABRIKA_HOME,tmp:process.env.TMPDIR,foreground:process.env.FABRIKA_FOREGROUND===undefined,paid:process.env.TYPESAFE_API_KEY===undefined}))'`,
+          ],
+          env,
+          log,
+          1,
+          pin,
+        );
+
+        expect(result).toBeNull();
+        const text = yield* fs.readFileString(log);
+        // The fake old node reports 0.0.0; only the current-node symlink runs the real runtime.
+        expect(text.split("\n").filter((line) => /^v\d/.test(line))).toEqual(Array(3).fill(`v${pin}`));
+        expect(yield* fs.readFileString(`${dir}/discovery`)).toBe(`${pin}\n`);
+        const output = text.split("\n").find((line) => line.startsWith("{"));
+        expect(output).toBe(
+          JSON.stringify({
+            keep: "fixture child",
+            removed: true,
+            home: `${dir}/home`,
+            tmp: dir,
+            foreground: true,
+            paid: true,
+          }),
+        );
+      }),
+    ));
+
   it("scenario: a quest brief with no host section is a skip that touches nothing, since most quests have no window", () =>
     ran(
       Effect.gen(function* () {
@@ -198,6 +286,52 @@ describe("the host step's outcomes", () => {
         expect(outcome).toMatchObject({ _tag: "send", to: "build" });
         expect(outcome?.reason).toContain("0.002-minute limit");
         expect(outcome?.reason).toContain("begun");
+      }),
+    ));
+
+  it("scenario: stalled runtime discovery shares the first command's deadline and is reaped before returning", () =>
+    ran(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* temp;
+        yield* fs.writeFileString(`${dir}/volta`, '#!/bin/sh\nprintf "%s\\n" "$$" > discovery-pid\nexec sleep 30\n');
+        yield* fs.chmod(`${dir}/volta`, 0o755);
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            const before = process.env.PATH;
+            process.env.PATH = `${dir}:${before ?? ""}`;
+
+            return before;
+          }),
+          (before) =>
+            Effect.sync(() => {
+              if (before === undefined) {
+                delete process.env.PATH;
+              } else {
+                process.env.PATH = before;
+              }
+            }),
+        );
+        const started = Date.now();
+
+        // Same 120 ms command budget, 30 s stand-in and cleanup bound as the timeout law above.
+        const outcome = yield* runCommands(
+          dir,
+          ["touch ran", "touch later"],
+          {},
+          `${dir}/log`,
+          0.002,
+          process.versions.node,
+        );
+
+        expect(Date.now() - started).toBeLessThan(10_000);
+        expect(outcome).toMatchObject({ _tag: "send", to: "build" });
+        expect(outcome?.reason).toContain("0.002-minute limit");
+        expect(yield* fs.exists(`${dir}/ran`)).toBe(false);
+        expect(yield* fs.exists(`${dir}/later`)).toBe(false);
+        const pid = Number((yield* fs.readFileString(`${dir}/discovery-pid`)).trim());
+        expect(Number.isInteger(pid) && pid > 0).toBe(true);
+        expect(() => process.kill(pid, 0)).toThrow(/ESRCH/);
       }),
     ));
 });
