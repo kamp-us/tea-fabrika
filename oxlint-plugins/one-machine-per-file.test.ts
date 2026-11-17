@@ -445,6 +445,105 @@ it("scenario: L5 each real file copy refuses one added second export", async () 
   }
 });
 
+const lintFailure = (out: ReturnType<typeof spawnSync>): string => {
+  // Only known error text and diagnostic fields leave the child. Source excerpts stay private.
+  const text = (value: string) => {
+    const sample = value.length > 4096 ? `${value.slice(0, 2048)}\n[omitted]\n${value.slice(-2048)}` : value;
+
+    return {
+      length: value.length,
+      truncated: value.length > 4096,
+      codes: [
+        "ENOENT",
+        "EACCES",
+        "ENOTDIR",
+        "EISDIR",
+        "ENOBUFS",
+        "ETIMEDOUT",
+        "ERR_MODULE_NOT_FOUND",
+        "ERR_PACKAGE_PATH_NOT_EXPORTED",
+        "ERR_UNKNOWN_FILE_EXTENSION",
+        "ERR_INVALID_MODULE_SPECIFIER",
+      ].filter((code) => new RegExp(`\\b${code}\\b`).test(sample)),
+      reasons: [
+        "Failed to parse oxlint configuration file",
+        "Failed to load JS plugin",
+        "Cannot find package",
+        "Cannot find module",
+        "No such file or directory",
+        "Permission denied",
+        "Failed to open file",
+        "Failed to read file",
+        "Unexpected token",
+        "Expected",
+        "at most one tea machine",
+        "must be defined in this file",
+        "no input or output imports",
+      ].filter((reason) => sample.includes(reason)),
+      redacted: value.length > 0,
+    };
+  };
+
+  const location = (file: string | undefined) =>
+    typeof file === "string" &&
+    /^(?:next|\.agents)\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_.-]+\.[cm]?[jt]sx?$/.test(file) &&
+    !/(?:^|\/)[^/]*(?:tmp|temp|plant|scratch)[^/]*(?:\/|$)/i.test(file)
+      ? file.slice(0, 160)
+      : "[redacted path]";
+
+  const position = (n: number | undefined) => (Number.isSafeInteger(n) && n !== undefined && n >= 0 ? n : null);
+  const stdout = out.stdout?.toString() ?? "";
+  const stderr = out.stderr?.toString() ?? "";
+
+  let json = null;
+
+  try {
+    const report: {
+      number_of_files?: number;
+      diagnostics?: Array<{
+        code?: string;
+        filename?: string;
+        message?: string;
+        severity?: string;
+        labels?: Array<{ span?: { line?: number; column?: number } }>;
+      }>;
+    } | null = JSON.parse(stdout);
+
+    if (Array.isArray(report?.diagnostics)) {
+      json = {
+        files: position(report.number_of_files),
+        count: report.diagnostics.length,
+        diagnostics: report.diagnostics.slice(0, 4).map((d) => ({
+          code: d?.code === CODE || d?.code === "oxc" ? d.code : "[other diagnostic]",
+          file: location(d?.filename),
+          line: position(d?.labels?.[0]?.span?.line),
+          column: position(d?.labels?.[0]?.span?.column),
+          severity: d?.severity === "error" || d?.severity === "warning" ? d.severity : null,
+          message: text(typeof d?.message === "string" ? d.message : ""),
+        })),
+      };
+    }
+  } catch {
+    // A non-JSON child failure still keeps its recognized error codes and reasons below.
+  }
+
+  return JSON.stringify({
+    status: out.status,
+    signal: out.signal,
+    error:
+      out.error === undefined
+        ? null
+        : text(
+            `${out.error.name} ${out.error.message} ${
+              "code" in out.error && typeof out.error.code === "string" ? out.error.code : ""
+            }`,
+          ),
+    json,
+    stdout: text(stdout),
+    stderr: text(stderr),
+  });
+};
+
 it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", () => {
   // L4 checks the real config's scope. This count runs only this rule, with the same fixture exemptions.
   const root = join(import.meta.dirname, "..");
@@ -487,8 +586,9 @@ it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", ()
       { cwd: root, encoding: "utf8", maxBuffer: 2 ** 30, timeout: 120_000 },
     );
 
-    expect(out.error).toBeUndefined();
-    expect(out.status).toBe(0);
+    const failure = out.error !== undefined || out.status !== 0 ? lintFailure(out) : undefined;
+    expect(out.error === undefined, failure).toBe(true);
+    expect(out.status, failure).toBe(0);
 
     const report: { number_of_files: number; diagnostics: Array<{ code?: string; filename: string }> } = JSON.parse(
       out.stdout,
