@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds 0042, 0054, 0555, 0574 and 0579; body f369090cd257
 Plancheck-Version: 3
 
 # Plan: the `cloudflare:workers` and Alchemy mocks go, so three folders' `vi` locks can land, in next/ (ticket 1067)
@@ -35,8 +35,13 @@ was read before any change to it is proposed). It resolves the finding
 - **Slice 4's live layer may not build from the brain's binding yet (70%).** It wraps Alchemy's
   `Cloudflare.WorkerLoader`, but the brain still receives `env.LOADER` as a raw binding until
   0042's port moves it onto Alchemy's Worker. If Alchemy's service cannot be made from that binding
-  today, the fallback is one marked edge: `IsolatesAlchemy.ts` wraps the raw binding in that one
-  line, under 0042's rule for a gap, and the law W1 is unchanged, since it sees only `Isolates`.
+  today, the tests step first reads the installed package's decisions, patterns or docs and source
+  for its own answer (0054). A proved gap follows 0042: patch it locally and file the upstream
+  issue with its repro the same day. Building Alchemy's loader from this binding is not one of
+  0042's six unreported gaps. Only if a patch cannot fit in reasonable size may a direct use stay,
+  on one marked edge line with the reason and issue link. A needed patch or edge returns to the
+  lead as an unsigned plan amendment with its files, laws and proof before construction starts.
+  W1 still sees only `Isolates`; a failed attempt does not authorize a raw-binding workaround.
 - **Slice 2's real Alchemy deploy over test providers has not run (65%).** The two Alchemy laws
   move from module mocks to Alchemy's real `Stack` and `deploy` with `inMemoryState()` and test
   providers made with `Provider.effect`. Each name is in beta.85's source (below), but nothing here
@@ -54,9 +59,11 @@ was read before any change to it is proposed). It resolves the finding
 - **The app folder still is not at zero after this plan alone.** PR 1366 (merged 2026-11-16 as
   `e3f72bf`) added `runtime-quotas.laws.test.ts` with three `vi.mock` calls. One is a
   `cloudflare:workers` mock and is this plan's. The other two, `./table.ts` at `:45` and
-  `virtual:fabrika-built` at `:48`, are the kind the app-src plan's slice 5 fixes, but they came
-  after its count at `0683861`, so its plan does not list them. A finding row below hands them to
-  that slice. A6 and A8 wait for both.
+  `virtual:fabrika-built` at `:48`, came after the app-src plan's count at `0683861`. Its current
+  slice 5 now lists both in the `runtime-quotas.laws.test.ts` files row, in
+  [PR 1491 at `4a17276e`](https://github.com/kamp-us/tea-fabrika/blob/4a17276e01fcf34dde840892ab12a9d329e920cc/docs/plan/quests/mock-app-src-PLAN.md#L673).
+  The finding below keeps the original evidence and records that ownership. A6 and A8 still wait
+  for those two mocks to be removed; a plan row is not implementation proof.
 
 ## What changes, in one paragraph
 
@@ -183,14 +190,14 @@ output keeps the import for workerd to answer, as it does today through `box.ts`
  * extends. It has no members, so a box that starts reading `this.ctx` or `this.env` reads undefined
  * in a law, and the law that needs them gives them.
  *
- * @stability unstable
  * @category constructors
  */
 export class Base {}
 ```
 
 It lives in the test package because 0557 puts every fake of a Cloudflare object there. It stays a
-class, not `Stub.make`, because `extends` needs a constructor.
+class, not `Stub.make`, because `extends` needs a constructor. Its doc block carries no
+`@stability` tag before the first release, following 0574.
 
 ### Slice 2: the stack takes its providers and its state
 
@@ -301,8 +308,9 @@ const isolates = Recorder.layer(Isolates, { open: (_key, _code) => Effect.succee
 `runtime.ts:984` and `:2289` and `control.ts:69`, provide `IsolatesAlchemy.layer` over Alchemy's
 `Cloudflare.WorkerLoader` for `env.LOADER`. Call, 70%. The doubt is whether Alchemy's
 `WorkerLoader` can be built from the brain's `env.LOADER` today, before 0042's port moves the
-brain onto Alchemy's Worker. If not, the live layer wraps the raw binding at that one edge with its
-marked line, and the law is unchanged.
+brain onto Alchemy's Worker. If not, follow the source read, local patch and upstream issue steps
+in "Doubts" under 0042 and 0054. A direct edge needs proof that a patch cannot fit in reasonable
+size, its reason and issue link, and the lead's approved plan amendment. The law is unchanged.
 
 **What else it touches.** Five other test files call `workerLoader` with a hand-made platform
 object: `cloudflare/index.test.ts:18`, `cloudflare/tail.test.ts:148`,
@@ -327,15 +335,23 @@ plan counts them. With them moved, `index.ts` names no raw platform type.
 
 | Law | Kind | Generator | What it holds | Plant | Where |
 |---|---|---|---|---|---|
-| C1. A program box extends the base it is handed and answers `describe`, `init` and `step` the same as before, for any program the generator makes; 6 runs fast, 20 full | test | fc.record: a program name, a state version and a list of cmd types, as `runner-reply.laws.test.ts`'s generator makes them, 6 runs fast and 20 runs full | `Object.getPrototypeOf(Box.prototype)` is the handed base's prototype, and the three answers equal the ones the law computes from the program | (a) `box.ts` goes back to `import { WorkerEntrypoint } from "cloudflare:workers"` and extends it: the file fails to load in Node, red; (b) `programBox` extends a fresh `class {}` of its own: the prototype check is red | next/packages/libfabrika/src/cloudflare/box.test.ts |
+| C1. A program box extends the base it is handed and answers `describe`, `init` and `step` the same as before, for any program the generator makes; 6 runs fast, 20 full | test | Effect Arbitrary: ProgramBoxInput | `Object.getPrototypeOf(Box.prototype)` is the handed base's prototype, and the three answers equal the ones the law computes from the program | (a) `box.ts` goes back to `import { WorkerEntrypoint } from "cloudflare:workers"` and extends it: the file fails to load in Node, red; (b) `programBox` extends a fresh `class {}` of its own: the prototype check is red | next/packages/libfabrika/src/cloudflare/box.test.ts |
 | C2. The generated program entry hands the platform's own `WorkerEntrypoint` to `programBox` | test | scenario: the one counter program build-one-file already bundles, its linked `cloudflare:workers` class as the platform's | the default export's prototype chain reaches the linked class; the existing checks of the run are kept | the generated line hands `class {}` in place of `WorkerEntrypoint`: red | next/packages/libfabrika/src/node/build/build-one-file.integration.test.ts |
 | C3. On the real runtime, a copied file loads programs and they answer over Worker Loader RPC, as today | test | scenario: the existing "p33 complete output and T10 recovery" law, unchanged | the default export of each program isolate is a real `WorkerEntrypoint`: a box that is not one fails every RPC call | the generated line hands `class {}`: the law's first program call fails, red | next/apps/fabrika/src/instance-one-file.integration.test.ts |
 | C4. Every law of the twelve files keeps its checks with the `vi.mock("cloudflare:workers")` line gone; the eight that call `programBox` hand it `Stub.Base` | test | scenario: each file's own laws, unchanged, at their own run counts | each file loads and passes as it did with the mock | none of its own: C1's plant (a) is what reddens all eight at once | next/packages/libfabrika/src/cloudflare/runner-reply.laws.test.ts |
-| S1. The stack hands Alchemy the completed brain file, no second bundle, and an env with no code that is under 5 KB per setting; a setting at or over 5 KB is refused before any deploy, on the real `Stack` over `inMemoryState()` and the test providers | test | fc.integer: the founder name's length, 1600 to 1800, with fc.boolean for a multibyte name, as today, 3 runs | the props the test Worker provider was asked to create: `main` is the built brain, `bundle` is false, each env value is a binding or a text under the limit and holds no program source | (a) `bundle: true` in `alchemy.run.ts`: red; (b) the program source added to `env`: red; (c) `stack` reads `Cloudflare.providers()` past `layers`: the law reaches a real provider and fails | next/apps/fabrika/src/instance-one-file.integration.test.ts |
+| S1. The stack hands Alchemy the completed brain file, no second bundle, and an env with no code that is under 5 KB per setting; a setting at or over 5 KB is refused before any deploy, on the real `Stack` over `inMemoryState()` and the test providers | test | Effect Arbitrary: StackSettingInput | the props the test Worker provider was asked to create: `main` is the built brain, `bundle` is false, each env value is a binding or a text under the limit and holds no program source | (a) `bundle: true` in `alchemy.run.ts`: red; (b) the program source added to `env`: red; (c) `stack` reads `Cloudflare.providers()` past `layers`: the law reaches a real provider and fails | next/apps/fabrika/src/instance-one-file.integration.test.ts |
 | S2. `startDev` deploys through Alchemy's real `deploy`, and its laws (the quota start, the outbox link, the two runs on one home) hold as today, with the pid and the control port coming from the test Worker provider | test | scenario: the three existing laws of the file, unchanged, at their own run counts | the start event with pid 27001 reaches `startDev`'s lifecycle queue, and the control plugin starts on 27002 | `startDev` reads `StackLayers.defaultValue()` past the reference: the law reaches the real local runtime and fails on `unused.mjs`, red | next/apps/fabrika/src/local-instance.integration.test.ts |
-| W1 (slice 4). Law A5 keeps every check with no spy: the loader is asked for `<hash>/<process>` by the whole qualified name, with the recorded bytes and hash, an empty env and a null outbound, and an unknown name fails typed `no_program`; `Isolates.open` is recorded through `Recorder`, and no cast or spy is in the file | test | fc.string: the source, with fc.uuid for the process and fc.string for the missing name, as today, 3 runs | the recorded `open` calls and the typed failure, with the law typed by the monomorphic `Isolates` contract, so no generic reaches the law | (a) `workerLoader` answers the bare short name: the `no_program` check is red; (b) `workerLoader` loads with `env: { CODE: source }`: the recorded config check is red; (c) `workerLoader` calls `open` twice for one load: `Recorder.calls` has two entries, red | next/apps/fabrika/src/instance-one-file.integration.test.ts |
+| W1 (slice 4). Law A5 keeps every check with no spy: the loader is asked for `<hash>/<process>` by the whole qualified name, with the recorded bytes and hash, an empty env and a null outbound, and an unknown name fails typed `no_program`; `Isolates.open` is recorded through `Recorder`, and no cast or spy is in the file | test | Effect Arbitrary: LoaderInput | the recorded `open` calls and the typed failure, with the law typed by the monomorphic `Isolates` contract, so no generic reaches the law | (a) `workerLoader` answers the bare short name: the `no_program` check is red; (b) `workerLoader` loads with `env: { CODE: source }`: the recorded config check is red; (c) `workerLoader` calls `open` twice for one load: `Recorder.calls` has two entries, red | next/apps/fabrika/src/instance-one-file.integration.test.ts |
 | M11 (cloudflare), M1 (node/dev), A6 and A8 (app src). Each folder's `vi` lock, as its own plan writes it, lands whole the day the folder is at zero | lint | lint | the five-method block of `vitest/no-restricted-vi-methods` for the folder's glob, with node's `VI_METHODS` plants run in its paths (node's M1, ruling 2 of 2026-11-15); A8: `pnpm lint` passes with the lock an error and no disable line names it | each plan's own plant: drop `mock` from the block and the planted `vi.mock("x")` line in the folder is taken, red; put back one `vi.mock("cloudflare:workers")` and `pnpm lint` exits 1 | oxlint-plugins/plants.test.ts |
 
+- **Generated inputs (0411, 0579).** C1, S1 and W1 use `it.effect.prop` from the test package,
+  with Schemas as inputs. `ProgramBoxInput` is the law's Schema for a program name, state version
+  and list of cmd types, keeping the existing generator's bounds and cases, with 6 runs fast and
+  20 full. `StackSettingInput` is the law's Schema for an integer length from 1600 through 1800
+  and a multibyte boolean, keeping both `"a"` and `"雪"` names and 3 runs. `LoaderInput` is the
+  law's Schema for a source string, process UUID and missing-name string, keeping A5's existing
+  string bounds, missing-name cases and 3 runs. The Schema move keeps each law's old reach; it
+  does not narrow a bound to make it pass. None of these inputs needs a fast-check exception.
 - **Lint, type or test?** C1 to C4, S1 and S2 are tests: they hold what code does. The locks are
   lint. That `box.ts` names no platform module is held by C1's plant (a) for now; a lint rule for it
   is ticket 506's (0042), and this plan does not take it.
@@ -432,7 +448,7 @@ share files with, so no folder's lock lands with a gap:
 5. **Slice 3** (the locks): the tests step writes each folder's lock block, as its own plan has it,
    the day its folder is at zero, and runs the plants; a review reads it. The cloudflare folder and
    node/dev are at zero after slice 1 and their own sweep slices. The app folder is at zero only
-   after slices 2 and 4 and the two PR 1366 hits the finding below hands to app-src slice 5. No block lands
+   after slices 2 and 4 and the two PR 1366 hits already assigned to app-src slice 5. No block lands
    for a folder that is not at zero, and no block lists files (0524).
 
 PR 1366 merged on 2026-11-16, so nothing here waits on it.
@@ -453,7 +469,7 @@ PR 1366 merged on 2026-11-16, so nothing here waits on it.
 
 ## Validation
 
-The tests and build steps run, under `nice -n 15 pnpm exec vitest run --maxWorkers=3`, the narrow
+The tests and build steps run, under `nice -n 19 pnpm exec vitest run --maxWorkers=1`, the narrow
 paths of every test file in the table, the `.integration.` laws among them (C2, C3, S1, S2, which
 the guard allows in a cloud box since PR 1508), and `pnpm lint` with
 `NODE_OPTIONS=--max-old-space-size=6144`. The lead runs the wider pass and the one type check.
@@ -508,6 +524,12 @@ Each choice here only picks how code does what 0042 and 0555 already say: the pl
 through Alchemy's own shape, a stand-in from the code's design, and each lock whole at zero.
 
 ## Findings
+
+Status checked 2026-11-16: the original finding below is now covered by the app-src plan's slice 5,
+whose `runtime-quotas.laws.test.ts` row names removal of both table mocks in
+[PR 1491 at `4a17276e`](https://github.com/kamp-us/tea-fabrika/blob/4a17276e01fcf34dde840892ab12a9d329e920cc/docs/plan/quests/mock-app-src-PLAN.md#L673).
+Its original count, commit, wording and evidence remain below unchanged. This records plan
+ownership, not a claim that the mocks are gone or that A6 and A8 may land yet.
 
 ```json
 {"_tag": "finding", "id": "2026-11-16-runtime-quotas-mocks-not-in-app-sweep", "date": "2026-11-16", "by": "plan", "model": null, "rule": "rule_break", "location": {"path": "next/apps/fabrika/src/runtime-quotas.laws.test.ts", "line": 45}, "says": "In next/, runtime-quotas.laws.test.ts, added by PR 1366 after the app-src mock plan counted the folder, calls vi.mock(\"./table.ts\") at :45 and vi.mock(\"virtual:fabrika-built\") at :48, which 0555 bans; the app-src plan's slice 5 fixes that kind of hit but does not list these two, so the app folder cannot reach zero and its lock (A6, A8) cannot land.", "proof": "git grep -o -E 'vi\\.mock\\(' over next/apps/fabrika/src: 25 at 0683861, 28 at origin/main b510ed2; the three new ones are runtime-quotas.laws.test.ts:45, :47 and :48, and :47 is the cloudflare:workers mock the alchemy-mocks plan takes.", "cost": "The app folder keeps no vi lock after the sweep until these two go, so a new vi.fn or vi.spyOn can land there.", "head": "b510ed2", "ticket": null, "pr": null}
