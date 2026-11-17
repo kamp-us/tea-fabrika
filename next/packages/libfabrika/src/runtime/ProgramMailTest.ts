@@ -17,31 +17,34 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import { arbGuidedSequence, propertyInvariant, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import {
-  Arbitrary,
-  ByteSize,
-  Cause,
-  Clock,
-  Console,
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Formatter,
-  Layer,
-  Logger,
-  Option,
-  References,
-  Result,
-  Schema,
-  Scope,
-  Stream,
-  Tracer,
-} from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as ByteSize from "effect/ByteSize";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as Console from "effect/Console";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import * as References from "effect/References";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import * as Arr from "effect/Array";
 import * as Str from "effect/String";
-import { TestClock } from "effect/testing";
+import * as Rec from "effect/Record";
+import * as TestClock from "effect/testing/TestClock";
+
+
+
+
 import * as fc from "fast-check";
 import { Appended, InputId, Writer } from "../coordination/index.ts";
 import { INPUT_BYTES } from "../processes/Children.ts";
@@ -143,8 +146,8 @@ const requesterName = (k: Pair) => `requester:${k}`;
 
 const responderName = (k: Pair) => `responder:${k}`;
 
-const REQUESTERS = Object.fromEntries(
-  Arr.map(PAIRS, (k) => [k, mailRequester({ self: requesterName(k), peer: responderName(k) })]),
+const REQUESTERS = Rec.fromEntries(
+  Arr.map(PAIRS, (k) => [String(k), mailRequester({ self: requesterName(k), peer: responderName(k) })]),
 ) as Record<Pair, ReturnType<typeof mailRequester>>;
 
 const TimerModel = Schema.Struct({
@@ -216,14 +219,14 @@ const alarmPolicy = {
 };
 
 const PROGRAMS: Record<string, unknown> = {
-  ...Object.fromEntries(Arr.map(PAIRS, (k) => [REQUESTERS[k].name, REQUESTERS[k]])),
+  ...Rec.fromEntries(Arr.map(PAIRS, (k) => [REQUESTERS[k].name, REQUESTERS[k]])),
   [mailResponder.name]: mailResponder,
   [timerProgram.name]: timerProgram,
 };
 
 /** The host's closed grant: each requester reaches its own responder and a missing name; each
  *  responder reaches its own requester. */
-const GRANTS: Grants = Object.fromEntries(
+const GRANTS: Grants = Rec.fromEntries(
   Arr.flatMap(PAIRS, (k) => [
     [requesterName(k), [responderName(k), GHOST]],
     [responderName(k), [requesterName(k)]],
@@ -520,7 +523,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
           cap: 16_384,
           grants: {
             ...GRANTS,
-            ...Object.fromEntries(
+            ...Rec.fromEntries(
               Arr.map(world.records?.secrets ?? [], (secret) => [`decoy-${secret}`, [`unused-${secret}`]]),
             ),
           },

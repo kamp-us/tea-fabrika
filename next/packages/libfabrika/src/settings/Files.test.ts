@@ -17,9 +17,17 @@
 //   it refuses an unknown key and a key of the other file. A file whose scope holds no
 //   declaration refuses every key: Effect's empty `Schema.Struct({})` would accept any object.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Exit, Formatter, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as ByteSize from "effect/ByteSize";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Schema from "effect/Schema";
+import * as Digest from "effect/crypto/Digest";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
@@ -407,7 +415,7 @@ type Declared = typeof declared extends fc.Arbitrary<infer D> ? D : never;
 
 const grouped = (ds: Declared) =>
   Setting.group(
-    Object.fromEntries(
+    Rec.fromEntries(
       ds.map((d, n) => [
         `s${n}`,
         Setting.make(`${d.table}.${d.key}`, {
@@ -487,7 +495,7 @@ describe("T730 L2, a file's schema keeps omitted tables and empty files valid, a
           }
 
           // A table that holds only the other file's keys is unknown to this file, even empty.
-          for (const table of Object.keys(tree)) {
+          for (const table of Rec.keys(tree)) {
             if (ds.every((d) => d.table !== table || !d.scope.includes(doc.file))) {
               ok = false;
             }

@@ -1,9 +1,20 @@
 // T753, next/. Shared start laws take their storage driver from the calling module (0062).
 import { describe, expect, it } from "@effect/vitest";
-import { type Config, DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
-import { Digest } from "effect/crypto";
-import { Hex } from "effect/encoding";
+import type * as Config from "effect/Config";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Digest from "effect/crypto/Digest";
+import * as Hex from "effect/encoding/Hex";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
+
 import * as fc from "fast-check";
 import { property } from "../Testing.test-support.ts";
 import * as Declarations from "./Declarations.ts";
@@ -98,10 +109,10 @@ export const rateLimit = { limit: 100_000, window: 60_000 };
 
 /** Each declaration's default value, by its key, and the default origin, by its path. */
 const defaults = {
-  values: Object.fromEntries(
-    Object.entries(Declarations.all.settings).map(([key, d]) => [key, d.default]),
+  values: Rec.fromEntries(
+    Rec.toEntries(Declarations.all.settings).map(([key, d]) => [key, d.default]),
   ) as Config.Success<typeof Declarations.all>,
-  origins: Object.fromEntries(Declarations.all.declarations.map((d) => [d.path, Origin.cases.default.make({})])),
+  origins: Rec.fromEntries(Declarations.all.declarations.map((d) => [d.path, Origin.cases.default.make({})])),
 };
 
 /** Declared values a fixture sets in place of their defaults, by each setting's key. */
@@ -109,8 +120,8 @@ export type Values = Partial<Config.Success<typeof Declarations.all>>;
 
 /** A flag origin for each value a fixture sets, so the snapshot never says a chosen value is a default. */
 const chosen = (values: Values) =>
-  Object.fromEntries(
-    Object.keys(values).map((key) => {
+  Rec.fromEntries(
+    Rec.keys<string, unknown>(values).map((key) => {
       const path = Declarations.all.settings[key as keyof Values].path;
       return [path, Origin.cases.flag.make({ name: `--${path}` })];
     }),
@@ -266,7 +277,7 @@ export const exclude = (output: unknown, secret: string) => {
         visit(new TextDecoder().decode(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)));
       }
 
-      for (const [key, item] of Object.entries(value)) {
+      for (const [key, item] of Rec.toEntries(value)) {
         visit(key);
         visit(item);
       }

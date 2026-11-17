@@ -15,24 +15,25 @@
 // product's fold.
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import {
-  Cause,
-  Context,
-  DateTime,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Logger,
-  Option,
-  Result,
-  Schema,
-  type Scope,
-  Stream,
-  Tracer,
-} from "effect";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -175,7 +176,7 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
   const tables = sql
     .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     .map((row) => String(row.name));
-  return Object.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
+  return Rec.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
 };
 
 const body = (entry: Entry): Record<string, unknown> =>
@@ -297,8 +298,8 @@ const reorder = (value: unknown): unknown =>
   Array.isArray(value)
     ? value.map(reorder)
     : typeof value === "object" && value !== null
-      ? Object.fromEntries(
-          Object.entries(value)
+      ? Rec.fromEntries(
+          Rec.toEntries(value)
             .reverse()
             .map(([k, v]) => [k, reorder(v)]),
         )
@@ -309,8 +310,8 @@ const sorted = (value: unknown): unknown =>
   Array.isArray(value)
     ? value.map(sorted)
     : typeof value === "object" && value !== null
-      ? Object.fromEntries(
-          Object.entries(value)
+      ? Rec.fromEntries(
+          Rec.toEntries(value)
             .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
             .map(([k, v]) => [k, sorted(v)]),
         )

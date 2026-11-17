@@ -7,9 +7,23 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Formatter, Layer, Schema, Scope, Stream } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import * as Arr from "effect/Array";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
+
 import { Writer } from "../access/SessionManager.ts";
 import { SinkError } from "../coordination/index.ts";
 import { InputId } from "../Id.ts";
@@ -199,7 +213,7 @@ const replyRows = (sql: Sql, id: string) =>
     ),
     (table) =>
       Arr.flatMap(sql.exec(`SELECT * FROM "${table}"`), (row) =>
-        Arr.flatMap(Object.entries(row), ([column, value]) =>
+        Arr.flatMap(Rec.toEntries(row), ([column, value]) =>
           typeof value === "string" && parsed(value)?.["id"] === id ? [{ table, column, value }] : [],
         ),
       ),
@@ -216,7 +230,7 @@ const replyCells = (sql: Sql): ReadonlyArray<string> =>
         ),
         (table) => !KNOWN.has(table),
       ),
-      (table) => Arr.flatMap(sql.exec(`SELECT * FROM "${table}"`), (row) => Object.values(row)),
+      (table) => Arr.flatMap(sql.exec(`SELECT * FROM "${table}"`), (row) => Rec.values(row)),
     ),
     (cell): cell is string => typeof cell === "string",
   );
@@ -375,13 +389,13 @@ const walk = (
     const expected = (patchesNow: number) => ({
       letters: accepted,
       patches: patchesNow,
-      view: { notes: Object.fromEntries([...versions].sort(([a], [b]) => Str.localeCompare(b)(a))) },
+      view: { notes: Rec.fromEntries([...versions].sort(([a], [b]) => Str.localeCompare(b)(a))) },
       rev: accepted,
     });
 
     const sorted = (view: unknown) => {
       const notes = (view as Model).notes;
-      return { notes: Object.fromEntries(Object.entries(notes).sort(([a], [b]) => Str.localeCompare(b)(a))) };
+      return { notes: Rec.fromEntries(Rec.toEntries(notes).sort(([a], [b]) => Str.localeCompare(b)(a))) };
     };
 
     const letter = (note: string, base: number, body: string, by = { key: "SHA256:writer", for: "person-writer" }) =>
@@ -585,7 +599,7 @@ const walk = (
             ? `${Str.slice(0, -1)(value)}${step.secret}`
             : kind === "missing"
               ? Formatter.formatJson(
-                  Object.fromEntries(Arr.filter(Object.entries(json), ([f]) => f !== fields[n % fields.length])),
+                  Rec.fromEntries(Arr.filter(Rec.toEntries(json), ([f]) => f !== fields[n % fields.length])),
                 )
               : kind === "key"
                 ? Formatter.formatJson({ ...json, id: `${prior.letter.id}-other` })

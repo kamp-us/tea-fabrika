@@ -4,10 +4,19 @@
  * the RPC as checked data.
  */
 import { type AnyCmdDef, type Tagged } from "@demlik/tea";
-import { Cause, Effect, Option, Result, Schema } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Str from "effect/String";
+
+
+
+
 import * as Audit from "./Audit.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
 import { Admission, type Input, ProgramDown, stepper, Step, type Prepared, type Stepper } from "./Program.ts";
@@ -49,7 +58,7 @@ export const ExecutionFailure = Schema.TaggedStruct("ProgramDown", Failure);
 /** A program's own throw rides in deletable content; a cause the runtime kept for diagnosis,
  *  which may hold the input that failed, never leaves memory. */
 const shown = (error: ProgramDown): unknown =>
-  !Object.hasOwn(error, "cause")
+  !("cause" in error)
     ? error
     : error.error === "ProgramDown"
       ? new ProgramDown({ reason: error.reason, error: error.error })
@@ -189,7 +198,7 @@ const encodeAnswer = (schema: unknown, value: unknown): Schema.Json => {
 const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean => {
   const typed = Schema.decodeUnknownOption(Typed)(m);
 
-  if (Option.isNone(typed) || !Object.hasOwn(inputs, typed.value.type)) {
+  if (Option.isNone(typed) || !Rec.has(inputs, typed.value.type)) {
     return false;
   }
 

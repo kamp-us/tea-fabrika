@@ -26,9 +26,20 @@ import { makeRequestEffect } from "@alchemy.run/cloudflare/Workers/HttpServer";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { describe, expect } from "@effect/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Context, Effect, Formatter, Layer, Option, type Scope, Struct } from "effect";
-import { HttpClientRequest, HttpClientResponse } from "effect/http";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import type * as Scope from "effect/Scope";
+import * as Struct from "effect/Struct";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
@@ -121,7 +132,7 @@ const damaged = (
   }
 
   if (recipe._tag === "missing") {
-    const keys = Object.keys(good);
+    const keys = Rec.keys(good);
     const { [keys[recipe.pick % keys.length]!]: _dropped, ...rest } = good;
     return JSON.stringify(rest);
   }

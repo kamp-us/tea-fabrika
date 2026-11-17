@@ -10,8 +10,21 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
-import { TestClock } from "effect/testing";
 import * as Tracer from "effect/Tracer";
+import * as Rec from "effect/Record";
+import * as TestClock from "effect/testing/TestClock";
+
+
+
+
+
+
+
+
+
+
+
+
 import * as Id from "../Id.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
@@ -122,7 +135,7 @@ const leakFree = (rows: ReadonlyArray<SpanRow>, marks: ReadonlyArray<string>) =>
       expect(text, row.name).not.toContain(mark);
     }
 
-    for (const value of Object.values(row.attributes)) {
+    for (const value of Rec.values(row.attributes)) {
       if (typeof value === "string") {
         expect(value.length, row.name).toBeLessThanOrEqual(128);
       }

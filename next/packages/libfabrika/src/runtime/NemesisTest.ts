@@ -2,10 +2,21 @@
 // The tests step's field row records the failing plants for all nine laws (0093).
 // Answer letters, shown program state and URLs belong to later slices.
 import { describe, expect, it } from "@effect/vitest";
-import type { Scope } from "effect";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
+import type * as Scope from "effect/Scope";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
+
 import { expectTypeOf } from "vitest";
 import { inbox } from "../processes/Mailbox.ts";
 import type { Sql } from "../Sql.ts";
@@ -441,7 +452,7 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
               records: own,
             };
 
-            for (const [name, output] of Object.entries(publicOutputs)) {
+            for (const [name, output] of Rec.toEntries(publicOutputs)) {
               for (const secret of [body, errorText, keyText]) {
                 noLeak(output, secret, name);
               }

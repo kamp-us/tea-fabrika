@@ -6,11 +6,18 @@
  * rewrite. A tag holds a name, an id, a number or a boolean. A failed span's message is never a
  * tag, only its record part's `content`, the one thing a person may delete.
  */
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
+
+
+
 import { ProcessId } from "../ProcessId.ts";
 
 /**
@@ -340,8 +347,8 @@ const cut = (text: string): string => {
  * @category constructors
  */
 export const short = (texts: Readonly<Record<string, string>>): Record<string, string | number> =>
-  Object.fromEntries(
-    Arr.flatMap(Object.entries(texts), ([key, text]) =>
+  Rec.fromEntries(
+    Arr.flatMap(Rec.toEntries(texts), ([key, text]) =>
       text.length <= MOST_CHARS
         ? [[key, text]]
         : [

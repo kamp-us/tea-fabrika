@@ -8,21 +8,22 @@
  * `storage`: let it crash. The sink's own calls end no span.
  */
 import { applyCell } from "@demlik/tea";
-import {
-  Cause,
-  Clock,
-  Context,
-  Effect,
-  Exit,
-  Layer,
-  Option,
-  Predicate,
-  Redacted,
-  Result,
-  Schema,
-  Tracer,
-} from "effect";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Tracer from "effect/Tracer";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
 import type { Sql } from "../Sql.ts";
 import type { Archive } from "./Archive.ts";
 import {
@@ -127,7 +128,7 @@ const findProcess = (span: Tracer.AnySpan): Option.Option<string> => {
 
 /** The largest numeric tag whose key ends in `.lag`, such as P6's `fab.ledger.lag`. */
 const largestLag = (tags: Readonly<Record<string, Tag>>): number | null => {
-  const lags = Object.entries(tags).flatMap(([key, value]) =>
+  const lags = Rec.toEntries(tags).flatMap(([key, value]) =>
     Str.endsWith(".lag")(key) && typeof value === "number" ? [value] : [],
   );
   return lags.length === 0 ? null : Math.max(...lags);
@@ -255,12 +256,12 @@ const ended = (span: Tracer.NativeSpan, endTime: bigint, exit: Exit.Exit<unknown
   const kept = span.events.map(([name, time, attributes]) => ({
     name,
     time,
-    ...keep(Object.entries(attributes)),
+    ...keep(Rec.toEntries(attributes)),
   }));
   const links = span.links.map(({ span: linked, attributes }) => ({
     traceId: linked.traceId,
     spanId: linked.spanId,
-    ...keep(Object.entries(attributes)),
+    ...keep(Rec.toEntries(attributes)),
   }));
   const dropped = [...kept, ...links].reduce((n, one) => n + one.dropped, own.dropped);
   const failure = Exit.isFailure(exit) ? Option.some(exit.cause) : Option.none();

@@ -2,11 +2,18 @@
  * View patches: the RFC 6902 operations that turn one JSON view into the next. A watcher gets the
  * whole view once, then a patch per step. Pure, and it never changes its inputs.
  */
-import { pipe } from "effect";
+import * as pipe from "effect/pipe";
 import * as Arr from "effect/Array";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
+
+
+
 
 /**
  * One RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs.
@@ -32,9 +39,9 @@ const same = (a: unknown, b: unknown): boolean => {
   }
 
   if (isPlain(a) && isPlain(b)) {
-    const keys = Object.keys(a);
+    const keys = Rec.keys(a);
     return (
-      keys.length === Object.keys(b).length && Arr.every(keys, (key) => Object.hasOwn(b, key) && same(a[key], b[key]))
+      keys.length === Rec.keys(b).length && Arr.every(keys, (key) => Rec.has(b, key) && same(a[key], b[key]))
     );
   }
 
@@ -65,16 +72,16 @@ const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>):
   }
 
   if (isPlain(before) && isPlain(after)) {
-    for (const key of Object.keys(before)) {
-      if (!Object.hasOwn(after, key)) {
+    for (const key of Rec.keys(before)) {
+      if (!Rec.has(after, key)) {
         out.push({ op: "remove", path: `${path}/${token(key)}` });
       }
     }
 
-    for (const [key, value] of Object.entries(after)) {
+    for (const [key, value] of Rec.toEntries(after)) {
       const at = `${path}/${token(key)}`;
 
-      if (Object.hasOwn(before, key)) {
+      if (Rec.has(before, key)) {
         walk(at, before[key], value, out);
       } else {
         out.push({ op: "add", path: at, value: structuredClone(value) });
@@ -165,7 +172,7 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
         }
 
         parent = parent[Number(part)] ?? null;
-      } else if (isPlain(parent) && Object.hasOwn(parent, part)) {
+      } else if (isPlain(parent) && Rec.has(parent, part)) {
         parent = parent[part];
       } else {
         return invalid();
@@ -189,7 +196,7 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
         parent[index] = structuredClone(op.value);
       }
     } else if (isPlain(parent)) {
-      if (op.op !== "add" && !Object.hasOwn(parent, key)) {
+      if (op.op !== "add" && !Rec.has(parent, key)) {
         return invalid();
       }
 

@@ -6,8 +6,14 @@
  * allows, in the same ledger turn.
  */
 import { applyCell } from "@demlik/tea";
-import { Equal, Option, Result, Schema } from "effect";
+import * as Equal from "effect/Equal";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
 import { LedgerError } from "../ledger/Ledger.ts";
 import type { LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
@@ -121,7 +127,7 @@ export const brainOnly = (write: { readonly stream: string; readonly id: string;
   Str.startsWith(`${PROCESSES}/`)(write.stream) ||
   Str.endsWith("/dead")(write.stream) ||
   write.tag === "dead" ||
-  Object.hasOwn(ProcessEvent.cases, write.tag) ||
+  Rec.has<string, unknown>(ProcessEvent.cases, write.tag) ||
   inSignalSpace(write.id) ||
   inNoticeSpace(write.id) ||
   inRunnerSpace(write.id);

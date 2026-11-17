@@ -8,7 +8,8 @@
 // never appear whole in the file's bytes. The folder it reads is never changed: a read-only open
 // may still write a `-shm` file, so it opens the copy, with `TestDatabase.open`, which sets nothing in it.
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Array as Arr, Effect, FileSystem, Formatter, Path, Schema, String as Str } from "effect";
+import { Array as Arr, Effect, FileSystem, Formatter, Path, Schema, String as Str, Record as Rec } from "effect";
+
 
 /** Where in a file a machine path was found: a byte offset in a file's raw bytes, or one SQLite cell. */
 export const Place = Schema.TaggedUnion({
@@ -99,7 +100,7 @@ const cellHits = (file: string, copy: string, roots: Forms) =>
             const rows = db.prepare(`SELECT * FROM "${Str.replaceAll('"', '""')(table)}"`).all();
 
             for (const [row, cells] of rows.entries()) {
-              for (const [column, value] of Object.entries(cells)) {
+              for (const [column, value] of Rec.toEntries(cells)) {
                 for (const { root, forms } of roots) {
                   const holds =
                     typeof value === "string"

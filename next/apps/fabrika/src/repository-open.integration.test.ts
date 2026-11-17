@@ -6,8 +6,10 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Row } from "@kampus/libfabrika/ledger/Log";
 import type { Entry } from "@kampus/libfabrika/ledger/Log";
-import { Array as Arr, String as Str, Config, ConfigProvider, Effect, FileSystem, Formatter, Option, Path, Queue, Ref, Result, Schema, Stream } from "effect";
+import { Array as Arr, String as Str, Config, ConfigProvider, Effect, FileSystem, Formatter, Option, Path, Queue, Ref, Result, Schema, Stream, Record as Rec } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+
+
 
 
 
@@ -96,7 +98,7 @@ const reports = (text: string, commit: string, result: "ready" | "awaiting_trust
 
     return (
       Result.isSuccess(fields) &&
-      Object.values(fields.success).includes(result) &&
+      Rec.values(fields.success).includes(result) &&
       Str.includes(commit)(JSON.stringify(line))
     );
   });

@@ -12,7 +12,13 @@
 // - T730, P38 slice 2, L10: `since`, the release that introduced the key, is a required string
 //   option of `Setting.make` and a field of `Setting`. It is a release fact, not a setting.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Config, ConfigProvider, Effect, Exit, Schema } from "effect";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
+
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Setting.ts";
@@ -230,7 +236,7 @@ describe("L3, absence gives the default, and an invalid present value never does
       expect(Exit.isSuccess(exit)).toBe(true);
 
       if (Exit.isSuccess(exit)) {
-        expect(Object.values(exit.value)).toEqual(Declarations.all.declarations.map((d) => d.default));
+        expect(Rec.values(exit.value)).toEqual(Declarations.all.declarations.map((d) => d.default));
       }
 
       expect(Declarations.all.declarations.map((d) => d.path)).toContain("instance.port");
@@ -266,14 +272,12 @@ describe("L4, a dotted declaration path reaches the nested value exactly once", 
         fc.uniqueArray(segments, { minLength: 1, maxLength: 4, selector: (p) => p[0] }),
         ports,
         async (paths, base) => {
-          const settings = Object.fromEntries(paths.map((p, n) => [`s${n}`, declare(p.join("."))]));
+          const settings = Rec.fromEntries(paths.map((p, n) => [`s${n}`, declare(p.join("."))]));
           const group = Setting.group(settings);
           expect(group.declarations.map((d) => d.path)).toEqual(paths.map((p) => p.join(".")));
           const root = Object.assign({}, ...paths.map((p, n) => nest(p, ((base + n) % 65535) + 1)));
           const exit = await run(group.parse(ConfigProvider.fromUnknown(root)));
-          expect(exit).toEqual(
-            Exit.succeed(Object.fromEntries(paths.map((_, n) => [`s${n}`, ((base + n) % 65535) + 1]))),
-          );
+          expect(exit).toEqual(Exit.succeed(Rec.fromEntries(paths.map((_, n) => [`s${n}`, ((base + n) % 65535) + 1]))));
         },
       ),
       check,

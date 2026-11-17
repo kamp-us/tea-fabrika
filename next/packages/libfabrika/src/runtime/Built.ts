@@ -4,9 +4,15 @@
  * the Worker adapters serve them; both read these shapes from here, so nothing here needs a
  * platform.
  */
-import { Effect, Schema, SchemaGetter } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as SchemaGetter from "effect/SchemaGetter";
 import * as Arr from "effect/Array";
-import { Digest } from "effect/crypto";
+import * as Digest from "effect/crypto/Digest";
+import * as Rec from "effect/Record";
+
+
+
 import { ProgramName } from "../packs/ProgramName.ts";
 
 /**
@@ -125,12 +131,12 @@ export const Built = Schema.Struct({
   // A refined key would drop a bad name or route quietly, so each record checks its keys instead.
   programs: Schema.Record(Schema.String, BuiltProgram).check(
     Schema.makeFilter(
-      (programs) => Arr.every(Object.keys(programs), isProgramName) || "a program's name is not `pack/program`",
+      (programs) => Arr.every(Rec.keys(programs), isProgramName) || "a program's name is not `pack/program`",
     ),
   ),
   assets: Schema.Record(Schema.String, Asset).check(
     Schema.makeFilter(
-      (assets) => Arr.every(Object.keys(assets), (route) => ROUTE.test(route)) || "an asset route is not a path",
+      (assets) => Arr.every(Rec.keys(assets), (route) => ROUTE.test(route)) || "an asset route is not a path",
     ),
   ),
 });

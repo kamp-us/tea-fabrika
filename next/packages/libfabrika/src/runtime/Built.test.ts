@@ -9,9 +9,14 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 
@@ -81,8 +86,8 @@ describe("P16 checked built tables", () => {
     await fc.assert(
       fc.asyncProperty(rows, routes, async (rows, assets) => {
         const raw: Built = {
-          programs: Object.fromEntries(Arr.map(rows, ({ name, source }) => [name, { hash: sha(source), source }])),
-          assets: Object.fromEntries(
+          programs: Rec.fromEntries(Arr.map(rows, ({ name, source }) => [name, { hash: sha(source), source }])),
+          assets: Rec.fromEntries(
             Arr.map(assets, ({ route, type, body }) => [route, { hash: sha(body), type, body }]),
           ),
         };
@@ -90,11 +95,11 @@ describe("P16 checked built tables", () => {
         expect(await Effect.runPromise(api.decodeBuilt(raw))).toEqual(raw);
         expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.Built)(raw))).toEqual(raw);
 
-        for (const program of Object.values(raw.programs)) {
+        for (const program of Rec.values(raw.programs)) {
           expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.BuiltProgram)(program))).toEqual(program);
         }
 
-        for (const asset of Object.values(raw.assets)) {
+        for (const asset of Rec.values(raw.assets)) {
           expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.Asset)(asset))).toEqual(asset);
         }
       }),
@@ -185,7 +190,7 @@ describe("P16 checked built tables", () => {
     const tape = fc.array(fc.nat(), { minLength: 2, maxLength: 12 });
     await fc.assert(
       fc.asyncProperty(rows, tape, async (rows, tape) => {
-        const programs: Record<string, Program> = Object.fromEntries(
+        const programs: Record<string, Program> = Rec.fromEntries(
           Arr.map(rows, ({ name, source }) => [name, { hash: sha(source), source }]),
         );
 
@@ -193,13 +198,13 @@ describe("P16 checked built tables", () => {
           refused = 0;
 
         for (const [i, n] of tape.entries()) {
-          const keys = Object.keys(programs);
+          const keys = Rec.keys(programs);
 
           if (i % 2 === 0) {
             const key = `pack${n % 5}/added${i}`;
             programs[key] = { hash: sha(key), source: key };
             const decoded = await Effect.runPromise(api.decodeBuilt({ programs, assets: {} }));
-            expect(Object.keys(decoded.programs).sort()).toEqual(Object.keys(programs).sort());
+            expect(Rec.keys(decoded.programs).sort()).toEqual(Rec.keys(programs).sort());
             expect(decoded.programs).toEqual(programs);
             added++;
           } else {

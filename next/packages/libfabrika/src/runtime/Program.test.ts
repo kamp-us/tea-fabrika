@@ -1,9 +1,20 @@
 // P11, next/. Program is a declaration schema; stepper exposes init/step/fold from the plan.
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Option, Predicate, Result, Schema, SchemaIssue } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as SchemaIssue from "effect/SchemaIssue";
 import * as Arr from "effect/Array";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
 import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./Entry.ts";
@@ -281,7 +292,7 @@ it("P1: policy survives authoring, decoding and Node description, while malforme
               const raw = {
                 ...spec(),
                 machine: r.raw.machine,
-                ...(Object.hasOwn(r.raw, "policy") ? { policy: r.raw.policy } : {}),
+                ...(Rec.has(r.raw, "policy") ? { policy: r.raw.policy } : {}),
               };
 
               const decoded = Schema.decodeUnknownResult(Program.schema)(m.checked ? r.checked : raw);
@@ -966,9 +977,7 @@ describe("P34 a program sets its own maxDeliveries, next/", () => {
         const raw = limit === undefined ? fields : withLimit(fields, limit);
 
         const own = (u: unknown) =>
-          typeof u === "object" && u !== null && Object.hasOwn(u, "maxDeliveries")
-            ? Reflect.get(u, "maxDeliveries")
-            : undefined;
+          Predicate.isObject(u) && Rec.has(u, "maxDeliveries") ? Reflect.get(u, "maxDeliveries") : undefined;
 
         const p: unknown = Reflect.apply(Reflect.get(Program, "make"), Program, [raw]);
         expect(own(p)).toBe(limit);
@@ -1069,7 +1078,7 @@ const callables = {
   array: () => [() => 0],
 } as const;
 
-const Callable = fc.constantFrom(...(Object.keys(callables) as Array<keyof typeof callables>));
+const Callable = fc.constantFrom(...(Rec.keys(callables) as Array<keyof typeof callables>));
 
 /** Where a machine's fields live and what they hold. */
 const MachineRecipe = fc.record({
@@ -1292,7 +1301,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
       const target: object = b.target === "array" ? [] : b.target === "function" ? () => 0 : {};
 
       if (b.kind === "getters") {
-        for (const key of Arr.filter(Object.keys(fields), (k) => fields[k]!.present)) {
+        for (const key of Arr.filter(Rec.keys(fields), (k) => fields[k]!.present)) {
           Object.defineProperty(target, key, {
             get: () => {
               trace.push(`get:${key}`);
@@ -1667,7 +1676,7 @@ describe("Program watch: a program that monitors declares DOWN, next/", () => {
 
   const watcher = (cmds: ReadonlyArray<string>, port: "DOWN" | "other" | "both") => {
     const defs = Arr.map(cmds, named);
-    const answers = Object.fromEntries(
+    const answers = Rec.fromEntries(
       Arr.flatMap(defs, (d) => [
         [d.okType, (s: typeof watchModel.Type) => [s, []]],
         [d.errType, (s: typeof watchModel.Type) => [s, []]],

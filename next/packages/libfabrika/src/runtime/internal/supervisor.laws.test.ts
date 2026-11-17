@@ -23,11 +23,20 @@
 import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as Str from "effect/String";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+
+
+
+
+
+
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { A, ExitReason, fcErrorClass, from } from "../../processes/Process.test-support.ts";
@@ -74,9 +83,9 @@ const roundTrip = (model: Model): unknown =>
 const canon = (value: unknown): string =>
   JSON.stringify(value, (_key, v: unknown) =>
     v !== null && typeof v === "object" && !Arr.isArray(v)
-      ? Object.fromEntries(
+      ? Rec.fromEntries(
           Arr.sort(
-            Object.entries(v),
+            Rec.toEntries(v),
             Order.mapInput(Order.String, ([key]: readonly [string, unknown]) => key),
           ),
         )
@@ -1087,12 +1096,12 @@ describe("P34c slice 2: one saved recovery journal", () => {
 const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
   const raw = saved as { journal: Record<string, unknown>; receipts: Array<Record<string, unknown>> };
   const journal = raw.journal;
-  const fields = Arr.filter(Object.keys(journal), (key) => key !== "_tag");
+  const fields = Arr.filter(Rec.keys(journal), (key) => key !== "_tag");
   const dropped = fields[pick % Math.max(fields.length, 1)];
 
   const broken: Array<unknown> = [
     { ...raw, journal: { ...journal, _tag: "starting" } },
-    { ...raw, journal: Object.fromEntries(Arr.filter(Object.entries(journal), ([key]) => key !== dropped)) },
+    { ...raw, journal: Rec.fromEntries(Arr.filter(Rec.toEntries(journal), ([key]) => key !== dropped)) },
     { ...raw, v: 1 },
   ];
 
@@ -1113,7 +1122,7 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
   if (journal._tag === "checkpointing") {
     broken.push({
       ...raw,
-      journal: Object.fromEntries(Arr.filter(Object.entries(journal), ([key]) => key !== "after")),
+      journal: Rec.fromEntries(Arr.filter(Rec.toEntries(journal), ([key]) => key !== "after")),
     });
   }
 

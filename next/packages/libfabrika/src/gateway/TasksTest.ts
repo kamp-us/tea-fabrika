@@ -24,25 +24,28 @@
 // answering every open task of every key (G1), and take the stream name from the params (G2).
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import {
-  Arbitrary,
-  Array as Arr,
-  Deferred,
-  Effect,
-  Fiber,
-  Formatter,
-  Layer,
-  Logger,
-  Option,
-  Redacted,
-  Result as R,
-  Schema,
-  Semaphore,
-  Tracer,
-  type Scope,
-} from "effect";
-import { Base64, Base64Url } from "effect/encoding";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import * as R from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
+import * as Tracer from "effect/Tracer";
+import type * as Scope from "effect/Scope";
+import * as Base64 from "effect/encoding/Base64";
+import * as Base64Url from "effect/encoding/Base64Url";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
 import { grantText, revokeText } from "../access/Text.ts";
 import * as Id from "../Id.ts";
 import { MailWakeups, MailWakeupsError } from "../runtime/MailWakeups.ts";
@@ -1209,7 +1212,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         }
       }
 
-      for (const [name, value] of Object.entries(outputs)) {
+      for (const [name, value] of Rec.toEntries(outputs)) {
         const encoded = yield* Schema.encodeEffect(
           Schema.fromJsonString(Schema.Unknown, {
             replacer: (_key, item: unknown) =>
@@ -1608,7 +1611,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
     );
   }
 
-  for (const focus of Object.keys(moves) as Array<Focus>) {
+  for (const focus of Rec.keys(moves) as Array<Focus>) {
     it.effect(
       focus === "W1"
         ? "W1: an accepted or repeated tasks.finish wakes the requester's name after the write turn and before it answers; a failed wake answers refused unavailable and leaves the task finished; W2 and W2b: that wake joins the finish's trace, and each tasks call that reaches the tasks branch has one gateway.route span with its outcome"

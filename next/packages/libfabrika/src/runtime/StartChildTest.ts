@@ -32,26 +32,29 @@ import type { Tagged } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import type { Tracer } from "effect";
-import {
-  Arbitrary,
-  Clock,
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Formatter,
-  Layer,
-  Logger,
-  Option,
-  Predicate,
-  Result,
-  Schema,
-  Scope,
-} from "effect";
+import type * as Tracer from "effect/Tracer";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import * as Arr from "effect/Array";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
+
 import * as fc from "fast-check";
 import { InputId, NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
 import * as Id from "../Id.ts";
@@ -257,7 +260,7 @@ let withStoppers: Record<string, unknown> | undefined;
 
 /** The loader's programs for a stopper's runner: every program, plus the three stoppers. */
 const stopperPrograms = (): Record<string, unknown> => {
-  withStoppers ??= { ...PROGRAMS, ...Object.fromEntries(Arr.map([...STOPPER_PROGRAMS], (p) => [p, stopper(p)])) };
+  withStoppers ??= { ...PROGRAMS, ...Rec.fromEntries(Arr.map([...STOPPER_PROGRAMS], (p) => [p, stopper(p)])) };
   return withStoppers;
 };
 
@@ -966,7 +969,7 @@ const walk = (
         case "forged": {
           const name = choose(starters(), cell.pick);
           const target = fresh();
-          const extra = Object.fromEntries(Arr.map(cell.extra, (field) => [field, forged(field, world)]));
+          const extra = Rec.fromEntries(Arr.map(cell.extra, (field) => [field, forged(field, world)]));
           const before = (yield* answers(name)).length;
           yield* door(name, { type: "start", ask: { program: "merger", name: target, extra } });
           expect(yield* lastAnswer(name, before), "L5, L8: a Cmd with fields beyond its operands").toEqual({

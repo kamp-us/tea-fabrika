@@ -12,14 +12,15 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Array as Arr, String as Str } from "effect";
-import * as Arbitrary from "effect/Arbitrary";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
+import { Array as Arr, String as Str, Arbitrary, Effect, FileSystem, Formatter, Option, Path, Schema, Record as Rec } from "effect";
+
+
+
+
+
+
+
+
 import { type Hit, machinePaths, Place } from "./port-home.test-support.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -166,7 +167,7 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
     }
   }
 
-  return { roots: Object.values(roots), expected };
+  return { roots: Rec.values(roots), expected };
 });
 
 /** Every file's name and bytes, to see the guard changed nothing. */

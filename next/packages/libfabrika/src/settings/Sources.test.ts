@@ -10,8 +10,14 @@
 //   decoded values, and per dotted path the Origin of the source that supplied it, or `default`.
 //   A source that fails to read, or a winning value that fails its schema, fails the whole resolve.
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Schema } from "effect";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
 import * as fc from "fast-check";
 import * as Setting from "./Setting.ts";
 import * as Sources from "./Sources.ts";
@@ -138,7 +144,7 @@ describe("L5, the highest present source wins per key, and so does its origin", 
         noise,
         async (picked, extra) => {
           const choices: Array<Choice> = picked.map((c) =>
-            Object.fromEntries(Object.entries(c).map(([slot, v]) => [slot, String(v)])),
+            Rec.fromEntries(Rec.toEntries<string, number>(c).map(([slot, v]) => [slot, String(v)])),
           );
 
           const { resolved, lines } = await Effect.runPromise(
@@ -186,7 +192,7 @@ describe("L6, a failed source or an invalid winner never falls through", () => {
         const lower = ORDER.slice(ORDER.indexOf(failing) + 1);
 
         const choices: Array<Choice> = [
-          Object.fromEntries(lower.map((slot) => [slot, String(below)])),
+          Rec.fromEntries(lower.map((slot) => [slot, String(below)])),
           { person: String(other) },
         ];
 
@@ -222,7 +228,7 @@ describe("L6, a failed source or an invalid winner never falls through", () => {
         const text =
           winning === "flag" || winning === "env" ? (Str.startsWith('"')(raw) ? Str.slice(1, -1)(raw) : raw) : raw;
         const choices: Array<Choice> = [
-          { [winning]: text, ...Object.fromEntries(lower.map((slot) => [slot, String(below)])) },
+          { [winning]: text, ...Rec.fromEntries(lower.map((slot) => [slot, String(below)])) },
           {},
         ];
 

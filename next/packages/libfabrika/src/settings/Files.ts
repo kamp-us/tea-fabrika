@@ -5,8 +5,16 @@
  *
  * The repo's `fabrika-version` is read first. Each file's schema is derived from the declarations whose scope includes that file. A failure is explained at its key, with the line the Toml service gave.
  */
-import { Effect, Order, Predicate, Schema, SchemaAST, SchemaIssue } from "effect";
+import * as Effect from "effect/Effect";
+import * as Order from "effect/Order";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
+import * as SchemaIssue from "effect/SchemaIssue";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
 import type * as Setting from "./Setting.ts";
@@ -64,7 +72,7 @@ const at = (value: unknown, path: Path) =>
 /** The first key/value at or under `path`. */
 const leaf = (value: unknown, path: Path): Path => {
   const below = at(value, path);
-  const key = Predicate.isObject(below) ? Object.keys(below)[0] : undefined;
+  const key = Predicate.isObject(below) ? Rec.keys(below)[0] : undefined;
 
   return key === undefined ? path : leaf(value, [...path, key]);
 };
@@ -124,7 +132,7 @@ const distance = (a: string, b: string) => {
 /** The Struct a file is decoded with: every table and leaf optional. */
 const struct = (declarations: ReadonlyArray<Declaration>, depth: number): Schema.Codec<unknown, unknown> =>
   Schema.Struct(
-    Object.fromEntries(
+    Rec.fromEntries(
       [...new Set(declarations.flatMap((d) => d.segments[depth] ?? []))].map((key) => {
         const below = declarations.filter((d) => d.segments[depth] === key);
         const own = below.find((d) => d.segments.length === depth + 1);

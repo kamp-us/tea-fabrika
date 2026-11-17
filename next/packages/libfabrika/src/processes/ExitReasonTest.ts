@@ -13,6 +13,18 @@ import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
+
+
+
+
+
+
+
+
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
@@ -194,7 +206,7 @@ const check = (rows: ReadonlyArray<Entry>, world: World) => {
     seen.set(key, m.reason);
   }
 
-  expect(Object.fromEntries(seen)).toEqual(Object.fromEntries(world.downs));
+  expect(Rec.fromEntries(seen)).toEqual(Rec.fromEntries(world.downs));
 };
 
 const startRequest = (world: World, slot: number) => {

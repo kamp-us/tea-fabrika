@@ -1,8 +1,16 @@
 // P34c slice 4, next/. Calibration is copied from A-Numbers, never read from product defaults.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Formatter, Option, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as ByteSize from "effect/ByteSize";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Digest from "effect/crypto/Digest";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Setting.ts";
 import * as Snapshot from "./Snapshot.ts";
@@ -29,7 +37,7 @@ const numeric = (value: unknown): unknown => {
   }
 
   if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, numeric(v)]));
+    return Rec.fromEntries(Rec.toEntries(value).map(([key, v]) => [key, numeric(v)]));
   }
 
   return value;
@@ -110,7 +118,7 @@ describe("P34c Q11 settings", () => {
           const defaults = new Map<string, number>([
             ["writes", 13_760],
             ["storage", 1_000_000_000],
-            ...Object.entries(measured).flatMap(([location, value]) => [
+            ...Rec.toEntries(measured).flatMap(([location, value]) => [
               [`recovery.${location}.writes`, value.writes] as const,
               [`recovery.${location}.bytes`, value.bytes] as const,
               [`recovery.${location}.message.writes`, value.message.writes] as const,
@@ -144,7 +152,7 @@ describe("P34c Q11 settings", () => {
             expect(numeric(restored.values)).toEqual({
               writes: selected.get("writes"),
               storage: selected.get("storage"),
-              recovery: Object.fromEntries(
+              recovery: Rec.fromEntries(
                 ["project", "process"].map((location) => [
                   location,
                   {

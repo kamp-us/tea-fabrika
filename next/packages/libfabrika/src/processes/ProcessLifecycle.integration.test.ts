@@ -1,7 +1,12 @@
 // P33 / p79. The manager is rebuilt over the same SQLite file for each reopen check.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import { Ledger } from "../ledger/Ledger.ts";
@@ -601,7 +606,7 @@ const lawsFor = (
 };
 
 describe("P33, the process fold ignores events not written by the brain", () => {
-  for (const tag of Object.keys(ProcessEvent.cases) as Array<keyof typeof ProcessEvent.cases>) {
+  for (const tag of Rec.keys(ProcessEvent.cases) as Array<keyof typeof ProcessEvent.cases>) {
     it.effect(`the fold ignores an event tagged ${tag} whose by is not the brain's writer`, () =>
       check(
         fc.tuple(
@@ -705,7 +710,7 @@ describe("P33, the brain writes process events and `parent` keeps who asked", ()
           ),
         );
         yield* ProcessManager.use((p) => p.start(first(), from({ by: X_KEY, parent: asked })));
-        const written = store.rows().filter((row) => Object.hasOwn(ProcessEvent.cases, row._tag));
+        const written = store.rows().filter((row) => Rec.has<string, unknown>(ProcessEvent.cases, row._tag));
         expect(written.map((row) => row._tag)).toEqual(["registered", "started"]);
 
         for (const row of written) {

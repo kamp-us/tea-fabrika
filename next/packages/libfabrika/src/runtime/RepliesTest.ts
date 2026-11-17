@@ -3,23 +3,27 @@
 // chosen from what the walk has stored so far, and every answer is compared with an independent
 // record of the first reply under each registered name and letter.
 import { describe, expect, it } from "@effect/vitest";
-import {
-  Arbitrary,
-  Cause,
-  Context,
-  Effect,
-  Exit,
-  Formatter,
-  Layer,
-  Predicate,
-  Result,
-  Schema,
-  Scope,
-  Tracer,
-} from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Tracer from "effect/Tracer";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
+
+
 import { expectTypeOf } from "vitest";
 import type { Sql } from "../Sql.ts";
 import type * as Module from "./Replies.ts";
@@ -385,7 +389,7 @@ const walk = (
       } else if ((move === "corrupt" || move === "accepted") && chosen !== undefined) {
         const [k, stored] = chosen;
         const located = Arr.flatMap(dump(raw), ({ table, row }) =>
-          Arr.flatMap(Object.entries(row), ([column, value]) => {
+          Arr.flatMap(Rec.toEntries(row), ([column, value]) => {
             if (typeof value !== "string" || parsed(value)?.["digest"] !== stored.digest) {
               return [];
             }
@@ -409,7 +413,7 @@ const walk = (
             ? `${Str.slice(0, -1)(value)}${secret}`
             : kind === "missing"
               ? Formatter.formatJson(
-                  Object.fromEntries(Arr.filter(Object.entries(json), ([f]) => f !== fields[n % fields.length])),
+                  Rec.fromEntries(Arr.filter(Rec.toEntries(json), ([f]) => f !== fields[n % fields.length])),
                 )
               : kind === "key"
                 ? Formatter.formatJson({
@@ -436,14 +440,14 @@ const walk = (
 
         note(yield* refusedWith(service.reply(stored.name, stored.id), "bad_row"));
         note(yield* refusedWith(service.rememberReply(stored), "bad_row"));
-        const cells = Arr.flatMap(dump(raw), ({ row }) => Object.values(row));
+        const cells = Arr.flatMap(dump(raw), ({ row }) => Rec.values(row));
         expect(cells, "a corrupt row is retained as it was").toContain(damaged);
       }
 
       // After every move: no stored row, printed error or span holds a body (R11).
       const damaged = new Set(corrupt.values());
       const cells = Arr.filter(
-        Arr.flatMap(dump(raw), ({ row }) => Object.values(row)),
+        Arr.flatMap(dump(raw), ({ row }) => Rec.values(row)),
         (cell): cell is string => typeof cell === "string" && !damaged.has(cell),
       );
       unleaked([...cells, ...errors, ...spans.text()], secrets);

@@ -19,19 +19,20 @@ import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, String as Str } from "effect";
-import * as Cause from "effect/Cause";
-import * as DateTime from "effect/DateTime";
-import * as Deferred from "effect/Deferred";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
-import * as Scope from "effect/Scope";
-import * as Tracer from "effect/Tracer";
+import { Array as Arr, String as Str, Cause, DateTime, Deferred, Effect, Exit, Formatter, Layer, Option, Schedule, Schema, Scope, Tracer, Record as Rec } from "effect";
+
+
+
+
+
+
+
+
+
+
+
+
+
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -1177,7 +1178,7 @@ describe("P12 Connection recording", () => {
           // Failure text is deletable content (P37), never a span tag.
           expect(
             Arr.filter(
-              Object.values(refused[0]!.attributes),
+              Rec.values(refused[0]!.attributes),
               (tag) => typeof tag === "string" && Str.includes(text)(tag),
             ),
           ).toEqual([]);

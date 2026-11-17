@@ -1,24 +1,27 @@
 // next/. SQLite laws, with no driver (0062). A decision tape chooses only a move allowed by
 // the calls so far. The oracle reads committed health and span rows, never the sink's model.
 import { describe, expect, it } from "@effect/vitest";
-import {
-  Cause,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Formatter,
-  Logger,
-  References,
-  Ref,
-  Result,
-  Schema,
-  Tracer,
-  type Scope,
-} from "effect";
+import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
+import * as Logger from "effect/Logger";
+import * as References from "effect/References";
+import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Tracer from "effect/Tracer";
+import type * as Scope from "effect/Scope";
 import * as Arr from "effect/Array";
 import * as Str from "effect/String";
-import { TestClock } from "effect/testing";
+import * as Rec from "effect/Record";
+import * as TestClock from "effect/testing/TestClock";
+
+
+
+
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import type * as IsolateUsage from "./IsolateUsage.ts";
@@ -418,7 +421,7 @@ export const suite = (rig: Rig) =>
                   }
 
                   expect(
-                    Formatter.formatJson([logs, Arr.map(spans, (span) => Object.fromEntries(span.attributes))]),
+                    Formatter.formatJson([logs, Arr.map(spans, (span) => Rec.fromEntries(span.attributes))]),
                   ).not.toContain(Str.slice(1, -1)(Formatter.formatJson(`PRIVATE_DELIVERY_${cell.error}_END`)));
                 }
 

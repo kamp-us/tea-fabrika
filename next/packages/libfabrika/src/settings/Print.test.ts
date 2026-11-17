@@ -9,9 +9,14 @@
 //   hold its value, its origin (a file's name and line, a flag's or environment variable's name),
 //   its default and its doc. `all` changes which rows show, never what a shown row says.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Digest from "effect/crypto/Digest";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
 import * as fc from "fast-check";
 import * as Print from "./Print.ts";
 import * as Reference from "./Reference.ts";
@@ -57,7 +62,7 @@ const declared = port.chain((shared) =>
       default: fc.oneof(fc.constant(shared), port),
       scope: fc.constantFrom<Setting.Scope>(["person"], ["repo", "person"]),
       supplied: fc.record(
-        Object.fromEntries(
+        Rec.fromEntries(
           SOURCES.map((s) => [s, fc.oneof(fc.constant("default" as const), fc.constant(shared), port)]),
         ) as Record<Slot, fc.Arbitrary<number | "default">>,
         { requiredKeys: [] },
@@ -84,7 +89,7 @@ const fileText = (entries: ReadonlyArray<readonly [string, string, number]>) => 
 const loadRows = (ds: Declared) =>
   Effect.gen(function* () {
     const group = Setting.group(
-      Object.fromEntries(
+      Rec.fromEntries(
         ds.map((d, n) => [
           `s${n}`,
           Setting.make(`${d.table}.${d.key}`, {

@@ -36,7 +36,11 @@ import { ClientKey, ClientKeyError } from "@kampus/libfabrika/transport/ClientKe
 import { connection } from "@kampus/libfabrika/transport/Connection";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
-import { Array as Arr, String as Str } from "effect";
+import { Array as Arr, String as Str, Effect, Exit, Layer, Queue, Record as Rec, Schema, Scope, Semaphore, Tracer, Formatter } from "effect";
+import { Base64, Base64Url } from "effect/encoding";
+import { KeyValueStore, RateLimiter } from "effect/persistence";
+import { Socket } from "effect/socket";
+import { TestClock } from "effect/testing";
 // P39 slice 4a, next/: E1 and S1, the hands client end to end in one process. The real hands start
 // (`client/HandsStart.ts`) dials over the in-memory socket the window laws use
 // (`client/WindowStart.test-support.ts`) into the real transport driver (`transport/Connection.ts`)
@@ -59,19 +63,20 @@ import { Array as Arr, String as Str } from "effect";
 // S1 [secrets]: the hands key's private bytes, in every encoding a leak could take, never appear in
 // a frame the client writes, a journal value, a ledger row or a span. Plant (after build): put the
 // private key's armored text in the hello's `build`.
-import * as Effect from "effect/Effect";
-import { Base64, Base64Url } from "effect/encoding";
-import * as Exit from "effect/Exit";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import { KeyValueStore, RateLimiter } from "effect/persistence";
-import * as Queue from "effect/Queue";
-import * as Schema from "effect/Schema";
-import * as Scope from "effect/Scope";
-import * as Semaphore from "effect/Semaphore";
-import { Socket } from "effect/socket";
-import { TestClock } from "effect/testing";
-import * as Tracer from "effect/Tracer";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import * as fc from "fast-check";
 import { type ConnectionId, Gateway } from "./door.ts";
 
@@ -613,7 +618,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
       spans: Arr.map(spans, (span) => ({ name: span.name, attributes: [...span.attributes] })),
     };
 
-    for (const [name, value] of focus === "S1" ? Object.entries(outputs) : []) {
+    for (const [name, value] of focus === "S1" ? Rec.toEntries(outputs) : []) {
       const encoded = yield* Schema.encodeEffect(
         Schema.fromJsonString(Schema.Unknown, {
           replacer: (_key, item: unknown) => (typeof item === "bigint" ? String(item) : item),

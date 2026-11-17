@@ -6,9 +6,19 @@
 // the fault from below (0043 rule 12, 0055, 0119). This file names no ledger file.
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
-import { type Context, Effect, Exit, Formatter, type Layer, Schema } from "effect";
+import type * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import type * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
+
 import * as fc from "fast-check";
 import { A, B, from, storage } from "../processes/Process.test-support.ts";
 import type { Sql } from "../Sql.ts";
@@ -230,7 +240,7 @@ describe("P34 recovery storage", () => {
               const table = quote(String(name));
 
               for (const row of disk.sql.exec(`SELECT rowid, * FROM ${table}`)) {
-                for (const [column, value] of Object.entries(row)) {
+                for (const [column, value] of Rec.toEntries(row)) {
                   if (typeof value === "string" && Str.includes('"journal"')(value)) {
                     disk.sql.exec(
                       `UPDATE ${table} SET ${quote(column)}=? WHERE rowid=?`,

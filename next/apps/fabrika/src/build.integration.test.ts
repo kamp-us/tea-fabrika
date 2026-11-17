@@ -17,12 +17,14 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, String as Str } from "effect";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import type * as Path from "effect/Path";
-import * as PlatformError from "effect/PlatformError";
+import { Array as Arr, String as Str, Effect, FileSystem, Layer, PlatformError, Record as Rec } from "effect";
+import type { Path } from "effect";
+
+
+
+
+
+
 import * as fc from "fast-check";
 import { rolldown } from "rolldown";
 import { afterEach, describe, expect, it } from "vitest";
@@ -252,9 +254,9 @@ describe("P12 Rolldown build", () => {
       const built = await runNode(build({ out: join(home(), "dist") }));
       expect(built.brain).toEqual(expect.any(String));
       // P40: the app's own selections build under qualified names, the core counter as `fabrika/counter`.
-      expect(Object.keys(built.programs).length).toBeGreaterThan(0);
+      expect(Rec.keys(built.programs).length).toBeGreaterThan(0);
 
-      for (const key of Object.keys(built.programs)) {
+      for (const key of Rec.keys(built.programs)) {
         expect(key, "one pack and one program segment").toMatch(/^[A-Za-z_][\w-]*\/[A-Za-z_][\w-]*$/);
       }
 

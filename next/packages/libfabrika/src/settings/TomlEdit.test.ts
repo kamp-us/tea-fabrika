@@ -3,9 +3,18 @@
 // L9 is the Reflect ban's (ticket 1056, slice 5): hostile keys and a scalar in the middle of a path.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, Effect, Exit, Option, Schema } from "effect";
+import * as ByteSize from "effect/ByteSize";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as DateTime from "effect/DateTime";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
+
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
@@ -82,7 +91,7 @@ const frozen = (value: unknown): unknown =>
   Array.isArray(value)
     ? Object.freeze(value.map(frozen))
     : record(value)
-      ? Object.freeze(Object.fromEntries(Object.entries(value).map(([k, v]) => [k, frozen(v)])))
+      ? Object.freeze(Rec.fromEntries(Rec.toEntries(value).map(([k, v]) => [k, frozen(v)])))
       : value;
 
 const throwingRecord = (cause: Error) =>
@@ -94,7 +103,7 @@ const throwingRecord = (cause: Error) =>
   });
 
 const get = (v: unknown, path: Path): unknown =>
-  path.reduce<unknown>((parent, key) => (record(parent) && Object.hasOwn(parent, key) ? parent[key] : undefined), v);
+  path.reduce<unknown>((parent, key) => (record(parent) && Rec.has(parent, key) ? parent[key] : undefined), v);
 
 const put = (tree: Tree, path: Path, value: unknown): Tree => {
   const [key, ...rest] = path;
@@ -105,8 +114,8 @@ const put = (tree: Tree, path: Path, value: unknown): Tree => {
 
   const parent = get(tree, [key]);
 
-  return Object.fromEntries([
-    ...Object.entries(tree).filter(([name]) => name !== key),
+  return Rec.fromEntries([
+    ...Rec.toEntries(tree).filter(([name]) => name !== key),
     [key, rest.length === 0 ? value : put(record(parent) ? parent : {}, rest, value)],
   ]);
 };
@@ -116,22 +125,22 @@ const drop = (tree: Tree, path: Path): Tree => {
   const parent = key === undefined ? undefined : get(tree, [key]);
 
   return rest.length === 0
-    ? Object.fromEntries(Object.entries(tree).filter(([name]) => name !== key))
+    ? Rec.fromEntries(Rec.toEntries(tree).filter(([name]) => name !== key))
     : key !== undefined && record(parent)
       ? put(tree, [key], drop(parent, rest))
       : tree;
 };
 
 const leaves = (tree: Tree, path: Path = []): Array<Path> =>
-  Object.entries(tree).flatMap(([key, value]) => {
+  Rec.toEntries(tree).flatMap(([key, value]) => {
     const at = [...path, key];
 
-    return record(value) && Object.keys(value).length > 0 ? leaves(value, at) : [at];
+    return record(value) && Rec.keys(value).length > 0 ? leaves(value, at) : [at];
   });
 
 const parents = (tree: Tree, path: Path = []): Array<Path> => [
   path,
-  ...Object.entries(tree).flatMap(([key, value]) => (record(value) ? parents(value, [...path, key]) : [])),
+  ...Rec.toEntries(tree).flatMap(([key, value]) => (record(value) ? parents(value, [...path, key]) : [])),
 ];
 
 const keyText = (key: string, quote: Layout["quote"]): string => {
@@ -149,7 +158,7 @@ const literal = (value: unknown): string => {
   }
 
   if (record(value)) {
-    return `{ ${Object.entries(value)
+    return `{ ${Rec.toEntries(value)
       .map(([key, child]) => `${JSON.stringify(key)} = ${literal(child)}`)
       .join(", ")} }`;
   }
@@ -160,7 +169,7 @@ const literal = (value: unknown): string => {
 
 const fixture = (l: Layout, n: number, trailingComma = false) => {
   const key = (s: string) => keyText(s, l.quote);
-  const values = Object.fromEntries(segments.map((s) => [s, n]));
+  const values = Rec.fromEntries(segments.map((s) => [s, n]));
   const members = segments.map((s) => `${key(s)}${l.space}${n}`);
   const lines = ["# note-0-雪", `untouched  = 'text # = [ ]' # note-1-雪`, `"box.a.b"${l.space}${n} # note-2-雪`];
   let box: Tree = values;
@@ -242,7 +251,7 @@ const inherited = [Object.prototype, Object, Object.prototype.toString];
 
 const members = () =>
   inherited.flatMap((owner) =>
-    Object.entries(Object.getOwnPropertyDescriptors(owner)).map(([name, d]) => [owner, name, d.value, d.get, d.set]),
+    Rec.toEntries(Object.getOwnPropertyDescriptors(owner)).map(([name, d]) => [owner, name, d.value, d.get, d.set]),
   );
 
 const unchanged = (before: ReturnType<typeof members>, after: ReturnType<typeof members>) =>
@@ -258,7 +267,7 @@ const writable = (value: unknown): boolean =>
     : Array.isArray(value)
       ? value.every(writable)
       : record(value)
-        ? Object.entries(value).every(([key, child]) => !lone(key) && writable(child))
+        ? Rec.toEntries(value).every(([key, child]) => !lone(key) && writable(child))
         : typeof value === "string"
           ? !lone(value)
           : typeof value !== "number" || !Number.isInteger(value) || Number.isSafeInteger(value);
@@ -414,7 +423,7 @@ describe("T877 public TOML edits, next/", () => {
             .map((value, i) => `${keyText(keys[i]!, l.quote)}${l.space}${array(value, markers[i]!)}`)
             .join(", ")} }`;
 
-          let model: Tree = Object.fromEntries(members.map((value, i) => [keys[i]!, [value, "# string text"]]));
+          let model: Tree = Rec.fromEntries(members.map((value, i) => [keys[i]!, [value, "# string text"]]));
           let paths: Array<Path> = keys.map((key) => [key]);
           const siblings: Array<string> = [];
 
@@ -600,7 +609,7 @@ describe("T877 public TOML edits, next/", () => {
           // A dotted parent has no header left to declare it after its last key goes.
           const box = get(model, ["box"]);
 
-          if (l.style === "dotted" && record(box) && Object.keys(box).length === 0) {
+          if (l.style === "dotted" && record(box) && Rec.keys(box).length === 0) {
             model = drop(model, ["box"]);
           }
 
@@ -649,7 +658,7 @@ describe("T877 public TOML edits, next/", () => {
         type Piece = { readonly text: string; readonly member?: string; readonly comma?: number };
 
         let pieces: Array<Piece> = [{ text: `# before${l.eol}box${l.space}{  ` }];
-        const initial = Object.fromEntries(values.map((v, i) => [`k${i}`, v]));
+        const initial = Rec.fromEntries(values.map((v, i) => [`k${i}`, v]));
         let model: Tree = initial;
         values.forEach((value, i) => {
           pieces.push({ text: `k${i}${l.space}${literal(value)}`, member: `k${i}` });
@@ -662,13 +671,13 @@ describe("T877 public TOML edits, next/", () => {
         const write = (parts: ReadonlyArray<Piece>) => parts.map((part) => part.text).join("");
         let text = write(pieces);
 
-        for (let i = 0; Object.keys(model).length > 0; i++) {
+        for (let i = 0; Rec.keys(model).length > 0; i++) {
           const parsed = yield* toml.parse(text);
           expect(parsed.value).toEqual({ box: model, other: "unchanged # text" });
           const hint = l.hints[i % l.hints.length]!;
 
           const key = pick(
-            Object.keys(model).filter((key) => get(parsed.value, ["box", key]) !== undefined),
+            Rec.keys(model).filter((key) => get(parsed.value, ["box", key]) !== undefined),
             hint.pick,
           );
 
@@ -784,6 +793,18 @@ describe("T877 public TOML edits, next/", () => {
         cycle.self = cycle;
         const sparse: Array<unknown> = Array.from({ length: 2 });
         Reflect.deleteProperty(sparse, 0);
+        // A hole whose index the prototype holds is still a hole: the guard reads own elements only,
+        // as Object.hasOwn did before the Effect-check sweep turned it into the in operator.
+        const shadowed: Array<unknown> = Array.from({ length: 2 }, () => 1);
+        Reflect.deleteProperty(shadowed, 0);
+        Object.setPrototypeOf(shadowed, Object.assign(Object.create(Array.prototype), { 0: "inherited" }));
+
+        for (const holed of [sparse, shadowed]) {
+          for (const value of [holed, { nested: [holed] }]) {
+            const error = yield* refusal(toml.set(start.text, path, value), "Value");
+            expect(error.message).toBe("A TOML array cannot contain a missing element.");
+          }
+        }
 
         const bad: ReadonlyArray<unknown> = [
           null,
@@ -863,7 +884,7 @@ describe("T877 public TOML edits, next/", () => {
 
         const parsed = yield* toml.parse(text);
 
-        for (const path of Object.keys(parsed.value).map((key) => [key])) {
+        for (const path of Rec.keys(parsed.value).map((key) => [key])) {
           expect(yield* toml.set(text, path, get(parsed.value, path))).toBe(text);
         }
       }).pipe(Effect.provide(TomlParser.layer)),

@@ -31,10 +31,14 @@ import { build } from "@kampus/libfabrika/build";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Array as Arr, String as Str, Config, ConfigProvider, Effect, FileSystem, Option, Path, Queue, Schema, Stream, Formatter } from "effect";
+import { Array as Arr, String as Str, Config, ConfigProvider, Effect, FileSystem, Option, Path, Queue, Schema, Stream, Formatter, Record as Rec } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { FetchHttpClient, HttpBody, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
+
+
+
+
 
 
 
@@ -381,7 +385,7 @@ const flow = Effect.fnUntraced(
         const tables = Arr.map(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all(), (row) =>
           String(row["name"]),
         );
-        return Object.fromEntries(
+        return Rec.fromEntries(
           Arr.map(tables, (t) => [t, db.prepare(`SELECT * FROM "${Str.replace(/"/g, '""')(t)}"`).all()]),
         );
       }),
@@ -465,7 +469,7 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
 
                   expect(seen.lines.length, `S2 (${launch}): the scan read real lines`).toBeGreaterThan(0);
 
-                  for (const [name, value] of Object.entries(outputs)) {
+                  for (const [name, value] of Rec.toEntries(outputs)) {
                     const text = yield* Schema.encodeEffect(
                       Schema.fromJsonString(Schema.Unknown, {
                         replacer: (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v),

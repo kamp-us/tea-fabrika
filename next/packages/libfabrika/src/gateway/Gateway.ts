@@ -21,6 +21,7 @@ import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
 import { Base64, Base64Url } from "effect/encoding";
 import { RateLimiter } from "effect/persistence/RateLimiter";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Str from "effect/String";
 import { admitted, MemberEvent, Saw } from "../access/Access.ts";
@@ -93,7 +94,7 @@ const rawObject = (a: unknown): Record<string, unknown> | null =>
 
 const reserved = (a: unknown) => {
   const value = rawObject(a);
-  return value !== null && ["id", "by", "for", "arrivedAt"].some((key) => Object.hasOwn(value, key));
+  return value !== null && ["id", "by", "for", "arrivedAt"].some((key) => Rec.has(value, key));
 };
 
 const no = (reason: string) => Answer.cases.refused.make({ reason });

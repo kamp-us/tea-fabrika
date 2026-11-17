@@ -15,8 +15,11 @@
 // delivery; let a second finished reply settle a settled one again.
 import { arbGuidedSequence, propertyInvariant, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
+
+
 import * as fc from "fast-check";
 import { fcResult } from "../../tasks/TasksTest.ts";
 import { Reply } from "../HandsTasks.ts";
@@ -104,7 +107,7 @@ describe("P39 slice 3: one hands Cmd's delivery", () => {
             (next._tag === "result" &&
               next.answer._tag === "ok" &&
               same(next.answer.result, r.result) &&
-              Arr.join(Object.keys(next.answer).sort(), ",") === "_tag,result") ||
+              Arr.join(Rec.keys(next.answer).sort(), ",") === "_tag,result") ||
             "D1: a finished reply settles the delivery with that result"
           );
         }
@@ -114,7 +117,7 @@ describe("P39 slice 3: one hands Cmd's delivery", () => {
             (next._tag === "result" &&
               next.answer._tag === "err" &&
               next.answer.reason === r.reason &&
-              Arr.join(Object.keys(next.answer).sort(), ",") === "_tag,reason") ||
+              Arr.join(Rec.keys(next.answer).sort(), ",") === "_tag,reason") ||
             `D1: a ${r.reason} refusal settles a ${prev._tag} delivery with that reason`
           );
         }

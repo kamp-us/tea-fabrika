@@ -24,10 +24,16 @@
 // move that state allows; stale and malformed input is built from what the walk delivered.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
+
 import * as fc from "fast-check";
 import { ProcessId } from "../ProcessId.ts";
 import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";
@@ -91,7 +97,7 @@ const SHAPES = {
 
 type Kind = keyof typeof SHAPES;
 
-const KINDS = Object.keys(SHAPES) as ReadonlyArray<Kind>;
+const KINDS = Rec.keys(SHAPES) as ReadonlyArray<Kind>;
 
 type ListView = typeof SHAPES.list.Type;
 
@@ -593,7 +599,7 @@ describe("L5: client views (p3)", () => {
             expect(out).toEqual([{ type: "ask", pid: notice.pid }]);
           }
 
-          for (const [pid, shown] of Object.entries(next.views)) {
+          for (const [pid, shown] of Rec.toEntries(next.views)) {
             expect(decodes(pid, shown.view), `${pid} shows ${JSON.stringify(shown.view)}`).toBe(true);
             arrays += Str.includes("[")(JSON.stringify(shown.view)) && shown.rev > 0 ? 1 : 0;
           }
@@ -648,12 +654,12 @@ describe("L5: client views (p3)", () => {
           expect(Arr.every(asks, (o) => o.pid === notice.pid)).toBe(true);
           expect(
             Arr.map(
-              Arr.filter(Object.keys(next.views), (p) => p !== notice.pid),
+              Arr.filter(Rec.keys(next.views), (p) => p !== notice.pid),
               (p) => next.views[p],
             ),
           ).toEqual(
             Arr.map(
-              Arr.filter(Object.keys(next.views), (p) => p !== notice.pid),
+              Arr.filter(Rec.keys(next.views), (p) => p !== notice.pid),
               (p) => prev.c.views[p],
             ),
           );
@@ -700,7 +706,7 @@ describe("L5: client views (p3)", () => {
             `${notice.pid}'s notice checked by ${Arr.join(w.log, ",")}`,
           ).toBe(true);
 
-          for (const pid of Arr.filter(Object.keys(next.views), (p) => p !== notice.pid)) {
+          for (const pid of Arr.filter(Rec.keys(next.views), (p) => p !== notice.pid)) {
             expect(next.views[pid]).toBe(prev.c.views[pid]);
           }
         });

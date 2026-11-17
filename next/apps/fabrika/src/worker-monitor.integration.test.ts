@@ -15,8 +15,10 @@ import { NodeServices } from "@effect/platform-node";
 import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
-import { Array as Arr, String as Str, Duration, Effect, Schema, Scope, DateTime, Option } from "effect";
+import { Array as Arr, String as Str, Duration, Effect, Schema, Scope, DateTime, Option, Record as Rec } from "effect";
 import { SecureRandom } from "effect/crypto";
+
+
 
 
 
@@ -383,7 +385,7 @@ const carries = (value: unknown, type: string): boolean =>
     ? Arr.some(value, (item) => carries(item, type))
     : typeof value === "object" &&
       value !== null &&
-      (Reflect.get(value, "type") === type || Arr.some(Object.values(value), (item) => carries(item, type)));
+      (Reflect.get(value, "type") === type || Arr.some(Rec.values(value), (item) => carries(item, type)));
 
 /** The next view update the brain pushes for `pid` whose rows hold one of this type. It asks nothing. */
 const pushed = (client: Awaited<ReturnType<typeof wire>>, pid: string, type: string) =>

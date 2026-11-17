@@ -12,22 +12,23 @@ import { Machine } from "@demlik/tea/effect";
 // Plant: read the span with `Effect.orDie` again; R2's untraced callers go red.
 import { it, expect } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import {
-  Arbitrary,
-  Cause,
-  Context,
-  Effect,
-  Exit,
-  Formatter,
-  Layer,
-  Logger,
-  References,
-  Result,
-  Schedule,
-  Schema,
-  Tracer,
-} from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as References from "effect/References";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as Tracer from "effect/Tracer";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { NORMAL, PIDS } from "../processes/Process.test-support.ts";
@@ -554,7 +555,7 @@ const project = Effect.fnUntraced(function* () {
       bootstrap: [{ name: "counter:1", id: "counter:1", program: COUNTER }],
       door: () =>
         Effect.succeed(
-          Object.fromEntries(
+          Rec.fromEntries(
             [
               "connect",
               "challenge",

@@ -7,8 +7,11 @@
 //   internal/programMail.ts: `mailId(command)` and `granted(grants, source, to)`.
 //   ProgramMail.ts: `Grants`, `MailRefusal` (the closed refusal reasons) and `ProgramMailError`.
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { PIDS } from "../Process.test-support.ts";
@@ -62,11 +65,11 @@ describe("P41 slice 1: program mail rules", () => {
   it("L8: a destination is permitted only when the host's closed grant for that source names it", () => {
     fc.assert(
       fc.property(fcGrants, fcName, fcName, (grants, source, to) => {
-        const own = Object.hasOwn(grants, source) ? grants[source] : undefined;
+        const own = Rec.has(grants, source) ? grants[source] : undefined;
         const expected = own !== undefined && own.includes(to);
         expect(granted(grants, source, to), `${source} -> ${to} in ${JSON.stringify(grants)}`).toBe(expected);
         expect(granted(grants, to, source), "a grant is one way").toBe(
-          Object.hasOwn(grants, to) && (grants[to] ?? []).includes(source),
+          Rec.has(grants, to) && (grants[to] ?? []).includes(source),
         );
       }),
       {
@@ -100,7 +103,7 @@ describe("P41 slice 1: program mail rules", () => {
             _tag: "ProgramMailError",
             reason: reason === "full" ? { _tag: reason, unread } : { _tag: reason },
           });
-          expect(Object.keys(encoded as object)).not.toContain("kind");
+          expect(Rec.keys(encoded as object)).not.toContain("kind");
           expect(Schema.decodeUnknownSync(ProgramMailError)(encoded), "it decodes back to the same error").toEqual(
             error,
           );

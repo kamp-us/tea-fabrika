@@ -3,11 +3,27 @@ import { createHash } from "node:crypto";
 // node:sqlite is the edge: Effect has no synchronous in-memory SQLite handle.
 import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "@effect/vitest";
-import { Effect, Formatter, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Schema from "effect/Schema";
+import * as Digest from "effect/crypto/Digest";
 import * as Str from "effect/String";
-import { TestClock } from "effect/testing";
+import * as Rec from "effect/Record";
+import * as TestClock from "effect/testing/TestClock";
 import type * as Tracer from "effect/Tracer";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+
+
+
+
+
 import { vi } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
@@ -22,7 +38,7 @@ import * as SettingsRecorded from "./SettingsRecorded.ts";
 import * as SettingsStartsLedger from "./SettingsStartsLedger.ts";
 
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Clock, Context, Exit, Layer, Scope, Stream } from "effect";
+
 import * as fc from "fast-check";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { PAGE as DOOR_PAGE } from "../ledger/Log.ts";
@@ -204,12 +220,12 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
 };
 
 const tableCounts = (db: DatabaseSync) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     db
       .prepare("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name")
       .all()
       .map(({ name }) => [
-        name,
+        String(name),
         db.prepare(`SELECT count(*) AS n FROM "${Str.replaceAll('"', '""')(String(name))}"`).get()?.n,
       ]),
   );
@@ -534,12 +550,12 @@ const t864Due = (db: DatabaseSync, now: number) =>
   );
 
 const t864Tables = (db: DatabaseSync) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     db
       .prepare("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name")
       .all()
       .map(({ name }) => [
-        name,
+        String(name),
         db.prepare(`SELECT * FROM "${Str.replaceAll('"', '""')(String(name))}" ORDER BY rowid`).all(),
       ]),
   );
@@ -874,7 +890,7 @@ it.effect.prop(
           reached.add(category);
         }
 
-        expect([...reached].sort()).toEqual([...Object.keys(answerCases), "too_many_waits"].sort());
+        expect([...reached].sort()).toEqual([...Rec.keys(answerCases), "too_many_waits"].sort());
       }).pipe(Effect.provide(w.layer));
     }),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },

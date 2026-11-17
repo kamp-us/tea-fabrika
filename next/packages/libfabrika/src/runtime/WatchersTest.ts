@@ -1,10 +1,23 @@
 // next/, W3/W4. Driver-free laws run by the Node module over real scoped SQLite files.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Formatter, Layer, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
+
+
 import type { Sql, SqlValue } from "../Sql.ts";
 import { type Update, WatcherManager } from "./Entry.ts";
 import { nth } from "./RepliesTest.ts";
@@ -61,7 +74,7 @@ const fails = Effect.fnUntraced(function* <A, E, R>(
 /** Copy saved rows into `sql`'s watcher table, column for column. */
 const restore = (sql: Sql, saved: ReadonlyArray<Record<string, SqlValue>>) => {
   for (const row of saved) {
-    const columns = Object.keys(row);
+    const columns = Rec.keys(row);
     sql.exec(
       `INSERT INTO process_watchers (${Arr.join(
         Arr.map(columns, (c) => `"${c}"`),
@@ -233,7 +246,7 @@ export const suite = (database: Database) =>
               expect(row).toBeDefined();
               const column = Option.getOrUndefined(
                 Arr.findFirst(
-                  Object.keys(row ?? {}),
+                  Rec.keys(row ?? {}),
                   (k) => typeof (row ?? {})[k] === "string" && Str.startsWith("{")(String((row ?? {})[k])),
                 ),
               );

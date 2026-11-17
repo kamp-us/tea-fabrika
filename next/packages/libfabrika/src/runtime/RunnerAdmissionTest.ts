@@ -3,11 +3,28 @@ import { applyCell } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Cause, Context, Effect, Exit, Formatter, Layer, Result, Schema, Scope, Stream } from "effect";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Str from "effect/String";
-import { TestClock } from "effect/testing";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as TestClock from "effect/testing/TestClock";
+
+
+
+
+
+
 import * as fc from "fast-check";
 import { Writer, SinkError } from "../coordination/index.ts";
 import * as Id from "../Id.ts";
@@ -96,7 +113,7 @@ const WRITE = /^\s*(INSERT|UPDATE|REPLACE|DELETE)\b/i;
 const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json));
 
 // SQL columns and span fields can hold another JSON document.
-const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
+const texts = (value: unknown, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
   if (typeof value === "string") {
     const prior = cache.get(value);
 
@@ -124,7 +141,7 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
 
   // An array's values are its items, in order, so one branch reads arrays and objects alike.
   return value !== null && typeof value === "object"
-    ? Arr.flatMap(Object.values(value), (part) => texts(part, cache))
+    ? Arr.flatMap(Rec.values(value), (part) => texts(part, cache))
     : [];
 };
 
@@ -612,7 +629,7 @@ const walk = Effect.fnUntraced(function* (
   const check = Effect.fnUntraced(function* () {
     const saved = yield* live.journal.load;
     expect((yield* live.runner.open("verify")).view, "only accepted inputs change the model").toEqual({
-      versions: Object.fromEntries(versions),
+      versions: Rec.fromEntries(versions),
     });
 
     for (const prior of failures) {

@@ -44,8 +44,10 @@ import { describe, expect, it } from "@effect/vitest";
 import { Activity } from "@kampus/libfabrika/processes/Process";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Array as Arr, String as Str, Clock, Config, ConfigProvider, Effect, FileSystem, Layer, Path, Predicate, Schema, Formatter, Option, Order } from "effect";
+import { Array as Arr, String as Str, Clock, Config, ConfigProvider, Effect, FileSystem, Layer, Path, Predicate, Schema, Formatter, Option, Order, Record as Rec } from "effect";
 import { SecureRandom } from "effect/crypto";
+
+
 
 
 
@@ -306,7 +308,7 @@ const open = Effect.fnUntraced(function* <A, E, R>(
   if (programs !== undefined) {
     yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(out, "node_modules"));
 
-    for (const [n, [name, source]] of Object.entries(programs).entries()) {
+    for (const [n, [name, source]] of Rec.toEntries(programs).entries()) {
       modules[name] = path.join(out, `program-${n}.ts`);
       yield* fs.writeFileString(modules[name], source);
     }
@@ -759,7 +761,7 @@ const reopenedOnItsCode = Effect.gen(function* () {
           yield* add(instance, saved.key, checklist.id, "t833-two", "t833 item"),
           "checklist:1 stepped one real input",
         ).toContain("t833 item");
-        return Object.fromEntries(Arr.map(Object.entries(built.programs), ([name, program]) => [name, program.hash]));
+        return Rec.fromEntries(Arr.map(Rec.toEntries(built.programs), ([name, program]) => [name, program.hash]));
       }),
     { "fabrika/counter": counterAt(1) },
   );

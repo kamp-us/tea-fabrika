@@ -24,6 +24,17 @@ import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
+
+
+
+
+
+
+
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -127,7 +138,7 @@ const CODE = { program: "mail", hash: "build-a" };
 /** The host's closed grant: each source reaches only the names listed for it. */
 const GRANTS: Grants = { [REQUESTER]: [RESPONDER, HELPER, GHOST], [RESPONDER]: [REQUESTER] };
 
-const granted = (source: string, to: string) => Object.hasOwn(GRANTS, source) && GRANTS[source]?.includes(to) === true;
+const granted = (source: string, to: string) => Rec.has(GRANTS, source) && GRANTS[source]?.includes(to) === true;
 
 type Delivery = Parameters<ProgramMail["Service"]["deliver"]>[0];
 
@@ -225,7 +236,7 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
     .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     .map((row) => String(row.name));
 
-  return Object.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
+  return Rec.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
 };
 
 const layer = (sql: Sql, next: Effect.Effect<string>) =>
@@ -663,13 +674,13 @@ const pair = (a: string, b: string) => JSON.stringify([a, b].sort());
 
 /** The model's mail rule: the host grant lists the pair, or one is the other's first requester. */
 const mayMail = (family: Family, source: string, to: string) =>
-  (Object.hasOwn(HOST, source) && HOST[source]?.includes(to) === true) ||
+  (Rec.has(HOST, source) && HOST[source]?.includes(to) === true) ||
   family.first.get(to) === source ||
   family.first.get(source) === to;
 
 /** Why a pair may or may not mail, for the walk's tally of what it reached. */
 const relation = (family: Family, source: string, to: string): string => {
-  if (Object.hasOwn(HOST, source) && HOST[source]?.includes(to) === true) {
+  if (Rec.has(HOST, source) && HOST[source]?.includes(to) === true) {
     return "host";
   }
 

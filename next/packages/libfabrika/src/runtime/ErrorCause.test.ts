@@ -9,9 +9,17 @@
 // `Program.ts:379`, a ProgramDown's class, reads as it did before the cause was kept.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Formatter, Result, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
+
 import * as fc from "fast-check";
 import { BuildError, decodeBuilt } from "./Built.ts";
 import { ProgramLoader } from "./Entry.ts";
@@ -309,7 +317,7 @@ const causedAt = {
 law(
   "C7: a ProgramDown from a site that now keeps its cause reports the class it reported without one",
   fc.record({
-    site: fc.constantFrom(...(Object.keys(causedAt) as Array<keyof typeof causedAt>)),
+    site: fc.constantFrom(...(Rec.keys(causedAt) as Array<keyof typeof causedAt>)),
     // Never a valid Int, number, string or name: each site fails for this value alone.
     bad: fc.oneof(fc.boolean(), failures),
   }),

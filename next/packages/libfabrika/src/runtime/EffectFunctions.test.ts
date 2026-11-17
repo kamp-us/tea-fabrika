@@ -17,6 +17,21 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
+import * as Rec from "effect/Record";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { ClientManager } from "../access/ClientManager.ts";
@@ -96,7 +111,7 @@ const capture = (delegate?: Tracer.Tracer, spans: Array<Tracer.Span> = []) => {
   return { spans, tracer };
 };
 
-const tags = (span: Tracer.Span) => Object.fromEntries(span.attributes);
+const tags = (span: Tracer.Span) => Rec.fromEntries(span.attributes);
 
 const parentId = (span: Tracer.Span) => Option.getOrNull(Option.map(span.parent, (p) => p.spanId));
 

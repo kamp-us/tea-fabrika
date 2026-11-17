@@ -20,19 +20,22 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, String as Str } from "effect";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
+import { Array as Arr, String as Str, Cause, Effect, Exit, Formatter, Layer, Option, Predicate, Record as Rec, Result, Schema, Stream, Tracer } from "effect";
 import { RateLimiter } from "effect/persistence";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import { TestClock } from "effect/testing";
-import * as Tracer from "effect/Tracer";
+
+
+
+
+
+
+
+
+
+
+
+
+
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Gateway } from "./door.ts";
@@ -54,7 +57,7 @@ const text = fc.string({ minLength: 1, maxLength: 100 });
 const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json));
 
 // SQL columns and span fields can hold another JSON document.
-const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
+const texts = (value: unknown, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
   if (typeof value === "string") {
     const prior = cache.get(value);
 
@@ -83,7 +86,7 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
   return Arr.isArray<Schema.Json>(value)
     ? Arr.flatMap(value, (part) => texts(part, cache))
     : value !== null && typeof value === "object"
-      ? Arr.flatMap(Object.values(value), (part) => texts(part, cache))
+      ? Arr.flatMap(Rec.values(value), (part) => texts(part, cache))
       : [];
 };
 
@@ -516,7 +519,7 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
 const checkSpan = (span: Tracer.Span, a: Sample, ok: boolean, attributes: Record<string, unknown> = {}) => {
   expect(span.traceId).toBe(a.traceId);
   expect(Option.getOrThrow(span.parent).spanId).toBe(a.spanId);
-  expect(Object.fromEntries(span.attributes)).toEqual(attributes);
+  expect(Rec.fromEntries(span.attributes)).toEqual(attributes);
   expect(span.status._tag).toBe("Ended");
 
   if (span.status._tag === "Ended") {

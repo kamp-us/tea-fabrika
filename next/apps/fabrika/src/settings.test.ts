@@ -1,6 +1,6 @@
 // T753, next/. Port bounds are held at the shared reader in SettingsInput.test.ts.
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
-import { Effect, Schema } from "effect";
+import { Effect, Record as Rec, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect } from "vitest";
@@ -14,6 +14,6 @@ StartsTest.law(
       const input = yield* StartsTest.input(recipe);
       const decoded = yield* Schema.decodeEffect(Settings)(input, { onExcessProperty: "error" });
       expect(decoded).toEqual(input);
-      expect(Object.hasOwn(decoded, "port")).toBe(false);
+      expect(Rec.has<string, unknown>(decoded, "port")).toBe(false);
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
 );

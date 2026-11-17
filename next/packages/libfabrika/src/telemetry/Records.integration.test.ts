@@ -26,7 +26,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { RpcCallError } from "alchemy/Rpc";
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import type * as Layer from "effect/Layer";
@@ -35,7 +35,20 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
-import { TestClock } from "effect/testing";
+import * as Rec from "effect/Record";
+import * as TestClock from "effect/testing/TestClock";
+
+
+
+
+
+
+
+
+
+
+
+
 import { processId } from "../Id.test-support.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { Sql } from "../Sql.ts";
@@ -203,7 +216,7 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
           for (const p of [...used].sort((x, y) => x - y).slice(0, -1)) {
             const rolled = parts.rows(part(p), "rolled");
             expect(rolled, `${part(p)} keeps one rolled row`).toHaveLength(1);
-            const values = Object.values(rolled[0] ?? {});
+            const values = Rec.values(rolled[0] ?? {});
             expect(values, "rolled names the next part").toContain(part(p + 1));
             expect(
               Arr.some(values, (v) => typeof v === "number" && v >= CAP),

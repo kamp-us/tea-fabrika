@@ -6,26 +6,9 @@ import { join, relative, resolve } from "node:path";
 import { it } from "@effect/vitest";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import { runsFor } from "@kampus/vitest";
-import {
-  Arbitrary,
-  Array as Arr,
-  Cause,
-  Effect,
-  Exit,
-  FileSystem,
-  Formatter,
-  Layer,
-  Logger,
-  Option,
-  Path,
-  PlatformError,
-  References,
-  Schema,
-  Sink,
-  Stream,
-  String as Str,
-} from "effect";
+import { Arbitrary, Array as Arr, Cause, Effect, Exit, FileSystem, Formatter, Layer, Logger, Option, Path, PlatformError, Record as Rec, References, Schema, Sink, Stream, String as Str } from "effect";
 import { ChildProcessSpawner } from "effect/process";
+
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
 import { build } from "./build.ts";
@@ -530,7 +513,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           port,
         };
         const selected = Arr.filter(
-          Object.entries(overrides),
+          Rec.toEntries(overrides),
           ([field]) =>
             choices[field as keyof typeof overrides] ||
             (!choices.saved && ["name", "person", "founder"].includes(field)),
@@ -557,7 +540,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           });
           const calls = Arr.filter(w.calls, ([, path]) => path === folder || path === file);
           // T664: the port is a setting now, so it leaves the saved state and goes to the instance.
-          const { port: _flag, ...founding } = Object.fromEntries(selected);
+          const { port: _flag, ...founding } = Rec.fromEntries(selected);
           const { port: _saved, ...kept } = saved;
           const { port: _override, ...named } = overrides;
 

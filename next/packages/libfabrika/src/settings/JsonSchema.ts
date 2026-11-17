@@ -6,6 +6,7 @@
  * A key no declaration names is refused, and a default is only an annotation. A leaf JSON Schema cannot hold exactly stops generation rather than shipping a looser schema.
  */
 import { Predicate, Schema } from "effect";
+import * as Rec from "effect/Record";
 
 const DIALECT = "https://json-schema.org/draft/2020-12/schema";
 
@@ -30,7 +31,7 @@ const loose = (node: unknown, seen: Set<unknown>): boolean => {
     }
   }
 
-  return Object.values(node).some((value) => loose(value, seen));
+  return (Array.isArray(node) ? node : Rec.values(node)).some((value) => loose(value, seen));
 };
 
 /**
@@ -63,7 +64,7 @@ const WIDTH = 120;
  * of plain values on one line when it fits the width, so the committed text needs no reformatting.
  */
 const printed = (value: unknown, indent: string, taken: number): string => {
-  if (value === null || typeof value !== "object") {
+  if (!Predicate.isObjectOrArray(value)) {
     return JSON.stringify(value);
   }
 
@@ -85,7 +86,7 @@ const printed = (value: unknown, indent: string, taken: number): string => {
     return `[\n${items.join(",\n")}\n${indent}]`;
   }
 
-  const entries = Object.entries(value);
+  const entries = Rec.toEntries(value);
 
   if (entries.length === 0) {
     return "{}";

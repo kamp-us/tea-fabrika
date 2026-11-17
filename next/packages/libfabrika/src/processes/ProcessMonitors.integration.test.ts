@@ -5,6 +5,13 @@ import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
+
+
+
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -652,7 +659,7 @@ describe("P33, demonitored records reason", () => {
         yield* monitor(store, byExit!, A, X);
         yield* cancel(store, byCancel!);
         yield* exit(store, X);
-        expect(Object.fromEntries(demonitored(store).map((body) => [body.ref, body.reason]))).toEqual({
+        expect(Rec.fromEntries(demonitored(store).map((body) => [body.ref, body.reason]))).toEqual({
           [byCancel!]: "canceled",
           [byExit!]: "watcher_exited",
         });

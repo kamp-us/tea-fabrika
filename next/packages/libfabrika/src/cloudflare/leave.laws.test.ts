@@ -13,8 +13,18 @@ import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Context, Effect, Exit, Formatter, Layer, Schedule, Schema } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -180,7 +190,7 @@ const instance = Effect.fnUntraced(function* () {
     },
   } as unknown as Env;
 
-  const door = Object.fromEntries(
+  const door = Rec.fromEntries(
     [
       "connect",
       "challenge",

@@ -34,7 +34,8 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { DateTime, Effect, Exit, Schema, String as Str, Duration, Fiber } from "effect";
+import { DateTime, Effect, Exit, Schema, String as Str, Duration, Fiber, Record as Rec } from "effect";
+
 
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
@@ -1802,8 +1803,8 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
 
           done.add(move);
           const rows = (await Promise.all(names.map(({ name }) => exited(name)))).flat();
-          expect(Object.fromEntries(rows), "each exit reads back as the reason it was given").toEqual(
-            Object.fromEntries(exits),
+          expect(Rec.fromEntries(rows), "each exit reads back as the reason it was given").toEqual(
+            Rec.fromEntries(exits),
           );
         }
       }),
@@ -1954,7 +1955,7 @@ describe("P34c live object accounting", () => {
           expect(local.program.writes).toBeGreaterThan(0);
           expect(local.recovery.total).toEqual({ writes: 0, bytes: 0 });
           const counts = (db: DatabaseSync) =>
-            Object.fromEntries(
+            Rec.fromEntries(
               db
                 .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
                 .all()

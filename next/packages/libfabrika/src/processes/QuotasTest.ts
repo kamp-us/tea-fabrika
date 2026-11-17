@@ -3,10 +3,19 @@
 // Quotas.program(fullIdentity) reads { writes, bytes, ahead: {writes, bytes} }.
 // Counts are restored from committed data before first admission. No fake quota implementation.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Option, Layer, Result, Schema } from "effect";
-import type { Scope } from "effect";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import * as Str from "effect/String";
-import { TestClock } from "effect/testing";
+import * as Rec from "effect/Record";
+import * as TestClock from "effect/testing/TestClock";
+
+
+
+
 import type { Ledger } from "../ledger/Ledger.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -77,7 +86,7 @@ const rows = (sql: Sql) =>
 const bytes = (e: Entry) => new TextEncoder().encode(JSON.stringify(Schema.encodeSync(Entry)(e))).length;
 
 const snapshot = (sql: Sql) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     sql
       .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
       .map(({ name }) => [String(name), sql.exec(`SELECT * FROM "${Str.replaceAll('"', '""')(String(name))}"`)]),

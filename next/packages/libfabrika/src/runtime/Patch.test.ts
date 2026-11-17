@@ -3,6 +3,10 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Result from "effect/Result";
 import * as Str from "effect/String";
+import * as Rec from "effect/Record";
+
+
+
 import * as fc from "fast-check";
 import { apply, diff } from "./Patch.ts";
 
@@ -105,7 +109,7 @@ const paths = (value: unknown, at: ReadonlyArray<string> = []): Array<ReadonlyAr
       out.push(...paths(one, [...at, String(i)]));
     }
   } else if (typeof value === "object" && value !== null) {
-    for (const [key, one] of Object.entries(value)) {
+    for (const [key, one] of Rec.toEntries(value)) {
       out.push(...paths(one, [...at, key]));
     }
   }
@@ -163,7 +167,7 @@ const edited = (before: unknown, edits: ReadonlyArray<EditChoice>): unknown =>
       return change(value, parent, (p) =>
         Arr.isArray(p)
           ? Arr.filter(p, (_, i) => String(i) !== last)
-          : Object.fromEntries(Arr.filter(Object.entries(Object(p)), ([k]) => k !== last)),
+          : Rec.fromEntries(Arr.filter(Rec.toEntries(Object(p)), ([k]) => k !== last)),
       );
     }
 
