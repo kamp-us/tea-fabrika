@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0113, 0589, 0033, 0040, 0587, 0524; body 81af55606021
+Approved by the lead agent, builds 0113, 0589, 0033, 0040, 0587, 0524; body 3783b353e131
 Plancheck-Version: 3
 
 # Plan: the last fifteen shell and Python scripts become TypeScript and Effect, behind services with a test layer, and lint refuses a new one (ticket 766)
@@ -190,6 +190,8 @@ The same list, one line per new code file, as 0587's check reads it:
 - `.agents/skills/lead/scripts/box/RunsFs.ts`: searched `box/Runs.ts`.
 - `.agents/skills/lead/scripts/redact.ts`: searched gitleaks, trufflehog.
 - `.agents/skills/lead/scripts/redact/Redact.ts`: searched gitleaks, trufflehog.
+- `.agents/skills/lead/scripts/redact/RedactFs.ts` (2026-11-16): searched `box/RunsFs.ts`, the same
+  shape, a contract's real layer on `FileSystem`.
 - `.agents/skills/lead/scripts/runplan.ts`: searched nothing more.
 - `.agents/skills/step-commit/scripts/exam.ts`: searched `commits.ts`, `path.matchesGlob`.
 - `.agents/skills/plan/scripts/plancheck.ts`: searched remark, marked, markdown-it.
@@ -210,6 +212,7 @@ The same list, one line per new code file, as 0587's check reads it:
 - `Redact`: to redact, the word the script and its receipts use (`redacted N`).
 - `Signer`: one who signs; OpenSSH's `ssh-keygen -Y sign` and git's `gpg.ssh` call it the signer.
 - `RunsFs`: the `Runs` service's layer on the file system, as `BranchesGit` is on git.
+- `RedactFs` (2026-11-16): the `Redact` service's layer on the file system, as `RunsFs` is.
 
 ## The shape
 
@@ -348,7 +351,7 @@ callers that are not exam paths.
 
 | Slice | Script | Services | Callers changed here |
 |---|---|---|---|
-| S1 | the lint hold, plus `apt.sh`'s edge line. 2026-11-16, the lead's ruling on S1's review: the hold also reads the `#!` line of a file with no extension, and one naming a shell or Python is a script; the three tsh launchers (`bin/tsh`, `packages/pipeline/bin/tsh`, `packages/fabrika/bin/tsh-small`) are today's version, frozen and deleted with it (0525), so they go on `NOT_YET_PORTED` and the list law's 16 files become those 16 plus these three | `Git.tracked` (or one `git ls-files -z`) | `package.json` lint list |
+| S1 | the lint hold, plus `apt.sh`'s edge line | `Git.tracked` (or one `git ls-files -z`) | `package.json` lint list |
 | S2 | `governance.sh` | `Git` (first), `FileSystem` | `flow/landing.ts`; adr, lead, review skills |
 | S3 | `fieldrow.py` | `FileSystem`, `Clock` | `box.sh`'s one call line; `agents.ts`'s comments; lead skill |
 | S4 | `keepruns.sh` | `box/Runs` real layer on `FileSystem` (`RunsFs`) | `box.ts`, `gc.ts`, `box/RunsProcess.ts` (deleted), `box/BoxTestGit.ts` |
@@ -377,6 +380,16 @@ so a plan step's commit falls back to plain git; the merge session tickets that,
 into this slice. The lean (80%): `plan` is accepted with `--commit-only` only, and in a box its paths
 go through the plan's owner rows like any step's; the signed route refuses `plan` with its own line,
 `stepcommit: no plan key; commit with --commit-only`, since no plan step key exists to sign with.
+
+**Amended 2026-11-16, the lead's ruling: S12 takes a publisher by name.** `stepcommit.ts` takes
+`--publisher <name>`, for example `--publisher bot`, from a fixed set of names, in place of
+`STEPCOMMIT_PUBLISHER`, which today runs its value as a command with the branch name appended
+(`stepcommit.sh:175`). `STEPCOMMIT_PUBLISHER=botpush.mjs` fails with "No such file or directory":
+a bare file name is no command, and `botpush.mjs` also wants the worktree before the branch. Two
+laptop agents hit it, a second sighting (finding `2026-11-16-stepcommit-publisher-runs-its-value`).
+With no flag, the publisher is `publish.ts`, as today; `bot` runs `node botpush.mjs <worktree>
+<branch>`. A flag per call, not a `fabrika.toml` setting (0069): which publisher pushes is the
+caller's choice for one commit, not the project's.
 
 S10 waits for https://github.com/kamp-us/tea-fabrika/pull/1454 to merge (it adds 0587's Existing
 tools check to `plancheck.sh`); if it has not merged when S10 starts, S10 ports main's version and
@@ -409,7 +422,7 @@ table (`Removed`, `Replacement`) with every title, which `loosening.sh` reads.
 |---|---|---|---|---|
 | A tracked `.sh` or `.py` file that is not listed and has no edge line fails lint, and names the file | S1 | test | fc.stringMatching: a file name under a generated folder, 50 runs | the check skips `.py` |
 | A listed file that git does not track fails lint as a stale entry | S1 | test | fc.subarray: of the list, 50 runs | the check ignores stale entries |
-| The list is a subset of the 16 files this plan names (plus the three tsh launchers, lead ruling 2026-11-16) | S1 | test | pinned: the 16 paths of this plan | a 17th entry |
+| The list is a subset of the 16 files this plan names | S1 | test | pinned: the 16 paths of this plan | a 17th entry |
 | `apt.sh` passes by its edge line alone, and an edge line without `(0113)` or a reason fails | S1 | test | fc.string: the reason text, 50 runs | the check accepts `# edge:` with no reason |
 | A diff's words list every decision whose slug, title or tags share a word of four letters or more, edited ones first | S2 | test | fc.array: generated decision records and diff lines, 100 runs | the stop list drops a real word |
 | `governance.ts` always exits 0 and prints the no-match line when nothing matches | S2 | test | scenario: an empty diff | exit 1 on no match |
@@ -418,6 +431,7 @@ table (`Removed`, `Replacement`) with every title, which `loosening.sh` reads.
 | [secrets] Every old K19 law of `redact.test.ts` holds on the scrub function, through every escape depth | S5 | test | fc.string: generated secrets and their JSON and URL spellings, 100 runs | one decoding depth fewer |
 | [secrets] `redact.ts --run` scrubs both files before the config restore, and a failed scrub deletes them | S5 | test | fc.constantFrom: each failure point, 20 runs | restore before scrub |
 | Two runs in one folder never hold the `.npmrc` swap at once | S5 | test | fc.integer: 2 to 4 runs at once on `LockTest`, 30 runs | the lock is skipped |
+| (2026-11-16) The redacted count is recorded as a number: for the output `redacted N`, the run row's `redacted` field is N, in `drive.ts` and `chain.ts` | S5 | test | fc.nat: the count, 100 runs | the count read as NaN |
 | `Env` gives the values `env.sh` gives, each overridable from outside, and `local.env` sets the model | S6 | test | fc.record: generated values for each variable, 100 runs | `local.env` wins over an outside value |
 | `runplan.ts` runs the plan writer through `Redact`'s run with the model and effort from `Env` | S7 | test | scenario: one brief on the test layer | the effort is dropped |
 | Every old law of `skillscheck.test.ts` holds on `skillscheck.ts` | S8 | test | scenario: the old file's own generated trees | a fenced clause counts |
@@ -429,6 +443,7 @@ table (`Removed`, `Replacement`) with every title, which `loosening.sh` reads.
 | Every old law of `stepcommit.test.ts` holds, on the `.sh` and the `.ts` until the switch | S12 | test | scenario: the old file's own cases | a staged folder passes |
 | `plan` is a known step: `--commit-only plan` commits the named paths, and a signed `plan` commit refuses with its own line and exit 2, leaving the index as it was | S12 | test | fc.constantFrom: each step name, known and unknown, 30 runs | `plan` refused as unknown |
 | A refused commit leaves the index as it was | S12 | test | fc.constantFrom: each refusal, 30 runs | `unstage` skipped on a format refusal |
+| (2026-11-16) `--publisher <name>` runs the named publisher with the arguments it takes, and an unknown name is refused with a typed error before anything is committed | S12 | test | fc.constantFrom: each publisher name, known and unknown, 30 runs | an unknown name run as a command |
 | Every old law of `loosening.test.ts` holds, exit codes 0, 1 and 2 included | S13 | test | scenario: the old file's own cases | a removed `expect` passes |
 | A test file `oxc-parser` cannot parse, at either ref, fails closed with exit 2 | S13 | test | fc.string: generated broken TypeScript, 50 runs | a parse error read as no change |
 | Every old law of `box.test.ts` holds on `BoxTest` layers, and its process laws on the real layer | S14 | test | scenario: the old file's own cases | the slot limit 8 becomes 9 |
@@ -439,6 +454,11 @@ table (`Removed`, `Replacement`) with every title, which `loosening.sh` reads.
 | The entry imports nothing but `node:` built-ins, each on a marked `edge:` line | S16 | lint | lint | an `effect` import in the entry |
 | A commit under test from before S15 still runs its arms through `run.sh` | S16 | test | scenario: a base commit that has `run.sh` and no `run.ts` | the fallback dropped |
 | No tracked `.sh` or `.py` file is left but `apt.sh` (and `typecheck.sh` until its port) | S14 | lint | lint | `env.sh` left behind |
+
+**Amended 2026-11-16, the lead's ruling: S5's count law.** Today `drive.ts:1425` and
+`chain.ts:1395` record `Number(out.trim())` of redact's output `redacted N`, which is NaN, so every
+run row's `redacted` field is written as null. The law pins the number, read from the output's
+last word.
 
 No host-only law: nothing here needs launchd, the real Electron app or a signal on the owner's
 Mac. The real-layer sets run in a box on real git, which any Linux box has.
@@ -574,6 +594,24 @@ Mac. The real-layer sets run in a box on real git, which any Linux box has.
 | `docs/direction/lane-queue-or-scheduled-job.md` | lead | S5, S13, S14 | docs |
 | `docs/direction/next-is-a-pipeline-pre-run.md` | lead | S13 | docs |
 | `docs/direction/agents-run-on-codex.md` | lead | S6 | docs |
+| `.agents/skills/lead/scripts/redact/RedactFs.ts` | build | S5 | 60 |
+| `.agents/skills/lead/scripts/box.sh` | build | S5 | 2 |
+| `.agents/skills/lead/scripts/runplan.sh` | build | S5 | 1 |
+| `.agents/skills/step-commit/scripts/exam.integration.test.ts` | tests | S9 | tests |
+
+**Amended 2026-11-16, the lead's rulings, the four rows above:**
+
+- S5's `redact/RedactFs.ts` is the `Redact` service's real layer.
+  [0095](../../../.decisions/0095-a-service-file-holds-only-its-contract.md) keeps the contract
+  file `redact/Redact.ts` free of layers, so the layer is its own file.
+- S5's `box.sh` and `runplan.sh` lines pass `--` before the wrapped command when they call `node
+  redact.ts --run`, since `effect/cli` refuses flag-like words (the wrapped command's `-n`, `-m`,
+  `-c`) after a positional argument.
+- S9's `exam.integration.test.ts` holds the law that runs both entry points, `exam.py` and
+  `exam.ts`, as processes, so it is an integration file by
+  [0584](../../../.decisions/0584-a-tests-kind-follows-what-it-uses.md): no stand-in shows that the
+  two real commands print and exit alike. `exam.py` is deleted at integrator 2's switch, not in S9:
+  its row above says S9, and the switch is where it goes.
 
 The skill prose rows are the lead's in each slice: they change a file name in a command and the
 matching clause row in `skillscheck.ts`, which S8's tests step owns, so a slice after S8 hands that
@@ -652,4 +690,5 @@ None.
 
 ```json
 {"id":"2026-11-16-two-exam-path-matchers-disagree","date":"2026-11-16","rule":"one meaning, one way (0212)","what":"exam.py and next/apps/fabrika/src/exam/commits.ts both turn exam-paths.json's globs into regexes, by different rules. A glob ending in /** matches its own folder name in commits.ts (`(?:/.*)?`) and not in exam.py (`/.*`), and commits.ts counts any path with a control character as an exam path while exam.py does not. So a step tool and CI's commits check can answer differently for the same path.","proof":"Read on origin/main at bcad008: .agents/skills/step-commit/scripts/exam.py lines 4 to 11, and commits.ts's globRegex and examMatcher, lines 169 to 200.","where":".agents/skills/step-commit/scripts/exam.py","next":"S9 of docs/plan/quests/port-scripts-0113-PLAN.md replaces exam.py with an import of examMatcher."}
+{"id":"2026-11-16-lockfs-has-no-law","date":"2026-11-16","rule":"missing_test","what":"Added 2026-11-16 by the lead's ruling. No law in this plan covers sys/LockFs.ts, the Lock service's real layer (a pid file written with the wx flag, reclaimed when its pid is dead). S5's only lock law runs on LockTest, so the real layer's reclaim and its refusal of a live holder are unpinned.","proof":"This plan at c756f02: the Files row for .agents/skills/lead/scripts/sys/LockFs.ts (line 474) has no matching row in the Laws table; the one lock law (line 420) names LockTest.","where":"docs/plan/quests/port-scripts-0113-PLAN.md","next":"Saved as field/findings/2026-11-16-lockfs-has-no-law.json; the lead decides whether S5 gains a real-layer lock law."}
 ```

@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import { check, line, NOT_YET_PORTED } from "./tracked-scripts.ts";
 
 const ROOT = join(import.meta.dirname, "..");
+
 const runs = { seed: 119120, numRuns: 50 };
 
 /** Every listed script, tracked, so the list itself adds no finding. */
@@ -132,10 +133,12 @@ describe("a tracked shell or Python file", () => {
 
         reached.add(script.name.startsWith("python") ? "python" : "shell");
         const body = rest.split("\n").slice(1).join("\n");
+
         const findings = check(
           [...LISTED, path, fine],
           reader({ [path]: `${script.bang}\n${body}`, [fine]: `${other}\n${body}` }),
         );
+
         expect(findings).toEqual([{ _tag: "new_script", path }]);
         expect(findings.map(line).join("\n")).toContain(path);
         // A marked edge passes, as a `.sh` file does.
@@ -214,10 +217,12 @@ describe("an edge line", () => {
   it("scenario: apt.sh passes by its edge line alone", () => {
     expect(LISTED).not.toContain(APT);
     expect(check([...LISTED, APT], reader({ [APT]: apt }))).toEqual([]);
+
     const bare = apt
       .split("\n")
       .filter((text) => !/^#\s*edge:/.test(text))
       .join("\n");
+
     expect(check([...LISTED, APT], reader({ [APT]: bare }))).toEqual([{ _tag: "new_script", path: APT }]);
   });
 
@@ -251,6 +256,7 @@ describe("an edge line", () => {
           const late = reader({
             [script]: ["#!/bin/sh", "#", "#", "#", "#", `# edge: reason${why} (0113)`].join("\n"),
           });
+
           expect(check([...LISTED, script], late).map((found) => found.path)).toEqual([script]);
         },
       ),

@@ -88,6 +88,7 @@ const runsAsScript = (text: string): boolean => {
 
   const first = bang[1]?.split("/").at(-1) ?? "";
   const name = first === "env" ? envTarget((bang[2] ?? "").split(/\s+/).filter((word) => word !== "")) : first;
+
   return RUNS_AS_SCRIPT.test(name.split("/").at(-1) ?? "");
 };
 
@@ -115,7 +116,9 @@ const edges = (text: string): { readonly marked: boolean; readonly broken: boole
     .split("\n")
     .slice(0, HEAD)
     .filter((line) => EDGE_WORD.test(line));
+
   const good = lines.filter((line) => /\S/.test(EDGE.exec(line)?.[1] ?? ""));
+
   return { marked: good.length > 0, broken: good.length < lines.length };
 };
 
@@ -128,14 +131,17 @@ const edges = (text: string): { readonly marked: boolean; readonly broken: boole
 export const check = (tracked: ReadonlyArray<string>, head: (path: string) => string): ReadonlyArray<Finding> => {
   const present = new Set(tracked);
   const listed = new Set(NOT_YET_PORTED);
+
   const stale: ReadonlyArray<Finding> = NOT_YET_PORTED.filter((path) => !present.has(path)).map((path) => ({
     _tag: "stale_entry",
     path,
   }));
+
   const scripts = tracked
     .filter((path) => !listed.has(path) && (SCRIPT.test(path) || BARE.test(path)))
     .map((path) => ({ path, text: head(path) }))
     .filter(({ path, text }) => SCRIPT.test(path) || runsAsScript(text));
+
   const found = scripts.flatMap(({ path, text }): ReadonlyArray<Finding> => {
     const { marked, broken } = edges(text);
 
@@ -145,6 +151,7 @@ export const check = (tracked: ReadonlyArray<string>, head: (path: string) => st
 
     return marked ? [] : [{ _tag: "new_script", path }];
   });
+
   return [...stale, ...found];
 };
 

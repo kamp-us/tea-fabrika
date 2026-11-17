@@ -14,6 +14,7 @@ import { Effect, FileSystem, Layer, Option, Path } from "effect";
 import { type Kept, Runs } from "./Runs.ts";
 
 const nothing: Kept = { said: "", kept: true };
+
 const refused: Kept = { said: "", kept: false };
 
 /** `main` is MAIN, the checkout whose runs/ every folder's runs/ moves into. */
@@ -68,6 +69,7 @@ export const layer = (main: string): Layer.Layer<Runs, never, FileSystem.FileSys
           yield* fs.makeDirectory(into, { recursive: true });
           const dest = yield* free(into, name);
           yield* fs.rename(src, dest);
+
           return { said: `kept runs of ${name} at runs/${path.basename(dest)}`, kept: true };
         },
         Effect.catchTag("PlatformError", () => Effect.succeed(refused)),

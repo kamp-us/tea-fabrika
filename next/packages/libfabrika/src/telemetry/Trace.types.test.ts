@@ -5,6 +5,7 @@ import * as Trace from "./Trace.ts";
 const types = () => {
   expectTypeOf<Trace.SumPoint["refused"]>().toEqualTypeOf<"reserved" | "rate_limited" | "other">();
   expectTypeOf<Trace.Refused>().toEqualTypeOf<"reserved" | "rate_limited" | "other">();
+
   const invalid: Trace.SumPoint = {
     _tag: "sum",
     piece: "gateway.route",
@@ -13,6 +14,7 @@ const types = () => {
     // @ts-expect-error the refusal split is closed, so arbitrary strings cannot create rows
     refused: "unbounded",
   };
+
   return invalid;
 };
 

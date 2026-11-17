@@ -15,24 +15,28 @@ const Cause = { cause: Schema.optionalKey(Schema.Redacted(Schema.Unknown, { disa
  * @category errors
  */
 export class Input extends Schema.TaggedError<Input>()("Input", Cause) {}
+
 /**
  * The program's selector failed.
  *
  * @category errors
  */
 export class Selection extends Schema.TaggedError<Selection>()("Selection", Cause) {}
+
 /**
  * The selected value cannot be encoded as checked JSON.
  *
  * @category errors
  */
 export class Output extends Schema.TaggedError<Output>()("Output", Cause) {}
+
 /**
  * Audit transport failed without deciding anything about the program.
  *
  * @category errors
  */
 export class Transport extends Schema.TaggedError<Transport>()("Transport", Cause) {}
+
 /**
  * The remote audit reply could not be checked.
  *
@@ -111,6 +115,7 @@ export const select = (program: Declaration, raw: unknown): Result.Result<Schema
       try: () => (program.audit === undefined ? Schema.decodeUnknownSync(Minimal)(msg) : program.audit.select(msg)),
       catch: (cause) => new AuditError({ reason: new Selection({ cause: Redacted.make(cause) }) }),
     });
+
     return Result.flatMap(selected, (value) =>
       Result.try({
         try: () =>

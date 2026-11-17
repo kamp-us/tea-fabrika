@@ -30,6 +30,7 @@ const LEAD = ".agents/skills/lead/scripts/";
 
 /** The quest code's own files and tests (0089's table); the flow runner is a folder. */
 const QUEST = ["chain", "drive"].flatMap((stem) => [".ts", ".test.ts"].map((end) => `${LEAD}${stem}${end}`));
+
 const FLOW = `${LEAD}flow/`;
 
 /**
@@ -37,7 +38,9 @@ const FLOW = `${LEAD}flow/`;
  * parsers/create-parser.js). A changed `.cjs` or `.mjs` file is sampled like a `.ts` one (ticket 655).
  */
 const EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"] as const;
+
 const DECLARATIONS = [".d.ts", ".d.mts", ".d.cts"] as const;
+
 const TESTS = [".test.ts", ".test.tsx"] as const;
 
 /** The same product rule as a git pathspec, for the sample script's diff: less tests and type-only files. */
@@ -72,6 +75,7 @@ export const related = (changed: ReadonlyArray<string>) => {
   const tests = pick(changed).flatMap((path) => {
     if (product(path)) {
       const stem = path.slice(0, path.lastIndexOf("."));
+
       return TESTS.map((extension) => `${stem}${extension}`);
     }
 

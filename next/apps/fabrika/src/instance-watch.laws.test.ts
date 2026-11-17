@@ -20,11 +20,14 @@ describe("T421 the dev instance's watch on the build folder", () => {
           const changed = yield* Deferred.make<void>();
           const seen: Array<string> = [];
           let content = "export default 1";
+
           const read = Effect.sync(() => {
             const file = { path: "brain.mjs", content, hash: sha(content) };
             Queue.offerUnsafe(reads, file.hash);
+
             return { files: [file] as [typeof file], hash: file.hash };
           });
+
           const watched = Layer.effect(
             FileSystem.FileSystem,
             Effect.map(FileSystem.FileSystem, (fs) => ({
@@ -32,6 +35,7 @@ describe("T421 the dev instance's watch on the build folder", () => {
               watch: () => Stream.fromQueue(events),
             })),
           ).pipe(Layer.provide(NodeServices.layer));
+
           yield* watchBundleDirectory({ main: "/build/brain.mjs", read }).pipe(
             Stream.runForEach((event) =>
               Effect.gen(function* () {

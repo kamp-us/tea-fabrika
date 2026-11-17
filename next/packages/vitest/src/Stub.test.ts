@@ -50,14 +50,17 @@ it("a name outside own answers rest(name) with that name and the call's argument
   fc.assert(
     fc.property(Members, fc.array(fc.jsonValue(), { maxLength: 3 }), ({ keys, other }, args) => {
       const asked: Array<string> = [];
+
       const stub = Stub.make<Record<string, Method>>(
         (name) =>
           (...given) => {
             asked.push(name);
+
             return { name, given };
           },
         ownMembers(keys),
       );
+
       expect(stub[other]?.(...args)).toEqual({ name: other, given: args });
       expect(asked).toEqual([other]);
     }),
@@ -73,10 +76,13 @@ it("an own member answers as given, and rest is not asked for it", () => {
       ({ keys }, at) => {
         const key = keys[at % keys.length] ?? "";
         const asked: Array<string> = [];
+
         const stub = Stub.make<Record<string, Method>>((name) => {
           asked.push(name);
+
           return () => "rest";
         }, ownMembers(keys));
+
         expect(stub[key]?.()).toBe(`own:${key}`);
         expect(asked).toEqual([]);
       },

@@ -50,7 +50,9 @@ import { Argument, Command, Flag } from "effect/cli";
 
 export const SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing";
 
-export class Refused extends Schema.TaggedError<Refused>()("Refused", { reason: Schema.String }) {}
+export class Refused extends Schema.TaggedError<Refused, { readonly brand: unique symbol }>()("Refused", {
+  reason: Schema.String,
+}) {}
 
 /** One call's tokens by how they are priced: uncached input, the two cache writes, cache reads, output. */
 export interface Tokens {
@@ -104,6 +106,7 @@ const ROUTING = [
 ] as const;
 
 const Count = Schema.optionalKey(Schema.NullOr(Schema.Int));
+
 const Routed = Schema.optionalKey(Schema.NullOr(Schema.String));
 
 /** A message's `usage`, as the Messages API writes it. Other fields are not read. */
@@ -119,14 +122,18 @@ const Usage = Schema.Struct({
   service_tier: Routed,
   speed: Routed,
 });
+
 type Usage = typeof Usage.Type;
 
 const Field = Schema.optionalKey(Schema.Unknown);
 
 /** The four fields read from a transcript line, and the four read from its message. */
 const Line = Schema.Struct({ type: Field, timestamp: Field, uuid: Field, message: Field });
+
 const Message = Schema.Struct({ id: Field, model: Field, content: Field, usage: Field });
+
 const ToolUse = Schema.Struct({ type: Schema.Literal("tool_use") });
+
 /** A usage that says nothing: `{}`. */
 const Empty = Schema.Record(Schema.String, Schema.Never);
 
@@ -134,8 +141,11 @@ const Empty = Schema.Record(Schema.String, Schema.Never);
 const Meta = Schema.Struct({ effort: Schema.optionalKey(Schema.NullOr(Schema.String)), finished: Field });
 
 const decodeLine = Schema.decodeUnknownResult(Schema.fromJsonString(Line));
+
 const decodeMessage = Schema.decodeUnknownResult(Message);
+
 const decodeUsage = Schema.decodeUnknownResult(Usage);
+
 const decodeMeta = Schema.decodeUnknownResult(Schema.fromJsonString(Meta));
 
 /** One model call: when its first line was written, its model, its tokens, tool calls and list dollars. */
@@ -159,6 +169,7 @@ const refuse = (reason: string) => Result.fail(Refused.make({ reason }));
 /** A usage's tokens by price. */
 const split = (usage: Usage): Tokens => {
   const write1h = usage.cache_creation?.ephemeral_1h_input_tokens ?? 0;
+
   return {
     input: usage.input_tokens ?? 0,
     write5m: usage.cache_creation?.ephemeral_5m_input_tokens ?? (usage.cache_creation_input_tokens ?? 0) - write1h,
@@ -190,6 +201,7 @@ const priced = (model: unknown, usage: Usage, tokens: Tokens): Result.Result<num
 
   const prompt = tokens.input + tokens.write5m + tokens.write1h + tokens.read;
   const price = listed.long !== undefined && prompt > 100_000 ? listed.long : listed.price;
+
   // Added in this order, as the Python script did, so the sum is the same number to the last bit.
   return Result.succeed(
     tokens.input * price.input +
@@ -287,6 +299,7 @@ export const rounded = (x: number, places: number): number => {
   const digits = Number(Math.abs(x).toFixed(places).replace(".", ""));
   const halves = Math.abs(x) * 2 ** (places + 1);
   const tie = Number.isInteger(halves) && halves % 2 === 1;
+
   return Math.sign(x) * Number(`${tie && digits % 2 === 1 ? digits - 1 : digits}e-${places}`);
 };
 
@@ -299,6 +312,7 @@ const ZONED = /T.*(?:Z|[+-]\d{2}:?\d{2})$/;
 /** The instant a transcript's timestamp names, or a refusal when it names none. */
 const instant = (at: string | null): Result.Result<DateTime.Utc, Refused> => {
   const made = at !== null && ZONED.test(at) ? DateTime.make(at) : Option.none();
+
   return Option.isSome(made)
     ? Result.succeed(DateTime.toUtc(made.value))
     : refuse(`a timestamp is missing or names no time zone: ${JSON.stringify(at)}`);
@@ -307,6 +321,7 @@ const instant = (at: string | null): Result.Result<DateTime.Utc, Refused> => {
 /** An instant as that zone's clock reads it, to the second: `2026-11-10T00:12:15-08:00`. */
 const local = (zone: DateTime.TimeZone, at: DateTime.Utc): string => {
   const zoned = DateTime.setZone(at, zone);
+
   return `${DateTime.formatIsoOffset(zoned).slice(0, 19)}${DateTime.zonedOffsetIso(zoned)}`;
 };
 
@@ -345,16 +360,16 @@ const Row = Schema.Struct({
   effort: Text,
   outcome: Text,
   reason: Schema.String,
-  tokens: Schema.Number,
-  tools: Schema.Number,
-  minutes: Schema.Number,
+  tokens: Schema.Finite,
+  tools: Schema.Finite,
+  minutes: Schema.Finite,
   note: Text,
   costUsd: Schema.Null,
-  listUsd: Schema.Number,
-  billed: Schema.Number,
-  inputTokens: Schema.Number,
-  cachedTokens: Schema.Number,
-  outputTokens: Schema.Number,
+  listUsd: Schema.Finite,
+  billed: Schema.Finite,
+  inputTokens: Schema.Finite,
+  cachedTokens: Schema.Finite,
+  outputTokens: Schema.Finite,
   billing: Schema.optionalKey(Billing),
   corrects: Schema.optionalKey(Schema.String),
   step: Schema.optionalKey(Schema.String),
@@ -362,24 +377,27 @@ const Row = Schema.Struct({
 
 /** One model call of a transcript, for the cost curve. */
 const Turn = Schema.Struct({
-  call: Schema.Number,
+  call: Schema.Finite,
   at: Schema.String,
-  context: Schema.Number,
-  write: Schema.Number,
-  output: Schema.Number,
-  tools: Schema.Number,
-  usd: Schema.Number,
-  total: Schema.Number,
+  context: Schema.Finite,
+  write: Schema.Finite,
+  output: Schema.Finite,
+  tools: Schema.Finite,
+  usd: Schema.Finite,
+  total: Schema.Finite,
 });
 
 const encodeRow = Schema.encodeSync(Schema.fromJsonString(Row));
+
 const encodeTurn = Schema.encodeSync(Schema.fromJsonString(Turn));
 
 const load = Effect.fn("clauderow.load")(function* (path: string) {
   const fs = yield* FileSystem.FileSystem;
+
   const text = yield* fs
     .readFileString(path)
     .pipe(Effect.mapError(() => Refused.make({ reason: `${path} could not be read` })));
+
   return yield* Effect.fromResult(read(text));
 });
 
@@ -419,6 +437,7 @@ export const row = Effect.fn("clauderow.row")(function* (path: string, ask: Ask)
   const cached = sum((call) => call.tokens.read);
   const output = sum((call) => call.tokens.output);
   const { tokens } = final;
+
   const reason = [
     ask.reason,
     ` Claude Code subagent transcript: ${calls.length} model calls; tokens in ${grouped(input)} uncached,`,

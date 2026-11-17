@@ -24,6 +24,7 @@ import { Decode, StartsError } from "../settings/Starts.ts";
  */
 export const check = Effect.fnUntraced(function* (raw: unknown) {
   const input = yield* Schema.decodeUnknownEffect(Start.Input)(raw, { onExcessProperty: "error" });
+
   // Preserve the shared decoder's own failure for existing app error boundaries.
   const values = Object.fromEntries(
     Object.entries(Declarations.all.settings).map(([name, declaration]) => [
@@ -31,8 +32,10 @@ export const check = Effect.fnUntraced(function* (raw: unknown) {
       input.settings.values[declaration.path],
     ]),
   );
+
   yield* Schema.decodeUnknownEffect(Codec.values(Declarations.all))(values, { onExcessProperty: "error" });
   const checked = yield* Snapshot.read(Declarations.all, input.settings);
+
   return { input, ...checked };
 });
 
@@ -45,6 +48,7 @@ export const decode = Effect.fnUntraced(function* (encoded: unknown) {
   const input = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Start.Input))(encoded, {
     onExcessProperty: "error",
   });
+
   return yield* check(input);
 }, Effect.provide(Digest.layerWebCrypto));
 
@@ -93,6 +97,7 @@ export const receipt = Effect.fnUntraced(function* (raw: unknown, expected?: Sta
  */
 export const read = Effect.gen(function* () {
   const env = yield* WorkerEnvironment;
+
   return yield* decode(env.INSTANCE).pipe(
     Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
   );

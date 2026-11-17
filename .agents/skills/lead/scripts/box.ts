@@ -23,12 +23,14 @@ const rm = Effect.fn("box.rm")(function* (name: string) {
 
   if (main === undefined || boxes === undefined) {
     yield* Console.log(`kept box ${name}: inspection or removal failed`);
+
     return yield* setExit(1);
   }
 
   const services = Layer.mergeAll(BoxGitProcess.layer(main, process.env), RunsFs.layer(main)).pipe(
     Layer.provide(NodeServices.layer),
   );
+
   const removal = yield* Remove.remove(name, { boxes, main }).pipe(Effect.provide(services));
 
   if (removal.runs !== "") {

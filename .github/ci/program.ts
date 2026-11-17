@@ -62,6 +62,7 @@ const unmatched = (from: readonly Comment[], to: readonly Comment[]) => {
     const key = `${comment.type}:${comment.value}`;
     const count = left.get(key) ?? 0;
     left.set(key, count - 1);
+
     return count <= 0;
   });
 };
@@ -93,6 +94,7 @@ const refusal = (name: string, before: string, after: string, parse: typeof pars
 
   const changed = [...unmatched(old.comments, fresh.comments), ...unmatched(fresh.comments, old.comments)];
   const found = changed.find(tool);
+
   return found === undefined ? undefined : `a tool comment changed: ${JSON.stringify(found.value.trim())}`;
 };
 
@@ -137,5 +139,6 @@ export const samePaths = (
   paths.filter((path) => {
     const verdict = judge(base, head, path, run);
     note(path, verdict ?? "same program");
+
     return verdict === undefined;
   });

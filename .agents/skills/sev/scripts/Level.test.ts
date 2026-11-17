@@ -7,6 +7,7 @@ import { Effect, FileSystem, Path, Result, Schema } from "effect";
 import * as Level from "./Level.ts";
 
 const AT = "2026-11-14T19:00:00.000Z";
+
 const BRANCH = Schema.Literals(["fabrikalfa/ci-cache", "fabrikalfa/ci-legs", "fabrikalfa/ci-flake"]);
 
 /** One command a person can give, as the line it would write. */
@@ -51,6 +52,7 @@ describe("fold", () => {
           entry._tag === "opened"
             ? sev0._tag === "closed"
             : entry._tag === "looping" || entry._tag === "ended" || sev0._tag === "open";
+
         expect(Result.isSuccess(next)).toBe(fits);
 
         if (Result.isSuccess(next)) {
@@ -79,6 +81,7 @@ describe("fold", () => {
       }
 
       const folded = Level.fold(entries);
+
       return Result.isSuccess(folded) && folded.success._tag === "open" && folded.success.allow.join() === model.join();
     },
   );

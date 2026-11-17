@@ -22,6 +22,7 @@ export const Origin = Schema.TaggedUnion({
   env: { name: Schema.String },
   file: { file: Schema.String, line: Schema.Int },
 });
+
 /**
  * The decoded type of `Origin`.
  *
@@ -74,6 +75,7 @@ export interface Resolved<A> {
 export const flags = (record: Readonly<Record<string, string>>): Source => ({
   provider: ConfigProvider.make((path) => {
     const value = record[path.join(".")];
+
     return Effect.succeed(value === undefined ? undefined : ConfigProvider.makeValue(value));
   }),
   origin: (path) => Origin.cases.flag.make({ name: `--${path.join(".")}` }),
@@ -156,17 +158,23 @@ export const resolve = Effect.fnUntraced(function* <A>(group: Setting.Group<A>, 
     (chain, source) => chain.pipe(ConfigProvider.orElse(source.provider)),
     slots.flags.provider,
   );
+
   const values = yield* group.parse(provider).pipe(
     Effect.mapError((error: Config.ConfigError) => {
       const issue = error.cause instanceof Schema.SchemaError ? error.cause.issue : undefined;
+
       const path =
         issue === undefined ? [] : (SchemaIssue.makeFormatterStandardSchemaV1()(issue).issues[0]?.path ?? []);
+
       const d = group.declarations.find((d) => d.segments.join(".") === path.join("."));
+
       return d === undefined
         ? new SettingsError({ reason: "read", message: `The settings could not be read.\n  ${STOP}`, cause: error })
         : refused(location(origins[d.path] ?? Origin.cases.default.make({})), d, supplied[d.path] ?? "");
     }),
   );
+
   const resolved: Resolved<A> = { values, origins };
+
   return resolved;
 });

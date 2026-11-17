@@ -24,29 +24,37 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { build } from "../src/build.ts";
 
 const SEED = 119120;
+
 const ORIGIN = "http://127.0.0.1";
+
 /** How a red law ends: at its first failing run, with its seed and path, and no shrinking. Each
  *  shrink step opens a page and waits out a 2 s bound again, which adds nothing to the counterexample. */
 const RED = { endOnFailure: true } as const;
+
 /** How long a stop or a report may take to show, in ms. The stop shows in 1.7 to 3.0 ms (the plan's
  *  probe 3), so two seconds is room for a slow CI machine without letting a page that never stops pass. */
 const WITHIN = 2000;
+
 /** How long "nothing happened" is read after a persisted event, in ms: about 80 times the slowest stop
  *  the plan's probe 3 measured, so a stop that did happen has shown by then. */
 const QUIET = 250;
+
 /** How long a page restored from the back/forward cache may take to dial again, in ms: the window's
  *  own redial backoff after Chromium closed its socket in the cache (the plan, L3). */
 const REDIAL_WITHIN = 10_000;
 
 /** A Playwright call the law awaited failed: which call, and the cause. */
-class PlaywrightError extends Schema.TaggedError<PlaywrightError>()("PlaywrightError", {
-  op: Schema.String,
-  message: Schema.String,
-  cause: Schema.Defect(),
-}) {}
+class PlaywrightError extends Schema.TaggedError<PlaywrightError, { readonly brand: unique symbol }>()(
+  "PlaywrightError",
+  {
+    op: Schema.String,
+    message: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {}
 
 /** A property's own run failed, a counterexample or a setup error, with fast-check's report as its message. */
-class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", {
+class PropertyFailed extends Schema.TaggedError<PropertyFailed, { readonly brand: unique symbol }>()("PropertyFailed", {
   message: Schema.String,
   cause: Schema.Defect(),
 }) {}
@@ -65,6 +73,7 @@ const property = (run: () => Promise<void>) =>
   Effect.tryPromise({ try: run, catch: (cause) => PropertyFailed.make({ message: text(cause), cause }) });
 
 type Assets = { readonly page: string; readonly script: string };
+
 let assets: Assets;
 
 beforeAll(async () => {
@@ -75,7 +84,9 @@ beforeAll(async () => {
           Effect.sync(() => mkdtempSync(join(tmpdir(), "page-runtime-"))),
           (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
         );
+
         const built = yield* build({ out: join(folder, "dist"), ledger: [] });
+
         return { page: built.assets["/index.html"]!.body, script: built.assets["/window.js"]!.body };
       }),
     ).pipe(Effect.provide(NodeServices.layer)),
@@ -102,6 +113,7 @@ const profile = (b: Browser, init?: { readonly script: (arg: string) => void; re
       playwright("newContext", () => b.newContext()),
       (c) => playwright("context.close", () => c.close()).pipe(Effect.orDie),
     );
+
     const seen: Seen = { dials: [], lines: [] };
     yield* playwright("route", () =>
       context.route(`${ORIGIN}/**`, (route) => {
@@ -183,6 +195,7 @@ const up = (context: BrowserContext, seen: Seen) =>
     const page = yield* tab(context, seen);
     yield* playwright("goto /", () => page.goto(`${ORIGIN}/`));
     expect(yield* until(isUp(page, seen), 30_000), `the tab came up: ${JSON.stringify(seen)}`).toBe(true);
+
     return page;
   });
 
@@ -289,9 +302,11 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
           // A page restored from the cache fires no `load`, so Back waits only for the commit, and
           // the law then waits for the `pageshow` the init script records.
           yield* playwright("goBack", () => page.goBack({ waitUntil: "commit" }));
+
           const shows = playwright("shows", (): Promise<ReadonlyArray<boolean>> =>
             page.evaluate(() => Reflect.get(globalThis, "__shows") ?? []).catch(() => []),
           );
+
           yield* until(
             Effect.map(shows, (s) => s.length > 0),
             30_000,

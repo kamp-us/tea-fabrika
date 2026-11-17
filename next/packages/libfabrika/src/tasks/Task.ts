@@ -20,6 +20,7 @@ const Capability = Text;
 export const Command = Schema.TaggedUnion({
   git_version: {},
 });
+
 /**
  * The one supported command: `git_version`.
  *
@@ -47,6 +48,7 @@ export const Result = Schema.TaggedUnion({
   failed: { reason: Schema.Literals(["unavailable", "spawn_failed", "output_limit"]) },
   unknown: { reason: Schema.Literal("interrupted") },
 });
+
 /**
  * The checked terminal answer: `exited` with a code and version, `failed` with a reason, or
  * `unknown` after a crash between start and a saved result.
@@ -83,6 +85,7 @@ export const Request = Schema.Struct({
   /** Trace correlation, never authority. */
   traceId: TraceId,
 });
+
 /**
  * What a program asked for, with every fact that exists only when it asked.
  *
@@ -102,6 +105,7 @@ export const Executor = Schema.Struct({
   has: Schema.Array(Capability),
   build: Text,
 });
+
 /**
  * The hands that take a task: their key, the connection they came on, what they advertise and their
  * build.
@@ -130,6 +134,7 @@ export const Recorded = Schema.Struct({
   connection: Schema.optionalKey(Text),
   has: Schema.optionalKey(Schema.Array(Capability)),
 });
+
 /**
  * What a writer says about one call: who, for whom, its own clock, what it had seen, why and its
  * build.
@@ -167,6 +172,7 @@ export const State = Schema.TaggedUnion({
   finished: { request: Request, assignment: Assignment, result: Result },
   collected: { request: Request, assignment: Assignment, result: Result, collection: Collection },
 });
+
 /**
  * A task's control state: `absent`, `requested`, `assigned`, `started`, `finished` or `collected`.
  * Neither `finished` nor `collected` has a way back to execution.
@@ -188,6 +194,7 @@ export const Event = Schema.Struct({
   /** The referee's clock, in ms since 1970. */
   arrivedAt: Schema.Int,
 });
+
 /**
  * One accepted call as the ledger kept it: the writer's record, and where and when it arrived.
  *
@@ -201,6 +208,7 @@ export type Event = typeof Event.Type;
  * @category models
  */
 export const Task = Schema.Struct({ state: State, events: Schema.Array(Event) });
+
 /**
  * A task as `read` answers it: its state, and every accepted event in order.
  *

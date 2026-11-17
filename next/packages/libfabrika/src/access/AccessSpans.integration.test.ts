@@ -13,9 +13,9 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -38,9 +38,13 @@ import { ClientManager } from "./ClientManager.ts";
 import * as ClientManagerLedger from "./ClientManagerLedger.ts";
 
 const READER = "connection:t1";
+
 const PARENT = `in-${A}-41`;
+
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const TO = "ledger:home";
+
 const SENT = "2026-11-07T21:10:01.204Z";
 
 const FOUNDER = {
@@ -78,8 +82,11 @@ const examples =
 
 // Markers no tag may hold: the letter's m, every saw text, and the signature's two texts.
 const M_MARK = "m-marker-51c0";
+
 const SAW_MARK = "saw-marker-8a2e";
+
 const SIG_MARK = "sig-marker-3f71";
+
 const MARKS = [M_MARK, SAW_MARK, SIG_MARK];
 
 // Every ledger is a fresh node:sqlite file in its own temp folder. The scope that opens it closes
@@ -94,17 +101,7 @@ type Store = Effect.Effect<Sql, never, Scope.Scope>;
 
 const fresh = (): Store =>
   folder.pipe(
-    Effect.flatMap((path) =>
-      Effect.acquireRelease(
-        Effect.sync(() => new DatabaseSync(join(path, "ledger.db"))),
-        (db) =>
-          Effect.sync(() => {
-            if (db.isOpen) {
-              db.close();
-            }
-          }),
-      ),
-    ),
+    Effect.flatMap((path) => TestDatabase.make(join(path, "ledger.db"))),
     Effect.map(nodeSql),
   );
 
@@ -143,14 +140,18 @@ const from = (over: Partial<From> = {}): From => ({
 /** A tracer that keeps every span it makes. */
 const capture = () => {
   const spans: Array<Tracer.NativeSpan> = [];
+
   const tracer = Tracer.make({
     span(options) {
       const span = new Tracer.NativeSpan(options);
       spans.push(span);
+
       return span;
     },
   });
+
   const ended = (name: string) => spans.filter((s) => s.name === name && s.status._tag === "Ended");
+
   return { tracer, spans, ended };
 };
 
@@ -196,6 +197,7 @@ const signed = (signer: string) => ({
 });
 
 let made = 0;
+
 const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
 
 const granted = (signer: string, key: string): MemberEvent => ({
@@ -279,6 +281,7 @@ describe("p97, mailbox spans", () => {
     [nameArb, idArb],
     examples([["notes:1", "letter_a"]], (name: string, id: string) => {
       const { tracer, ended, spans } = capture();
+
       return Effect.gen(function* () {
         const mailbox = yield* Mailbox;
         const m = { type: "save", value: M_MARK };
@@ -316,6 +319,7 @@ describe("p97, mailbox spans", () => {
     [nameArb],
     examples([["notes:1"]], (name: string) => {
       const { tracer, ended, spans } = capture();
+
       return Effect.gen(function* () {
         const mailbox = yield* Mailbox;
         const ledger = yield* Ledger;
@@ -361,12 +365,15 @@ describe("p97, process spans", () => {
     ],
     examples([["notes:1", "notes", "sha256-7c1d073e"]], (name: string, program: string, hash: string) => {
       const { tracer, ended, spans } = capture();
+
       return Effect.gen(function* () {
         const manager = yield* ProcessManager;
+
         const request = firstStart("start:notes:1", name, {
           program,
           hash,
         });
+
         yield* manager.start(request, from());
         expect((yield* Effect.flip(manager.start(request, from({ parent: null })))).reason).toBe("id_reused");
         const [first, second, ...more] = ended("process.start");
@@ -397,6 +404,7 @@ describe("p97, member spans", () => {
     [keyArb],
     examples([["t1"]], (key: string) => {
       const { tracer, ended, spans } = capture();
+
       return Effect.gen(function* () {
         const clients = yield* ClientManager;
         yield* write(granted("pA", key));
@@ -450,18 +458,22 @@ describe("p97, member spans", () => {
         const sheet = addedSheet("pA", key);
         const macC = addedDevice(key, "pC", "wC", ["pA"]);
         const macX = addedDevice(key, "pX", "wX");
+
         const hook: { before: Effect.Effect<void, LedgerError> | null } = {
           before: write(macX).pipe(
             Effect.asVoid,
             Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
           ),
         };
+
         const target = macC._tag === "added" ? macC.add.id : "";
+
         // A Ledger that runs Mac X's whole write just before Mac C's append: the race, made certain.
         const racing = Layer.effect(
           Ledger,
           Effect.gen(function* () {
             const real = yield* Ledger;
+
             return {
               read: real.read,
               wait: real.wait,
@@ -474,19 +486,23 @@ describe("p97, member spans", () => {
                   }
 
                   hook.before = null;
+
                   return Effect.andThen(before, real.append(stream, id, line));
                 }),
             };
           }),
         ).pipe(Layer.provide(onSql(sql)));
+
         return Effect.gen(function* () {
           const clients = yield* ClientManager;
           yield* write(sheet);
           expect(yield* write(macC)).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
+
           // Spans are kept in the order they start, and Mac X's starts inside Mac C's, so sort them.
           const answers = ended("access.write")
             .map((span) => `${String(tagged(span, "answer"))} ${String(tagged(span, "reason") ?? "")}`)
             .sort();
+
           expect(answers).toEqual(["applied ", "applied ", "ignored used"]);
           yield* clients.members;
           const read = ended("access.read").at(-1);
@@ -514,6 +530,7 @@ describe("p97, names and numbers only", () => {
       const long = (letter: string) => letter.repeat(length);
       // Process texts stay under their 256-character cap and still pass the 128 tag cut.
       const capped = (letter: string) => letter.repeat(cap);
+
       return Effect.gen(function* () {
         const mailbox = yield* Mailbox;
         const manager = yield* ProcessManager;
@@ -543,6 +560,7 @@ describe("p97, the tags hold the right names and numbers", () => {
     [keyArb],
     examples([["t1"]], (key: string) => {
       const { tracer, ended } = capture();
+
       return Effect.gen(function* () {
         const clients = yield* ClientManager;
         const event = granted("pA", key);
@@ -577,6 +595,7 @@ describe("p97, the tags hold the right names and numbers", () => {
     [Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 20 }))],
     examples([[2]], (count: number) => {
       const { tracer, ended } = capture();
+
       return Effect.gen(function* () {
         const clients = yield* ClientManager;
         yield* clients.members;
@@ -604,10 +623,12 @@ describe("p97, the tags hold the right names and numbers", () => {
         const macC = addedDevice(key, "pC", "wC", ["pA"]);
         const macX = addedDevice(key, "pX", "wX");
         const target = macC._tag === "added" ? macC.add.id : "";
+
         let before: Effect.Effect<void, LedgerError> | null = write(macX).pipe(
           Effect.asVoid,
           Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
         );
+
         // Mac X's whole write runs just before Mac C's append, as in the race above.
         const racing = Layer.effect(
           Ledger,
@@ -623,10 +644,12 @@ describe("p97, the tags hold the right names and numbers", () => {
                 }
 
                 before = null;
+
                 return Effect.andThen(first, real.append(stream, id, line));
               }),
           })),
         ).pipe(Layer.provide(onSql(sql)));
+
         return Effect.gen(function* () {
           yield* write(sheet);
           expect(yield* write(macC)).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
@@ -652,6 +675,7 @@ describe("p97, the tags hold the right names and numbers", () => {
     [idArb],
     examples([["letter_a"]], (id: string) => {
       const { tracer, ended } = capture();
+
       return Effect.gen(function* () {
         const mailbox = yield* Mailbox;
         yield* mailbox.send("notes:1", id, { value: M_MARK }, from());
@@ -672,11 +696,13 @@ describe("p97, the tags hold the right names and numbers", () => {
     [nameArb, idArb],
     examples([["notes:1", "letter_a"]], (name: string, id: string) => {
       const { tracer, ended } = capture();
+
       const broken = Layer.succeed(Ledger, {
         append: () => Effect.fail(LedgerError.make({ reason: "storage" })),
         read: () => Stream.fail(LedgerError.make({ reason: "storage" })),
         wait: () => Effect.fail(LedgerError.make({ reason: "storage" })),
       });
+
       return Effect.gen(function* () {
         const mailbox = yield* Mailbox;
         const failed = yield* Effect.flip(mailbox.send(name, id, {}, from()));
@@ -697,11 +723,13 @@ describe("p97, the tags hold the right names and numbers", () => {
     [Schema.Literals(["storage", "bad_row"])],
     ([reason]) => {
       const { tracer, ended } = capture();
+
       const broken = Layer.succeed(Ledger, {
         append: () => Effect.fail(LedgerError.make({ reason })),
         read: () => Stream.fail(LedgerError.make({ reason })),
         wait: () => Effect.fail(LedgerError.make({ reason })),
       });
+
       return Effect.gen(function* () {
         expect((yield* Effect.flip((yield* ClientManager).members)).reason).toBe(reason);
         const reads = ended("access.read");

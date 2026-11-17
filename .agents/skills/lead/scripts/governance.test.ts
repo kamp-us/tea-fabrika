@@ -25,7 +25,9 @@ import * as GitTest from "./git/GitTest.ts";
 import { governance } from "./governance.ts";
 
 const runs = { seed: 119120, numRuns: 100 };
+
 const TOP = "/repo";
+
 const NO_MATCH = "governance: no decision file matched this diff. Search .decisions/ by hand too.";
 
 /** governance.sh's stop list, as it stood on main. */
@@ -75,7 +77,9 @@ const counted = (text: string): ReadonlySet<string> =>
 // The words a generated text is made of: real words, stop words of four letters or more, words too
 // short to count, words with digits, and capitals, which count lowercased.
 const REAL = ["ledger", "review", "merge", "lint", "port", "shell", "python", "effect", "tracker", "brain", "lease"];
+
 const STOPPED = ["never", "every", "with", "from", "when", "that", "only", "file", "decision", "owner", "repo"];
+
 const SHORT = ["box", "run", "tea", "git", "a1"];
 
 const word = fc.oneof(
@@ -86,16 +90,20 @@ const word = fc.oneof(
 );
 
 const words = (max: number) => fc.array(word, { minLength: 1, maxLength: max });
+
 const SEPARATORS = [" ", "-", ", ", ".", "/"];
+
 /** A line of words: it starts with a letter, so it never reads as a diff header. */
 const line = fc.tuple(words(5), fc.constantFrom(...SEPARATORS)).map(([ws, sep]) => ws.join(sep));
 
 /** Every token of a text, before the length and stop-list filter. */
 const tokens = (text: string): ReadonlySet<string> => new Set(text.toLowerCase().match(/[a-z][a-z0-9]+/g) ?? []);
+
 const lines = fc.array(line, { minLength: 1, maxLength: 4 });
 
 /** What a generated file does between the merge base and HEAD. */
 type Fate = "same" | "edited" | "added" | "deleted";
+
 const fate = fc.constantFrom<Fate>("same", "edited", "added", "deleted");
 
 type Decision = {
@@ -219,6 +227,7 @@ const world = (ds: ReadonlyArray<Decision>, os: ReadonlyArray<Other>, mainOnly: 
 
   // A file only main changed is not in base...HEAD: the three dots diff from the merge base.
   const main = { ...base, "notes/main-only.md": text(mainOnly) };
+
   return {
     model: {
       top: TOP,
@@ -234,22 +243,27 @@ const world = (ds: ReadonlyArray<Decision>, os: ReadonlyArray<Other>, mainOnly: 
 /** governance.sh's answer for a world: the lines it prints, and how each record got there. */
 const oracle = (w: World) => {
   const seen = counted(w.changed.join("\n"));
+
   const hits = w.records.flatMap((d) => {
     const keys = new Set([
       ...counted(d.name.slice(5, -3).replaceAll("-", " ")),
       ...counted(d.title.join(" ")),
       ...counted(d.tags.join(", ")),
     ]);
+
     const match = [...keys].filter((k) => seen.has(k)).toSorted();
     const edited = w.edited.has(d.name);
+
     return edited || match.length > 0 ? [{ edited, match, name: d.name }] : [];
   });
+
   const sorted = hits.toSorted(
     (a, b) =>
       Number(b.edited) - Number(a.edited) ||
       b.match.length - a.match.length ||
       (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
   );
+
   return {
     lines:
       sorted.length === 0
@@ -264,6 +278,7 @@ const runCommand = (model: GitTest.Model, args: ReadonlyArray<string>) =>
   Effect.gen(function* () {
     const exit = yield* Command.runWith(governance, { version: "0.0.0" })(args).pipe(Effect.exit);
     const out = (yield* TestConsole.logLines).map(String).join("\n");
+
     return { exit, lines: out === "" ? [] : out.split("\n") };
   }).pipe(
     Effect.provide(Layer.mergeAll(GitTest.layer(model), GitTest.workTree(model), TestConsole.layer)),
@@ -334,11 +349,13 @@ describe("governance.ts", () => {
       ".decisions/0113-no-shell-or-python-scripts.md": "---\ntitle: No shell or Python scripts\n---\n",
       "README.md": "# repo\n",
     };
+
     const model: GitTest.Model = {
       top: TOP,
       commits: { b: { parents: [], tree } },
       refs: { HEAD: "b", "origin/main": "b" },
     };
+
     const got = runCommand(model, []);
     expect(Exit.isSuccess(got.exit)).toBe(true);
     expect(got.lines).toEqual([NO_MATCH]);

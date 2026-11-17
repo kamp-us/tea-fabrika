@@ -55,8 +55,10 @@ const NO_MATCH = "governance: no decision file matched this diff. Search .decisi
 
 /** A decision record's file name: four digits, a dash, anything, `.md`. */
 const RECORD = /^[0-9]{4}-.*\.md$/s;
+
 // Each reads the first line that starts with its key, as Python's `re.M` with `^` and `$` did.
 const TITLE = /(?:^|\n)title:\s*([^\n]*)/;
+
 const TAGS = /(?:^|\n)tags:\s*\[([^\n]*)\](?=\n|$)/;
 
 /** The words of a text that count. */
@@ -124,6 +126,7 @@ const records = Effect.fn("governance.records")(function* (top: string) {
   }
 
   const names = (yield* fs.readDirectory(folder)).filter((name) => RECORD.test(name));
+
   return yield* Effect.forEach(
     names,
     (name) => Effect.map(fs.readFileString(path.join(folder, name)), (text) => ({ name, text })),
@@ -138,9 +141,11 @@ export const governance = Command.make(
     const git = yield* Git;
     const top = yield* git.top;
     const { touched, seen } = readDiff(yield* git.diff(["--unified=0", `${base}...HEAD`]));
+
     const hits = (yield* records(top)).flatMap(({ name, text }): ReadonlyArray<Hit> => {
       const match = [...keys(name, text)].filter((key) => seen.has(key)).toSorted(byName);
       const edited = touched.has(name);
+
       return edited || match.length > 0 ? [{ name, edited, match }] : [];
     });
 

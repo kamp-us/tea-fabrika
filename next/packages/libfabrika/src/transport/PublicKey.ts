@@ -16,6 +16,7 @@ import { KeyLine } from "./Sshsig.ts";
  */
 export const fingerprint = Effect.fnUntraced(function* (raw: Uint8Array) {
   const hash = yield* subtle("digest", "SHA-256", new Uint8Array(raw));
+
   return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
 });
 
@@ -30,4 +31,4 @@ export const fingerprint = Effect.fnUntraced(function* (raw: Uint8Array) {
  * @category constructors
  */
 export const line = (raw: Uint8Array) =>
-  Schema.decodeUnknownEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(join(field("ssh-ed25519"), field(raw)))}`);
+  Schema.decodeEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(join(field("ssh-ed25519"), field(raw)))}`);

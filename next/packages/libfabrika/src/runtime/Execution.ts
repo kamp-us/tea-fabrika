@@ -74,6 +74,7 @@ const programFailure = (failure: typeof ExecutionFailure.Type) => {
   // Restore only checked text, never an arbitrary remote object or prototype.
   const cause = new Error(failure.content);
   cause.stack = failure.content;
+
   return new ProgramDown({ reason: failure.reason, error: failure.error, cause });
 };
 
@@ -105,6 +106,7 @@ export const Declaration = Schema.Struct({
   inputs: Schema.Record(Schema.String, Schema.Struct({ write: Schema.Boolean, personOnly: Schema.Boolean })),
   cmds: Schema.Array(Schema.String),
 });
+
 /**
  * A loaded program's checked declaration, as `Declaration` decodes it.
  *
@@ -190,6 +192,7 @@ const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean =>
   }
 
   const port = inputs[typed.value.type];
+
   return port !== undefined && port._tag === "write" && Result.isSuccess(Schema.decodeUnknownResult(port.schema)(m));
 };
 
@@ -242,8 +245,10 @@ export const nodeExecution = (declared: unknown, build = "node"): Execution => {
   const pure = Effect.fromResult(stepper(declared)).pipe(
     Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
   );
+
   const run = <A>(reason: ProgramDown["reason"], f: (pure: Stepper) => A) =>
     pure.pipe(Effect.flatMap((loaded) => attempt(reason, () => f(loaded))));
+
   return {
     init: Effect.fn("execution.init")((saved) => run("load", (pure) => pure.init(saved))),
     step: Effect.fn("execution.step")((model, msg) => run("step", (pure) => pure.step(model, msg))),
@@ -270,6 +275,7 @@ export const nodeExecution = (declared: unknown, build = "node"): Execution => {
     check: Effect.fn("execution.check")((kind, event) =>
       run("step", (pure) => {
         const policy = pure.program.writes[kind];
+
         return policy !== undefined && Result.isSuccess(Schema.decodeUnknownResult(policy.schema)(event));
       }),
     ),
@@ -289,6 +295,7 @@ const invoke = (binding: ExecutionCalls, key: keyof ExecutionCalls, args: Readon
   }
 
   const rejected = (cause: unknown) => new RpcError({ method: key, cause });
+
   // oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader RPC enters Effect
   return Effect.tryPromise({ try: () => Reflect.apply(method, binding, args), catch: rejected });
 };
@@ -311,6 +318,7 @@ const invoke = (binding: ExecutionCalls, key: keyof ExecutionCalls, args: Readon
 export const workerExecution = (binding: ExecutionCalls): Execution => {
   const call = (method: keyof ExecutionCalls, args: ReadonlyArray<unknown>, reason: ProgramDown["reason"]) =>
     invoke(binding, method, args).pipe(Effect.mapError((cause) => new ProgramDown({ reason, source: "rpc", cause })));
+
   const ask = <A>(
     schema: Schema.Decoder<A>,
     work: Effect.Effect<unknown, ProgramDown>,
@@ -325,11 +333,13 @@ export const workerExecution = (binding: ExecutionCalls): Execution => {
         }
 
         const decoded = Schema.decodeUnknownResult(schema)(raw);
+
         return Result.isSuccess(decoded)
           ? Effect.succeed(decoded.success)
           : Effect.fail(new ProgramDown({ reason, source: "decode", cause: decoded.failure }));
       }),
     );
+
   return {
     fresh: Effect.fn("execution.fresh")((model, msg) => ask(Admission, call("fresh", [model, msg], "step"), "step")),
     update: Effect.fn("execution.update")((model, msg) =>

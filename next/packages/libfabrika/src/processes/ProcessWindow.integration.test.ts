@@ -30,10 +30,12 @@ const policy = Schema.Struct({
 });
 
 const nat = (max: number) => Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: max }));
+
 // Effect 4.1.1 has no examples option. Each callback also checks its old inputs.
 // Retain 0..40 times/texts and 2..31 errors. Explicit number bounds above
 // keep the old full nat range without making every string that large.
 const options = { arbitrary: { seed: 119120, runs: 100, size: 40 } };
+
 // The schema generates every free base32 character, both version characters and all eight variants.
 const processIds = Arbitrary.schema(Id.Process);
 
@@ -222,6 +224,7 @@ describe("p80, supplied policy events", () => {
         [{ reason: "owner-policy", crashes: 17, until: 123_456 }, generated],
         (supplied) => {
           const store = storage();
+
           return Effect.gen(function* () {
             const processes = yield* ProcessManager;
             yield* processes.start(first(), from());
@@ -240,6 +243,7 @@ describe("p80, supplied policy events", () => {
       ),
     { arbitrary: { seed: 119120, runs: 20, size: 40 } },
   );
+
   // Dead needs dependent generation: errors.length must equal tries.
   const dead = Arbitrary.all({
     process: Arbitrary.schema(Id.Process),
@@ -258,6 +262,7 @@ describe("p80, supplied policy events", () => {
       }),
     ),
   );
+
   it.prop(
     "plant, fewer error classes than tries: dead keeps one class per attempt",
     [dead],
@@ -295,6 +300,7 @@ describe("p80, supplied policy events", () => {
     [policy],
     ([supplied]) => {
       const store = storage();
+
       return Effect.gen(function* () {
         yield* ProcessManager.use((p) => p.start(first(), from())).pipe(Effect.provide(manager(store, brain())));
         const before = store.rows();
@@ -306,6 +312,7 @@ describe("p80, supplied policy events", () => {
           const answer = yield* ProcessManager.use((p) => Effect.result(p.down(A, supplied, from()))).pipe(
             Effect.provide(manager(store, caller)),
           );
+
           expect(Result.isFailure(answer)).toBe(true);
 
           if (Result.isFailure(answer)) {
@@ -322,6 +329,7 @@ describe("p80, supplied policy events", () => {
 
 describe("T319, next/ complete dead values", () => {
   const text = fc.string({ minLength: 1, maxLength: 256 });
+
   const complete = fc
     .record({
       process: fcProcessIds,

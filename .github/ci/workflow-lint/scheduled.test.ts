@@ -11,13 +11,16 @@ import { lintScheduled } from "./scheduled.ts";
 // unrelated error cannot mask it. Each plant was also run once on workflow-lint.ts with its rule
 // dropped, and that turned this law red.
 const options = { seed: 119120, numRuns: 100 };
+
 const read = (path: string) => readFileSync(new URL(`../../workflows/${path}`, import.meta.url), "utf8");
+
 const check = read("check.yaml");
 
 type Step = Record<string, unknown> & { env?: Record<string, unknown>; with?: Record<string, unknown> };
 
 type Job = Record<string, unknown> & {
   steps: Step[];
+  concurrency?: Record<string, unknown>;
   strategy?: { "fail-fast"?: unknown; "max-parallel"?: unknown; matrix: { shard: unknown } };
   permissions?: unknown;
   needs?: unknown;
@@ -72,11 +75,14 @@ const scheduled = fc
   .tuple(
     fc.integer({ min: 1, max: 59 }),
     fc.integer({ min: 60, max: 1440 }),
-    fc.stringMatching(/^[a-z][a-z0-9-]{0,15}$/),
+    fc.stringMatching(/^[a-z][a-z0-9-]{0,15}$/).filter((group) => !/^scheduled-(?:control|test-[1-9])$/i.test(group)),
     fc.integer({ min: 1, max: 9 }),
     fc.constantFrom("", " ", "  "),
+    fc.shuffledSubarray(["1", "2", "3", "4", "5", "6", "7", "8", "9"], { minLength: 9, maxLength: 9 }),
+    fc.boolean(),
+    fc.boolean(),
   )
-  .map(([minute, minutes, group, most, gap]) => {
+  .map(([minute, minutes, group, most, gap, slots, numeric, upper]) => {
     const w = real();
     const crons = Array.isArray(w.on["schedule"]) ? (w.on["schedule"] as { cron?: unknown }[]) : [];
 
@@ -96,6 +102,21 @@ const scheduled = fc
     w.jobs["changed"]!.strategy!["max-parallel"] = most;
     step(w, "select", "set").env!["MOST"] = most;
 
+    const shards = w.jobs["tests"]!.strategy!.matrix.shard;
+    const full = w.jobs["tests"]!.concurrency;
+
+    if (Array.isArray(shards) && full !== undefined && "group" in full) {
+      const pairs = shards.map((shard, i) => [shard, numeric ? Number(slots[i]) : slots[i]]);
+      const values = Object.fromEntries(upper ? pairs.toReversed() : pairs);
+      full["group"] = `scheduled-test-\${{${gap}fromJSON('${JSON.stringify(values)}')[matrix.shard]${gap}}}`;
+    }
+
+    for (const job of Object.values(w.jobs)) {
+      if (upper && typeof job.concurrency?.["group"] === "string") {
+        job.concurrency["group"] = job.concurrency["group"].replace(/^scheduled-/, "SCHEDULED-");
+      }
+    }
+
     for (const job of Object.values(w.jobs)) {
       if ("if" in job) {
         job["if"] = spaced(job["if"], gap);
@@ -113,6 +134,19 @@ const scheduled = fc
 
 const lint = (w: Workflow) => lintScheduled(JSON.stringify(w), check);
 
+/** Rebuilds the full matrix's closed slot map, then applies one isolated input mutation. */
+const remap = (w: Workflow, change: (slots: Record<string, string>) => void) => {
+  const shards = w.jobs["tests"]!.strategy!.matrix.shard;
+
+  if (!Array.isArray(shards) || !shards.every((shard) => typeof shard === "string")) {
+    throw new Error("the full matrix has no literal shard list");
+  }
+
+  const slots = Object.fromEntries(shards.map((shard, i) => [shard, String(i + 1)]));
+  change(slots);
+  w.jobs["tests"]!.concurrency!["group"] = `scheduled-test-\${{ fromJSON('${JSON.stringify(slots)}')[matrix.shard] }}`;
+};
+
 // SC18's message, which a scenario on the next limit expects beside SC13's.
 const CHANGED_RULE =
   "SC18: changed runs only when select said changed with a leg, each leg its own list over every project at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else";
@@ -122,12 +156,20 @@ it("pinned: the real scheduled.yaml passes, against the real check.yaml", () => 
 });
 
 it("property: a schedule varied only where its meaning holds passes", () => {
+  const reached = new Set<string>();
   fc.assert(
     fc.property(scheduled, (w) => {
+      const group = String(w.jobs["tests"]!.concurrency?.["group"]);
+      reached.add(group.startsWith("SCHEDULED-") ? "upper" : "lower");
+      reached.add(/:"[1-9]"/.test(group) ? "text" : "number");
       expect(lint(w)).toEqual([]);
     }),
     options,
   );
+  expect(
+    ["upper", "lower", "text", "number"].every((kind) => reached.has(kind)),
+    [...reached].join(", "),
+  ).toBe(true);
 });
 
 // The step that ended each test job until 2026-11-15: after a failure it canceled the job's own
@@ -264,6 +306,62 @@ const plants: [string, (w: Workflow) => void][] = [
   // SC12: a newer run never cancels a waiting one.
   ["SC12: no queue, so a newer run cancels the waiting one", (w) => Reflect.deleteProperty(w.concurrency, "queue")],
   ["SC12: one waiting run at most", (w) => (w.concurrency["queue"] = "single")],
+  // SC19: the same nine test groups and one control group across participating workflows.
+  // Plants, each run once with its new guard dropped and restored, must fail their own rule.
+  ...(["gate", "select", "report", "tests", "changed"] as const).flatMap((job): [string, (w: Workflow) => void][] => [
+    [`SC19: ${job} has no shared job group`, (w) => Reflect.deleteProperty(w.jobs[job]!, "concurrency")],
+    [`SC19: ${job} replaces a waiting job`, (w) => Reflect.deleteProperty(w.jobs[job]!.concurrency!, "queue")],
+    [`SC19: ${job} keeps only one waiting job`, (w) => (w.jobs[job]!.concurrency!["queue"] = "single")],
+    [`SC19: ${job} cancels a running job`, (w) => (w.jobs[job]!.concurrency!["cancel-in-progress"] = true)],
+    [
+      `SC19: ${job} has no explicit cancellation policy`,
+      (w) => Reflect.deleteProperty(w.jobs[job]!.concurrency!, "cancel-in-progress"),
+    ],
+    [
+      `SC19: ${job} has a group per ref`,
+      (w) => (w.jobs[job]!.concurrency!["group"] = `${String(w.jobs[job]!.concurrency!["group"])}-\${{ github.ref }}`),
+    ],
+    [
+      `SC19: ${job} has a group per source`,
+      (w) => (w.jobs[job]!.concurrency!["group"] = `${String(w.jobs[job]!.concurrency!["group"])}-\${{ github.sha }}`),
+    ],
+    [
+      `SC19: ${job} has a group per run`,
+      (w) =>
+        (w.jobs[job]!.concurrency!["group"] = `${String(w.jobs[job]!.concurrency!["group"])}-\${{ github.run_id }}`),
+    ],
+  ]),
+  ["SC19: gate uses another control group", (w) => (w.jobs["gate"]!.concurrency!["group"] = "scheduled-select")],
+  [
+    "SC19: changed uses its own slot namespace",
+    (w) => (w.jobs["changed"]!.concurrency!["group"] = `scheduled-changed-\${{ matrix.shard }}`),
+  ],
+  ["SC19: the full slot map loses a shard", (w) => remap(w, (slots) => Reflect.deleteProperty(slots, "e2e-1"))],
+  ["SC19: the full slot map adds a shard", (w) => remap(w, (slots) => (slots["extra"] = "1"))],
+  ["SC19: two full shards share one slot", (w) => remap(w, (slots) => (slots["e2e-2"] = slots["e2e-1"]!))],
+  ["SC19: the full slot map reaches a tenth test slot", (w) => remap(w, (slots) => (slots["e2e-1"] = "10"))],
+  [
+    "SC19: the full slot map is malformed JSON",
+    (w) => (w.jobs["tests"]!.concurrency!["group"] = `scheduled-test-\${{ fromJSON('{')[matrix.shard] }}`),
+  ],
+  [
+    "SC19: the full slot map is a JSON list",
+    (w) =>
+      (w.jobs["tests"]!.concurrency!["group"] = `scheduled-test-\${{ fromJSON('[1,2,3,4,5,6,7,8,9]')[matrix.shard] }}`),
+  ],
+  ["SC19: the workflow holds the control job's group", (w) => (w.concurrency["group"] = "SCHEDULED-CONTROL")],
+  ["SC19: the workflow holds a test job's group", (w) => (w.concurrency["group"] = "SCHEDULED-TEST-1")],
+  [
+    "SC19: the full matrix gains another dimension",
+    (w) => void Object.assign(w.jobs["tests"]!.strategy!.matrix, { extra: ["a", "b"] }),
+  ],
+  [
+    "SC19: changed can name a tenth test slot",
+    (w) => {
+      w.jobs["changed"]!.strategy!["max-parallel"] = 10;
+      step(w, "select", "set").env!["MOST"] = 10;
+    },
+  ],
   // SC3: the token, the gate's included.
   ["SC3: the gate's own token writes actions", (w) => (gate(w).permissions = { actions: "write" })],
   [
@@ -613,8 +711,10 @@ const plants: [string, (w: Workflow) => void][] = [
       const list = w.jobs[job]!.steps;
       const at = list.indexOf(step(w, job, name));
       list[at] = structuredClone(list[at]!);
+
       return list[at]!;
     };
+
     return [
       [
         `TT1: ${job} drops its time table`,
@@ -827,10 +927,13 @@ it("SC13 scenario: on the real scheduled.yaml, a test step with no limit of its 
   // run 43778586135). Plant, run once on scheduled.ts and restored: SC13 dropped (red on each case).
   const STEPS = (suite: string) => `scheduled.yaml: SC13: ${suite}'s test steps share one whole timeout-minutes`;
   const JOB = "scheduled.yaml: SC13: tests's own timeout-minutes is each leg's suite limit and 3 minutes more";
+
   const LIMIT_TEXT =
     "scheduled.yaml: SC5: the report runs node .github/ci/scheduled.mjs once, with the needs, the results, the token and each suite's time limit, and its failure shows";
+
   // The changed legs run at next's limit (SC18), so a next limit that is no longer one names them too.
   const CHANGED = `scheduled.yaml: ${CHANGED_RULE}`;
+
   const backstop = (tooling: number, next: number) =>
     `\${{ startsWith(matrix.shard, 'tooling-') && ${tooling} || ${next} }}`;
 

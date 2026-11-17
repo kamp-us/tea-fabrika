@@ -15,7 +15,9 @@ import {
 
 // Today's tooling. Pure rules drive.ts and gc.ts share.
 const options = { seed: 119120, numRuns: 300 };
+
 const branch = fc.stringMatching(/^fabrikalfa\/[a-z0-9]{1,8}(-[a-z0-9]{1,4})?$/);
+
 const step = fc.constantFrom("tests", "build", "mutation", "review", "lead");
 
 describe("quest rules, today's tooling", () => {
@@ -58,8 +60,10 @@ describe("quest rules, today's tooling", () => {
           const pushed = [onBranch, onWip].filter((t): t is string => t !== undefined);
           const got = startHead(pushed, saved, isAncestor);
           const newest = pushed.toSorted((a, b) => at(b) - at(a))[0];
+
           const savedAhead =
             saved !== undefined && (newest === undefined || (saved[0] === "c" && at(saved) > at(newest)));
+
           expect(got).toBe(savedAhead || newest === undefined ? saved : newest);
         },
       ),
@@ -113,17 +117,20 @@ describe("quest rules, today's tooling", () => {
         for: fc.constant("exam_read"),
       }),
     );
+
     fc.assert(
       fc.property(fc.array(answer), fc.uniqueArray(step), (answers, signed) => {
         const quest = new Set<string>(signed);
         const out = [...answers.map((a) => JSON.stringify(a)), "commits: noise"].join("\n");
         const held = questStuck(out, quest).map((l) => JSON.parse(l));
+
         const want = answers.filter(
           (a) =>
             a._tag === "stuck" &&
             a.reason !== "unsigned_commit" &&
             !(a.reason === "stale_link" && "step" in a && !quest.has(a.step)),
         );
+
         expect(held).toEqual(want);
         const stuck = answers.some((a) => a._tag === "stuck");
         expect(checkHolds(0, out, quest)).toBe(false);
@@ -140,20 +147,25 @@ describe("the lockfile follows the manifests, today's tooling", () => {
   const dep = fc.stringMatching(/^[a-z][a-z0-9-]{0,7}$/);
   const version = fc.stringMatching(/^[0-9]\.[0-9]{1,2}\.[0-9]$/);
   const deps = fc.dictionary(dep, version, { maxKeys: 4 });
+
   const locked = fc.record({
     dependencies: deps,
     devDependencies: deps,
   });
+
   const loose = fc.record({
     scripts: fc.dictionary(dep, fc.string({ maxLength: 6 }), { maxKeys: 3 }),
     version,
   });
+
   const member = fc.constantFrom("package.json", "apps/fabrika/package.json", "oxlint-plugins/package.json");
+
   const outside = fc.constantFrom(
     "fixtures/slugify/repo/package.json",
     "packages/old/package.json",
     "experiments/results/x-package.json",
   );
+
   const text = (o: object) => JSON.stringify(o, null, "\t");
   const reversed = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).toReversed());
 
@@ -165,11 +177,13 @@ describe("the lockfile follows the manifests, today's tooling", () => {
         const b = other ?? a;
         const before = text({ ...la, ...a });
         const after = text(reversed({ ...lb, ...b, dependencies: reversed(b.dependencies) }));
+
         const moved =
           JSON.stringify(Object.entries(a.dependencies).toSorted()) !==
             JSON.stringify(Object.entries(b.dependencies).toSorted()) ||
           JSON.stringify(Object.entries(a.devDependencies).toSorted()) !==
             JSON.stringify(Object.entries(b.devDependencies).toSorted());
+
         expect(lockfileBehind([{ path, before, after }], globs, false)).toEqual(moved ? [path] : []);
         // The step refreshed the lockfile itself, and CI's frozen install judges it.
         expect(lockfileBehind([{ path, before, after }], globs, true)).toEqual([]);
@@ -212,6 +226,7 @@ describe("the lockfile follows the manifests, today's tooling", () => {
       "catalog:",
       "  effect: 4.1.2",
     ].join("\n");
+
     expect(workspaceGlobs(yaml)).toEqual(["apps/*", "next/packages/*", "!next/old", ".github/ci"]);
     expect(workspaceGlobs("catalog:\n  a: 1\n")).toEqual([]);
   });
@@ -233,6 +248,7 @@ describe("a saved quest's key, today's tooling", () => {
             ...(lane === undefined ? {} : { lane }),
             ...(quest === undefined ? {} : { quest }),
           };
+
           const got = questKeyed(saved);
           expect(got).not.toHaveProperty("lane");
           expect(got).toEqual({ ...rest, ...((quest ?? lane) === undefined ? {} : { quest: quest ?? lane }) });

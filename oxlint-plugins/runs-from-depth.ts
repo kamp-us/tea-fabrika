@@ -15,8 +15,9 @@
 // to fast-check's `sample` or `statistics` is how many values to draw, so it stays. It is refused when
 // it is a number literal, or a name the same file declares only as `const NAME = <number>`.
 //
-// Real IO is a name imported from a module in `IO` below (SQLite, a child process, a socket, a
-// bundler, workerd, Alchemy's local state, a browser), a `node:fs` function that writes (`WRITES`),
+// Real IO is a name imported from a module in `IO` below (SQLite, the test primitives' SQLite module
+// `@kampus/vitest/TestDatabase`, a child process, a socket, a bundler, workerd, Alchemy's local
+// state, a browser; `runsFor` from the root `@kampus/vitest` is not), a `node:fs` function that writes (`WRITES`),
 // a dynamic `import()` of such a module, or, in a file that imports Effect's Node services
 // (`@effect/platform-node`), a call of a FileSystem method that writes (`EFFECT_WRITES`). Reading a
 // file or asking whether it exists is not real IO here: a law that checks a module is built before it
@@ -41,7 +42,7 @@ import { ancestors, below, pathIn, type Node } from "./match.ts";
 
 /** Modules whose every name is real IO. */
 const IO =
-  /^(?:(?:node:)?(?:sqlite|child_process|net|http|https|worker_threads)|@effect\/sql-sqlite-node(?:\/.*)?|effect\/(?:unstable\/)?process(?:\/.*)?|rolldown(?:\/.*)?|miniflare|workerd|wrangler|@alchemy\.run\/cloudflare-runtime(?:\/.*)?|alchemy\/State(?:\/.*)?|playwright(?:-core)?(?:\/.*)?|@playwright\/test|@kampus\/libfabrika\/sqlite|.*\/NodeSqlite(?:\.ts)?)$/;
+  /^(?:(?:node:)?(?:sqlite|child_process|net|http|https|worker_threads)|@effect\/sql-sqlite-node(?:\/.*)?|effect\/(?:unstable\/)?process(?:\/.*)?|rolldown(?:\/.*)?|miniflare|workerd|wrangler|@alchemy\.run\/cloudflare-runtime(?:\/.*)?|alchemy\/State(?:\/.*)?|playwright(?:-core)?(?:\/.*)?|@playwright\/test|@kampus\/libfabrika\/sqlite|@kampus\/vitest\/TestDatabase|.*\/NodeSqlite(?:\.ts)?)$/;
 
 /** The file system: only a write is real IO, so reads and `existsSync` stay out. */
 const FS = /^(?:node:)?fs(?:\/promises)?$/;
@@ -131,6 +132,7 @@ const overridden = (node: Node): boolean => {
   }
 
   const after = object.properties.slice(object.properties.indexOf(spread as ESTree.SpreadElement) + 1);
+
   return after.some((property) => property.type === "Property" && keyName(property) === "numRuns");
 };
 
@@ -144,6 +146,7 @@ const isDraw = (property: Node): boolean => {
   }
 
   const callee = call.callee.type === "MemberExpression" ? call.callee.property : call.callee;
+
   return callee.type === "Identifier" && (callee.name === "sample" || callee.name === "statistics");
 };
 
@@ -151,6 +154,7 @@ const isDraw = (property: Node): boolean => {
 const inArbitrary = (property: Node): boolean => {
   const object = parentOf(property);
   const holder = object === null ? null : parentOf(object);
+
   return holder?.type === "Property" && holder.value === object && keyName(holder) === "arbitrary";
 };
 
@@ -203,6 +207,7 @@ export const runsFromDepth: CreateRule = {
                   ? specifier.imported.name
                   : String(specifier.imported.value)
                 : null;
+
             const variable = resolve(specifier.local);
 
             if (variable && (IO.test(from) || (FS.test(from) && (imported === null || WRITES.test(imported))))) {
@@ -233,6 +238,7 @@ export const runsFromDepth: CreateRule = {
         }
 
         const uses = new Map<Node, { readonly through: ReadonlySet<Variable>; readonly direct: boolean }>();
+
         const usesOf = (root: Node) => {
           const known = uses.get(root);
 
@@ -263,6 +269,7 @@ export const runsFromDepth: CreateRule = {
 
           const found = { through, direct };
           uses.set(root, found);
+
           return found;
         };
 
@@ -284,6 +291,7 @@ export const runsFromDepth: CreateRule = {
 
         const reaches = (root: Node): boolean => {
           const { through, direct } = usesOf(root);
+
           return direct || [...through].some((used) => reaching.has(used));
         };
 
@@ -342,8 +350,10 @@ export const runsFromDepth: CreateRule = {
           // function), or else the helper call it is handed to.
           const enclosing = [...declared].filter(([, node]) => around.includes(node));
           const call = around.find((node) => node.type === "CallExpression");
+
           const own =
             enclosing.length > 0 ? enclosing.some(([, node]) => reaches(node)) : call !== undefined && reaches(call);
+
           return (
             own ||
             tests.some((call) => reaches(call) && enclosing.some(([variable]) => usedThrough(call).has(variable)))

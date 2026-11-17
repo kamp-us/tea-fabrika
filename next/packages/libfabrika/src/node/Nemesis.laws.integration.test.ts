@@ -1,8 +1,8 @@
 // P17b slice 1, next/. Runtime's suite on real SQLite; every connection and folder is scoped.
-import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite handle for the referee's transactions
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -34,15 +34,18 @@ const database: NemesisTest.Database = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p17b-history-" });
-  const file = path.join(folder, "history.sqlite");
-  return Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(file)),
-    (db) => Effect.sync(() => db.close()),
-  ).pipe(Effect.map(nodeSql));
-}).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
+
+  return path.join(folder, "history.sqlite");
+}).pipe(
+  Effect.map((file) => TestDatabase.make(file).pipe(Effect.map(nodeSql))),
+  Effect.provide(NodeServices.layer),
+  Effect.orDie,
+);
 
 const process = "process_0000000000e008000000000000";
+
 const successor = "process_0000000000e008000000000001";
+
 const name = "checklist:1";
 
 const from = {
@@ -74,6 +77,7 @@ const append = Effect.fnUntraced(function* (ledger: Ledger["Service"], stream: s
 const head = Effect.fnUntraced(function* (sql: Sql, stream: string) {
   const ledger = yield* reader(sql);
   const waited = yield* ledger.wait(stream, 0);
+
   return waited._tag === "ready" ? waited.rev : 0;
 }, Effect.orDie);
 
@@ -86,13 +90,16 @@ const seed = Effect.fnUntraced(function* (sql: Sql, count: number, body: string)
       LedgerTransactionSql.layer(sql).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
     ),
   );
+
   const processBoundary = yield* transaction.transact((turn) => {
     let completed = 0;
+
     const place = (stream: string, key: string, line: Line, rev: number, pos: number) => {
       const placed = turn.append(stream, key, line);
       expect(placed.rev).toBe(rev);
       expect(placed.pos).toBe(pos);
       completed++;
+
       return placed;
     };
 
@@ -111,8 +118,10 @@ const seed = Effect.fnUntraced(function* (sql: Sql, count: number, body: string)
     );
     const fact = place(`processes/${name}`, "restart-1", restart("crash"), 2 * count + 2, 2);
     expect(completed).toBe(2 * count + 2);
+
     return fact.rev;
   });
+
   return { boundary: yield* head(sql, inbox(name)), processBoundary };
 }, Effect.orDie);
 
@@ -132,6 +141,7 @@ const singleSeed = Effect.fnUntraced(function* (sql: Sql, count: number, body: s
     lineFor(from, ProcessEvent.cases.started.make({ process, name, program: "fabrika/checklist", hash: "test" })),
   );
   const fact = yield* append(ledger, `processes/${name}`, "restart-1", restart("crash"));
+
   return { boundary: yield* head(sql, inbox(name)), processBoundary: fact.rev };
 }, Effect.orDie);
 
@@ -144,6 +154,7 @@ const seedCase = Arbitrary.schema(
   Arbitrary.map(({ count, body }) => {
     const state = { index: 0, head: 0, positions: new Map<string, number>() };
     const rows: Array<{ id: string; stream: string; rev: number; pos: number }> = [];
+
     const next = (stream: string, id: string) => {
       const pos = (state.positions.get(stream) ?? 0) + 1;
       state.head++;
@@ -158,6 +169,7 @@ const seedCase = Arbitrary.schema(
 
     next(`processes/${name}`, "start-0");
     next(`processes/${name}`, "restart-1");
+
     return { count, body, rows };
   }),
 );
@@ -201,6 +213,7 @@ const service = Effect.fnUntraced(function* (
   const failure = options.failure;
   const lower = failure === undefined ? undefined : LedgerError.make({ reason: failure.reason, cause: failure.cause });
   const affected = failure?.part.startsWith("inbox") ? inbox(name) : `processes/${name}`;
+
   const controlled: Ledger["Service"] = {
     ...ledger,
     wait: (stream, after) =>
@@ -208,7 +221,7 @@ const service = Effect.fnUntraced(function* (
         expect(after, "capture uses the nonblocking wait from zero").toBe(0);
 
         if (lower !== undefined && stream === affected && failure?.part.endsWith("wait")) {
-          return yield* Effect.fail(lower);
+          return yield* lower;
         }
 
         const captured = yield* ledger.wait(stream, after);
@@ -234,12 +247,14 @@ const service = Effect.fnUntraced(function* (
         ? ledger.read(stream, after).pipe(Stream.take(1), Stream.concat(Stream.fail(lower)))
         : ledger.read(stream, after),
   };
+
   const context = yield* Layer.build(
     NemesisLedger.layer(operation).pipe(
       Layer.provide(ProcessHistoryLedger.layer),
       Layer.provide(Layer.succeed(Ledger, controlled)),
     ),
   );
+
   return Context.get(context, Nemesis);
 }, Effect.orDie);
 
@@ -253,18 +268,22 @@ NemesisTest.suite({
     const context = yield* Layer.build(SpanSink.layer(sql, { object: "chaos-test" }));
     const sink = Context.get(context, SpanSink);
     const tracer = Context.get(context, Tracer.Tracer);
+
     return {
       trace: <A, E, R>(work: Effect.Effect<A, E, R>) =>
         work.pipe(Effect.withSpan("chaos.test", { attributes: { [PROCESS]: process } }), Effect.withTracer(tracer)),
       read: Effect.gen(function* () {
         const records = RecordManager.sql(() => sql, 1024 ** 3);
         yield* sink.flush.pipe(Effect.provide(Layer.merge(records, Archive.memory)));
+
         const rows = yield* RecordManager.use((manager) =>
           Stream.runCollect(manager.read(Chain.cases.job.make({ process }))),
         ).pipe(Effect.provide(records));
+
         const health = sql
           .exec("SELECT * FROM measurements")
           .filter((row) => typeof row["piece"] === "string" && /nemesis/i.test(row["piece"]));
+
         return { rows, health };
       }).pipe(Effect.orDie),
     };

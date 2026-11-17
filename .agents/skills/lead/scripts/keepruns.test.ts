@@ -43,7 +43,9 @@ const normal = (path: string): string => {
 };
 
 const folderAbove = (path: string): string => normal(`${path}/..`);
+
 const lastName = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
+
 const under = (path: string, folder: string): boolean => path.startsWith(folder === "/" ? "/" : `${folder}/`);
 
 /**
@@ -66,6 +68,7 @@ const locate = (disk: Disk, path: string, follow: boolean, depth = 0): string | 
     if (entry?._tag === "link" && (!last || follow)) {
       const target = entry.to.startsWith("/") ? entry.to : `${at}/${entry.to}`;
       const rest = parts.slice(i + 1).join("/");
+
       return locate(disk, rest === "" ? target : `${target}/${rest}`, follow, depth + 1);
     }
 
@@ -97,7 +100,7 @@ const info = (entry: Entry): FileSystem.File.Info => ({
 });
 
 /** The names right under a folder on the disk. */
-const children = (disk: Disk, folder: string): ReadonlyArray<string> =>
+const children = (disk: Disk, folder: string): Array<string> =>
   [...disk.keys()].filter((p) => p !== folder && folderAbove(p) === folder).map(lastName);
 
 /** Effect's `FileSystem` over the disk. With `refuse`, every write fails, as a full or read-only disk does. */
@@ -106,19 +109,24 @@ const layer = (disk: Disk, refuse = false): Layer.Layer<FileSystem.FileSystem> =
     Effect.suspend(() => {
       const at = locate(disk, path, follow);
       const entry = at === null ? undefined : disk.get(at);
+
       return at === null || entry === undefined ? fail("NotFound", method, path) : Effect.succeed({ at, entry });
     });
+
   const folder = (method: string, path: string) =>
     Effect.flatMap(found(method, path, true), ({ at, entry }) =>
       entry._tag === "folder" ? Effect.succeed(at) : fail("BadResource", method, path),
     );
+
   /** Where a new entry goes: its parent must be a folder, and the name must be free unless `replace`. */
   const room = (method: string, path: string) =>
     Effect.suspend(() => {
       const at = locate(disk, path, false);
       const parent = at === null ? undefined : disk.get(folderAbove(at));
+
       return at === null || parent?._tag !== "folder" ? fail("NotFound", method, path) : Effect.succeed(at);
     });
+
   const moveTree = (from: string, to: string, keep: boolean) => {
     for (const [p, entry] of [...disk.entries()]) {
       if (p === from || under(p, from)) {
@@ -209,6 +217,7 @@ const layer = (disk: Disk, refuse = false): Layer.Layer<FileSystem.FileSystem> =
             }
 
             moveTree(at, dest, false);
+
             return Effect.void;
           }),
       ),
@@ -256,7 +265,9 @@ const layer = (disk: Disk, refuse = false): Layer.Layer<FileSystem.FileSystem> =
           : Effect.sync(() => disk.set(at, { _tag: "link", to: target })),
       ),
   };
+
   const refused = (method: string) => (path: string) => fail("PermissionDenied", method, path);
+
   return FileSystem.layerNoop(
     refuse
       ? {
@@ -274,6 +285,7 @@ const layer = (disk: Disk, refuse = false): Layer.Layer<FileSystem.FileSystem> =
 };
 
 const encoder = new TextEncoder();
+
 const decoder = new TextDecoder();
 
 /** Every file under a folder, as its relative path and content. */
@@ -331,11 +343,13 @@ const withHome = (body: (disk: Disk, main: string, root: string) => void) => {
 const run = (disk: Disk, main: string, folder: string, refuse = false) => {
   const kept = Effect.gen(function* () {
     const runs = yield* Runs;
+
     return yield* runs.keep(folder);
   }).pipe(
     Effect.provide(RunsFs.layer(main).pipe(Layer.provide(Layer.mergeAll(layer(disk, refuse), Path.layer)))),
     Effect.runSync,
   );
+
   return { code: kept.kept ? 0 : 1, out: kept.said.trim() };
 };
 
@@ -354,12 +368,15 @@ describe("keepruns.sh, today's tooling", () => {
             const folder = `${root}/${name}`;
             mkdir(disk, folder);
             write(disk, `${folder}/runs`, runs);
+
             // Names already taken under MAIN's runs/: <name>, then <name>-1.
             const before = taken.map((files, i) => {
               const at = `${main}/runs/${i === 0 ? name : `${name}-${i}`}`;
               write(disk, at, files);
+
               return [at, filesIn(disk, at)] as const;
             });
+
             const got = run(disk, main, folder);
             expect(got.code).toBe(0);
 
@@ -369,6 +386,7 @@ describe("keepruns.sh, today's tooling", () => {
 
             if (Object.keys(runs).length === 0) {
               expect(got.out).toBe("");
+
               return;
             }
 

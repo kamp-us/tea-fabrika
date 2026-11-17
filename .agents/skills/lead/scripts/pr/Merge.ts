@@ -34,6 +34,7 @@ export const Route = Schema.TaggedUnion({
   /** `sev0` holds the branches an open sev0 allows, and none when no sev0 is open. */
   admin: { sev0: Schema.Array(Schema.String) },
 });
+
 export type Route = typeof Route.Type;
 
 export type Ask = {
@@ -49,6 +50,7 @@ export const Done = Schema.TaggedUnion({
   admin: { pr: Schema.Number, oid: Schema.String, for: Schema.Literals(["docs", "sev0"]) },
   merged: { pr: Schema.Number, commit: Schema.String },
 });
+
 export type Done = typeof Done.Type;
 
 /** Why the admin merge is allowed for this pull request, or why not. */
@@ -64,6 +66,7 @@ const adminFor = (head: string, files: ReadonlyArray<string>, sev0: ReadonlyArra
   }
 
   const shown = code.length > 5 ? [...code.slice(0, 5), `and ${code.length - 5} more`] : code;
+
   return {
     refused:
       files.length === 0
@@ -101,11 +104,13 @@ const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number, sev0:
 
     if (required._tag === "None" || required.value.conclusion !== "success") {
       const stands = required._tag === "None" ? "missing" : (required.value.conclusion ?? required.value.status);
+
       return yield* refuse(`${Queue.REQUIRED} is ${stands} at ${found.oid}, not a success; not merged`);
     }
   }
 
   yield* prs.admin(found.number, found.oid);
+
   return Done.cases.admin.make({ pr: found.number, oid: found.oid, for: allowed.for });
 });
 
@@ -115,6 +120,7 @@ export const merge = Effect.fn("Merge.merge")(function* (a: Ask) {
   }
 
   const added = yield* Queue.add({ dir: a.dir, pr: a.pr });
+
   return added._tag === "queued"
     ? Done.cases.queued.make({ pr: added.pr, oid: added.oid })
     : Done.cases.merged.make({ pr: added.pr, commit: added.commit });

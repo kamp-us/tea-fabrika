@@ -57,7 +57,9 @@ export type World = {
 };
 
 const TIP = "1".repeat(40);
+
 const LOST = "2".repeat(40);
+
 const OTHER = "3".repeat(40);
 
 /** The world in memory: files written by hand, Git and the runs/ move answered from the plan. */
@@ -96,6 +98,7 @@ export const memory: World = {
 
     const flag = { plain: "H", flagged: "h", submodule: "H" }[plan.index];
     const mode = plan.index === "submodule" ? "160000" : "100644";
+
     const git = BoxGitTest.layer({
       index: [`${flag} ${mode} ${TIP} 0\ttracked`],
       dirty: plan.dirty,
@@ -108,12 +111,15 @@ export const memory: World = {
       reachable: plan.retained ? [TIP, OTHER] : [OTHER],
       failing: plan.failing === "none" ? [] : [plan.failing],
     });
+
     const runs = RunsTest.layer(
       plan.runs === "stuck"
         ? { said: "", kept: false }
         : { said: plan.runs === "moved" ? `kept runs of ${plan.name} at runs/${plan.name}\n` : "", kept: true },
     );
+
     const layer: Layer.Layer<BoxGit | Runs> = Layer.mergeAll(git, runs);
+
     return { main, boxes, tip: TIP, lost: LOST, layer };
   }),
 };
@@ -151,6 +157,7 @@ export const expected = (plan: Plan): Remove.Verdict => {
   }
 
   const first = order.find(([holds]) => holds);
+
   return first === undefined ? Remove.Verdict.cases.removed.make({}) : kept(first[1]);
 };
 
@@ -270,9 +277,11 @@ const law = Effect.fnUntraced(function* (world: World, plan: Plan) {
   const work = `${made.boxes}/${plan.name}`;
   const data = `${work}-gitdata`;
   const before = [yield* present(fs, work), yield* present(fs, data)];
+
   const removal = yield* Remove.remove(plan.asked, { boxes: made.boxes, main: made.main }).pipe(
     Effect.provide(made.layer),
   );
+
   const verdict = expected(plan);
   const removed = verdict._tag === "removed";
   expect(removal.verdict, JSON.stringify(plan)).toEqual(verdict);
@@ -326,6 +335,7 @@ export const rm = {
         failing: "none",
         runs: "moved",
       };
+
       const vectors: ReadonlyArray<Partial<Plan>> = [
         {},
         { asked: "../clean" },

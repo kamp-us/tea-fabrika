@@ -19,6 +19,7 @@ export const world: World = {
     const work = `${boxes}/${plan.name}`;
     const data = `${work}-gitdata`;
     const path = process.env.PATH ?? "/usr/bin:/bin";
+
     const env = {
       PATH: path,
       HOME: home,
@@ -30,6 +31,7 @@ export const world: World = {
 
     const run = Effect.fnUntraced(function* (command: string, args: ReadonlyArray<string>) {
       const handle = yield* ChildProcess.make(command, args, { env, extendEnv: false, stdin: "ignore" });
+
       const [out, err, code] = yield* Effect.all(
         [
           Stream.mkString(Stream.decodeText(handle.stdout)),
@@ -45,6 +47,7 @@ export const world: World = {
 
       return out.trim();
     }, Effect.scoped);
+
     const git = (at: string, ...args: ReadonlyArray<string>) => run("git", ["-C", at, ...args]);
 
     for (const folder of [home, main, work]) {
@@ -107,6 +110,7 @@ export const world: World = {
         ),
       ),
     );
+
     return { main, boxes, tip, lost, layer };
   }),
 };

@@ -27,6 +27,7 @@ import fc from "fast-check";
 import { fieldrow } from "./fieldrow.ts";
 
 const EVENTS = "/box/out/events.jsonl";
+
 const RECEIPT = `${EVENTS}.redacted`;
 
 /**
@@ -80,8 +81,10 @@ const offsetAt = (ms: number, zone: string): { readonly minutes: number; readonl
     new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "longOffset" })
       .formatToParts(new Date(ms))
       .find((part) => part.type === "timeZoneName")?.value ?? "GMT";
+
   const text = name === "GMT" ? "+00:00" : name.slice(3);
   const sign = text.startsWith("-") ? -1 : 1;
+
   return { minutes: sign * (Number(text.slice(1, 3)) * 60 + Number(text.slice(4, 6))), text };
 };
 
@@ -89,6 +92,7 @@ const offsetAt = (ms: number, zone: string): { readonly minutes: number; readonl
 const localIso = (ms: number, zone: string): string => {
   const { minutes, text } = offsetAt(ms, zone);
   const clock = new Date(Math.floor(ms / 1000) * 1000 + minutes * 60_000).toISOString().slice(0, 19);
+
   return `${clock}${text}`;
 };
 
@@ -102,12 +106,14 @@ const pyRound = (x: number, places: number): number => {
   const digits = Number(Math.abs(x).toFixed(places).replace(".", ""));
   const halves = Math.abs(x) * 2 ** (places + 1);
   const tie = Number.isInteger(halves) && halves % 2 === 1;
+
   return Math.sign(x) * Number(`${tie && digits % 2 === 1 ? digits - 1 : digits}e-${places}`) + 0;
 };
 
 /** The usage fieldrow.py sums: whole numbers in all three counts of a `turn.completed` event. */
 const summed = (lines: ReadonlyArray<Line> | null): Usage | null => {
   const turns = (lines ?? []).flatMap((line) => (line._tag === "turn" ? [line.usage] : []));
+
   return turns.length === 0
     ? null
     : turns.reduce((sum, u) => ({
@@ -124,20 +130,25 @@ const summed = (lines: ReadonlyArray<Line> | null): Usage | null => {
 const expected = (c: Case): Record<string, unknown> => {
   const model = c.model.flag ?? c.model.env ?? "gpt-6-astra";
   const effort = c.effort.flag ?? c.effort.env ?? "medium";
+
   const begun =
     c.started === null
       ? { ms: c.lines === null ? c.now : c.birth, iso: localIso(c.lines === null ? c.now : c.birth, c.zone) }
       : { ms: Date.parse(c.started), iso: c.started };
+
   const ended =
     c.ended === null
       ? { ms: c.lines === null ? c.now : c.changed, iso: localIso(c.lines === null ? c.now : c.changed, c.zone) }
       : { ms: Date.parse(c.ended), iso: c.ended };
+
   const u = summed(c.lines);
   const rate = LIST[model];
+
   const usd =
     rate === undefined || u === null
       ? null
       : pyRound(((u.input - u.cached) * rate[0] + u.cached * rate[1] + u.output * rate[2]) / 1e6, 4);
+
   const stepped =
     c.step === null
       ? {}
@@ -147,6 +158,7 @@ const expected = (c: Case): Record<string, unknown> => {
           ...(c.end === null ? {} : { end: c.end }),
           ...(c.status === null ? {} : { status: c.status }),
         };
+
   return {
     date: begun.iso.slice(0, 10),
     run: c.run,
@@ -185,6 +197,7 @@ const usage = fc
   .map(({ cached, fresh, output }) => ({ input: fresh + cached, cached, output }));
 
 const KEYS = ["input_tokens", "cached_input_tokens", "output_tokens"] as const;
+
 const said = (u: Usage) => ({ input_tokens: u.input, cached_input_tokens: u.cached, output_tokens: u.output });
 
 /** A completed turn, sometimes with keys fieldrow.py does not read. */
@@ -217,19 +230,25 @@ const skipped: fc.Arbitrary<Line> = fc
   .map((text) => ({ _tag: "skipped", text }));
 
 const ZONES = ["UTC", "America/Los_Angeles", "Asia/Kolkata", "Europe/Istanbul"] as const;
+
 const OFFSETS = ["+00:00", "-08:00", "-07:00", "+05:30", "+03:00"] as const;
+
 const FROM = Date.UTC(2025, 0, 1);
+
 const TO = Date.UTC(2027, 0, 1);
 
 /** A time as box.sh passes it: `datetime.now().astimezone().isoformat(timespec="seconds")`. */
 const given = (ms: number, offset: string): string => {
   const sign = offset.startsWith("-") ? -1 : 1;
   const minutes = sign * (Number(offset.slice(1, 3)) * 60 + Number(offset.slice(4, 6)));
+
   return `${new Date(Math.floor(ms / 1000) * 1000 + minutes * 60_000).toISOString().slice(0, 19)}${offset}`;
 };
 
 const word = fc.stringMatching(/^[a-zé0-9][a-zé0-9.]{0,7}$/);
+
 const sha = fc.stringMatching(/^[0-9a-f]{7,12}$/);
+
 const named = fc.constantFrom("gpt-6.1-sol", "gpt-6-astra", "gpt-made-up-1");
 
 const cases: fc.Arbitrary<Case> = fc
@@ -293,8 +312,10 @@ const disk = (c: Case) => {
 
   const text = (path: string, method: string) => {
     const held = files.get(path);
+
     return held === undefined ? Effect.fail(notFound(method)) : Effect.succeed(held);
   };
+
   return FileSystem.layerNoop({
     exists: (path) => Effect.succeed(files.has(path)),
     readFileString: (path) => text(path, "readFileString"),
@@ -348,6 +369,7 @@ const run = (c: Case) =>
     const exit = yield* Command.runWith(fieldrow, { version: "0.0.0" })(argv(c)).pipe(Effect.exit);
     const stdout = (yield* TestConsole.logLines).map(String);
     const stderr = (yield* TestConsole.errorLines).map(String);
+
     return { exit, stdout, stderr };
   }).pipe(
     Effect.provide(
@@ -386,6 +408,7 @@ const check = (c: Case) =>
 const reaches = (c: Case): ReadonlyArray<string> => {
   const u = summed(c.lines);
   const model = c.model.flag ?? c.model.env ?? "gpt-6-astra";
+
   const marks: ReadonlyArray<readonly [string, boolean]> = [
     ["no events file", c.lines === null],
     ["no usage", c.lines !== null && u === null],
@@ -401,6 +424,7 @@ const reaches = (c: Case): ReadonlyArray<string> => {
     ["bounds without step", c.step === null && c.status !== null],
     ["receipt", c.receipt !== null],
   ];
+
   return marks.flatMap(([mark, hit]) => (hit ? [mark] : []));
 };
 

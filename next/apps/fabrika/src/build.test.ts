@@ -12,16 +12,20 @@ it("format: the page entry starts its one Effect program through runMain, once, 
   const source = readFileSync(file, "utf8");
   const parsed = parseSync(file, source);
   expect(parsed.errors).toEqual([]);
+
   // Any oxc node: some carry a `name` that is itself a node (V8IntrinsicExpression), so it is read as unknown.
   const isRunMain = (node: { readonly type: string; readonly name?: unknown }) =>
     node.type === "Identifier" && node.name === "runMain";
+
   const imported = parsed.program.body.filter(
     (node) =>
       node.type === "ImportDeclaration" &&
       node.source.value === "@kampus/tuval/browser" &&
       node.specifiers.some((s) => s.type === "ImportSpecifier" && isRunMain(s.imported) && isRunMain(s.local)),
   );
+
   expect(imported, "runMain comes from @kampus/tuval/browser").toHaveLength(1);
+
   // A start is `program.pipe(runMain)`, `runMain(program)` or `runMain(options)(program)`, as a
   // statement of the module itself.
   const boots = parsed.program.body.filter((node) => {
@@ -31,15 +35,19 @@ it("format: the page entry starts its one Effect program through runMain, once, 
 
     const { callee, arguments: args } = node.expression;
     const last = args.at(-1);
+
     const piped =
       callee.type === "MemberExpression" &&
       callee.property.type === "Identifier" &&
       callee.property.name === "pipe" &&
       last !== undefined &&
       isRunMain(last);
+
     const direct = isRunMain(callee) || (callee.type === "CallExpression" && isRunMain(callee.callee));
+
     return piped || direct;
   });
+
   expect(boots, "a React mount never owns the page's Effect run").toHaveLength(1);
   // The import and the one start: any other `runMain`, in a function or a component, is a second start.
   expect(source.match(/\brunMain\b/g), "there is only one page runtime").toHaveLength(2);

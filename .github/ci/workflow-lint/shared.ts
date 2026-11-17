@@ -67,6 +67,7 @@ export const compact = (value: unknown) => {
 
   const trimmed = value.trim();
   const expression = trimmed.startsWith("${{") && trimmed.endsWith("}}") ? trimmed.slice(3, -2).trim() : trimmed;
+
   // Keep quoted strings and names intact. Only operator spacing cannot change meaning.
   return expression.replace(
     /'(?:[^']|'')*'|\s*(==|!=|&&|\|\|)\s*/g,
@@ -110,13 +111,16 @@ export const chromium =
 export const E2E_PREFIX = "e2e-";
 
 export const ON_E2E = `startsWith(matrix.shard, '${E2E_PREFIX}')`;
+
 // Chromium is fetched only once a visual file exists.
 export const VISUAL_FILES = "hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''";
+
 const FALLBACKS = /^fromJSON\(needs\.changes\.outputs\.shards\|\|\((.*)&&'(.*)'\|\|'(.*)'\)\)$/s;
 
 const parsed = (text: string | undefined): unknown[] => {
   try {
     const value: unknown = JSON.parse(text ?? "");
+
     return Array.isArray(value) ? value : [];
   } catch {
     return [];
@@ -129,6 +133,7 @@ const parsed = (text: string | undefined): unknown[] => {
  */
 export const fallbacks = (job: Record<string, unknown>) => {
   const found = FALLBACKS.exec(compact(map(map(job["strategy"])["matrix"])["shard"]));
+
   return { when: found?.[1] ?? "", full: parsed(found?.[2]), plain: parsed(found?.[3]) };
 };
 

@@ -56,12 +56,14 @@ export const oneStoreHook: CreateRule = {
         message: `\`${name}\`'s value is dropped. A view draws from what the store hook returns; compiled, a view that reads anything else keeps its first output forever (docs/direction/react-compiler.md, C4).`,
       });
     };
+
     return {
       ImportDeclaration(node) {
         const from = node.source.value;
 
         if (from.startsWith("use-sync-external-store")) {
           context.report({ node, message: ONLY });
+
           return;
         }
 

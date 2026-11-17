@@ -7,6 +7,7 @@ import * as Schema from "effect/Schema";
 import { Row } from "../Relation.ts";
 
 const Model = Schema.Struct({ tuples: Schema.ReadonlySet(Schema.String) });
+
 type Model = typeof Model.Type;
 
 const Msg = Schema.Struct({ type: Schema.Literal("recorded"), row: Row });

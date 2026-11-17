@@ -43,6 +43,7 @@ const Turn = Schema.Struct({
 });
 
 const decodeTurn = Schema.decodeUnknownResult(Schema.fromJsonString(Turn));
+
 const decodeCount = Schema.decodeUnknownResult(Schema.NumberFromString.check(Schema.isInt()));
 
 interface Usage {
@@ -76,6 +77,7 @@ const summed = (text: string): Option.Option<Usage> => {
 /** An instant as that zone's clock reads it, to the second: `2026-11-16T09:05:00-08:00`. */
 const local = (zone: DateTime.TimeZone, at: DateTime.DateTime): string => {
   const zoned = DateTime.setZone(at, zone);
+
   return `${DateTime.formatIsoOffset(zoned).slice(0, 19)}${DateTime.zonedOffsetIso(zoned)}`;
 };
 
@@ -87,6 +89,7 @@ const given = (flag: string, text: string): Effect.Effect<DateTime.Zoned, Refuse
   });
 
 const Text = Schema.NullOr(Schema.String);
+
 const Count = Schema.NullOr(Schema.Number);
 
 /** One `field/runs.jsonl` row, in fieldrow.py's key order. Its `reason` is saved as `why`. */
@@ -147,6 +150,7 @@ const row = Effect.fn("fieldrow.row")(function* (ask: Ask) {
   const zone = yield* DateTime.CurrentTimeZone;
   const now = yield* DateTime.now;
   const unreadable = (path: string) => Effect.mapError(() => new Refused({ reason: `${path} could not be read` }));
+
   const read = Effect.fnUntraced(function* (path: string) {
     return (yield* fs.exists(path).pipe(unreadable(path)))
       ? Option.some(yield* fs.readFileString(path).pipe(unreadable(path)))
@@ -154,30 +158,37 @@ const row = Effect.fn("fieldrow.row")(function* (ask: Ask) {
   });
 
   const text = yield* read(ask.events);
+
   const info = Option.isSome(text)
     ? Option.some(yield* fs.stat(ask.events).pipe(unreadable(ask.events)))
     : Option.none();
+
   const birth = info.pipe(
     Option.flatMap((stat) => Option.orElse(stat.birthtime, () => stat.mtime)),
     Option.map(DateTime.fromDateUnsafe),
   );
+
   const changed = info.pipe(
     Option.flatMap((stat) => stat.mtime),
     Option.map(DateTime.fromDateUnsafe),
   );
+
   const bound = (flag: string, value: string | null, file: Option.Option<DateTime.Utc>) =>
     value === null
       ? Effect.succeed({ at: Option.getOrElse(file, () => now), zone })
       : Effect.map(given(flag, value), (at) => ({ at, zone: at.zone }));
+
   const begun = yield* bound("started", ask.started, birth);
   const ended = yield* bound("ended", ask.ended, changed);
 
   const usage = Option.getOrNull(Option.flatMap(text, (held) => summed(held)));
   const rate = LIST[ask.model];
+
   const usd =
     rate === undefined || usage === null
       ? null
       : rounded(((usage.input - usage.cached) * rate[0] + usage.cached * rate[1] + usage.output * rate[2]) / 1e6, 4);
+
   const priced =
     rate === undefined
       ? ""
@@ -185,6 +196,7 @@ const row = Effect.fn("fieldrow.row")(function* (ask: Ask) {
 
   const receipt = `${ask.events}.redacted`;
   const redacted = yield* read(receipt);
+
   const count = Option.isSome(redacted)
     ? Option.some(
         yield* Effect.fromResult(decodeCount(redacted.value.trim())).pipe(
@@ -194,6 +206,7 @@ const row = Effect.fn("fieldrow.row")(function* (ask: Ask) {
     : Option.none<number>();
 
   const started = local(begun.zone, begun.at);
+
   return encodeRow({
     date: started.slice(0, 10),
     run: ask.run,
@@ -273,6 +286,7 @@ export const fieldrow = Command.make(
   ({ effort, model, reason, ...ask }) =>
     Effect.gen(function* () {
       const line = yield* row({ ...ask, model: yield* model, effort: yield* effort, reason: reason.join(" ") });
+
       return yield* Console.log(line);
     }).pipe(
       Effect.catchTag("ConfigError", (error) => Effect.fail(new Refused({ reason: error.message }))),

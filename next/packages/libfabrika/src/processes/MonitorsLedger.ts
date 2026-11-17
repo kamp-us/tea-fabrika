@@ -23,6 +23,7 @@ import { ProcessManager } from "./ProcessManager.ts";
 const tag = (word: string): string => `fab.monitors.${word}`;
 
 const isName = Schema.is(ProcessName);
+
 const encodeWatched = Schema.encodeSync(Watched);
 
 const refuse = (reason: Exclude<MonitorsError["reason"], "storage">) => new MonitorsError({ reason });
@@ -65,6 +66,7 @@ const look = (
 
   if (saved !== undefined) {
     const watched = Watched.make({ ref: watch.id, process: saved.process, name: saved.name ?? watch.name });
+
     return Result.succeed(Found.saved({ watched }));
   }
 
@@ -79,12 +81,14 @@ const look = (
 
   if (Result.isFailure(picked)) {
     const { reason } = picked.failure;
+
     return Result.fail(
       reason === "storage" ? storage(picked.failure) : refuse(reason === "ended" ? "stale_sender" : "forbidden"),
     );
   }
 
   const member = picked.success;
+
   const allowed = Option.match(member, {
     onNone: () => Result.succeed(related(table, watcher.name, watch.name)),
     onSome: (checked) => may(turn, checked),
@@ -145,6 +149,7 @@ export const layer = (config: {
       const manager = yield* ProcessManager;
       const relations = yield* Relations;
       const senders = yield* Senders;
+
       const may: May = (turn, member) =>
         Result.map(relations.within(turn), (tuples) =>
           Result.isSuccess(WatchProcess.within(tuples, member, config.fabrika)),
@@ -185,6 +190,7 @@ export const layer = (config: {
 
           // Outside any turn, and kept as it came: it decides nothing before the saved-ref check.
           const sender = yield* senders.sender(from.parent, watch.watcher.process).pipe(Effect.result);
+
           const found = yield* tx
             .transact((turn) => look(manager.table(turn), turn, watch, sender, may))
             .pipe(Effect.mapError(storage), Effect.flatMap(Effect.fromResult));

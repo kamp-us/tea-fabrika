@@ -13,6 +13,7 @@ import { foldAccess } from "./AccessFold.ts";
 import { NotGranted } from "./SessionManager.ts";
 
 const known: ReadonlySet<string> = new Set(Object.keys(MemberEvent.cases));
+
 const decodeEventResult = Schema.decodeUnknownResult(MemberEvent);
 
 /**
@@ -40,6 +41,7 @@ export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
       short({ "fab.authorization.id": write.id, "fab.authorization.stream": write.stream }),
     );
     const transaction = yield* LedgerTransaction;
+
     const result = yield* transaction.transact((turn): Result.Result<Appended, LedgerError | NotGranted> => {
       const events: MemberEvent[] = [];
 
@@ -63,8 +65,10 @@ export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
 
       return Result.succeed(Appended.cases.placed.make(turn.append(write.stream, write.id, write.line)));
     });
+
     const appended = yield* Effect.fromResult(result);
     yield* Effect.annotateCurrentSpan("fab.authorization.outcome", "placed");
+
     return appended;
   },
   Effect.tapError((error) =>

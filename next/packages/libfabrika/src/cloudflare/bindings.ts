@@ -84,6 +84,7 @@ const refusals = {
  * @category schemas
  */
 export const SigningReply = Schema.TaggedUnion({ ok: { value: Session }, ...refusals });
+
 /**
  * Schema for a commit's answer over Project RPC: `ok` with the `Appended` entry, `SigningRefused`
  * with its reason, or `NotGranted`.
@@ -202,10 +203,14 @@ export interface GatewayCalls {
 type RemoteCall<F> = F extends (...args: infer A) => infer B ? (...args: A) => Promise<Effect.Success<B>> : never;
 
 type Remote<S> = { [K in keyof S]: RemoteCall<S[K]> };
+
 type DoorService = GatewayCalls;
+
 /** The manager's calls an object may make over RPC: no guard, and no trusted watcher. */
 type Processes = ProcessCalls;
+
 type Gateways = (typeof Connections)["Service"];
+
 type Runner = (typeof ProgramRunner)["Service"];
 
 /** One ProcessManager call over Project RPC: a refusal comes back as reply data. */

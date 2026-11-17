@@ -62,6 +62,7 @@ const PINNED = [
 ] as const;
 
 const WORDS = ["ledger", "review", "merge", "lint", "port", "never", "shell", "box", "brain", "lease", "Effect"];
+
 const word = fc.constantFrom(...WORDS);
 
 /** A file's lines: each carries the file's own name, so git sees no rename between two files. */
@@ -95,6 +96,7 @@ const history = fc.record({
     )
     .map(([fs, rest]) => {
       const fates = [FATES[0], ...rest];
+
       return fs.map((f, i) => ({
         ...f,
         folder: i < 2 ? ".decisions" : f.folder === ".decisions" ? "src" : f.folder,
@@ -111,6 +113,7 @@ type Branch = "main" | "work" | "side";
 
 /** A walk's moves, in the order the fold offers them. */
 const MOVES = ["work", "main", "side", "branch", "mergeMain", "mergeWork", "mergeSide", "mergeBehind"] as const;
+
 type Move = (typeof MOVES)[number];
 
 /** What a commit does to one file its branch made, or `add`, a new file. */
@@ -153,6 +156,7 @@ const trees = (h: History) => {
 
   for (const f of h.files) {
     const path = filePath(f);
+
     const was =
       f.folder === ".decisions"
         ? `---\ntitle: ${f.name.join(" ")}\n---\n${fileText(path, "old", f.before)}`
@@ -200,6 +204,7 @@ const possible = (
 ): ReadonlyArray<Move> => {
   const { main = "", work = "", side } = refs;
   const behind = commits[work]?.parents[0];
+
   const can: Record<Move, boolean> = {
     work: true,
     main: true,
@@ -210,6 +215,7 @@ const possible = (
     mergeSide: side !== undefined && !reaches(commits, work, side),
     mergeBehind: behind !== undefined && !reaches(commits, main, behind),
   };
+
   return MOVES.filter((move) => can[move]);
 };
 
@@ -223,16 +229,20 @@ const edited = (tree: GitTest.Tree, mine: ReadonlyArray<string>, s: Step, n: num
 
   if (target === undefined) {
     const slug = s.name.join("-").toLowerCase();
+
     const path =
       s.folder === ".decisions"
         ? `.decisions/${String(n).padStart(4, "0")}-step-${slug}.md`
         : `${s.folder}/${slug}-step${n}.md`;
+
     const head = s.folder === ".decisions" ? `---\ntitle: ${s.name.join(" ")}\n---\n` : "";
+
     return { tree: { ...tree, [path]: `${head}${fileText(path, `add${n}`, s.lines)}` }, added: path, moved: false };
   }
 
   if (s.edit === "delete") {
     const { [target]: _gone, ...rest } = tree;
+
     return { tree: rest, added: undefined, moved: false };
   }
 
@@ -242,6 +252,7 @@ const edited = (tree: GitTest.Tree, mine: ReadonlyArray<string>, s: Step, n: num
   const fresh = s.lines.map((l) => `${target} step${n} ${l.join(" ")}`);
   const at = s.at % old.length;
   const to = s.to % old.length;
+
   const lines = (() => {
     switch (s.edit) {
       case "append":
@@ -255,18 +266,24 @@ const edited = (tree: GitTest.Tree, mine: ReadonlyArray<string>, s: Step, n: num
         return fresh;
       case "move": {
         const rest = old.toSpliced(at, 1);
+
         return rest.toSpliced(s.to % (rest.length + 1), 0, old[at] ?? "");
       }
+
       case "swap": {
         const other = to === at ? (at + 1) % old.length : to;
+
         return old.map((line, i) => (i === at ? (old[other] ?? line) : i === other ? (old[at] ?? line) : line));
       }
+
       // Returned above as a new file; the type only knows `delete` went.
       case "add":
         return old;
     }
   })();
+
   const now = `${lines.join("\n")}${eol && s.edit !== "noeol" ? "\n" : ""}`;
+
   return {
     tree: { ...tree, [target]: now },
     added: undefined,
@@ -282,11 +299,14 @@ const build = Effect.fn("git.integration.build")(function* (h: History) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const dir = yield* fs.realPath(yield* fs.makeTempDirectoryScoped({ prefix: "git-law-" }));
+
   const git = Effect.fn("git.integration.git")(function* (...args: ReadonlyArray<string>) {
     const ran = yield* run("git", args, dir, { env: CLEAN });
     expect(ran.code, `git ${args.join(" ")}: ${ran.err}`).toBe(0);
+
     return ran.out.trim();
   });
+
   const commit = Effect.fn("git.integration.commit")(function* (
     tree: Readonly<Record<string, string>>,
     message: string,
@@ -304,6 +324,7 @@ const build = Effect.fn("git.integration.build")(function* (h: History) {
 
     yield* git("add", "-A");
     yield* git("commit", "-q", "--allow-empty", "-m", message);
+
     return yield* git("rev-parse", "HEAD");
   });
 
@@ -320,6 +341,7 @@ const build = Effect.fn("git.integration.build")(function* (h: History) {
   yield* git("checkout", "-q", "main");
   const m = yield* commit(t.main, "main");
   yield* git("checkout", "-q", "work");
+
   const model: GitTest.Model = {
     top: dir,
     commits: {
@@ -332,10 +354,12 @@ const build = Effect.fn("git.integration.build")(function* (h: History) {
 
   const commits: Record<string, GitTest.Commit> = { ...model.commits };
   const refs: Record<string, string> = { work: w, main: m };
+
   const owner = new Map<string, Branch>([
     ...Object.keys({ ...t.base, ...t.head }).map((p): [string, Branch] => [p, "work"]),
     ["notes/main-only.md", "main"],
   ]);
+
   /** The model of the history the walk has built so far, HEAD on work. */
   const now = (): GitTest.Model => ({ top: dir, commits: { ...commits }, refs: { ...refs, HEAD: refs.work ?? w } });
 
@@ -346,15 +370,18 @@ const build = Effect.fn("git.integration.build")(function* (h: History) {
     if (move === "branch") {
       yield* git("branch", "side", "work");
       refs.side = refs.work ?? w;
+
       return { move, ancestor: false, moved: false };
     }
 
     if (move === "work" || move === "main" || move === "side") {
       const tip = refs[move] ?? w;
       const tree = commits[tip]?.tree ?? {};
+
       const mine = Object.keys(tree)
         .filter((p) => owner.get(p) === move)
         .toSorted();
+
       const next = edited(tree, mine, s, n);
 
       if (next.added !== undefined) {
@@ -366,6 +393,7 @@ const build = Effect.fn("git.integration.build")(function* (h: History) {
       commits[sha] = { parents: [tip], tree: next.tree };
       refs[move] = sha;
       yield* git("checkout", "-q", "work");
+
       return { move, ancestor: false, moved: next.moved };
     }
 
@@ -373,20 +401,25 @@ const build = Effect.fn("git.integration.build")(function* (h: History) {
     // best merge bases (a criss-cross), which the model must refuse.
     const into = move === "mergeWork" || move === "mergeBehind" ? "main" : "work";
     const tip = refs[into] ?? w;
+
     const other =
       move === "mergeBehind"
         ? (commits[refs.work ?? w]?.parents[0] ?? w)
         : (refs[move === "mergeWork" ? "work" : move === "mergeMain" ? "main" : "side"] ?? w);
+
     yield* git("checkout", "-q", into);
     yield* git("merge", "-q", "--no-ff", "-m", `${move} ${n}`, other);
     const sha = yield* git("rev-parse", "HEAD");
     const tracked = (yield* git("ls-files", "-z")).split("\0").filter((p) => p !== "");
+
     const texts = yield* Effect.forEach(tracked, (p) => fs.readFileString(path.join(dir, p)), {
       concurrency: 16,
     });
+
     commits[sha] = { parents: [tip, other], tree: Object.fromEntries(tracked.map((p, i) => [p, texts[i] ?? ""])) };
     refs[into] = sha;
     yield* git("checkout", "-q", "work");
+
     // A `--no-ff` merge of a commit that already holds the branch: its first parent is an ancestor
     // of its second.
     return { move, ancestor: reaches(commits, other, tip), moved: false };
@@ -401,6 +434,7 @@ const build = Effect.fn("git.integration.build")(function* (h: History) {
 /** A diff as the ports read it: its file header lines, and its changed lines, each sorted. */
 const readDiff = (diff: string) => {
   const lines = diff.split("\n");
+
   return {
     headers: lines.filter((l) => l.startsWith("--- ") || l.startsWith("+++ ")).toSorted(),
     changed: lines.filter((l) => /^[+-]/.test(l) && !l.startsWith("--- ") && !l.startsWith("+++ ")).toSorted(),
@@ -414,6 +448,7 @@ const answers = (git: Layer.Layer<Git>) =>
     const top = yield* service.top;
     const diff = readDiff(yield* service.diff(["--unified=0", "main...HEAD"]));
     const unknown = yield* Effect.exit(service.diff(["--unified=0", "no-such-ref...HEAD"]));
+
     return { top, diff, unknown: Exit.isFailure(unknown) };
   }).pipe(Effect.provide(git));
 
@@ -422,13 +457,17 @@ const alike = (dir: string, model: GitTest.Model) =>
   Effect.gen(function* () {
     const diff = Effect.gen(function* () {
       const service = yield* Git;
+
       return readDiff(yield* service.diff(["--unified=0", "main...HEAD"]));
     });
+
     const real = yield* diff.pipe(Effect.provide(GitProcess.layer(dir).pipe(Layer.provide(NodeServices.layer))));
+
     const fake = yield* diff.pipe(
       Effect.provide(GitTest.layer(model)),
       Effect.catchTag("GitError", (e) => Effect.succeed({ refused: e._tag })),
     );
+
     return { real, fake };
   });
 
@@ -437,6 +476,7 @@ const governed = (layers: Layer.Layer<Git | FileSystem.FileSystem>) =>
   Effect.gen(function* () {
     const exit = yield* Command.runWith(governance, { version: "0.0.0" })(["main"]).pipe(Effect.exit);
     const out = (yield* TestConsole.logLines).map(String).join("\n");
+
     return { ok: Exit.isSuccess(exit), out };
   }).pipe(Effect.provide(Layer.merge(layers, TestConsole.layer)));
 
@@ -447,7 +487,9 @@ const governedOrRefused = (layers: Layer.Layer<Git | FileSystem.FileSystem>) =>
       Effect.as(undefined),
       Effect.catchTag("GitError", (e) => Effect.succeed(e._tag)),
     );
+
     const out = (yield* TestConsole.logLines).map(String).join("\n");
+
     return refused === undefined ? { ok: true, out } : { refused };
   }).pipe(Effect.provide(Layer.merge(layers, TestConsole.layer)));
 
@@ -514,6 +556,7 @@ describe("the Git service's two layers", () => {
   // walked criss-cross, git named two bases and the model answered a diff.
   it("property: GitProcess and GitTest answer top and a three-dot diff alike, and both refuse an unknown ref", () => {
     const seen = reached();
+
     return fc.assert(
       fc.asyncProperty(walk, (wk) =>
         ran(
@@ -580,9 +623,11 @@ describe("the Git service's two layers", () => {
         ran(
           Effect.gen(function* () {
             const { dir, model, now, take } = yield* build(wk.history);
+
             const real = yield* governed(
               Layer.merge(GitProcess.layer(dir).pipe(Layer.provide(NodeServices.layer)), NodeServices.layer),
             );
+
             const fake = yield* governed(Layer.merge(GitTest.layer(model), GitTest.workTree(model)));
             expect(real.ok).toBe(true);
             expect(fake).toEqual(real);
@@ -597,9 +642,11 @@ describe("the Git service's two layers", () => {
             }
 
             const after = now();
+
             const walked = yield* governedOrRefused(
               Layer.merge(GitProcess.layer(dir).pipe(Layer.provide(NodeServices.layer)), NodeServices.layer),
             );
+
             const modeled = yield* governedOrRefused(Layer.merge(GitTest.layer(after), GitTest.workTree(after)));
             expect(walked).toEqual({ ok: true, out: expect.any(String) });
             expect(modeled).toEqual("refused" in modeled ? { refused: "GitError" } : walked);
@@ -631,6 +678,7 @@ describe("the Git service's two layers", () => {
               const real = yield* governed(
                 Layer.merge(GitProcess.layer(dir).pipe(Layer.provide(NodeServices.layer)), NodeServices.layer),
               );
+
               const clean = yield* run(process.execPath, [script, "main"], dir, { env: CLEAN });
               expect({ code: clean.code, out: clean.out }).toEqual({ code: 0, out: `${real.out}\n` });
               const unknown = yield* run(process.execPath, [script, "no-such-ref"], dir, { env: CLEAN });

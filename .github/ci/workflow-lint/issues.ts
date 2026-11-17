@@ -34,11 +34,14 @@ export const lintIssues = (workflows: Readonly<Record<string, string>>): string[
     }
 
     const top = touchesIssues(workflow["permissions"]) ? [`${path}: the workflow's token: ${ISSUES_RULE}`] : [];
+
     const jobs = Object.entries(map(workflow["jobs"]))
       .filter(([name, job]) => {
         const grant = map(job)["permissions"];
+
         return touchesIssues(grant) && (ISSUE_JOBS[path] !== name || grant === "write-all");
       })
       .map(([name]) => `${path}: job ${name}: ${ISSUES_RULE}`);
+
     return [...top, ...jobs];
   });

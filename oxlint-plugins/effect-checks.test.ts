@@ -4,7 +4,7 @@
 // the type check just stops reading it, so the folders each slice locked are saved here.
 //
 // It walks the real files each project checks: what its tsconfig names, and every file those reach by
-// a relative import, which the checker checks too. It merges the checker's plugin block
+// a relative import, which the checker checks too. test-helpers/effect-config.ts merges the checker's plugin block
 // the way the checker does (0577): the base's keys, then the project's, each key replacing the one
 // before, except `diagnosticSeverity`, whose maps merge, and `overrides`, whose lists join. Each
 // override a file matches then applies in order, its globs read from its own tsconfig's folder. So an
@@ -16,11 +16,20 @@
 // The fold of E0 to E3 (ticket 1075) planted one glob dropped from each of E1's, E2's and E3's lists: red.
 import { existsSync, globSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, join, matchesGlob, relative, resolve } from "node:path";
-import { type Expression, parseSync } from "oxc-parser";
+import { parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
+import {
+  blockOf,
+  DEFAULTS,
+  levelAt,
+  matches,
+  optionsAt,
+  readConfig,
+  record,
+  strings,
+} from "./test-helpers/effect-config.ts";
 
 const ROOT = join(import.meta.dirname, "..");
-const PLUGIN = "@effect/language-service";
 
 // Every project `pnpm typecheck` reads in `next/` and our tooling.
 const PROJECTS = [
@@ -221,128 +230,6 @@ const LOCKED: Readonly<Record<string, ReadonlyArray<string>>> = {
   ],
 };
 
-type Options = Readonly<Record<string, unknown>>;
-
-type Override = {
-  readonly dir: string;
-  readonly include: ReadonlyArray<string>;
-  readonly exclude: ReadonlyArray<string>;
-  readonly options: Options;
-};
-
-type Block = { readonly options: Options; readonly overrides: ReadonlyArray<Override> };
-
-const record = (x: unknown): Options =>
-  typeof x === "object" && x !== null && !Array.isArray(x) ? Object.fromEntries(Object.entries(x)) : {};
-
-const list = (x: unknown): ReadonlyArray<unknown> => (Array.isArray(x) ? x : []);
-
-const strings = (x: unknown): ReadonlyArray<string> => list(x).filter((item) => typeof item === "string");
-
-/** A JSON value from a parsed tsconfig, comments dropped. */
-const value = (node: Expression): unknown => {
-  switch (node.type) {
-    case "ParenthesizedExpression":
-      return value(node.expression);
-    case "Literal":
-      return node.value;
-    case "ArrayExpression":
-      return node.elements.map((element) =>
-        element === null || element.type === "SpreadElement" ? null : value(element),
-      );
-    case "ObjectExpression":
-      return Object.fromEntries(
-        node.properties.flatMap((property) =>
-          property.type === "Property" && property.key.type === "Literal"
-            ? [[String(property.key.value), value(property.value)]]
-            : [],
-        ),
-      );
-    default:
-      throw new Error(`a tsconfig holds a ${node.type}, which is not JSON`);
-  }
-};
-
-/** A tsconfig's own JSON. A tsconfig has comments, so it is read as a JS expression. */
-const readConfig = (path: string): Options => {
-  const parsed = parseSync("tsconfig.ts", `(${readFileSync(path, "utf8")})`);
-  expect(parsed.errors, path).toEqual([]);
-  const statement = parsed.program.body[0];
-
-  if (statement?.type !== "ExpressionStatement") {
-    throw new Error(`${path} did not parse as one expression`);
-  }
-
-  return record(value(statement.expression));
-};
-
-/** Two plugin option sets, merged as the checker merges `extends` and an override. */
-const merge = (base: Options, child: Options): Options => ({
-  ...base,
-  ...child,
-  diagnosticSeverity: { ...record(base.diagnosticSeverity), ...record(child.diagnosticSeverity) },
-});
-
-/** The checker's plugin block for one tsconfig, through its whole `extends` chain. */
-const blockOf = (path: string): Block => {
-  const config = readConfig(path);
-  const dir = dirname(path);
-  const parent: Block =
-    typeof config.extends === "string" ? blockOf(resolve(dir, config.extends)) : { options: {}, overrides: [] };
-  const plugin = list(record(config.compilerOptions).plugins)
-    .map(record)
-    .find((entry) => entry.name === PLUGIN);
-  const { overrides, ...options } = record(plugin);
-  const own = list(overrides)
-    .map(record)
-    .map((override) => ({
-      dir,
-      include: strings(override.include),
-      exclude: strings(override.exclude),
-      options: record(override.options),
-    }));
-
-  return { options: merge(parent.options, options), overrides: [...parent.overrides, ...own] };
-};
-
-const matches = (dir: string, globs: ReadonlyArray<string>, file: string): boolean => {
-  const path = relative(dir, file).replaceAll("\\", "/");
-  return globs.some((glob) => matchesGlob(path, glob));
-};
-
-/** The options one file ends with: the block's, then each override it matches, in order. */
-const optionsAt = (block: Block, file: string): Options =>
-  block.overrides
-    .filter(
-      (override) => matches(override.dir, override.include, file) && !matches(override.dir, override.exclude, file),
-    )
-    .reduce((options, override) => merge(options, override.options), block.options);
-
-const SCHEMA = record(JSON.parse(readFileSync(join(ROOT, "node_modules", "@effect", "tsgo", "schema.json"), "utf8")));
-
-/** Each check's level when no config names it, from the checker's own schema. */
-const DEFAULTS: Options = Object.fromEntries(
-  Object.entries(
-    record(record(record(SCHEMA.definitions).effectLanguageServicePluginDiagnosticSeverityDefinition).properties),
-  ).map(([check, schema]) => [check, record(schema).default]),
-);
-
-/** The level a check ends at for one file. An import check is off when its list does not name `effect`. */
-const levelAt = (options: Options, check: string): unknown => {
-  const named = (key: string) => strings(options[key]).includes("effect");
-
-  if (check === "preferNamespaceImport" && !named("namespaceImportPackages")) {
-    return "off";
-  }
-
-  // Named in both lists, a package takes the namespace form (0577).
-  if (check === "preferBarrelImport" && (!named("barrelImportPackages") || named("namespaceImportPackages"))) {
-    return "off";
-  }
-
-  return record(options.diagnosticSeverity)[check] ?? DEFAULTS[check];
-};
-
 /** A tsconfig's file keys, each from the nearest config in the `extends` chain that sets it, with that config's folder. */
 type Roots = {
   readonly include: { readonly dir: string; readonly list: ReadonlyArray<string> } | undefined;
@@ -354,10 +241,12 @@ type Roots = {
 const rootsOf = (path: string): Roots => {
   const config = readConfig(path);
   const dir = dirname(path);
+
   const parent: Roots =
     typeof config.extends === "string"
       ? rootsOf(resolve(dir, config.extends))
       : { include: undefined, files: undefined, exclude: undefined, allowJs: false };
+
   const own = (key: string) => (key in config ? { dir, list: strings(config[key]) } : undefined);
   const allowJs = record(config.compilerOptions).allowJs;
 
@@ -370,18 +259,21 @@ const rootsOf = (path: string): Roots => {
 };
 
 const TS = [".ts", ".tsx", ".mts", ".cts"];
+
 const JS = [".js", ".jsx", ".mjs", ".cjs"];
 
 /** The file a relative import names, as NodeNext resolution with `allowImportingTsExtensions` finds it. */
 const resolveImport = (from: string, request: string): string | undefined => {
   const base = resolve(dirname(from), request);
   const stem = base.slice(0, base.length - extname(base).length);
+
   const swapped: Readonly<Record<string, ReadonlyArray<string>>> = {
     ".js": [".ts", ".tsx"],
     ".jsx": [".tsx"],
     ".mjs": [".mts"],
     ".cjs": [".cts"],
   };
+
   const candidates = [
     base,
     ...(swapped[extname(base)] ?? []).map((extension) => stem + extension),
@@ -396,11 +288,13 @@ const resolveImport = (from: string, request: string): string | undefined => {
 const importsOf = (file: string): ReadonlyArray<string> => {
   const text = readFileSync(file, "utf8");
   const { module } = parseSync(file, text);
+
   const requests = [
     ...module.staticImports.map((entry) => entry.moduleRequest.value),
     ...module.staticExports.flatMap((entry) => entry.entries.flatMap((one) => one.moduleRequest?.value ?? [])),
     ...module.dynamicImports.flatMap((entry) => {
       const literal = /^(["'`])([^"'`$]*)\1$/.exec(text.slice(entry.moduleRequest.start, entry.moduleRequest.end));
+
       return literal?.[2] ?? [];
     }),
   ];
@@ -410,6 +304,7 @@ const importsOf = (file: string): ReadonlyArray<string> => {
 
 const excluded = (dir: string, globs: ReadonlyArray<string>, file: string): boolean => {
   const path = relative(dir, file).replaceAll("\\", "/");
+
   return globs.some((glob) =>
     glob.includes("*") ? matchesGlob(path, glob) : path === glob || path.startsWith(`${glob}/`),
   );
@@ -427,6 +322,7 @@ const programOf = (path: string): { readonly files: ReadonlyArray<string>; reado
   const roots = rootsOf(path);
   const allowed = roots.allowJs ? [...TS, ...JS] : TS;
   const checked = (file: string) => allowed.includes(extname(file)) && !file.split("/").includes("node_modules");
+
   const included = (roots.include?.list ?? []).flatMap((entry) => {
     const dir = roots.include?.dir ?? dirname(path);
     const full = resolve(dir, entry);
@@ -441,10 +337,12 @@ const programOf = (path: string): { readonly files: ReadonlyArray<string>; reado
 
     return existsSync(full) ? [full] : [];
   });
+
   const start = [
     ...included.filter((file) => roots.exclude === undefined || !excluded(roots.exclude.dir, roots.exclude.list, file)),
     ...(roots.files?.list ?? []).map((entry) => resolve(roots.files?.dir ?? dirname(path), entry)),
   ].filter(checked);
+
   const seen = new Set(start);
   const lost: Array<string> = [];
   const queue = [...start];

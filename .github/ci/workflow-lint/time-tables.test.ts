@@ -27,6 +27,7 @@ const plants: Plant[] = [
     const named = (w: Workflow, name: string) => steps(w).find((s) => s["name"] === name)!;
     const table = (w: Workflow) => named(w, "time table");
     const upload = (w: Workflow) => named(w, "timings");
+
     return [
       [`TT1: ${job} drops its time table`, (w) => void steps(w).splice(place(w, job, "time table"), 1)],
       [`TT1: ${job}'s time table skips a red leg`, (w) => (table(w).if = "success()")],

@@ -73,7 +73,7 @@ export const Checks = Schema.Array(CheckRun).check(
  *
  * @category errors
  */
-export class Unavailable extends Schema.TaggedError<Unavailable>()("Unavailable", {
+export class Unavailable extends Schema.TaggedError<Unavailable, { readonly brand: unique symbol }>()("Unavailable", {
   cause: Schema.Defect(),
 }) {}
 
@@ -82,7 +82,7 @@ export class Unavailable extends Schema.TaggedError<Unavailable>()("Unavailable"
  *
  * @category errors
  */
-export class RateLimited extends Schema.TaggedError<RateLimited>()("RateLimited", {
+export class RateLimited extends Schema.TaggedError<RateLimited, { readonly brand: unique symbol }>()("RateLimited", {
   cause: Schema.Defect(),
 }) {}
 
@@ -91,7 +91,7 @@ export class RateLimited extends Schema.TaggedError<RateLimited>()("RateLimited"
  *
  * @category errors
  */
-export class CiError extends Schema.TaggedError<CiError>()("CiError", {
+export class CiError extends Schema.TaggedError<CiError, { readonly brand: unique symbol }>()("CiError", {
   reason: Schema.Union([Unavailable, RateLimited]),
 }) {}
 

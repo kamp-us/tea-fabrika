@@ -50,6 +50,7 @@ const ancestry = (model: Model, sha: string): ReadonlySet<string> => {
 const mergeBases = (model: Model, a: string, b: string): ReadonlyArray<string> => {
   const fromA = ancestry(model, a);
   const common = [...ancestry(model, b)].filter((sha) => fromA.has(sha));
+
   return common.filter((sha) => !common.some((other) => other !== sha && ancestry(model, other).has(sha)));
 };
 
@@ -122,6 +123,7 @@ const fileDiff = (
 
   const removed = old.slice(start, old.length - end).map((line) => `-${line}`);
   const added = fresh.slice(start, fresh.length - end).map((line) => `+${line}`);
+
   return [
     `diff --git a/${path} b/${path}`,
     ...(was === undefined ? ["new file mode 100644"] : now === undefined ? ["deleted file mode 100644"] : []),
@@ -158,6 +160,7 @@ const treeDiff = (from: Tree, to: Tree): Effect.Effect<string, GitError> => {
 
 /** The range a `diff` call names, `a...b` or `a..b`, and the options the model answers. */
 const RANGE = /^([^.\s]+)(\.\.\.?)([^.\s]+)$/;
+
 const OPTIONS = new Set(["--unified=0"]);
 
 const answerDiff = (model: Model, args: ReadonlyArray<string>): Effect.Effect<string, GitError> => {
@@ -211,8 +214,10 @@ export const workTree = (model: Model): Layer.Layer<FileSystem.FileSystem> => {
   const tree = (head === undefined ? undefined : model.commits[head]?.tree) ?? {};
   const files = new Map(Object.entries(tree).map(([path, text]) => [`${model.top}/${path}`, text]));
   const clean = (path: string) => path.replace(/\/+$/, "");
+
   const children = (path: string) => {
     const folder = `${clean(path)}/`;
+
     return [
       ...new Set(
         [...files.keys()]
@@ -221,9 +226,12 @@ export const workTree = (model: Model): Layer.Layer<FileSystem.FileSystem> => {
       ),
     ];
   };
+
   const isFolder = (path: string) => children(path).length > 0;
+
   const read = (path: string) => {
     const text = files.get(clean(path));
+
     return text === undefined ? nothing.readFileString(path) : Effect.succeed(text);
   };
 

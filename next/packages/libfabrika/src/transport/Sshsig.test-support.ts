@@ -8,15 +8,22 @@ import * as Schema from "effect/Schema";
 import { checkSshsig, KeyLine, writeSshsig } from "./Sshsig.ts";
 
 export const SPACE = "fabrika-client";
+
 export const refused = { reason: "bad_signature" };
 
 // P1's saved vectors (fixtures/next/sshsig/README.md), made once by real `ssh-keygen -Y sign`.
 const VECTORS = resolve(import.meta.dirname, "../../../../../fixtures/next/sshsig");
+
 export const at = (name: string): string => readFileSync(join(VECTORS, name), "utf8");
+
 export const text = at("text.txt");
+
 export const goodSig = at("good.sig");
+
 export const signer = at("signer.pub").trim();
+
 export const other = at("other.pub").trim();
+
 export const ecdsa = at("ecdsa.pub").trim();
 
 export const check = (armored: string, signers: ReadonlyArray<string>, body: string = text) =>
@@ -29,23 +36,28 @@ export const join8 = (...parts: ReadonlyArray<Uint8Array>): Uint8Array => {
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   parts.reduce((offset, p) => {
     out.set(p, offset);
+
     return offset + p.length;
   }, 0);
+
   return out;
 };
 
 export const u32 = (n: number): Uint8Array => {
   const out = new Uint8Array(4);
   new DataView(out.buffer).setUint32(0, n);
+
   return out;
 };
 
 export const str = (s: Uint8Array | string): Uint8Array => {
   const bytes = typeof s === "string" ? utf8(s) : s;
+
   return join8(u32(bytes.length), bytes);
 };
 
 export const base64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64");
+
 export const rows = (body: string): string => (body.match(/.{1,70}/g) ?? []).join("\n");
 
 export const armor = (blob: Uint8Array): string =>
@@ -80,12 +92,16 @@ const parse = (bytes: Uint8Array): Blob => {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let offset = 0;
   const take = (n: number): Uint8Array => bytes.slice(offset, (offset += n));
+
   const word = (): number => {
     const n = view.getUint32(offset);
     offset += 4;
+
     return n;
   };
+
   const field = (): Uint8Array => take(word());
+
   return {
     magic: take(6),
     version: word(),
@@ -105,8 +121,10 @@ export const toSign = (space: string, hash: string, digest: Uint8Array): Uint8Ar
   join8(utf8("SSHSIG"), str(space), str(""), str(hash), str(digest));
 
 export const good = parse(unarmor(goodSig));
+
 /** `ssh-ed25519`, then a 32-byte key: 4 + 11 + 4 bytes before the key itself. */
 export const goodKey = good.key.slice(19);
+
 /** `ssh-ed25519`, then a 64-byte signature. */
 export const goodRaw = good.signature.slice(19);
 
@@ -121,23 +139,28 @@ export type Key = {
 // A test-support file is not a `*.test.ts` file, so its WebCrypto calls are marked Promise edges with
 // a tagged failure, as the shared suites' are (gateway/TasksTest.ts). A failure is a defect here, as
 // it was under `Effect.promise`: no law expects WebCrypto to fail.
-class CryptoFailed extends Schema.TaggedError<CryptoFailed>()("CryptoFailed", { cause: Schema.Defect() }) {}
+class CryptoFailed extends Schema.TaggedError<CryptoFailed, { readonly brand: unique symbol }>()("CryptoFailed", {
+  cause: Schema.Defect(),
+}) {}
 
 const fail = (cause: unknown) => CryptoFailed.make({ cause });
 
 export const freshKey = (comment?: string): Effect.Effect<Key> =>
   Effect.gen(function* () {
     const subtle = crypto.subtle;
+
     // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto generates the test's Ed25519 key
     const pair = yield* Effect.tryPromise({
       try: () => subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]),
       catch: fail,
     });
+
     // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto exports the generated public key
     const raw = yield* Effect.tryPromise({ try: () => subtle.exportKey("raw", pair.publicKey), catch: fail });
     // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto exports the generated test key's seed
     const pkcs8 = yield* Effect.tryPromise({ try: () => subtle.exportKey("pkcs8", pair.privateKey), catch: fail });
     const publicKey = new Uint8Array(raw);
+
     return {
       line: lineFor(keyBlob(publicKey), comment),
       publicKey,
@@ -150,6 +173,7 @@ export const signWith =
   (key: Key) =>
   (bytes: Uint8Array): Effect.Effect<Uint8Array> => {
     const sign = () => crypto.subtle.sign("Ed25519", key.privateKey, new Uint8Array(bytes));
+
     // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto signs with the generated test key
     return Effect.tryPromise({ try: sign, catch: fail }).pipe(
       Effect.map((sig) => new Uint8Array(sig)),

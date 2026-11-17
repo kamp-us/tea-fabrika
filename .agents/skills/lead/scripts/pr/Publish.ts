@@ -19,7 +19,9 @@ export const DRAFT_BODY =
   "0134). It is marked ready when its steps have passed.";
 
 /** A branch no commit step pushes to: main, or none (a detached head). */
-export class NoBranch extends Schema.TaggedError<NoBranch>()("NoBranch", { reason: Schema.String }) {}
+export class NoBranch extends Schema.TaggedError<NoBranch, { readonly brand: unique symbol }>()("NoBranch", {
+  reason: Schema.String,
+}) {}
 
 /** What one publish did: the branch's pull request, whether this publish opened it, and if a draft. */
 export type Published = { readonly pr: number; readonly opened: boolean; readonly draft: boolean };
@@ -28,7 +30,7 @@ export type Ask = {
   /** The checkout the commit is in. */
   readonly dir: string;
   readonly branch: string;
-  /** The commit to push, a sha or a ref the checkout reads. */
+  /** The exact commit SHA to push and use when opening a draft. */
   readonly head: string;
   /** What a new draft says. A pull request already open keeps its own words. */
   readonly text: Text;
@@ -53,7 +55,8 @@ export const publish = Effect.fn("Publish.publish")(function* (a: Ask) {
     return { pr: open.value.number, opened: false, draft: open.value.draft } satisfies Published;
   }
 
-  const pr = yield* prs.draft(branch, a.text);
+  const pr = yield* prs.draft(branch, a.text, a.head);
+
   return { pr, opened: true, draft: true } satisfies Published;
 });
 

@@ -10,6 +10,7 @@ import { Run } from "./WorkflowRuns.ts";
 import * as WorkflowRunsTest from "./WorkflowRunsTest.ts";
 
 const FIX = "fabrikalfa/ci-cache";
+
 const AT = "2026-11-14T19:00:00.000Z";
 
 const made = (id: number, over: Partial<Run>): Run => ({
@@ -25,10 +26,15 @@ const made = (id: number, over: Partial<Run>): Run => ({
 });
 
 const queue = made(1, { event: "merge_group", branch: "gh-readonly-queue/main/pr-1240-6fe17ff" });
+
 const fixPr = made(2, { branch: FIX });
+
 const mainPush = made(3, { event: "push", branch: "main" });
+
 const otherPr = made(4, {});
+
 const done = made(5, { status: "completed", conclusion: "success" });
+
 const dispatched = made(6, { event: "workflow_dispatch", workflow: "scheduled", branch: "main" });
 
 /** A fresh folder for the log, removed when the law ends. */
@@ -73,11 +79,14 @@ const started = Effect.fnUntraced(function* (
   given: { readonly allow?: ReadonlyArray<string>; readonly failing?: WorkflowRunsTest.Failing } = {},
 ) {
   yield* opened(dir, given.allow ?? []);
+
   const loop = yield* Freeze.loop(dir, Duration.seconds(20), 7).pipe(
     Effect.provide(WorkflowRunsTest.layer(github, given.failing)),
     Effect.forkChild,
   );
+
   yield* until(Effect.map(tags(dir), (t) => t.includes("looping")));
+
   return loop;
 });
 
@@ -114,6 +123,7 @@ describe("verdict", () => {
     ({ run, allow, listed }) => {
       const other = { ...run, event: run.event === "merge_group" ? "push" : run.event };
       const list = listed ? [...allow, other.branch] : allow.filter((b) => b !== other.branch);
+
       return (Freeze.verdict(other, list)._tag === "keep") === listed;
     },
   );
@@ -204,11 +214,13 @@ describe("the cancel loop", () => {
     law(
       Effect.gen(function* () {
         const dir = yield* home;
+
         const refused = yield* Effect.flip(
           Freeze.loop(dir, Duration.seconds(20), 7).pipe(
             Effect.provide(WorkflowRunsTest.layer(WorkflowRunsTest.world())),
           ),
         );
+
         expect(refused).toMatchObject({ _tag: "Refused", reason: "no sev0 is open" });
       }),
     ),

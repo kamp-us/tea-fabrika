@@ -52,14 +52,21 @@ const CODE = {
 };
 
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
+
 vi.mock("./table.ts", () => table);
+
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
+
 vi.mock("virtual:fabrika-built", () => ({ ...table, assets: {} }));
 
 const SEED = 119120;
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const SENT = "2026-11-11T04:00:00.000Z";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 // Desk S2a: the founder's tezgah boots third, from the boot list like every other entry (plan
 // amendment after S2a's first review), named by libfabrika's one name function.
 const BOOT = ["counter:1", "checklist:1", tezgahName(PERSON)] as const;
@@ -71,9 +78,13 @@ it("pinned: L20 windowMachineFor checks the registration's decoder and tile pres
     decode: () => Schema.decodeUnknownSync(checklistWindow.data),
     tile: () => checklistWindow.tile,
   });
+
   expect(parent.init).toBeTypeOf("function");
+
   type Checks = Parameters<typeof windowMachineFor<typeof checklist>>[0];
+
   type Decode = ReturnType<NonNullable<Checks["decode"]>>;
+
   expectTypeOf<ReturnType<Decode>>().toEqualTypeOf<typeof checklistWindow.data.Type>();
 
   // @ts-expect-error a decoder for unknown does not check the program's view
@@ -86,6 +97,7 @@ it("pinned: L20 windowMachineFor checks the registration's decoder and tile pres
     ok: Schema.Null,
     err: [],
   });
+
   const wrongTile = Machine.make({
     model: Schema.Struct({}),
     msg: Schema.Struct({ type: Schema.Literal("submit") }),
@@ -97,17 +109,21 @@ it("pinned: L20 windowMachineFor checks the registration's decoder and tile pres
       press_err: (s) => [s, []],
     },
   });
+
   // @ts-expect-error the parent may not erase an incompatible tile's press Msg to AnyTile
   windowMachineFor<typeof checklist>({ tile: () => wrongTile });
 });
 
 type ProjectCalls = (typeof ProjectService)["Service"];
+
 type ProcessCalls = (typeof ProcessService)["Service"];
 
 const field = (value: Buffer | string) => {
   const body = Buffer.from(value),
     size = Buffer.alloc(4);
+
   size.writeUInt32BE(body.length);
+
   return Buffer.concat([size, body]);
 };
 
@@ -115,6 +131,7 @@ const identity = () => {
   const pair = generateKeyPairSync("ed25519"),
     bytes = Buffer.from(pair.publicKey.export({ format: "jwk" }).x!, "base64url"),
     blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw: bytes.toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -127,8 +144,10 @@ const identity = () => {
         field("sha512"),
         field(createHash("sha512").update(text).digest()),
       ]);
+
       const version = Buffer.alloc(4);
       version.writeUInt32BE(1);
+
       const packet = Buffer.concat([
         Buffer.from("SSHSIG"),
         version,
@@ -138,6 +157,7 @@ const identity = () => {
         field("sha512"),
         field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
       ]);
+
       return `-----BEGIN SSH SIGNATURE-----\n${packet
         .toString("base64")
         .match(/.{1,70}/g)!
@@ -149,6 +169,7 @@ const identity = () => {
 const storage = (db: DatabaseSync, alarm?: (at: number | null) => void) => {
   const sql = nodeSql(db),
     values = new Map<string, unknown>();
+
   return {
     values,
     sql: {
@@ -172,12 +193,14 @@ const storage = (db: DatabaseSync, alarm?: (at: number | null) => void) => {
 const projectObject = (ctx: DurableObjectState, env: Env) => {
   const runtime = projectRuntime(ctx, env);
   const run = <A, E>(use: (p: ProjectCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProjectService.use(use));
+
   return { runtime, run, exit: () => runtime.runPromiseExit(ProjectService) };
 };
 
 const processObject = (ctx: DurableObjectState, env: Env) => {
   const runtime = processRuntime(ctx, env, built);
   const run = <A, E>(use: (p: ProcessCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProcessService.use(use));
+
   return {
     runtime,
     configure: (descriptor: Descriptor) => Effect.runPromise(configureProcess(ctx, descriptor, runtime)),
@@ -214,19 +237,24 @@ const world = (options: { readonly lacks?: string } = {}) =>
 
       const key = identity(),
         db = new DatabaseSync(":memory:");
+
       const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
+
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles the real Project reads
       const ctx = {
         id: { name: "project-test" },
         storage: storage(db),
         exports: loopbacks,
       } as unknown as DurableObjectState;
+
       const processes = new Map<string, Entry>(),
         configured: Array<Descriptor> = [],
         heard: Array<Heard> = [],
         published: Array<Heard> = [];
+
       let closed = false;
       let project: ReturnType<typeof projectObject>;
+
       const projectCall = (method: string) => (args: ReadonlyArray<unknown>) => {
         if (method === "publish") {
           published.push({ client: String(args[0]), news: structuredClone(args[1]) });
@@ -245,6 +273,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
 
         return project.run((p) => {
           const work = Reflect.apply(Reflect.get(p, method), p, args) as Effect.Effect<unknown, unknown>;
+
           return method === "sign"
             ? signingReply(work as never)
             : method === "commit"
@@ -252,6 +281,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
               : work;
         });
       };
+
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but lack workerd's nominal brands
       const env = {
         INSTANCE: JSON.stringify(
@@ -281,9 +311,11 @@ const world = (options: { readonly lacks?: string } = {}) =>
             const [, storageKey] = Schema.decodeUnknownSync(Schema.Tuple([Schema.String, Schema.String]))(
               JSON.parse(name),
             );
+
             const made = (): Entry => {
               const processDb = new DatabaseSync(":memory:");
               let entry: Entry | undefined;
+
               // The platform alarm: a past time fires at once, as the Process object's alarm does.
               const handles = storage(processDb, (at) => {
                 if (entry === undefined) {
@@ -301,17 +333,22 @@ const world = (options: { readonly lacks?: string } = {}) =>
                   );
                 }
               });
+
               // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the handles the real Process reads
               const processCtx = {
                 id: { name },
                 storage: handles,
                 exports: loopbacks,
               } as unknown as DurableObjectState;
+
               entry = { db: processDb, ctx: processCtx, timer: undefined, object: processObject(processCtx, env) };
               processes.set(storageKey, entry);
+
               return entry;
             };
+
             const current = processes.get(storageKey) ?? made();
+
             return new Proxy(
               {},
               {
@@ -323,6 +360,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
                   if (method === "configure") {
                     return (descriptor: Descriptor) => {
                       configured.push(structuredClone(descriptor));
+
                       return current.object.configure(descriptor);
                     };
                   }
@@ -359,12 +397,15 @@ const world = (options: { readonly lacks?: string } = {}) =>
                     : counter,
                 id,
               );
+
               return Reflect.construct(Box, []);
             },
           }),
         },
       } as unknown as Env;
+
       project = projectObject(ctx, env);
+
       const from = {
         by: key.fingerprint,
         for: PERSON,
@@ -374,6 +415,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
         traceId: TRACE,
         build: "brain-test",
       };
+
       return {
         key,
         env,
@@ -388,6 +430,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
         reopen: Effect.promise(async () => {
           await project.runtime.dispose();
           project = projectObject(ctx, env);
+
           return project.exit();
         }),
         close: async () => {
@@ -412,7 +455,7 @@ type World = Effect.Success<ReturnType<typeof world>>;
 const call = <A>(w: World, use: (p: ProjectCalls) => Effect.Effect<A, unknown>) =>
   Effect.promise(() => w.project.run(use));
 
-const Started = Schema.Struct({ _tag: Schema.Literal("started"), body: Schema.Struct({ process: Schema.String }) });
+const Started = Schema.TaggedStruct("started", { body: Schema.Struct({ process: Schema.String }) });
 
 /** The live process each boot entry placed first, read from its own `processes/<name>`. */
 const placings = (w: World) =>
@@ -431,6 +474,7 @@ const admit = (w: World) =>
     yield* call(w, (p) => p.register(client, "test-connection", "test-session"));
     const nonce = yield* call(w, (p) => p.challenge(client));
     const tab = "checklist-instance";
+
     const admitted = yield* call(w, (p) =>
       p.initialize(
         client,
@@ -449,7 +493,9 @@ const admit = (w: World) =>
         { url: "http://127.0.0.1:18787", tab, name: w.key.fingerprint },
       ),
     );
+
     expect(admitted).toMatchObject({ _tag: "online" });
+
     return client;
   });
 
@@ -549,6 +595,7 @@ const Notice = Schema.Struct({
 
 const without = (params: Readonly<Record<string, unknown>>) => {
   const { pid: _pid, ...rest } = params;
+
   return rest;
 };
 
@@ -561,9 +608,11 @@ describe("L13: notices name their process", () => {
             Effect.gen(function* () {
               const w = yield* world();
               expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
+
               const [, [pid]] = Schema.decodeUnknownSync(
                 Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String), Schema.Array(Schema.String)]),
               )(yield* placings(w));
+
               const client = yield* admit(w);
               yield* call(w, (p) => p.route(client, "view.open", { pid }));
               let model = checklistMachine.init(null, {})[0];
@@ -571,6 +620,7 @@ describe("L13: notices name their process", () => {
               for (const [n] of names.entries()) {
                 const name = names.filter((candidate) => !model.items.some((item) => item.name === candidate))[0]!;
                 const msg = { type: "add" as const, name };
+
                 const answer = yield* call(w, (p) =>
                   p.route(client, "process.send", {
                     pid,
@@ -580,6 +630,7 @@ describe("L13: notices name their process", () => {
                     seen: 0,
                   }),
                 );
+
                 expect(answer, `send ${n + 1} reaches the same live process`).toMatchObject({
                   result: { _tag: "accepted" },
                 });
@@ -588,9 +639,11 @@ describe("L13: notices name their process", () => {
                 yield* settle;
                 const late = yield* admit(w);
                 const opened = yield* call(w, (p) => p.route(late, "view.open", { pid }));
+
                 const { result } = Schema.decodeUnknownSync(
                   Schema.Struct({ result: Schema.Struct({ rev: Schema.Int, view: checklistView }) }),
                 )(opened);
+
                 // Ticket 866 saves wake 0 and delivers timer {at: 0}. That is a requested wake,
                 // not today's time: an item added just now must not already be a day old.
                 expect(
@@ -629,9 +682,11 @@ describe("L13: notices name their process", () => {
               Effect.gen(function* () {
                 const w = yield* world();
                 expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
+
                 const [, [pid]] = Schema.decodeUnknownSync(
                   Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String), Schema.Array(Schema.String)]),
                 )(yield* placings(w));
+
                 const client = yield* admit(w);
                 const opened = yield* call(w, (p) => p.route(client, "view.open", { pid }));
                 expect(opened, "view.open answered").toBeDefined();
@@ -642,6 +697,7 @@ describe("L13: notices name their process", () => {
                 for (const m of moves) {
                   const names = [...items.keys()];
                   const held = names.length === 0 ? null : names[m.pick % names.length]!;
+
                   const options: Array<{ readonly type: string; readonly name: string } | null> = [
                     { type: "add", name: m.name },
                     null, // a timer: the alarm the program asked for fires on its own
@@ -653,6 +709,7 @@ describe("L13: notices name their process", () => {
                           { type: "remove", name: held },
                         ]),
                   ];
+
                   const input = options[m.move % options.length]!;
 
                   if (input !== null) {
@@ -665,6 +722,7 @@ describe("L13: notices name their process", () => {
                         seen: 0,
                       }),
                     );
+
                     const refused = JSON.stringify(answer).includes('"refused"');
                     seen.refused += refused ? 1 : 0;
 
