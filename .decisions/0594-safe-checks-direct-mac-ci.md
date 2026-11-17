@@ -1,12 +1,12 @@
 ---
 id: 0594
-title: Ordinary safe checks run directly while machine laws use eligible disposable CI
+title: Ordinary safe checks run directly in parallel while launchd, real Electron and process-signal laws use disposable CI
 status: accepted
 date: 2026-11-16
 tags: [checks, parallel, docker, linux, macos, ci, launchd, electron, signals, safety]
 ---
 
-# 0594: Ordinary safe checks run directly while machine laws use eligible disposable CI
+# 0594: Ordinary safe checks run directly in parallel while launchd, real Electron and process-signal laws use disposable CI
 
 **Earlier wording:**
 
