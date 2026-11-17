@@ -7,6 +7,8 @@ import { editor } from "./editor.ts";
 
 type EditorCmd = ReturnType<typeof editor.init>[1][number];
 
+type EditorMsg = typeof editor.msg.Type;
+
 const decode = Schema.decodeUnknownSync(Schema.toType(editor.msg));
 
 const Paste = Arbitrary.schema(Schema.String).pipe(
@@ -28,7 +30,7 @@ it.prop(
     const outputs: EditorCmd[] = [];
 
     for (const data of [bytes.slice(0, at), bytes.slice(at)]) {
-      const [next, cmds] = applyCell(editor, model, decode({ type: "keys", data }));
+      const [next, cmds] = applyCell<Model, EditorMsg, EditorCmd>(editor, model, decode({ type: "keys", data }));
       model = next;
       outputs.push(...cmds);
     }
@@ -50,7 +52,7 @@ it.prop(
       }),
       Match.orElse(() => expect.fail("paste left prompt mode")),
     );
-    const [, cmds] = applyCell(editor, model, decode({ type: "keys", data: "\r" }));
+    const [, cmds] = applyCell<Model, EditorMsg, EditorCmd>(editor, model, decode({ type: "keys", data: "\r" }));
     const submitted = cmds.flatMap((cmd) =>
       Match.value(cmd).pipe(
         Match.when({ type: "submit" }, (value) => [value.line]),

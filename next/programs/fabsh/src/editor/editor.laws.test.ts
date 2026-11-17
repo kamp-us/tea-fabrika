@@ -14,6 +14,8 @@ const decode = Schema.decodeUnknownSync(Schema.toType(editor.msg));
 
 type Model = ReturnType<typeof editor.init>[0];
 
+type Msg = typeof editor.msg.Type;
+
 type Output = ReturnType<typeof editor.init>[1][number];
 
 interface Real {
@@ -33,7 +35,7 @@ const boot = (history: ReadonlyArray<string> = [], limit = 1000): Real => {
 };
 
 const send = (real: Real, raw: unknown) => {
-  const [model, cmds] = applyCell(editor, real.model, decode(raw));
+  const [model, cmds] = applyCell<Model, Msg, Output>(editor, real.model, decode(raw));
   real.model = model;
   real.cmds = cmds;
 };
