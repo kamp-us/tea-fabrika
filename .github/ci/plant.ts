@@ -1,7 +1,20 @@
 // Today's manual lead tooling for two next/ laws. Raw child output stays in the scoped scratch directory.
 import { run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Cause, Clock, Context, DateTime, Effect, FileSystem, Option, Path, Ref, Schema, Stream } from "effect";
+import {
+  Cause,
+  Clock,
+  Context,
+  DateTime,
+  Effect,
+  FileSystem,
+  Option,
+  Path,
+  Ref,
+  RegExp as Regex,
+  Schema,
+  Stream,
+} from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { argv, cases, decodeRequest, derive, Request } from "./plant-cases.ts";
@@ -12,7 +25,7 @@ export class ExerciseError extends Schema.TaggedError<ExerciseError, { readonly 
   { reason: Schema.String },
 ) {}
 
-const fail = (reason: string) => new ExerciseError({ reason });
+const fail = (reason: string) => ExerciseError.make({ reason });
 
 const Counts = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
@@ -185,7 +198,7 @@ export const observation = (key: Request["case"], root: string, raw: string, exi
     report.numFailedTestSuites > 0 &&
     safe !== null
   ) {
-    const frame = new RegExp(`${RegExp.escape(selected.test)}:([0-9]+):([0-9]+)`).exec(
+    const frame = new RegExp(`${Regex.escape(selected.test)}:([0-9]+):([0-9]+)`).exec(
       (target.failureMessages ?? []).join("\n"),
     );
 

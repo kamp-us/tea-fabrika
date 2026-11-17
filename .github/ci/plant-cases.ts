@@ -1,5 +1,5 @@
 // Today's lead tooling. Each case fixes its source, selected law and sole temporary edit.
-import { Effect, Schema } from "effect";
+import { Effect, RegExp as Regex, Schema } from "effect";
 
 export const Request = Schema.Struct({
   case: Schema.Literals(["checklist-pid", "watcher-r1"]),
@@ -48,7 +48,7 @@ export const derive = Effect.fn("plant.derive")(function* (key: Request["case"],
     start < 0 ||
     text.includes(selected.before, start + 1)
   ) {
-    return yield* new UnsupportedEdit();
+    return yield* UnsupportedEdit.make({});
   }
 
   return new TextEncoder().encode(text.slice(0, start) + selected.after + text.slice(start + selected.before.length));
@@ -69,5 +69,5 @@ export const argv = (key: Request["case"], report: string): readonly string[] =>
   `--outputFile.json=${report}`,
   cases[key].test,
   "-t",
-  `^${RegExp.escape(cases[key].title)}$`,
+  `^${Regex.escape(cases[key].title)}$`,
 ];

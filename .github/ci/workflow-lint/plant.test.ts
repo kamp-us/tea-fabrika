@@ -8,6 +8,7 @@ import { allSteps, map } from "./shared.ts";
 
 const text = readFileSync(new URL("../../workflows/plant.yaml", import.meta.url), "utf8");
 
+// Plant: accept a raw report upload or arbitrary command
 it.prop(
   "valid YAML forms pass and changed execution policy is refused",
   { reverse: Schema.Boolean, comment: Schema.String },
@@ -70,6 +71,5 @@ it.prop(
   },
   {
     arbitrary: { runs: runsFor({ fast: 100, full: 100 }) },
-    meta: { plant: "accept a raw report upload or arbitrary command" },
   },
 );

@@ -1,7 +1,7 @@
 // Today's tooling. These laws supply in-memory I/O only; the real adapters remain unexercised.
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Option, Path, Result, Schema } from "effect";
+import { Effect, FileSystem, Option, Path, RegExp as Regex, Result, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { argv, cases, decodeRequest, derive, Request } from "./plant-cases.ts";
 import { Model, Observation } from "./plant-machine.ts";
@@ -16,12 +16,9 @@ import {
   type Snapshot,
 } from "./plant.ts";
 
-const options = (plant: string) => ({
-  arbitrary: { runs: runsFor({ fast: 100, full: 100 }) },
-  meta: { plant },
-});
+const options = { arbitrary: { runs: runsFor({ fast: 100, full: 100 }) } };
 
-const bytes = (text: string) => new TextEncoder().encode(text);
+const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
 
 const sha = "a".repeat(40);
 
@@ -39,27 +36,26 @@ const details = (key: Request["case"]) => ({
 
 // Vitest 5.0.5's JSON reporter serializes e.stack || e.message, never err.diff.
 // Use the installed matcher to produce that input instead of inventing its display diff.
-const message = (key: Request["case"], content = "", syntax = false) =>
-  Result.match(
-    Result.try(() => {
-      const checklist = key === "checklist-pid";
-      const actual = checklist ? undefined : { _tag: "same", program: content, hash: content };
-      const expected = checklist ? "process-id" : syntax ? { _tag: "failed", reason: "bundle" } : { _tag: "loaded" };
-      expect(actual, checklist ? "a notice names its process" : undefined)[checklist ? "toBe" : "toMatchObject"](
-        expected,
-      );
-    }),
-    {
-      onSuccess: () => "",
-      onFailure: (error) => {
-        const serialized = Schema.decodeUnknownSync(
-          Schema.Struct({ message: Schema.String, stack: Schema.optionalKey(Schema.String) }),
-        )(error);
+const message = (key: Request["case"], content = "", syntax = false) => {
+  const matchers = {
+    "checklist-pid": () => expect(undefined, "a notice names its process").toBe("process-id"),
+    "watcher-r1": () =>
+      expect({ _tag: "same", program: content, hash: content }).toMatchObject(
+        syntax ? { _tag: "failed", reason: "bundle" } : { _tag: "loaded" },
+      ),
+  };
 
-        return serialized.stack || serialized.message;
-      },
+  return Result.match(Result.try(matchers[key]), {
+    onSuccess: () => "",
+    onFailure: (error) => {
+      const serialized = Schema.decodeUnknownSync(
+        Schema.Struct({ message: Schema.String, stack: Schema.optionalKey(Schema.String) }),
+      )(error);
+
+      return serialized.stack || serialized.message;
     },
-  );
+  });
+};
 
 const report = (key: Request["case"], status: string, messages: string[] = []) => ({
   success: status === "passed",
@@ -82,6 +78,7 @@ const report = (key: Request["case"], status: string, messages: string[] = []) =
   ],
 });
 
+// Plant: accept unknown fields and cases
 it.effect.prop(
   "only exact case and SHA requests decode",
   { request: Request, junk: Schema.String },
@@ -106,7 +103,7 @@ it.effect.prop(
           inspect: Effect.suspend(() => {
             touched = true;
 
-            return Effect.fail(new ExerciseError({ reason: "must_not_execute" }));
+            return Effect.fail(ExerciseError.make({ reason: "must_not_execute" }));
           }),
           write: () => Effect.void,
           diff: Effect.succeed(new Uint8Array()),
@@ -119,9 +116,10 @@ it.effect.prop(
         expect(touched).toBe(false);
       }
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
-  options("accept unknown fields and cases"),
+  options,
 );
 
+// Plant: replace every occurrence instead of requiring exactly one
 it.effect.prop(
   "each case derives exactly one fixed byte edit and refuses ambiguous layouts",
   {
@@ -146,14 +144,21 @@ it.effect.prop(
       }
 
       const args = argv(key, "/private/result.json");
-      expect(args).toContain(`^${RegExp.escape(selected.title)}$`);
+      expect(args).toContain(`^${Regex.escape(selected.title)}$`);
       expect(args).toContain(selected.test);
+      const selection = new RegExp(args.at(-1) ?? "(?!)");
+      expect(selection.test(selected.title)).toBe(true);
+      expect(selection.test(`prefix ${selected.title}`)).toBe(false);
+      expect(selection.test(`${selected.title} suffix`)).toBe(false);
+      const changedTitle = selected.title.includes(".") ? selected.title.replaceAll(".", "#") : `${selected.title}.`;
+      expect(selection.test(changedTitle)).toBe(false);
       expect(args).not.toContain("--passWithNoTests");
       expect(args.some((arg) => /Timeout|retry|seed|numRuns/.test(arg))).toBe(false);
     }),
-  options("replace every occurrence instead of requiring exactly one"),
+  options,
 );
 
+// Plant: check allowed paths but ignore bytes or index
 it.prop(
   "the byte edit cannot hide a changed index, mode, HEAD or extra path",
   { key: Request.fields.case, text: Schema.String },
@@ -176,9 +181,10 @@ it.prop(
       expect(unchanged(before, bad, edited, cases[key].file)).toBe(false);
     }
   },
-  options("check allowed paths but ignore bytes or index"),
+  options,
 );
 
+// Plant: accept exit 1 without a failed target assertion
 it.prop(
   "only actual selected assertion results become phase observations",
   { key: Request.fields.case, extra: Schema.String },
@@ -213,9 +219,10 @@ it.prop(
     expect(observation(key, root, JSON.stringify(red), 0, 12)._tag).toBe("incomplete");
     expect(observation(key, root, JSON.stringify(report(key, "passed")), 1, 12)._tag).toBe("incomplete");
   },
-  options("accept exit 1 without a failed target assertion"),
+  options,
 );
 
+// Plant: require formatted minus/plus diff lines absent from JSON failureMessages
 it.prop(
   "watcher observations decode installed matcher stacks and keep ambiguous outcomes incomplete",
   {
@@ -261,9 +268,10 @@ it.prop(
       ).toBe("incomplete");
     }
   },
-  options("require formatted minus/plus diff lines absent from JSON failureMessages"),
+  options,
 );
 
+// Plant: publish raw failure messages
 it.prop(
   "public observations copy no generated private diagnostic content",
   { key: Request.fields.case, content: Schema.String },
@@ -284,9 +292,10 @@ it.prop(
         : "AssertionError: expected _tag loaded; received _tag same",
     );
   },
-  options("publish raw failure messages"),
+  options,
 );
 
+// Plant: skip scoped restoration after the broken child fails
 it.effect.prop(
   "every acquired source restores after an injected I/O failure",
   {
@@ -303,7 +312,7 @@ it.effect.prop(
 
       const io = <A>(body: () => A) =>
         Effect.suspend(() =>
-          calls++ === fault ? Effect.fail(new ExerciseError({ reason: "injected-private-value" })) : Effect.sync(body),
+          calls++ === fault ? Effect.fail(ExerciseError.make({ reason: "injected-private-value" })) : Effect.sync(body),
         );
 
       const workspace = Workspace.of({
@@ -369,9 +378,10 @@ it.effect.prop(
 
       expect(tested).toEqual(["baseline", "broken", "restored"].slice(0, tested.length));
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
-  options("skip scoped restoration after the broken child fails"),
+  options,
 );
 
+// Plant: discard validated attempt facts and replace every setup failure with a generic reason
 it.effect.prop(
   "validated attempt facts survive every early setup failure without copying private errors",
   {
@@ -433,7 +443,7 @@ it.effect.prop(
           expect(before.source).toBe(request.sha);
           expect(before.startedAt).not.toBe("");
 
-          return yield* new ExerciseError({ reason });
+          return yield* ExerciseError.make({ reason });
         }),
       ).pipe(Effect.provide(layer), Effect.provide(Path.layer));
 
@@ -465,7 +475,7 @@ it.effect.prop(
       });
       expect(recorded.startedAt).not.toBe("");
       const unknown = `private-value-${JSON.stringify(content)}-end`;
-      yield* attempt(environment, () => Effect.fail(new ExerciseError({ reason: unknown }))).pipe(
+      yield* attempt(environment, () => Effect.fail(ExerciseError.make({ reason: unknown }))).pipe(
         Effect.provide(layer),
         Effect.provide(Path.layer),
       );
@@ -493,7 +503,7 @@ it.effect.prop(
           }),
       });
 
-      yield* attempt(environment, () => Effect.fail(new ExerciseError({ reason: "must_not_execute" }))).pipe(
+      yield* attempt(environment, () => Effect.fail(ExerciseError.make({ reason: "must_not_execute" }))).pipe(
         Effect.provide(malformed),
         Effect.provide(Path.layer),
       );
@@ -574,7 +584,7 @@ it.effect.prop(
           }),
       });
 
-      yield* attempt(environment, () => Effect.fail(new ExerciseError({ reason: "must_not_execute" }))).pipe(
+      yield* attempt(environment, () => Effect.fail(ExerciseError.make({ reason: "must_not_execute" }))).pipe(
         Effect.provide(invalid),
         Effect.provide(Path.layer),
       );
@@ -586,5 +596,5 @@ it.effect.prop(
         reason: "request_invalid",
       });
     }),
-  options("discard validated attempt facts and replace every setup failure with a generic reason"),
+  options,
 );

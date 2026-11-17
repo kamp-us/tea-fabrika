@@ -83,7 +83,7 @@ export const machine = Machine.make({
           msg.cmd.phase !== "baseline"
             ? stay(model)
             : Observation.match(msg.value, {
-                passed: (baseline) => [Model.cases.broken.make({ baseline }), [phase({ phase: "broken" })]],
+                passed: (baseline): Next => [Model.cases.broken.make({ baseline }), [phase({ phase: "broken" })]],
                 failed: (value) => incomplete([value], "baseline_failed"),
                 incomplete: (value) => incomplete([value], value.reason),
               }),
@@ -91,7 +91,10 @@ export const machine = Machine.make({
           msg.cmd.phase !== "broken"
             ? stay(model)
             : Observation.match(msg.value, {
-                failed: (broken) => [Model.cases.restored.make({ baseline, broken }), [phase({ phase: "restored" })]],
+                failed: (broken): Next => [
+                  Model.cases.restored.make({ baseline, broken }),
+                  [phase({ phase: "restored" })],
+                ],
                 passed: (value) => incomplete([baseline, value], "break_passed"),
                 incomplete: (value) => incomplete([baseline, value], value.reason),
               }),

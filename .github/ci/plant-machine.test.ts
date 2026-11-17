@@ -59,56 +59,57 @@ const lists = arbGuidedSequence(
 
 // tea's guided queue uses fast-check Arbitrary; installed Effect's it.prop accepts only its native
 // Arbitrary. Use tea's generator directly so shrinking still follows outstanding commands.
-it(
-  "phase walks record only pass, failure, pass and keep incomplete answers terminal",
-  { meta: { plant: "advance on an incomplete phase" } },
-  () => {
-    const reached = new Set<string>();
-    fc.assert(
-      fc.property(lists, (messages) => {
-        let [model, commands] = machine.init(null, {});
-        const seen: Observation[] = [];
+// Plant: advance on an incomplete phase
+it("phase walks record only pass, failure, pass and keep incomplete answers terminal", () => {
+  const reached = new Set<string>();
+  fc.assert(
+    fc.property(lists, (messages) => {
+      let [model, commands] = machine.init(null, {});
+      const seen: Observation[] = [];
 
-        for (const msg of messages) {
-          const previous = model;
-          const terminal = Model.isAnyOf(["recorded", "incomplete"])(previous);
-          [model, commands] = step(machine, model, msg, {});
-          reached.add(model._tag);
+      for (const msg of messages) {
+        const previous = model;
+        const terminal = Model.isAnyOf(["recorded", "incomplete"])(previous);
+        [model, commands] = step(machine, model, msg, {});
+        reached.add(model._tag);
 
-          if (terminal) {
-            expect(model).toEqual(previous);
-          } else {
+        if (terminal) {
+          expect(model).toEqual(previous);
+        } else {
+          expect(msg.type).toBe("phase_ok");
+
+          if (msg.type === "phase_ok") {
             seen.push(msg.value);
-          }
-
-          if (Model.isAnyOf(["recorded"])(model)) {
-            expect(seen.map((value) => value._tag)).toEqual(["passed", "failed", "passed"]);
-            expect(commands).toEqual([]);
-          }
-
-          if (Model.isAnyOf(["incomplete"])(model)) {
-            expect(commands).toEqual([]);
-          }
-
-          if (Model.isAnyOf(["recorded", "incomplete"])(model)) {
-            expect(step(machine, model, msg, {})[0]).toEqual(model);
           }
         }
 
-        const [initial, pending] = machine.init(null, {});
-        const cmd = pending[0]!;
+        if (Model.isAnyOf(["recorded"])(model)) {
+          expect(seen.map((value) => value._tag)).toEqual(["passed", "failed", "passed"]);
+          expect(commands).toEqual([]);
+        }
 
-        const [missing] = step(
-          machine,
-          initial,
-          phase.ok(cmd, Observation.cases.incomplete.make({ reason: "unknown" }), 0),
-          {},
-        );
+        if (Model.isAnyOf(["incomplete"])(model)) {
+          expect(commands).toEqual([]);
+        }
 
-        expect(Model.isAnyOf(["incomplete"])(missing)).toBe(true);
-      }),
-      { numRuns: runsFor({ fast: 100, full: 100 }) },
-    );
-    expect([...reached].sort()).toEqual(["broken", "incomplete", "recorded", "restored"]);
-  },
-);
+        if (Model.isAnyOf(["recorded", "incomplete"])(model)) {
+          expect(step(machine, model, msg, {})[0]).toEqual(model);
+        }
+      }
+
+      const [initial, pending] = machine.init(null, {});
+      const cmd = pending[0]!;
+
+      const [missing] = step(
+        machine,
+        initial,
+        phase.ok(cmd, Observation.cases.incomplete.make({ reason: "unknown" }), 0),
+        {},
+      );
+
+      expect(Model.isAnyOf(["incomplete"])(missing)).toBe(true);
+    }),
+    { numRuns: runsFor({ fast: 100, full: 100 }) },
+  );
+  expect([...reached].sort()).toEqual(["broken", "incomplete", "recorded", "restored"]);
+});
