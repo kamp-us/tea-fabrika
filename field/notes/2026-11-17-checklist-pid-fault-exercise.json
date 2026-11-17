@@ -1,0 +1,26 @@
+{
+  "date": "2026-11-17",
+  "stage": "harness",
+  "kind": "success",
+  "person": false,
+  "primitive": null,
+  "id": "2026-11-17-checklist-pid-fault-exercise",
+  "quests": [
+    "tea-fabrika#1126",
+    "tea-fabrika#1133"
+  ],
+  "what": "Today's trusted-main fault runner exercised the next/ checklist notice PID law. The original passed, removing the published PID failed the intended assertion, and restoring the source passed. This accepts only the PID-removal check, not the whole checklist change.",
+  "cause": "The selected L13 law requires every notice to name its process. The broken phase reached AssertionError: a notice names its process, at checklist-instance.laws.integration.test.ts:838:73. The causal reporter followed the actual wrapped error; a generic property failure, timeout or failed process exit was insufficient.",
+  "fix": "The runner restored exact source bytes and mode, and checked the unchanged head, index and complete file inventory. The independent source reader accepted this one exercise. Six other fault or probe groups and a fresh whole-change review remain owed; ticket 1126 stays open.",
+  "test": "Run 44051257300 selected one exact law in every phase: baseline passed in 10273.593817 ms, broken failed in 685.31345 ms, restored passed in 9475.690117 ms. Each phase had five intentionally filtered siblings and no skipped selected law. No local protected law ran.",
+  "source": "27039e9455026f37327259a5411260cb4d441ba8",
+  "runner": "9a748e3c165390ed4a3ecd8133326b24a1874a50",
+  "originalHash": "175ceddc78e5bf30a68abc3c9d826175f7a8afc7611f247fa2c3bccd41aeaf05",
+  "editedHash": "0655716aebc486194a6fd56eb6c9e6f5a59e38dae1ba828908cb37b2cdaa675c",
+  "diffHash": "e94ded3e3455ba21bf545b5e5cdf2c9ed1817687f0544e5e534d3505c95be170",
+  "index": "5d3dfe1dabb1f232b94aa8c515d1a642af1f96bc",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44051257300",
+    "https://github.com/kamp-us/tea-fabrika/pull/1553"
+  ]
+}
