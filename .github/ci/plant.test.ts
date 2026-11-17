@@ -1,11 +1,20 @@
 // Today's tooling. These laws supply in-memory I/O only; the real adapters remain unexercised.
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Option, Schema } from "effect";
+import { Effect, FileSystem, Option, Path, Result, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { argv, cases, decodeRequest, derive, Request } from "./plant-cases.ts";
 import { Model, Observation } from "./plant-machine.ts";
-import { exercise, ExerciseError, observation, unchanged, Workspace, type Snapshot } from "./plant.ts";
+import {
+  attempt,
+  diffOptions,
+  exercise,
+  ExerciseError,
+  observation,
+  unchanged,
+  Workspace,
+  type Snapshot,
+} from "./plant.ts";
 
 const options = (plant: string) => ({
   arbitrary: { runs: runsFor({ fast: 100, full: 100 }) },
@@ -28,10 +37,29 @@ const details = (key: Request["case"]) => ({
   counts: { total: 1, passed: 1, failed: 0, pending: 0, todo: 0 },
 });
 
-const message = (key: Request["case"]) =>
-  key === "checklist-pid"
-    ? "AssertionError: a notice names its process"
-    : 'AssertionError: expected object to match object\n-  "_tag": "loaded",\n+  "_tag": "same",';
+// Vitest 5.0.5's JSON reporter serializes e.stack || e.message, never err.diff.
+// Use the installed matcher to produce that input instead of inventing its display diff.
+const message = (key: Request["case"], content = "", syntax = false) =>
+  Result.match(
+    Result.try(() => {
+      const checklist = key === "checklist-pid";
+      const actual = checklist ? undefined : { _tag: "same", program: content, hash: content };
+      const expected = checklist ? "process-id" : syntax ? { _tag: "failed", reason: "bundle" } : { _tag: "loaded" };
+      expect(actual, checklist ? "a notice names its process" : undefined)[checklist ? "toBe" : "toMatchObject"](
+        expected,
+      );
+    }),
+    {
+      onSuccess: () => "",
+      onFailure: (error) => {
+        const serialized = Schema.decodeUnknownSync(
+          Schema.Struct({ message: Schema.String, stack: Schema.optionalKey(Schema.String) }),
+        )(error);
+
+        return serialized.stack || serialized.message;
+      },
+    },
+  );
 
 const report = (key: Request["case"], status: string, messages: string[] = []) => ({
   success: status === "passed",
@@ -189,6 +217,54 @@ it.prop(
 );
 
 it.prop(
+  "watcher observations decode installed matcher stacks and keep ambiguous outcomes incomplete",
+  {
+    syntax: Schema.Boolean,
+    content: Schema.String,
+    line: Schema.Int.check(Schema.isGreaterThan(0)),
+    column: Schema.Int.check(Schema.isGreaterThan(0)),
+  },
+  ({ syntax, content, line, column }) => {
+    const stack = message("watcher-r1", content, syntax);
+    expect(stack).not.toMatch(/^[-+]\s+"_tag":/m);
+    const actual = observation("watcher-r1", root, JSON.stringify(report("watcher-r1", "failed", [stack])), 1, 12);
+    expect(actual._tag).toBe("failed");
+
+    if (Observation.isAnyOf(["failed"])(actual)) {
+      expect(actual.diagnostic).toBe(
+        `AssertionError: expected _tag ${syntax ? "failed" : "loaded"}; received _tag ${stack.includes("{ Object (_tag, program, ...) }") ? "unknown" : "same"}`,
+      );
+    }
+
+    const positioned = observation(
+      "watcher-r1",
+      root,
+      JSON.stringify(
+        report("watcher-r1", "failed", [
+          `${stack}\n    at receiveChange (/private/runner/${cases["watcher-r1"].test}:${line}:${column})`,
+        ]),
+      ),
+      1,
+      12,
+    );
+
+    expect(positioned).toMatchObject({ _tag: "failed", assertion: { line, column } });
+    expect(JSON.stringify(positioned)).not.toContain("/private/runner");
+
+    for (const unknown of [
+      "AssertionError: expected an object to match another object",
+      "Error: Test timed out",
+      content,
+    ]) {
+      expect(
+        observation("watcher-r1", root, JSON.stringify(report("watcher-r1", "failed", [unknown])), 1, 12)._tag,
+      ).toBe("incomplete");
+    }
+  },
+  options("require formatted minus/plus diff lines absent from JSON failureMessages"),
+);
+
+it.prop(
   "public observations copy no generated private diagnostic content",
   { key: Request.fields.case, content: Schema.String },
   ({ key, content }) => {
@@ -253,6 +329,7 @@ it.effect.prop(
                   ...details(key),
                   exit: 1,
                   category: "assertion",
+                  assertion: null,
                   diagnostic: "assertion mismatch",
                 })
               : Observation.cases.passed.make(details(key));
@@ -293,4 +370,221 @@ it.effect.prop(
       expect(tested).toEqual(["baseline", "broken", "restored"].slice(0, tested.length));
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
   options("skip scoped restoration after the broken child fails"),
+);
+
+it.effect.prop(
+  "validated attempt facts survive every early setup failure without copying private errors",
+  {
+    request: Request,
+    caller: Schema.String.check(Schema.isPattern(/^[a-z]{1,16}$/)),
+    reason: Schema.Literals([
+      "checkout_mismatch",
+      "source_versions_unsupported",
+      "source_not_regular",
+      "source_install_failed",
+      "git_version_unsupported",
+      "inspect_failed",
+      "source_unsupported",
+    ]),
+    content: Schema.String,
+  },
+  ({ request, caller, reason, content }) =>
+    Effect.gen(function* () {
+      const environment = {
+        GITHUB_REF: "refs/heads/main",
+        GITHUB_EVENT_NAME: "workflow_dispatch",
+        GITHUB_WORKFLOW_SHA: sha,
+        GITHUB_SHA: sha,
+        GITHUB_RUN_ID: "42",
+        GITHUB_RUN_ATTEMPT: "2",
+        GITHUB_ACTIONS: "true",
+        CI: "true",
+        GITHUB_EVENT_PATH: "/runner/event.json",
+        RUNNER_TEMP: "/runner/temp",
+        PATH: "/runner/bin",
+        HOME: "/runner/home",
+      };
+
+      const saved: string[] = [];
+
+      const layer = FileSystem.layerNoop({
+        makeDirectory: () => Effect.void,
+        readFileString: () =>
+          Effect.succeed(JSON.stringify({ sender: { login: caller }, inputs: request, ignored: content })),
+        writeFileString: (_file, value) =>
+          Effect.sync(() => {
+            saved.push(value);
+          }),
+      });
+
+      let entered = false;
+
+      const result = yield* attempt(environment, () =>
+        Effect.gen(function* () {
+          entered = true;
+
+          const before = Schema.decodeUnknownSync(
+            Schema.fromJsonString(
+              Schema.Struct({ caller: Schema.String, source: Request.fields.sha, startedAt: Schema.String }),
+            ),
+          )(saved.at(-1));
+
+          expect(before.caller).toBe(caller);
+          expect(before.source).toBe(request.sha);
+          expect(before.startedAt).not.toBe("");
+
+          return yield* new ExerciseError({ reason });
+        }),
+      ).pipe(Effect.provide(layer), Effect.provide(Path.layer));
+
+      expect(result).toBe(false);
+      expect(entered).toBe(true);
+
+      const Record = Schema.Struct({
+        caller: Schema.NullOr(Schema.String),
+        source: Schema.NullOr(Request.fields.sha),
+        request: Schema.NullOr(Request),
+        startedAt: Schema.String,
+        state: Schema.String,
+        reason: Schema.String,
+        runner: Request.fields.sha,
+        run: Schema.String,
+        attempt: Schema.String,
+      });
+
+      const recorded = Schema.decodeUnknownSync(Schema.fromJsonString(Record))(saved.at(-1));
+      expect(recorded).toMatchObject({
+        caller,
+        source: request.sha,
+        request,
+        runner: sha,
+        run: "42",
+        attempt: "2",
+        state: "incomplete",
+        reason,
+      });
+      expect(recorded.startedAt).not.toBe("");
+      const unknown = `private-value-${JSON.stringify(content)}-end`;
+      yield* attempt(environment, () => Effect.fail(new ExerciseError({ reason: unknown }))).pipe(
+        Effect.provide(layer),
+        Effect.provide(Path.layer),
+      );
+      expect(Schema.decodeUnknownSync(Schema.fromJsonString(Record))(saved.at(-1)).reason).toBe("setup_or_io");
+      expect(saved.at(-1)).not.toContain(encodeURIComponent(unknown));
+      expect(saved.at(-1)).not.toContain(unknown);
+      expect(saved.at(-1)).not.toContain(JSON.stringify(unknown).slice(1, -1));
+      yield* attempt(environment, () => Effect.die(new Error(unknown))).pipe(
+        Effect.provide(layer),
+        Effect.provide(Path.layer),
+      );
+      expect(Schema.decodeUnknownSync(Schema.fromJsonString(Record))(saved.at(-1))).toMatchObject({
+        source: request.sha,
+        caller,
+        reason: "setup_or_io",
+      });
+      expect(saved.at(-1)).not.toContain(encodeURIComponent(unknown));
+
+      const malformed = FileSystem.layerNoop({
+        makeDirectory: () => Effect.void,
+        readFileString: () => Effect.succeed(JSON.stringify(content)),
+        writeFileString: (_file, value) =>
+          Effect.sync(() => {
+            saved.push(value);
+          }),
+      });
+
+      yield* attempt(environment, () => Effect.fail(new ExerciseError({ reason: "must_not_execute" }))).pipe(
+        Effect.provide(malformed),
+        Effect.provide(Path.layer),
+      );
+      expect(Schema.decodeUnknownSync(Schema.fromJsonString(Record))(saved.at(-1))).toMatchObject({
+        source: null,
+        caller: null,
+        request: null,
+        reason: "event_invalid",
+      });
+
+      let writes = 0;
+
+      const interruptedWrite = FileSystem.layerNoop({
+        makeDirectory: () => Effect.void,
+        readFileString: () => Effect.succeed(JSON.stringify({ sender: { login: caller }, inputs: request })),
+        writeFileString: (_file, value) =>
+          Effect.suspend(() =>
+            ++writes === 4
+              ? Effect.die(new Error(unknown))
+              : Effect.sync(() => {
+                  saved.push(value);
+                }),
+          ),
+      });
+
+      const passed = Observation.cases.passed.make(details(request.case));
+
+      const broken = Observation.cases.failed.make({
+        ...details(request.case),
+        exit: 1,
+        category: "assertion",
+        assertion: null,
+        diagnostic: "assertion mismatch",
+      });
+
+      yield* attempt(environment, () =>
+        Effect.succeed({
+          request,
+          originalHash: sha,
+          editedHash: sha,
+          originalMode: 0o100644,
+          head: request.sha,
+          index: sha,
+          diffHash: sha,
+          gitVersion: "git version 2.0.0",
+          diffOptions,
+          cleanup: { restored: true, hash: sha },
+          model: Model.cases.recorded.make({ baseline: passed, broken, restored: passed }),
+        }),
+      ).pipe(Effect.provide(interruptedWrite), Effect.provide(Path.layer));
+
+      const afterWriteFailure = Schema.decodeUnknownSync(
+        Schema.fromJsonString(
+          Schema.Struct({
+            ...Record.fields,
+            model: Model,
+            cleanup: Schema.Struct({ restored: Schema.Boolean, hash: Schema.String }),
+          }),
+        ),
+      )(saved.at(-1));
+
+      expect(afterWriteFailure).toMatchObject({
+        source: request.sha,
+        caller,
+        state: "incomplete",
+        reason: "setup_or_io",
+        model: { _tag: "recorded" },
+        cleanup: { restored: true, hash: sha },
+      });
+
+      const invalid = FileSystem.layerNoop({
+        makeDirectory: () => Effect.void,
+        readFileString: () =>
+          Effect.succeed(JSON.stringify({ sender: { login: caller }, inputs: { ...request, patch: content } })),
+        writeFileString: (_file, value) =>
+          Effect.sync(() => {
+            saved.push(value);
+          }),
+      });
+
+      yield* attempt(environment, () => Effect.fail(new ExerciseError({ reason: "must_not_execute" }))).pipe(
+        Effect.provide(invalid),
+        Effect.provide(Path.layer),
+      );
+      expect(Schema.decodeUnknownSync(Schema.fromJsonString(Record))(saved.at(-1))).toMatchObject({
+        caller,
+        source: null,
+        request: null,
+        state: "incomplete",
+        reason: "request_invalid",
+      });
+    }),
+  options("discard validated attempt facts and replace every setup failure with a generic reason"),
 );

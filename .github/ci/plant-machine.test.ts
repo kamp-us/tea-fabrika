@@ -18,7 +18,13 @@ const details = {
 const results = fc.oneof(
   fc.constant(Observation.cases.passed.make(details)),
   fc.constant(
-    Observation.cases.failed.make({ ...details, exit: 1, category: "assertion", diagnostic: "assertion mismatch" }),
+    Observation.cases.failed.make({
+      ...details,
+      exit: 1,
+      category: "assertion",
+      assertion: null,
+      diagnostic: "assertion mismatch",
+    }),
   ),
   fc.string().map((reason) => Observation.cases.incomplete.make({ reason })),
 );
@@ -39,6 +45,7 @@ const lists = arbGuidedSequence(
                     ...details,
                     exit: 1,
                     category: "assertion",
+                    assertion: null,
                     diagnostic: "assertion mismatch",
                   })
                 : Observation.cases.passed.make(details)),

@@ -28,6 +28,12 @@ export const Observation = Schema.TaggedUnion({
     exit: Schema.Int.check(Schema.isGreaterThan(0)),
     category: Schema.Literal("assertion"),
     diagnostic: Schema.String,
+    assertion: Schema.NullOr(
+      Schema.Struct({
+        line: Schema.Int.check(Schema.isGreaterThan(0)),
+        column: Schema.Int.check(Schema.isGreaterThan(0)),
+      }),
+    ),
   },
   incomplete: { reason: Schema.String },
 });

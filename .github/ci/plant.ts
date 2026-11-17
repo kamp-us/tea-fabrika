@@ -1,7 +1,7 @@
 // Today's manual lead tooling for two next/ laws. Raw child output stays in the scoped scratch directory.
 import { run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Clock, Context, DateTime, Effect, FileSystem, Option, Path, Ref, Schema, Stream } from "effect";
+import { Cause, Clock, Context, DateTime, Effect, FileSystem, Option, Path, Ref, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { argv, cases, decodeRequest, derive, Request } from "./plant-cases.ts";
@@ -46,11 +46,13 @@ const Reporter = Schema.Struct({
 
 /** Diagnostics are a closed vocabulary. No substring copied from source or child output is public. */
 const diagnostic = (key: Request["case"], messages: readonly string[]) => {
-  const text = messages.join("\n");
+  const [message] = messages;
 
-  if (/timed?\s*out|timeout|cancel|signal|SIGTERM|SIGKILL/i.test(text)) {
+  if (message === undefined || messages.length !== 1) {
     return null;
   }
+
+  const text = message.split(/\n\s+at /)[0] ?? "";
 
   if (!text.includes("AssertionError")) {
     return null;
@@ -61,11 +63,18 @@ const diagnostic = (key: Request["case"], messages: readonly string[]) => {
   }
 
   if (key === "watcher-r1") {
-    const expected = /^-\s*"_tag": "(loaded|failed)",?\s*$/m.exec(text)?.[1];
-    const received = /^\+\s*"_tag": "(same)",?\s*$/m.exec(text)?.[1];
+    const received = /AssertionError: expected \{\s*_tag: 'same'/.test(text)
+      ? "same"
+      : text.includes("AssertionError: expected { Object (_tag, program, ...) }")
+        ? "unknown"
+        : null;
 
-    if (expected !== undefined && received !== undefined) {
-      return `AssertionError: expected _tag ${expected}; received _tag same`;
+    const expected =
+      /to match object \{\s*_tag: '(loaded)'\s*\}/.exec(text)?.[1] ??
+      /to match object \{\s*_tag: '(failed)',\s*reason: 'bundle'\s*\}/.exec(text)?.[1];
+
+    if (received !== null && expected !== undefined) {
+      return `AssertionError: expected _tag ${expected}; received _tag ${received}`;
     }
   }
 
@@ -176,7 +185,21 @@ export const observation = (key: Request["case"], root: string, raw: string, exi
     report.numFailedTestSuites > 0 &&
     safe !== null
   ) {
-    return Observation.cases.failed.make({ ...details, category: "assertion", diagnostic: safe });
+    const frame = new RegExp(`${RegExp.escape(selected.test)}:([0-9]+):([0-9]+)`).exec(
+      (target.failureMessages ?? []).join("\n"),
+    );
+
+    const assertion =
+      frame === null
+        ? null
+        : Option.getOrNull(
+            Schema.decodeUnknownOption(Observation.cases.failed.fields.assertion)({
+              line: Number(frame[1]),
+              column: Number(frame[2]),
+            }),
+          );
+
+    return Observation.cases.failed.make({ ...details, category: "assertion", diagnostic: safe, assertion });
   }
 
   return missing("unclear");
@@ -340,235 +363,303 @@ const Environment = Schema.Struct({
   HOME: Schema.String,
 });
 
-/** This is the real adapter. Unit tests never construct it or start a child process. */
-const main = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+type Environment = typeof Environment.Type;
 
-  const environment = yield* Schema.decodeUnknownEffect(Environment)(process.env).pipe(
+const Attempt = Schema.Struct({
+  kind: Schema.Literal("plant-exercise"),
+  startedAt: Schema.String,
+  dispatchedAt: Schema.Null,
+  dispatchTimeReason: Schema.String,
+  caller: Schema.NullOr(Event.fields.sender.fields.login),
+  source: Schema.NullOr(Request.fields.sha),
+  request: Schema.NullOr(Request),
+  runner: Request.fields.sha,
+  run: Environment.fields.GITHUB_RUN_ID,
+  attempt: Environment.fields.GITHUB_RUN_ATTEMPT,
+});
+
+const Reason = Schema.Literals([
+  "runner_sha_mismatch",
+  "event_invalid",
+  "request_invalid",
+  "child_io",
+  "git_failed",
+  "git_io",
+  "checkout_mismatch",
+  "source_versions_unsupported",
+  "source_not_regular",
+  "source_unsupported",
+  "source_install_failed",
+  "inspect_failed",
+  "source_dirty_or_wrong_head",
+  "source_changed",
+  "diff_empty",
+  "restore_or_edit_failed",
+  "test_io",
+  "git_version_unsupported",
+  "exercise_incomplete",
+]);
+
+type ExerciseResult = Effect.Success<ReturnType<typeof exercise>> & {
+  readonly gitVersion: string;
+  readonly diffOptions: typeof diffOptions;
+};
+
+/** The real attempt boundary persists known facts before setup and keeps only closed failure reasons. */
+export const attempt = Effect.fn("plant.attempt")(function* <E, R>(
+  input: unknown,
+  body: (environment: Environment, request: Request) => Effect.Effect<ExerciseResult, E, R>,
+) {
+  const startedAt = DateTime.formatIso(yield* DateTime.now);
+
+  const environment = yield* Schema.decodeUnknownEffect(Environment)(input).pipe(
     Effect.mapError(() => fail("trusted_main_required")),
   );
 
-  if (environment.GITHUB_SHA !== environment.GITHUB_WORKFLOW_SHA) {
-    return yield* fail("runner_sha_mismatch");
-  }
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
 
-  const event = yield* fs.readFileString(environment.GITHUB_EVENT_PATH).pipe(
-    Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Event))),
-    Effect.mapError(() => fail("event_invalid")),
-  );
+  const facts = yield* Ref.make<typeof Attempt.Type & Partial<Omit<ExerciseResult, "request">>>({
+    kind: "plant-exercise",
+    startedAt,
+    dispatchedAt: null,
+    dispatchTimeReason: "workflow_dispatch event supplies no dispatch timestamp",
+    caller: null,
+    source: null,
+    request: null,
+    runner: environment.GITHUB_WORKFLOW_SHA,
+    run: environment.GITHUB_RUN_ID,
+    attempt: environment.GITHUB_RUN_ATTEMPT,
+    cleanup: { restored: false, hash: null },
+  });
 
-  const request = yield* decodeRequest(event.inputs).pipe(Effect.mapError(() => fail("request_invalid")));
-  const runner = path.resolve(".");
-  const source = path.resolve("source");
-  const selected = cases[request.case];
-  const scratch = yield* fs.makeTempDirectoryScoped({ directory: environment.RUNNER_TEMP, prefix: "plant-private-" });
+  const directory = path.join(environment.RUNNER_TEMP, "plant-exercise");
 
-  const childEnv = {
-    PATH: environment.PATH,
-    HOME: environment.HOME,
-    TMPDIR: scratch,
-    CI: "true",
-    GITHUB_ACTIONS: "true",
-    GITHUB_RUN_ID: environment.GITHUB_RUN_ID,
-    GITHUB_RUN_ATTEMPT: environment.GITHUB_RUN_ATTEMPT,
-    FABRIKA_TEST_DEPTH: "full",
+  const write = Effect.fn("plant.writeAttempt")(function* (result: Record<string, unknown>) {
+    yield* fs.makeDirectory(directory, { recursive: true });
+    yield* fs.writeFileString(
+      path.join(directory, "result.json"),
+      JSON.stringify({ ...(yield* Ref.get(facts)), ...result }, null, 2),
+    );
+  });
+
+  const unfinished = {
+    state: "incomplete",
+    reason: "attempt_unfinished",
+    cleanup: { restored: false, reason: "no verified exercise result" },
   };
 
-  const child = Effect.fn("plant.child")(
-    function* (cwd: string, executable: string, args: readonly string[], name: string) {
-      const started = yield* Clock.currentTimeMillis;
+  return yield* Effect.gen(function* () {
+    yield* write(unfinished);
 
-      const process = yield* spawner.spawn(
-        ChildProcess.make(executable, args, { cwd, env: childEnv, extendEnv: false, stdin: "ignore" }),
-      );
-
-      const [exit] = yield* Effect.all(
-        [
-          process.exitCode,
-          process.stdout.pipe(Stream.run(fs.sink(path.join(scratch, `${name}.out`), { mode: 0o600 }))),
-          process.stderr.pipe(Stream.run(fs.sink(path.join(scratch, `${name}.err`), { mode: 0o600 }))),
-        ],
-        { concurrency: "unbounded" },
-      );
-
-      return { exit: Number(exit), ms: (yield* Clock.currentTimeMillis) - started };
-    },
-    Effect.scoped,
-    Effect.mapError(() => fail("child_io")),
-  );
-
-  const git = Effect.fn("plant.git")(
-    function* (cwd: string, args: readonly string[]) {
-      const handle = yield* spawner.spawn(
-        ChildProcess.make("git", args, { cwd, env: childEnv, extendEnv: false, stdin: "ignore" }),
-      );
-
-      const [exit, stdout] = yield* Effect.all(
-        [
-          handle.exitCode,
-          handle.stdout.pipe(Stream.decodeText(), Stream.mkString),
-          handle.stderr.pipe(Stream.runDrain),
-        ],
-        { concurrency: "unbounded" },
-      );
-
-      if (Number(exit) !== 0) {
-        return yield* fail("git_failed");
-      }
-
-      return stdout;
-    },
-    Effect.scoped,
-    Effect.mapError(() => fail("git_io")),
-  );
-
-  if (
-    (yield* git(runner, ["rev-parse", "HEAD"])).trim() !== environment.GITHUB_WORKFLOW_SHA ||
-    (yield* git(source, ["rev-parse", "HEAD"])).trim() !== request.sha
-  ) {
-    return yield* fail("checkout_mismatch");
-  }
-
-  const lock = yield* fs.readFile(path.join(runner, "pnpm-lock.yaml"));
-
-  if (!equal(lock, yield* fs.readFile(path.join(source, "pnpm-lock.yaml")))) {
-    return yield* fail("source_versions_unsupported");
-  }
-
-  const target = path.join(source, selected.file);
-
-  const regular = Effect.gen(function* () {
-    const parts = selected.file.split("/");
-
-    for (let i = 0; i <= parts.length; i++) {
-      const info = yield* fs.lstat(path.join(source, ...parts.slice(0, i)));
-
-      if (info.type !== (i === parts.length ? "File" : "Directory")) {
-        return yield* fail("source_not_regular");
-      }
+    if (environment.GITHUB_SHA !== environment.GITHUB_WORKFLOW_SHA) {
+      return yield* fail("runner_sha_mismatch");
     }
 
-    return yield* fs.lstat(target);
-  });
+    const event = yield* fs.readFileString(environment.GITHUB_EVENT_PATH).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Event))),
+      Effect.mapError(() => fail("event_invalid")),
+    );
 
-  yield* regular;
-  yield* derive(request.case, yield* fs.readFile(target));
-  const install = yield* child(source, "pnpm", ["install", "--frozen-lockfile"], "source-install");
+    yield* Ref.update(facts, (known) => ({ ...known, caller: event.sender.login }));
+    yield* write(unfinished);
+    const request = yield* decodeRequest(event.inputs).pipe(Effect.mapError(() => fail("request_invalid")));
+    yield* Ref.update(facts, (known) => ({ ...known, source: request.sha, request }));
+    yield* write(unfinished);
+    const result = yield* body(environment, request);
+    yield* Ref.update(facts, (known) => ({ ...known, ...result }));
+    const complete = result.cleanup.restored && Model.isAnyOf(["recorded"])(result.model);
+    yield* write({
+      ...result,
+      state: complete ? "recorded" : "incomplete",
+      reason: complete ? null : "exercise_incomplete",
+    });
 
-  if (install.exit !== 0) {
-    return yield* fail("source_install_failed");
-  }
-
-  const inspect = Effect.gen(function* () {
-    const info = yield* regular;
-    const bytes = yield* fs.readFile(target);
-    const head = (yield* git(source, ["rev-parse", "HEAD"])).trim();
-    const index = (yield* git(source, ["write-tree"])).trim();
-    const status = yield* git(source, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
-    const summary = yield* git(source, ["diff", "--no-ext-diff", "--no-textconv", "--summary", "--no-renames"]);
-
-    return { bytes, mode: info.mode, head, index, status, summary };
-  }).pipe(Effect.mapError(() => fail("inspect_failed")));
-
-  const workspace = Workspace.of({
-    inspect,
-    write: (bytes, mode) =>
+    return complete;
+  }).pipe(
+    Effect.catchCause((cause) =>
       Effect.gen(function* () {
-        yield* regular;
-        yield* fs.writeFile(target, bytes);
-        yield* fs.chmod(target, mode);
-      }).pipe(Effect.mapError(() => fail("restore_or_edit_failed"))),
-    diff: git(source, [...diffOptions, "--", selected.file]).pipe(Effect.map((text) => new TextEncoder().encode(text))),
-    test: (phase) =>
-      Effect.gen(function* () {
-        const report = path.join(scratch, `${phase}.json`);
-        const result = yield* child(source, "nice", argv(request.case, report), phase);
-        const raw = yield* fs.readFileString(report).pipe(Effect.orElseSucceed(() => ""));
+        const reason = Option.getOrElse(
+          Option.flatMap(Cause.findErrorOption(cause), (error) =>
+            Schema.is(ExerciseError)(error) ? Schema.decodeUnknownOption(Reason)(error.reason) : Option.none(),
+          ),
+          () => "setup_or_io",
+        );
 
-        return observation(request.case, source, raw, result.exit, result.ms);
-      }).pipe(Effect.mapError(() => fail("test_io"))),
-  });
+        yield* write({ state: "incomplete", reason });
 
-  const at = DateTime.formatIso(yield* DateTime.now);
-  const gitVersion = (yield* git(runner, ["--version"])).trim();
-
-  if (!/^git version [0-9.]+$/.test(gitVersion)) {
-    return yield* fail("git_version_unsupported");
-  }
-
-  const result = yield* exercise(request).pipe(Effect.provideService(Workspace, workspace));
-  const publicDir = path.join(environment.RUNNER_TEMP, "plant-exercise");
-  yield* fs.makeDirectory(publicDir);
-  yield* fs.writeFileString(
-    path.join(publicDir, "result.json"),
-    JSON.stringify(
-      {
-        kind: "plant-exercise",
-        caller: event.sender.login,
-        startedAt: at,
-        dispatchedAt: null,
-        dispatchTimeReason: "workflow_dispatch event supplies no dispatch timestamp",
-        source: request.sha,
-        runner: environment.GITHUB_WORKFLOW_SHA,
-        run: environment.GITHUB_RUN_ID,
-        attempt: environment.GITHUB_RUN_ATTEMPT,
-        gitVersion,
-        diffOptions,
-        ...result,
-      },
-      null,
-      2,
+        return false;
+      }),
     ),
   );
+});
 
-  if (!result.cleanup.restored || !Model.isAnyOf(["recorded"])(result.model)) {
-    return yield* fail("exercise_incomplete");
-  }
-}).pipe(Effect.scoped);
+/** This is the real adapter. Unit tests supply only the attempt boundary's in-memory filesystem. */
+const main = attempt(process.env, (environment, request) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const runner = path.resolve(".");
+    const source = path.resolve("source");
+    const selected = cases[request.case];
+    const scratch = yield* fs.makeTempDirectoryScoped({ directory: environment.RUNNER_TEMP, prefix: "plant-private-" });
+
+    const childEnv = {
+      PATH: environment.PATH,
+      HOME: environment.HOME,
+      TMPDIR: scratch,
+      CI: "true",
+      GITHUB_ACTIONS: "true",
+      GITHUB_RUN_ID: environment.GITHUB_RUN_ID,
+      GITHUB_RUN_ATTEMPT: environment.GITHUB_RUN_ATTEMPT,
+      FABRIKA_TEST_DEPTH: "full",
+    };
+
+    const child = Effect.fn("plant.child")(
+      function* (cwd: string, executable: string, args: readonly string[], name: string) {
+        const started = yield* Clock.currentTimeMillis;
+
+        const process = yield* spawner.spawn(
+          ChildProcess.make(executable, args, { cwd, env: childEnv, extendEnv: false, stdin: "ignore" }),
+        );
+
+        const [exit] = yield* Effect.all(
+          [
+            process.exitCode,
+            process.stdout.pipe(Stream.run(fs.sink(path.join(scratch, `${name}.out`), { mode: 0o600 }))),
+            process.stderr.pipe(Stream.run(fs.sink(path.join(scratch, `${name}.err`), { mode: 0o600 }))),
+          ],
+          { concurrency: "unbounded" },
+        );
+
+        return { exit: Number(exit), ms: (yield* Clock.currentTimeMillis) - started };
+      },
+      Effect.scoped,
+      Effect.mapError(() => fail("child_io")),
+    );
+
+    const git = Effect.fn("plant.git")(
+      function* (cwd: string, args: readonly string[]) {
+        const handle = yield* spawner.spawn(
+          ChildProcess.make("git", args, { cwd, env: childEnv, extendEnv: false, stdin: "ignore" }),
+        );
+
+        const [exit, stdout] = yield* Effect.all(
+          [
+            handle.exitCode,
+            handle.stdout.pipe(Stream.decodeText(), Stream.mkString),
+            handle.stderr.pipe(Stream.runDrain),
+          ],
+          { concurrency: "unbounded" },
+        );
+
+        if (Number(exit) !== 0) {
+          return yield* fail("git_failed");
+        }
+
+        return stdout;
+      },
+      Effect.scoped,
+      Effect.mapError(() => fail("git_io")),
+    );
+
+    if (
+      (yield* git(runner, ["rev-parse", "HEAD"])).trim() !== environment.GITHUB_WORKFLOW_SHA ||
+      (yield* git(source, ["rev-parse", "HEAD"])).trim() !== request.sha
+    ) {
+      return yield* fail("checkout_mismatch");
+    }
+
+    const lock = yield* fs.readFile(path.join(runner, "pnpm-lock.yaml"));
+
+    if (!equal(lock, yield* fs.readFile(path.join(source, "pnpm-lock.yaml")))) {
+      return yield* fail("source_versions_unsupported");
+    }
+
+    const target = path.join(source, selected.file);
+
+    const regular = Effect.gen(function* () {
+      const parts = selected.file.split("/");
+
+      for (let i = 0; i <= parts.length; i++) {
+        const info = yield* fs.lstat(path.join(source, ...parts.slice(0, i)));
+
+        if (info.type !== (i === parts.length ? "File" : "Directory")) {
+          return yield* fail("source_not_regular");
+        }
+      }
+
+      return yield* fs.lstat(target);
+    });
+
+    yield* regular;
+    yield* derive(request.case, yield* fs.readFile(target)).pipe(Effect.mapError(() => fail("source_unsupported")));
+    const install = yield* child(source, "pnpm", ["install", "--frozen-lockfile"], "source-install");
+
+    if (install.exit !== 0) {
+      return yield* fail("source_install_failed");
+    }
+
+    const inspect = Effect.gen(function* () {
+      const info = yield* regular;
+      const bytes = yield* fs.readFile(target);
+      const head = (yield* git(source, ["rev-parse", "HEAD"])).trim();
+      const index = (yield* git(source, ["write-tree"])).trim();
+      const status = yield* git(source, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
+      const summary = yield* git(source, ["diff", "--no-ext-diff", "--no-textconv", "--summary", "--no-renames"]);
+
+      return { bytes, mode: info.mode, head, index, status, summary };
+    }).pipe(Effect.mapError(() => fail("inspect_failed")));
+
+    const workspace = Workspace.of({
+      inspect,
+      write: (bytes, mode) =>
+        Effect.gen(function* () {
+          yield* regular;
+          yield* fs.writeFile(target, bytes);
+          yield* fs.chmod(target, mode);
+        }).pipe(Effect.mapError(() => fail("restore_or_edit_failed"))),
+      diff: git(source, [...diffOptions, "--", selected.file]).pipe(
+        Effect.map((text) => new TextEncoder().encode(text)),
+      ),
+      test: (phase) =>
+        Effect.gen(function* () {
+          const report = path.join(scratch, `${phase}.json`);
+          const result = yield* child(source, "nice", argv(request.case, report), phase);
+          const raw = yield* fs.readFileString(report).pipe(Effect.orElseSucceed(() => ""));
+
+          return observation(request.case, source, raw, result.exit, result.ms);
+        }).pipe(Effect.mapError(() => fail("test_io"))),
+    });
+
+    const gitVersion = (yield* git(runner, ["--version"])).trim();
+
+    if (!/^git version [0-9.]+$/.test(gitVersion)) {
+      return yield* fail("git_version_unsupported");
+    }
+
+    const result = yield* exercise(request).pipe(Effect.provideService(Workspace, workspace));
+
+    return { ...result, gitVersion, diffOptions };
+  }).pipe(Effect.scoped),
+);
 
 if (import.meta.main) {
   NodeRuntime.runMain(
     main.pipe(
-      Effect.catchCause(() =>
-        Effect.gen(function* () {
-          const environment = Schema.decodeUnknownOption(Environment)(process.env);
-
-          if (Option.isSome(environment)) {
-            const fs = yield* FileSystem.FileSystem;
-            const path = yield* Path.Path;
-            const directory = path.join(environment.value.RUNNER_TEMP, "plant-exercise");
-            const file = path.join(directory, "result.json");
-
-            if (!(yield* fs.exists(file))) {
-              yield* fs.makeDirectory(directory, { recursive: true });
-              yield* fs.writeFileString(
-                file,
-                JSON.stringify({
-                  kind: "plant-exercise",
-                  state: "incomplete",
-                  reason: "setup_or_io",
-                  source: null,
-                  runner: environment.value.GITHUB_WORKFLOW_SHA,
-                  run: environment.value.GITHUB_RUN_ID,
-                  attempt: environment.value.GITHUB_RUN_ATTEMPT,
-                  cleanup: { restored: false, reason: "no verified exercise result" },
-                }),
-              );
-            }
+      Effect.tap((complete) =>
+        Effect.sync(() => {
+          if (!complete) {
+            process.exitCode = 1;
           }
-
-          console.error("plant-exercise: incomplete; sanitized result may be available");
+        }),
+      ),
+      Effect.catchCause(() =>
+        Effect.sync(() => {
+          console.error("plant-exercise: incomplete; result could not be saved");
           process.exitCode = 1;
-        }).pipe(
-          Effect.catchCause(() =>
-            Effect.sync(() => {
-              console.error("plant-exercise: incomplete; result could not be saved");
-              process.exitCode = 1;
-            }),
-          ),
-        ),
+        }),
       ),
       Effect.provide(NodeServices.layer),
       Effect.provide(Digest.layerWebCrypto),
