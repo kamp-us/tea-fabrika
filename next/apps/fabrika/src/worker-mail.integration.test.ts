@@ -335,6 +335,8 @@ const world = async (
         );
 
         const scope = yield* Effect.scope;
+        // `test` is a plain async function, so `connect` runs with this world's services.
+        const context = yield* Effect.context();
 
         const from: From = {
           by: key.fingerprint,
@@ -352,7 +354,7 @@ const world = async (
             hash: built.build,
             diagnostics,
             connect: (tab) =>
-              Effect.runPromise(
+              Effect.runPromiseWith(context)(
                 Effect.gen(function* () {
                   const socket = yield* Effect.acquireRelease(
                     Effect.sync(
@@ -755,6 +757,8 @@ const checklistWorld = async (
       );
 
       const scope = yield* Effect.scope;
+      // `test` is a plain async function, so `connect` runs with this world's services.
+      const context = yield* Effect.context();
 
       const from: From = {
         by: key.fingerprint,
@@ -785,7 +789,7 @@ const checklistWorld = async (
             return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
           },
           connect: () =>
-            Effect.runPromise(
+            Effect.runPromiseWith(context)(
               Effect.gen(function* () {
                 const tab = "immediate-wake";
 
@@ -957,6 +961,8 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
       });
 
       const scope = yield* Effect.scope;
+      // The body below is a plain async function, so the client it opens runs with this law's services.
+      const context = yield* Effect.context();
 
       const from: From = {
         by: key.fingerprint,
@@ -992,7 +998,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
           code: code("reader"),
         });
 
-        const client = await Effect.runPromise(
+        const client = await Effect.runPromiseWith(context)(
           Effect.gen(function* () {
             const socket = yield* Effect.acquireRelease(
               Effect.sync(

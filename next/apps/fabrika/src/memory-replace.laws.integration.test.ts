@@ -333,11 +333,13 @@ describe("the memory restart on real workerd, next/", () => {
 
         const switched = yield* Clock.currentTimeMillis;
         sizes.set(old, OVER);
+        // `watch` polls with plain Promises, so each look runs with this law's services.
+        const context = yield* Effect.context();
 
         // The next 1-second sample sends the SIGTERM; the grace and two seconds bound the old pid's end.
         const gone = yield* Effect.promise(() =>
           watch(
-            () => Effect.runPromise(alive(old)),
+            () => Effect.runPromiseWith(context)(alive(old)),
             (live) => !live,
             1000 + GRACE + 2000,
           ),
@@ -422,10 +424,12 @@ describe("the memory restart on real workerd, next/", () => {
         const first = Option.getOrThrow(Arr.findFirst(before.last!, (fact) => fact._tag === "started")).body;
         const old = Number(first.pid);
         sizes.set(old, OVER);
+        // `watch` polls with plain Promises, so each look runs with this law's services.
+        const context = yield* Effect.context();
 
         const gone = yield* Effect.promise(() =>
           watch(
-            () => Effect.runPromise(alive(old)),
+            () => Effect.runPromiseWith(context)(alive(old)),
             (live) => !live,
             1000 + GRACE + 2000,
           ),

@@ -323,6 +323,8 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
         );
 
         const scope = yield* Effect.scope;
+        // `test` is a plain async function, so `connect` runs with this world's services.
+        const context = yield* Effect.context();
 
         const from: From = {
           by: key.fingerprint,
@@ -337,7 +339,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
         yield* Effect.promise(() =>
           test(instance, {
             connect: (tab) =>
-              Effect.runPromise(
+              Effect.runPromiseWith(context)(
                 Effect.gen(function* () {
                   const socket = yield* Effect.acquireRelease(
                     Effect.sync(

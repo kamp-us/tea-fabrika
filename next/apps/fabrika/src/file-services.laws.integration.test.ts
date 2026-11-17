@@ -660,7 +660,7 @@ it("L11: no failed settings load reaches the instance write, the build or the in
 
             vi.resetModules();
             yield* Effect.promise(() => import("../dev.ts"));
-            const exit = yield* Effect.promise(() => Effect.runPromiseExit(cli.work!));
+            const exit = yield* Effect.exit(cli.work!);
             instanceFailure(exit, "settings");
             // The dev edge translates the load's error and keeps it as the cause.
             expect(Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty)).toMatchObject({

@@ -645,9 +645,11 @@ const law = (name: string, focus: "E1" | "S1", required: ReadonlyArray<string>, 
     () =>
       Effect.gen(function* () {
         const done = new Set<string>();
+        const context = yield* Effect.context();
 
+        // Each flow still gets its own fresh test clock.
         const check = (f: Flow) =>
-          Effect.runPromise(flow(f, focus, done).pipe(Effect.scoped, Effect.provide(TestClock.layer())));
+          Effect.runPromiseWith(context)(flow(f, focus, done).pipe(Effect.scoped, Effect.provide(TestClock.layer())));
 
         yield* Effect.tryPromise({
           try: () =>
