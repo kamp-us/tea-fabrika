@@ -20,11 +20,10 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, ConfigProvider, DateTime, Effect, Exit, FileSystem, Layer, Option, PlatformError } from "effect";
-import { Command } from "effect/cli";
+import { ByteSize, DateTime, Effect, Exit, FileSystem, Layer, Option, PlatformError } from "effect";
 import { TestClock, TestConsole } from "effect/testing";
 import fc from "fast-check";
-import { fieldrow } from "./fieldrow.ts";
+import { run as runFieldrow } from "./fieldrow.ts";
 
 const EVENTS = "/box/out/events.jsonl";
 
@@ -369,20 +368,14 @@ const env = (c: Case): Record<string, string> => ({
 const run = (c: Case) =>
   Effect.gen(function* () {
     yield* TestClock.setTime(c.now);
-    const exit = yield* Command.runWith(fieldrow, { version: "0.0.0" })(argv(c)).pipe(Effect.exit);
+    const exit = yield* runFieldrow(argv(c), env(c)).pipe(Effect.exit);
     const stdout = (yield* TestConsole.logLines).map(String);
     const stderr = (yield* TestConsole.errorLines).map(String);
 
     return { exit, stdout, stderr };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        disk(c),
-        TestConsole.layer,
-        TestClock.layer(),
-        ConfigProvider.layer(ConfigProvider.fromEnv({ env: env(c) })),
-        DateTime.layerCurrentZoneNamed(c.zone),
-      ),
+      Layer.mergeAll(disk(c), TestConsole.layer, TestClock.layer(), DateTime.layerCurrentZoneNamed(c.zone)),
     ),
     Effect.provide(NodeServices.layer),
   );
