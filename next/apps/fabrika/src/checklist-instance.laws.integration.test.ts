@@ -23,6 +23,7 @@ import type { Descriptor } from "@kampus/libfabrika";
 import { programBox } from "@kampus/libfabrika/box";
 import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
 import { fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
+import { News, Published } from "@kampus/libfabrika/runtime/News";
 import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
@@ -588,17 +589,6 @@ describe("L21: the boot list", () => {
   }
 });
 
-const Notice = Schema.Struct({
-  method: Schema.Literals(["view.whole", "view.patch"]),
-  params: Schema.Record(Schema.String, Schema.Unknown),
-});
-
-const without = (params: Readonly<Record<string, unknown>>) => {
-  const { pid: _pid, ...rest } = params;
-
-  return rest;
-};
-
 describe("L13: notices name their process", () => {
   it("successive sends land and a client joining after the first send opens the current checklist", async () => {
     await fc.assert(
@@ -741,19 +731,18 @@ describe("L13: notices name their process", () => {
                 }
 
                 yield* settle;
-                const views = w.heard.filter((h) => Schema.is(Notice)(h.news));
-                const theirs = w.published.filter((h) => Reflect.get(Object(h.news), "type") !== undefined);
+                // Read as the Connection object reads them: a view news, and the Published it holds.
+                const views = w.heard.map((h) => h.news).filter(News.guards.view);
+                const theirs = w.published.map((h) => h.news).filter(Schema.is(Published));
                 expect(views.length, "the client heard the checklist's views").toBeGreaterThan(0);
                 expect(views.length).toBe(theirs.length);
 
-                for (const [i, h] of views.entries()) {
-                  const news = Schema.decodeUnknownSync(Notice)(h.news);
-                  expect(news.params.pid, "a notice names its process").toBe(pid);
-                  expect(without(news.params), "the update reached the client unchanged").toEqual(
-                    without(Object(theirs[i]!.news)),
-                  );
-                  seen[news.method === "view.whole" ? "whole" : "patch"]++;
-                  seen.arrays += JSON.stringify(news.params).includes('"/items/') ? 1 : 0;
+                for (const [i, { update }] of views.entries()) {
+                  expect(update.pid, "a notice names its process").toBe(pid);
+                  expect(update, "the update its Process published reached the client unchanged").toEqual(theirs[i]);
+                  seen[update.type]++;
+                  seen.arrays +=
+                    update.type === "patch" && update.patch.some((op) => op.path.startsWith("/items/")) ? 1 : 0;
                 }
               }),
             ),
