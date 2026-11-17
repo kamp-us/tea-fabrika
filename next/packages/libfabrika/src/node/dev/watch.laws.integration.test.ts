@@ -27,6 +27,7 @@ import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
+import { type Expression, parseSync, type SpreadElement, Visitor } from "oxc-parser";
 import { assert, describe, expect, it, vi } from "vitest";
 import { expectTypeOf } from "vitest";
 import { hash } from "../../runtime/Built.ts";
@@ -196,6 +197,90 @@ const fixture = Effect.gen(function* () {
     programs: ["one", "two"].map((short) => ({ name: `p15/${short}`, package: `@p15/${short}`, export: "program" })),
   };
 });
+
+const fixtureValue = (source: string) => {
+  const parsed = parseSync("watcher-fixture.mjs", source);
+  const assignments: Array<{ right: Expression; nested: boolean }> = [];
+  const declarations: Array<{ name: string; init: Expression | null; nested: boolean; grouped: boolean }> = [];
+  let depth = 0;
+  const enter = () => depth++;
+  const leave = () => depth--;
+
+  new Visitor({
+    FunctionDeclaration: enter,
+    "FunctionDeclaration:exit": leave,
+    FunctionExpression: enter,
+    "FunctionExpression:exit": leave,
+    ArrowFunctionExpression: enter,
+    "ArrowFunctionExpression:exit": leave,
+    VariableDeclaration(node) {
+      for (const declaration of node.declarations) {
+        if (declaration.id.type === "Identifier") {
+          declarations.push({
+            name: declaration.id.name,
+            init: declaration.init,
+            nested: depth > 0,
+            grouped: node.declarations.length > 1,
+          });
+        }
+      }
+    },
+    AssignmentExpression(node) {
+      const left = node.left;
+
+      if (
+        node.operator === "=" &&
+        left.type === "MemberExpression" &&
+        !left.computed &&
+        left.object.type === "Identifier" &&
+        left.object.name === "globalThis" &&
+        left.property.type === "Identifier" &&
+        left.property.name === "__p15"
+      ) {
+        assignments.push({ right: node.right, nested: depth > 0 });
+      }
+    },
+  }).visit(parsed.program);
+
+  const kind = (node: Expression | SpreadElement | null | undefined) =>
+    node === null || node === undefined
+      ? "absent"
+      : node.type === "ArrayExpression" ||
+          node.type === "Identifier" ||
+          node.type === "Literal" ||
+          node.type === "UnaryExpression"
+        ? node.type
+        : "other";
+
+  const number = (node: Expression | SpreadElement | null | undefined) =>
+    node?.type === "Literal" && typeof node.value === "number" && Number.isFinite(node.value) ? node.value : null;
+
+  return {
+    errors: parsed.errors.length,
+    assignments: assignments.length,
+    facts: assignments.slice(0, 4).map(({ right, nested }) => {
+      const own = right.type === "ArrayExpression" ? right.elements[1] : undefined;
+
+      const bindings =
+        own?.type === "Identifier" ? declarations.filter((declaration) => declaration.name === own.name) : [];
+
+      return {
+        right: kind(right),
+        length: right.type === "ArrayExpression" ? right.elements.length : null,
+        nested,
+        own: kind(own),
+        value: number(own),
+        bindings: bindings.length,
+        candidates: bindings.slice(0, 4).map((declaration) => ({
+          init: kind(declaration.init),
+          value: number(declaration.init),
+          nested: declaration.nested,
+          grouped: declaration.grouped,
+        })),
+      };
+    }),
+  };
+};
 
 /** The brain as the watcher sees it: it answers `same` for a hash a program already runs. */
 const brain = Effect.gen(function* () {
@@ -526,21 +611,11 @@ describe("P15 slice 1: the watcher", () => {
               });
               expect(code.hash).toBe(yield* hash(code.source));
 
-              const own = Array.from(
-                code.source.matchAll(
-                  /\b(?:var|let|const)\s+(own[$\w]{0,44})\s*=\s*(-?\d{1,9}(?:\.\d{1,9})?)(?=\s*[,;])/g,
-                ),
-                (match) => ({ name: match[1], value: Number(match[2]) }),
-              ).slice(0, 8);
-
               expect(
                 new RegExp(`\\b(?:var|let|const) own\\s*=\\s*${value}\\s*;`).test(code.source),
                 `the installed bundle contains this save's module value: ${JSON.stringify({
                   value,
-                  program: selected.name,
-                  from: code.from,
-                  own,
-                  fixture: code.source.includes("globalThis.__p15"),
+                  syntax: fixtureValue(code.source),
                 })}`,
               ).toBe(true);
               installs.set(loaded.hash, code);
