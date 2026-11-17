@@ -82,7 +82,7 @@ it.effect(
 
       yield* fs.makeDirectory(packed);
 
-      const command = Effect.fnUntraced(function* (cwd: string, executable: string, args: ReadonlyArray<string>) {
+      const invoke = Effect.fnUntraced(function* (cwd: string, executable: string, args: ReadonlyArray<string>) {
         const handle = yield* spawner.spawn(
           ChildProcess.make(executable, args, {
             cwd,
@@ -99,9 +99,15 @@ it.effect(
           ),
         );
 
-        expect(yield* handle.exitCode, `${executable} ${args.join(" ")}\n${output}`).toBe(0);
+        return { code: yield* handle.exitCode, output: output.trim() };
+      });
 
-        return output.trim();
+      const command = Effect.fnUntraced(function* (cwd: string, executable: string, args: ReadonlyArray<string>) {
+        const result = yield* invoke(cwd, executable, args);
+
+        expect(result.code, `${executable} ${args.join(" ")}\n${result.output}`).toBe(0);
+
+        return result.output;
       });
 
       const source = yield* command(root, "git", ["rev-parse", "HEAD"]);
@@ -233,6 +239,66 @@ it.effect(
 
       yield* command(consumer, "node", ["node_modules/typescript/bin/tsc", "--project", "tsconfig.json"]);
 
+      // Each CI fault changes only an installed copy, restored before the next process starts.
+      const refusal = Effect.fnUntraced(function* (
+        target: string,
+        change: (original: string) => ReturnType<typeof fs.writeFileString>,
+        args: ReadonlyArray<string>,
+        reason: RegExp,
+      ) {
+        const original = yield* Effect.acquireRelease(fs.readFileString(target), (saved) =>
+          fs.writeFileString(target, saved).pipe(Effect.orDie),
+        );
+
+        yield* change(original);
+
+        const result = yield* invoke(consumer, "node", args);
+
+        expect(result.code, result.output).not.toBe(0);
+
+        expect(result.output).toMatch(reason);
+      });
+
+      const manifestPath = path.join(installed, "package.json");
+
+      yield* refusal(
+        manifestPath,
+        (original) => {
+          expect(original).toContain('"./dist/App.js"');
+
+          return fs.writeFileString(manifestPath, original.replace('"./dist/App.js"', '"./src/App.ts"'));
+        },
+        ["consumer.mjs"],
+        /src\/App\.ts/,
+      ).pipe(Effect.scoped);
+
+      const parserPath = path.join(installed, "dist/TomlParser.js");
+
+      yield* refusal(parserPath, () => fs.remove(parserPath), ["consumer.mjs"], /TomlParser\.js/).pipe(Effect.scoped);
+
+      const declarationPath = path.join(installed, "dist/App.d.ts");
+
+      yield* refusal(
+        declarationPath,
+        () => fs.remove(declarationPath),
+        ["node_modules/typescript/bin/tsc", "--project", "tsconfig.json"],
+        /(?:TS7016|TS2307).*@kalfa\/config\/App/,
+      ).pipe(Effect.scoped);
+
+      const appPath = path.join(installed, "dist/App.js");
+
+      yield* refusal(
+        appPath,
+        (original) => fs.writeFileString(appPath, 'import "@kampus/libfabrika";\n' + original),
+        ["consumer.mjs"],
+        /Cannot find package ['"]@kampus\/libfabrika['"]/,
+      ).pipe(Effect.scoped);
+
+      // These processes read the restored files; delivery still names the original good tarball.
+      yield* command(consumer, "node", ["consumer.mjs"]);
+
+      yield* command(consumer, "node", ["node_modules/typescript/bin/tsc", "--project", "tsconfig.json"]);
+
       expect(yield* digest.digestHex(Digest.sha256, yield* fs.readFile(archive))).toBe(sha256);
 
       const node = yield* command(consumer, "node", ["--version"]);
@@ -262,6 +328,7 @@ it.effect(
             versions: { node, pnpm, npm, compiler },
             exports: manifest.exports,
             stages: { build: "passed", pack: "passed", install: "passed", ...runtime, types: "passed" },
+            negatives: { source: "refused", parser: "refused", declarations: "refused", workspace: "refused" },
           },
           null,
           2,
