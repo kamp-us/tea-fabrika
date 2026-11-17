@@ -440,7 +440,7 @@ Every commit leaves the laptop when it is made
 ([0134](../../../.decisions/0134-no-code-stays-only-on-a-local-branch.md)). `stepcommit.sh` (signed)
 runs `publish.ts` itself, and a quest's box commit is pushed by drive's pushing phase, so neither
 step nor lead pushes by hand. A commit step that cannot push exits 6 and names the command to run
-where the push can. Run `node scripts/unlisted.ts` in the main checkout every round and fix each
+where the push can. Run `node .agents/skills/lead/scripts/unlisted.ts` in the main checkout every round and fix each
 line the same turn.
 
 Keep the bot's explicit atomic push of notes plus branch. On a person's branch, notes-only as the
