@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-host-runtime-source-review",
+  "ticket": "kamp-us/tea-fabrika#1132",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-16T21:22:23-08:00",
+  "parent": null,
+  "role": "hand",
+  "step": "review",
+  "model": null,
+  "effort": null,
+  "outcome": "fail",
+  "why": "Source-only review found one timeout regression: runtime discovery now precedes the existing command deadline. Stalled Volta discovery can retain the host lock indefinitely.",
+  "note": "Read every changed line and callers at exact head, approved plan and explicit-pin amendment, installed Effect docs/source and supplied unit/plant evidence. No tests/compiler/install/real process/CI action or source/ref write. Not a completed full review or missing remote proof clearance. Start time was not sampled and remains null.",
+  "head": "ff8e14daee3442dec442b291b9aaaeb5fd78323a",
+  "base": "c433a7e995b3bb3ef5afe3adbee1d961f5758015",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null
+}

@@ -6,14 +6,16 @@ import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
 /** GitHub could not be asked, refused, or answered in a shape we do not read. */
-export class RunsError extends Schema.TaggedError<RunsError>()("RunsError", { reason: Schema.String }) {}
+export class RunsError extends Schema.TaggedError<RunsError, { readonly brand: unique symbol }>()("RunsError", {
+  reason: Schema.String,
+}) {}
 
 /**
  * One workflow run as GitHub lists it: its id, the commit it ran on, `queued`, `in_progress`,
  * `waiting` or `completed`, and once completed its conclusion.
  */
 export const Run = Schema.Struct({
-  id: Schema.Number,
+  id: Schema.Finite,
   head: Schema.String,
   status: Schema.String,
   conclusion: Schema.NullOr(Schema.String),
@@ -32,7 +34,7 @@ export type Step = typeof Step.Type;
 
 /** One job of a run, latest attempt: its id (its log's id too), its name and its steps. */
 export const Job = Schema.Struct({
-  id: Schema.Number,
+  id: Schema.Finite,
   name: Schema.String,
   status: Schema.String,
   conclusion: Schema.NullOr(Schema.String),
@@ -48,5 +50,7 @@ export class Runs extends Context.Service<
     readonly on: (workflow: string, branch: string) => Effect.Effect<ReadonlyArray<Run>, RunsError>;
     /** The jobs of run `id`, of its latest attempt. */
     readonly jobs: (id: number) => Effect.Effect<ReadonlyArray<Job>, RunsError>;
+    /** Before suggesting a new proof: the branch still holds `head`, whose workflow shares the ten job groups. */
+    readonly preflight: (branch: string, head: string) => Effect.Effect<void, RunsError>;
   }
 >()("lead/ci/Runs") {}
