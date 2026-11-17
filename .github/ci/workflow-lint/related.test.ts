@@ -7,6 +7,8 @@ import { lintWorkflow } from "../workflow-lint.ts";
 const text = readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8");
 
 const Fault = Schema.Literals([
+  "selection_report",
+  "results_report",
   "next_pool",
   "related_pool",
   "private_group",
@@ -29,6 +31,14 @@ it.prop(
     const integration = workflow.jobs.related.steps.find((step: { name?: string }) => step.name === "integration");
 
     switch (fault) {
+      case "selection_report":
+        workflow.jobs.select.steps.find((step: { name?: string }) => step.name === "selected files").with.name =
+          "tested-injected";
+        break;
+      case "results_report":
+        workflow.jobs.related.steps.find((step: { name?: string }) => step.name === "results").with.path =
+          "${{ runner.temp }}/tested.json";
+        break;
       case "next_pool":
         delete workflow.jobs.next.concurrency;
         break;

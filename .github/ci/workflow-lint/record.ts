@@ -88,10 +88,45 @@ export const record: Rule = ({ jobs }, require) => {
     allSteps(map(job)).filter((s) => typeof s["uses"] === "string" && /(?:^|\/)upload-artifact@/.test(s["uses"])),
   );
 
+  const reports = [
+    [
+      "select",
+      "selected files",
+      {
+        name: "related-set",
+        path: "${{ runner.temp }}/related-set.json",
+        "if-no-files-found": "ignore",
+        "retention-days": 90,
+      },
+    ],
+    [
+      "related",
+      "results",
+      {
+        name: "results-related-${{ matrix.shard }}",
+        path: "${{ runner.temp }}/related.json",
+        "if-no-files-found": "error",
+        "retention-days": 7,
+      },
+    ],
+  ] as const;
+  const reportUploads = reports.flatMap(([job, name, expected]) => {
+    const found = allSteps(map(jobs[job])).filter(
+      (step) =>
+        uses(step, "actions/upload-artifact") &&
+        step["name"] === name &&
+        compact(step["if"]) === "!cancelled()" &&
+        Object.keys(step).length === 4 &&
+        sameEntries(Object.entries(map(step["with"])), Object.entries(expected)),
+    );
+    require(found.length === 1, `Q1: ${job} uploads only its exact related report once`);
+    return found;
+  });
+
   const timingsUploads = TIMED_LEGS.flatMap(([name]) => allSteps(map(jobs[name])).filter(isTimings));
   require(upload !== undefined &&
     uploaders.filter((s) => s === upload).length === 1 &&
     uploaders.every(
-      (s) => s === upload || timingsUploads.includes(s),
+      (s) => s === upload || timingsUploads.includes(s) || reportUploads.includes(s),
     ), "Q1: the record's upload is the one step in check.yaml that uploads an artifact, beside the test legs' timings");
 };
