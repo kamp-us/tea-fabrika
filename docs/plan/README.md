@@ -61,6 +61,13 @@ matrix without requiring a label. Global triggers select every file, and selecte
 full depth. All test jobs share the existing nine groups and one control group. The original
 regression suite remains intact. The source is prepared; CI validation and review remain due.
 
+In `next/`, ticket 1153 reuses the Node quota fixture's admission services within one World
+and one limits generation. Every input still sends; each limits setter creates a fresh cache key,
+and failed setup remains retryable. Existing laws, workloads, SQL operations, seeds and timeouts
+stay in place. Temporary proof passed 82 cases with three caught faults, scoped lint and the
+narrow libfabrika compiler passed, and an independent build read passed without changes.
+The whole unchanged quota suite on eligible Linux and final review remain due. The proof uses
+no real SQL, and no speedup is claimed.
 
 In `next/`, ticket 1151 changes Q18's final entry check to collect stepped IDs once per entries
 snapshot, then check every expected message against that set. Its exact existence rule, all
@@ -151,6 +158,18 @@ between 0279 and 0274 before the desk is built, then S1 of the
 before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `alchemy plan` before
 the first cloud deploy. The other open calls are listed in
 [the section](./tier-1.md#the-owners-walks-and-decisions-by-step), each tied to its step.
+
+*2026-11-17:* P25 slice 1's library code half in `next/` is proved at code head
+`0e2bd3a9708a8f2e9746f9933646fcb865262c88` in [PR1099](https://github.com/kamp-us/tea-fabrika/pull/1099).
+[Ordinary CI](https://github.com/kamp-us/tea-fabrika/actions/runs/44154987776) passed compiler,
+lint and selected tests. [Full GitHub proof](https://github.com/kamp-us/tea-fabrika/actions/runs/44155042561)
+matched all 544 source files: 6,014 ordinary passes, one expected failure and nine documented skips.
+All 19 layer checks passed; the actual T5 import faults and restoration are recorded. Fresh
+independent review returned merge-ready for this code half, with two nonblocking findings.
+The lead records those findings and updates these docs without changing code. Normal CI and the
+same reviewer's documentation recheck govern this follow-up. The existing gateway audit decoder
+needs follow-through before later gateway integration. Ticket 905's schema gaps, the real agent
+experiment and slices 2 to 4 remain open. Tickets 888 and 328 stay open; no Tier 1 row is finished.
 
 *2026-11-15:* P39's slice 4a, the hands client, is built in `next/` as draft
 [PR 1315](https://github.com/kamp-us/tea-fabrika/pull/1315), waiting for the owner's look: the

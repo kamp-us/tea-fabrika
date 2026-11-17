@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-17-p25-documentation-follow-through",
+  "date": "2026-11-17",
+  "by": "review",
+  "model": null,
+  "rule": "doc_drift",
+  "location": {
+    "path": "docs/plan/tier-1-detail.md",
+    "line": 448
+  },
+  "says": "In next/, the lead's remaining documentation work has not caught up with the recovered library half and completed proof.",
+  "proof": "The approved recovery plan assigns tier-1-detail.md and glossary work at lines137-138. Both files have no change against fbb7a36c; tier-1-detail.md:475 still describes the bridge entry without the library-half boundary, and TERMS.md has no MCP tool definition. README.md:155 and the P25 row still say T5/full proof are missing, despite exact-head successful run44155042561 and the committed current T5 row. The current PR description likewise retains the earlier missing-proof status.",
+  "cost": "Readers must reconstruct the shipped boundary and current evidence from several places. The lead still owes the scoped tool definition, detail-page boundary and dated proof/status update; bridge and process.query remain later-slice terms.",
+  "head": "0e2bd3a9708a8f2e9746f9933646fcb865262c88",
+  "ticket": "kamp-us/tea-fabrika#888",
+  "pr": "kamp-us/tea-fabrika#1099"
+}
