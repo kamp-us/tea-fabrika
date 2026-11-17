@@ -27,7 +27,7 @@ const write = (key: string, value: string | undefined): void => {
  * function that puts every saved one back, deleting one that was unset. A key in `kept` is one the
  * code under test sets, such as `ALCHEMY_HOME`, which `localInstance` writes.
  */
-export const changeEnv = (values: Readonly<Record<string, string>>, kept: ReadonlyArray<string> = []) =>
+const changeEnv = (values: Readonly<Record<string, string>>, kept: ReadonlyArray<string> = []) =>
   Effect.gen(function* () {
     const saved = yield* Effect.forEach(
       [...Object.keys(values), ...kept],
