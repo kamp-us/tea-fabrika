@@ -1,0 +1,39 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-leakgrep-patch-blob-quotes-tests-commit",
+  "ticket": "leakgrep",
+  "pr": null,
+  "started": "2026-11-16T01:57:15-08:00",
+  "ended": "2026-11-16T02:06:11-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step, sent back to commit the build's fix for the leakgrep-patch-blob-quotes slice, today's lead tooling. exam-paths.json lists .agents/skills/lead/scripts/leakgrep.sh as an exam path, so stepcommit.sh refused it to the build. This step put the build's finished leakgrep.sh on the branch unchanged (byte for byte the same as the build's uncommitted file: 25 lines added, 8 removed), with no change to any law: in --commits mode an added line of a pnpm patch under patches/ is quoted only when the patch file as that commit holds it has the same line inside one of its hunks at the same line number, read with git cat-file blob.",
+  "laws": [
+    {
+      "law": ".agents/skills/lead/scripts/leakgrep.patches.test.ts: an em dash a commit adds inside a patches/ file's hunk passes when git's hunk starts mid-hunk",
+      "red": "red at 9863ba719 (leak em_dash), green with the build's fix"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/leakgrep.patches.test.ts: an em dash a commit adds inside a patches/ file's hunk passes when the commit renumbers its @@ line",
+      "red": "red at 9863ba719 (leak em_dash), green with the build's fix"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/leakgrep.patches.test.ts: an em dash a commit adds inside a patches/ file's hunk passes when the commit removes its @@ line",
+      "red": "red at 9863ba719 (leak em_dash), green with the build's fix"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/leakgrep.patches.test.ts: the fifteen fail-closed guards of the commits describe",
+      "red": "green before and after the build's fix"
+    }
+  ],
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 9,
+  "note": "No new law and no plant in this round: the laws and their plants are the tests round at 9863ba719. The five leakgrep test files ran 97 passed of 97. The other tests that read leakgrep.sh (next/apps/fabrika/src/exam/commits.test.ts, .agents/skills/plan/scripts/plancheck.draft.test.ts, .agents/skills/lead/scripts/skillscheck.test.ts, .agents/skills/lead/scripts/pr/Arm.test.ts, .agents/skills/lead/scripts/pr/Merge.test.ts, .agents/skills/lead/scripts/botpush.test.ts, .agents/skills/step-commit/scripts/stepcommit.test.ts) ran 113 passed of 113. pnpm format changed nothing else; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 passed all 18 parts; the list ratchet exits 0. No typecheck: no TypeScript changed.",
+  "step": "tests"
+}
