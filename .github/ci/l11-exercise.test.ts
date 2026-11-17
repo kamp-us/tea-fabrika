@@ -1389,120 +1389,119 @@ const SpanInput = Schema.Struct({
   word: Word,
 });
 
-const verifySpan = ({ name, encoding, kind, word }: typeof SpanInput.Type) =>
-  Effect.gen(function* () {
-    // Plant: record encoding2 without reading the selected span attribute, or accept another field's evidence.
-    // Pinned: the 9cb audit found all three span cases permanently incomplete; each keeps a positive control.
-    // Only the fixed observation helper runs, with memory-only SpanRow/TestRunner stand-ins. The protected law never runs.
+const verifySpan = Effect.fnUntraced(function* ({ name, encoding, kind, word }: typeof SpanInput.Type) {
+  // Plant: record encoding2 without reading the selected span attribute, or accept another field's evidence.
+  // Pinned: the 9cb audit found all three span cases permanently incomplete; each keeps a positive control.
+  // Only the fixed observation helper runs, with memory-only SpanRow/TestRunner stand-ins. The protected law never runs.
 
-    const request = Cases.Request.make({ case: name, sha: Cases.cached });
-    const field = name === "l11-span-name" ? "name" : name === "l11-span-code" ? "code" : "errcode";
-    const key = field === "name" ? "error.type" : "fab.ledger.code";
-    const secret = `private-${word}\n/%☃`;
-    const marker = [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)][encoding]!;
-    const observe = spanHelper(request);
-    const raw = testReport(request, true);
+  const request = Cases.Request.make({ case: name, sha: Cases.cached });
+  const field = name === "l11-span-name" ? "name" : name === "l11-span-code" ? "code" : "errcode";
+  const key = field === "name" ? "error.type" : "fab.ledger.code";
+  const secret = `private-${word}\n/%☃`;
+  const marker = [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)][encoding]!;
+  const observe = spanHelper(request);
+  const raw = testReport(request, true);
 
-    for (const assertion of raw.testResults[0]!.assertionResults) {
-      const path = Cases.paths.find((path) => assertion.fullName === Cases.sibling(path, "span"));
-      const metadata = {};
-      const recorded = [[{ span: { attributes: { [kind === "other_attribute" ? "message" : key]: marker } } }]];
-      observe(
-        recorded,
-        secret,
-        marker,
-        encoding,
-        path ?? "fresh",
-        path === undefined ? 0 : null,
-        Schema,
-        Result,
-        Schema.Struct({ attributes: Schema.Record(Schema.String, Schema.Unknown) }),
-        { getCurrentTest: () => ({ meta: metadata }) },
-        Attribution,
-      );
+  for (const assertion of raw.testResults[0]!.assertionResults) {
+    const path = Cases.paths.find((path) => assertion.fullName === Cases.sibling(path, "span"));
+    const metadata = {};
+    const recorded = [[{ span: { attributes: { [kind === "other_attribute" ? "message" : key]: marker } } }]];
+    observe(
+      recorded,
+      secret,
+      marker,
+      encoding,
+      path ?? "fresh",
+      path === undefined ? 0 : null,
+      Schema,
+      Result,
+      Schema.Struct({ attributes: Schema.Record(Schema.String, Schema.Unknown) }),
+      { getCurrentTest: () => ({ meta: metadata }) },
+      Attribution,
+    );
 
-      const error = Result.try(() =>
-        fc.assert(
-          fc.property(fc.constant(null), () => {
-            expect.hasAssertions();
+    const error = Result.try(() =>
+      fc.assert(
+        fc.property(fc.constant(null), () => {
+          expect.hasAssertions();
 
-            if (kind === "early") {
-              assert(false, "L11: storage failure is an RPC rejection");
-            }
+          if (kind === "early") {
+            assert(false, "L11: storage failure is an RPC rejection");
+          }
 
-            if (path === undefined) {
-              expect(
-                ["fresh/0 SELECT 1 -> span"],
-                "L11: 1 storage operations were cut; storage text or metadata reached these outputs",
-              ).toEqual([]);
-            } else {
-              assert(false, `L11: ${path} leaked storage text or metadata into span`);
-            }
-          }),
-          { numRuns: 1, endOnFailure: true },
-        ),
-      );
+          if (path === undefined) {
+            expect(
+              ["fresh/0 SELECT 1 -> span"],
+              "L11: 1 storage operations were cut; storage text or metadata reached these outputs",
+            ).toEqual([]);
+          } else {
+            assert(false, `L11: ${path} leaked storage text or metadata into span`);
+          }
+        }),
+        { numRuns: 1, endOnFailure: true },
+      ),
+    );
 
-      if (Result.isSuccess(error)) {
-        return yield* Effect.die(new Error("missing final assertion"));
-      }
-
-      new L11Reporter().onTestCaseResult({
-        fullName: Cases.collection.find((row) => row.reporter === assertion.fullName)!.name,
-        meta: () => metadata,
-        result: () => ({ state: "failed", errors: [error.failure] }),
-      });
-
-      if (kind === "foreign") {
-        Object.assign(metadata, {
-          l11: [
-            {
-              field: field === "name" ? "code" : "name",
-              path: path ?? "fresh",
-              operation: path === undefined ? 0 : null,
-              encoding: 2,
-            },
-          ],
-        });
-      }
-
-      Object.assign(assertion, { meta: metadata });
-      expect(JSON.stringify(metadata)).not.toContain(word);
+    if (Result.isSuccess(error)) {
+      return yield* Effect.die(new Error("missing final assertion"));
     }
 
-    const mock = standin(request);
-
-    const io = Exercise.Executor.of({
-      ...mock.io,
-      test: (variant, phase) =>
-        phase === "broken"
-          ? Effect.succeed({
-              exit: 1,
-              started: stamp,
-              ended: stamp,
-              elapsed: 1,
-              stdout: "",
-              stderr: "",
-              report: JSON.parse(JSON.stringify(raw)),
-            })
-          : mock.io.test(variant, phase),
+    new L11Reporter().onTestCaseResult({
+      fullName: Cases.collection.find((row) => row.reporter === assertion.fullName)!.name,
+      meta: () => metadata,
+      result: () => ({ state: "failed", errors: [error.failure] }),
     });
 
-    const result = yield* run(request, Exercise.Internal.cases.output.make({}), identity("output"), io);
-    const supported = kind === "match" && encoding !== 0 && (field === "name" || encoding === 2);
-    expect(result.result._tag).toBe(supported ? "observed" : "incomplete");
-    expect(result.tests.map((test) => test.phase)).toEqual(["baseline", "broken", "restored"]);
-    expect(result.targets).toHaveLength(5);
-    expect(JSON.stringify(result)).not.toContain(word);
-
-    if (supported) {
-      expect(
-        result.targets.every(
-          (target) => target.observations.every((fact) => fact.field === field) && target.encodings.includes(encoding),
-        ),
-      ).toBe(true);
+    if (kind === "foreign") {
+      Object.assign(metadata, {
+        l11: [
+          {
+            field: field === "name" ? "code" : "name",
+            path: path ?? "fresh",
+            operation: path === undefined ? 0 : null,
+            encoding: 2,
+          },
+        ],
+      });
     }
+
+    Object.assign(assertion, { meta: metadata });
+    expect(JSON.stringify(metadata)).not.toContain(word);
+  }
+
+  const mock = standin(request);
+
+  const io = Exercise.Executor.of({
+    ...mock.io,
+    test: (variant, phase) =>
+      phase === "broken"
+        ? Effect.succeed({
+            exit: 1,
+            started: stamp,
+            ended: stamp,
+            elapsed: 1,
+            stdout: "",
+            stderr: "",
+            report: JSON.parse(JSON.stringify(raw)),
+          })
+        : mock.io.test(variant, phase),
   });
+
+  const result = yield* run(request, Exercise.Internal.cases.output.make({}), identity("output"), io);
+  const supported = kind === "match" && encoding !== 0 && (field === "name" || encoding === 2);
+  expect(result.result._tag).toBe(supported ? "observed" : "incomplete");
+  expect(result.tests.map((test) => test.phase)).toEqual(["baseline", "broken", "restored"]);
+  expect(result.targets).toHaveLength(5);
+  expect(JSON.stringify(result)).not.toContain(word);
+
+  if (supported) {
+    expect(
+      result.targets.every(
+        (target) => target.observations.every((fact) => fact.field === field) && target.encodings.includes(encoding),
+      ),
+    ).toBe(true);
+  }
+});
 
 it.effect.prop(
   "[secrets] span evidence requires the actual selected attribute, encoding and final assertion",
