@@ -289,25 +289,17 @@
               "namespaceImportPackages": ["effect"],
               "diagnosticSeverity": { "preferNamespaceImport": "error" }
             }
-          }
-        ]
-      }
-    ],
-    "types": ["node", "@cloudflare/workers-types"],
-    // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
-    "erasableSyntaxOnly": true,
-    "plugins": [
-      {
-        "name": "@effect/language-service",
-        // E54: a `new Promise` is an Effect here. At zero in the whole package, tests too.
-        "overrides": [
+          },
           {
             "include": ["src/**/*.ts", "src/**/*.tsx"],
             "options": { "diagnosticSeverity": { "newPromise": "error" } }
           }
         ]
       }
-    ]
+    ],
+    "types": ["node", "@cloudflare/workers-types"],
+    // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
+    "erasableSyntaxOnly": true
   },
   "include": ["src"]
 }

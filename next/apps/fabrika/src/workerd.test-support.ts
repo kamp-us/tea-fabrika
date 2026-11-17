@@ -5,13 +5,9 @@
 import { deserialize } from "node:v8";
 import { NodeServices } from "@effect/platform-node";
 import { Activity } from "@kampus/libfabrika/processes/Process";
-import { Array as Arr, String as Str } from "effect";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
+import { Array as Arr, String as Str, Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
+
 import { instanceDatabase } from "./instance-database.test-support.ts";
 
 const processes = Effect.gen(function* () {

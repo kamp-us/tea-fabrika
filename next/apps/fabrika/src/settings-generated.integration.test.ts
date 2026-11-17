@@ -21,12 +21,6 @@ import * as Reference from "@kampus/libfabrika/settings/Reference";
 import * as Setting from "@kampus/libfabrika/settings/Setting";
 import { Array as Arr, String as Str, Effect, FileSystem, Option, Path, Result, Schema, Record as Rec } from "effect";
 
-
-
-
-
-
-
 import * as fc from "fast-check";
 import { plant } from "./exam/plant.ts";
 
@@ -270,10 +264,9 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
           fc.pre(planted.length > 0);
 
           const result = await plant(
-            Object.fromEntries(
+            Rec.fromEntries(
               Arr.map(planted, (p) => [p.file, `import * as T from "${p.spec}";\n\nexport const t = T;\n`]),
             ),
-            Rec.fromEntries(planted.map((p) => [p.file, `import * as T from "${p.spec}";\n\nexport const t = T;\n`])),
           );
 
           for (const p of planted) {

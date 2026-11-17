@@ -8,13 +8,14 @@ import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
+
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -217,7 +218,7 @@ const service = Effect.fnUntraced(function* (
   const lower = failure === undefined ? undefined : LedgerError.make({ reason: failure.reason, cause: failure.cause });
 
   const affected =
-    failure !== undefined && pipe(failure.part, Str.startsWith("inbox")) ? inbox(name) : `processes/${name}`;
+    failure !== undefined && Function.pipe(failure.part, Str.startsWith("inbox")) ? inbox(name) : `processes/${name}`;
 
   const controlled: Ledger["Service"] = {
     ...ledger,
@@ -229,7 +230,7 @@ const service = Effect.fnUntraced(function* (
           lower !== undefined &&
           stream === affected &&
           failure !== undefined &&
-          pipe(failure.part, Str.endsWith("wait"))
+          Function.pipe(failure.part, Str.endsWith("wait"))
         ) {
           return yield* lower;
         }
@@ -256,7 +257,7 @@ const service = Effect.fnUntraced(function* (
       lower !== undefined &&
       stream === affected &&
       failure !== undefined &&
-      pipe(failure.part, Str.endsWith("read")) === true
+      Function.pipe(failure.part, Str.endsWith("read")) === true
         ? ledger.read(stream, after).pipe(Stream.take(1), Stream.concat(Stream.fail(lower)))
         : ledger.read(stream, after),
   };

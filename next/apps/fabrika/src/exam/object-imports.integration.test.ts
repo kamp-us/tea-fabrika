@@ -1,9 +1,7 @@
 // T502 PR 2, next/. The installed no-restricted-imports rule handles this shape.
 import { it, expect } from "@effect/vitest";
-import { Array as Arr } from "effect";
-import * as Effect from "effect/Effect";
-import * as Formatter from "effect/Formatter";
-import * as Schema from "effect/Schema";
+import { Array as Arr, Effect, Formatter, Schema } from "effect";
+
 import { plant } from "./plant.ts";
 
 it.effect.prop(

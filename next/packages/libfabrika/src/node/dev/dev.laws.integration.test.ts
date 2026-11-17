@@ -17,7 +17,7 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -26,6 +26,7 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
+
 import * as fc from "fast-check";
 import { expect, it, type Mock, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
@@ -436,7 +437,7 @@ const between = (minimum: number, maximum: number) => Schema.Int.check(Schema.is
 const install: Install = {
   id: "install-1",
   program: "p/replace",
-  hash: pipe("a", Str.repeat(64)),
+  hash: Function.pipe("a", Str.repeat(64)),
   source: "",
   from: "watch",
 };

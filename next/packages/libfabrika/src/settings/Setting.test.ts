@@ -16,8 +16,8 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
 
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";

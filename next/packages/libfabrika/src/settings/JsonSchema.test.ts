@@ -18,15 +18,14 @@
 //   with trusted patterns, never a validator of ours.
 import { describe, expect, it } from "@effect/vitest";
 import * as ByteSize from "effect/ByteSize";
-import * as EffectJsonSchema from "effect/JsonSchema";
 import * as Exit from "effect/Exit";
+import * as EffectJsonSchema from "effect/JsonSchema";
 import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import * as SchemaRepresentation from "effect/SchemaRepresentation";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
-
 
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";

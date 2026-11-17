@@ -1130,14 +1130,12 @@ describe("T518 shared Id generator", () => {
       { ...options, numRuns: 40 },
     ));
   it.live("pinned: T518 review 5 P1, four fibers reseed the same millisecond after a scheduler yield", () =>
-    Effect.gen(function* () {
-      yield* promised(() =>
-        checkSchedule({
-          type: "process",
-          entropy: 0,
-          batches: [{ at: 1000, work: [2035, 2035, 2035, 2035] }],
-        }),
-      );
-    }),
+    promised(() =>
+      checkSchedule({
+        type: "process",
+        entropy: 0,
+        batches: [{ at: 1000, work: [2035, 2035, 2035, 2035] }],
+      }),
+    ),
   );
 });

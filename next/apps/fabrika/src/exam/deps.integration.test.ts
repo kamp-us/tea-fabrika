@@ -18,11 +18,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
-import * as Effect from "effect/Effect";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
+import { String as Str, pipe, Array as Arr, Record as Rec, Effect, Formatter, Option, Schema } from "effect";
+
 import fc from "fast-check";
 import { rolldown, type Plugin, type RolldownBuild } from "rolldown";
 

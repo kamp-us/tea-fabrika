@@ -8,22 +8,12 @@ import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
-
-
-
-
-
-
-
-
-
-
 
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";

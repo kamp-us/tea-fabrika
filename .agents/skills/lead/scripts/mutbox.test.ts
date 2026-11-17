@@ -5,21 +5,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import {
-  Array as Arr,
   String as Str,
   pipe,
+  Option,
+  Array as Arr,
   Clock,
   DateTime,
   Effect,
   Exit,
   Fiber,
   Layer,
-  Option,
   Record as Rec,
   Schedule,
   Stream,
 } from "effect";
 import { TestClock } from "effect/testing";
+
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 import packageJson from "../../../../package.json" with { type: "json" };
@@ -64,7 +65,7 @@ const made: string[] = [];
 
 /** The first `docker <verb>` call a run made; a run that made none fails the law here. */
 const firstCall = (calls: ReadonlyArray<string>, verb: string) =>
-  Option.getOrThrow(Arr.findFirst(calls, (c) => c.startsWith(`${verb} `)));
+  Option.getOrThrow(Arr.findFirst(calls, (c) => pipe(c, Str.startsWith(`${verb} `))));
 
 afterAll(() => {
   for (const dir of made) {

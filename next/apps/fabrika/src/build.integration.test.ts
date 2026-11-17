@@ -20,11 +20,6 @@ import { runsFor } from "@kampus/vitest";
 import { Array as Arr, String as Str, Effect, FileSystem, Layer, PlatformError, Record as Rec } from "effect";
 import type { Path } from "effect";
 
-
-
-
-
-
 import * as fc from "fast-check";
 import { rolldown } from "rolldown";
 import { afterEach, describe, expect, it } from "vitest";

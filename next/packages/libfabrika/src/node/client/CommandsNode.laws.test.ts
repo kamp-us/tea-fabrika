@@ -25,12 +25,13 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { Commands } from "../../client/Commands.ts";
 import { Command, type Result } from "../../tasks/Task.ts";
@@ -90,7 +91,7 @@ const expected = (child: Child): Result => {
   return {
     _tag: "exited",
     code: child.code,
-    version: pipe(text, Str.endsWith("\n")) ? pipe(text, Str.slice(0, -1)) : text,
+    version: Function.pipe(text, Str.endsWith("\n")) ? Function.pipe(text, Str.slice(0, -1)) : text,
   };
 };
 
@@ -161,7 +162,7 @@ const ChildArb: fc.Arbitrary<Child> = fc
   })
   .map((g): Child => {
     // No byte order mark: the plan does not say whether a leading one stays in `version`.
-    let out = encoder.encode(pipe(g.text, Str.replaceAll("﻿", ""), Str.repeat(g.repeat)) + g.ending);
+    let out = encoder.encode(Function.pipe(g.text, Str.replaceAll("﻿", ""), Str.repeat(g.repeat)) + g.ending);
 
     if (g.broken !== null) {
       // 0xFF is never a byte of UTF-8, wherever it stands.
@@ -324,7 +325,7 @@ describe("P39 slice 4b: the real command layer", () => {
 
             for (const form of forms) {
               expect(
-                pipe(text, Str.includes(form)),
+                Function.pipe(text, Str.includes(form)),
                 "C2: [secrets] the planted value reaches the child in no form",
               ).toBe(false);
             }

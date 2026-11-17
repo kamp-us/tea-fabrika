@@ -10,9 +10,8 @@
 // `vitest list --project next` no longer lists them.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
+import { String as Str, pipe, Array as Arr, Record as Rec, Option, Schema } from "effect";
+
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 

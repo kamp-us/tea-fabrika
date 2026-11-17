@@ -4,9 +4,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { String as Str, pipe, Array as Arr } from "effect";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
+import { String as Str, pipe, Array as Arr, Option, Schema } from "effect";
+
 import fc from "fast-check";
 import { type Row, rowsAt } from "./rows.ts";
 

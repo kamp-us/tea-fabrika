@@ -18,12 +18,10 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
-
-
 
 import * as fc from "fast-check";
 import { vi } from "vitest";

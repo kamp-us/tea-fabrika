@@ -27,13 +27,14 @@ import * as Arr from "effect/Array";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
+
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { fcTypeId } from "../tasks/TasksTest.ts";
@@ -67,7 +68,7 @@ const identity = (() => {
 
   return {
     fingerprint: KEY,
-    raw: pipe(
+    raw: Function.pipe(
       btoa(String.fromCharCode(...raw)),
       Str.replaceAll("+", "-"),
       Str.replaceAll("/", "_"),

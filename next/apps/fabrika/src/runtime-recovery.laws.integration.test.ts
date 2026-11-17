@@ -36,7 +36,6 @@ import {
 import { runsFor } from "@kampus/vitest";
 import { DateTime, Effect, Exit, Schema, String as Str, Duration, Fiber, Record as Rec } from "effect";
 
-
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -557,7 +556,11 @@ const world = (
 
     const fire = (tries: number) => {
       entry.timer = Effect.runFork(
-        Effect.sleep(Duration.millis(tries === 0 ? Math.max(0, (entry.alarm ?? 0) - DateTime.toEpochMillis(DateTime.nowUnsafe())) : 100)).pipe(
+        Effect.sleep(
+          Duration.millis(
+            tries === 0 ? Math.max(0, (entry.alarm ?? 0) - DateTime.toEpochMillis(DateTime.nowUnsafe())) : 100,
+          ),
+        ).pipe(
           Effect.andThen(
             Effect.sync(() => {
               entry.alarm = null;

@@ -5,10 +5,9 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { it } from "@effect/vitest";
-import { String as Str, Array as Arr } from "effect";
-import * as Effect from "effect/Effect";
+import { String as Str, Array as Arr, Effect, Option } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
-import * as Option from "effect/Option";
+
 import { chromium, type Browser, type Page } from "playwright";
 import { afterEach, describe, expect } from "vitest";
 import { heldPort } from "../src/port.test-support.ts";

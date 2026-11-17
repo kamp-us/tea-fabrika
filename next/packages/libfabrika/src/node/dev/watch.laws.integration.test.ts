@@ -1,4 +1,3 @@
-import { NodeServices } from "@effect/platform-node";
 // P15 slice 1, next/. The watcher: laws L10 and L18 of the approved plan, through the real Rolldown
 // watcher and the real program build on fixture programs in a temp folder. Only the brain is a
 // double here: `install` and `failed` record what the watcher sent and answer as the brain would.
@@ -14,6 +13,8 @@ import { NodeServices } from "@effect/platform-node";
 //
 // These start real file watchers. A sandbox that refuses file events (macOS without FSEvents in a
 // box) builds once and never sees a save: L10 and L18's save-driven runs then wait for the lead.
+import { NodeServices } from "@effect/platform-node";
+
 import { it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Arr from "effect/Array";
@@ -22,7 +23,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as Path from "effect/Path";
@@ -32,6 +33,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import { assert, describe, expect, vi } from "vitest";
 import { expectTypeOf } from "vitest";
@@ -387,10 +389,13 @@ describe("P15 slice 1: the watcher", () => {
                       for (const forbidden of [sentinel, home]) {
                         for (const form of [
                           forbidden,
-                          pipe(Formatter.formatJson(forbidden), Str.slice(1, -1)),
+                          Function.pipe(Formatter.formatJson(forbidden), Str.slice(1, -1)),
                           encodeURIComponent(forbidden),
                         ]) {
-                          expect(pipe(output, Str.includes(form)), "a rebuild output copied private input").toBe(false);
+                          expect(
+                            Function.pipe(output, Str.includes(form)),
+                            "a rebuild output copied private input",
+                          ).toBe(false);
                         }
                       }
                     }
@@ -578,7 +583,7 @@ describe("P15 slice 1: the watcher", () => {
                         Formatter.formatJson(failures),
                       ]) {
                         for (const forbidden of [sentinel, home]) {
-                          expect(pipe(output, Str.includes(forbidden))).toBe(false);
+                          expect(Function.pipe(output, Str.includes(forbidden))).toBe(false);
                         }
                       }
 
@@ -646,9 +651,9 @@ describe("P15 slice 1: the watcher", () => {
                       const value = (values.get(file) ?? 0) + g(fc.integer, { min: 1, max: 99 });
                       values.set(file, value);
 
-                      const name = pipe(file, Str.endsWith("shared.ts"))
+                      const name = Function.pipe(file, Str.endsWith("shared.ts"))
                         ? "shared"
-                        : pipe(file, Str.endsWith("unused.ts"))
+                        : Function.pipe(file, Str.endsWith("unused.ts"))
                           ? "unused"
                           : "own";
 

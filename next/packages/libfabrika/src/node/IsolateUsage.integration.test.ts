@@ -11,7 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -21,6 +21,7 @@ import * as ScopedRef from "effect/ScopedRef";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
+
 import * as fc from "fast-check";
 import { ProcessReplies } from "../cloudflare/bindings.ts";
 import { workerLoader } from "../cloudflare/index.ts";
@@ -87,7 +88,7 @@ const START = StartsTest.fixture(
     build: CODE.hash,
   },
   (algorithm, data) =>
-    createHash(pipe(algorithm.name, Str.replaceAll("-", ""), Str.toLowerCase))
+    createHash(Function.pipe(algorithm.name, Str.replaceAll("-", ""), Str.toLowerCase))
       .update(data)
       .digest(),
 );
@@ -518,7 +519,7 @@ it.effect(
                   recipient: Recipient.cases.client.make({ client: "test", session: PID }),
                   by: FROM.by,
                 },
-                Effect.sync(() => `process_0000000000e00800${pipe(String(++next), Str.padStart(10, "0"))}`),
+                Effect.sync(() => `process_0000000000e00800${Function.pipe(String(++next), Str.padStart(10, "0"))}`),
               ).pipe(Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data)))),
             );
 
@@ -644,7 +645,11 @@ it.effect(
             for (const load of seen) {
               expect(load.tails).toHaveLength(1);
               expect(Arr.map(load.tails ?? [], (tail) => bound.get(tail))).toEqual([
-                { project: "project-test", name: NAME, process: pipe(load.key, Str.slice(`${CODE.hash}/`.length)) },
+                {
+                  project: "project-test",
+                  name: NAME,
+                  process: Function.pipe(load.key, Str.slice(`${CODE.hash}/`.length)),
+                },
               ]);
             }
 
@@ -728,7 +733,7 @@ it.effect(
             expect(bootstrap.length).toBeGreaterThan(0);
 
             for (const load of bootstrap) {
-              expect(pipe(load.key, Str.startsWith(`${CODE.hash}/project:`))).toBe(true);
+              expect(Function.pipe(load.key, Str.startsWith(`${CODE.hash}/project:`))).toBe(true);
               expect(load.tails).toBeUndefined();
             }
 
@@ -740,7 +745,7 @@ it.effect(
                   recipient: Recipient.cases.client.make({ client: "starter", session: PID }),
                   by: "brain:project-test",
                 },
-                Effect.sync(() => `process_0000000000e00800${pipe(String(++next), Str.padStart(10, "0"))}`),
+                Effect.sync(() => `process_0000000000e00800${Function.pipe(String(++next), Str.padStart(10, "0"))}`),
               ).pipe(Layer.provide(LedgerTransactionSql.layer(projectStore.sql).pipe(Layer.provide(quiet)))),
             );
 
@@ -793,7 +798,7 @@ it.effect(
             const restoredLoads = seen.slice(beforeRestore);
 
             const bootstrapLoads = Arr.filter(restoredLoads, (load) =>
-              pipe(load.key, Str.startsWith(`${CODE.hash}/project:`)),
+              Function.pipe(load.key, Str.startsWith(`${CODE.hash}/project:`)),
             );
 
             expect(bootstrapLoads).toHaveLength(1);
@@ -801,7 +806,7 @@ it.effect(
 
             const programLoads = Arr.filter(
               restoredLoads,
-              (load) => !pipe(load.key, Str.startsWith(`${CODE.hash}/project:`)),
+              (load) => !Function.pipe(load.key, Str.startsWith(`${CODE.hash}/project:`)),
             );
 
             expect(Arr.map(programLoads, (load) => load.key).sort()).toEqual(

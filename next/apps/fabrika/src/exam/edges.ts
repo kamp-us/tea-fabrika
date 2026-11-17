@@ -16,17 +16,22 @@
 // It exits 2 when it could not read something. The answer comes back by hand for now: the lead agent
 // relays each line to the owner and posts the answer on the pull request (P35, flag 2).
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { String as Str, pipe, Array as Arr } from "effect";
-import * as Config from "effect/Config";
-import * as Console from "effect/Console";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
+import {
+  String as Str,
+  pipe,
+  Array as Arr,
+  Config,
+  Console,
+  Effect,
+  Exit,
+  FileSystem,
+  Option,
+  Path,
+  Schema,
+  Stream,
+} from "effect";
 import { ChildProcess } from "effect/process";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
+
 import { parseSync } from "oxc-parser";
 
 /** One edge comment: where it stands, the rules it names, as written, and its reason. */

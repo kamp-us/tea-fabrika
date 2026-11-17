@@ -1,14 +1,15 @@
-import * as Arr from "effect/Array";
-import * as ByteSize from "effect/ByteSize";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import { pipe } from "effect/Function";
 // P39 slice 4b, next/: a file system in memory for the node client's merge-line laws (C1 to C3, K1,
 // K2), over Effect's own `FileSystem.layerNoop`. It keeps POSIX's facts the laws lean on: a mode
 // set only when a file is made, `wx` and `link` refuse a name that exists, a hard link shares its
 // file, `rename` replaces, and `stat` reports the type bits with the permission bits, as Node does.
 // Nothing here touches the disk. A call it does not model fails, as `layerNoop` makes it.
+
+import * as Arr from "effect/Array";
+import * as ByteSize from "effect/ByteSize";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
 import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
@@ -54,17 +55,16 @@ export const normal = (path: string): string => {
     }
   }
 
-  return `${pipe(path, Str.startsWith("/")) ? "/" : ""}${Arr.join(kept, "/")}`;
+  return `${Function.pipe(path, Str.startsWith("/")) ? "/" : ""}${Arr.join(kept, "/")}`;
 };
 
-const parent = (path: string): string => {
-  return pipe(
+const parent = (path: string): string =>
+  Function.pipe(
     path,
     Str.lastIndexOf("/"),
     Option.filter((at) => at > 0),
-    Option.match({ onNone: () => "/", onSome: (at) => pipe(path, Str.slice(0, at)) }),
+    Option.match({ onNone: () => "/", onSome: (at) => Function.pipe(path, Str.slice(0, at)) }),
   );
-};
 
 /** A new empty disk with the root and the folders given, each mode 0755. */
 export const disk = (folders: ReadonlyArray<string> = []): Disk => {
@@ -124,9 +124,9 @@ const concat = (a: Uint8Array, b: Uint8Array): Uint8Array => {
 
 const isWrite = (flag: FileSystem.OpenFlag): boolean => flag !== "r";
 
-const isExclusive = (flag: FileSystem.OpenFlag): boolean => pipe(flag, Str.includes("x"));
+const isExclusive = (flag: FileSystem.OpenFlag): boolean => Function.pipe(flag, Str.includes("x"));
 
-const isTruncate = (flag: FileSystem.OpenFlag): boolean => pipe(flag, Str.startsWith("w"));
+const isTruncate = (flag: FileSystem.OpenFlag): boolean => Function.pipe(flag, Str.startsWith("w"));
 
 /** Effect's `FileSystem` over the disk. Each call is recorded in `calls`. */
 export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
@@ -192,7 +192,7 @@ export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
         seen(method, path);
         const flag = options?.flag ?? "w";
         const file = yield* create(method, path, flag, options?.mode);
-        file.bytes = pipe(flag, Str.startsWith("a")) ? concat(file.bytes, data) : new Uint8Array(data);
+        file.bytes = Function.pipe(flag, Str.startsWith("a")) ? concat(file.bytes, data) : new Uint8Array(data);
         file.mtime = tick();
       });
 
@@ -250,7 +250,7 @@ export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
         return options?.force === true ? Effect.void : fail("NotFound", "remove", path);
       }
 
-      const below = Arr.filter([...d.entries.keys()], (k) => pipe(k, Str.startsWith(`${path}/`)));
+      const below = Arr.filter([...d.entries.keys()], (k) => Function.pipe(k, Str.startsWith(`${path}/`)));
 
       if (known.type === "Directory" && below.length > 0 && options?.recursive !== true) {
         return fail("Busy", "remove", path);
@@ -279,7 +279,7 @@ export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
       seen("open", path);
       const flag = options?.flag ?? "r";
       const file = yield* create("open", path, flag, options?.mode);
-      let position = pipe(flag, Str.startsWith("a")) ? BigInt(file.bytes.length) : 0n;
+      let position = Function.pipe(flag, Str.startsWith("a")) ? BigInt(file.bytes.length) : 0n;
       yield* Effect.addFinalizer(() => Effect.sync(() => seen("close", path)));
 
       const write = (buffer: Uint8Array) =>
@@ -421,9 +421,11 @@ export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
             Arr.filter(
               [...d.entries.keys()],
               (k) =>
-                pipe(k, Str.startsWith(prefix)) && k !== path && !pipe(k, Str.slice(prefix.length), Str.includes("/")),
+                Function.pipe(k, Str.startsWith(prefix)) &&
+                k !== path &&
+                !Function.pipe(k, Str.slice(prefix.length), Str.includes("/")),
             ),
-            (k) => pipe(k, Str.slice(prefix.length)),
+            (k) => Function.pipe(k, Str.slice(prefix.length)),
           ),
         );
       }),

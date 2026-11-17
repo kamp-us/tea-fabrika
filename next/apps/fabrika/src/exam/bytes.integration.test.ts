@@ -6,14 +6,20 @@ import { expect, it } from "@effect/vitest";
 import { build as buildOne, type Built } from "@kampus/libfabrika/build";
 import { bundle } from "@kampus/libfabrika/node/build";
 import { runsFor } from "@kampus/vitest";
-import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
-import * as Arbitrary from "effect/Arbitrary";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
+import {
+  String as Str,
+  pipe,
+  Array as Arr,
+  Record as Rec,
+  Arbitrary,
+  Effect,
+  FileSystem,
+  Formatter,
+  Option,
+  Path,
+  Schema,
+} from "effect";
+
 import * as fc from "fast-check";
 import type { Plugin, RolldownPluginOption } from "rolldown";
 import { vi } from "vitest";

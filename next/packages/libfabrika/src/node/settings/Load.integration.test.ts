@@ -19,13 +19,14 @@ import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
 import { SettingsError } from "../../settings/Files.ts";
@@ -289,7 +290,7 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
             expect(row.value).toBe(wanted);
             expect(row.origin._tag).toBe(v.override ? "flag" : v.personPresent ? "file" : "default");
             const report = Print.report(rows, { all: v.all });
-            expect(pipe(report, Str.includes(`${row.path} =`))).toBe(v.all || row.origin._tag !== "default");
+            expect(Function.pipe(report, Str.includes(`${row.path} =`))).toBe(v.all || row.origin._tag !== "default");
             expect(touched).toEqual([PERSON]);
           }
         }

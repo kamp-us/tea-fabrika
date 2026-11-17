@@ -9,13 +9,11 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
-import * as Str from "effect/String";
+import * as Effect from "effect/Effect";
 import * as Rec from "effect/Record";
-
-
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
@@ -87,9 +85,7 @@ describe("P16 checked built tables", () => {
       fc.asyncProperty(rows, routes, async (rows, assets) => {
         const raw: Built = {
           programs: Rec.fromEntries(Arr.map(rows, ({ name, source }) => [name, { hash: sha(source), source }])),
-          assets: Rec.fromEntries(
-            Arr.map(assets, ({ route, type, body }) => [route, { hash: sha(body), type, body }]),
-          ),
+          assets: Rec.fromEntries(Arr.map(assets, ({ route, type, body }) => [route, { hash: sha(body), type, body }])),
         };
 
         expect(await Effect.runPromise(api.decodeBuilt(raw))).toEqual(raw);

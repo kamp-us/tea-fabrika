@@ -22,7 +22,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { it } from "@effect/vitest";
-import { Array as Arr, Effect, pipe, Record as Rec, Schema } from "effect";
+import { Array as Arr, Effect, pipe, Record as Rec, Schema, Order, String as Str } from "effect";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -689,15 +689,17 @@ const inConfigCopy = (
 
 /** The lines of `file` that one rule's code refuses, in order. */
 const refusedIn = (diagnostics: Diagnostics, file: string, code: string): ReadonlyArray<number> =>
-  diagnostics
-    .filter((d) => d.filename === file && d.code === code)
-    .flatMap((d) => (d.labels[0] === undefined ? [] : [d.labels[0].span.line]))
-    .sort((a, b) => a - b);
+  pipe(
+    diagnostics,
+    Arr.filter((d) => d.filename === file && d.code === code),
+    Arr.flatMap((d) => (d.labels[0] === undefined ? [] : [d.labels[0].span.line])),
+    Arr.sort(Order.Number),
+  );
 
 /** A plant's text, and the lines its rule must refuse. */
 const textOf = (p: Plant) => ({
-  text: `${[...p.prelude, ...p.lines.map(([line]) => line)].join("\n")}\n`,
-  want: p.lines.flatMap(([, refused], i) => (refused ? [p.prelude.length + i + 1] : [])),
+  text: `${Arr.join([...p.prelude, ...Arr.map(p.lines, ([line]) => line)], "\n")}\n`,
+  want: Arr.flatMap(p.lines, ([, refused], i) => (refused ? [p.prelude.length + i + 1] : [])),
 });
 
 describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
@@ -708,14 +710,14 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
     inConfigCopy(({ printed, lint }) => {
       const globs = globsHolding(printed, isReflectGet);
       // Coverage: the tooling, a next/ folder where JSON.parse blocks and one where it still advises.
-      expect(globs.map(({ glob }) => glob)).toEqual(
+      expect(Arr.map(globs, ({ glob }) => glob)).toEqual(
         expect.arrayContaining([".agents/**", ".github/**", "oxlint-plugins/**"]),
       );
-      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "deny")).toBe(true);
-      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "warn")).toBe(true);
+      expect(Arr.some(globs, ({ glob, level }) => Str.startsWith("next/")(glob) && level === "deny")).toBe(true);
+      expect(Arr.some(globs, ({ glob, level }) => Str.startsWith("next/")(glob) && level === "warn")).toBe(true);
 
       const { text, want } = textOf(REFLECT);
-      const files = globs.map(({ glob }) => plantPath(glob));
+      const files = Arr.map(globs, ({ glob }) => plantPath(glob));
       expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
       const diagnostics = lint(text, files);
 
@@ -737,13 +739,13 @@ describe("the Data.TaggedError entry, which stands beside fabrika/no-data-tagged
     inConfigCopy(({ printed, lint }) => {
       const globs = globsHolding(printed, () => true);
       // Coverage: today's app, next/ where JSON.parse blocks and where it advises, and the tooling.
-      expect(globs.map(({ glob }) => glob)).toEqual(
+      expect(Arr.map(globs, ({ glob }) => glob)).toEqual(
         expect.arrayContaining(["apps/fabrika/e2e.ts", "next/**/*", ".agents/**", ".github/**", "oxlint-plugins/**"]),
       );
-      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "warn")).toBe(true);
+      expect(Arr.some(globs, ({ glob, level }) => Str.startsWith("next/")(glob) && level === "warn")).toBe(true);
 
       const files = [
-        ...new Set(globs.map(({ glob }) => plantPath(glob))),
+        ...new Set(Arr.map(globs, ({ glob }) => plantPath(glob))),
         // Under no block that sets the rule: the root rules hold these.
         "planted-tagged-error.ts",
         "scripts/planted-tagged-error.ts",

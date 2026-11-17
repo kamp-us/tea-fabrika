@@ -10,21 +10,18 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as ByteSize from "effect/ByteSize";
 import * as Cause from "effect/Cause";
+import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Rec from "effect/Record";
 import * as References from "effect/References";
 import * as Schema from "effect/Schema";
-import * as Tracer from "effect/Tracer";
-import * as Digest from "effect/crypto/Digest";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
 import * as TestConsole from "effect/testing/TestConsole";
-
-
-
+import * as Tracer from "effect/Tracer";
 
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";

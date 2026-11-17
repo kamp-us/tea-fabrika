@@ -4,11 +4,6 @@ import { it } from "@effect/vitest";
 import { Array as Arr, Config, Effect, FileSystem, Option, Path, Formatter } from "effect";
 import { Digest } from "effect/crypto";
 
-
-
-
-
-
 import { expect } from "vitest";
 import * as Host from "./node/P19Launchd.test-support.ts";
 

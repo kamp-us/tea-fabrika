@@ -18,15 +18,13 @@
 //   declaration refuses every key: Effect's empty `Schema.Struct({})` would accept any object.
 import { describe, expect, it } from "@effect/vitest";
 import * as ByteSize from "effect/ByteSize";
+import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
-import * as Schema from "effect/Schema";
-import * as Digest from "effect/crypto/Digest";
-import * as Str from "effect/String";
 import * as Rec from "effect/Record";
-
-
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";

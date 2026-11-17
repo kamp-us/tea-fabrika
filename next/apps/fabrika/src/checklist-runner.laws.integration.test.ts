@@ -20,7 +20,8 @@ import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Layer, Path, type Scope, Stream } from "effect";
+import { Effect, FileSystem, Layer, Path, Stream } from "effect";
+import type { Scope } from "effect";
 
 const NAME = "checklist:1";
 

@@ -1,4 +1,3 @@
-import { applyCell } from "@demlik/tea";
 // P18 slice 1, next/ (ticket 290): the window parent, moved from Tuval into the library with its
 // laws. P14 slice 2's laws (ticket 828: L8 connection, L9 records) keep every assertion (P18 L1); P18
 // adds L3 (each frame reaches one owner), L6 (a cut Model continues the same), L10 (the wire's
@@ -42,18 +41,21 @@ import { applyCell } from "@demlik/tea";
 // answer. The tiles are the checklist's tile shape (a draft and a submit that presses `add`), a second
 // generated tile machine, and a tile with none. Tuval may not import a program, so the checklist's own
 // tile is stepped through its registration in the checklist's laws (L22, L24).
+import { applyCell } from "@demlik/tea";
+
 import { Cmd as TeaCmd, Machine } from "@demlik/tea/effect";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as SchemaAST from "effect/SchemaAST";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace, NoProc, Recipient, signalId } from "../processes/Process.ts";
@@ -141,7 +143,7 @@ const REASONS = [
   "too_many",
   "Not A Word!",
   "has space",
-  pipe("x", Str.repeat(41)),
+  Function.pipe("x", Str.repeat(41)),
 ] as const;
 
 const isWord = (reason: string) => /^[a-z_]{1,40}$/.test(reason);
@@ -263,7 +265,14 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
     const d = s.link.dial;
     out.push(
       () => ({ type: "admitted", dial: d, ping: 30_000, ms: c.ms }),
-      () => ({ type: "not_granted", dial: d, fingerprint, code: pipe(c.word, Str.slice(0, 4)), until: c.ms, ms: c.ms }),
+      () => ({
+        type: "not_granted",
+        dial: d,
+        fingerprint,
+        code: Function.pipe(c.word, Str.slice(0, 4)),
+        until: c.ms,
+        ms: c.ms,
+      }),
     );
 
     // Favor admission enough to finish several letters before a generated drop.
@@ -380,7 +389,7 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
     if (own !== undefined) {
       out.push(...own);
     } else if (f.call._tag === "read") {
-      const name = pipe(String(f.call["stream"]), Str.replace(/^processes\//, ""));
+      const name = Function.pipe(String(f.call["stream"]), Str.replace(/^processes\//, ""));
       out.push(() => {
         const live = c.aux % 4 === 0 ? null : (w.pids.get(name) ?? `process_${name}_${c.word}`);
 
@@ -483,7 +492,7 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
         answer(
           {
             letter: `letter_${c.word}_${c.ms}`,
-            sentAt: `2026-11-11T00:00:00.${pipe(String(c.ms % 1000), Str.padStart(3, "0"))}Z`,
+            sentAt: `2026-11-11T00:00:00.${Function.pipe(String(c.ms % 1000), Str.padStart(3, "0"))}Z`,
           },
           { _tag: "clock" },
         ),
@@ -1118,7 +1127,7 @@ describe("L8: the window parent's connection", () => {
 
           for (const c of cmds) {
             const text = JSON.stringify(c);
-            const drafts = Arr.filter([...world.typed], (d) => d !== "" && pipe(text, Str.includes(d)));
+            const drafts = Arr.filter([...world.typed], (d) => d !== "" && Function.pipe(text, Str.includes(d)));
 
             const recorded = c.type === "record" ? drafts : [];
             const unsent = isWrite(c) ? Arr.filter(drafts, (d) => !world.submitted.has(d)) : [];
@@ -1468,7 +1477,7 @@ const goodAnswer = (
   const on = { id: f.id, dial: f.dial };
 
   if (f.call._tag === "read") {
-    const name = pipe(f.call.stream, Str.replace(/^processes\//, ""));
+    const name = Function.pipe(f.call.stream, Str.replace(/^processes\//, ""));
     const entries = [{ _tag: "started", by: "brain", body: { process: `process_${name}_${c.word}`, name }, rev: 1 }];
 
     return { result: { entries }, owner: { type: "read_ok", ...on, value: entries, ms: c.ms } };
@@ -2312,10 +2321,11 @@ const BRAIN_BY = "brain:p18";
 
 const PERSON_BY = "SHA256:person";
 
-const trusted = (by: unknown) => typeof by === "string" && (by === "brain" || pipe(by, Str.startsWith("brain:")));
+const trusted = (by: unknown) =>
+  typeof by === "string" && (by === "brain" || Function.pipe(by, Str.startsWith("brain:")));
 
 /** Real process ids, one per life the brain places, so a DOWN for one decodes as `Down`. */
-const processAt = (n: number) => `process_0000000000e00800${pipe(String(n), Str.padStart(10, "0"))}`;
+const processAt = (n: number) => `process_0000000000e00800${Function.pipe(String(n), Str.padStart(10, "0"))}`;
 
 const EXITS: ReadonlyArray<ExitReason> = [
   ExitReason.cases.normal.make({}),
@@ -2585,8 +2595,8 @@ const followAnswer =
     const all =
       stream === INBOX
         ? w.inbox
-        : pipe(stream, Str.startsWith("processes/"))
-          ? lifeFacts(w, pipe(stream, Str.slice(10)))
+        : Function.pipe(stream, Str.startsWith("processes/"))
+          ? lifeFacts(w, Function.pipe(stream, Str.slice(10)))
           : [];
 
     if (call._tag === "read") {
@@ -3638,10 +3648,10 @@ const deskMoves = (w: DeskWorld, c: DeskPick): ReadonlyArray<() => WindowMsg | n
     const on = { id: f.id, dial: f.dial };
     out.push(() => {
       if (f.call._tag === "read") {
-        const name = pipe(f.call.stream, Str.replace(/^processes\//, ""));
-        const process = pipe(name, Str.startsWith("tezgah:")) ? TEZGAH_PID : `process_of_${name}`;
+        const name = Function.pipe(f.call.stream, Str.replace(/^processes\//, ""));
+        const process = Function.pipe(name, Str.startsWith("tezgah:")) ? TEZGAH_PID : `process_of_${name}`;
         // A stream no process was ever started on reads as the brain sends it: no entries.
-        const none = pipe(name, Str.startsWith("tezgah:")) && !w.up;
+        const none = Function.pipe(name, Str.startsWith("tezgah:")) && !w.up;
 
         return {
           type: "read_ok",
@@ -3817,7 +3827,7 @@ describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () =>
 
           if (next.link._tag === "online" && prev.link._tag !== "online") {
             expect(
-              Arr.filter(reads(cmds), (r) => pipe(r, Str.startsWith("processes/tezgah:"))),
+              Arr.filter(reads(cmds), (r) => Function.pipe(r, Str.startsWith("processes/tezgah:"))),
               "L10: going online, the first time or after a redial, reads the admitted person's tezgah once",
             ).toHaveLength(1);
           }
@@ -3862,7 +3872,7 @@ describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () =>
             "L10: the given tiles stay",
           ).toEqual(Arr.map(GIVEN, (t) => [t.id, t.name]));
           expect(
-            Arr.filter(reads(cmds), (r) => pipe(r, Str.startsWith("processes/tezgah:"))),
+            Arr.filter(reads(cmds), (r) => Function.pipe(r, Str.startsWith("processes/tezgah:"))),
             "L10: no desk, no tezgah read",
           ).toEqual([]);
         });
@@ -3878,7 +3888,7 @@ describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () =>
 // started with no tezgah for the window's person; one of its moves has the brain start it later.
 describe("Desk R: a window whose person has no tezgah says so, and follows tezgah once it exists", () => {
   it("R2: a read that finds no tezgah takes the window's tezgah link to missing, with no tile and nothing opened; each redial reads processes/tezgah:<person> again, and once tezgah exists the window opens it and takes its tiles", () => {
-    const stream = `processes/tezgah:${pipe(DESK_PERSON, Str.slice("person_".length))}`;
+    const stream = `processes/tezgah:${Function.pipe(DESK_PERSON, Str.slice("person_".length))}`;
     const seen = { missing: 0, redialed: 0, followed: 0 };
     fc.assert(
       fc.property(arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }), (picks) => {
@@ -3910,7 +3920,7 @@ describe("Desk R: a window whose person has no tezgah says so, and follows tezga
             const online = next.link._tag === "online" && prev.link._tag !== "online";
             seen.redialed += online && wasMissing ? 1 : 0;
             expect(
-              online ? Arr.filter(reads(cmds), (r) => pipe(r, Str.startsWith("processes/tezgah:"))) : [stream],
+              online ? Arr.filter(reads(cmds), (r) => Function.pipe(r, Str.startsWith("processes/tezgah:"))) : [stream],
               "R2: each time the window goes online it reads its own person's tezgah once",
             ).toEqual([stream]);
 
@@ -4087,10 +4097,10 @@ const focusMoves = (
     const on = { id: f.id, dial: f.dial };
     out.push(() => {
       if (f.call._tag === "read") {
-        const name = pipe(f.call.stream, Str.replace(/^processes\//, ""));
-        const process = pipe(name, Str.startsWith("tezgah:")) ? TEZGAH_PID : `process_of_${name}`;
+        const name = Function.pipe(f.call.stream, Str.replace(/^processes\//, ""));
+        const process = Function.pipe(name, Str.startsWith("tezgah:")) ? TEZGAH_PID : `process_of_${name}`;
         const started = { _tag: "started", by: "brain", body: { process, name }, rev: 1 };
-        const ended = ends && !pipe(name, Str.startsWith("tezgah:")) && c.pick % 2 === 1;
+        const ended = ends && !Function.pipe(name, Str.startsWith("tezgah:")) && c.pick % 2 === 1;
         const reason = EXITS[c.pick % EXITS.length]!;
         send({
           type: "read_ok",

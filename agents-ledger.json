@@ -42,11 +42,6 @@
 		},
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-effect-run-outside-edge)",
-			"code": "Effect.runPromise("
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
 			"rule": "fabrika(no-hand-tag)",
 			"code": "_tag: \"RetriesExhausted\" as const,"
 		},
@@ -89,11 +84,6 @@
 			"file": ".agents/skills/lead/scripts/chain.ts",
 			"rule": "fabrika(no-of)",
 			"code": "const headsOf = () => {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-promises)",
-			"code": "Effect.runPromise("
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
@@ -179,11 +169,6 @@
 			"file": ".agents/skills/lead/scripts/quest.ts",
 			"rule": "fabrika(no-node-imports)",
 			"code": "import { dirname, matchesGlob } from \"node:path\";"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/quest.ts",
-			"rule": "fabrika(no-of)",
-			"code": "export const wipOf = (branch: string): string => `${branch.replace(/(-wip)+$/, \"\")}-wip`;"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/quest.ts",

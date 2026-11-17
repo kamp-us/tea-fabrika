@@ -13,20 +13,26 @@ import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { build } from "@kampus/libfabrika/build";
 import { runsFor } from "@kampus/vitest";
-import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
+import {
+  String as Str,
+  pipe,
+  Array as Arr,
+  Record as Rec,
+  Effect,
+  FileSystem,
+  Formatter,
+  Layer,
+  Option,
+  Path,
+  Schedule,
+  Schema,
+  Stream,
+} from "effect";
+import type { Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
-import * as Effect from "effect/Effect";
 import { Base64Url } from "effect/encoding";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
-import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
-import type * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
+
 import * as fc from "fast-check";
 import { chromium, type Page } from "playwright";
 import { describe, expect, vi } from "vitest";

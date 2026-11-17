@@ -34,12 +34,13 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
@@ -218,8 +219,8 @@ const drain = (world: World, i: number) => {
       const on = { id: flight.id, dial: flight.dial };
 
       if (flight.call._tag === "read") {
-        const name = pipe(flight.call.stream, Str.replace(/^processes\//, ""));
-        const process = pipe(name, Str.startsWith("tezgah:")) ? TEZGAH_PID : `process_of_${name}`;
+        const name = Function.pipe(flight.call.stream, Str.replace(/^processes\//, ""));
+        const process = Function.pipe(name, Str.startsWith("tezgah:")) ? TEZGAH_PID : `process_of_${name}`;
         step(world, i, {
           type: "read_ok",
           ...on,

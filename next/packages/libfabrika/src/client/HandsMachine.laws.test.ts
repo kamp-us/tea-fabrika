@@ -35,11 +35,12 @@
 import { applyCell, type Cmd } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { fcTypeId } from "../tasks/TasksTest.ts";
 import {
@@ -520,7 +521,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         weight: 1,
         run: () => {
           // The door took the call, and its answer never came back.
-          if (call !== undefined && pipe(call.method, Str.startsWith("tasks."))) {
+          if (call !== undefined && Function.pipe(call.method, Str.startsWith("tasks."))) {
             w.door.call(KEY, call.method, call.params);
           }
 
@@ -792,7 +793,9 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     // H4: a take refused for a reason that cannot change by itself, kept against the list's rev:
     // an idle (the list was behind), `ambiguous`, `not_allowed`, `lacks_capability`, or another
     // key's assignment.
-    const forgedLive = pipe(chosen.label, Str.startsWith("forge:")) && take !== undefined && take.id === live.call;
+    const forgedLive =
+      Function.pipe(chosen.label, Str.startsWith("forge:")) && take !== undefined && take.id === live.call;
+
     const takeReply = chosen.label === "door:tasks.take" && reply.get("id") === live.call;
 
     const forGood =
@@ -804,8 +807,10 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     }
 
     // H4: a forged answer to the live take, or any answer to a stale id, starts nothing to execute.
-    if (pipe(chosen.label, Str.startsWith("forge:")) || chosen.label === "stale") {
-      const forged = take !== undefined && take.id === live.call && pipe(chosen.label, Str.startsWith("forge:"));
+    if (Function.pipe(chosen.label, Str.startsWith("forge:")) || chosen.label === "stale") {
+      const forged =
+        take !== undefined && take.id === live.call && Function.pipe(chosen.label, Str.startsWith("forge:"));
+
       const busy = ["recalling", "saving", "starting", "executing", "reporting"];
       expect(Arr.some(cmds, (c) => c.type === "execute" || c.type === "journal_write")).toBe(false);
       expect(

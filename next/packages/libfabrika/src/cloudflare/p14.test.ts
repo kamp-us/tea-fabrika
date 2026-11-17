@@ -14,9 +14,8 @@ import { createHash } from "node:crypto";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Str from "effect/String";
 import * as Rec from "effect/Record";
-
+import * as Str from "effect/String";
 
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";

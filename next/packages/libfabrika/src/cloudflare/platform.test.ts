@@ -7,10 +7,9 @@ import { encodeRpcError, ErrorTag, RpcCallError } from "alchemy/Rpc";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
-
 
 import { expect } from "vitest";
 import { Writer } from "../coordination/index.ts";

@@ -13,11 +13,12 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schedule from "effect/Schedule";
 import * as Str from "effect/String";
+
 import { Commands } from "../../client/Commands.ts";
 import { Command } from "../../tasks/Task.ts";
 import * as CommandsNode from "./CommandsNode.ts";
@@ -40,12 +41,13 @@ describe("P39 slice 4b: the real command on a real host", () => {
         }
 
         expect(answer.code).toBe(0);
-        expect(pipe(answer.version, Str.startsWith("git version ")), `C4: ${Formatter.format(answer.version)}`).toBe(
-          true,
-        );
-        expect(pipe(answer.version, Str.endsWith("\n")), "C4: the trailing newline is dropped").toBe(false);
+        expect(
+          Function.pipe(answer.version, Str.startsWith("git version ")),
+          `C4: ${Formatter.format(answer.version)}`,
+        ).toBe(true);
+        expect(Function.pipe(answer.version, Str.endsWith("\n")), "C4: the trailing newline is dropped").toBe(false);
         // The line C1's vectors replay: one line, far under the cap.
-        expect(pipe(answer.version, Str.includes("\n"))).toBe(false);
+        expect(Function.pipe(answer.version, Str.includes("\n"))).toBe(false);
         expect(new TextEncoder().encode(answer.version).length).toBeLessThan(CAP);
       }).pipe(Effect.provide(CommandsNode.layer.pipe(Layer.provideMerge(NodeServices.layer)))),
     30_000,

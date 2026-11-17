@@ -31,18 +31,10 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
 import * as TestClock from "effect/testing/TestClock";
-
-
-
-
-
-
-
-
 
 import * as fc from "fast-check";
 import { processId } from "../../Id.test-support.ts";

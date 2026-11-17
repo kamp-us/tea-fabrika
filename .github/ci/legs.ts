@@ -238,6 +238,7 @@ if (import.meta.main) {
   // The step's variables, read through Effect's Config. An empty variable stays empty, as a read of
   // process.env gave it, so an empty FILTER still means the reader tests alone.
   const text = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
+
   const env = Effect.runSync(
     Config.all({
       event: text("EVENT"),
@@ -249,6 +250,7 @@ if (import.meta.main) {
       summary: text("GITHUB_STEP_SUMMARY"),
     }).parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true })),
   );
+
   const root = fileURLToPath(new URL("../../", import.meta.url));
   const workflow = readFileSync(join(root, ".github/workflows/check.yaml"), "utf8");
   const full = { vitest: vitestLegs(workflow).length, e2e: e2eLegs(workflow).length };
@@ -259,6 +261,7 @@ if (import.meta.main) {
     base: env.base ?? "",
     visual: env.visual === "true",
   };
+
   const limit = limits(nextMinutes(workflow), budgetOf(env.budget));
   // `--changed` from the base on a run of all of next/; none on a run of the reader tests alone.
   const changed = run.scope === "all" ? [`--changed=${run.base}`] : [];

@@ -36,11 +36,25 @@ import { ClientKey, ClientKeyError } from "@kampus/libfabrika/transport/ClientKe
 import { connection } from "@kampus/libfabrika/transport/Connection";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
-import { Array as Arr, String as Str, Effect, Exit, Layer, Queue, Record as Rec, Schema, Scope, Semaphore, Tracer, Formatter } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Effect,
+  Exit,
+  Layer,
+  Queue,
+  Record as Rec,
+  Schema,
+  Scope,
+  Semaphore,
+  Tracer,
+  Formatter,
+} from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { KeyValueStore, RateLimiter } from "effect/persistence";
 import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
+
 // P39 slice 4a, next/: E1 and S1, the hands client end to end in one process. The real hands start
 // (`client/HandsStart.ts`) dials over the in-memory socket the window laws use
 // (`client/WindowStart.test-support.ts`) into the real transport driver (`transport/Connection.ts`)
@@ -63,19 +77,6 @@ import { TestClock } from "effect/testing";
 // S1 [secrets]: the hands key's private bytes, in every encoding a leak could take, never appear in
 // a frame the client writes, a journal value, a ledger row or a span. Plant (after build): put the
 // private key's armored text in the hello's `build`.
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 import * as fc from "fast-check";
 import { type ConnectionId, Gateway } from "./door.ts";

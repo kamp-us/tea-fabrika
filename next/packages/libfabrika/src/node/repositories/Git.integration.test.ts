@@ -6,12 +6,13 @@ import { runsFor } from "@kampus/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";
@@ -84,7 +85,7 @@ const session = (
               { concurrency: "unbounded" },
             );
 
-            return { code, out: pipe(out, Str.replaceAll(root, "<root>")) };
+            return { code, out: Function.pipe(out, Str.replaceAll(root, "<root>")) };
           }),
         );
       });
@@ -97,7 +98,7 @@ const session = (
       ) {
         const { code, out } = yield* git(cwd, args);
         transcript.push(
-          `git ${pipe(Arr.join(args, " "), Str.replaceAll(root, "<root>"))} => ${code}${data === undefined ? "" : ` ${data === "commits" ? named(out) : out}`}`,
+          `git ${Function.pipe(Arr.join(args, " "), Str.replaceAll(root, "<root>"))} => ${code}${data === undefined ? "" : ` ${data === "commits" ? named(out) : out}`}`,
         );
 
         return out;

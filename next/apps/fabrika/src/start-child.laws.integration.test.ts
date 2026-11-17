@@ -1,8 +1,9 @@
-import { it as effectIt } from "@effect/vitest";
 // P42 slice 1 (ticket 770), next/: L9 and L10 on a real local instance, L11 on the public Project.
 // Outside only: real workerd,
 // sockets, object storage, alarms and the private local instance capability, set up as ticket 402's
 // supervision test is. Needs ports and its own processes, so it runs in the step's container (0045).
+import { it as effectIt } from "@effect/vitest";
+
 import type { Descriptor } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
 import { Started } from "@kampus/libfabrika/processes/Children";
@@ -12,19 +13,23 @@ import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, String as Str, Clock, DateTime, Effect, Exit, Layer, Logger, ManagedRuntime, Option, Result, Schema, Scope, Duration, Record as Rec } from "effect";
-
-
-
-
-
-
-
-
-
-
-
-
+import {
+  Array as Arr,
+  String as Str,
+  Clock,
+  DateTime,
+  Effect,
+  Exit,
+  Layer,
+  Logger,
+  ManagedRuntime,
+  Option,
+  Result,
+  Schema,
+  Scope,
+  Duration,
+  Record as Rec,
+} from "effect";
 
 import * as fc from "fast-check";
 import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";

@@ -32,13 +32,12 @@ import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
-
 
 import * as fc from "fast-check";
 import { expectTypeOf, vi } from "vitest";

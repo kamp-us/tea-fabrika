@@ -18,10 +18,11 @@
  * change of its own. The ledger starts empty and only shrinks. There is no setting to loosen it.
  */
 import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import { parseSync } from "oxc-parser";
 import { type OxcError, transformSync } from "oxc-transform-react";
 
@@ -90,7 +91,7 @@ type Tree = any;
 
 const FUNCTIONS = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
 
-const lineAt = (text: string, at: number) => pipe(text, Str.slice(0, at), Str.split("\n")).length;
+const lineAt = (text: string, at: number) => Function.pipe(text, Str.slice(0, at), Str.split("\n")).length;
 
 /** Whether a function body opens with `"use no memo"`, among its other directives. */
 const saysNoMemo = (body: Tree): boolean => {
@@ -209,7 +210,7 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
 
   const compiled = new Set(
     Arr.map(
-      Arr.filter(functions(pipe(file, Str.replace(/\.tsx$/, ".js")), out.code), (f) => f.cache),
+      Arr.filter(functions(Function.pipe(file, Str.replace(/\.tsx$/, ".js")), out.code), (f) => f.cache),
       (f) => f.name,
     ),
   );

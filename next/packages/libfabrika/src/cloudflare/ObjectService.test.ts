@@ -29,16 +29,14 @@ import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import type * as Scope from "effect/Scope";
-import * as Struct from "effect/Struct";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
-import * as Str from "effect/String";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
-
-
+import type * as Scope from "effect/Scope";
+import * as Str from "effect/String";
+import * as Struct from "effect/Struct";
 
 import * as fc from "fast-check";
 import { vi } from "vitest";

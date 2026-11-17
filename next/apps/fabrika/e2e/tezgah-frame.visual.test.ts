@@ -1,7 +1,3 @@
-import { String as Str, pipe, Array as Arr } from "effect";
-import * as Effect from "effect/Effect";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
 // Desk S2b, next/ (the desk program fabrika/tezgah, ticket named by its title): law L21 of the approved
 // plan, and the slice's shots. Written before the tab draws tezgah's workspace and before it reads a
 // key. Starts the real `dev.ts` in its own temp home on its own port and drives headless Chromium;
@@ -21,6 +17,8 @@ import * as Option from "effect/Option";
 //
 // The shots (plan, "Show it running"; AGENTS.md, "Shoot more than one layout") go to the folder
 // `SHOTS` names, only when it is set, named `tezgah-<state>-<layout>.png`.
+import { String as Str, pipe, Array as Arr, Effect, Formatter, Option } from "effect";
+
 import { describe, expect, it } from "vitest";
 import { browser, devServer, grant, home, profile, reader, suite, tab, waiting } from "./p14.test-support.ts";
 import {

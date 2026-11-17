@@ -9,16 +9,13 @@
 // `Program.ts:379`, a ProgramDown's class, reads as it did before the cause was kept.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
-
-
-
 
 import * as fc from "fast-check";
 import { BuildError, decodeBuilt } from "./Built.ts";

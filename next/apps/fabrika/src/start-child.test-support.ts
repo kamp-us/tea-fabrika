@@ -16,14 +16,9 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Array as Arr, String as Str } from "effect";
+import { Array as Arr, String as Str, Effect, FileSystem, Formatter, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
+
 import { programs } from "virtual:fabrika-built";
 import { build } from "./build.ts";
 import { noTracking, scopedEnv } from "./env.test-support.ts";

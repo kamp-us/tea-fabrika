@@ -5,13 +5,14 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
+
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import { programBox } from "../../cloudflare/box.ts";
@@ -281,7 +282,7 @@ const located = (location: string): { file: string; folder: boolean } => {
     return { file: `eval at ${origin[1]} (${inner.file}), ${outer.file}`, folder: inner.folder || outer.folder };
   }
 
-  const folder = !pipe(location, Str.startsWith("node:")) && /[/\\]/.test(location);
+  const folder = !Function.pipe(location, Str.startsWith("node:")) && /[/\\]/.test(location);
 
   return {
     file: folder ? Arr.lastNonEmpty(Str.split(location, /[/\\]/)) : location,
@@ -354,7 +355,9 @@ for (const adapter of ["node", "worker"] as const) {
               const thrown = sample.value instanceof Error ? frames(sample.value.stack ?? "") : [];
 
               const lost = Arr.map(kept, (c) => [
-                ...(sample.message === null || pipe(c.message, Str.includes(sample.message)) ? [] : [sample.message]),
+                ...(sample.message === null || Function.pipe(c.message, Str.includes(sample.message))
+                  ? []
+                  : [sample.message]),
                 ...lostFrames(
                   Arr.map(frames(c.message), (stored) => stored.frame),
                   Arr.map(thrown, (raw) => raw.frame),
@@ -406,7 +409,7 @@ for (const adapter of ["node", "worker"] as const) {
                   w.sink.sql.exec("SELECT * FROM summary"),
                 ]) {
                   expect(Formatter.formatJson(permanent)).not.toContain(
-                    pipe(Formatter.formatJson(text), Str.slice(1, -1)),
+                    Function.pipe(Formatter.formatJson(text), Str.slice(1, -1)),
                   );
                 }
               }
@@ -426,7 +429,9 @@ for (const adapter of ["node", "worker"] as const) {
               });
 
               for (const text of sample.private) {
-                expect(Formatter.formatJson(after)).not.toContain(pipe(Formatter.formatJson(text), Str.slice(1, -1)));
+                expect(Formatter.formatJson(after)).not.toContain(
+                  Function.pipe(Formatter.formatJson(text), Str.slice(1, -1)),
+                );
               }
 
               expect(yield* recorded(A)).toEqual(rows);
@@ -506,7 +511,7 @@ describe("P34 supervision recording", () => {
               const at = Arr.findFirstIndex(contents, (content) =>
                 Option.match(content, {
                   onNone: () => false,
-                  onSome: (c) => c._tag === "kept" && pipe(c.message, Str.includes(secret)),
+                  onSome: (c) => c._tag === "kept" && Function.pipe(c.message, Str.includes(secret)),
                 }),
               );
 
@@ -525,7 +530,7 @@ describe("P34 supervision recording", () => {
                 yield* read(`${A}/dead`),
               ]) {
                 expect(Formatter.formatJson(output)).not.toContain(
-                  pipe(Formatter.formatJson(secret), Str.slice(1, -1)),
+                  Function.pipe(Formatter.formatJson(secret), Str.slice(1, -1)),
                 );
               }
 

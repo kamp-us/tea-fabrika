@@ -31,23 +31,12 @@ import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
 import * as TestClock from "effect/testing/TestClock";
-
-
-
-
-
-
-
-
-
-
-
 
 import { processId } from "../Id.test-support.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";

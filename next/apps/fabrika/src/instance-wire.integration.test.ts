@@ -14,19 +14,20 @@ import { Id } from "@kampus/libfabrika";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Array as Arr, String as Str, Clock, DateTime, Deferred, Effect, Fiber, Formatter, Option, Schema, Duration } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Clock,
+  DateTime,
+  Deferred,
+  Effect,
+  Fiber,
+  Formatter,
+  Option,
+  Schema,
+  Duration,
+} from "effect";
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/http";
-
-
-
-
-
-
-
-
-
-
-
 
 import { afterEach, describe, expect } from "vitest";
 import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
@@ -296,7 +297,10 @@ const launch = async (
     try {
       // The page is served while startup is still flushing the lifecycle outbox.
       // dev.ts emits ready only after that flush. Read history after its ready message.
-      if (Str.includes(`{"ready":${JSON.stringify(url)},"build":`)(output) && (await exchange(HttpClientRequest.get(url))).ok) {
+      if (
+        Str.includes(`{"ready":${JSON.stringify(url)},"build":`)(output) &&
+        (await exchange(HttpClientRequest.get(url))).ok
+      ) {
         break;
       }
     } catch {

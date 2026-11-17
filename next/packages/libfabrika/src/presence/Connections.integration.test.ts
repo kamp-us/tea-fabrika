@@ -7,11 +7,12 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { A, B, W, storage } from "../processes/Process.test-support.ts";
@@ -234,7 +235,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
         yield* gateways.join(connection("tab-b", B));
         expect(
           Arr.map(yield* gateways.online("key-a"), (row) => ({ client: row.client, state: row.state })).sort((a, b) =>
-            pipe(a.client, Str.localeCompare(b.client)),
+            Function.pipe(a.client, Str.localeCompare(b.client)),
           ),
         ).toEqual([
           { client: "tab-a", state: "unknown" },

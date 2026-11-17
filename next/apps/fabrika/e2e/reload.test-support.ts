@@ -8,16 +8,21 @@ import { build } from "@kampus/libfabrika/build";
 import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { String as Str, pipe, Array as Arr } from "effect";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
+import {
+  String as Str,
+  pipe,
+  Array as Arr,
+  Effect,
+  FileSystem,
+  Formatter,
+  Option,
+  Path,
+  Queue,
+  Schema,
+  Stream,
+} from "effect";
 import { ChildProcess } from "effect/process";
-import * as Queue from "effect/Queue";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
+
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
 import * as RecordWireTest from "../src/record-wire.test-support.ts";

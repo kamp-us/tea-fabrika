@@ -12,7 +12,6 @@ import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Schema } from "eff
 import { SecureRandom } from "effect/crypto";
 import { FetchHttpClient } from "effect/http";
 
-
 import { vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { rssStandIn } from "./rss.fixture.ts";

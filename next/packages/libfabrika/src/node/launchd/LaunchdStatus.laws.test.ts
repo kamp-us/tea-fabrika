@@ -4,10 +4,11 @@ import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as Status from "./LaunchdStatus.ts";
 
@@ -153,7 +154,7 @@ it.effect.each([
     // The first line is accepted only as that exact line, before the exact missing-service line.
     for (const err of [
       `${missing}Bad request.\n`,
-      pipe(`Bad request.\n${missing}`, Str.replace("501", "502")),
+      Function.pipe(`Bad request.\n${missing}`, Str.replace("501", "502")),
       `Bad request\n${missing}`,
       "Bad request.\n",
     ]) {
@@ -205,21 +206,21 @@ it("L3 missing, duplicate, nested, ambiguous and wrong-target fields fail Unsupp
 
         const broken =
           mutation === "missing-program"
-            ? pipe(text, Str.replace(/\tprogram = .*\n/, ""))
+            ? Function.pipe(text, Str.replace(/\tprogram = .*\n/, ""))
             : mutation === "duplicate-program"
-              ? pipe(text, Str.replace("\ttype =", `\tprogram = /test/${word}/Electron\n\ttype =`))
+              ? Function.pipe(text, Str.replace("\ttype =", `\tprogram = /test/${word}/Electron\n\ttype =`))
               : mutation === "nested-program"
-                ? pipe(
+                ? Function.pipe(
                     text,
                     Str.replace(/\tprogram = .*\n/, `\tunrelated = {\n\t\tprogram = /test/${word}/Electron\n\t}\n`),
                   )
                 : mutation === "argument"
-                  ? pipe(text, Str.replace(`/test/${word}/brain.mjs`, 'unbalanced "argument'))
+                  ? Function.pipe(text, Str.replace(`/test/${word}/brain.mjs`, 'unbalanced "argument'))
                   : mutation === "target"
-                    ? pipe(text, Str.replace(target, "gui/502/foreign"))
+                    ? Function.pipe(text, Str.replace(target, "gui/502/foreign"))
                     : mutation === "duplicate-pid"
-                      ? pipe(text, Str.replace("\tpid = 81", "\tpid = 82\n\tpid = 81"))
-                      : pipe(text, Str.slice(0, -3));
+                      ? Function.pipe(text, Str.replace("\tpid = 81", "\tpid = 82\n\tpid = 81"))
+                      : Function.pipe(text, Str.slice(0, -3));
 
         const exit = Effect.runSync(decode(0, broken).pipe(Effect.exit));
         expect(error(exit)).toMatchObject({

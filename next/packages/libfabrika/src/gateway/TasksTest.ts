@@ -28,23 +28,21 @@ import * as Arbitrary from "effect/Arbitrary";
 import * as Arr from "effect/Array";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Base64 from "effect/encoding/Base64";
+import * as Base64Url from "effect/encoding/Base64Url";
 import * as Fiber from "effect/Fiber";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as R from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Semaphore from "effect/Semaphore";
-import * as Tracer from "effect/Tracer";
 import type * as Scope from "effect/Scope";
-import * as Base64 from "effect/encoding/Base64";
-import * as Base64Url from "effect/encoding/Base64Url";
+import * as Semaphore from "effect/Semaphore";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
-
-
+import * as Tracer from "effect/Tracer";
 
 import { grantText, revokeText } from "../access/Text.ts";
 import * as Id from "../Id.ts";

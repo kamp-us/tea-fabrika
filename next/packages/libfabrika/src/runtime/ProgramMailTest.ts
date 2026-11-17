@@ -18,6 +18,7 @@ import { arbGuidedSequence, propertyInvariant, stubCtxThrowingProxy } from "@dem
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as ByteSize from "effect/ByteSize";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -31,19 +32,15 @@ import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as References from "effect/References";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as Tracer from "effect/Tracer";
-import * as Arr from "effect/Array";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
 import * as TestClock from "effect/testing/TestClock";
-
-
-
+import * as Tracer from "effect/Tracer";
 
 import * as fc from "fast-check";
 import { Appended, InputId, Writer } from "../coordination/index.ts";

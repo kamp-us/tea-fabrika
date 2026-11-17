@@ -17,12 +17,13 @@ import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
 import type { Binding } from "../runtime/Program.ts";
@@ -494,7 +495,7 @@ const stepWin = (world: World, i: number, m: WindowMsg, each: (e: Event) => void
 
       if (
         did?.type === "did" &&
-        pipe(did.does, Str.startsWith("tezgah.focus")) &&
+        Function.pipe(did.does, Str.startsWith("tezgah.focus")) &&
         !Arr.some(w.outbox, (o) => o.letter === letter) &&
         !w.got.has(letter)
       ) {
@@ -747,8 +748,8 @@ const online = (world: World, i: number, each: (e: Event) => void) => {
     const on = { id: flight.id, dial: flight.dial };
 
     if (flight.call._tag === "read") {
-      const name = pipe(flight.call.stream, Str.replace(/^processes\//, ""));
-      const process = pipe(name, Str.startsWith("tezgah:")) ? TEZGAH_PID : `process_of_${name}`;
+      const name = Function.pipe(flight.call.stream, Str.replace(/^processes\//, ""));
+      const process = Function.pipe(name, Str.startsWith("tezgah:")) ? TEZGAH_PID : `process_of_${name}`;
       stepWin(
         world,
         i,
@@ -1260,7 +1261,7 @@ describe("Desk S3: a split's letter carries the cursor it leaves", () => {
               if (
                 c.type !== "write" ||
                 call?._tag !== "send" ||
-                !(did !== undefined && pipe(did.does, Str.startsWith("tezgah.split_")))
+                !(did !== undefined && Function.pipe(did.does, Str.startsWith("tezgah.split_")))
               ) {
                 continue;
               }
@@ -1507,7 +1508,7 @@ describe("Ticket 1043: a burst of presses is judged as the same presses one step
         const desk = makeDesk(d.cuts, d.focus);
         const apart = typed(desk, picks, "apart");
         counts.splits += Arr.filter(apart.letters, (m) =>
-          pipe(String(Reflect.get(Object(m), "does")), Str.startsWith("tezgah.split")),
+          Function.pipe(String(Reflect.get(Object(m), "does")), Str.startsWith("tezgah.split")),
         ).length;
 
         for (const schedule of SCHEDULES) {

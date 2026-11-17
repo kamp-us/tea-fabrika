@@ -10,12 +10,11 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
-
 
 import * as fc from "fast-check";
 import { Doorbell } from "../ledger/Ledger.ts";

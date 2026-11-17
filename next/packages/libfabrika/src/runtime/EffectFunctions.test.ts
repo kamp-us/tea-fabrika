@@ -13,24 +13,11 @@ import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
-import * as Rec from "effect/Record";
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";

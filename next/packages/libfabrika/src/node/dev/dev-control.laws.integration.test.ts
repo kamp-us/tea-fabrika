@@ -15,7 +15,7 @@ import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -23,6 +23,7 @@ import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
+
 import { vi, type Mock } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
@@ -276,7 +277,7 @@ const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalTh
       if (key === "rename") {
         return (from: string, to: string) =>
           Effect.gen(function* () {
-            const held = pipe(to, Str.endsWith("brain.pending.jsonl")) ? gate : null;
+            const held = Function.pipe(to, Str.endsWith("brain.pending.jsonl")) ? gate : null;
 
             if (held !== null) {
               yield* Deferred.await(held);
@@ -284,7 +285,7 @@ const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalTh
 
             yield* target.rename(from, to);
             // The startup flush rewrites the file too; only the walk's own writes are counted.
-            synced = pipe(to, Str.endsWith("brain.pending.jsonl")) && mode === "walk";
+            synced = Function.pipe(to, Str.endsWith("brain.pending.jsonl")) && mode === "walk";
           });
       }
 

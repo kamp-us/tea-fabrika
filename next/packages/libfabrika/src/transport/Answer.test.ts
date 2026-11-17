@@ -183,7 +183,7 @@ describe("P10 JSON-RPC", () => {
               const route = vi.fn(() => Effect.succeed(answer));
               const result = yield* answerFrame(frame(), online(), admit, route);
               expect(result.send).not.toBeNull();
-              const reply = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Reply))(result.send!);
+              const reply = yield* Schema.decodeEffect(Schema.fromJsonString(Reply))(result.send!);
               expect(reply).toMatchObject({ jsonrpc: "2.0", id: "r1" });
               expect(mode === "ok" ? reply.result : reply.error?.data).toEqual(
                 mode === "ok"

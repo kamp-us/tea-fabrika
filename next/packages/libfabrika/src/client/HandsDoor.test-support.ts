@@ -1,5 +1,3 @@
-import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
 // P39 slice 4a, next/: the brain as the hands client's laws see it, as a script. It keeps tasks the
 // way slice 1's task machine does (requested, assigned, started, finished) and answers the five
 // tasks calls a hands key may make, `tasks.list`, `tasks.wait`, `tasks.take`, `tasks.started` and
@@ -10,12 +8,16 @@ import { pipe } from "effect/Function";
 // `door` is the door in front of it, one in-memory socket per dial: it challenges each socket,
 // answers the hello and the knock as its gate says, and keeps every socket, so a law can read every
 // frame the client wrote as it was sent (`MemorySocket.sent`), not only what the door kept of it.
+
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import * as Str from "effect/String";
+
 import type { Request } from "../tasks/Task.ts";
 import { Command, Task, Result, State } from "../tasks/Task.ts";
 import { MemorySocket } from "./WindowStart.test-support.ts";
@@ -377,7 +379,7 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
       return;
     }
 
-    if (!pipe(call.method, Str.startsWith("tasks."))) {
+    if (!Function.pipe(call.method, Str.startsWith("tasks."))) {
       return;
     }
 

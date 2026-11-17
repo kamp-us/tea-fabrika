@@ -4,17 +4,14 @@
 // Counts are restored from committed data before first admission. No fake quota implementation.
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
 import * as TestClock from "effect/testing/TestClock";
-
-
-
 
 import type { Ledger } from "../ledger/Ledger.ts";
 import { Doorbell } from "../ledger/Ledger.ts";

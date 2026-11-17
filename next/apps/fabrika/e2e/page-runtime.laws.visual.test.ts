@@ -18,12 +18,8 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it, beforeAll } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { String as Str, pipe, Array as Arr } from "effect";
-import * as Clock from "effect/Clock";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Formatter from "effect/Formatter";
-import * as Schema from "effect/Schema";
+import { String as Str, pipe, Array as Arr, Clock, DateTime, Effect, Formatter, Schema } from "effect";
+
 import * as fc from "fast-check";
 import { type Browser, type BrowserContext, chromium, type LaunchOptions, type Page } from "playwright";
 import { describe, expect } from "vitest";

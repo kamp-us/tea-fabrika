@@ -5,16 +5,20 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
-import { Array as Arr, String as Str } from "effect";
-import * as Context from "effect/Context";
+import {
+  Array as Arr,
+  String as Str,
+  Context,
+  Effect,
+  FileSystem,
+  Formatter,
+  Layer,
+  Option,
+  Path,
+  Schema,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
+
 import { expect } from "vitest";
 import { build } from "./build.ts";
 import { scopedEnv } from "./env.test-support.ts";

@@ -10,7 +10,6 @@
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Array as Arr, Effect, FileSystem, Formatter, Path, Schema, String as Str, Record as Rec } from "effect";
 
-
 /** Where in a file a machine path was found: a byte offset in a file's raw bytes, or one SQLite cell. */
 export const Place = Schema.TaggedUnion({
   byte: { offset: Schema.Finite },

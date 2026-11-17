@@ -12,7 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -22,6 +22,7 @@ import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { Repositories } from "../../repositories/Repositories.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";
@@ -134,7 +135,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                 yield* git(f.repo, ["revert", "--no-edit", "HEAD"]);
                 yield* git(f.repo, ["push", "origin", f.branch]);
                 const real = yield* ChildProcessSpawner.ChildProcessSpawner;
-                const object = pipe("a", Str.repeat(40));
+                const object = Function.pipe("a", Str.repeat(40));
                 const validHead = `ref: refs/heads/release\tHEAD\n${object}\tHEAD\n`;
 
                 const faults = [
@@ -151,7 +152,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                   {
                     operation: "ls-remote",
                     flag: "--symref",
-                    output: pipe(validHead, Str.replace(object, "invalid")),
+                    output: Function.pipe(validHead, Str.replace(object, "invalid")),
                     code: 0,
                   },
                   {
@@ -442,12 +443,12 @@ it.effect.prop(
         yield* fs.makeDirectory(common);
         yield* fs.makeDirectory(path.join(repo, ".fabrika"), { recursive: true });
 
-        const first = pipe("a", Str.repeat(width)),
-          second = pipe("b", Str.repeat(width));
+        const first = Function.pipe("a", Str.repeat(width)),
+          second = Function.pipe("b", Str.repeat(width));
 
-        const documentId = pipe("c", Str.repeat(width)),
-          firstBlob = pipe("d", Str.repeat(width)),
-          secondBlob = pipe("e", Str.repeat(width));
+        const documentId = Function.pipe("c", Str.repeat(width)),
+          firstBlob = Function.pipe("d", Str.repeat(width)),
+          secondBlob = Function.pipe("e", Str.repeat(width));
 
         let head = first;
         let fault: "fetch" | "tree" | "blob" | "type" | "absent" | null = null;
@@ -477,11 +478,13 @@ it.effect.prop(
                 }),
             ),
           makeDirectory: (directory, options) =>
-            pipe(directory, Str.startsWith(isolatedBase)) ? Effect.void : fs.makeDirectory(directory, options),
+            Function.pipe(directory, Str.startsWith(isolatedBase)) ? Effect.void : fs.makeDirectory(directory, options),
           writeFileString: (file, value, options) =>
-            pipe(file, Str.startsWith(isolatedBase)) ? Effect.void : fs.writeFileString(file, value, options),
+            Function.pipe(file, Str.startsWith(isolatedBase)) ? Effect.void : fs.writeFileString(file, value, options),
           exists: (file) =>
-            pipe(file, Str.startsWith(isolatedBase)) ? Effect.sync(() => temporary.has(file)) : fs.exists(file),
+            Function.pipe(file, Str.startsWith(isolatedBase))
+              ? Effect.sync(() => temporary.has(file))
+              : fs.exists(file),
         };
 
         const spawner = ChildProcessSpawner.make((command) =>

@@ -15,10 +15,11 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import {
   SPACE,
@@ -521,7 +522,7 @@ describe("p27, the armor's own words", () => {
     ["another kind's END line", Str.replace(END, "-----END PGP SIGNATURE-----")(goodSig)],
     [
       "both lines bad",
-      pipe(
+      Function.pipe(
         goodSig,
         Str.replace(BEGIN, "-----BEGIN SSH SIGNATURX-----"),
         Str.replace(END, "-----END SSH SIGNATURX-----"),

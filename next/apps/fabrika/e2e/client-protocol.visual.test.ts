@@ -6,12 +6,8 @@
 // never on a laptop step. Every resource is acquired in the scope of `p14.test-support.ts`'s `suite`.
 import { ClientKeyError } from "@kampus/libfabrika/transport/ClientKey";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
-import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
-import * as Effect from "effect/Effect";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Order from "effect/Order";
-import * as Schema from "effect/Schema";
+import { String as Str, pipe, Array as Arr, Record as Rec, Effect, Formatter, Option, Order, Schema } from "effect";
+
 import type { BrowserContext } from "playwright";
 import { describe, expect, it } from "vitest";
 import {

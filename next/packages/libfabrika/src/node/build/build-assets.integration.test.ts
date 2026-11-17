@@ -16,13 +16,14 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Rec from "effect/Record";
 import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import type { RolldownOutput, RolldownOptions, OutputOptions } from "rolldown";
@@ -113,7 +114,7 @@ const cssImport = (
   url: string,
   continuation: string,
 ) => {
-  const quote = pipe(form, Str.startsWith("single")) ? "'" : form === "url" ? "" : '"';
+  const quote = Function.pipe(form, Str.startsWith("single")) ? "'" : form === "url" ? "" : '"';
 
   const ref = Arr.join(
     Arr.map([...path], (char) => {
@@ -123,14 +124,16 @@ const cssImport = (
         return char;
       }
 
-      return escape === "hex" ? `\\${pipe(char, Str.codePointAt(0), Option.getOrThrow).toString(16)} ` : `\\${char}`;
+      return escape === "hex"
+        ? `\\${Function.pipe(char, Str.codePointAt(0), Option.getOrThrow).toString(16)} `
+        : `\\${char}`;
     }),
     "",
   );
 
   const target = `${quote}${quote !== "" && continuation !== "" ? `\\${continuation}` : ""}${ref}${quote}`;
 
-  return `@${keyword} ${pipe(form, Str.endsWith("string")) ? target : `${url}(${target})`}${media !== "" ? ` ${media}` : ""};`;
+  return `@${keyword} ${Function.pipe(form, Str.endsWith("string")) ? target : `${url}(${target})`}${media !== "" ? ` ${media}` : ""};`;
 };
 
 const homes: string[] = [];
@@ -193,7 +196,7 @@ const fixture = (name: string, value: string) => {
   writeFileSync(join(pkg, "window.css"), `b { color: rgb(12, 34, 56); }`);
   cpSync(join(ROOT, "next/apps/fabrika/src"), join(home, "src"), {
     recursive: true,
-    filter: (p) => !pipe(p, Str.endsWith(".test.ts")),
+    filter: (p) => !Function.pipe(p, Str.endsWith(".test.ts")),
   });
 
   const options: Options = {
@@ -282,7 +285,7 @@ describe("P16 assets and Compiler", () => {
           expect(Arr.some(Rec.values(built.assets), (a) => a.type === "text/css; charset=utf-8")).toBe(true);
 
           for (const [route, asset] of Rec.toEntries(built.assets)) {
-            expect(pipe(route, Str.startsWith("/"))).toBe(true);
+            expect(Function.pipe(route, Str.startsWith("/"))).toBe(true);
             expect(asset.hash).toBe(createHash("sha256").update(asset.body).digest("hex"));
 
             const response = await Effect.runPromise(
@@ -391,13 +394,13 @@ describe("P16 assets and Compiler", () => {
 
             const verify = async (assets: Readonly<Record<string, Asset>>) => {
               for (const [route, asset] of Rec.toEntries(assets)) {
-                if (pipe(asset.type, Str.startsWith("text/css"))) {
+                if (Function.pipe(asset.type, Str.startsWith("text/css"))) {
                   expect(asset.body, "local CSS import must be included").not.toMatch(/@import\b/);
                   continue;
                 }
 
                 const refs = Arr.map(
-                  [...pipe(asset.body, Str.matchAll(/(?:from\s*|import\s*\(?\s*)["']([^"']+)["']/g))],
+                  [...Function.pipe(asset.body, Str.matchAll(/(?:from\s*|import\s*\(?\s*)["']([^"']+)["']/g))],
                   (m) => m[1]!,
                 );
 
@@ -415,7 +418,7 @@ describe("P16 assets and Compiler", () => {
 
             // Plant the exact old behavior in real output: retain a CSS import to an absent route.
             const stylesheet = Option.getOrUndefined(
-              Arr.findFirst(Rec.toEntries(built.assets), ([, a]) => pipe(a.type, Str.startsWith("text/css"))),
+              Arr.findFirst(Rec.toEntries(built.assets), ([, a]) => Function.pipe(a.type, Str.startsWith("text/css"))),
             );
 
             assert(stylesheet, "window stylesheet must be emitted");
@@ -429,7 +432,7 @@ describe("P16 assets and Compiler", () => {
 
             const styles = Arr.join(
               Arr.map(
-                Arr.filter(Rec.values(built.assets), (a) => pipe(a.type, Str.startsWith("text/css"))),
+                Arr.filter(Rec.values(built.assets), (a) => Function.pipe(a.type, Str.startsWith("text/css"))),
                 (a) => a.body,
               ),
               "\n",
@@ -687,8 +690,8 @@ describe("P16 cleanup and recording", () => {
 
                 const rename: typeof fs.rename = (from, to) =>
                   Effect.gen(function* () {
-                    const backup = from === f.options.out && pipe(to, Str.endsWith(".old"));
-                    const final = to === f.options.out && !pipe(from, Str.endsWith(".old"));
+                    const backup = from === f.options.out && Function.pipe(to, Str.endsWith(".old"));
+                    const final = to === f.options.out && !Function.pipe(from, Str.endsWith(".old"));
 
                     if (!fired && point === "before final" && final) {
                       yield* stop;
@@ -787,13 +790,16 @@ describe("P16 cleanup and recording", () => {
 
                 const rename: typeof fs.rename = (from, to) =>
                   Effect.suspend(() => {
-                    const backup = from === f.options.out && pipe(to, Str.endsWith(".old")),
-                      final = to === f.options.out && !pipe(from, Str.endsWith(".old")),
+                    const backup = from === f.options.out && Function.pipe(to, Str.endsWith(".old")),
+                      final = to === f.options.out && !Function.pipe(from, Str.endsWith(".old")),
                       selected = !fired && (point === "backup" ? backup : final);
 
                     if (selected) {
                       fired = true;
-                      complete = readFileSync(join(backup ? pipe(to, Str.slice(0, -4)) : from, "brain.mjs"), "utf8");
+                      complete = readFileSync(
+                        join(backup ? Function.pipe(to, Str.slice(0, -4)) : from, "brain.mjs"),
+                        "utf8",
+                      );
                     }
 
                     return delayed(fs.rename(from, to), selected ? delays.rename : 0, selected);
@@ -993,7 +999,7 @@ describe("P16 cleanup and recording", () => {
                   const out = await handle.generate(o);
 
                   const css = Option.getOrUndefined(
-                    Arr.findFirst(out.output, (f) => pipe(f.fileName, Str.endsWith(".css"))),
+                    Arr.findFirst(out.output, (f) => Function.pipe(f.fileName, Str.endsWith(".css"))),
                   );
 
                   if (css === undefined) {
@@ -1146,7 +1152,7 @@ describe("P16 cleanup and recording", () => {
 
             for (const marker of [ROOT, f.home, readFileSync(f.file, "utf8")]) {
               expect(recorded).not.toContain(marker);
-              expect(recorded).not.toContain(pipe(JSON.stringify(marker), Str.slice(1, -1)));
+              expect(recorded).not.toContain(Function.pipe(JSON.stringify(marker), Str.slice(1, -1)));
             }
 
             expect(recorded).toContain(JSON.stringify(versions.rolldown));
@@ -1268,7 +1274,7 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
     for (const p of selected) {
       const marker = markers.get(p.module)!;
       // A window's entry is the one script that names its view; its chunk names `-chunk` instead.
-      const own = Arr.filter(scripts, ([, a]) => pipe(a.body, Str.includes(`${JSON.stringify(marker)}`)));
+      const own = Arr.filter(scripts, ([, a]) => Function.pipe(a.body, Str.includes(`${JSON.stringify(marker)}`)));
       expect(own, `${p.name} has one window entry`).toHaveLength(1);
       const [route] = own[0]!;
       // Its route keeps the whole qualified name, so equal short names never meet on one route.

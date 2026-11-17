@@ -4,6 +4,7 @@
 import { NodeServices } from "@effect/platform-node";
 import {
   Array as Arr,
+  Option,
   String as Str,
   pipe,
   Clock,
@@ -12,12 +13,12 @@ import {
   FileSystem,
   Formatter,
   Layer,
-  Option,
   Ref,
   Schema,
 } from "effect";
 import type { Scope } from "effect";
 import { Digest } from "effect/crypto";
+
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { repoNode } from "../boxnode.ts";
@@ -307,7 +308,7 @@ describe("the quest's state file", () => {
         const after = yield* readState(yield* fs.readFileString(state));
         expect(after.ticket).toBe("7");
         expect(after.head).toBe(pipe("b", Str.repeat(40)));
-        expect(after.steps.map((e: { step: string; outcome: string }) => `${e.step} ${e.outcome}`)).toEqual([
+        expect(Arr.map(after.steps, (e: { step: string; outcome: string }) => `${e.step} ${e.outcome}`)).toEqual([
           "build done",
           "host send:build:host_failed",
           "host done",
@@ -355,7 +356,7 @@ describe("the quest's state file", () => {
           head: sha,
         });
         expect(after).not.toHaveProperty("lane");
-        expect(after.steps.map((e: { step: string }) => e.step)).toEqual(["build", "host"]);
+        expect(Arr.map(after.steps, (e: { step: string }) => e.step)).toEqual(["build", "host"]);
       }),
     ));
 });

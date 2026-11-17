@@ -1,12 +1,7 @@
 // The exam command and the build share one Compiler check in libfabrika.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { check, Row } from "@kampus/libfabrika/compiler";
-import { String as Str, pipe, Array as Arr } from "effect";
-import * as Console from "effect/Console";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
+import { String as Str, pipe, Array as Arr, Console, Effect, FileSystem, Path, Schema } from "effect";
 
 export { check, compile, Row, type Finding } from "@kampus/libfabrika/compiler";
 

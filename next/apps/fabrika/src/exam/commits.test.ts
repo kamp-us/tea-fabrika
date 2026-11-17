@@ -1,8 +1,8 @@
 // next/, P32 and ticket 251: pure laws p83 to p87 and p89.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
-import * as Option from "effect/Option";
+import { String as Str, pipe, Array as Arr, Record as Rec, Option } from "effect";
+
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {

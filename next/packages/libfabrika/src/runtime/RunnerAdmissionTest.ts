@@ -1,29 +1,24 @@
-import { applyCell } from "@demlik/tea";
 // P13 slice 2, next/. Runtime laws take real stores from the module that owns their driver (0062).
+import { applyCell } from "@demlik/tea";
+
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
 import * as Str from "effect/String";
-import * as Predicate from "effect/Predicate";
-import * as Rec from "effect/Record";
 import * as TestClock from "effect/testing/TestClock";
-
-
-
-
-
 
 import * as fc from "fast-check";
 import { Writer, SinkError } from "../coordination/index.ts";

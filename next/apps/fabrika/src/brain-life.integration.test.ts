@@ -8,10 +8,6 @@ import { describe, expect, it, afterEach } from "@effect/vitest";
 import { Array as Arr, String as Str, Effect, Option } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 
-
-
-
-
 import { heldPort } from "./port.test-support.ts";
 
 const homes: Array<string> = [];

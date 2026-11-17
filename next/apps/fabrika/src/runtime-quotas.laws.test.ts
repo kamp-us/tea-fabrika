@@ -37,7 +37,6 @@ import { runsFor } from "@kampus/vitest";
 import { ByteSize, Clock, Effect, Option, Schema, String as Str, Record as Rec } from "effect";
 import { TestClock } from "effect/testing";
 
-
 import { programs } from "virtual:fabrika-built";
 import { vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";

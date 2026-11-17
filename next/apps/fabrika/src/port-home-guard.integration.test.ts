@@ -12,14 +12,18 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Array as Arr, String as Str, Arbitrary, Effect, FileSystem, Formatter, Option, Path, Schema, Record as Rec } from "effect";
-
-
-
-
-
-
-
+import {
+  Array as Arr,
+  String as Str,
+  Arbitrary,
+  Effect,
+  FileSystem,
+  Formatter,
+  Option,
+  Path,
+  Schema,
+  Record as Rec,
+} from "effect";
 
 import { type Hit, machinePaths, Place } from "./port-home.test-support.ts";
 

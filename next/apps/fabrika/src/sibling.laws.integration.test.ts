@@ -6,14 +6,7 @@ import { expect, it } from "@effect/vitest";
 import { String as Str, Effect, FileSystem, Formatter, Layer, Path, Schedule, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 
-
-
-
-
-
-
 import { noTracking, scopedEnv } from "./env.test-support.ts";
-
 
 import { heldPort } from "./port.test-support.ts";
 
@@ -82,7 +75,7 @@ it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call looku
 
           const body = yield* reply.text;
           expect(reply.status >= 200 && reply.status < 300).toBe(!bare);
-          expect(bare ? body : yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(body)).toEqual(
+          expect(bare ? body : yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(body)).toEqual(
             bare ? expect.stringContaining("Pong") : { path: ["ping.hit", "pong.back", "ping.leaf"], n: 3 },
           );
         }),

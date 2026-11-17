@@ -8,14 +8,9 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { String as Str, pipe, Array as Arr } from "effect";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Path from "effect/Path";
+import { String as Str, pipe, Array as Arr, Effect, FileSystem, Formatter, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
+
 import fc from "fast-check";
 import { API } from "typescript/unstable/sync";
 

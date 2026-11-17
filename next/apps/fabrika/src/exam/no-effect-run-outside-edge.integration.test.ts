@@ -1,9 +1,9 @@
-import { Record as Rec } from "effect";
 // `no-effect-run-outside-edge` (exam item 2): an Effect runs only on a line under an edge comment.
 // There is no list of edge files (owner, 2026-11-05; Tier 1, P35), so each run fires at every one of
 // the 18 paths that list once named, and passes only where an edge comment stands over it.
 
-import { Array as Arr } from "effect";
+import { Record as Rec, Array as Arr } from "effect";
+
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 

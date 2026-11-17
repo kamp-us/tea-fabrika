@@ -1,11 +1,9 @@
 // p22. RFC 6902 patches are checked with an independent small applicator, never patch's own apply.
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
-
-
 
 import * as fc from "fast-check";
 import { apply, diff } from "./Patch.ts";

@@ -5,10 +5,11 @@ import * as Arr from "effect/Array";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as Declarations from "../settings/Declarations.ts";
 import * as Test from "./Menu.test-support.ts";
@@ -51,7 +52,7 @@ const hasLabel = (words: string, raw: string) => {
   );
 };
 
-const hasCode = (words: string, code: string) => pipe(words, Str.replace(/\s/g, ""), Str.includes(code));
+const hasCode = (words: string, code: string) => Function.pipe(words, Str.replace(/\s/g, ""), Str.includes(code));
 
 // After build: sign on approve, approve on Enter, or accept a checked reply with the wrong cmd.
 it("L1: signatures follow the matching check; no check failure or Enter writes", () => {

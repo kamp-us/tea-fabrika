@@ -1,6 +1,7 @@
-import { createHash } from "node:crypto";
 // P12, next/. [secrets] Generated flows through the real instance, control route, Connection and sinks.
 // Only platform deployment, HTTP/RPC transport, child RSS and Cloudflare handles are supplied.
+import { createHash } from "node:crypto";
+
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,7 +16,7 @@ import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -25,6 +26,7 @@ import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { expect, expectTypeOf, it, vi } from "vitest";
 import { ConnectionService, connectionRuntime } from "../../cloudflare/connection.ts";
@@ -60,7 +62,7 @@ const config = {
 };
 
 const connectionInput = StartsTest.fixture(config, (algorithm, data) =>
-  createHash(pipe(algorithm.name, Str.replaceAll("-", ""), Str.toLowerCase))
+  createHash(Function.pipe(algorithm.name, Str.replaceAll("-", ""), Str.toLowerCase))
     .update(data)
     .digest(),
 );
@@ -76,7 +78,7 @@ const forms = (text: string) => [
   Buffer.from(text).toString("base64"),
   Buffer.from(text).toString("base64url"),
   encodeURIComponent(text),
-  pipe(JSON.stringify(text), Str.slice(1, -1)),
+  Function.pipe(JSON.stringify(text), Str.slice(1, -1)),
 ];
 
 const strings = (value: unknown): Array<string> => {
@@ -102,7 +104,7 @@ const clean = (outputs: Outputs, words: ReadonlyArray<string>) => {
     const json = JSON.stringify(outputs[destination]);
     const text = json + inspect(outputs[destination], { depth: null }) + Arr.join(strings(JSON.parse(json)), "\n");
 
-    if (Arr.some(forbidden, (word) => pipe(text, Str.includes(word)))) {
+    if (Arr.some(forbidden, (word) => Function.pipe(text, Str.includes(word)))) {
       leaks.push(destination);
     }
   }
@@ -130,7 +132,7 @@ type Flow = ReturnType<typeof generated.generate>["value"];
 const flow = async (sample: Flow) => {
   const home = mkdtempSync(join(tmpdir(), "p12-sec-"));
   vi.stubEnv("FABRIKA_HOME", home);
-  const material = pipe(`${sample.word}/"\\\n`, Str.padEnd(32, "!"));
+  const material = Function.pipe(`${sample.word}/"\\\n`, Str.padEnd(32, "!"));
 
   const random = Layer.succeed(
     SecureRandom.SecureRandom,

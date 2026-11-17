@@ -51,26 +51,29 @@ import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Array as Arr, String as Str, Arbitrary, Deferred, Effect, Exit, Fiber, Formatter, Layer, Logger, Option, Order, Predicate, Record as Rec, Result, Schema, Scope, Stream, Redacted } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Arbitrary,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Formatter,
+  Layer,
+  Logger,
+  Option,
+  Order,
+  Predicate,
+  Record as Rec,
+  Result,
+  Schema,
+  Scope,
+  Stream,
+  Redacted,
+} from "effect";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -788,7 +791,7 @@ describe("P13 selected input recording", () => {
 
                 for (const row of rows) {
                   expect(
-                    yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(String(row.body)),
+                    yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(String(row.body)),
                   ).toMatchObject({
                     input: { type: "comment", ticket: "ticket-7" },
                   });
@@ -2939,7 +2942,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
           const saved = w.db.prepare("SELECT value FROM gateway_state WHERE name=?").get(`client/${connection.client}`);
           const attached =
             saved !== undefined &&
-            (yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ _tag: Schema.String })))(
+            (yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Struct({ _tag: Schema.String })))(
               String(saved.value),
             ))._tag === "waiting";
           yield* d.disconnect(connection.client);
@@ -6138,7 +6141,7 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
           const extra = { ...call.extra, ref: `${call.ref}:x`, pid: call.pid };
           // A key every door call reserves (`id`, `by`, `for`, `arrivedAt`) keeps the door's own
           // `reserved` refusal; any other key is this method's `bad_input`.
-          const reserved = Arr.some(["id", "by", "for", "arrivedAt"], (k) => Rec.has(extra, k));
+          const reserved = Arr.some(["id", "by", "for", "arrivedAt"], (k) => Rec.has<string, unknown>(extra, k));
           expect(yield* d.route(client, "process.monitor", extra), Formatter.format(Rec.keys(extra))).toMatchObject({
             _tag: "refused",
             reason: reserved ? "reserved" : "bad_input",

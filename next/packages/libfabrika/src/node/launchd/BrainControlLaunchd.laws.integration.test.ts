@@ -11,12 +11,13 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
+
 import * as Outside from "../../desktop/BrainControl.test-support.ts";
 import { BrainControl } from "../../desktop/BrainControl.ts";
 import * as FilesTest from "../../desktop/BrainFilesTest.ts";
@@ -182,7 +183,7 @@ it.effect.prop(
       expect(Exit.isSuccess(yield* brain.stop.pipe(Effect.exit))).toBe(true);
       expect(
         Option.getOrUndefined(
-          Arr.findFirst(disk.seen.slice(from), (call) => pipe(call.executable, Str.endsWith("launchctl"))),
+          Arr.findFirst(disk.seen.slice(from), (call) => Function.pipe(call.executable, Str.endsWith("launchctl"))),
         )?.args[0],
       ).toBe("print");
       expect(removalObservations).toEqual([null, null]);
@@ -378,7 +379,7 @@ it.effect.prop(
       expect(Arr.some(disk.seen, (call) => /(?:sh|bash|zsh)$/.test(call.executable))).toBe(false);
 
       const compile = Option.getOrUndefined(
-        Arr.findFirst(disk.seen, (call) => pipe(call.executable, Str.endsWith("plutil"))),
+        Arr.findFirst(disk.seen, (call) => Function.pipe(call.executable, Str.endsWith("plutil"))),
       );
 
       expect(compile?.args).toContain("xml1");
@@ -525,7 +526,11 @@ it.effect.prop(
             }
 
             expect(delivered.length).toBeGreaterThanOrEqual(attempts);
-            const actions = Arr.filter(delivered, ({ span }) => pipe(span.name, Str.startsWith("BrainService.")));
+
+            const actions = Arr.filter(delivered, ({ span }) =>
+              Function.pipe(span.name, Str.startsWith("BrainService.")),
+            );
+
             expect(actions.length).toBeGreaterThanOrEqual(attempts);
             expect(Arr.some(actions, ({ span }) => span.attributes["fab.result"] === "delivery_failed")).toBe(true);
 

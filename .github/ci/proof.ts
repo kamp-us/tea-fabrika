@@ -207,6 +207,7 @@ if (import.meta.main) {
   // The step's variables, read through Effect's Config. An empty variable stays empty, as a read of
   // process.env gave it, so `whole` still refuses an empty MOST or LIMIT.
   const text = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
+
   const env = Effect.runSync(
     Config.all({
       most: text("MOST"),
@@ -216,6 +217,7 @@ if (import.meta.main) {
       summary: text("GITHUB_STEP_SUMMARY"),
     }).parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true })),
   );
+
   const root = fileURLToPath(new URL("../../", import.meta.url));
 
   const git = (args: readonly string[]) => {

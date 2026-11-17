@@ -8,9 +8,10 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { checkSshsig, verifySshsig } from "./Sshsig.ts";
 import { line, realArmor, SPACE, text } from "./SshsigWebauthn.test-support.ts";
@@ -214,7 +215,7 @@ const check = (armored: string, signer: string = line, body: string = text, over
 const refused = { _tag: "refused", reason: "bad_signature" };
 
 const blob = (armored = realArmor) =>
-  Buffer.from(Arr.join(pipe(armored, Str.trim, Str.split("\n")).slice(1, -1), ""), "base64");
+  Buffer.from(Arr.join(Function.pipe(armored, Str.trim, Str.split("\n")).slice(1, -1), ""), "base64");
 
 const runs = { seed: 119120, numRuns: 40 };
 

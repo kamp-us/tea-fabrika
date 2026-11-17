@@ -9,13 +9,14 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { ObjectId, Repositories, SourceMetadata } from "../../repositories/Repositories.ts";
 import type { RepositoriesError, Repository } from "../../repositories/Repositories.ts";
@@ -89,7 +90,7 @@ const personBases = Effect.fnUntraced(function* (root: string) {
         expected = [];
 
       for (const from of [".", "./", "./.", "..", "../", "./.."]) {
-        const reads: ReadonlyArray<readonly [string, string]> = pipe(from, Str.includes(".."))
+        const reads: ReadonlyArray<readonly [string, string]> = Function.pipe(from, Str.includes(".."))
           ? [
               ["entry.txt", parent],
               ["./.fabrika/entry.txt", own],
@@ -148,8 +149,8 @@ const regularFileLinks = Effect.fnUntraced(function* (root: string) {
   const blobs = new Map<string, string>([["traversal/entry.txt", "regular file"]]);
 
   const entries = new Map<string, { mode: string; type: string; id: string }>([
-    ["traversal", { mode: "040000", type: "tree", id: pipe("b", Str.repeat(40)) }],
-    ["traversal/entry.txt", { mode: "100644", type: "blob", id: pipe("c", Str.repeat(40)) }],
+    ["traversal", { mode: "040000", type: "tree", id: Function.pipe("b", Str.repeat(40)) }],
+    ["traversal/entry.txt", { mode: "100644", type: "blob", id: Function.pipe("c", Str.repeat(40)) }],
   ]);
 
   const links = [
@@ -164,7 +165,7 @@ const regularFileLinks = Effect.fnUntraced(function* (root: string) {
     for (const link of links) {
       yield* fs.symlink(link.target, path.join(folder, link.name));
       blobs.set(`traversal/${link.name}`, link.target);
-      entries.set(`traversal/${link.name}`, { mode: "120000", type: "blob", id: pipe("d", Str.repeat(40)) });
+      entries.set(`traversal/${link.name}`, { mode: "120000", type: "blob", id: Function.pipe("d", Str.repeat(40)) });
     }
   }
 
@@ -234,20 +235,24 @@ it.effect.prop(
         yield* fs.makeDirectory(path.join(repo, ".fabrika"), { recursive: true });
         yield* fs.makeDirectory(path.join(repo, "inside space"));
         yield* fs.makeDirectory(person);
-        const commit = Schema.decodeSync(ObjectId)(pipe("a", Str.repeat(40)));
+        const commit = Schema.decodeSync(ObjectId)(Function.pipe("a", Str.repeat(40)));
 
         const entries = new Map<string, { mode: string; type: string; id: string }>([
-          [".fabrika", { mode: "040000", type: "tree", id: pipe("b", Str.repeat(40)) }],
-          ["inside space", { mode: "040000", type: "tree", id: pipe("c", Str.repeat(40)) }],
-          ["inside space/entry.txt", { mode: "100644", type: "blob", id: pipe("e", Str.repeat(40)) }],
+          [".fabrika", { mode: "040000", type: "tree", id: Function.pipe("b", Str.repeat(40)) }],
+          ["inside space", { mode: "040000", type: "tree", id: Function.pipe("c", Str.repeat(40)) }],
+          ["inside space/entry.txt", { mode: "100644", type: "blob", id: Function.pipe("e", Str.repeat(40)) }],
           ...Arr.map(
             ["local", "outside", "absolute", "cycle"],
-            (name) => [`.fabrika/${name}`, { mode: "120000", type: "blob", id: pipe("d", Str.repeat(40)) }] as const,
+            (name) =>
+              [`.fabrika/${name}`, { mode: "120000", type: "blob", id: Function.pipe("d", Str.repeat(40)) }] as const,
           ),
           ...Arr.map(
             ["local-file", "outside-file", "absolute-local", "absolute-outside"],
             (name) =>
-              [`inside space/${name}`, { mode: "120000", type: "blob", id: pipe("d", Str.repeat(40)) }] as const,
+              [
+                `inside space/${name}`,
+                { mode: "120000", type: "blob", id: Function.pipe("d", Str.repeat(40)) },
+              ] as const,
           ),
         ]);
 

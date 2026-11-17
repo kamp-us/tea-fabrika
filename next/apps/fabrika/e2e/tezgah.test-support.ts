@@ -12,12 +12,18 @@ import {
   TezgahView as View,
   tezgahName,
 } from "@kampus/libfabrika/tezgah/Workspace";
-import { String as Str, pipe, Array as Arr, Record as Rec, DateTime, Effect, Formatter, Option, Schema, Config } from "effect";
-
-
-
-
-
+import {
+  String as Str,
+  pipe,
+  Array as Arr,
+  Record as Rec,
+  DateTime,
+  Effect,
+  Formatter,
+  Option,
+  Schema,
+  Config,
+} from "effect";
 
 import type { Page } from "playwright";
 import { expect } from "vitest";

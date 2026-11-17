@@ -2,20 +2,17 @@
 // The tests step's field row records the failing plants for all nine laws (0093).
 // Answer letters, shown program state and URLs belong to later slices.
 import { describe, expect, it } from "@effect/vitest";
-import type * as Scope from "effect/Scope";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
-import * as Str from "effect/String";
 import * as Rec from "effect/Record";
-
-
-
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Str from "effect/String";
 
 import { expectTypeOf } from "vitest";
 import { inbox } from "../processes/Mailbox.ts";

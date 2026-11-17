@@ -30,7 +30,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
@@ -40,6 +40,7 @@ import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import { parseSync } from "oxc-parser";
@@ -233,7 +234,7 @@ const fixture = (value: string, count = 1) => {
 
   cpSync(join(ROOT, "next/apps/fabrika/src"), join(home, "src"), {
     recursive: true,
-    filter: (p) => !pipe(p, Str.endsWith(".test.ts")),
+    filter: (p) => !Function.pipe(p, Str.endsWith(".test.ts")),
   });
   vi.stubEnv("TYPESAFE_API_KEY", undefined);
   vi.stubEnv("FABRIKA_HOME", home);
@@ -570,8 +571,8 @@ describe("P16 p33 one-file build", () => {
           embedded(`export const source=${JSON.stringify(source)};`, [source]);
 
           for (const changed of [
-            pipe(source, Str.replaceAll("\\r\\n", "\\n")),
-            pipe(source, Str.replaceAll("\\\\", "\\")),
+            Function.pipe(source, Str.replaceAll("\\r\\n", "\\n")),
+            Function.pipe(source, Str.replaceAll("\\\\", "\\")),
             `${source}\n`,
           ]) {
             assert.notEqual(changed, source);
@@ -629,12 +630,12 @@ const parsedRules = (css: string): unknown => {
 const pageRules = (page: string): unknown =>
   parsedRules(
     Arr.join(
-      Arr.map([...pipe(page, Str.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi))], (m) => m[1] ?? ""),
+      Arr.map([...Function.pipe(page, Str.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi))], (m) => m[1] ?? ""),
       "\n",
     ),
   );
 
-const count = (text: string, pattern: RegExp) => [...pipe(text, Str.matchAll(pattern))].length;
+const count = (text: string, pattern: RegExp) => [...Function.pipe(text, Str.matchAll(pattern))].length;
 
 // A style element ends at its first `</style`, as an HTML tokenizer reads raw text; what is left is markup.
 const STYLE = /<style\b[^>]*>[\s\S]*?<\/style\s*>/gi;
@@ -785,7 +786,10 @@ const tabHome = (value: string) => {
 
 /** The temporary folders a build makes beside `out`; none may outlive the build. */
 const leftovers = (home: string) =>
-  Arr.filter(readdirSync(home), (n) => pipe(n, Str.startsWith(".fabrika-build-")) || pipe(n, Str.endsWith(".old")));
+  Arr.filter(
+    readdirSync(home),
+    (n) => Function.pipe(n, Str.startsWith(".fabrika-build-")) || Function.pipe(n, Str.endsWith(".old")),
+  );
 
 const outFiles = (out: string) => (existsSync(out) ? snapshot(out) : []);
 
@@ -854,7 +858,7 @@ const checkCarried = (
       parsedRules(Arr.join(given, "\n")),
     );
     expect(page!.body, "no stylesheet in the page imports another file").not.toMatch(/@import\b/i);
-    const markup = pipe(page!.body, Str.replace(STYLE, ""));
+    const markup = Function.pipe(page!.body, Str.replace(STYLE, ""));
     expect(count(page!.body, STYLE), "one style element per stylesheet").toBe(given.length);
     expect(count(markup, /<\/?style\b/gi), "no stylesheet text ends its element early").toBe(0);
     expect(count(markup, /<script\b/gi), "the page's one script").toBe(1);
@@ -1214,7 +1218,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
 
               const clean = (output: string, label: string) => {
                 for (const form of forms) {
-                  expect(pipe(output, Str.includes(form)), `${label} copies no credential`).toBe(false);
+                  expect(Function.pipe(output, Str.includes(form)), `${label} copies no credential`).toBe(false);
                 }
               };
 
@@ -1254,7 +1258,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
                 const built = (result as { readonly success: Built }).success;
                 const page = built.assets[PAGE]?.body ?? "";
 
-                for (const [, url] of pipe(page, Str.matchAll(/\b(?:src|href)="([^"]*)"/g))) {
+                for (const [, url] of Function.pipe(page, Str.matchAll(/\b(?:src|href)="([^"]*)"/g))) {
                   clean(url!, "a page URL");
                   clean(decodeURIComponent(url!), "a decoded page URL");
                 }
@@ -1273,7 +1277,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
                 const config = StartsTest.fixture(
                   { name: "p14", port, person: "p", founder: "f", window: null, build: built.build },
                   (algorithm, data) =>
-                    createHash(pipe(algorithm.name, Str.replaceAll("-", ""), Str.toLowerCase))
+                    createHash(Function.pipe(algorithm.name, Str.replaceAll("-", ""), Str.toLowerCase))
                       .update(data)
                       .digest(),
                 );
@@ -1337,13 +1341,13 @@ const nameBreaks: ReadonlyArray<(name: string) => string> = [
   (name) => Str.split(name, "/")[1]!,
   (name) => `/${name}`,
   (name) => `${name}/`,
-  (name) => pipe(name, Str.replace("/", "//")),
+  (name) => Function.pipe(name, Str.replace("/", "//")),
   (name) => `${name}/extra`,
   (name) => `../${name}`,
-  (name) => pipe(name, Str.replace("/", "/./")),
-  (name) => pipe(name, Str.replace("/", ".")),
-  (name) => pipe(name, Str.replace("/", " ")),
-  (name) => `${name}${pipe("x", Str.repeat(257 - name.length))}`,
+  (name) => Function.pipe(name, Str.replace("/", "/./")),
+  (name) => Function.pipe(name, Str.replace("/", ".")),
+  (name) => Function.pipe(name, Str.replace("/", " ")),
+  (name) => `${name}${Function.pipe("x", Str.repeat(257 - name.length))}`,
 ];
 
 const p40Home = Effect.fn("p40.home")(function* () {

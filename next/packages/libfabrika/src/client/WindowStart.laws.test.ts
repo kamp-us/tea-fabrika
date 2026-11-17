@@ -31,7 +31,6 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
 import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -43,6 +42,7 @@ import * as Socket from "effect/socket/Socket";
 import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { ClientKey, ClientKeyError } from "../transport/ClientKey.ts";
@@ -321,7 +321,7 @@ const identity = Effect.gen(function* () {
 
   return {
     fingerprint: "SHA256:test",
-    raw: pipe(
+    raw: Function.pipe(
       btoa(String.fromCharCode(...raw)),
       Str.replaceAll("+", "-"),
       Str.replaceAll("/", "_"),
@@ -1005,7 +1005,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
 
           const ws = new MemorySocket(url, {
             send: (text) => {
-              owed -= pipe(text, Str.includes('"initialize"')) ? 1 : 0;
+              owed -= Function.pipe(text, Str.includes('"initialize"')) ? 1 : 0;
               lower();
             },
             closed: lower,
@@ -1240,7 +1240,11 @@ const recording = (spans: Array<Tracer.AnySpan>) =>
   );
 
 /** The ways a secret can be written out: as it is, URL-encoded, and JSON-escaped. */
-const forms = (secret: string) => [secret, encodeURIComponent(secret), pipe(JSON.stringify(secret), Str.slice(1, -1))];
+const forms = (secret: string) => [
+  secret,
+  encodeURIComponent(secret),
+  Function.pipe(JSON.stringify(secret), Str.slice(1, -1)),
+];
 
 const Secret = Schema.String.check(Schema.isMinLength(4), Schema.isMaxLength(24));
 
@@ -1360,7 +1364,7 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
         const tab = String(Reflect.get(Object(hello?.params), "tab") ?? "");
         expect(signed.length, "the hello was signed").toBeGreaterThan(0);
         expect(
-          Arr.some(door.sent, (t) => Arr.some(forms(s.body), (form) => pipe(t, Str.includes(form)))),
+          Arr.some(door.sent, (t) => Arr.some(forms(s.body), (form) => Function.pipe(t, Str.includes(form)))),
           "the press reached the door",
         ).toBe(true);
         // Every span the start made is its own, a `Span` with a name: an external one is a parent
@@ -1384,13 +1388,13 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
 
         for (const [output, text] of Rec.toEntries(outputs)) {
           expect(
-            Arr.filter(secrets, (secret) => pipe(text, Str.includes(secret))),
+            Arr.filter(secrets, (secret) => Function.pipe(text, Str.includes(secret))),
             `${output} holds a secret`,
           ).toEqual([]);
         }
 
         // A dial's URL is the origin's socket path, the fingerprint and the tab, and nothing else.
-        const ws = pipe(ORIGIN, Str.replace(/^http/, "ws"));
+        const ws = Function.pipe(ORIGIN, Str.replace(/^http/, "ws"));
         expect(
           urls.length,
           "the start dialed three times: the throw, its retry, and after the drop",

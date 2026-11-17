@@ -18,19 +18,23 @@
 // imports no product code, so a builder cannot weaken it by changing one (p84). Exit 1 on any `stuck`,
 // 0 on `done` and `ask`, 2 when the run fails: a keys file p87 refuses, or something it could not read.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { String as Str, pipe, Array as Arr } from "effect";
-import * as Config from "effect/Config";
-import * as Console from "effect/Console";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import type * as PlatformError from "effect/PlatformError";
+import {
+  String as Str,
+  pipe,
+  Array as Arr,
+  Config,
+  Console,
+  Effect,
+  Exit,
+  FileSystem,
+  Formatter,
+  Option,
+  Path,
+  Schema,
+  Stream,
+} from "effect";
+import type { PlatformError } from "effect";
 import { ChildProcess } from "effect/process";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 
 export const ROLES = ["tests", "build", "lead"] as const;
 
@@ -834,7 +838,7 @@ const loggedAt = Effect.fnUntraced(function* (rev: string) {
       continue;
     }
 
-    const row: unknown = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(line).pipe(
+    const row: unknown = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(line).pipe(
       Effect.mapError(() => Failed.make({ message: `field/runs.jsonl line ${i + 1} is not JSON` })),
     );
 

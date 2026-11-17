@@ -20,19 +20,23 @@ import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { BuildError } from "@kampus/libfabrika/runtime/Built";
 import { runsFor } from "@kampus/vitest";
-import { String as Str, pipe, Array as Arr, Record as Rec, Config, Effect, Exit, Option, Result, Schema, Scope, Formatter, Layer } from "effect";
-import { SecureRandom } from "effect/crypto";
+import {
+  String as Str,
+  pipe,
+  Array as Arr,
+  Record as Rec,
+  Config,
+  Effect,
+  Exit,
+  Option,
+  Result,
+  Schema,
+  Scope,
+  Formatter,
+  Layer,
+} from "effect";
 import type { PlatformError } from "effect";
-
-
-
-
-
-
-
-
-
-
+import { SecureRandom } from "effect/crypto";
 
 import * as fc from "fast-check";
 import { chromium } from "playwright";

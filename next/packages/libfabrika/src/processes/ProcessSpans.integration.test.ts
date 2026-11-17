@@ -6,24 +6,13 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
-import * as Tracer from "effect/Tracer";
-import * as Rec from "effect/Record";
 import * as TestClock from "effect/testing/TestClock";
-
-
-
-
-
-
-
-
-
-
-
+import * as Tracer from "effect/Tracer";
 
 import * as Id from "../Id.ts";
 import { Archive } from "../telemetry/Archive.ts";

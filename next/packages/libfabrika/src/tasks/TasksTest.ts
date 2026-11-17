@@ -21,13 +21,14 @@ import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as R from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -139,7 +140,8 @@ export const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
 };
 
 /** The same process id with its last character flipped: "0" becomes "1", anything else "0". */
-const flipLast = (id: string): string => `${pipe(id, Str.slice(0, -1))}${pipe(id, Str.endsWith("0")) ? "1" : "0"}`;
+const flipLast = (id: string): string =>
+  `${Function.pipe(id, Str.slice(0, -1))}${Function.pipe(id, Str.endsWith("0")) ? "1" : "0"}`;
 
 /** One field of a request changed to another valid value: same id, different bytes. */
 export const changedRequest = (request: Request, pick: number, other: Request): Request => {
@@ -219,7 +221,7 @@ export const BAD_REQUEST: ReadonlyArray<readonly [string, unknown]> = [
   ["settings", MISSING],
   ["parent", "not-an-input"],
   ["parent", MISSING],
-  ["traceId", pipe("0", Str.repeat(32))],
+  ["traceId", Function.pipe("0", Str.repeat(32))],
   ["traceId", "XYZ"],
 ];
 
@@ -492,7 +494,7 @@ const able = (saved: Saved, cell: Cell): Executor => ({
 
 /** Another execution identity than the saved one, close to it on purpose. */
 const otherExecution = (execution: string, variant: number): string =>
-  choose([`${execution}x`, pipe(execution, Str.slice(0, -1)) || "e", `other-${execution}`], variant);
+  choose([`${execution}x`, Function.pipe(execution, Str.slice(0, -1)) || "e", `other-${execution}`], variant);
 
 /** A move, or a move in the one phase of the task it was played on. */
 type Done = Move | `${Move}@${Phase}` | "listed" | "listed_empty";

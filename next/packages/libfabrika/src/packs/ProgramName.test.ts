@@ -1,11 +1,3 @@
-import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { it } from "@effect/vitest";
-import * as Arr from "effect/Array";
-import * as Effect from "effect/Effect";
-import { pipe } from "effect/Function";
 // P40 slice 1, next/. A program's identity is `pack/program`: exactly two segments, each in the
 // builder's segment alphabet, at most 256 characters in all (0083). Builder contract:
 // `packs/ProgramName.ts` exports the `ProgramName` schema, pure and platform-free.
@@ -13,9 +5,19 @@ import { pipe } from "effect/Function";
 // The law walks a name. A decision tape is folded through the current valid name: an even step
 // grows or replaces one of its segments, staying valid, and an odd step breaks the current name in
 // one way and must be refused. Shrinking a tape recomputes every move from the shortened prefix.
+
+import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { it } from "@effect/vitest";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { describe, expect, vi } from "vitest";
 
@@ -118,13 +120,15 @@ const breaks = (name: Name): ReadonlyArray<(n: number) => string> => {
     (n) => {
       const key = side(n);
       const at = n % (name[key].length + 1);
-      const broken = pipe(name[key], Str.slice(0, at)) + pick(FOREIGN, n) + pipe(name[key], Str.slice(at));
+
+      const broken =
+        Function.pipe(name[key], Str.slice(0, at)) + pick(FOREIGN, n) + Function.pipe(name[key], Str.slice(at));
 
       return key === "pack" ? `${broken}/${program}` : `${pack}/${broken}`;
     },
     (n) =>
       side(n) === "pack" ? `${pick([..."0123456789-"], n)}${full}` : `${pack}/${pick([..."0123456789-"], n)}${program}`,
-    (n) => `${full}${pipe(pick([..."ab_-1"], n), Str.repeat(MAX + 1 - full.length))}`,
+    (n) => `${full}${Function.pipe(pick([..."ab_-1"], n), Str.repeat(MAX + 1 - full.length))}`,
   ];
 };
 

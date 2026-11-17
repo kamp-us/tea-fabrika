@@ -14,11 +14,8 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { connect } from "node:net";
 import { join, resolve } from "node:path";
-import { String as Str, Array as Arr } from "effect";
-import * as Clock from "effect/Clock";
-import * as Effect from "effect/Effect";
-import * as Formatter from "effect/Formatter";
-import * as Schema from "effect/Schema";
+import { String as Str, Array as Arr, Clock, Effect, Formatter, Schema } from "effect";
+
 import * as fc from "fast-check";
 import { describe, expect, it, type TestContext } from "vitest";
 import { suite as scopedSuite } from "./p14.test-support.ts";

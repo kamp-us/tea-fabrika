@@ -20,21 +20,24 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, String as Str, Cause, Effect, Exit, Formatter, Layer, Option, Predicate, Record as Rec, Result, Schema, Stream, Tracer } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Cause,
+  Effect,
+  Exit,
+  Formatter,
+  Layer,
+  Option,
+  Predicate,
+  Record as Rec,
+  Result,
+  Schema,
+  Stream,
+  Tracer,
+} from "effect";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
-
-
-
-
-
-
-
-
-
-
-
-
 
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -83,9 +86,9 @@ const texts = (value: unknown, cache: Map<string, ReadonlyArray<string>>): Reado
     return result;
   }
 
-  return Arr.isArray<Schema.Json>(value)
+  return Arr.isArray(value)
     ? Arr.flatMap(value, (part) => texts(part, cache))
-    : value !== null && typeof value === "object"
+    : Predicate.isObject(value)
       ? Arr.flatMap(Rec.values(value), (part) => texts(part, cache))
       : [];
 };
@@ -500,7 +503,7 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                   const rows = Arr.filter(cells, (r) => r.stream === "gateway/inputs" && r._tag === "received");
                   expect(rows.length).toBeGreaterThan(0);
                   expect(
-                    yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(String(rows.at(-1)!.body)),
+                    yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(String(rows.at(-1)!.body)),
                   ).toMatchObject({ input: { type: "comment" } });
                 }
               }

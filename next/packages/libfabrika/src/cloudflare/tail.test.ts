@@ -4,12 +4,10 @@ import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
-import * as Tracer from "effect/Tracer";
-import * as Str from "effect/String";
 import * as Rec from "effect/Record";
-
-
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+import * as Tracer from "effect/Tracer";
 
 import * as fc from "fast-check";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";

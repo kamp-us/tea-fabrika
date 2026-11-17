@@ -19,11 +19,8 @@ import { MemberEvent } from "@kampus/libfabrika/access/Access";
 import { valueFor } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
-import { String as Str, pipe, Array as Arr } from "effect";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as Formatter from "effect/Formatter";
-import * as Schema from "effect/Schema";
+import { String as Str, pipe, Array as Arr, Effect, Fiber, Formatter, Schema } from "effect";
+
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {

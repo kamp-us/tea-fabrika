@@ -17,20 +17,24 @@ import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, String as Str } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Effect,
+  Exit,
+  FileSystem,
+  Formatter,
+  Layer,
+  Path,
+  Ref,
+  Schedule,
+  Schema,
+  Stream,
+} from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
-import * as Formatter from "effect/Formatter";
 import { FetchHttpClient, HttpClient } from "effect/http";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
-import * as Ref from "effect/Ref";
-import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
+
 import * as fc from "fast-check";
 import { rolldown } from "rolldown";
 import { build } from "./build.ts";
@@ -190,7 +194,7 @@ describe("L13, each process start keeps the exact settings and hash it began wit
                   yield* begin(a.env);
                 } else if (processes.length > 0) {
                   const p = processes[a.which % processes.length]!;
-                  const replayed = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Snapshot.Snapshot))(p.saved);
+                  const replayed = yield* Schema.decodeEffect(Schema.fromJsonString(Snapshot.Snapshot))(p.saved);
                   expect(replayed.values["instance.port"]).toBe(p.port);
                   // The process's own value never moves, though files changed since it began.
                   expect(p.held.values["instance.port"]).toBe(p.port);

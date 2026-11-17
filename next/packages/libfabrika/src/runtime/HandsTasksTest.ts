@@ -23,13 +23,12 @@
 // another process's waiting receipt out of the reply. Plant: drop that check in `HandsTasksLive.ts`.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
 import * as R from "effect/Result";
 import type * as Scope from "effect/Scope";
-import * as Arr from "effect/Array";
-import * as Rec from "effect/Record";
-
 
 import * as fc from "fast-check";
 import type { From } from "../processes/Mailbox.ts";

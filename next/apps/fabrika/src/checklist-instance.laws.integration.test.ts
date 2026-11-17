@@ -37,14 +37,19 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import { tezgah } from "@kampus/tezgah";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, String as Str, Cause, DateTime, Effect, Exit, Formatter, Option, Schema, Duration, Fiber } from "effect";
-
-
-
-
-
-
-
+import {
+  Array as Arr,
+  String as Str,
+  Cause,
+  DateTime,
+  Effect,
+  Exit,
+  Formatter,
+  Option,
+  Schema,
+  Duration,
+  Fiber,
+} from "effect";
 
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";

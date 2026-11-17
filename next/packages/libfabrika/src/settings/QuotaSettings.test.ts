@@ -1,15 +1,13 @@
 // P34c slice 4, next/. Calibration is copied from A-Numbers, never read from product defaults.
 import { describe, expect, it } from "@effect/vitest";
 import * as ByteSize from "effect/ByteSize";
+import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as Digest from "effect/crypto/Digest";
-import * as Str from "effect/String";
 import * as Rec from "effect/Record";
-
-
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Setting.ts";

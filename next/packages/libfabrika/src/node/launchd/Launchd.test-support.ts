@@ -8,7 +8,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -19,6 +19,7 @@ import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
+
 import { BrainControl } from "../../desktop/BrainControl.ts";
 import * as BrainFilesTest from "../../desktop/BrainFilesTest.ts";
 import * as ServiceTest from "../../desktop/BrainServiceTest.ts";
@@ -106,18 +107,21 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
 
         let response: Response = {
           ...supplied,
-          stderr: pipe(supplied.stderr, Str.replace("test.p19.brain", Str.split(args.at(-1) ?? "", "/").at(-1) ?? "")),
+          stderr: Function.pipe(
+            supplied.stderr,
+            Str.replace("test.p19.brain", Str.split(args.at(-1) ?? "", "/").at(-1) ?? ""),
+          ),
         };
 
-        if (pipe(command.command, Str.endsWith("launchctl")) && !args.includes("print")) {
+        if (Function.pipe(command.command, Str.endsWith("launchctl")) && !args.includes("print")) {
           response = { code: 0, stdout: "", stderr: "" };
         }
 
-        if (pipe(command.command, Str.endsWith("id"))) {
+        if (Function.pipe(command.command, Str.endsWith("id"))) {
           response = { code: 0, stdout: "501\n", stderr: "" };
         }
 
-        if (pipe(command.command, Str.endsWith("plutil"))) {
+        if (Function.pipe(command.command, Str.endsWith("plutil"))) {
           if (fault === "compile") {
             return yield* failure("compile");
           }
@@ -251,7 +255,9 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
   const links = Effect.gen(function* () {
     const held: Array<ReadonlyArray<number>> = [];
 
-    for (const folder of Arr.filter(yield* fs.readDirectory(home), (name) => pipe(name, Str.startsWith(".brain-")))) {
+    for (const folder of Arr.filter(yield* fs.readDirectory(home), (name) =>
+      Function.pipe(name, Str.startsWith(".brain-")),
+    )) {
       for (const name of yield* fs.readDirectory(path.join(home, folder))) {
         const file = path.join(home, folder, name);
 

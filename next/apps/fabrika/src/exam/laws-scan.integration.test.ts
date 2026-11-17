@@ -17,8 +17,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
-import * as Effect from "effect/Effect";
+import { String as Str, pipe, Array as Arr, Record as Rec, Effect } from "effect";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
 

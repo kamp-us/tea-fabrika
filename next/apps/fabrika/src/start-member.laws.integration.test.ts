@@ -9,12 +9,6 @@ import { Recipient } from "@kampus/libfabrika/processes/Process";
 import { ProjectService } from "@kampus/libfabrika/workers/runtime";
 import { Array as Arr, String as Str, DateTime, Effect, Exit, Option, Schema, Scope, Duration } from "effect";
 
-
-
-
-
-
-
 import { describe, expect, it, vi } from "vitest";
 import { childHome, childProject, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
 

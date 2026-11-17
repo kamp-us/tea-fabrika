@@ -25,7 +25,7 @@ import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as PlatformError from "effect/PlatformError";
@@ -35,6 +35,7 @@ import * as Sink from "effect/Sink";
 import * as Str from "effect/String";
 import * as TestConsole from "effect/testing/TestConsole";
 import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
 import * as Print from "../../settings/Print.ts";
@@ -118,7 +119,7 @@ const files = (at: string, person: Person, sunk: Array<string>) =>
               : Effect.fail(missing("readFileString", path));
         }
 
-        return pipe(path, Str.endsWith(".fabrika/fabrika.toml"))
+        return Function.pipe(path, Str.endsWith(".fabrika/fabrika.toml"))
           ? Effect.succeed("[nope]\nkey = 1\n")
           : Effect.fail(missing("readFileString", path));
       },
@@ -341,7 +342,7 @@ const shape = (g: Generated) => {
 /** Whether a line of output is a report row: it starts with a declared path. */
 const row = (line: string) =>
   Arr.some(Str.split(line, "\n"), (l) =>
-    Arr.some(Declarations.all.declarations, (d) => pipe(l, Str.trimStart, Str.startsWith(d.path))),
+    Arr.some(Declarations.all.declarations, (d) => Function.pipe(l, Str.trimStart, Str.startsWith(d.path))),
   );
 
 describe("L7, the command loads once, prints only after success, selects no repo and writes nothing", () => {
@@ -377,12 +378,16 @@ describe("L7, the command loads once, prints only after success, selects no repo
 });
 
 /** Every form a secret may take in text: raw, JSON-escaped and URL-encoded. */
-const forms = (secret: string) => [secret, pipe(JSON.stringify(secret), Str.slice(1, -1)), encodeURIComponent(secret)];
+const forms = (secret: string) => [
+  secret,
+  Function.pipe(JSON.stringify(secret), Str.slice(1, -1)),
+  encodeURIComponent(secret),
+];
 
 // Made-up secrets with the characters that make the three forms differ.
 const secret = fc
   .tuple(fc.stringMatching(/^[A-Za-z0-9]{6,12}$/), fc.constantFrom('"', "/", " ", "+", "\\", "&"))
-  .map(([word, mark]) => `sk-${word}${mark}${pipe(word, Str.slice(0, 3))}`);
+  .map(([word, mark]) => `sk-${word}${mark}${Function.pipe(word, Str.slice(0, 3))}`);
 
 /**
  * Where the person's file holds the secret: nowhere, at an unknown key, or under a declared key.

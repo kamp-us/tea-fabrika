@@ -17,11 +17,11 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Layout from "@kampus/libfabrika/tezgah/Layout";
 import { type Tile, type TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
 import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
 import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -58,7 +58,7 @@ const TAG = /<\/?([a-zA-Z][a-zA-Z0-9-]*)((?:\s+[^\s=>/]+(?:="[^"]*")?)*)\s*(\/?)
 const ATTR = /([^\s=>/]+)(?:="([^"]*)")?/g;
 
 const unescape = (text: string) =>
-  pipe(
+  Function.pipe(
     text,
     Str.replace(/&quot;/g, '"'),
     Str.replace(/&#x27;/g, "'"),

@@ -35,29 +35,14 @@ import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
-import * as Tracer from "effect/Tracer";
-import * as Rec from "effect/Record";
 import * as TestClock from "effect/testing/TestClock";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+import * as Tracer from "effect/Tracer";
 
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";

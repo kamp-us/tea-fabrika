@@ -23,19 +23,13 @@
 import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
-import * as Str from "effect/String";
-import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
-
-
-
-
-
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";

@@ -6,7 +6,26 @@ import { join, relative, resolve } from "node:path";
 import { it } from "@effect/vitest";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Array as Arr, Cause, Effect, Exit, FileSystem, Formatter, Layer, Logger, Option, Path, PlatformError, Record as Rec, References, Schema, Sink, Stream, String as Str } from "effect";
+import {
+  Arbitrary,
+  Array as Arr,
+  Cause,
+  Effect,
+  Exit,
+  FileSystem,
+  Formatter,
+  Layer,
+  Logger,
+  Option,
+  Path,
+  PlatformError,
+  Record as Rec,
+  References,
+  Schema,
+  Sink,
+  Stream,
+  String as Str,
+} from "effect";
 import { ChildProcessSpawner } from "effect/process";
 
 import * as fc from "fast-check";

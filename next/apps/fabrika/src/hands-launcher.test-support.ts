@@ -12,11 +12,6 @@ import { Command } from "@kampus/libfabrika/tasks/Task";
 import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
 import { Array as Arr, String as Str, Cause, Effect, Formatter, Option, Schema, Record as Rec } from "effect";
 
-
-
-
-
-
 import { Control as RealControl, Project as RealProject } from "./brain.ts";
 import { projectTasksLayer } from "./runtime.ts";
 

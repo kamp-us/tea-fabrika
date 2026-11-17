@@ -5,8 +5,6 @@ import { Cause, DateTime, Effect, Exit, Layer, Option, Schema, Sink, Stream, Rec
 import { FetchHttpClient } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-
-
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 

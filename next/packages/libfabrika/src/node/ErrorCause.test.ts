@@ -6,9 +6,10 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as GatewayCauseTest from "../gateway/GatewayCauseTest.ts";
 import { Doorbell, Ledger, type LedgerCalls, LedgerError } from "../ledger/Ledger.ts";
@@ -133,7 +134,7 @@ const carriers = (text: string): ReadonlyArray<unknown> => [
 const forms = (core: string, text: string) => [
   core,
   text,
-  pipe(JSON.stringify(text), Str.slice(1, -1)),
+  Function.pipe(JSON.stringify(text), Str.slice(1, -1)),
   encodeURIComponent(text),
 ];
 
@@ -228,9 +229,10 @@ describe("T695, C7 [secrets]: the span sink stores no input-bearing detail of a 
 
         for (const { word } of steps) {
           for (const form of forms(word, `${decor}${word}${decor}`)) {
-            expect(pipe(stored, Str.includes(form)), "a stored span row holds a cause's input-bearing text").toBe(
-              false,
-            );
+            expect(
+              Function.pipe(stored, Str.includes(form)),
+              "a stored span row holds a cause's input-bearing text",
+            ).toBe(false);
           }
         }
       }),

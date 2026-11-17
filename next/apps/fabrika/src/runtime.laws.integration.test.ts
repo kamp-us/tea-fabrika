@@ -19,19 +19,23 @@ import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, String as Str, Cause, DateTime, Deferred, Effect, Exit, Formatter, Layer, Option, Schedule, Schema, Scope, Tracer, Record as Rec } from "effect";
-
-
-
-
-
-
-
-
-
-
-
-
+import {
+  Array as Arr,
+  String as Str,
+  Cause,
+  DateTime,
+  Deferred,
+  Effect,
+  Exit,
+  Formatter,
+  Layer,
+  Option,
+  Schedule,
+  Schema,
+  Scope,
+  Tracer,
+  Record as Rec,
+} from "effect";
 
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
@@ -1177,10 +1181,7 @@ describe("P12 Connection recording", () => {
           expect(refused[0]).toMatchObject({ ok: false, attributes: { "error.type": kind.name } });
           // Failure text is deletable content (P37), never a span tag.
           expect(
-            Arr.filter(
-              Rec.values(refused[0]!.attributes),
-              (tag) => typeof tag === "string" && Str.includes(text)(tag),
-            ),
+            Arr.filter(Rec.values(refused[0]!.attributes), (tag) => typeof tag === "string" && Str.includes(text)(tag)),
           ).toEqual([]);
         }, signal),
       ),

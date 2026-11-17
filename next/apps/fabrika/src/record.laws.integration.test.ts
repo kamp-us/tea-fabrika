@@ -10,16 +10,18 @@ import type { RecordShape } from "@kampus/libfabrika/workers/objects";
 import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
 import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Array as Arr, String as Str, Context, Effect, Formatter, Layer, Option, Result, Schema, Predicate, Record as Rec } from "effect";
-
-
-
-
-
-
-
-
-
+import {
+  Array as Arr,
+  String as Str,
+  Context,
+  Effect,
+  Formatter,
+  Layer,
+  Option,
+  Result,
+  Schema,
+  Record as Rec,
+} from "effect";
 
 import { recordCall, recordWire } from "./record-wire.test-support.ts";
 

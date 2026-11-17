@@ -33,7 +33,7 @@ import * as Base64 from "effect/encoding/Base64";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Hex from "effect/encoding/Hex";
 import * as Exit from "effect/Exit";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
@@ -46,6 +46,7 @@ import * as Scope from "effect/Scope";
 import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import { brain, door, type Gate, HelloAnswer } from "../../client/HandsDoor.test-support.ts";
 import { start } from "../../client/HandsStart.ts";
@@ -83,7 +84,13 @@ const forms = (d: string): ReadonlyArray<string> => {
 
   const padded = Base64.encode(bytes.success);
 
-  return [d, Base64Url.encode(bytes.success), padded, pipe(padded, Str.replace(/=+$/, "")), Hex.encode(bytes.success)];
+  return [
+    d,
+    Base64Url.encode(bytes.success),
+    padded,
+    Function.pipe(padded, Str.replace(/=+$/, "")),
+    Hex.encode(bytes.success),
+  ];
 };
 
 /** Any value as text, Maps, bigints and errors included, so a scan reads every field. */
@@ -459,10 +466,10 @@ describe("P39 slice 4b: the hands key's private half stays in its file", () => {
               for (const [name, texts] of Rec.toEntries(outputs)) {
                 for (const secret of secrets) {
                   for (const form of forms(secret)) {
-                    const leak = Arr.findFirst(texts, (t) => pipe(t, Str.includes(form)));
+                    const leak = Arr.findFirst(texts, (t) => Function.pipe(t, Str.includes(form)));
                     expect(
                       Option.isNone(leak),
-                      `S2: [secrets] the private half is in no ${name}: ${Option.match(leak, { onNone: () => "", onSome: (t) => pipe(t, Str.slice(0, 400)) })}`,
+                      `S2: [secrets] the private half is in no ${name}: ${Option.match(leak, { onNone: () => "", onSome: (t) => Function.pipe(t, Str.slice(0, 400)) })}`,
                     ).toBe(true);
                   }
                 }

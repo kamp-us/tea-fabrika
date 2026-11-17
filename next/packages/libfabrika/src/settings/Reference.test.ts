@@ -16,13 +16,11 @@
 //   keeps the doc's meaning whatever punctuation it holds.
 import { describe, expect, it } from "@effect/vitest";
 import * as ByteSize from "effect/ByteSize";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Digest from "effect/crypto/Digest";
-import * as Str from "effect/String";
+import * as Effect from "effect/Effect";
 import * as Rec from "effect/Record";
-
-
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 
 import * as fc from "fast-check";
 import * as Print from "./Print.ts";

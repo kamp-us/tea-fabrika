@@ -537,7 +537,7 @@ const off = [
   "next/apps/fabrika/src/Planted.ts",
 ];
 
-const linted = await plant(Object.fromEntries([...on, ...off].map((path) => [path, body])));
+const linted = await plant(Rec.fromEntries(Arr.map([...on, ...off], (path) => [path, body])));
 
 // Ticket 948: the rule is on for every `next/packages/*/src/**` folder. A clean folder blocks and a
 // folder with fires left advises through its warn line (advice.test.ts L2 reads the severity); here
