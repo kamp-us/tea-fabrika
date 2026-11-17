@@ -1,10 +1,10 @@
-
+Approved by the lead agent, builds 0586, 0275, 0069, 0579, 0587 and 0594; body 85d87d3bf1a7
 Plancheck-Version: 3
 
 # Plan: fabsh v1, today's terminal in a tile of next/, with its line editor, tsh's grammar, syntax highlighting and [terminal] settings in Ghostty's key names (ticket 1078)
 
 Tracker ticket 1078. Version: `next/` only. Today's version is read as the spec and is not touched.
-It builds decision 0586 (draft pull request https://github.com/kamp-us/tea-fabrika/pull/1429),
+It builds accepted decision 0586 (https://github.com/kamp-us/tea-fabrika/pull/1429),
 which amends 0432 and sets aside 0217's lesson rule for this one case. Read on main at `a1df7569d`.
 
 **The doubt, at the top (75%).** `next/` has no ephemeral frame on main. Today's terminal sends raw
@@ -90,7 +90,7 @@ Read in today's code: `apps/fabrika/src/window/terminal.ts`, `apps/fabrika/src/e
   them. Completion knows programs and built-ins, a program's flags, a flag's values, inputs (`pr=`),
   `--help` parts, what fits after `|`, `%n` jobs, a job's inputs, `summon`'s harnesses and their
   offered settings, and `@` names.
-- History: 1,000 lines, each once (readline's `erasedups`), kept in a file, shared by every tile
+- History: `terminal.history-limit` lines, 1,000 by default, each once (readline's `erasedups`), kept in a file, shared by every tile
   (fish's way), with Up and Down that keep what was typed.
 - Ctrl-R: bash's reverse-i-search; Ctrl-R again for older; Backspace; Enter runs; Esc, Ctrl-G and
   Ctrl-C leave; any other key takes the line and goes on.
@@ -244,7 +244,7 @@ export const fabsh = Program.make({
 // next/programs/fabsh/src/history.ts: one history process per person, `fabsh-history:<person id body>`,
 // as tezgah is `tezgah:<person id body>`. A submitted line is mailed to it; it mails the whole list
 // back to each fabsh process that subscribed, so every tile's Up and Ctrl-R see it (fish).
-type HistoryModel = { lines: ReadonlyArray<string>; subscribers: ReadonlyArray<ProcessId> }; // at most 1,000
+type HistoryModel = { lines: ReadonlyArray<string>; subscribers: ReadonlyArray<ProcessId> }; // capped by terminal.history-limit
 ```
 
 ```ts
@@ -257,6 +257,7 @@ export const fontFamily = Setting.make("terminal.font-family", {
 //   font-family, font-size (13), theme ("light:fabrika-light,dark:fabrika"), cursor-style ("block"),
 //   cursor-style-blink (false), cursor-color, background, foreground, selection-background,
 //   selection-foreground, palette ("N=COLOR", N from 0 to 15), scrollback-limit, keybind ("trigger=action")
+//   history-limit (1,000): no Ghostty command-history key; this follows its *-limit spelling (0586).
 ```
 
 Where each file goes, by `next/AGENTS.md`'s libfabrika test:
@@ -349,6 +350,42 @@ A person in a browser tab types `countr` and Tab in tile `tile_01k`, which runs 
   window, two side by side, two stacked, a 2x2 grid, and a 1024x700 window. The pull request says
   what squeezes or breaks in each.
 
+## Existing tools
+
+Searched GitHub code for this repo's `readline` and `ghostty` names, then searched its local
+shell, editor, runtime, client, settings and tezgah files. Read the matching contracts and relevant code paths.
+Also searched npm for shell parsing, terminal rendering, ANSI matching and cell widths. The
+lockfile pins ghostty-web 0.4.0, Effect 4.1.3 and fast-check 4.10.2. This search adds no package.
+Today's files below are the behavior to rebuild under 0586, never imports into `next/`.
+
+- `next/programs/fabsh/src/words.ts`: searched today's `shell/words.ts` and npm's [shell-quote](https://www.npmjs.com/package/shell-quote). shell-quote reads shell quoting; tsh also needs source positions and its own operators. Rebuild today's word reader.
+- `next/programs/fabsh/src/grammar.ts`: searched today's `shell/grammar.ts` and shell-quote. The existing tsh grammar has named inputs, outputs, substitutions and agent prose; retain that grammar rather than replace it with a general shell parser.
+- `next/programs/fabsh/src/check.ts`: searched today's `shell/check.ts` and libfabrika's program declarations. Reuse those declarations for checks; the tsh-specific line check is rebuilt here.
+- `next/programs/fabsh/src/roles.ts`: searched today's word positions and check results, plus [fish's highlighting](https://fishshell.com/docs/current/interactive.html#syntax-highlighting). Derive roles from this one reader; no second parser or new highlighting package.
+- `next/programs/fabsh/src/complete.ts`: searched today's `shell/complete.ts` and [Node readline's completer](https://nodejs.org/api/readline.html#use-of-the-completer-function). Today's completion already reads program declarations, jobs and agent names; rebuild it over `next/`'s declarations.
+- `next/programs/fabsh/src/editor/keys.ts`: searched today's `editor/keys.ts` and Node readline's key support. Node readline requires Node streams; the byte-to-command reader must also run in the brain without Node streams.
+- `next/programs/fabsh/src/editor/editor.ts`: searched today's editor and Node readline. Rebuild the existing pure editor as a tea machine; a Node readline interface cannot be stepped by a browser-compatible parent.
+- `next/programs/fabsh/src/editor/search.ts`: searched today's `shell/search.ts` and readline's history support. Rebuild the pure search over the editor's history; no second history or Node interface.
+- `next/programs/fabsh/src/editor/screen.ts`: searched today's `editor/screen.ts` and npm's [ansi-regex](https://github.com/chalk/ansi-regex). ansi-regex matches escapes; it does not draw this editor's prompt and cursor. Rebuild today's screen functions and keep program text unable to control the terminal.
+- `next/programs/fabsh/src/editor/cells.ts`: searched today's `editor/cells.ts` and npm's [string-width](https://www.npmjs.com/package/string-width). string-width measures columns; this editor needs Ghostty's exact wrapping, grapheme and variation-selector behavior. Rebuild against the installed Ghostty wasm.
+- `next/programs/fabsh/src/editor/cells.table.ts`: searched today's generated table and ghostty-web 0.4.0's wasm. Generate this data from that wasm, not from another Unicode-width table or today's generated file.
+- `next/programs/fabsh/table.ts`: searched today's `apps/fabrika/table.ts` and `editor/cells.probe.ts`, plus string-width. Use today's probing method against the installed wasm; no generic width package supplies its exact cell facts.
+- `next/packages/libfabrika/src/runtime/Terminal.ts`: searched `runtime/Runner.ts`, `runtime/Program.ts` and [ghostty-web](https://github.com/coder/ghostty-web). Ghostty renders bytes; the runner still needs the in-memory editor and screen beside its saved model. Keep that runner-specific work here.
+- `next/programs/fabsh/src/program.ts`: searched `runtime/Program.ts` and tezgah's `program.ts`. Use the existing `Program.make`, machine and runner contracts; this file supplies only fabsh's behavior.
+- `next/programs/fabsh/src/history.ts`: searched today's `editor/history.ts`, the process mail API and Node readline's history. Preserve today's shared history through one regular process and saved mail, with the declared limit; no separate storage service.
+- `next/programs/fabsh/src/echo.ts`: searched today's terminal and 0275's local-echo rule. Ghostty supplies the terminal renderer, not this protocol's prediction and confirmation machine; keep those transitions in one tea machine.
+- `next/programs/fabsh/src/window.ts`: searched today's `window/terminal.ts` and ghostty-web's browser renderer. Use ghostty-web for the terminal; this adapter connects the existing window protocol, settings and screen-reader regions.
+- `next/programs/fabsh/src/builtins.ts`: searched today's `shell/builtins.ts`, `shell/help.ts` and `shell/table.ts`, plus the program loader. Rebuild the declared built-ins on existing runtime calls rather than add a shell execution library.
+- `next/programs/fabsh/src/jobs.ts`: searched today's shared job table and libfabrika's process and mail APIs. Rebuild the `%n` table with those APIs; a Node shell's child-process table is not the brain's processes.
+- `next/programs/fabsh/src/run.ts`: searched today's `shell/execute.ts`, the grammar and libfabrika's start and mail calls. Rebuild statement ordering over those existing calls; this does not add a second execution engine.
+- `next/packages/libfabrika/src/runtime/Program.ts`: searched its constructor and declarations. Extend the existing program contract for a terminal editor; no parallel constructor.
+- `next/packages/libfabrika/src/runtime/Runner.ts`: searched its existing step, save and watcher paths. Route ephemeral keys to the in-memory terminal and retain saved input handling for submissions; no second runner.
+- `next/packages/libfabrika/src/gateway/Gateway.ts`: searched its existing session, access and budget checks. Add the two frame cases there, retaining those checks rather than create another gateway.
+- `next/packages/libfabrika/src/client/WindowMachine.ts`: searched its routing and watch states. Add terminal frames to that parent, using the same connection and watch lifecycle.
+- `next/packages/libfabrika/src/client/Prefix.ts`: searched its existing prefix machine. Extend its double-prefix result; do not make another prefix handler in fabsh.
+- `next/packages/libfabrika/src/settings/Declarations.ts`: searched its existing `Setting.make` declarations and the settings note. Declare terminal choices once there, including `history-limit`; no hand-written config reader.
+- `next/programs/tezgah/src/program.ts`: searched its `NEW_TILE` and child lifecycle handling. Use its existing tile and monitor behavior to show fabsh and foreground children.
+
 ## Files
 
 | File | Owner | Slice | Product lines expected |
@@ -417,43 +454,56 @@ table is made, never copied from today's file.
 
 ## Laws
 
-| # | Law | Kind | Generator | Plant | Slice |
-|---|---|---|---|---|---|
-| L1 | Every word of a parsed line gets exactly one role: the spans are in order, never overlap, and cover every character that is not a space | test | fc.stringMatching: lines over tsh's characters, words, quotes and operators, 500 runs | drop the span of a closing quote | S1 |
-| L2 | A finished first word that names no program and no built-in is the error role, and a name in the list never is | test | fc.record: a program list and a word drawn in or out of it, 300 runs | give an unknown first word the program role | S1 |
-| L3 | A theme change changes the drawn colors and never the roles: a line's bytes are the same under any two themes, and the color drawn for a role is that theme's palette at the role's index | test | fc.tuple: two themes from the design package's palettes and a line, 200 runs | write a theme's 24-bit color into the bytes | S2 |
-| L4 | A pipe whose writer's output fits no reader input, by 0550's needed-fields rule, is the error role on its `\|`, and one that fits never is | test | fc.record: two declared shapes with fields added or removed, 300 runs | fit on an exact match, as today's tsh does | S1 |
-| L5 | The error role is underlined as well as colored, so color is never its only mark (WCAG 1.4.1) | test | scenario: one unknown word, and the SGR codes it is drawn with | drop SGR 4 | S1 |
-| L6 | Each token's text comes from its own place on the line, and a word still being typed at the cursor is never the error role | test | fc.stringMatching: lines cut at a random cursor, 300 runs | judge the word under the cursor | S1 |
-| L7 | Each Tab candidate starts with the word typed, and a line with one candidate put in reads that word in a role that is not error | test | fc.record: program lists, jobs and a cut line, 300 runs | offer every program after a pipe | S1 |
-| L8 | After any keys at the prompt, the grid shows the prompt, then the line, and the cursor sits at the cell `spot` gives the left part | test | fc.commands: every bound key and text runs, at widths 10 to 200, 300 runs | count a wide character as one cell | S1 |
-| L9 | Kill then yank puts back what was killed; kills in a row join; Alt-Y walks the ring; undo returns each earlier line in order | test | fc.commands: kill, yank, yank-pop and undo keys on random lines, 300 runs | let a move between kills join them | S1 |
-| L10 | History keeps each line once, newest last, at most 1,000; Up then Down to the bottom gives back what was typed | test | fc.commands: submits and Up and Down keys, 300 runs | keep a repeated line twice | S1 |
-| L11 | Ctrl-R shows the newest line that holds the query, Ctrl-S the next newer one, and Esc, Ctrl-G or Ctrl-C give back the line typed before | test | fc.commands: queries and search keys over a random history, 300 runs | start the search from the oldest line | S1 |
-| L12 | Keys typed while a line runs go to the next prompt in order, and Ctrl-C drops them and reaches the process at once | test | @demlik/tea/pbt.arbMsgSequence | send Ctrl-C after what waits | S1 |
-| L13 | A paste inside bracketed-paste marks goes in as text, and none of its newlines submits a line | test | fc.string: pasted texts with newlines, 300 runs | read a newline inside the marks as Enter | S1 |
-| L14 | `spot` counts cells as ghostty-web 0.4.0's wasm does, and the table matches the wasm code point by code point | test | vector: ghostty-web 0.4.0's wasm, read by `table.ts` | count U+FE0F as a cell after any character | S1 |
-| L15 | A program's text cannot move the cursor or retitle the window | test | fc.string: texts with escape sequences, 300 runs | let OSC through | S1 |
-| L16 | No key frame is saved: after any keys and submits, the ledger and the process store hold each submitted line once and no key bytes and no partial line | test | fc.commands: keys, submits and restarts on the runner's stand-in, 200 runs | save the line in the saved model | S2 |
-| L17 | A submitted line reaches the process as one saved letter, as typed | test | fc.string: lines, 300 runs | trim the line | S2 |
-| L18 | The gateway answers `process.keys` only for a live session on its own budget `gateway.keys-limit`, never spending `gateway.limit`, and records nothing | test | fc.commands: keys from live, ended and other sessions, 200 runs | spend `gateway.limit` | S2 |
-| L19 | Once the last key is confirmed, the line the window draws equals the process's line, whatever the order the screen frames arrive in | test | fc.commands: keys with confirms delayed, reordered and dropped, 300 runs | predict Tab | S2 |
-| L20 | A window that starts to watch a tile gets its screen first, then each frame after it in order, so two windows show the same screen | test | fc.commands: two windows attaching at random times, 200 runs | send frames before the screen | S2 |
-| L21 | A line submitted in one tile is in every tile's Up and Ctrl-R, and stays after a restart of the brain | test | fc.commands: submits in three tiles and restarts, on the runner's stand-in, 100 runs | keep the history in each fabsh process only | S2 |
-| L22 | Each `[terminal]` key reads Ghostty's value forms, round-trips through the TOML file, and a value ghostty-web cannot draw is refused at its file, line and key with the reason | test | Effect Arbitrary: TerminalSettings | accept `block_hollow` | S2 |
-| L23 | A tile opens ghostty-web with the settings' values, and a `live` change redraws the tile in the new look with what it showed | test | fc.record: settings values, 100 runs | read font-size once at open | S2 |
-| L24 | Every role has one palette index and an underline choice | type | type | drop `room` from the map | S1 |
-| L25 | Nothing in `next/programs/fabsh` imports today's version | lint | lint | import `@kampus/fabrika-old` | S1 |
-| L26 | `help`, `programs` and `exit` answer as today's do; `programs` is the runner's loader table, sorted | test | fc.record: loader tables, 100 runs | list only started programs | S2 |
-| L27 | A pipe, `summon`, `@name` or `#room` line is read and colored, and Enter refuses it in words that name the quest that builds it | test | fc.constantFrom: one line of each kind with random words, 100 runs | run the first program of a pipe | S2 |
-| L28 | The prefix pressed twice sends one Ctrl-B on to the tile, and the prefix alone never reaches it | test | @demlik/tea/pbt.arbMsgSequence | pass the first Ctrl-B on | S2 |
-| L29 | A program with a view run in the foreground shows in the tile and the tile goes back to fabsh when it ends; Ctrl-C stops it; `&` gives the prompt back at once; `attach %n` brings it forward | test | fc.commands: starts, ends, Ctrl-C and attach on tezgah's stepper, 200 runs | leave the tile on the ended process | S3 |
-| L30 | A start from a line is checked against the member who typed it, and fabsh holds no start grant (0170) | test | fc.commands: lines from members with and without a role, 100 runs | judge the start by fabsh's own grant | S3 |
-| L31 | `;` runs each statement, `&&` only after status 0, `\|\|` only after another, and `$( )` puts a finished process's output into the line by its shape | test | fc.commands: chains of statements with random statuses, 200 runs | run `&&`'s right side on any status | S3 |
-| L32 | `jobs`, `ps`, `stop %n`, `tell %n` and `close %n` act on the job table every tile shares, and a job's `%n` is the same in each tile | test | fc.commands: jobs begun and ended across two tiles, 200 runs | number jobs per tile | S3 |
-| L33 | The screen's text region, the status region and the replies region hold the grid's text, at most once a frame, every 3 s and 50 lines | test | scenario: a long print, a status that changes each second, 60 replies | write the status on each change | S2 |
-| L34 | The whole suite on a real local instance, in a browser tab | test | scenario: the suite's lines typed into a real tab | none: it runs L19, L20, L29 against the real runner | S3 |
-| L35 | The same suite in the real built Electron app | test | scenario: the suite's lines typed into the real app | none: it runs L34's steps there | S4 |
+| # | Law | Kind | Generator | Inputs and runs | Plant | Slice |
+|---|---|---|---|---|---|---|
+| L1 | Every word of a parsed line gets exactly one role: the spans are in order, never overlap, and cover every character that is not a space | test | Effect Arbitrary: Schema.String | lines over tsh's characters, words, quotes and operators, 500 runs | drop the span of a closing quote | S1 |
+| L2 | A finished first word that names no program and no built-in is the error role, and a name in the list never is | test | Effect Arbitrary: Schema.Struct | a program list and a word drawn in or out of it, 300 runs | give an unknown first word the program role | S1 |
+| L3 | A theme change changes the drawn colors and never the roles: a line's bytes are the same under any two themes, and the color drawn for a role is that theme's palette at the role's index | test | Effect Arbitrary: Schema.Tuple | two themes from the design package's palettes and a line, 200 runs | write a theme's 24-bit color into the bytes | S2 |
+| L4 | A pipe whose writer's output fits no reader input, by 0550's needed-fields rule, is the error role on its `\|`, and one that fits never is | test | Effect Arbitrary: Schema.Struct | two declared shapes with fields added or removed, 300 runs | fit on an exact match, as today's tsh does | S1 |
+| L5 | The error role is underlined as well as colored, so color is never its only mark (WCAG 1.4.1) | test | Effect Arbitrary: Schema.String | unknown program words and lines, default runs; inspect their error SGR bytes | drop SGR 4 | S1 |
+| L6 | Each token's text comes from its own place on the line, and a word still being typed at the cursor is never the error role | test | Effect Arbitrary: Schema.String | lines cut at a random cursor, 300 runs | judge the word under the cursor | S1 |
+| L7 | Each Tab candidate starts with the word typed, and a line with one candidate put in reads that word in a role that is not error | test | Effect Arbitrary: Schema.Struct | program lists, jobs and a cut line, 300 runs | offer every program after a pipe | S1 |
+| L8 | After any keys at the prompt, the grid shows the prompt, then the line, and the cursor sits at the cell `spot` gives the left part | test | fc.commands | every bound key and text runs, at widths 10 to 200, 300 runs | count a wide character as one cell | S1 |
+| L9 | Kill then yank puts back what was killed; kills in a row join; Alt-Y walks the ring; undo returns each earlier line in order | test | fc.commands | kill, yank, yank-pop and undo keys on random lines, 300 runs | let a move between kills join them | S1 |
+| L10 | History keeps each line once, newest last, at most `terminal.history-limit`; Up then Down to the bottom gives back what was typed | test | fc.commands | configured limits including 1,000; submits and Up and Down keys, 300 runs | keep a repeated line twice | S1 |
+| L11 | Ctrl-R shows the newest line that holds the query, Ctrl-S the next newer one, and Esc, Ctrl-G or Ctrl-C give back the line typed before | test | fc.commands | queries and search keys over a random history, 300 runs | start the search from the oldest line | S1 |
+| L12 | Keys typed while a line runs go to the next prompt in order, and Ctrl-C drops them and reaches the process at once | test | @demlik/tea/pbt.arbMsgSequence | machine message walks, default runs | send Ctrl-C after what waits | S1 |
+| L13 | A paste inside bracketed-paste marks goes in as text, and none of its newlines submits a line | test | Effect Arbitrary: Schema.String | pasted texts with newlines, 300 runs | read a newline inside the marks as Enter | S1 |
+| L14 | `spot` counts cells as ghostty-web 0.4.0's wasm does, and the table matches the wasm code point by code point | test | vector: ghostty-web 0.4.0's wasm, read by `table.ts` | the wasm vectors, every code point | count U+FE0F as a cell after any character | S1 |
+| L15 | A program's text cannot move the cursor or retitle the window | test | Effect Arbitrary: Schema.String | texts with escape sequences, 300 runs | let OSC through | S1 |
+| L16 | No key frame is saved: after any keys and submits, the ledger and the process store hold each submitted line once and no key bytes and no partial line | test | fc.commands | keys, submits and restarts on the runner's stand-in, 200 runs | save the line in the saved model | S2 |
+| L17 | A submitted line reaches the process as one saved letter, as typed | test | Effect Arbitrary: Schema.String | lines, 300 runs | trim the line | S2 |
+| L18 | The gateway answers `process.keys` only for a live session on its own budget `gateway.keys-limit`, never spending `gateway.limit`, and records nothing | test | fc.commands | keys from live, ended and other sessions, 200 runs | spend `gateway.limit` | S2 |
+| L19 | Once the last key is confirmed, the line the window draws equals the process's line, whatever the order the screen frames arrive in | test | fc.commands | keys with confirms delayed, reordered and dropped, 300 runs | predict Tab | S2 |
+| L20 | A window that starts to watch a tile gets its screen first, then each frame after it in order, so two windows show the same screen | test | fc.commands | two windows attaching at random times, 200 runs | send frames before the screen | S2 |
+| L21 | A line submitted in one tile is in every tile's Up and Ctrl-R, and stays after a restart of the brain | test | fc.commands | submits in three tiles and restarts, on the runner's stand-in, 100 runs | keep the history in each fabsh process only | S2 |
+| L22 | All `[terminal]` keys round-trip through TOML; Ghostty-named keys read Ghostty's value forms, `history-limit` reads a positive integer, and unsupported terminal values are refused at their file, line and key with the reason | test | Effect Arbitrary: TerminalSettings | TerminalSettings values, default runs | accept `block_hollow` | S2 |
+| L23 | A tile opens ghostty-web with the settings' values, and a `live` change redraws the tile in the new look with what it showed | test | Effect Arbitrary: Schema.Struct | settings values, 100 runs | read font-size once at open | S2 |
+| L24 | Every role has one palette index and an underline choice | type | type | all role tags, compiler only | drop `room` from the map | S1 |
+| L25 | Nothing in `next/programs/fabsh` imports today's version | lint | lint | package imports, lint only | import `@kampus/fabrika-old` | S1 |
+| L26 | `help`, `programs` and `exit` answer as today's do; `programs` is the runner's loader table, sorted | test | Effect Arbitrary: Schema.Struct | loader tables, 100 runs | list only started programs | S2 |
+| L27 | A pipe, `summon`, `@name` or `#room` line is read and colored, and Enter refuses it in words that name the quest that builds it | test | Effect Arbitrary: Schema.Union | one line of each kind with random words, 100 runs | run the first program of a pipe | S2 |
+| L28 | The prefix pressed twice sends one Ctrl-B on to the tile, and the prefix alone never reaches it | test | @demlik/tea/pbt.arbMsgSequence | prefix message walks, default runs | pass the first Ctrl-B on | S2 |
+| L29 | A program with a view run in the foreground shows in the tile and the tile goes back to fabsh when it ends; Ctrl-C stops it; `&` gives the prompt back at once; `attach %n` brings it forward | test | fc.commands | starts, ends, Ctrl-C and attach on tezgah's stepper, 200 runs | leave the tile on the ended process | S3 |
+| L30 | A start from a line is checked against the member who typed it, and fabsh holds no start grant (0170) | test | fc.commands | lines from members with and without a role, 100 runs | judge the start by fabsh's own grant | S3 |
+| L31 | `;` runs each statement, `&&` only after status 0, `\|\|` only after another, and `$( )` puts a finished process's output into the line by its shape | test | fc.commands | chains of statements with random statuses, 200 runs | run `&&`'s right side on any status | S3 |
+| L32 | `jobs`, `ps`, `stop %n`, `tell %n` and `close %n` act on the job table every tile shares, and a job's `%n` is the same in each tile | test | fc.commands | jobs begun and ended across two tiles, 200 runs | number jobs per tile | S3 |
+| L33 | The screen's text region, the status region and the replies region hold the grid's text, at most once a frame, every 3 s and 50 lines | test | scenario: a long print, a status that changes each second, 60 replies | long print, status each second, 60 replies | write the status on each change | S2 |
+| L34 | The whole suite on a real local instance, in a browser tab | test | scenario: the suite's lines typed into a real tab | real-browser run of L19, L20 and L29 | none: it runs L19, L20, L29 against the real runner | S3 |
+| L35 | The same suite in the real built Electron app | test | scenario: the suite's lines typed into the real app | the L34 suite in the real app | none: it runs L34's steps there | S4 |
+
+All property laws use `it.prop` or `it.effect.prop` through the shared test package (0579).
+The Schema constructors in the table describe the inputs, not a second set of production types:
+use the existing domain Schema where there is one, with its Arbitrary constraints covering the
+listed characters, lists, cursor positions, widths and boundary cases. Keep every listed run count.
+
+**State-aware generator exceptions (0411, 0579).** L8-L11, L16, L18-L21 and L29-L32 keep
+`fc.commands`: the next command is drawn from the model's legal moves as the walk proceeds.
+A Schema for one command cannot by itself generate that state-dependent walk. Generate each
+command's data from its domain Schema, preserve the table's run counts and boundaries, and use the
+property runner rather than a hand-written `fc.assert`. L10 also generates the configured history
+limit and checks retention against that value, with 1,000 included. L12 and L28 keep tea's own
+machine-law generators. L14 keeps its exact wasm vector. L33-L35 remain scripted browser or Electron checks.
 
 **Lint, type or test.** L24 is a type law (a `Record` over the role's tags); L25 is the
 package-imports lint that holds today; the rest are tests, because each checks behavior.
@@ -470,10 +520,11 @@ pull request still checks the behavior (0581).
 
 ## Host-only laws
 
-L35 runs only in the real built Electron app. It runs before the first review. On the owner's Mac
-it waits for the lead's read of its launch and signal lines and the owner's yes (0178). It is
-started only through the app's test-window rules: its own `FABRIKA_HOME` in a temp folder, never
-in the foreground.
+L35 runs in the real built Electron app on eligible disposable macOS CI, before the first
+implementation review (0178, amended by 0594). It never runs on the owner's laptop. The lead reads
+the test's launch, signal and cleanup paths before selecting its CI route. A workflow proves only
+the laws it actually runs; missing remote proof remains missing proof. The app's test-window rules
+still apply: its own `FABRIKA_HOME` in a temp folder, never in the foreground.
 
 ## What it records, and what is lost if not
 
@@ -491,7 +542,7 @@ in the foreground.
 | Choice | A setting? | Why |
 |---|---|---|
 | Font, size, theme, cursor, colors, scrollback, terminal keys | yes, `[terminal]` | 0586 |
-| History length (1,000) | no | bash's `HISTSIZE` is a setting, but no one has asked; it becomes `terminal.history-limit` the day someone does. A constant with its source |
+| History length | yes, `terminal.history-limit` | positive integer, default 1,000 from today's editor; declared once, person scope, read through the settings system (0069). Ghostty has no command-history key; `history-limit` follows its `*-limit` spelling (0586) |
 | The role-to-palette map | no | the theme's 16 colors already are settings (`palette`); a second map would be two places to set one color |
 | `gateway.keys-limit` | yes | a budget per key, as `gateway.limit` is |
 | The prompt `fabsh$ ` | no | the summon guidelines' R5 fixes the word |
@@ -507,8 +558,9 @@ Both stay open and unmerged, and no v1 commit builds on their branches (0586).
   - It draws the line as role-colored spans in a Manti view. v1 draws roles as ANSI codes inside
     Ghostty. Both read roles from one reader, but they are two readers with two role lists
     (1232's verb, keyword, name-new, word, unknown; v1's thirteen).
-  - It adds `next/programs/fabsh` and `@kampus/fabsh`, the same folder and name as v1. 1232 must be
-    renamed or closed before v1's S1 lands, or its branch conflicts. That is the lead's to do.
+  - It adds `next/programs/fabsh` and `@kampus/fabsh`, the same folder and name as v1. 1232 stays
+    parked as 0586 requires. Its overlapping paths are a future conflict to resolve if its later
+    program resumes; this plan does not authorize renaming or closing it.
   - It adds a built-in `programs` Cmd in `runtime/Programs.ts`. v1 builds its own; the name may
     collide.
 - **PR 1254** (https://github.com/kamp-us/tea-fabrika/pull/1254):
@@ -524,9 +576,11 @@ Both stay open and unmerged, and no v1 commit builds on their branches (0586).
 ## Validation
 
 The test writer and the builder run, under the machine caps: `pnpm format`, `pnpm lint`, the
-narrow vitest paths of the files in their slice with `nice -n 15 pnpm exec vitest run
---maxWorkers=3`, and one `pnpm typecheck` at the end. CI runs the rest. The visual laws run on the
-schedule (0536); L35 runs as the host-only section says.
+verified-safe narrow vitest paths of the files in their slice, under the current worker caps.
+The lead runs the changed checks and one `pnpm typecheck` at the end. Real Electron, launchd and
+real process-signal laws run only on eligible disposable CI away from the owner's laptop (0594),
+with required proof before the first implementation review. Other real-resource and visual laws
+follow 0536 as amended by 0581, 0584 and 0590; L35 follows the host-only section above.
 
 ## Risks and what this plan cannot tell us
 
@@ -546,8 +600,10 @@ schedule (0536); L35 runs as the host-only section says.
 
 None.
 
-Nothing waits on the owner. Every call above builds 0586, 0275 or a note, and each has its percentage. The
-one the lead should read first is the frame call at the top.
+No new owner decision is needed to approve this plan's implementation choices: they build 0586,
+0275 or a settled note. The lead should read the frame call at the top first. The later look step
+still waits for the owner's choice before S2's pull request opens, as Show it running requires;
+this plan does not choose its palette map, prompt treatment, padding or error mark.
 
 ## Size
 
