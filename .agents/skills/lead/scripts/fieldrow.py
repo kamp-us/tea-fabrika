@@ -1,15 +1,17 @@
 # fieldrow.py [--parent RUN] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why...>
-#   -> prints one field/runs.jsonl row for a Codex run. The model and effort default to CODEX_MODEL
-#   and CODEX_EFFORT (env.sh). Codex reports the tokens billed over the run, not the size of its
-#   conversation at the last turn, so they go in `billed` and `tokens` stays null (field/README.md).
+#   -> prints one field/runs.jsonl row for a Codex run. Model and effort are the requested profile;
+#   this adapter does not capture its effective API context. An absent value stays unknown.
+#   Codex reports the tokens billed over the run, not the size of its conversation at the last turn,
+#   so they go in `billed` and `tokens` stays null (field/README.md).
 import argparse,datetime,json,os
 a=argparse.ArgumentParser()
-a.add_argument("--parent"); a.add_argument("--model",default=os.environ.get("CODEX_MODEL","gpt-6-astra"))
-a.add_argument("--effort",default=os.environ.get("CODEX_EFFORT","medium"))
+a.add_argument("--parent"); a.add_argument("--model",default=os.environ.get("CODEX_MODEL") or "unknown")
+a.add_argument("--effort",default=os.environ.get("CODEX_EFFORT") or None)
 a.add_argument("--step"); a.add_argument("--started"); a.add_argument("--ended")
 a.add_argument("--start"); a.add_argument("--end"); a.add_argument("--status",type=int)
 a.add_argument("jsonl"); a.add_argument("run"); a.add_argument("ticket"); a.add_argument("outcome"); a.add_argument("why",nargs="+")
 x=a.parse_args(); why=" ".join(x.why)
+if x.model!="unknown" or x.effort is not None: why+=f" Requested profile: model {x.model}, effort {x.effort or 'unknown'}; effective API context unavailable to this adapter."
 u=None
 if os.path.exists(x.jsonl):
     for l in open(x.jsonl):
