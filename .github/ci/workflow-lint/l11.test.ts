@@ -1,11 +1,19 @@
 import { readFileSync } from "node:fs";
-// Policy inputs only. No Actions workflow or real adapter is started here.
-import fc from "fast-check";
-import { expect, it } from "vitest";
+import { it, expect } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
+import { Schema } from "effect";
 import { parse, stringify } from "yaml";
 import { bootstrap, cached, cases, uncached } from "../l11-cases.ts";
 import { lintL11 } from "./l11.ts";
 import { allSteps, map } from "./shared.ts";
+
+const options = { arbitrary: { runs: runsFor({ fast: 100, full: 100 }), size: 30, concurrency: 1 } };
+
+const integer = (minimum: number, maximum: number) => Schema.Int.check(Schema.isBetween({ minimum, maximum }));
+
+const Text = Schema.String.check(Schema.isPattern(/^[\x20-\x7e]*$/));
+
+// Policy inputs only. No Actions workflow or real adapter is started here.
 
 const slots = Array.from({ length: 10 }, (_, index) => `slot-${index + 1}`);
 
@@ -119,110 +127,112 @@ const job = (value: ReturnType<typeof workflow>, name: string) => map(value.jobs
 const execute = (value: ReturnType<typeof workflow>, name: string) =>
   allSteps(job(value, name)).find((step) => step["id"] === "l11")!;
 
-it("workflow policy accepts supported mapping order, expression spacing and YAML aliases", () => {
-  // The actual workflow and generated variants measure zero false alarms before activation.
-  // Plant: require manifest first in the YAML mapping rather than through needs.
-  fc.assert(
-    fc.property(fc.boolean(), fc.boolean(), (reverse, yaml) => {
-      const valid = workflow();
+it.prop(
+  "workflow policy accepts supported mapping order, expression spacing and YAML aliases",
+  { reverse: Schema.Boolean, yaml: Schema.Boolean },
+  ({ reverse, yaml }) => {
+    // The actual workflow and generated variants measure zero false alarms before activation.
+    // Plant: require manifest first in the YAML mapping rather than through needs.
 
-      if (reverse) {
-        valid.jobs = Object.fromEntries(Object.entries(valid.jobs).toReversed());
-        valid.on.workflow_dispatch.inputs.case.options.reverse();
-        map(map(job(valid, "compare")["strategy"])["matrix"])["variant"] = ["cached", "uncached"];
-      }
+    const valid = workflow();
 
-      const actual = map(parse(readFileSync(new URL("../../workflows/l11-exercise.yaml", import.meta.url), "utf8")));
+    if (reverse) {
+      valid.jobs = Object.fromEntries(Object.entries(valid.jobs).toReversed());
+      valid.on.workflow_dispatch.inputs.case.options.reverse();
+      map(map(job(valid, "compare")["strategy"])["matrix"])["variant"] = ["cached", "uncached"];
+    }
 
-      if (reverse) {
-        actual["jobs"] = Object.fromEntries(Object.entries(map(actual["jobs"])).toReversed());
-        map(map(map(map(actual["on"])["workflow_dispatch"])["inputs"])["case"])["options"] = [...cases].reverse();
-      }
+    const actual = map(parse(readFileSync(new URL("../../workflows/l11-exercise.yaml", import.meta.url), "utf8")));
 
-      for (const value of [valid, actual]) {
-        const text = yaml ? stringify(value, { aliasDuplicateObjects: true }) : JSON.stringify(value);
-        expect(lintL11(text)).toEqual([]);
-      }
-    }),
-    { numRuns: 100 },
-  );
-});
+    if (reverse) {
+      actual["jobs"] = Object.fromEntries(Object.entries(map(actual["jobs"])).toReversed());
+      map(map(map(map(actual["on"])["workflow_dispatch"])["inputs"])["case"])["options"] = [...cases].reverse();
+    }
 
-it("workflow policy refuses caller controls, parallel slots, weak trust and raw uploads", () => {
-  // Plant: stop checking slot needs. Mutations are policy data, never executed fault scripts.
-  fc.assert(
-    fc.property(fc.integer({ min: 2, max: 10 }), fc.string(), (slot, text) => {
-      const mutations: Array<(value: ReturnType<typeof workflow>) => void> = [
-        (value) => {
-          allSteps(job(value, "inputs"))[4]!["run"] = "true";
-        },
-        (value) => {
-          const steps = allSteps(job(value, "output"));
-          [steps[4], steps[5]] = [steps[5]!, steps[4]!];
-          job(value, "output")["steps"] = steps;
-        },
-        (value) => {
-          map(allSteps(job(value, "output"))[2]!["with"])["path"] = "source-uncached";
-        },
-        (value) => {
-          map(value.on.workflow_dispatch.inputs)["command"] = { type: "string", default: text };
-        },
-        (value) => {
-          map(value.on)["pull_request"] = {};
-        },
-        (value) => {
-          map(value.permissions)["id-token"] = "write";
-        },
-        (value) => {
-          job(value, "output")["name"] = `\${{ github.token }}`;
-        },
-        (value) => {
-          job(value, `slot-${slot}`)["needs"] = ["manifest"];
-        },
-        (value) => {
-          job(value, `slot-${slot}`)["if"] = "always()";
-        },
-        (value) => {
-          job(value, `slot-${slot}`)["strategy"] = { matrix: { replacement: [1, 2] } };
-        },
-        (value) => {
-          job(value, "compare")["strategy"] = { "max-parallel": 2, matrix: { variant: ["cached", "uncached"] } };
-        },
-        (value) => {
-          execute(value, "output")["timeout-minutes"] = 18;
-        },
-        (value) => {
-          execute(value, "output")["run"] = text;
-        },
-        (value) => {
-          map(execute(value, "inputs")["env"])["CI"] = "true";
-        },
-        (value) => {
-          allSteps(job(value, "inputs"))[1]!["run"] = "true";
-        },
-        (value) => {
-          map(allSteps(job(value, "output"))[0]!["with"])["persist-credentials"] = true;
-        },
-        (value) => {
-          map(allSteps(job(value, "output")).at(-1)!["with"])["path"] = `\${{ runner.temp }}/**`;
-        },
-        (value) => {
-          map(allSteps(job(value, "output")).at(-1)!["with"])["name"] = `l11-exercise-\${{ toJSON(secrets) }}`;
-        },
-        (value) => {
-          job(value, "collect")["needs"] = ["slot-10"];
-        },
-        (value) => {
-          job(value, "collect")["if"] = "success()";
-        },
-      ];
+    for (const value of [valid, actual]) {
+      const text = yaml ? stringify(value, { aliasDuplicateObjects: true }) : JSON.stringify(value);
+      expect(lintL11(text)).toEqual([]);
+    }
+  },
+  options,
+);
 
-      for (const mutate of mutations) {
-        const changed = structuredClone(workflow());
-        mutate(changed);
-        expect(lintL11(JSON.stringify(changed)).length).toBeGreaterThan(0);
-      }
-    }),
-    { numRuns: 100 },
-  );
-});
+it.prop(
+  "workflow policy refuses caller controls, parallel slots, weak trust and raw uploads",
+  { slot: integer(2, 10), text: Text },
+  ({ slot, text }) => {
+    // Plant: stop checking slot needs. Mutations are policy data, never executed fault scripts.
+
+    const mutations: Array<(value: ReturnType<typeof workflow>) => void> = [
+      (value) => {
+        allSteps(job(value, "inputs"))[4]!["run"] = "true";
+      },
+      (value) => {
+        const steps = allSteps(job(value, "output"));
+        [steps[4], steps[5]] = [steps[5]!, steps[4]!];
+        job(value, "output")["steps"] = steps;
+      },
+      (value) => {
+        map(allSteps(job(value, "output"))[2]!["with"])["path"] = "source-uncached";
+      },
+      (value) => {
+        map(value.on.workflow_dispatch.inputs)["command"] = { type: "string", default: text };
+      },
+      (value) => {
+        map(value.on)["pull_request"] = {};
+      },
+      (value) => {
+        map(value.permissions)["id-token"] = "write";
+      },
+      (value) => {
+        job(value, "output")["name"] = `\${{ github.token }}`;
+      },
+      (value) => {
+        job(value, `slot-${slot}`)["needs"] = ["manifest"];
+      },
+      (value) => {
+        job(value, `slot-${slot}`)["if"] = "always()";
+      },
+      (value) => {
+        job(value, `slot-${slot}`)["strategy"] = { matrix: { replacement: [1, 2] } };
+      },
+      (value) => {
+        job(value, "compare")["strategy"] = { "max-parallel": 2, matrix: { variant: ["cached", "uncached"] } };
+      },
+      (value) => {
+        execute(value, "output")["timeout-minutes"] = 18;
+      },
+      (value) => {
+        execute(value, "output")["run"] = text;
+      },
+      (value) => {
+        map(execute(value, "inputs")["env"])["CI"] = "true";
+      },
+      (value) => {
+        allSteps(job(value, "inputs"))[1]!["run"] = "true";
+      },
+      (value) => {
+        map(allSteps(job(value, "output"))[0]!["with"])["persist-credentials"] = true;
+      },
+      (value) => {
+        map(allSteps(job(value, "output")).at(-1)!["with"])["path"] = `\${{ runner.temp }}/**`;
+      },
+      (value) => {
+        map(allSteps(job(value, "output")).at(-1)!["with"])["name"] = `l11-exercise-\${{ toJSON(secrets) }}`;
+      },
+      (value) => {
+        job(value, "collect")["needs"] = ["slot-10"];
+      },
+      (value) => {
+        job(value, "collect")["if"] = "success()";
+      },
+    ];
+
+    for (const mutate of mutations) {
+      const changed = structuredClone(workflow());
+      mutate(changed);
+      expect(lintL11(JSON.stringify(changed)).length).toBeGreaterThan(0);
+    }
+  },
+  options,
+);
