@@ -55,6 +55,13 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+In `next/`, ticket 1151 changes Q18's final entry check to collect stepped IDs once per entries
+snapshot, then check every expected message against that set. Its exact existence rule, all
+40 generated histories, seed, calls, limits and timeout stay unchanged. Temporary proof from the
+actual source passed 40 generated inputs, 11 fixed cases and three deliberate faults. A separate
+build check verified the actual source and proof. Normal formatting, the whole compiler and full
+lint passed. Actual Linux Q18 and final review remain due; no speedup has been measured.
+
 Today's scheduled CI, serving both versions, swaps the shared groups of full-run browser leg 2
 and core leg 4. A [branch proof's second leg waited 705 seconds](../../field/notes/2026-11-17-shared-test-slot-wait.json),
 with another group empty for the last 286 seconds. This changes which full leg a small proof waits
