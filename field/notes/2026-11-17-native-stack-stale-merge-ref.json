@@ -1,0 +1,24 @@
+{
+  "id": "2026-11-17-native-stack-stale-merge-ref",
+  "date": "2026-11-17",
+  "quests": [
+    "tea-fabrika#1076",
+    "tea-fabrika#1057"
+  ],
+  "stage": "harness",
+  "kind": "failure",
+  "what": "GitHub reported the spacing child as conflicting and started no ordinary check after its new head was pushed. The branch and PR head both named f8fa71b6b5157a21c45dafb49caf3e2cd4cb15bc, but refs/pull/1525/merge still named the older 31730e25 child. This concerned next/ settings and spacing, with today's merge tooling.",
+  "cause": "The stale child merge ref was observed directly. Five ordinary or cumulative merge calculations were clean. The server implementation was not visible, so a stale computation is the supported diagnosis, not a proved internal algorithm. A separate scratch squash simulation produced conflicts; it did not prove the server used that route.",
+  "person": false,
+  "primitive": null,
+  "fix": "With both PRs open, unqueued and auto-merge off, the lead removed stack 1532, changed only the child base to main and back, then linked both full PR URLs in the same order as stack 1554. Source heads stayed 10f784ecb63d90683a787d8406490f66d3809820 and f8fa71b6b5157a21c45dafb49caf3e2cd4cb15bc. No source branch push, rebase or individual merge was used.",
+  "test": "GitHub changed the child to mergeable true. Its fresh merge ref f4661b465f7f985c9da1cc987196f770f30c742a has exactly the current parent and child as parents. One draft-to-ready event started ordinary run 44046716688 at unchanged f8fa. The separate full run 44043646700 failed the existing L11 storage-output law at 60000 ms; metadata recovery did not waive that hold or authorize landing.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1427",
+    "https://github.com/kamp-us/tea-fabrika/pull/1525",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44046716688",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44043646700",
+    "https://github.com/github/gh-stack/issues/319",
+    "https://github.com/github/gh-stack/discussions/229#discussioncomment-17751523"
+  ]
+}

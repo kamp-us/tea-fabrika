@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-node-repositories-plan",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-15T20:31:08-08:00",
+  "ended": "2026-11-15T20:38:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "plan",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "The plan for the mock sweep in next/packages/libfabrika/src/node/repositories (docs/plan/quests/mock-node-repositories-PLAN.md). The folder has one mock call, vi.spyOn(SettingsSnapshot, \"make\") in OpenRepository.test.ts law L3. The plan replaces it with a Recorder over Effect's own Digest service, which Snapshot.make and Snapshot.read both hash through, so a wrong second hash shows a bypassed read, with no product change and no build step. The lock is oxlint's vitest/no-restricted-vi-methods, not set on main yet, so this slice adds it for the folder. The @kalfa/config move (pull request 1427) does not change the plan: the new law no longer names Snapshot.make, so the move cannot break it.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "note": "plancheck.sh --draft passes. No test ran: a plan step runs none. The doubt for the lead: whether dropping the old law's values-missing fault, which Snapshot.test.ts L5 and L6 hold, is a loosening.",
+  "step": "plan"
+}
