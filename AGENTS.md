@@ -151,7 +151,7 @@ For every agent, whatever its step. A step's skill adds its own rules and its ow
   [the lead skill](./.agents/skills/lead/SKILL.md#run-a-whole-quest-with-chaints)); a fix round is one agent, and the same
   reviewer rechecks ([0177](./.decisions/0177-fix-round-is-one-agent.md)); a law that needs the real
   machine runs before the first review ([0178](./.decisions/0178-host-only-laws-run-first.md)), with
-  launchd, real Electron and process-signal laws on disposable macOS CI
+  launchd, real Electron and process-signal laws off the owner's laptop on eligible disposable CI
   ([0594](./.decisions/0594-safe-checks-direct-mac-ci.md)); a quest stops at its second
   sent-back review ([0176](./.decisions/0176-second-send-back-stops-lane.md)), unless its faults are
   named, located and inside the plan, when the lead decides one more fix round itself
@@ -362,7 +362,7 @@ these caps. Each one came from a laptop that became unusable.
   never `focus()` or `show()`. Shots come only from `page.screenshot`.
 - A wait or poll loop runs in the background.
 - Ordinary safe checks run directly in parallel, under the caps above. For launchd, real Electron
-  or real process signals, use disposable macOS CI, never the owner's laptop. Read
+  or real process signals, use eligible disposable CI off the owner's laptop. Read
   [0594](./.decisions/0594-safe-checks-direct-mac-ci.md) for the split and what remains of
   [0045](./.decisions/0045-test-steps-run-in-containers.md). Read the selected tests and cleanup
   before a direct run: a plain filename is not clearance. When `--changed` reaches these laws,
