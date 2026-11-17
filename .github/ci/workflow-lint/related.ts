@@ -104,7 +104,7 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
     Object.keys(matrix).length === 1 &&
     compact(matrix["shard"]) ===
       `fromJSON(needs.select.outputs.legs||'["1"]')`, "R1: related tests keep the nine-slot cap and one logical matrix axis");
-  require(related["name"] === "related (${{ matrix.shard }})", "R1: related jobs keep their logical leg identities");
+  require(!("name" in related), "R1: related keeps default logical matrix names, including an unexpanded skipped job");
   const commands = steps(related).filter((step) => typeof step["run"] === "string");
   require(JSON.stringify(commands.map((step) => step["run"])) ===
     JSON.stringify([
