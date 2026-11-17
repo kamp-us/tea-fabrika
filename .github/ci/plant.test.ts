@@ -4,6 +4,7 @@ import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Option, Path, RegExp as Regex, Result, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { argv, cases, decodeRequest, derive, Request } from "./plant-cases.ts";
+import { failure } from "./plant-errors.ts";
 import { Model, Observation } from "./plant-machine.ts";
 import {
   attempt,
@@ -73,7 +74,24 @@ const report = (key: Request["case"], status: string, messages: string[] = []) =
       name: `${root}/${cases[key].test}`,
       status: status === "failed" ? "failed" : "passed",
       message: "",
-      assertionResults: [{ fullName: cases[key].title, status, duration: 12, failureMessages: messages }],
+      assertionResults: [
+        {
+          fullName: cases[key].title,
+          status,
+          duration: 12,
+          failureMessages: messages,
+          meta: {
+            plant: failure(
+              key,
+              messages.map((stack) => ({
+                name: stack.startsWith("AssertionError:") ? "AssertionError" : "Error",
+                message: stack.replace(/^AssertionError: /, "").split("\n    at ")[0],
+                stack,
+              })),
+            ),
+          },
+        },
+      ],
     },
   ],
 });
@@ -267,6 +285,48 @@ it.prop(
         observation("watcher-r1", root, JSON.stringify(report("watcher-r1", "failed", [unknown])), 1, 12)._tag,
       ).toBe("incomplete");
     }
+  },
+  options,
+);
+
+// Plant: accept wrapper stacks, generic property failures or multiple errors as the intended assertion.
+it.prop(
+  "only one causal assertion supplies its own location and closed diagnostic",
+  { key: Request.fields.case, depth: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 5 })) },
+  ({ key, depth }) => {
+    const stack = message(key);
+
+    const assertion = {
+      name: "AssertionError",
+      message: stack.replace(/^AssertionError: /, "").split("\n    at ")[0],
+      stack: `${stack}\n    at matcher (/private/${cases[key].test}:17:23)`,
+    };
+
+    let error: unknown = assertion;
+
+    for (let i = 0; i < depth; i++) {
+      error = { name: "Error", message: "Property failed", stack: `${cases[key].test}:99:1`, cause: error };
+    }
+
+    expect(failure(key, [error])).toMatchObject({ assertion: { line: 17, column: 23 } });
+    const cycle: { name: string; message: string; cause?: unknown } = { name: "Error", message: "Property failed" };
+    cycle.cause = cycle;
+
+    for (const errors of [
+      [],
+      [error, error],
+      [cycle],
+      [{ name: "Error", message: "Property failed" }],
+      [{ ...assertion, name: "Error" }],
+      [{ ...assertion, message: `unrelated ${assertion.message}` }],
+      [{ ...assertion, cause: error }],
+    ]) {
+      expect(failure(key, errors)).toBeNull();
+    }
+
+    const unreported = report(key, "failed", [stack]);
+    unreported.testResults[0]!.assertionResults[0]!.meta.plant = null;
+    expect(observation(key, root, JSON.stringify(unreported), 1, 1)._tag).toBe("incomplete");
   },
   options,
 );
