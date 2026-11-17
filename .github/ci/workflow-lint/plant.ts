@@ -12,7 +12,7 @@ const expected = {
           description: "Fixed temporary break",
           required: true,
           type: "choice",
-          options: ["checklist-pid", "watcher-r1"],
+          options: ["checklist-pid", "watcher-r1", "host-pin", "host-discovery-timeout"],
         },
         sha: { description: "Exact source commit, forty lowercase hex characters", required: true, type: "string" },
       },

@@ -43,6 +43,8 @@ const message = (key: Request["case"], content = "", syntax = false) => {
       expect({ _tag: "same", program: content, hash: content }).toMatchObject(
         syntax ? { _tag: "failed", reason: "bundle" } : { _tag: "loaded" },
       ),
+    "host-pin": () => expect(["v26.13.0", "v0.0.0", "v0.0.0"]).toEqual(Array(3).fill("v26.13.0")),
+    "host-discovery-timeout": () => expect(30_001).toBeLessThan(10_000),
   };
 
   return Result.match(Result.try(matchers[key]), {
@@ -52,7 +54,9 @@ const message = (key: Request["case"], content = "", syntax = false) => {
         Schema.Struct({ message: Schema.String, stack: Schema.optionalKey(Schema.String) }),
       )(error);
 
-      return serialized.stack || serialized.message;
+      const stack = serialized.stack || serialized.message;
+
+      return cases[key].project === "tooling" ? `${stack}\n    at fixture (${root}/${cases[key].test}:194:12)` : stack;
     },
   });
 };
@@ -146,6 +150,7 @@ it.effect.prop(
       const args = argv(key, "/private/result.json");
       expect(args).toContain(`^${Regex.escape(selected.title)}$`);
       expect(args).toContain(selected.test);
+      expect(args[args.indexOf("--project") + 1]).toBe(key.startsWith("host-") ? "tooling" : "next-integration");
       const selection = new RegExp(args.at(-1) ?? "(?!)");
       expect(selection.test(selected.title)).toBe(true);
       expect(selection.test(`prefix ${selected.title}`)).toBe(false);
@@ -286,11 +291,44 @@ it.prop(
     expect(output).not.toContain(marker);
     expect(output).not.toContain(encodeURIComponent(marker));
     expect(output).not.toContain("/private/temp");
-    expect(JSON.parse(output).diagnostic).toBe(
-      key === "checklist-pid"
-        ? "AssertionError: a notice names its process"
-        : "AssertionError: expected _tag loaded; received _tag same",
-    );
+
+    const diagnostics = {
+      "checklist-pid": "AssertionError: a notice names its process",
+      "watcher-r1": "AssertionError: expected _tag loaded; received _tag same",
+      "host-pin": "AssertionError: direct and nested pnpm versions differ from the explicit Node pin",
+      "host-discovery-timeout": "AssertionError: runtime discovery exceeded the existing command cleanup bound",
+    };
+
+    expect(JSON.parse(output).diagnostic).toBe(diagnostics[key]);
+  },
+  options,
+);
+
+// Plant: accept a host mismatch without the actual assertion position, or accept a setup failure.
+it.prop(
+  "host diagnostics keep assertion positions and refuse unrelated failures",
+  {
+    key: Schema.Literals(["host-pin", "host-discovery-timeout"]),
+    line: Schema.Int.check(Schema.isGreaterThan(0)),
+    column: Schema.Int.check(Schema.isGreaterThan(0)),
+    content: Schema.String,
+  },
+  ({ key, line, column, content }) => {
+    const header = message(key).split(/\n\s+at /)[0] ?? "";
+    const positioned = `${header}\n    at fixture (/private/runner/${cases[key].test}:${line}:${column})`;
+    const result = observation(key, root, JSON.stringify(report(key, "failed", [positioned])), 1, 12);
+    expect(result).toMatchObject({ _tag: "failed", assertion: { line, column } });
+    expect(JSON.stringify(result)).not.toContain("/private/runner");
+
+    for (const unknown of [
+      header,
+      `Error: Test timed out\n    at fixture (${cases[key].test}:${line}:${column})`,
+      `AssertionError: expected 1 to be 2\n    at fixture (${cases[key].test}:${line}:${column})`,
+      `AssertionError: expected 30000 to be less than 20000\n    at fixture (${cases[key].test}:${line}:${column})`,
+      content,
+    ]) {
+      expect(observation(key, root, JSON.stringify(report(key, "failed", [unknown])), 1, 12)._tag).toBe("incomplete");
+    }
   },
   options,
 );

@@ -2,7 +2,7 @@
 import { Effect, RegExp as Regex, Schema } from "effect";
 
 export const Request = Schema.Struct({
-  case: Schema.Literals(["checklist-pid", "watcher-r1"]),
+  case: Schema.Literals(["checklist-pid", "watcher-r1", "host-pin", "host-discovery-timeout"]),
   sha: Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/)),
 });
 
@@ -10,6 +10,7 @@ export type Request = typeof Request.Type;
 
 export const cases = {
   "checklist-pid": {
+    project: "next-integration",
     file: "next/packages/libfabrika/src/cloudflare/runtime.ts",
     test: "next/apps/fabrika/src/checklist-instance.laws.integration.test.ts",
     title:
@@ -18,6 +19,7 @@ export const cases = {
     after: "p.publish(client, { ...update })",
   },
   "watcher-r1": {
+    project: "next-integration",
     file: "next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts",
     test: "next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts",
     title:
@@ -25,6 +27,37 @@ export const cases = {
     before: "        if (same) {\n          yield* duplicate(answer);",
     after:
       '        if (same) {\n          expect(answer).toMatchObject(syntax ? { _tag: "failed", reason: "bundle" } : { _tag: "loaded" });\n          yield* duplicate(answer);',
+  },
+  "host-pin": {
+    project: "tooling",
+    file: ".agents/skills/lead/scripts/flow/host.ts",
+    test: ".agents/skills/lead/scripts/flow/host.test.ts",
+    title:
+      "the host step's outcomes scenario: an explicit pin keeps direct and nested pnpm on that Node, even when the manifest differs",
+    before: "node === null ? Effect.succeed(env) : boxEnv(dir, { ...process.env, ...env }, node)",
+    after: "node === null ? Effect.succeed(env) : Effect.succeed({ ...process.env, ...env })",
+  },
+  "host-discovery-timeout": {
+    project: "tooling",
+    file: ".agents/skills/lead/scripts/flow/host.ts",
+    test: ".agents/skills/lead/scripts/flow/host.test.ts",
+    title:
+      "the host step's outcomes scenario: stalled runtime discovery shares the first command's deadline and is reaped before returning",
+    before: `  const childEnv = yield* Effect.cached(
+    node === null ? Effect.succeed(env) : boxEnv(dir, { ...process.env, ...env }, node),
+  );
+
+  for (const line of lines) {
+    const ended = yield* childEnv.pipe(
+      Effect.flatMap((prepared) => runLine(dir, line, prepared, log)),
+      Effect.timeoutOption(Duration.minutes(minutes)),
+    );`,
+    after: `  const childEnv = node === null ? env : yield* boxEnv(dir, { ...process.env, ...env }, node);
+
+  for (const line of lines) {
+    const ended = yield* runLine(dir, line, childEnv, log).pipe(
+      Effect.timeoutOption(Duration.minutes(minutes)),
+    );`,
   },
 } as const;
 
@@ -62,7 +95,7 @@ export const argv = (key: Request["case"], report: string): readonly string[] =>
   "vitest",
   "run",
   "--project",
-  "next-integration",
+  cases[key].project,
   "--maxWorkers=1",
   "--fileParallelism=false",
   "--reporter=json",

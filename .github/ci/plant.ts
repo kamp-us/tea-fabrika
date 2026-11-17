@@ -1,4 +1,4 @@
-// Today's manual lead tooling for two next/ laws. Raw child output stays in the scoped scratch directory.
+// Today's manual lead tooling. Raw child output stays in the scoped scratch directory.
 import { run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import {
@@ -89,6 +89,17 @@ const diagnostic = (key: Request["case"], messages: readonly string[]) => {
     if (received !== null && expected !== undefined) {
       return `AssertionError: expected _tag ${expected}; received _tag ${received}`;
     }
+  }
+
+  if (key === "host-pin" && /^AssertionError: expected \[.*\] to deeply equal \[/s.test(text)) {
+    return "AssertionError: direct and nested pnpm versions differ from the explicit Node pin";
+  }
+
+  if (
+    key === "host-discovery-timeout" &&
+    /^AssertionError: expected [0-9]+(?:\.[0-9]+)? to be less than 10000\s*$/.test(text)
+  ) {
+    return "AssertionError: runtime discovery exceeded the existing command cleanup bound";
   }
 
   return null;
@@ -211,6 +222,10 @@ export const observation = (key: Request["case"], root: string, raw: string, exi
               column: Number(frame[2]),
             }),
           );
+
+    if (selected.project === "tooling" && assertion === null) {
+      return missing("unclear");
+    }
 
     return Observation.cases.failed.make({ ...details, category: "assertion", diagnostic: safe, assertion });
   }
