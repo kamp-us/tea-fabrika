@@ -7,7 +7,7 @@ import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./Entry.ts";
 import { Declaration, nodeExecution } from "./Execution.ts";
-import { Input, Program, Refusal, stepper } from "./Program.ts";
+import { Input, Program, Refusal, Step, stepper } from "./Program.ts";
 import * as Wire from "./WireTest.ts";
 
 const Model = Schema.Struct({ count: Schema.Int, replies: Schema.Int });
@@ -1674,7 +1674,7 @@ describe("A-Wire: the runner reads a letter with the Msg's JSON codec, next/", (
           const start = yield* execution.init(null);
           expect(start._tag).toBe("stepped");
 
-          if (start._tag !== "stepped") {
+          if (!Step.isAnyOf(["stepped"])(start)) {
             continue;
           }
 
@@ -1706,7 +1706,7 @@ describe("A-Wire: the runner reads a letter with the Msg's JSON codec, next/", (
         const start = yield* execution.init(null);
         expect(start._tag).toBe("stepped");
 
-        if (start._tag !== "stepped") {
+        if (!Step.isAnyOf(["stepped"])(start)) {
           return;
         }
 
