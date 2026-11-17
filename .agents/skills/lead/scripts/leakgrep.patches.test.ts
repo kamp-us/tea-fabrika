@@ -2,9 +2,10 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import { Schema } from "effect";
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
 
 // Today's tooling. A `pnpm patch` file under patches/ quotes upstream's removed and context lines
 // byte for byte, so nobody can reword them. Inside a patch's hunk those quoted lines skip the
@@ -297,13 +298,16 @@ const rewrite = (path: string, before: ReadonlyArray<string>, after: ReadonlyArr
     const words = join(dir, "words");
     mkdirSync(repo);
     writeFileSync(words, `${word}\n`);
+
     const git = (...args: string[]) => {
       const ran = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args], {
         cwd: repo,
         encoding: "utf8",
       });
+
       expect(ran.status, ran.stderr).toBe(0);
     };
+
     git("init", "-q");
     const file = join(repo, path);
     mkdirSync(dirname(file), { recursive: true });
@@ -319,8 +323,10 @@ const rewrite = (path: string, before: ReadonlyArray<string>, after: ReadonlyArr
       encoding: "utf8",
       env: { ...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined },
     });
+
     expect(ran.stdout + ran.stderr).not.toContain(word);
     expect(ran.stdout + ran.stderr).not.toContain(dir);
+
     return { status: ran.status, stderr: ran.stderr };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -350,6 +356,7 @@ const patchText = (hunks: Hunks, head: (h: number) => string | null = header) =>
   "+++ b/dist/index.js",
   ...hunks.flatMap((lines, h) => {
     const top = head(h);
+
     return top === null ? lines : [top, ...lines];
   }),
 ];
@@ -399,8 +406,10 @@ describe("leakgrep reads a pushed commit's lines inside a patches/ file's hunks 
           // A removed `@@` joins hunk k to the hunk before it, so k is never the first hunk then.
           const k = change === "removes" ? 1 + (pick % (hunks.length - 1)) : pick % hunks.length;
           const after = plantIn(hunks, k, at, `${text}${dash}`);
+
           const head = (h: number) =>
             h !== k ? header(h) : change === "removes" ? null : `@@ -${h * 20 + 1},4 +${h * 20 + 1},7 @@`;
+
           // Whether a plant sits below the first three lines of its hunk, so git cuts a hunk of its own.
           apart ||= (after[k] ?? []).findLastIndex((line) => line.includes(dash)) >= 3;
 
@@ -414,7 +423,42 @@ describe("leakgrep reads a pushed commit's lines inside a patches/ file's hunks 
     });
   }
 
-  // Plants: mark every added line of a patches/ file as quoted, headers and preamble included.
+  // Plant: find the text anywhere among quoted lines, ignoring its new-file line number.
+  // Schemas keep multiple hunks, mixed markers, and malformed patch counts as edge cases.
+  for (const mark of marks) {
+    it.prop(
+      `an outer ${JSON.stringify(mark)} line matching a quoted line at another new-file number still fails`,
+      {
+        hunks: Schema.Array(
+          Schema.Array(Schema.String.check(Schema.isPattern(/^[ +-][abcxyz019 =;(){}.,']{0,12}$/))).check(
+            Schema.isMinLength(1),
+            Schema.isMaxLength(6),
+          ),
+        ).check(Schema.isMinLength(2), Schema.isMaxLength(3)),
+        text: Schema.String.check(Schema.isPattern(/^[abcxyz019 =;(){}.,']{0,12}$/)),
+        pick: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+        at: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 8 })),
+      },
+      ({ hunks, text, pick, at }) => {
+        const repeated = `${mark}same ${text}${dash}`;
+        const selected = pick % hunks.length;
+
+        const quoted = hunks.map((lines, n) =>
+          n === selected ? lines.toSpliced(Math.min(at, lines.length), 0, repeated) : lines,
+        );
+
+        const after = patchText(quoted).toSpliced(4, 0, repeated);
+        expect(after.filter((line) => line.includes(dash))).toEqual([repeated, repeated]);
+
+        const ran = rewrite("patches/upstream@1.0.0.patch", patchText(hunks), after);
+        expect(ran.status, ran.stderr).toBe(1);
+        expect(ran.stderr).toContain("leak em_dash");
+      },
+      { arbitrary: { runs: options.numRuns } },
+    );
+  }
+
+  // Plant: mark every added line of a patches/ file as quoted, headers and preamble included.
   it("an em dash on a patches/ file's @@ line that a commit adds still fails", () => {
     fc.assert(
       fc.property(hunkLines, fc.nat(), (hunks, pick) => {
