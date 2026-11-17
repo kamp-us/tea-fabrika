@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0585, 0556, 0086, 0032, 0579 and 0594; body c5e26ec14d53
+Approved by the lead agent, builds 0585, 0556, 0086, 0032, 0579 and 0594; body 17f51b782370
 Plancheck-Version: 3
 
 # Plan amendment: make slice 2 installable as a private config tarball
@@ -44,6 +44,14 @@ The separate CI repair pair,
 the needed follow-up edits below, but no step edits those files while that owner is active.
 Author the package and nonconflicting tests now. Join the landed CI repair when available and
 apply only this slice's package discovery and delivery additions before final review.
+
+Private preparation may copy these exact CI paths from the committed interface while the repair
+continues. It changes no active CI worktree. The additional Q1 guard path is required because the
+current global upload check otherwise rejects the planned package upload. Extend only its exact
+archive-and-receipt exception. Keep every unrelated upload and token/environment restriction.
+The upload runs only on the selected integration leg after successful consumer and receipt checks
+for the supported automatic event. Missing either fixed output fails. Negative cases belong in the
+already-owned related guard test; no new test file is required for this extension.
 
 ## How others do it
 
@@ -270,7 +278,8 @@ or clarify import followers. Old tests change module specifiers only; preserve t
 | .github/ci/related-selection.test.ts | tests | tests | Deferred: P4 regression coverage, preserving the existing suite. |
 | .github/workflows/check.yaml | tests | tests | Deferred: existing related job retains only the consumer law's tested archive and receipt, with existing slots and failure rules. |
 | .github/ci/workflow-lint/related.ts | tests | tests | Deferred: extend exact guard for the one bounded archive upload, preserving all current checks. |
-| .github/ci/workflow-lint/related.test.ts | tests | tests | Deferred: prove upload requires successful consumer proof and same archive digest/head. |
+| .github/ci/workflow-lint/record.ts | tests | tests | Deferred: Q1 permits only the exact successful selected config consumer archive and receipt upload; preserve every existing upload tuple, token/env restriction and tested-source contract. |
+| .github/ci/workflow-lint/related.test.ts | tests | tests | Deferred: prove successful consumer proof, same archive digest/head and Q1 refusal of wrong jobs, names, paths, events, legs, extra files and missing-file softening. |
 | .glossary/TERMS.md | build | docs | Existing setting/scope rows name the extracted package. |
 | docs/direction/settings.md | build | docs | Engine location line only. |
 | docs/plan/README.md | lead | docs | After active CI owner is done, record this slice's actual state. |
