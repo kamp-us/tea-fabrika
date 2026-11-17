@@ -39,6 +39,7 @@ export default class PlantReporter extends JsonReporter {
         const errors = test.result().errors ?? [];
         const key = Option.getOrNull(this.selected);
         const selected = key === null ? null : cases[key];
+
         const target =
           selected !== null && module.moduleId.endsWith(`/${selected.test}`) && names.join(" ") === selected.title;
 
