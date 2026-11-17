@@ -55,6 +55,22 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+Today's lead tooling adds a separate manual [L11 exercise](../../.github/workflows/l11-exercise.yaml), ticket 1135,
+for `next/` ticket 1129. It fixes one source pair, compares ordinary whole-file runs and private generated inputs,
+and declares ten serial clean jobs. Fixed output faults restore every edited file and publish only decoded facts.
+The actual adapters remain unexercised until the workflow runs on disposable CI after landing. Row, initialization,
+Runner and CPU-profile gaps stay open. These measurements supply no branch proof or reliability claim.
+
+Today's lead tooling has a manual [plant exercise](../../.github/workflows/plant.yaml), ticket 1133.
+It accepts seven fixed cases and an exact source commit, then records baseline, broken and restored observations.
+Its real Git and Vitest adapters ran on trusted main for [checklist notice PIDs](../../field/notes/2026-11-17-checklist-pid-fault-exercise.json)
+in `next/`, and [host pinning and discovery](../../field/notes/2026-11-17-host-runtime-fault-exercises.json) in today's lead tooling.
+The [three remaining host faults](../../field/notes/2026-11-17-host-remaining-fault-exercises.json) now have the same actual observations:
+ignoring the requested pin, omitting the native pnpm directory and reversing prepared-environment precedence.
+Each accepted exercise passed before the deliberate break, failed at its intended assertion, then passed after restoration.
+The watcher case and six other checklist fault or probe groups still need their own evidence.
+These exercises supply neither whole-product review nor branch proof; the affected product tickets remain open.
+
 *2026-11-13:* the order of work changed ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)). The next thing built in `next/` is `fabsh`,
 pipes, `summon` and `join`, working for real, with whatever they need (the window, a second tile and its
 keys, the link to the agent harnesses, rooms), so fabrika is built inside

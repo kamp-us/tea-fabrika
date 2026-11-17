@@ -76,11 +76,11 @@ export const failedSteps = (job: Job): ReadonlyArray<string> =>
 /** How one full run stands, judged job by job. */
 export const Verdict = Schema.TaggedUnion({
   /** Every job green, and what the run tested. */
-  green: { run: Schema.Number, kind: Kind },
+  green: { run: Schema.Finite, kind: Kind },
   /** Not ended yet. */
-  unfinished: { run: Schema.Number, status: Schema.String },
+  unfinished: { run: Schema.Finite, status: Schema.String },
   /** Ended, and these jobs are not green. */
-  red: { run: Schema.Number, jobs: Schema.Array(Job) },
+  red: { run: Schema.Finite, jobs: Schema.Array(Job) },
 });
 
 export type Verdict = typeof Verdict.Type;
@@ -169,7 +169,9 @@ export const failingLines = (log: string): ReadonlyArray<string> => {
 };
 
 /** The pull request was not armed, and nothing was asked of GitHub's merge. */
-export class NotArmed extends Schema.TaggedError<NotArmed>()("NotArmed", { reason: Schema.String }) {}
+export class NotArmed extends Schema.TaggedError<NotArmed, { readonly brand: unique symbol }>()("NotArmed", {
+  reason: Schema.String,
+}) {}
 
 export type Ask = {
   readonly repo: string;
@@ -197,8 +199,8 @@ export const refusal = (found: Detail): string | null => {
 
 /** What `arm` did: turned merge when ready on at this head, or found it merged already. */
 export const Armed = Schema.TaggedUnion({
-  armed: { pr: Schema.Number, oid: Schema.String, readied: Schema.Boolean, full: Schema.String },
-  merged: { pr: Schema.Number, commit: Schema.String },
+  armed: { pr: Schema.Finite, oid: Schema.String, readied: Schema.Boolean, full: Schema.String },
+  merged: { pr: Schema.Finite, commit: Schema.String },
 });
 
 export type Armed = typeof Armed.Type;
@@ -237,18 +239,27 @@ const redReport = Effect.fn("Arm.redReport")(function* (repo: string, run: numbe
   return lines.join("\n");
 });
 
-/** The line a head with no full run of its own is armed with (0544), and how to start one. */
-const unrunNote = (seen: string, oid: string, branch: string, docsOnly: boolean): string =>
+/** The line a head with no full run of its own is armed with (0544). */
+const unrunNote = (seen: string, oid: string, guidance: string, docsOnly: boolean): string =>
   `no full run at ${oid.slice(0, 12)}${seen}; arming as 0544 allows (${
-    docsOnly
-      ? `a docs pull request, only ${DOCS.join(", ")} files, starts no full run`
-      : `to start one: gh workflow run ${WORKFLOW} --ref ${branch}`
+    docsOnly ? `a docs pull request, only ${DOCS.join(", ")} files, starts no full run` : guidance
   })`;
+
+/** New proof guidance rechecks the exact branch head; already completed evidence keeps its meaning. */
+const proofNote = Effect.fn("Arm.proofNote")(function* (repo: string, branch: string, head: string) {
+  const runs = yield* Runs;
+
+  return yield* Effect.match(runs.preflight(branch, head), {
+    onFailure: (error) => `new proof unavailable: ${error.reason}`,
+    onSuccess: () =>
+      `before starting one: node .agents/skills/lead/scripts/ci/preflight.ts --repo ${repo} --branch ${branch} --head ${head}`,
+  });
+});
 
 export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
   const prs = yield* PullRequests;
   const found = yield* prs.view(a.pr);
-  const refuse = (reason: string) => new NotArmed({ reason: `pr ${found.number}: ${reason}` });
+  const refuse = (reason: string) => NotArmed.make({ reason: `pr ${found.number}: ${reason}` });
 
   if (found.state === "MERGED") {
     return Armed.cases.merged.make({ pr: found.number, commit: found.mergeCommit ?? found.oid });
@@ -271,13 +282,18 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
 
   const files = yield* prs.files(found.number);
   const docsOnly = files.length > 0 && files.every(isDocs);
-  const note = (seen: string) => unrunNote(seen, found.oid, found.head, docsOnly);
+
+  const note = Effect.fnUntraced(function* (seen: string) {
+    const guidance = docsOnly ? "" : yield* proofNote(a.repo, found.head, found.oid);
+
+    return unrunNote(seen, found.oid, guidance, docsOnly);
+  });
 
   // A green run arms with its line; any other refuses, at the head or, with none there, at the older head.
   const judged = (
     verdict: Verdict,
     place: string,
-    green: (run: number, kind: Kind) => Effect.Effect<string, NotArmed>,
+    green: (run: number, kind: Kind) => Effect.Effect<string, NotArmed, Runs>,
   ) =>
     Verdict.match(verdict, {
       green: ({ run, kind }) => green(run, kind),
@@ -292,7 +308,7 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
   const full = yield* fullRunAt(found.head, found.oid);
 
   const said = yield* FullRun.match(full, {
-    none: () => Effect.succeed(note("")),
+    none: () => note(""),
     at: ({ verdict }) =>
       judged(verdict, "at this head", (run, kind) =>
         Effect.succeed(
@@ -306,10 +322,12 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
 
       return judged(verdict, place, (run, kind) =>
         kind === "full"
-          ? Effect.succeed(note(`, and the newest one, ${run} at the older head ${head.slice(0, 12)}, was green`))
-          : Effect.fail(
-              refuse(
-                `${place}: the changed-set run ${runUrl(a.repo, run)} tested that head's change, not this one (0590); start one at this head: gh workflow run ${WORKFLOW} --ref ${found.head}`,
+          ? note(`, and the newest one, ${run} at the older head ${head.slice(0, 12)}, was green`)
+          : Effect.flatMap(proofNote(a.repo, found.head, found.oid), (guidance) =>
+              Effect.fail(
+                refuse(
+                  `${place}: the changed-set run ${runUrl(a.repo, run)} tested that head's change, not this one (0590); ${guidance}`,
+                ),
               ),
             ),
       );
