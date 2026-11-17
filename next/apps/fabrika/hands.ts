@@ -22,6 +22,7 @@ import { ClientKey } from "@kampus/libfabrika/transport/ClientKey";
 import type { Link } from "@kampus/libfabrika/transport/Link";
 import { Array as Arr, Record as Rec } from "effect";
 import * as Config from "effect/Config";
+import { Config, ConfigProvider, Effect, FileSystem, Layer, Option, Path, Queue, Schema, Stream } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -57,6 +58,18 @@ const OS: Partial<Record<NodeJS.Platform, "macos" | "linux" | "windows">> = {
 const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
   Rec.fromEntries(Arr.filter(entries, (entry): entry is readonly [string, string] => entry[1] !== undefined));
 
+/** One variable of this process's environment through Config; unset is `undefined`. */
+const variable = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
+
+/**
+ * The home folder's variable and each declared setting's, through Config. A start reads them when
+ * it runs, as process.env was read: an empty variable stays empty, and an unset one is left out.
+ */
+const environment = Config.all({
+  home: variable("FABRIKA_HOME"),
+  settings: Config.all(Object.fromEntries(Declarations.all.declarations.map((d) => [d.env, variable(d.env)]))),
+});
+
 /** What a parent needs to know of the link: waiting for a grant, online, or neither. */
 const lineFor = (link: Link, fingerprint: string): Line =>
   link._tag === "waiting_grant"
@@ -68,16 +81,15 @@ const lineFor = (link: Link, fingerprint: string): Line =>
 const hands = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
-
-  const home = process.env.FABRIKA_HOME ?? path.join(yield* Config.String("HOME"), ".fabrika");
-
+  const env = yield* environment.parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
+  const home = env.home ?? path.join(yield* Config.String("HOME"), ".fabrika");
   const loaded = yield* Load.load({
     person: {
       path: path.join(home, "fabrika.toml"),
-      name: `${process.env.FABRIKA_HOME === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
+      name: `${env.home === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
     },
     flags: {},
-    env: present(Arr.map(Declarations.all.declarations, (d) => [d.env, process.env[d.env]])),
+    env: present(Rec.toEntries(env.settings)),
     version: VERSION,
   }).pipe(Effect.provide([TomlParser.layer, Digest.layerWebCrypto]));
 

@@ -7,10 +7,13 @@
 // box.sh sources first: MAIN, BOXES. One result line on stdout; exit 0, 1 (kept) or 2 (bad name or
 // usage), as box.sh's Python gave.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Layer } from "effect";
+import { Config, ConfigProvider, Console, Effect, Layer, Option } from "effect";
 import * as BoxGitProcess from "./box/BoxGitProcess.ts";
 import * as Remove from "./box/Remove.ts";
 import * as RunsProcess from "./box/RunsProcess.ts";
+
+/** One variable of this process's environment, read through Config; unset is `undefined`. */
+const text = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
 
 const setExit = (code: number) =>
   Effect.sync(() => {
@@ -41,13 +44,19 @@ const [command, ...rest] = process.argv.slice(2);
 
 const name = rest[0] ?? "";
 
-const { MAIN: main, BOXES: boxes } = process.env;
-
-const program =
-  command !== "rm" || rest.length !== 1
-    ? Effect.andThen(Console.error("usage: box.sh rm <name>"), setExit(2))
-    : main === undefined || boxes === undefined
-      ? Effect.andThen(Console.log(`kept box ${name}: inspection or removal failed`), setExit(1))
-      : rm(name, { boxes, main }).pipe(Effect.provide(services(main)));
+const program = Effect.gen(function* () {
+  if (command !== "rm" || rest.length !== 1) {
+    yield* Console.error("usage: box.sh rm <name>");
+    return yield* setExit(2);
+  }
+  const { main, boxes } = yield* Config.all({ main: text("MAIN"), boxes: text("BOXES") }).parse(
+    ConfigProvider.fromEnv({ preserveEmptyStrings: true }),
+  );
+  if (main === undefined || boxes === undefined) {
+    yield* Console.log(`kept box ${name}: inspection or removal failed`);
+    return yield* setExit(1);
+  }
+  yield* rm(name, { boxes, main }).pipe(Effect.provide(services(main)));
+}).pipe(Effect.provide(NodeServices.layer));
 
 NodeRuntime.runMain(program, { disableErrorReporting: true });

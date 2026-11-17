@@ -1,6 +1,7 @@
 // Decision 0535: one setting picks how many cases a law over real IO runs. `fast` is the default, the
 // 3-hour schedule says `full`, and a `fast` count is held between `LEAST` and the law's full count.
 import { expect, it } from "@effect/vitest";
+import { Config, Effect, Option } from "effect";
 import * as fc from "fast-check";
 import { decodeDepth, depth, LEAST, runsAt, runsFor } from "./Depth.ts";
 
@@ -11,12 +12,15 @@ const Counts = fc
   .integer({ min: 1, max: 1000 })
   .chain((full) => fc.record({ fast: fc.integer({ min: Math.min(LEAST, full), max: full }), full: fc.constant(full) }));
 
-it("pinned: unset is fast, the two words name themselves, and this run reads FABRIKA_TEST_DEPTH", () => {
-  expect(decodeDepth(undefined)).toBe("fast");
-  expect(decodeDepth("fast")).toBe("fast");
-  expect(decodeDepth("full")).toBe("full");
-  expect(depth).toBe(decodeDepth(process.env.FABRIKA_TEST_DEPTH));
-});
+it.effect("pinned: unset is fast, the two words name themselves, and this run reads FABRIKA_TEST_DEPTH", () =>
+  Effect.gen(function* () {
+    expect(decodeDepth(undefined)).toBe("fast");
+    expect(decodeDepth("fast")).toBe("fast");
+    expect(decodeDepth("full")).toBe("full");
+    const set = yield* Config.option(Config.String("FABRIKA_TEST_DEPTH"));
+    expect(depth).toBe(decodeDepth(Option.getOrUndefined(set)));
+  }),
+);
 
 it("any other value fails the run rather than falling back to a depth", () => {
   fc.assert(

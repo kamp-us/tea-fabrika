@@ -23,6 +23,7 @@ import { Written } from "@kampus/libfabrika/telemetry/Records";
 import {
   Array as Arr,
   Clock,
+  Config as Env,
   Context,
   Effect,
   Exit,
@@ -424,15 +425,15 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
 export const check = Effect.fn("P19Host.check")(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
-
-  yield* checked(process.platform === "darwin" && process.env.FABRIKA_P19_HOST === "1", "host-opt-in-required");
+  const optIn = yield* Env.String("FABRIKA_P19_HOST").pipe(Env.withDefault(""));
+  yield* checked(process.platform === "darwin" && optIn === "1", "host-opt-in-required");
   const app = path.resolve(import.meta.dirname, "../..");
   const root = path.resolve(app, "../../..");
   const temporary = yield* fs.makeTempDirectoryScoped({ directory: "/tmp", prefix: "p19-" });
   const home = yield* fs.realPath(temporary);
   const executable: string = createRequire(path.join(app, "package.json"))("electron");
   // The OS chooses a disposable listener only in this host check, never in BrainService policy.
-  const chosen = Number(process.env.FABRIKA_P19_PORT);
+  const chosen = Number(yield* Env.String("FABRIKA_P19_PORT").pipe(Env.withDefault("")));
   yield* checked(Number.isInteger(chosen) && chosen > 1024 && chosen < 65535, "supply-isolated-host-port");
   const url = `http://127.0.0.1:${chosen}`;
   yield* checked(!(yield* listening(url)), "host-port-is-already-owned");

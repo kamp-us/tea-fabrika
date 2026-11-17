@@ -119,6 +119,14 @@ import {
   Option,
   Order,
   Record as Rec,
+  Cause,
+  Config,
+  ConfigProvider,
+  Context,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
   Result,
   Schema,
   Stream,
@@ -904,6 +912,27 @@ export const sh = (cmd: string, args: readonly string[], cwd?: string) => {
 
 const tail = (text: string, n = 3) => Arr.join(pipe(text, Str.trim, Str.split("\n")).slice(-n), " | ");
 
+/**
+ * One variable of this process's environment, read through Config when it runs; unset is
+ * `undefined`, and an empty one stays empty, as a read of process.env gave it.
+ */
+export const variable = (name: string) =>
+  Config.String(name)
+    .pipe(Config.option, Config.map(Option.getOrUndefined))
+    .parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
+
+/** How long a step's agent may run, in minutes, before drive stops it and the step is stuck. */
+export const StepMinutes = Context.Reference<number>("drive/StepMinutes", { defaultValue: () => 60 });
+
+/**
+ * `self` with DRIVE_MINUTES as its `StepMinutes` when the variable is set, read as `Number` reads
+ * it, so an empty one is 0, as a read of process.env gave it.
+ */
+export const withDriveMinutes = <A, E, R>(self: Effect.Effect<A, E, R>) =>
+  Effect.flatMap(variable("DRIVE_MINUTES"), (set) =>
+    set === undefined ? self : Effect.provideService(self, StepMinutes, Number(set)),
+  );
+
 /** This run's report, or `null` when it wrote none. */
 const writtenReport = (ask: Ask) => {
   const mtime = existsSync(ask.report) ? statSync(ask.report).mtimeMs : null;
@@ -1166,7 +1195,7 @@ export const commitSubject = (ask: Pick<Ask, "ticket" | "step">, report: string)
  * stepcommit commits them as the bot and signs them as the step, with main's own signer. The
  * branch then points at that one signed commit, or stays at the base when nothing changed.
  */
-const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
+const collect = (env: Env, ask: Ask, changes: readonly Change[], path: string) => {
   const git = (...args: string[]) => {
     const r = spawnSync("git", ["-C", env.MAIN, ...args], { encoding: "utf8", env: SAFE_GIT });
 
@@ -1230,7 +1259,7 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
           ...SAFE_GIT,
           // The fresh worktree has no node_modules, so stepcommit's format check finds
           // oxfmt in the main checkout's, where the signer comes from too.
-          PATH: `${join(env.MAIN, "node_modules/.bin")}:${process.env.PATH ?? ""}`,
+          PATH: `${join(env.MAIN, "node_modules/.bin")}:${path}`,
           STEPCOMMIT_SIGNER: `node ${join(env.MAIN, "next/apps/fabrika/src/exam/commits.ts")}`,
           // The sign worktree is not the box: name the box whose facts stepcommit checks.
           STEPCOMMIT_BOX: ask.box,
@@ -1295,8 +1324,9 @@ export const startedOf = (code: number, err: string): typeof Started.Type => {
 };
 
 /** The Cmds' handlers for one step. `started` holds the step's start phases so far; box_new adds
- * box.sh's own, and record writes them all on the step's entry. */
-const handlers = (env: Env, started: readonly Phase[] = []) => {
+ * box.sh's own, and record writes them all on the step's entry. `path` is drive's own PATH, which
+ * the sign worktree's stepcommit runs on after the main checkout's tools. */
+const handlers = (env: Env, started: readonly Phase[], path: string) => {
   const box = (...args: string[]) => sh("sh", [join(HERE, "box.sh"), ...args]);
   const git = (...args: string[]) => sh("git", ["-C", env.MAIN, "-c", "core.hooksPath=/dev/null", ...args]);
   let phases = started;
@@ -1374,7 +1404,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         // Work the box holds that no branch has: what the agent changed, until it is collected.
         const held = changes.length > 0 ? [`${changes.length} uncommitted files`] : [];
         const ref = `refs/heads/${ask.branch}`;
-        const f = ask.step === "review" ? { code: 0, err: "" } : collect(env, ask, changes);
+        const f = ask.step === "review" ? { code: 0, err: "" } : collect(env, ask, changes, path);
 
         if (f.code !== 0) {
           return {
@@ -2134,6 +2164,8 @@ export interface StepArgs {
   readonly branch?: string | undefined;
   readonly plan?: string | undefined;
   readonly from?: string | undefined;
+  /** How long the agent may run, in minutes (`StepMinutes`). */
+  readonly minutes: number;
 }
 
 /**
@@ -2274,7 +2306,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     report: step === "plan" ? at("-plan.md") : at(".md"),
     events: step === "plan" ? at("-plan.jsonl") : at(".jsonl"),
     err: at(".err"),
-    minutes: Number(process.env.DRIVE_MINUTES ?? 60),
+    minutes: p.minutes,
     started: DateTime.toEpochMillis(DateTime.nowUnsafe()),
   };
 
@@ -2409,6 +2441,7 @@ export const driveStep = (
 
   const program = Effect.gen(function* () {
     const waitStart = yield* Clock.currentTimeMillis;
+    const path = (yield* variable("PATH")) ?? "";
 
     if (holdsElectron(ask.step, p.electron)) {
       yield* takeElectron(env);
@@ -2437,7 +2470,7 @@ export const driveStep = (
 
     const handle = yield* run(machine, {
       ctx: undefined,
-      interpret: handlers(env, [...p.phases, { name: "wait", ms: (yield* Clock.currentTimeMillis) - waitStart }]),
+      interpret: handlers(env, [...p.phases, { name: "wait", ms: (yield* Clock.currentTimeMillis) - waitStart }], path),
       subscribe: { draft: agentsDraft(env, agents) },
       terminal: (m) => m.phase === "over",
     });
@@ -2520,82 +2553,84 @@ const main = () => {
   // prepare takes the quest for this process; it is given back however the process ends.
   process.on("exit", () => freeQuest(env.BOXES, quest));
 
-  const prepared = prepare(env, {
-    quest,
-    step: step as StepName,
-    brief,
-    agent: agent as AgentName,
-    model: flag(args, "--model"),
-    electron: args.includes("--electron"),
-    ticket: flag(args, "--ticket"),
-    branch: flag(args, "--branch"),
-    plan: flag(args, "--plan"),
-    from: flag(args, "--from"),
-  });
+  // The step itself, once the start checks passed.
+  const stepped = (prepared: Prepared) =>
+    Effect.gen(function* () {
+      const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN);
+      const line = yield* driveStep(env, agents, prepared);
+      console.log(Formatter.formatJson(line));
+      process.exitCode = line.exit;
+    }).pipe(
+      // A crash is still one JSON line, and the box is kept for the lead to read.
+      Effect.catchCause((cause) =>
+        Effect.sync(() => {
+          console.log(
+            Formatter.formatJson({
+              outcome: "stuck:crash",
+              quest,
+              step,
+              box: prepared.ask.box,
+              reason: Cause.pretty(cause),
+              fault: "tool",
+              kept: true,
+              exit: 30,
+            }),
+          );
+          process.exitCode = 30;
+        }),
+      ),
+    );
 
-  if (prepared._tag === "refused") {
-    if (prepared.exit === 2) {
-      console.error(`drive.ts: ${prepared.reason}`);
-      process.exit(2);
+  // The start checks run inside the program, so DRIVE_MINUTES is read through Config.
+  const program = Effect.gen(function* () {
+    const prepared = prepare(env, {
+      quest,
+      step: step as StepName,
+      brief,
+      agent: agent as AgentName,
+      model: flag(args, "--model"),
+      electron: args.includes("--electron"),
+      ticket: flag(args, "--ticket"),
+      branch: flag(args, "--branch"),
+      plan: flag(args, "--plan"),
+      from: flag(args, "--from"),
+      minutes: yield* StepMinutes,
+    });
+
+    if (prepared._tag === "refused") {
+      if (prepared.exit === 2) {
+        console.error(`drive.ts: ${prepared.reason}`);
+        process.exit(2);
+      }
+
+      console.log(
+        Formatter.formatJson({
+          outcome: prepared.outcome,
+          reason: prepared.reason,
+          fault: faultFrom(prepared.outcome, prepared.reason),
+        }),
+      );
+      process.exit(prepared.exit);
     }
 
-    console.log(
-      JSON.stringify({
-        outcome: prepared.outcome,
-        reason: prepared.reason,
-        fault: faultFrom(prepared.outcome, prepared.reason),
-      }),
-    );
-    process.exit(prepared.exit);
-  }
+    if (args.includes("--plan-only")) {
+      console.log(
+        Formatter.formatJson({
+          outcome: "plan-only",
+          ...prepared.ask,
+          electron: holdsElectron(prepared.ask.step, prepared.electron),
+        }),
+      );
+      return;
+    }
 
-  if (args.includes("--plan-only")) {
-    console.log(
-      JSON.stringify({
-        outcome: "plan-only",
-        ...prepared.ask,
-        electron: holdsElectron(prepared.ask.step, prepared.electron),
-      }),
-    );
-
-    return;
-  }
-
-  const program = Effect.gen(function* () {
-    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN);
-    const line = yield* driveStep(env, agents, prepared);
-    console.log(Formatter.formatJson(line));
-    process.exitCode = line.exit;
-  }).pipe(
-    // A crash is still one JSON line, and the box is kept for the lead to read.
-    Effect.catchCause((cause) =>
-      Effect.sync(() => {
-        console.log(
-          Formatter.formatJson({
-            outcome: "stuck:crash",
-            quest,
-            step,
-            box: prepared.ask.box,
-            reason: Cause.pretty(cause),
-            fault: "tool",
-            kept: true,
-            exit: 30,
-          }),
-        );
-        process.exitCode = 30;
-      }),
+    yield* stepped(prepared);
+  }).pipe(withDriveMinutes);
+  NodeRuntime.runMain(program.pipe(Effect.provide(
+    Layer.mergeAll(PushesProcess.layer(HERE), PullRequestsGh.layer(env.GH_REPO, env.MAIN)).pipe(
+      Layer.provideMerge(nodeServices),
     ),
-  );
-
-  NodeRuntime.runMain(
-    program.pipe(
-      Effect.provide(
-        Layer.mergeAll(PushesProcess.layer(HERE), PullRequestsGh.layer(env.GH_REPO, env.MAIN)).pipe(
-          Layer.provideMerge(nodeServices),
-        ),
-      ),
-    ),
-  );
+  )));
 };
 
 if (import.meta.main) {

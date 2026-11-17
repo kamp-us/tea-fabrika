@@ -14,6 +14,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import { Config, ConfigProvider, Effect, FileSystem, Option, Path, Queue, Ref, Result, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";

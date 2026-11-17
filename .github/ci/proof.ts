@@ -37,6 +37,7 @@ import { appendFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { DateTime } from "effect";
+import { Config, ConfigProvider, Effect, Option } from "effect";
 import vitestPackage from "vitest/package.json" with { type: "json" };
 import { testConfig } from "../../vitest.config.ts";
 import { rowsAt } from "../../vitest.shards.ts";
@@ -203,6 +204,18 @@ export const whole = (name: string, value: string | undefined): number => {
 
 // Under Vitest `import.meta.main` is false, so a test that imports this file never lists or writes.
 if (import.meta.main) {
+  // The step's variables, read through Effect's Config. An empty variable stays empty, as a read of
+  // process.env gave it, so `whole` still refuses an empty MOST or LIMIT.
+  const text = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
+  const env = Effect.runSync(
+    Config.all({
+      most: text("MOST"),
+      limit: text("LIMIT"),
+      record: text("RECORD"),
+      output: text("GITHUB_OUTPUT"),
+      summary: text("GITHUB_STEP_SUMMARY"),
+    }).parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true })),
+  );
   const root = fileURLToPath(new URL("../../", import.meta.url));
 
   const git = (args: readonly string[]) => {
@@ -240,8 +253,8 @@ if (import.meta.main) {
         );
 
   const sizing: Sizing = {
-    most: whole("MOST", process.env["MOST"]),
-    limit: room(whole("LIMIT", process.env["LIMIT"]), E2E_SETUP),
+    most: whole("MOST", env.most),
+    limit: room(whole("LIMIT", env.limit), E2E_SETUP),
     table: rowsAt("full"),
   };
 
@@ -256,19 +269,19 @@ if (import.meta.main) {
   const said = summary(proof);
   console.log(said);
   console.log(lines.join("\n"));
-  const record = process.env["RECORD"];
+  const record = env.record;
 
   if (record !== undefined && record !== "") {
     writeFileSync(record, `${JSON.stringify(proof, null, 2)}\n`);
   }
 
-  const output = process.env["GITHUB_OUTPUT"];
+  const output = env.output;
 
   if (output !== undefined && output !== "") {
     appendFileSync(output, `${lines.join("\n")}\n`);
   }
 
-  const step = process.env["GITHUB_STEP_SUMMARY"];
+  const step = env.summary;
 
   if (step !== undefined && step !== "") {
     appendFileSync(step, `${said}\n`);

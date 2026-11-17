@@ -134,6 +134,8 @@ import {
   Schema,
 } from "effect";
 import { Digest } from "effect/crypto";
+import type { Config } from "effect";
+import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -153,6 +155,9 @@ import {
   prepare,
   runNames,
   sh,
+  StepMinutes,
+  variable,
+  withDriveMinutes,
 } from "./drive.ts";
 import * as Beat from "./flow/Beat.ts";
 import * as Host from "./flow/host.ts";
@@ -1379,6 +1384,7 @@ const handlers = (s: Setup) => {
             ticket: s.ticket,
             branch: s.branch,
             plan: s.plan,
+            minutes: yield* StepMinutes,
           });
 
           if (prepared._tag === "refused") {
@@ -2006,11 +2012,11 @@ const backstopFor = (plan: string, brief: string) =>
 /** A limit's override from the environment, when set and a number. */
 const overridden =
   (ref: Context.Reference<number>, name: string) =>
-  <E>(self: Effect.Effect<void, E, never>): Effect.Effect<void, E, never> => {
-    const v = Number(process.env[name]);
-
-    return process.env[name] !== undefined && Number.isFinite(v) ? Effect.provideService(self, ref, v) : self;
-  };
+  <E>(self: Effect.Effect<void, E, never>): Effect.Effect<void, E | Config.ConfigError, never> =>
+    Effect.flatMap(variable(name), (set) => {
+      const v = Number(set);
+      return set !== undefined && Number.isFinite(v) ? Effect.provideService(self, ref, v) : self;
+    });
 
 /** The last line of a quest that never started: its pin could not be made or read. */
 const unpinned = (reason: string, quest?: string) => {
@@ -2052,43 +2058,42 @@ const launch = (env: Env, quest: string, args: ReadonlyArray<string>) =>
 const main = () => {
   const env = loadEnv();
   const args = process.argv.slice(2);
-  const state = Pin.pinState(process.env[Pin.PIN_ENV]);
   const [quest = ""] = args;
 
-  if (state._tag === "malformed") {
-    unpinned(`${Pin.PIN_ENV} does not parse: ${state.value}`);
-
-    return;
-  }
-
-  // A usage error needs no pin: it is printed here, from the checkout.
-  if (state._tag === "unpinned" && QUEST_NAME.test(quest)) {
-    launch(env, quest, args);
-
-    return;
-  }
-
-  const pin = state._tag === "pinned" ? state.pin : null;
   Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const end = yield* chainMain(args, env, pin);
-        process.exitCode = exitOf(end);
-      }),
-    ).pipe(
-      Effect.provide(services(env)),
-      overridden(WaitMinutes, "CHAIN_WAIT_MINUTES"),
-      overridden(MaxWaits, "CHAIN_WAITS"),
-      overridden(MaxStucks, "CHAIN_STUCKS"),
-      overridden(MaxSteps, "CHAIN_STEPS"),
-      overridden(IntensityCount, "CHAIN_INTENSITY"),
-      overridden(IntensityWithin, "CHAIN_WITHIN"),
-      overridden(BackstopTimes, "CHAIN_BACKSTOP"),
-      overridden(HostMinutes, "CHAIN_HOST_MINUTES"),
-      overridden(TypecheckMinutes, "CHAIN_TYPECHECK_MINUTES"),
-      overridden(TypecheckEvery, "CHAIN_TYPECHECK_EVERY"),
-      overridden(QueueMinutes, "CHAIN_QUEUE_MINUTES"),
-    ),
+    Effect.gen(function* () {
+      const state = Pin.pinState(yield* variable(Pin.PIN_ENV));
+
+      if (state._tag === "malformed") {
+        return yield* Effect.sync(() => unpinned(`${Pin.PIN_ENV} does not parse: ${state.value}`));
+      }
+
+      // A usage error needs no pin: it is printed here, from the checkout.
+      if (state._tag === "unpinned" && QUEST_NAME.test(quest)) {
+        return yield* Effect.sync(() => launch(env, quest, args));
+      }
+
+      const pin = state._tag === "pinned" ? state.pin : null;
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const end = yield* chainMain(args, env, pin);
+          process.exitCode = exitOf(end);
+        }),
+      ).pipe(
+        overridden(WaitMinutes, "CHAIN_WAIT_MINUTES"),
+        overridden(MaxWaits, "CHAIN_WAITS"),
+        overridden(MaxStucks, "CHAIN_STUCKS"),
+        overridden(MaxSteps, "CHAIN_STEPS"),
+        overridden(IntensityCount, "CHAIN_INTENSITY"),
+        overridden(IntensityWithin, "CHAIN_WITHIN"),
+        overridden(BackstopTimes, "CHAIN_BACKSTOP"),
+        overridden(HostMinutes, "CHAIN_HOST_MINUTES"),
+        overridden(TypecheckMinutes, "CHAIN_TYPECHECK_MINUTES"),
+        overridden(TypecheckEvery, "CHAIN_TYPECHECK_EVERY"),
+        overridden(QueueMinutes, "CHAIN_QUEUE_MINUTES"),
+        withDriveMinutes,
+      );
+    }).pipe(Effect.provide(services(env))),
   ).catch((e: unknown) => {
     console.log(JSON.stringify({ outcome: "stuck", reason: String(e), exit: 30 }));
     process.exitCode = 30;

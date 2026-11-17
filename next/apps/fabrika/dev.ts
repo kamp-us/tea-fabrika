@@ -10,6 +10,7 @@ import * as RepositoryTrustLedger from "@kampus/libfabrika/packs/RepositoryTrust
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Array as Arr, Record as Rec, String as Str } from "effect";
+import { Config, ConfigProvider, Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
 import * as Config from "effect/Config";
 import { Digest, SecureRandom } from "effect/crypto";
@@ -51,6 +52,18 @@ const Saved = Schema.Struct({ ...Founding.fields, port: Schema.optionalKey(Decla
 /** The entries that hold a value, as one record. */
 const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
   Rec.fromEntries(Arr.filter(entries, (entry): entry is readonly [string, string] => entry[1] !== undefined));
+
+/** One variable of this process's environment through Config; unset is `undefined`. */
+const variable = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
+
+/**
+ * The home folder's variable and each declared setting's, through Config. A start reads them when
+ * it runs, as process.env was read: an empty variable stays empty, and an unset one is left out.
+ */
+const environment = Config.all({
+  home: variable("FABRIKA_HOME"),
+  settings: Config.all(Object.fromEntries(declarations.map((d) => [d.env, variable(d.env)]))),
+});
 
 // The settings flags are one nested record, so the start reads each by its declared path.
 const flags = {
@@ -104,19 +117,18 @@ const command = Command.make("dev", flags, (options) => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem,
           path = yield* Path.Path;
-
-        const home = process.env.FABRIKA_HOME ?? path.join(yield* Config.String("HOME"), ".fabrika");
-
+        const env = yield* environment.parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
+        const home = env.home ?? path.join(yield* Config.String("HOME"), ".fabrika");
         // A person reads their file's name from ~ or FABRIKA_HOME, never as this machine's path.
         const person = {
           path: path.join(home, "fabrika.toml"),
-          name: `${process.env.FABRIKA_HOME === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
+          name: `${env.home === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
         };
 
         const loadOptions = {
           person,
           flags: present(Arr.map(declarations, (d) => [d.path, options.settings[d.path]])),
-          env: present(Arr.map(declarations, (d) => [d.env, process.env[d.env]])),
+          env: present(Rec.toEntries(env.settings)),
           version: VERSION,
         };
 

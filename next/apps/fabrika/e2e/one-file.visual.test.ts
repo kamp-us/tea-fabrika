@@ -21,6 +21,7 @@ import { it } from "@effect/vitest";
 import type { BuildError } from "@kampus/libfabrika/runtime/Built";
 import { runsFor } from "@kampus/vitest";
 import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
+import { Config, Effect, Exit, Option, Result, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -265,12 +266,18 @@ const Fault = Schema.Struct({
   kind: Schema.Literals(["setup", "test", "hold"]),
 });
 
-const fault =
-  process.env.P14_E2E_FAULT === undefined
-    ? undefined
-    : Schema.decodeSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
+// What the supervisor planted, read once through Config. A fault it cannot decode fails the file at
+// load, as the old decode did.
+const planted = Effect.runSync(
+  Config.all({
+    fault: Config.option(Config.schema(Schema.fromJsonString(Fault), "P14_E2E_FAULT")),
+    trace: Config.option(Config.String("P14_E2E_TRACE")),
+  }),
+);
 
-const trace = process.env.P14_E2E_TRACE;
+const fault = Option.getOrUndefined(planted.fault);
+
+const trace = Option.getOrUndefined(planted.trace);
 
 class SetupFault extends Schema.TaggedError<SetupFault, { readonly brand: unique symbol }>()("SetupFault", {
   at: Schema.String,

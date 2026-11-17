@@ -2,6 +2,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Array as Arr } from "effect";
+import { Config, Effect, FileSystem, Option, Path } from "effect";
 import { Digest } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -10,7 +11,15 @@ import * as Path from "effect/Path";
 import { expect } from "vitest";
 import * as Host from "./node/P19Launchd.test-support.ts";
 
-const enabled = process.platform === "darwin" && process.env.FABRIKA_P19_HOST === "1" && (process.env.CI ?? "") === "";
+// The host's opt-in and CI's marker, read through Config: an empty CI reads as unset, as before.
+const host = Effect.runSync(
+  Config.all({
+    optIn: Config.String("FABRIKA_P19_HOST").pipe(Config.withDefault("")),
+    ci: Config.option(Config.String("CI")),
+  }),
+);
+
+const enabled = process.platform === "darwin" && host.optIn === "1" && Option.isNone(host.ci);
 
 it.live("pinned: L13 bundles keep native dependencies resolvable outside root node_modules", () =>
   // Review found that pnpm's transitive native dependencies were absent from the root link.

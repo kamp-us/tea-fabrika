@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll } from "@effect/vitest";
 import { Effect, Record as Rec, Schema } from "effect";
+import { Config, Effect } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { readers } from "./changes.mjs";
@@ -431,7 +432,7 @@ it("scenario: the main prints the full matrix to GITHUB_OUTPUT in the merge queu
   const done = spawnSync(process.execPath, [fileURLToPath(new URL("./legs.ts", import.meta.url))], {
     encoding: "utf8",
     env: {
-      PATH: process.env["PATH"],
+      PATH: Effect.runSync(Config.String("PATH")),
       EVENT: "merge_group",
       FILTER: "next/",
       BUDGET: String(budget),

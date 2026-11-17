@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Record as Rec } from "effect";
+import { Config, Effect } from "effect";
 import { expect, it, onTestFinished } from "vitest";
 
 // Today's CI. Covers apt.sh, the apt step of next's chromium step. No root
@@ -106,7 +107,7 @@ const box = (files: Files, release = "noble") => {
     spawnSync("sh", [script, ...args], {
       encoding: "utf8",
       env: {
-        PATH: `${bin}:${process.env["PATH"]}`,
+        PATH: `${bin}:${Effect.runSync(Config.String("PATH"))}`,
         APT_ETC: etc,
         APT_LISTS: lists,
         OS_RELEASE: osRelease,

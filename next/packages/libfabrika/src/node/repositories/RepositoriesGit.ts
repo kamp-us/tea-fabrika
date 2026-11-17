@@ -18,6 +18,21 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
 import {
+  Config,
+  ConfigProvider,
+  Effect,
+  Fiber,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Redacted,
+  Schema,
+  Stream,
+} from "effect";
+import { Digest } from "effect/crypto";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import {
   Branch,
   DefaultUnknown,
   Hash,
@@ -36,6 +51,21 @@ const failure = (operation: string, cause: unknown, unknown = false) =>
       ? DefaultUnknown.make({ cause: Redacted.make(cause) })
       : ReadFailed.make({ cause: Redacted.make(cause) }),
   });
+
+/** One variable of this process's environment through Config; unset is `undefined`. */
+const variable = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
+
+/**
+ * What a git command takes from this process's environment, read at each command as process.env
+ * was: an empty variable stays empty, and an unset one stays unset.
+ */
+const inherited = Config.all({
+  PATH: variable("PATH"),
+  HOME: variable("HOME"),
+  GIT_CONFIG_NOSYSTEM: variable("GIT_CONFIG_NOSYSTEM"),
+  GIT_CONFIG_GLOBAL: variable("GIT_CONFIG_GLOBAL"),
+  SSH_AUTH_SOCK: variable("SSH_AUTH_SOCK"),
+});
 
 const safeConfig = [
   "-c",
@@ -86,20 +116,21 @@ export const layer = (options: { readonly person: string }) =>
 
         return yield* Effect.scoped(
           Effect.gen(function* () {
+            const env = yield* inherited.parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
             const child = yield* spawner.spawn(
               ChildProcess.make("git", ["--no-replace-objects", "--literal-pathspecs", ...safeConfig, ...args], {
                 cwd,
                 extendEnv: false,
                 env: {
-                  PATH: process.env.PATH,
-                  HOME: process.env.HOME,
-                  GIT_CONFIG_NOSYSTEM: objects === undefined ? "1" : process.env.GIT_CONFIG_NOSYSTEM,
-                  GIT_CONFIG_GLOBAL: objects === undefined ? "/dev/null" : process.env.GIT_CONFIG_GLOBAL,
+                  PATH: env.PATH,
+                  HOME: env.HOME,
+                  GIT_CONFIG_NOSYSTEM: objects === undefined ? "1" : env.GIT_CONFIG_NOSYSTEM,
+                  GIT_CONFIG_GLOBAL: objects === undefined ? "/dev/null" : env.GIT_CONFIG_GLOBAL,
                   GIT_TERMINAL_PROMPT: "0",
                   GIT_ATTR_NOSYSTEM: "1",
                   GIT_ALLOW_PROTOCOL: "file:https:http:ssh:git",
                   GIT_OBJECT_DIRECTORY: objects,
-                  SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK,
+                  SSH_AUTH_SOCK: env.SSH_AUTH_SOCK,
                 },
               }),
             );

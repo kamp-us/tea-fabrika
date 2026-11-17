@@ -18,6 +18,7 @@ import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import { Config, Effect, Schema } from "effect";
 import type { Page } from "playwright";
 import { expect } from "vitest";
 import { PERSON, type reader } from "./p14.test-support.ts";
@@ -318,13 +319,15 @@ export type Shot = "one-tile" | "side-by-side" | "stacked" | "grid-2x2" | "small
 
 /** A shot of the tab as it is now, named by state and layout, into the folder `SHOTS` names; nothing
  *  when `SHOTS` is unset, so a plain run writes no file. */
-export const shoot = (page: Page, state: string, layout: Shot) => {
-  const folder = process.env.SHOTS;
-
-  return folder === undefined || folder === ""
-    ? Effect.void
-    : promised(() => page.screenshot({ path: join(folder, `tezgah-${state}-${layout}.png`), fullPage: false }));
-};
+export const shoot = (page: Page, state: string, layout: Shot) =>
+  Config.String("SHOTS").pipe(
+    Config.withDefault(""),
+    Effect.flatMap((folder) =>
+      folder === ""
+        ? Effect.void
+        : promised(() => page.screenshot({ path: join(folder, `tezgah-${state}-${layout}.png`), fullPage: false })),
+    ),
+  );
 
 // Desk S3, next/: what the focus law reads on top of the frame's helpers.
 
