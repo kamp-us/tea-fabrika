@@ -3,7 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -485,6 +485,86 @@ it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", ()
         ".agents/",
       ],
       { cwd: root, encoding: "utf8", maxBuffer: 2 ** 30, timeout: 120_000 },
+    );
+
+    const parsed: unknown = (() => {
+      try {
+        return JSON.parse(out.stdout);
+      } catch {
+        return null;
+      }
+    })();
+
+    const diagnostics =
+      typeof parsed === "object" && parsed !== null && "diagnostics" in parsed && Array.isArray(parsed.diagnostics)
+        ? parsed.diagnostics
+        : null;
+
+    const findings =
+      diagnostics?.map((entry: unknown) => {
+        if (typeof entry !== "object" || entry === null) {
+          return { kind: "malformed_diagnostic", path: null, position: null };
+        }
+
+        const code = "code" in entry && typeof entry.code === "string" ? entry.code : null;
+        const filename = "filename" in entry && typeof entry.filename === "string" ? entry.filename : null;
+        const path = filename === null ? null : relative(root, resolve(root, filename));
+        const safePath =
+          path === null || path === "" || path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path)
+            ? null
+            : path;
+        const labels = "labels" in entry && Array.isArray(entry.labels) ? entry.labels : [];
+        const label: unknown = labels[0];
+        const span = typeof label === "object" && label !== null && "span" in label ? label.span : null;
+        const line =
+          typeof span === "object" && span !== null && "line" in span && typeof span.line === "number"
+            ? span.line
+            : null;
+        const column =
+          typeof span === "object" && span !== null && "column" in span && typeof span.column === "number"
+            ? span.column
+            : null;
+        const position =
+          line !== null &&
+          Number.isInteger(line) &&
+          line > 0 &&
+          column !== null &&
+          Number.isInteger(column) &&
+          column >= 0
+            ? { line, column }
+            : null;
+
+        return {
+          kind: code === CODE ? "target_rule" : code === null ? "unknown_diagnostic" : "other_diagnostic",
+          path: safePath,
+          position,
+        };
+      }) ?? null;
+
+    const files =
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "number_of_files" in parsed &&
+      typeof parsed.number_of_files === "number" &&
+      Number.isInteger(parsed.number_of_files) &&
+      parsed.number_of_files >= 0
+        ? parsed.number_of_files
+        : null;
+
+    console.log(
+      JSON.stringify({
+        status: out.status,
+        kind:
+          out.error !== undefined
+            ? "spawn_error"
+            : diagnostics === null || files === null
+              ? "malformed_report"
+              : "report",
+        files,
+        diagnosticCount: diagnostics?.length ?? null,
+        diagnostics: findings?.slice(0, 50) ?? null,
+        truncated: diagnostics !== null && diagnostics.length > 50,
+      }),
     );
 
     expect(out.error).toBeUndefined();

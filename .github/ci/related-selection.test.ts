@@ -23,7 +23,7 @@ it.prop(
       tooling: [".github/ci/plant.test.ts"],
     };
 
-    const table = Object.fromEntries(files["next-integration"].map((file) => [file, 100]));
+    const table = Object.fromEntries(files["next-integration"].map((file, index) => [file, index < 5 ? 100 : 0]));
 
     const result = select(files, { ...sizing, table }, 1, true);
 
@@ -61,6 +61,67 @@ it.prop(
   },
   options,
 );
+
+it.prop(
+  "uniform integration weights choose the fewest equal-load legs",
+  { count: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 30 })) },
+  ({ count }) => {
+    const files = {
+      "next-integration": [
+        fixture,
+        ...Array.from({ length: count }, (_, index) => `next/other-${index}.integration.test.ts`),
+      ],
+      tooling: [".github/ci/plant.test.ts"],
+    };
+
+    const table = Object.fromEntries(files["next-integration"].map((file) => [file, 100]));
+
+    const result = select(files, { ...sizing, table }, 1, true);
+
+    const assigned = Object.values(result.plants).flat();
+
+    expect(assigned.toSorted()).toEqual(checklistCases.toSorted());
+
+    expect(new Set(assigned).size).toBe(10);
+
+    const integrationFiles = files["next-integration"].length;
+
+    expect(Object.keys(result.plants)).toHaveLength(Math.ceil(integrationFiles / Math.ceil(integrationFiles / 5)));
+
+    for (const [leg, cases] of Object.entries(result.plants)) {
+      expect(result.projects[leg]).toBe("next-integration");
+
+      expect(cases.length).toBeGreaterThan(0);
+    }
+
+    expect(
+      Object.values(result.legs)
+        .flat()
+        .filter((file) => file === fixture),
+    ).toHaveLength(1);
+
+    expect(JSON.parse(Object.fromEntries(outputs(result).map((line) => line.split("=")))["plants"]!)).toEqual(
+      result.plants,
+    );
+  },
+  options,
+);
+
+it("uniform sixteen-file selection uses four groups when the best load ties", () => {
+  const files = {
+    "next-integration": [
+      fixture,
+      ...Array.from({ length: 15 }, (_, index) => `next/other-${index}.integration.test.ts`),
+    ],
+    tooling: [".github/ci/plant.test.ts"],
+  };
+
+  const table = Object.fromEntries(files["next-integration"].map((file) => [file, 100]));
+
+  const result = select(files, { ...sizing, table }, 1, true);
+
+  expect(Object.keys(result.plants)).toHaveLength(4);
+});
 
 it.prop(
   "only fixture and exercise source changes request the existing checklist faults",
