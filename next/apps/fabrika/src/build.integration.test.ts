@@ -5,7 +5,8 @@
 // with its `reason`.
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Layer, Path, PlatformError } from "effect";
+import { Effect, FileSystem, Layer, Path, PlatformError, Array as Arr, String as Str, Record as Rec } from "effect";
+
 import { Digest } from "effect/crypto";
 import { Base64 } from "effect/encoding";
 import * as fc from "fast-check";
@@ -36,7 +37,7 @@ const discovery = (files: Array<string>, seen?: { calls: number }) =>
       ...fs,
       glob: () =>
         Effect.sync(() => {
-          if (seen) {
+          if (seen !== undefined) {
             seen.calls++;
           }
 
@@ -94,7 +95,7 @@ const snapshot = Effect.fnUntraced(function* (dir: string) {
     }
   }
 
-  return files.sort(([a], [b]) => a.localeCompare(b));
+  return files.sort(([a], [b]) => Str.localeCompare(b)(a));
 });
 
 type Snapshot = Effect.Success<ReturnType<typeof snapshot>>;
@@ -269,9 +270,9 @@ describe("P12 Rolldown build", () => {
       const built = await runNode(build({ out: join(await home(), "dist") }));
       expect(built.brain).toEqual(expect.any(String));
       // P40: the app's own selections build under qualified names, the core counter as `fabrika/counter`.
-      expect(Object.keys(built.programs).length).toBeGreaterThan(0);
+      expect(Rec.keys(built.programs).length).toBeGreaterThan(0);
 
-      for (const key of Object.keys(built.programs)) {
+      for (const key of Rec.keys(built.programs)) {
         expect(key, "one pack and one program segment").toMatch(/^[A-Za-z_][\w-]*\/[A-Za-z_][\w-]*$/);
       }
 
@@ -291,7 +292,7 @@ describe("P12 Rolldown build", () => {
 
       try {
         const generated = await bundle.generate({ format: "esm" });
-        expect(generated.output.some((o) => o.type === "chunk" && o.exports.includes("default"))).toBe(true);
+        expect(Arr.some(generated.output, (o) => o.type === "chunk" && o.exports.includes("default"))).toBe(true);
       } finally {
         await bundle.close();
       }
@@ -323,7 +324,7 @@ describe("P12 Rolldown build", () => {
       build({ out, ledger: [] }).pipe(
         Effect.provide(
           discovery(
-            [good, test, dependency].map((file) => relative(root, file)),
+            Arr.map([good, test, dependency], (file) => relative(root, file)),
             seen,
           ),
         ),
@@ -483,7 +484,7 @@ describe("P14 slice 2, L18: the app's build carries the tab", () => {
                   expect(page!.body, "the page loads the script").toContain("/window.js");
                   expect(script!.body, "the tab bundle names no Node module").not.toMatch(/["'`]node:[a-z]/);
                   // Manti's defaults precede our token mapping (tier-1-detail.md, Styling).
-                  const styles = [...page!.body.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]!);
+                  const styles = Arr.map([...Str.matchAll(/<style>([\s\S]*?)<\/style>/g)(page!.body)], (m) => m[1]!);
                   expect(styles, "the tab's three stylesheets").toHaveLength(3);
                   expect(styles[1], "the design package's tokens follow Manti's styles").toContain(token);
                   good = yield* snapshot(out);

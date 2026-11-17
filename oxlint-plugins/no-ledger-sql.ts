@@ -1,5 +1,6 @@
 // next/: the ledger's entries and rings belong to the ledger service, including reads.
 import type { CreateRule } from "@oxlint/plugins";
+import { Array as Arr, pipe } from "effect";
 import { heldToNext, pathIn, type Node } from "./match.ts";
 
 const OWNERS = new Set([
@@ -39,7 +40,14 @@ export const noLedgerSql: CreateRule = {
         }
       },
       TemplateLiteral(node) {
-        report(node, node.quasis.map((q) => q.value.cooked ?? q.value.raw).join("?"));
+        report(
+          node,
+          pipe(
+            node.quasis,
+            Arr.map((q) => q.value.cooked ?? q.value.raw),
+            Arr.join("?"),
+          ),
+        );
       },
     };
   },

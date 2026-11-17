@@ -12,9 +12,23 @@ import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
-import { Effect, FileSystem, Path, Schema, Scope } from "effect";
+import {
+  Effect,
+  FileSystem,
+  Path,
+  Schema,
+  Scope,
+  Array as Arr,
+  String as Str,
+  Duration,
+  DateTime,
+  Option,
+  Record as Rec,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import { expect, it } from "vitest";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -111,14 +125,17 @@ export const program = Program.make({name: "m13/parent", machine, state: {v: 1, 
 // The instance's private local capability, read call by call as worker-mail's test reads it.
 type Instance = any;
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
+
+/** The wall clock in ms, for the polls that wait on real workerd. */
+const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(message: string, look: () => Promise<A>, done: (value: A) => boolean): Promise<A> => {
-  const end = Date.now() + WAIT;
+  const end = now() + WAIT;
   let last: { value: A } | { error: string } | null = null;
 
-  while (Date.now() < end) {
+  while (now() < end) {
     try {
       const value = await look();
       last = { value };
@@ -156,13 +173,13 @@ const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket
   });
 
   const next = async (match: (frame: any) => boolean) => {
-    const end = Date.now() + WAIT;
+    const end = now() + WAIT;
 
-    while (Date.now() < end) {
-      const index = frames.findIndex(match);
+    while (now() < end) {
+      const index = Arr.findFirstIndex(frames, match);
 
-      if (index >= 0) {
-        return frames.splice(index, 1)[0];
+      if (Option.isSome(index)) {
+        return frames.splice(index.value, 1)[0];
       }
 
       if (closeCode !== undefined) {
@@ -210,7 +227,7 @@ type Fixture = {
 
 /** One local instance on workerd in a temp home, with the reader and the writer built into it. */
 const world = async (test: (instance: Instance, fixture: Fixture) => Promise<void>) => {
-  process.env.DO_NOT_TRACK = "1";
+  noTracking();
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
@@ -222,22 +239,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "m13w-" });
 
       const key = yield* SshsigTest.identity;
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const previous = process.env.FABRIKA_HOME;
-          process.env.FABRIKA_HOME = home;
-
-          return previous;
-        }),
-        (previous) =>
-          Effect.sync(() => {
-            if (previous === undefined) {
-              delete process.env.FABRIKA_HOME;
-            } else {
-              process.env.FABRIKA_HOME = previous;
-            }
-          }),
-      );
+      yield* scopedEnv({ FABRIKA_HOME: home });
       yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
       const selections: Record<string, string> = {};
 
@@ -271,6 +273,8 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
         );
 
         const scope = yield* Effect.scope;
+        // `test` is a plain async function, so `connect` runs with this world's services.
+        const context = yield* Effect.context();
 
         const from: From = {
           by: key.fingerprint,
@@ -285,13 +289,13 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
         yield* Effect.promise(() =>
           test(instance, {
             connect: (tab) =>
-              Effect.runPromise(
+              Effect.runPromiseWith(context)(
                 Effect.gen(function* () {
                   const socket = yield* Effect.acquireRelease(
                     Effect.sync(
                       () =>
                         new WebSocket(
-                          `${instance.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+                          `${Str.replace("http", "ws")(instance.url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
                         ),
                     ),
                     (socket) => Effect.sync(() => socket.close()),
@@ -301,7 +305,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
                 }).pipe(Effect.provideService(Scope.Scope, scope)),
               ),
             start: async (name) => {
-              const program = `m13/${name.split(":")[0]}`;
+              const program = `m13/${Str.split(name, ":")[0]}`;
               const code = built.programs[program];
               expect(code).toBeDefined();
 
@@ -329,11 +333,11 @@ const letter = (pid: string, id: string, m: unknown) => ({ pid, letter: id, m, s
 
 /** Whether a pushed view update carries a log row of this type, however the update is cut. */
 const carries = (value: unknown, type: string): boolean =>
-  Array.isArray(value)
-    ? value.some((item) => carries(item, type))
+  Arr.isArray(value)
+    ? Arr.some(value, (item) => carries(item, type))
     : typeof value === "object" &&
       value !== null &&
-      (Reflect.get(value, "type") === type || Object.values(value).some((item) => carries(item, type)));
+      (Reflect.get(value, "type") === type || Arr.some(Rec.values(value), (item) => carries(item, type)));
 
 /** The next view update the brain pushes for `pid` whose rows hold one of this type. It asks nothing. */
 const pushed = (client: Awaited<ReturnType<typeof wire>>, pid: string, type: string) =>
@@ -385,7 +389,7 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
     await client.call("process.send", letter(writer, "quit-1", { type: "quit" }));
 
     const folded = await until("the reader folds the writer's DOWN", log, (rows) =>
-      rows.some((r) => r.type === "DOWN" && r.ref === kept),
+      Arr.some(rows, (r) => r.type === "DOWN" && r.ref === kept),
     );
 
     expect(

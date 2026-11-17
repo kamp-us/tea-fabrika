@@ -3,6 +3,7 @@
 // `Effect.all<T>(x)` and `x.Effect.all(y)` did not. The rules keep that exactly: README.md says how
 // that was measured.
 import type { Context, ESTree, Visitor } from "@oxlint/plugins";
+import { Array as Arr } from "effect";
 
 type Source = Context["sourceCode"];
 
@@ -158,7 +159,7 @@ export function* below(node: Node): Generator<Node> {
       continue;
     }
 
-    for (const part of Array.isArray(value) ? value : [value]) {
+    for (const part of Arr.isArray(value) ? value : [value]) {
       if (part !== null && typeof part === "object" && typeof part.type === "string") {
         yield* below(part);
       }

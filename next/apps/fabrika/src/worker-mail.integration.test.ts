@@ -4,10 +4,24 @@
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
-import { Effect, FileSystem, Path, Schema, Scope } from "effect";
+import {
+  Effect,
+  FileSystem,
+  Path,
+  Schema,
+  Scope,
+  Array as Arr,
+  String as Str,
+  Duration,
+  DateTime,
+  Formatter,
+  Option,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -106,10 +120,13 @@ export class Control extends Brain.Control {
     Effect.flatMap((out) =>
       fs.writeFileString(
         brain,
-        out.output
-          .filter((item) => item.type === "chunk")
-          .map((item) => item.code)
-          .join("\n"),
+        Arr.join(
+          Arr.map(
+            Arr.filter(out.output, (item) => item.type === "chunk"),
+            (item) => item.code,
+          ),
+          "\n",
+        ),
       ),
     ),
     Effect.scoped,
@@ -119,7 +136,7 @@ export class Control extends Brain.Control {
 const mailDiagnostics = () => {
   const frames: Array<{ at: number; elapsed: number; raw: string }> = [];
   const events: Array<{ at: number; elapsed: number; event: string; value: unknown }> = [];
-  const stamp = () => ({ at: Date.now(), elapsed: performance.now() });
+  const stamp = () => ({ at: DateTime.toEpochMillis(DateTime.nowUnsafe()), elapsed: performance.now() });
   const note = (event: string, value: unknown = null) => events.push({ ...stamp(), event, value });
   note("start");
 
@@ -206,7 +223,7 @@ const world = async (
   braked = false,
   diagnose = false,
 ) => {
-  process.env.DO_NOT_TRACK = "1";
+  noTracking();
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
@@ -218,22 +235,7 @@ const world = async (
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "p41w-" });
 
       const key = yield* SshsigTest.identity;
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const previous = process.env.FABRIKA_HOME;
-          process.env.FABRIKA_HOME = home;
-
-          return previous;
-        }),
-        (previous) =>
-          Effect.sync(() => {
-            if (previous === undefined) {
-              delete process.env.FABRIKA_HOME;
-            } else {
-              process.env.FABRIKA_HOME = previous;
-            }
-          }),
-      );
+      yield* scopedEnv({ FABRIKA_HOME: home });
       yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
       const selections: Record<string, string> = {};
 
@@ -281,6 +283,8 @@ const world = async (
         );
 
         const scope = yield* Effect.scope;
+        // `test` is a plain async function, so `connect` runs with this world's services.
+        const context = yield* Effect.context();
 
         const from: From = {
           by: key.fingerprint,
@@ -298,13 +302,13 @@ const world = async (
             hash: built.build,
             diagnostics,
             connect: (tab) =>
-              Effect.runPromise(
+              Effect.runPromiseWith(context)(
                 Effect.gen(function* () {
                   const socket = yield* Effect.acquireRelease(
                     Effect.sync(
                       () =>
                         new WebSocket(
-                          `${instance.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+                          `${Str.replace("http", "ws")(instance.url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
                         ),
                     ),
                     (socket) => Effect.sync(() => socket.close()),
@@ -314,7 +318,7 @@ const world = async (
                 }).pipe(Effect.provideService(Scope.Scope, scope)),
               ),
             start: async (name) => {
-              const program = `p41/${name.replace(":", "-")}`;
+              const program = `p41/${Str.replace(":", "-")(name)}`;
               const code = built.programs[program];
               expect(code).toBeDefined();
 
@@ -342,7 +346,7 @@ const world = async (
   );
 };
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(
@@ -351,10 +355,10 @@ const until = async <A>(
   done: (value: A) => boolean,
   ms = WAIT,
 ): Promise<A> => {
-  const end = Date.now() + ms;
+  const end = DateTime.toEpochMillis(DateTime.nowUnsafe()) + ms;
   let last: { value: A } | { error: string } | null = null;
 
-  while (Date.now() < end) {
+  while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
     try {
       const value = await look();
       last = { value };
@@ -411,16 +415,15 @@ const wire = async (
   });
 
   const next = async (match: (frame: any) => boolean) => {
-    const end = Date.now() + WAIT;
+    const end = DateTime.toEpochMillis(DateTime.nowUnsafe()) + WAIT;
     diagnostics?.note("wait.start", { end });
 
-    while (Date.now() < end) {
-      const index = frames.findIndex(match);
+    while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
+      const index = Arr.findFirstIndex(frames, match);
 
-      if (index >= 0) {
-        diagnostics?.note("consumed", { id: frames[index].id, method: frames[index].method });
-
-        return frames.splice(index, 1)[0];
+      if (Option.isSome(index)) {
+        diagnostics?.note("consumed", { id: frames[index.value].id, method: frames[index.value].method });
+        return frames.splice(index.value, 1)[0];
       }
 
       if (closeCode !== undefined) {
@@ -463,7 +466,7 @@ const wire = async (
 };
 
 const facts = async (instance: Instance, stream: string) =>
-  ((await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>).map((row) => ({
+  Arr.map((await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>, (row) => ({
     ...row.body,
     _tag: row._tag,
     rev: row.rev,
@@ -481,7 +484,7 @@ const answer = async (instance: Instance, name = "requester:1", ref = "exchange"
   until(
     "answer letter",
     () => facts(instance, `${name}/inbox`),
-    (rows) => rows.some((r) => r.m?.type === "answer" && r.m.ref === ref),
+    (rows) => Arr.some(rows, (r) => r.m?.type === "answer" && r.m.ref === ref),
   );
 
 // Read the view notifications; polling view.open would itself drain the requester's inbox.
@@ -507,7 +510,7 @@ it("scenario: W1 and W6, the door receives waiting then answered 8 and both obje
     await until(
       "idle alarms",
       async () => [await instance.process(requester).savedAlarm(), await instance.process(responder).savedAlarm()],
-      (alarms) => alarms.every((at) => at == null),
+      (alarms) => Arr.every(alarms, (at) => at == null),
     );
   });
 }, 180_000);
@@ -553,11 +556,11 @@ it("scenario: W2, aborting the target after its wake preserves one request and o
 
         await changed(client, "answered");
         await answer(instance, "requester:1", "eviction");
-        expect((await facts(instance, "requester:1/outbox")).filter((r) => r.ref === "eviction")).toHaveLength(1);
+        expect(Arr.filter(await facts(instance, "requester:1/outbox"), (r) => r.ref === "eviction")).toHaveLength(1);
         const inbox = await facts(instance, "responder:1/inbox");
-        expect(inbox.filter((r) => r.m?.type === "request" && r.m.ref === "eviction")).toHaveLength(1);
+        expect(Arr.filter(inbox, (r) => r.m?.type === "request" && r.m.ref === "eviction")).toHaveLength(1);
         const answers = await facts(instance, "requester:1/inbox");
-        expect(answers.filter((r) => r.m?.type === "answer" && r.m.ref === "eviction")).toHaveLength(1);
+        expect(Arr.filter(answers, (r) => r.m?.type === "answer" && r.m.ref === "eviction")).toHaveLength(1);
         await until(
           "the requester has drained its answer",
           () => instance.process(requester).savedAlarm(),
@@ -621,13 +624,15 @@ it("scenario: W5, mail respects a target's brake while another pair completes", 
           "restart or brake",
           () => facts(instance, "processes/responder:1"),
           (rows) =>
-            rows.some((r) => r._tag === "down") || rows.some((r) => r._tag === "restarted" && r.after === responder),
+            Arr.some(rows, (r) => r._tag === "down") ||
+            Arr.some(rows, (r) => r._tag === "restarted" && r.after === responder),
         );
-
-        down = rows.find((r) => r._tag === "down");
+        down = Option.getOrUndefined(Arr.findFirst(rows, (r) => r._tag === "down"));
 
         if (down === undefined) {
-          responder = rows.find((r) => r._tag === "restarted" && r.after === responder).process;
+          responder = Option.getOrUndefined(
+            Arr.findFirst(rows, (r) => r._tag === "restarted" && r.after === responder),
+          ).process;
         }
       }
 
@@ -636,23 +641,25 @@ it("scenario: W5, mail respects a target's brake while another pair completes", 
       await client.call("view.open", { pid: other });
       await client.call("process.send", request(other, "healthy"));
       await changed(client, "answered");
-
-      const healthy = (await answer(instance, "requester:2", "healthy")).filter(
+      const healthy = Arr.filter(
+        await answer(instance, "requester:2", "healthy"),
         (r) => r.m?.type === "answer" && r.m.ref === "healthy",
       );
 
       expect(healthy).toHaveLength(1);
       expect(healthy[0].m.value).toBe(8);
       expect(down.rev).toBeLessThan(healthy[0].rev);
-      expect((await facts(instance, "responder:1/inbox")).filter((r) => r.m?.ref === "braked")).toHaveLength(1);
-      expect((await facts(instance, "requester:1/inbox")).filter((r) => r.m?.type === "answer")).toEqual([]);
+      expect(Arr.filter(await facts(instance, "responder:1/inbox"), (r) => r.m?.ref === "braked")).toHaveLength(1);
+      expect(Arr.filter(await facts(instance, "requester:1/inbox"), (r) => r.m?.type === "answer")).toEqual([]);
       expect(await client.call("view.open", { pid: requester })).toMatchObject({
         result: { view: { phase: "waiting", ref: "braked" } },
       });
       expect(await instance.process(responder).savedAlarm()).toBe(down.until);
       const lifecycle = await facts(instance, "processes/responder:1");
-      expect(lifecycle.filter((r) => r._tag === "restarted" && r.rev > down.rev && r.rev < healthy[0].rev)).toEqual([]);
-      expect(lifecycle.filter((r) => r._tag === "restarted" && r.rev > down.rev)).toEqual([]);
+      expect(
+        Arr.filter(lifecycle, (r) => r._tag === "restarted" && r.rev > down.rev && r.rev < healthy[0].rev),
+      ).toEqual([]);
+      expect(Arr.filter(lifecycle, (r) => r._tag === "restarted" && r.rev > down.rev)).toEqual([]);
     },
     true,
     true,
@@ -674,27 +681,12 @@ const checklistWorld = async (
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "alarm866-" });
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const previous = process.env.FABRIKA_HOME;
-          process.env.FABRIKA_HOME = home;
-
-          return previous;
-        }),
-        (previous) =>
-          Effect.sync(() => {
-            if (previous === undefined) {
-              delete process.env.FABRIKA_HOME;
-            } else {
-              process.env.FABRIKA_HOME = previous;
-            }
-          }),
-      );
+      yield* scopedEnv({ FABRIKA_HOME: home });
       yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
       const wrapper = path.join(home, "checklist.ts");
       yield* fs.writeFileString(
         wrapper,
-        `export { checklist as program } from ${JSON.stringify(path.resolve(import.meta.dirname, "../../../programs/checklist/src/program.ts"))};\n`,
+        `export { checklist as program } from ${Formatter.formatJson(path.resolve(import.meta.dirname, "../../../programs/checklist/src/program.ts"))};\n`,
       );
       const built = yield* build({ out: path.join(home, "dist"), programs: { "fabrika/checklist": wrapper } });
       const key = yield* SshsigTest.identity;
@@ -713,6 +705,8 @@ const checklistWorld = async (
       );
 
       const scope = yield* Effect.scope;
+      // `test` is a plain async function, so `connect` runs with this world's services.
+      const context = yield* Effect.context();
 
       const from: From = {
         by: key.fingerprint,
@@ -743,7 +737,7 @@ const checklistWorld = async (
             return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
           },
           connect: () =>
-            Effect.runPromise(
+            Effect.runPromiseWith(context)(
               Effect.gen(function* () {
                 const tab = "immediate-wake";
 
@@ -751,7 +745,7 @@ const checklistWorld = async (
                   Effect.sync(
                     () =>
                       new WebSocket(
-                        `${instance.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+                        `${Str.replace("http", "ws")(instance.url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
                       ),
                   ),
                   (socket) => Effect.sync(() => socket.close()),
@@ -849,7 +843,7 @@ export const program = Program.make({name: "t1041/reader", machine, state: {v: 1
 `;
 
 it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread letter between two real programs answer full, and once the reader reads a resend lands", async () => {
-  process.env.DO_NOT_TRACK = "1";
+  noTracking();
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
@@ -863,22 +857,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "t1041-" });
 
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const previous = process.env.FABRIKA_HOME;
-          process.env.FABRIKA_HOME = home;
-
-          return previous;
-        }),
-        (previous) =>
-          Effect.sync(() => {
-            if (previous === undefined) {
-              delete process.env.FABRIKA_HOME;
-            } else {
-              process.env.FABRIKA_HOME = previous;
-            }
-          }),
-      );
+      yield* scopedEnv({ FABRIKA_HOME: home });
       yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
       const selections: Record<string, string> = {};
 
@@ -929,6 +908,8 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
       });
 
       const scope = yield* Effect.scope;
+      // The body below is a plain async function, so the client it opens runs with this law's services.
+      const context = yield* Effect.context();
 
       const from: From = {
         by: key.fingerprint,
@@ -964,13 +945,13 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
           code: code("reader"),
         });
 
-        const client = await Effect.runPromise(
+        const client = await Effect.runPromiseWith(context)(
           Effect.gen(function* () {
             const socket = yield* Effect.acquireRelease(
               Effect.sync(
                 () =>
                   new WebSocket(
-                    `${instance.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/cap`,
+                    `${Str.replace("http", "ws")(instance.url)}/client/${encodeURIComponent(key.fingerprint)}/cap`,
                   ),
               ),
               (socket) => Effect.sync(() => socket.close()),
@@ -1007,12 +988,15 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
         const lifecycle = () => facts(instance, "processes/reader:1");
 
         const letters = async () =>
-          (await facts(instance, "reader:1/inbox")).filter((r) => r.m?.type === "letter").map((r) => r.m.n);
-
+          Arr.map(
+            Arr.filter(await facts(instance, "reader:1/inbox"), (r) => r.m?.type === "letter"),
+            (r) => r.m.n,
+          );
         const last = async (stream: string) =>
           Math.max(
             0,
-            ...((await (instance as Instance).project(PROJECT).read(stream, 0, "audit")) as Array<any>).map(
+            ...Arr.map(
+              (await (instance as Instance).project(PROJECT).read(stream, 0, "audit")) as Array<any>,
               (row) => row.body.pos ?? row.pos,
             ),
           );
@@ -1032,13 +1016,13 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
           "the crash is not accepted",
         ).toBeUndefined();
         await until("the reader's crash", lifecycle, (rows) =>
-          rows.some((r) => r._tag === "exited" && r.process === reader),
+          Arr.some(rows, (r) => r._tag === "exited" && r.process === reader),
         );
         expect(await send(1), "the first letter is saved").toBe("queued");
         expect(await send(2), "the second letter is saved").toBe("queued");
         expect(await send(3), "L14: the repo file's cap of 2 unread answers the third letter full").toBe("full");
         expect(
-          (await lifecycle()).filter((r) => r._tag === "restarted"),
+          Arr.filter(await lifecycle(), (r) => r._tag === "restarted"),
           "the reader had not started again, so the full answer is the cap's and no read had happened",
         ).toEqual([]);
         expect(await letters(), "L14: the full letter was not saved").toEqual([1, 2]);
@@ -1046,7 +1030,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
         await until(
           "the reader's successor",
           lifecycle,
-          (rows) => rows.some((r) => r._tag === "restarted" && r.after === reader),
+          (rows) => Arr.some(rows, (r) => r._tag === "restarted" && r.after === reader),
           BACKOFF * 3,
         );
         const end = await last("reader:1/inbox");

@@ -6,8 +6,10 @@
 // P39 slice 3 (ticket 1040): the `collected` state and event keep every field through JSON too,
 // with the collection (which process took the result, and its answer letter) whole.
 import { describe, expect, it } from "@effect/vitest";
+import * as Rec from "effect/Record";
 import * as R from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as Struct from "effect/Struct";
 import * as fc from "fast-check";
 import { Collection, Event, Executor, Recorded, Request, Result, State } from "./Task.ts";
 import {
@@ -59,7 +61,7 @@ describe("P39 slice 1: the task's schemas", () => {
           expect(R.isSuccess(back), `decodes: ${JSON.stringify(value)}`).toBe(true);
           // Every key the caller gave comes back with its value: none dropped, none renamed.
           expect(R.getOrThrow(back)).toEqual(value);
-          expect(Object.keys(R.getOrThrow(back) as object).sort()).toEqual(Object.keys(value).sort());
+          expect(Rec.keys(R.getOrThrow(back) as object).sort()).toEqual(Struct.keys(value).sort());
         }
       }),
       RUNS,

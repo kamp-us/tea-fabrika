@@ -9,7 +9,8 @@ import { NodeServices } from "@effect/platform-node";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem } from "effect";
+import { String as Str, pipe, Array as Arr, Effect, FileSystem, Option, Order } from "effect";
+
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { rebuildSpans, spanOutputs } from "./reload.test-support.ts";
@@ -53,7 +54,10 @@ const rebuild = (spanId: string): SpanRow => ({
  */
 const withDatabase = Effect.fnUntraced(function* (file: string, work: (db: DatabaseSync) => void) {
   const fs = yield* FileSystem.FileSystem;
-  yield* fs.makeDirectory(file.slice(0, file.lastIndexOf("/")), { recursive: true });
+  yield* fs.makeDirectory(
+    pipe(file, Str.lastIndexOf("/"), Option.match({ onNone: () => ".", onSome: (at) => pipe(file, Str.slice(0, at)) })),
+    { recursive: true },
+  );
   yield* Effect.scoped(
     TestDatabase.open(file).pipe(
       Effect.orDie,
@@ -104,8 +108,8 @@ const flush = Effect.fnUntraced(function* (home: string, record: string, row: Sp
 const ids = fc.stringMatching(/^[a-f0-9]{16}$/);
 
 describe("spanOutputs", () => {
-  it("every queue's rows are read before any record's rows, wherever the record's file sorts", async () => {
-    await fc.assert(
+  it("every queue's rows are read before any record's rows, wherever the record's file sorts", () =>
+    fc.assert(
       fc.asyncProperty(fc.uniqueArray(ids, { minLength: 3, maxLength: 3 }), ([waiting = "", early = "", late = ""]) =>
         Effect.runPromise(
           Effect.scoped(
@@ -117,20 +121,19 @@ describe("spanOutputs", () => {
               yield* deliver(home, RECORDS[1], rebuild(late));
 
               const outputs = yield* spanOutputs(home);
-              const order = outputs.map((output) => (output as { readonly spanId: string }).spanId);
+              const order = Arr.map(outputs, (output) => (output as { readonly spanId: string }).spanId);
 
               expect(order[0], "the queue is read first").toBe(waiting);
-              expect(order.slice(1).toSorted()).toEqual([early, late].toSorted());
+              expect(Arr.sort(order.slice(1), Order.String)).toEqual(Arr.sort([early, late], Order.String));
             }),
           ).pipe(Effect.provide(NodeServices.layer)),
         ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }) },
-    );
-  });
+    ));
 
-  it("a flush that lands under a listing never hides the span, wherever its record's file sorts and whether or not that file was there", async () => {
-    await fc.assert(
+  it("a flush that lands under a listing never hides the span, wherever its record's file sorts and whether or not that file was there", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.record({
           spanId: ids,
@@ -176,7 +179,7 @@ describe("spanOutputs", () => {
 
                 expect(listings, "the flush landed during the read").toBeGreaterThanOrEqual(at);
                 expect(
-                  rebuildSpans(outputs).filter((span) => span.spanId === spanId),
+                  Arr.filter(rebuildSpans(outputs), (span) => span.spanId === spanId),
                   "the flushed span is found once",
                 ).toHaveLength(1);
               }),
@@ -184,6 +187,5 @@ describe("spanOutputs", () => {
           ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 8, full: 40 }) },
-    );
-  });
+    ));
 });

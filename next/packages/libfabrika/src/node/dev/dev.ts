@@ -5,6 +5,7 @@
  */
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { SystemError } from "@alchemy.run/cloudflare-runtime/core/RuntimeError";
+import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -12,16 +13,21 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Option from "effect/Option";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as Queue from "effect/Queue";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { Installed, type Install } from "../../runtime/Code.ts";
@@ -88,7 +94,7 @@ const sample = (pid: number) =>
         return yield* ControlError.make({ reason: "sample" });
       }
 
-      return Number(text.trim()) * 1024;
+      return Number(Str.trim(text)) * 1024;
     }),
   ).pipe(Effect.mapError((cause) => ControlError.make({ reason: "sample", cause })));
 
@@ -101,9 +107,14 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
 
   const { sha256 } = yield* Schema.decodeUnknownEffect(Schema.Struct({ sha256: Schema.String }))(raw);
 
+  const pairs: ReadonlyArray<string> = Option.getOrElse(
+    Function.pipe(sha256, Str.match(/../g)),
+    (): Array<string> => [],
+  );
+
   return {
     checksums: {
-      sha256: Uint8Array.from((sha256.match(/../g) ?? []).map((byte) => Number.parseInt(byte, 16))).buffer,
+      sha256: Uint8Array.from(Arr.map(pairs, (byte) => Number.parseInt(byte, 16))).buffer,
     },
   };
 });
@@ -156,7 +167,9 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   const config = options,
     scope = yield* Effect.scope,
     ids = yield* ProcessIdGenerator,
-    client = yield* HttpClient.HttpClient;
+    client = yield* HttpClient.HttpClient,
+    // The services a binding's Promise call runs on, so it keeps the brain's clock, logger and tracer.
+    context = yield* Effect.context<never>();
 
   const outbox = yield* brainOutbox(options.home),
     runtimeScope = yield* Scope.make(),
@@ -220,10 +233,13 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     const url = `http://127.0.0.1:${port}`;
     const fail = (cause: unknown) => ControlError.make({ reason: "unreachable", cause });
 
-    const body = yield* Effect.try({
-      try: () => JSON.stringify({ target, project, name, method, args }),
-      catch: fail,
-    });
+    const body = yield* Schema.encodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))({
+      target,
+      project,
+      name,
+      method,
+      args,
+    }).pipe(Effect.mapError(fail));
 
     const response = yield* HttpClientRequest.post(url).pipe(
       // oxlint-disable-next-line fabrika/no-redacted-value -- the private HTTP header sends the control bearer
@@ -320,7 +336,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
             name: "user-worker",
             entrypoint: "Control",
             // oxlint-disable-next-line fabrika/no-redacted-value -- Alchemy sends these entrypoint props to workerd
-            props: { json: JSON.stringify({ token: Redacted.value(token) }) },
+            props: { json: Formatter.formatJson({ token: Redacted.value(token) }) },
           },
         },
       ],
@@ -412,7 +428,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
             ...(rss === undefined ? {} : { bytes: rss }),
           }),
         );
-        yield* Effect.forkIn(recorded(restartRuntime(ready)).pipe(Effect.ignore), scope);
+        yield* ready.pipe(restartRuntime, recorded, Effect.ignore, Effect.forkIn(scope));
       }
 
       if (event.type === "start") {
@@ -580,7 +596,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     ),
   );
 
-  const proxy = <Members extends object>(
+  const proxy = <Members extends Readonly<Record<string | symbol, unknown>>>(
     invoke: (method: string, args: ReadonlyArray<unknown>) => Effect.Effect<unknown, ControlError>,
     members: Members,
   ) =>
@@ -590,19 +606,23 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
           return undefined;
         }
 
-        if (Object.hasOwn(members, method)) {
+        if (Rec.has<string | symbol, unknown>(members, method)) {
           return members[method as keyof Members];
         }
 
         const work = (args: ReadonlyArray<unknown>) => invoke(String(method), args);
 
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local binding proxy matches Durable Object's Promise API
-        return (...args: ReadonlyArray<unknown>) => Effect.runPromise(work(args));
+        return (...args: ReadonlyArray<unknown>) => Effect.runPromiseWith(context)(work(args));
       },
     });
 
   const binding = (target: Target, project: string, name = "") =>
     proxy((method, args) => call(target, project, name, method, args), {});
+
+  // A Worker Loader's start: the program's init, answering its binding.
+  const loaded = (name: string, pid: string) =>
+    call("loader", pid, name, "init", [null]).pipe(Effect.as(binding("loader", pid, name)));
 
   return {
     recording,
@@ -632,15 +652,15 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     loader: {
       load: (name: string, pid: string) =>
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Worker Loader proxy matches the platform's Promise API
-        Effect.runPromise(call("loader", pid, name, "init", [null]).pipe(Effect.as(binding("loader", pid, name)))),
+        Effect.runPromiseWith(context)(loaded(name, pid)),
     },
     bucket: {
       put: (key: string, body: Uint8Array, options: { sha256: string }) =>
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local R2 proxy matches the platform's Promise API
-        Effect.runPromise(call("bucket", config.name, "", "put", [key, [...body], options.sha256])),
+        Effect.runPromiseWith(context)(call("bucket", config.name, "", "put", [key, [...body], options.sha256])),
       head: (key: string) =>
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local R2 proxy matches the platform's Promise API
-        Effect.runPromise(bucketChecksum(call("bucket", config.name, "", "head", [key]))),
+        Effect.runPromiseWith(context)(bucketChecksum(call("bucket", config.name, "", "head", [key]))),
     },
   };
 });

@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e53-build1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:47:45-08:00",
+  "ended": "2026-11-15T21:06:04-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Build step for judgment slice E53 of the Effect-checker sweep, in next/: missedPipeableOpportunity in lib:access, app:src, lib:codehost, lib:node, lib:settings and lib:ci, after the tests step fixed the 19 exam-path hits at 55dac7d. Three product hits were left. Two were fixed by hand edit, each keeping what the code does: next/packages/libfabrika/src/node/dev/dev.ts:389, Effect.forkIn(recorded(restartRuntime(ready)).pipe(Effect.ignore), scope) becomes ready.pipe(restartRuntime, recorded, Effect.ignore, Effect.forkIn(scope)); and next/packages/libfabrika/src/node/launchd/BrainControlLaunchd.ts:134, the decode of Redacted.value(response.stdout) becomes response.stdout.pipe(Redacted.value, Schema.decodeUnknownEffect(...), Effect.mapError(unsupported)), with the oxlint-disable-next-line fabrika/no-redacted-value line kept right above Redacted.value (the rule bans the name whether called or handed on, so the line still covers it). One was left on purpose: next/packages/libfabrika/src/codehost/CodeHost.ts:62, where the check asks for Path.pipe(Schema.Array, Schema.NullOr) in place of Schema.NullOr(Schema.Array(Path)); a nested schema reads as the type it builds, so this is a false alarm, left with no ignore and no lock line, for the owner. Judgment per product hit, for 0565's false-alarm count: dev.ts:389 right (reads better, the steps run in order), BrainControlLaunchd.ts:134 right (reads better, the decode no longer wraps its input), CodeHost.ts:62 wrong. With the tests step's 19, the slice's 22 hits are 1 wrong, 4 style only, 17 right. Recount with only this check at error through --lspconfig: next/packages/libfabrika has 35 hits, CodeHost.ts:62 and 34 in src/cloudflare/ (another slice's folder, not this row's); next/apps/fabrika has 0. No law was changed. No lock line, no tsconfig change, no PR 1366 file touched. Owner ruling: no pull request; the branch fabrikalfa/effect-e53 holds the work.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 18,
+  "note": "Laws run green at the build's working tree on 55dac7d plus the two edits: every test file in next/packages/libfabrika/src/node/dev/ (11 files, the restart path's laws among them), BrainControlLaunchd.laws.integration.test.ts and LaunchdStatus.laws.test.ts, one file at a time, then --changed origin/main without the next-visual project (42 files, 252 passed). A first --changed run also started the next-visual project by mistake, and its browser tests failed in this box; step rules do not allow .visual. tests here, so they were not read further. pnpm format, pnpm lint (heap 6144), the ratchet and one pnpm typecheck all passed.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "build"
+}

@@ -20,9 +20,25 @@ import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer, Option, Result, Schema, Stream, Tracer } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Cause,
+  Effect,
+  Exit,
+  Formatter,
+  Layer,
+  Option,
+  Predicate,
+  Record as Rec,
+  Result,
+  Schema,
+  Stream,
+  Tracer,
+} from "effect";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
+
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Gateway } from "./door.ts";
@@ -44,7 +60,7 @@ const text = fc.string({ minLength: 1, maxLength: 100 });
 const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json));
 
 // SQL columns and span fields can hold another JSON document.
-const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
+const texts = (value: unknown, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
   if (typeof value === "string") {
     const prior = cache.get(value);
 
@@ -57,7 +73,7 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
     const result = [
       value,
       ...(Result.isSuccess(decoded) ? texts(decoded.success, cache) : []),
-      ...Array.from(value.matchAll(/https?:\/\/[^\s"<>\\]+/gu), ([url]) =>
+      ...Array.from(Str.matchAll(/https?:\/\/[^\s"<>\\]+/gu)(value), ([url]) =>
         Result.getOrElse(
           Result.try(() => decodeURIComponent(decodeURIComponent(url))),
           () => url,
@@ -70,10 +86,10 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
     return result;
   }
 
-  return Array.isArray(value)
-    ? value.flatMap((part) => texts(part, cache))
-    : value !== null && typeof value === "object"
-      ? Object.values(value).flatMap((part) => texts(part, cache))
+  return Arr.isArray(value)
+    ? Arr.flatMap(value, (part) => texts(part, cache))
+    : Predicate.isObject(value)
+      ? Arr.flatMap(Rec.values(value), (part) => texts(part, cache))
       : [];
 };
 
@@ -373,7 +389,7 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                     expect(Cause.hasDies(exit.cause)).toBe(false);
                     const error = Cause.squash(exit.cause);
                     expect(error).toBeInstanceOf(Audit.AuditError);
-                    errors.push(String(error), JSON.stringify(error), Cause.pretty(exit.cause));
+                    errors.push(String(error), Formatter.formatJson(error), Cause.pretty(exit.cause));
                   }
 
                   expect(w.controls.deliveries).toBe(beforeDeliveries);
@@ -395,37 +411,38 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                 yield* Effect.void.pipe(Effect.withSpan("archive-control"));
                 yield* (yield* SpanSink).flush;
                 expect(w.archived.length).toBeGreaterThan(0);
-
-                const cells = w.databases.flatMap((db) =>
-                  db
-                    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-                    .all()
-                    .flatMap(({ name }) => db.prepare(`SELECT * FROM "${String(name)}"`).all()),
+                const cells = Arr.flatMap(w.databases, (db) =>
+                  Arr.flatMap(
+                    db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all(),
+                    ({ name }) => db.prepare(`SELECT * FROM "${String(name)}"`).all(),
+                  ),
                 );
-
-                const shown = JSON.stringify(
-                  {
-                    spans: tracer.spans.map((s) => ({ name: s.name, tags: [...s.attributes] })),
-                    events: tracer.events,
-                  },
-                  (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v),
-                );
-
-                const outputs = [...w.writes, ...w.archived, JSON.stringify(cells), shown, ...errors].flatMap(
+                const shown = yield* Schema.encodeEffect(
+                  Schema.fromJsonString(Schema.Unknown, {
+                    replacer: (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v),
+                  }),
+                )({
+                  spans: Arr.map(tracer.spans, (s) => ({ name: s.name, tags: [...s.attributes] })),
+                  events: tracer.events,
+                });
+                const outputs = Arr.flatMap(
+                  [...w.writes, ...w.archived, Formatter.formatJson(cells), shown, ...errors],
                   (output) => texts(output, decoded),
                 );
 
                 for (const body of bodies) {
-                  for (const form of [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body)]) {
-                    expect(outputs.filter((output) => output.includes(form))).toEqual([]);
+                  for (const form of [body, Str.slice(1, -1)(Formatter.formatJson(body)), encodeURIComponent(body)]) {
+                    expect(Arr.filter(outputs, (output) => Str.includes(form)(output))).toEqual([]);
                   }
                 }
 
                 // A successful control still records the required safe metadata.
                 if (move === "send") {
-                  const rows = cells.filter((r) => r.stream === "gateway/inputs" && r._tag === "received");
+                  const rows = Arr.filter(cells, (r) => r.stream === "gateway/inputs" && r._tag === "received");
                   expect(rows.length).toBeGreaterThan(0);
-                  expect(JSON.parse(String(rows.at(-1)!.body))).toMatchObject({ input: { type: "comment" } });
+                  expect(
+                    yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(String(rows.at(-1)!.body)),
+                  ).toMatchObject({ input: { type: "comment" } });
                 }
               }
             }).pipe(Effect.provide(w.layer));
@@ -443,7 +460,7 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
 const checkSpan = (span: Tracer.Span, a: Sample, ok: boolean, attributes: Record<string, unknown> = {}) => {
   expect(span.traceId).toBe(a.traceId);
   expect(Option.getOrThrow(span.parent).spanId).toBe(a.spanId);
-  expect(Object.fromEntries(span.attributes)).toEqual(attributes);
+  expect(Rec.fromEntries(span.attributes)).toEqual(attributes);
   expect(span.status._tag).toBe("Ended");
 
   if (span.status._tag === "Ended") {
@@ -556,11 +573,11 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                   Exit.isSuccess(result),
                   Exit.isFailure(result) ? String(Cause.squash(result.cause)) : "success",
                 ).toBe(!fail);
-                const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
-                expect(spans.map((s) => s.name)).toEqual(["gateway.initialize"]);
+                const spans = Arr.filter(c.spans, (s) => Str.startsWith("gateway.")(s.name));
+                expect(Arr.map(spans, (s) => s.name)).toEqual(["gateway.initialize"]);
                 checkSpan(spans[0]!, a, !fail);
-                const appends = c.spans.filter((s) => s.name === "authorization.appendAdmitted");
-                const transactions = c.spans.filter((s) => s.name === "ledger.transaction");
+                const appends = Arr.filter(c.spans, (s) => s.name === "authorization.appendAdmitted");
+                const transactions = Arr.filter(c.spans, (s) => s.name === "ledger.transaction");
                 expect(appends).toHaveLength(1);
                 expect(transactions).toHaveLength(1);
 
@@ -628,10 +645,10 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                 );
 
                 expect(Exit.isSuccess(result)).toBe(!fail);
-                const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
-                expect(spans.map((s) => s.name)).toEqual(["gateway.grant"]);
+                const spans = Arr.filter(c.spans, (s) => Str.startsWith("gateway.")(s.name));
+                expect(Arr.map(spans, (s) => s.name)).toEqual(["gateway.grant"]);
                 checkSpan(spans[0]!, a, !fail);
-                const write = c.spans.find((s) => s.name === "access.write")!;
+                const write = Option.getOrThrow(Arr.findFirst(c.spans, (s) => s.name === "access.write"));
                 expect(Option.getOrThrow(write.parent).spanId).toBe(spans[0]!.spanId);
               }).pipe(Effect.provide(w.layer));
             }),
@@ -664,10 +681,10 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                 );
 
                 expect(Exit.isSuccess(result)).toBe(!fail);
-                const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
-                expect(spans.map((s) => s.name)).toEqual(["gateway.deny"]);
+                const spans = Arr.filter(c.spans, (s) => Str.startsWith("gateway.")(s.name));
+                expect(Arr.map(spans, (s) => s.name)).toEqual(["gateway.deny"]);
                 checkSpan(spans[0]!, a, true);
-                const write = c.spans.find((s) => s.name === "access.write")!;
+                const write = Option.getOrThrow(Arr.findFirst(c.spans, (s) => s.name === "access.write"));
                 expect(write.traceId).toBe(a.traceId);
                 expect(Option.getOrThrow(write.parent).spanId).toBe(a.spanId);
                 expect(write.status._tag).toBe("Ended");
@@ -728,8 +745,8 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                       expect(Cause.squash(result.cause)).toBeInstanceOf(LedgerError);
                     }
 
-                    const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
-                    expect(spans.map((s) => s.name)).toEqual(
+                    const spans = Arr.filter(c.spans, (s) => Str.startsWith("gateway.")(s.name));
+                    expect(Arr.map(spans, (s) => s.name)).toEqual(
                       call === "input_failed" ? ["gateway.input"] : ["gateway.input", "gateway.route"],
                     );
                     checkSpan(spans[0]!, a, call !== "input_failed");
@@ -745,7 +762,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                       ok ? { "fab.gateway.outcome": call === "refused" ? "refused" : "ok" } : {},
                     );
                     expect(
-                      spans[1]!.links.map((l) => ({
+                      Arr.map(spans[1]!.links, (l) => ({
                         traceId: l.span.traceId,
                         spanId: l.span.spanId,
                         attributes: l.attributes,
@@ -754,7 +771,9 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                     const recorded = yield* Stream.runCollect((yield* RecordManager).read(Chain.cases.spans.make({})));
 
                     for (const span of spans) {
-                      expect(recorded.find((r) => r.spanId === span.spanId)).toMatchObject({
+                      expect(
+                        Option.getOrUndefined(Arr.findFirst(recorded, (r) => r.spanId === span.spanId)),
+                      ).toMatchObject({
                         name: span.name,
                         ok: span === spans[0] || ok,
                         traceId: a.traceId,

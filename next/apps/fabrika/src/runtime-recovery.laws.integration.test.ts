@@ -34,7 +34,8 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit, Schema, DateTime, String as Str, Duration, Fiber, Record as Rec } from "effect";
+
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
@@ -270,7 +271,7 @@ const mailRequester = (config: { readonly self: string; readonly peer: string })
     },
   });
   return Program.make({
-    name: `p41/requester-${config.self.replaceAll(":", "-")}`,
+    name: `p41/requester-${Str.replaceAll(":", "-")(config.self)}`,
     machine,
     state: { v: 1, upgrades: [] },
     view: (s) => s,
@@ -431,9 +432,16 @@ type Entry = {
   readonly db: DatabaseSync;
   readonly ctx: DurableObjectState;
   readonly values: Map<string, unknown>;
-  timer: ReturnType<typeof setTimeout> | undefined;
+  timer: Fiber.Fiber<void> | undefined;
   alarm: number | null;
   held?: boolean;
+};
+
+/** Cancels a pending alarm the way clearTimeout did: the interrupt lands before this returns. */
+const cancel = (timer: Fiber.Fiber<void> | undefined) => {
+  if (timer !== undefined) {
+    Effect.runFork(Fiber.interrupt(timer));
+  }
 };
 
 type Lost = { readonly at: number; readonly side: "before" | "after" } | null;
@@ -471,7 +479,7 @@ const world = async (
           query: string,
           ...args: Parameters<typeof handles.sql.exec> extends [string, ...infer A] ? A : never
         ) => {
-          if (args.some((arg) => typeof arg === "string" && arg.startsWith("settings/instance/"))) {
+          if (args.some((arg) => typeof arg === "string" && Str.startsWith("settings/instance/")(arg))) {
             if (/SELECT \* FROM entries WHERE stream = \? AND rev > \?/i.test(query)) {
               settingsCounts.reads++;
             }
@@ -507,24 +515,31 @@ const world = async (
     stepFault: "none" | "rpc" | "decode" = "none",
     closed = false;
   const schedule = (entry: Entry) => {
-    clearTimeout(entry.timer);
+    cancel(entry.timer);
 
-    if (entry.alarm === null || entry.held || closed) {
+    if (entry.alarm === null || entry.held === true || closed) {
       return;
     }
 
     const fire = (tries: number) => {
-      entry.timer = setTimeout(
-        () => {
-          entry.alarm = null;
-          entry.object.alarm().catch(() => {
-            // workerd retries a failed alarm handler; so does this platform stand-in.
-            if (!closed && tries < 5 && entry.alarm === null) {
-              fire(tries + 1);
-            }
-          });
-        },
-        tries === 0 ? Math.max(0, (entry.alarm ?? 0) - Date.now()) : 100,
+      entry.timer = Effect.runFork(
+        Effect.sleep(
+          Duration.millis(
+            tries === 0 ? Math.max(0, (entry.alarm ?? 0) - DateTime.toEpochMillis(DateTime.nowUnsafe())) : 100,
+          ),
+        ).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              entry.alarm = null;
+              entry.object.alarm().catch(() => {
+                // workerd retries a failed alarm handler; so does this platform stand-in.
+                if (!closed && tries < 5 && entry.alarm === null) {
+                  fire(tries + 1);
+                }
+              });
+            }),
+          ),
+        ),
       );
     };
     fire(0);
@@ -638,7 +653,7 @@ const world = async (
               }
 
               entry.alarm = null;
-              clearTimeout(entry.timer);
+              cancel(entry.timer);
             },
           });
           // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the SQL, descriptor, alarm and sync handles the real Process reads
@@ -712,10 +727,10 @@ const world = async (
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => {
-          const requester = id.startsWith(`${requesterCode.hash}/`),
-            responder = id.startsWith(`${responderCode.hash}/`);
+          const requester = Str.startsWith(`${requesterCode.hash}/`)(id),
+            responder = Str.startsWith(`${responderCode.hash}/`)(id);
 
-          if (id.startsWith(`${poisonCode.hash}/`) || requester || responder) {
+          if (Str.startsWith(`${poisonCode.hash}/`)(id) || requester || responder) {
             // The real box: its declaration carries the program's own maxDeliveries.
             const program = requester ? requestProgram : responder ? mailResponder : poisonProgram(flow.limit);
             const Box = programBox(
@@ -752,12 +767,12 @@ const world = async (
             };
           }
 
-          if (id.startsWith(`${checklistCode.hash}/`)) {
+          if (Str.startsWith(`${checklistCode.hash}/`)(id)) {
             const Box = programBox(checklist, checklistCode.hash);
             return Reflect.construct(Box, []);
           }
 
-          const approval = id.startsWith(`${approvalCode.hash}/`),
+          const approval = Str.startsWith(`${approvalCode.hash}/`)(id),
             program = approval ? approvals : counter,
             execution = nodeExecution(program);
           return {
@@ -809,7 +824,7 @@ const world = async (
     interrupted.resolve();
 
     for (const { object, db: processDb, timer } of processes.values()) {
-      clearTimeout(timer);
+      cancel(timer);
       await object.runtime.dispose();
       processDb.close();
     }
@@ -896,7 +911,7 @@ const world = async (
     /** Platform restart: every object's runtime ends; storage and saved alarms survive. */
     reopenAll: async () => {
       for (const entry of processes.values()) {
-        clearTimeout(entry.timer);
+        cancel(entry.timer);
         await entry.object.runtime.dispose();
       }
 
@@ -924,7 +939,7 @@ const world = async (
     },
     reopenProcess: async (pid: string) => {
       const entry = processFor(pid);
-      clearTimeout(entry.timer);
+      cancel(entry.timer);
       await entry.object.runtime.dispose();
       entry.object = processObject(entry.ctx, env);
       schedule(entry);
@@ -1221,7 +1236,7 @@ StartsTest.law(
           pid = successor.process;
           restarts++;
           const view = yield* Effect.promise(() => owner.object.open("settings-audit"));
-          count = Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Int }))(view.view).count;
+          count = (yield* Schema.decodeUnknownEffect(Schema.Struct({ count: Schema.Int }))(view.view)).count;
         } else if (move === "alarm") {
           yield* Effect.promise(() => owner.object.due(0));
           yield* Effect.promise(() => owner.object.alarm());
@@ -1261,7 +1276,9 @@ describe("P12 Project configure recovery", () => {
               logged.some((spy) =>
                 spy.mock.calls.some((call) => {
                   const text = inspect(call, { depth: 8 });
-                  return text.includes(descriptor.id) && (fault === "interrupted" || text.includes("LedgerError"));
+                  return (
+                    Str.includes(descriptor.id)(text) && (fault === "interrupted" || Str.includes("LedgerError")(text))
+                  );
                 }),
               ),
               `the ${fault} delivery of ${descriptor.id} is logged`,
@@ -1393,10 +1410,10 @@ const FLOW_WAIT = 15_000;
 const BRAKE = 6;
 
 const until = async <A>(message: string, look: () => Promise<A>, done: (value: A) => boolean) => {
-  const end = Date.now() + FLOW_WAIT;
+  const end = DateTime.toEpochMillis(DateTime.nowUnsafe()) + FLOW_WAIT;
   let last: unknown = null;
 
-  while (Date.now() < end) {
+  while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
     try {
       const value = await look();
       last = value;
@@ -1408,7 +1425,7 @@ const until = async <A>(message: string, look: () => Promise<A>, done: (value: A
       last = { error: String(error) };
     }
 
-    await new Promise((done) => setTimeout(done, 20));
+    await Effect.runPromise(Effect.sleep("20 millis"));
   }
 
   throw new Error(`${message}: no answer in ${FLOW_WAIT} ms; last observed ${JSON.stringify(last)}`);
@@ -1488,7 +1505,7 @@ const runFlow = async (flow: RecoveryFlow) => {
     const rows = await until(`restart ${n}`, restarts, (found) => found.length >= n);
 
     if (held !== null) {
-      expect(Date.now()).toBeGreaterThanOrEqual(held);
+      expect(DateTime.toEpochMillis(DateTime.nowUnsafe())).toBeGreaterThanOrEqual(held);
     }
 
     expect(rows).toHaveLength(n);
@@ -1758,8 +1775,8 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
 
           done.add(move);
           const rows = (await Promise.all(names.map(({ name }) => exited(name)))).flat();
-          expect(Object.fromEntries(rows), "each exit reads back as the reason it was given").toEqual(
-            Object.fromEntries(exits),
+          expect(Rec.fromEntries(rows), "each exit reads back as the reason it was given").toEqual(
+            Rec.fromEntries(exits),
           );
         }
       }),
@@ -1910,13 +1927,13 @@ describe("P34c live object accounting", () => {
           expect(local.program.writes).toBeGreaterThan(0);
           expect(local.recovery.total).toEqual({ writes: 0, bytes: 0 });
           const counts = (db: DatabaseSync) =>
-            Object.fromEntries(
+            Rec.fromEntries(
               db
                 .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
                 .all()
                 .map(({ name }) => [
                   String(name),
-                  db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
+                  db.prepare(`SELECT count(*) AS n FROM "${Str.replaceAll('"', '""')(String(name))}"`).get()?.n,
                 ]),
             );
 
@@ -2070,7 +2087,7 @@ describe("P34c live object accounting", () => {
               // the Project answers it, so that span starts in one hour and ends in the next.
               w.onProjectCall((method) => {
                 if (method === "route" && turned === null) {
-                  turned = Date.now();
+                  turned = DateTime.toEpochMillis(DateTime.nowUnsafe());
                   vi.setSystemTime(hour + late);
                 }
               });

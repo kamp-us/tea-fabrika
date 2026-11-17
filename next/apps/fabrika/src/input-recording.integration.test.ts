@@ -5,11 +5,13 @@ import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { runsFor } from "@kampus/vitest";
 import { localState } from "alchemy/State/LocalState";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Array as Arr, String as Str, Effect, FileSystem, Formatter, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { build } from "./build.ts";
+import { scopedEnv } from "./env.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -41,10 +43,15 @@ const Metadata = Schema.Struct({
   reason: Schema.String,
 });
 
+class CallError extends Schema.TaggedError<CallError, { readonly brand: unique symbol }>()("CallError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
 const invoke = (target: object, method: string, args: ReadonlyArray<unknown>) =>
   Effect.tryPromise({
     try: () => Reflect.apply(Reflect.get(target, method), target, args) as PromiseLike<unknown>,
-    catch: (cause) => new Error("local instance call failed", { cause }),
+    catch: (cause) => CallError.make({ message: "local instance call failed", cause }),
   });
 
 const program = `
@@ -105,17 +112,16 @@ const pendingReply = Effect.fnUntraced(function* (
   expect(db.prepare("SELECT value FROM process_receipts WHERE name=? AND letter=?").get(NAME, letter)).toBeUndefined();
   const reply = db.prepare("SELECT value FROM process_replies WHERE name=? AND id=?").get(NAME, letter);
   expect(reply === undefined).toBe(move === "reply_write");
-  const output = JSON.stringify([db.prepare("SELECT value FROM process_recovery WHERE name=?").get(NAME), reply]);
+  const output = Formatter.formatJson([db.prepare("SELECT value FROM process_recovery WHERE name=?").get(NAME), reply]);
 
-  for (const form of [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body)]) {
+  for (const form of [body, Str.slice(1, -1)(Formatter.formatJson(body)), encodeURIComponent(body)]) {
     expect(output).not.toContain(form);
   }
 });
 
 const resumedReply = Effect.fnUntraced(function* (home: string) {
   const db = yield* recovery(home);
-
-  const saved = Schema.decodeUnknownSync(Schema.fromJsonString(Journal))(
+  const saved = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Journal))(
     db.prepare("SELECT value FROM process_recovery WHERE name=?").get(NAME)?.value,
   );
 
@@ -133,30 +139,10 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
   const built = yield* build({ out: path.join(home, "dist"), files: [], ledger: [], programs: { [PROGRAM]: file } });
   const held = yield* Effect.acquireRelease(heldPort(), (p) => p.release);
   const key = yield* SshsigTest.identity;
-  const line = Schema.decodeSync(KeyLine)(key.line);
+  const line = yield* Schema.decodeEffect(KeyLine)(key.line);
 
-  yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const previous = { fabrika: process.env.FABRIKA_HOME, alchemy: process.env.ALCHEMY_HOME };
-      process.env.FABRIKA_HOME = home;
-
-      return previous;
-    }),
-    (previous) =>
-      Effect.sync(() => {
-        if (previous.fabrika === undefined) {
-          delete process.env.FABRIKA_HOME;
-        } else {
-          process.env.FABRIKA_HOME = previous.fabrika;
-        }
-
-        if (previous.alchemy === undefined) {
-          delete process.env.ALCHEMY_HOME;
-        } else {
-          process.env.ALCHEMY_HOME = previous.alchemy;
-        }
-      }),
-  );
+  // localInstance sets ALCHEMY_HOME, so it goes back as it was too.
+  yield* scopedEnv({ FABRIKA_HOME: home }, ["ALCHEMY_HOME"]);
 
   const instance = yield* localInstance(
     built,
@@ -191,12 +177,10 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     }),
     from,
   ]);
-
-  const pid = Schema.decodeUnknownSync(Started)(started).process;
-
+  const pid = (yield* Schema.decodeUnknownEffect(Started)(started)).process;
   const connect = Effect.fnUntraced(function* (n: number) {
     const client = yield* invoke(project, "connect", []);
-    const nonce = Schema.decodeUnknownSync(Schema.String)(yield* invoke(project, "challenge", [client]));
+    const nonce = yield* Schema.decodeUnknownEffect(Schema.String)(yield* invoke(project, "challenge", [client]));
     const tab = `recording-${n}`;
 
     const signed = yield* writeSshsig({
@@ -255,7 +239,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     }
 
     if (move === "retry" || move === "lost_answer" || move === "refused_retry" || move === "refused_lost_answer") {
-      const history = move.startsWith("refused_") ? refused : accepted;
+      const history = Str.startsWith("refused_")(move) ? refused : accepted;
       const prior = history[Math.floor(entropy / choices.length) % history.length]!;
 
       if (move === "refused_lost_answer") {
@@ -317,13 +301,16 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     }
 
     const page = yield* invoke(project, "read", ["gateway/inputs", 0, "p13-check"]);
-    const rows = Schema.decodeUnknownSync(Schema.Array(Stored))(page);
-    const selected = rows.map((row) => Schema.decodeUnknownSync(Schema.Struct({ input: Metadata }))(row.body).input);
+    const rows = yield* Schema.decodeUnknownEffect(Schema.Array(Stored))(page);
+    const selected = Arr.map(
+      rows,
+      (row) => Schema.decodeUnknownSync(Schema.Struct({ input: Metadata }))(row.body).input,
+    );
     expect(selected).toEqual(received);
-    const output = JSON.stringify(rows);
+    const output = Formatter.formatJson(rows);
 
     for (const body of bodies) {
-      for (const form of [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body)]) {
+      for (const form of [body, Str.slice(1, -1)(Formatter.formatJson(body)), encodeURIComponent(body)]) {
         expect(output).not.toContain(form);
       }
     }
@@ -351,8 +338,12 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
   ).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
   const rows = yield* invoke(project, "read", ["gateway/inputs", 0, "p13-unknown-check"]);
 
-  for (const form of [unknown.body, JSON.stringify(unknown.body).slice(1, -1), encodeURIComponent(unknown.body)]) {
-    expect(JSON.stringify(rows)).not.toContain(form);
+  for (const form of [
+    unknown.body,
+    Str.slice(1, -1)(Formatter.formatJson(unknown.body)),
+    encodeURIComponent(unknown.body),
+  ]) {
+    expect(Formatter.formatJson(rows)).not.toContain(form);
   }
 });
 

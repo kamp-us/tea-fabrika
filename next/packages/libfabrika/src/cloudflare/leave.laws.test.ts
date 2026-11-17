@@ -12,7 +12,15 @@ import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Context, Effect, Exit, Layer, Schedule, Schema } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -114,6 +122,7 @@ const origin: Parameters<ProjectService["Service"]["start"]>[1] = {
 
 /** One booted Project over one SQLite database, with the door's `monitor` kept for the law. */
 const instance = Effect.fnUntraced(function* () {
+  const services = yield* Effect.context<never>();
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
     (db) => Effect.sync(() => db.close()),
@@ -145,7 +154,7 @@ const instance = Effect.fnUntraced(function* () {
 
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
-    INSTANCE: JSON.stringify(START),
+    INSTANCE: Formatter.formatJson(START),
     PROJECT: { getByName: () => ({}) },
     PROCESS: {
       getByName: (key: string) => ({
@@ -167,13 +176,13 @@ const instance = Effect.fnUntraced(function* () {
     LOADER: {
       get: () => ({
         getEntrypoint: () => ({
-          describe: () => Effect.runPromise(declaration()),
+          describe: () => Effect.runPromiseWith(services)(declaration()),
         }),
       }),
     },
   } as unknown as Env;
 
-  const door = Object.fromEntries(
+  const door = Rec.fromEntries(
     [
       "connect",
       "challenge",
@@ -269,7 +278,7 @@ describe("ticket 979: a closed socket's leave ends its session's watches", () =>
                         const to = Recipient.cases.client.make({ client, session });
                         expect(Exit.isSuccess(yield* Effect.exit(i.monitor(ref, pid, to, origin)))).toBe(true);
                         const watches = held.get(session) ?? new Map<string, "live" | "fired">();
-                        const key = JSON.stringify([client, ref]);
+                        const key = yield* Schema.encodeEffect(Key)([client, ref]);
                         watches.set(key, watches.get(key) ?? (running ? "live" : "fired"));
                         held.set(session, watches);
                       } else if (move === 5) {

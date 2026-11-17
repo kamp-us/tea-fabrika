@@ -16,7 +16,12 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Layout from "@kampus/libfabrika/tezgah/Layout";
 import { type Tile, type TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -53,12 +58,14 @@ const TAG = /<\/?([a-zA-Z][a-zA-Z0-9-]*)((?:\s+[^\s=>/]+(?:="[^"]*")?)*)\s*(\/?)
 const ATTR = /([^\s=>/]+)(?:="([^"]*)")?/g;
 
 const unescape = (text: string) =>
-  text
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&");
+  Function.pipe(
+    text,
+    Str.replace(/&quot;/g, '"'),
+    Str.replace(/&#x27;/g, "'"),
+    Str.replace(/&lt;/g, "<"),
+    Str.replace(/&gt;/g, ">"),
+    Str.replace(/&amp;/g, "&"),
+  );
 
 /** React's static markup as a tree: every element with its attributes, and its text. */
 const parse = (html: string): Node => {
@@ -67,17 +74,17 @@ const parse = (html: string): Node => {
   let last = 0;
 
   for (const m of html.matchAll(TAG)) {
-    const text = html.slice(last, m.index);
+    const text = Str.slice(last, m.index)(html);
     last = m.index + m[0].length;
 
     if (text !== "") {
       stack.at(-1)!.children.push(unescape(text));
     }
 
-    const tag = m[1]!.toLowerCase();
+    const tag = Str.toLowerCase(m[1]!);
 
-    if (m[0].startsWith("</")) {
-      const open = stack.map((n) => n.tag).lastIndexOf(tag);
+    if (Str.startsWith("</")(m[0])) {
+      const open = Arr.map(stack, (n) => n.tag).lastIndexOf(tag);
 
       if (open > 0) {
         stack.length = open;
@@ -88,8 +95,8 @@ const parse = (html: string): Node => {
 
     const attrs: Record<string, string> = {};
 
-    for (const a of (m[2] ?? "").matchAll(ATTR)) {
-      attrs[a[1]!.toLowerCase()] = unescape(a[2] ?? "");
+    for (const a of Str.matchAll(ATTR)(m[2] ?? "")) {
+      attrs[Str.toLowerCase(a[1]!)] = unescape(a[2] ?? "");
     }
 
     const node: Node = { tag, attrs, children: [] };
@@ -105,21 +112,31 @@ const parse = (html: string): Node => {
 
 const all = (node: Node): ReadonlyArray<Node> => [
   node,
-  ...node.children.flatMap((c) => (typeof c === "string" ? [] : all(c))),
+  ...Arr.flatMap(node.children, (c) => (typeof c === "string" ? [] : all(c))),
 ];
 
-const text = (node: Node): string => node.children.map((c) => (typeof c === "string" ? c : text(c))).join("");
+const text = (node: Node): string =>
+  Function.pipe(
+    node.children,
+    Arr.map((c) => (typeof c === "string" ? c : text(c))),
+    Arr.join(""),
+  );
 
 /** An element's accessible name by HTML-AAM's first two steps: `aria-labelledby`, then `aria-label`. */
 const nameIn = (root: Node, node: Node): string | null => {
   const by = node.attrs["aria-labelledby"];
 
   if (by !== undefined) {
-    return by
-      .split(/\s+/)
-      .map((id) => all(root).find((n) => n.attrs["id"] === id))
-      .map((n) => (n === undefined ? "" : text(n).trim()))
-      .join(" ");
+    return Function.pipe(
+      Str.split(by, /\s+/),
+      Arr.map((id) =>
+        Option.match(
+          Arr.findFirst(all(root), (n) => n.attrs["id"] === id),
+          { onNone: () => "", onSome: (n) => Str.trim(text(n)) },
+        ),
+      ),
+      Arr.join(" "),
+    );
   }
 
   return node.attrs["aria-label"] ?? null;
@@ -141,6 +158,10 @@ type Desk = { w: Workspace; tiles: Array<Tile>; next: number };
 
 const PROGRAMS = ["fabrika/checklist", "fabrika/counter", "acme/notes", "fabrika/inbox"] as const;
 
+/** A program's name after its owner: `fabrika/checklist` is shown as `checklist`. */
+const shortName = (program: string) =>
+  Option.match(Str.indexOf("/")(program), { onNone: () => program, onSome: (at) => Str.slice(at + 1)(program) });
+
 const draw = (d: Desk) =>
   renderToStaticMarkup(
     createElement(Desk, {
@@ -152,27 +173,33 @@ const draw = (d: Desk) =>
 
 const check = (d: Desk, seen: { regions: number; nested: number }) => {
   const root = parse(draw(d));
-  const mains = all(root).filter(isMain);
+  const mains = Arr.filter(all(root), isMain);
   expect(mains, "L20: the markup has one main").toHaveLength(1);
-  const regions = all(root).filter((n) => isRegion(root, n));
+  const regions = Arr.filter(all(root), (n) => isRegion(root, n));
   const open = Layout.order(d.w.layout);
-  const byId = new Map(d.tiles.map((t) => [t.id, t]));
+  const byId = new Map(Arr.map(d.tiles, (t) => [t.id, t]));
   expect(
-    regions.map((r) => nameIn(root, r)),
+    Arr.map(regions, (r) => nameIn(root, r)),
     "L20: one region per open tile, in reading order, each named by tileName",
-  ).toEqual(open.map((id) => tileName(byId.get(id)!)));
+  ).toEqual(Arr.map(open, (id) => tileName(byId.get(id)!)));
   expect(
-    regions.every((r) => all(mains[0]!).includes(r)),
+    Arr.every(regions, (r) => all(mains[0]!).includes(r)),
     "L20: every tile's region is inside the main",
   ).toBe(true);
   expect(
-    all(root)
-      .filter(current)
-      .map((n) => nameIn(root, n)),
+    Function.pipe(
+      all(root),
+      Arr.filter(current),
+      Arr.map((n) => nameIn(root, n)),
+    ),
     "L20: aria-current is on the focused tile's region only",
   ).toEqual([tileName(byId.get(d.w.focus)!)]);
   expect(
-    regions.filter(current).map((r) => nameIn(root, r)),
+    Function.pipe(
+      regions,
+      Arr.filter(current),
+      Arr.map((r) => nameIn(root, r)),
+    ),
     "L20: the element with aria-current is the focused tile's region",
   ).toEqual([tileName(byId.get(d.w.focus)!)]);
 
@@ -183,7 +210,8 @@ const check = (d: Desk, seen: { regions: number; nested: number }) => {
   }
 
   seen.regions = Math.max(seen.regions, regions.length);
-  seen.nested += typeof d.w.layout !== "string" && d.w.layout.parts.some((p) => typeof p.inner !== "string") ? 1 : 0;
+  seen.nested +=
+    typeof d.w.layout !== "string" && Arr.some(d.w.layout.parts, (p) => typeof p.inner !== "string") ? 1 : 0;
 };
 
 class Split implements fc.Command<Desk, Desk> {
@@ -204,7 +232,7 @@ class Split implements fc.Command<Desk, Desk> {
     d.tiles.push({
       id,
       n: d.next,
-      shows: `${this.program.slice(this.program.indexOf("/") + 1)}:t${d.next}`,
+      shows: `${shortName(this.program)}:t${d.next}`,
       program: this.program,
       child: true,
       keep: "failed",
@@ -229,7 +257,7 @@ class Close implements fc.Command<Desk, Desk> {
     const tiles = Layout.order(d.w.layout);
     const gone = tiles[this.at % tiles.length]!;
     d.w = Layout.remove(d.w, gone);
-    d.tiles = d.tiles.filter((t) => t.id !== gone);
+    d.tiles = Arr.filter(d.tiles, (t) => t.id !== gone);
     check(d, this.seen);
   }
 
@@ -337,7 +365,7 @@ const stripsAt = (w: Workspace, size: { readonly width: number; readonly height:
   const drawn = Layout.rects(w.layout, size, { gap: Layout.GAP });
 
   return new Set(
-    Layout.order(w.layout).filter((t) => {
+    Arr.filter(Layout.order(w.layout), (t) => {
       const r = drawn.get(t)!;
 
       return t !== w.focus && (r.width < SMALLEST.width || r.height < SMALLEST.height);
@@ -419,7 +447,7 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
           tiles.push({
             id,
             n: k + 2,
-            shows: `${program.slice(program.indexOf("/") + 1)}:t${k + 2}`,
+            shows: `${shortName(program)}:t${k + 2}`,
             program,
             child: true,
             keep: "failed",
@@ -429,9 +457,9 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
 
         const live = Layout.order(w.layout);
         w = Layout.focus(w, live[focus % live.length]!);
-        const shown = tiles.filter((t) => live.includes(t.id));
+        const shown = Arr.filter(tiles, (t) => live.includes(t.id));
         const strips = stripsAt(w, { width, height });
-        const byId = new Map(shown.map((t) => [t.id, t]));
+        const byId = new Map(Arr.map(shown, (t) => [t.id, t]));
 
         const root = parse(
           renderToStaticMarkup(
@@ -444,28 +472,30 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
           ),
         );
 
-        const mains = all(root).filter(isMain);
+        const mains = Arr.filter(all(root), isMain);
         expect(mains, "L31: the markup has one main").toHaveLength(1);
-        const open = live.filter((t) => !strips.has(t));
-        const folded = live.filter((t) => strips.has(t));
-        const regions = all(root).filter((n) => isRegion(root, n));
+        const open = Arr.filter(live, (t) => !strips.has(t));
+        const folded = Arr.filter(live, (t) => strips.has(t));
+        const regions = Arr.filter(all(root), (n) => isRegion(root, n));
         expect(
-          regions.map((r) => nameIn(root, r)),
+          Arr.map(regions, (r) => nameIn(root, r)),
           `L31: at ${width}x${height} the regions are the open tiles, in reading order`,
-        ).toEqual(open.map((t) => tileName(byId.get(t)!)));
+        ).toEqual(Arr.map(open, (t) => tileName(byId.get(t)!)));
         expect(
-          all(root)
-            .filter(current)
-            .map((n) => nameIn(root, n)),
+          Function.pipe(
+            all(root),
+            Arr.filter(current),
+            Arr.map((n) => nameIn(root, n)),
+          ),
           "L31: aria-current is on the focused tile's region only",
         ).toEqual([tileName(byId.get(w.focus)!)]);
-        const buttons = all(root).filter((n) => isButton(n) && (nameIn(root, n) ?? "").startsWith("open "));
+        const buttons = Arr.filter(all(root), (n) => isButton(n) && Str.startsWith("open ")(nameIn(root, n) ?? ""));
         expect(
-          buttons.map((b) => nameIn(root, b)),
+          Arr.map(buttons, (b) => nameIn(root, b)),
           `L31: at ${width}x${height} each strip is one button named open <program>, t<n>, in reading order`,
-        ).toEqual(folded.map((t) => `open ${tileName(byId.get(t)!)}`));
+        ).toEqual(Arr.map(folded, (t) => `open ${tileName(byId.get(t)!)}`));
         expect(
-          buttons.some((b) => nameIn(root, b) === `open ${tileName(byId.get(w.focus)!)}`),
+          Arr.some(buttons, (b) => nameIn(root, b) === `open ${tileName(byId.get(w.focus)!)}`),
           "L31: the focused tile is never a strip",
         ).toBe(false);
 
@@ -476,22 +506,23 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
           expect(b.attrs["tabindex"] === "-1", `L31: ${name} is in the Tab order`).toBe(false);
           expect("disabled" in b.attrs, `L31: ${name} is not disabled`).toBe(false);
           expect(
-            way.some((n) => "inert" in n.attrs || n.attrs["aria-hidden"] === "true"),
+            Arr.some(way, (n) => "inert" in n.attrs || n.attrs["aria-hidden"] === "true"),
             `L31: ${name} is neither inert nor hidden`,
           ).toBe(false);
           expect(way.includes(mains[0]!), `L31: ${name} is inside the main`).toBe(true);
           expect(
-            way.some((n) => isRegion(root, n)),
+            Arr.some(way, (n) => isRegion(root, n)),
             `L31: ${name} sits in no region`,
           ).toBe(false);
           expect(text(b), `L31: ${name} holds no tile body`).not.toContain(`body of ${byId.get(folded[i]!)!.shows}`);
           expect(
-            all(b)
-              .slice(1)
-              .filter(
+            Function.pipe(
+              all(b).slice(1),
+              Arr.filter(
                 (n) => INTERACTIVE.has(n.tag) || (n.attrs["tabindex"] !== undefined && n.attrs["tabindex"] !== "-1"),
-              )
-              .map((n) => n.tag),
+              ),
+              Arr.map((n) => n.tag),
+            ),
             `L31: ${name} holds nothing interactive`,
           ).toEqual([]);
         }
@@ -511,7 +542,9 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
         seen.strips += folded.length > 0 ? 1 : 0;
         seen.open += folded.length > 0 && open.length > 1 ? 1 : 0;
         seen.nested +=
-          folded.length > 0 && typeof w.layout !== "string" && w.layout.parts.some((p) => typeof p.inner !== "string")
+          folded.length > 0 &&
+          typeof w.layout !== "string" &&
+          Arr.some(w.layout.parts, (p) => typeof p.inner !== "string")
             ? 1
             : 0;
       }),

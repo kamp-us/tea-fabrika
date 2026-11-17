@@ -4,7 +4,13 @@
 // law without an edit here. Plant: `catch: unreachable` that ignores its argument, as before this ticket.
 import { it } from "@effect/vitest";
 import { encodeRpcError, ErrorTag, RpcCallError } from "alchemy/Rpc";
-import { Deferred, Effect, Fiber, Schema } from "effect";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import { expect } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -34,7 +40,12 @@ const rejecting = <A>(fault: unknown, own: object = {}) =>
           },
   }) as A;
 
-const clients = (fault: Error) => ({
+/** One client member: a call, or an Effect that needs no service, where the call takes nothing (the
+ *  checker's lazyEffect, T1075). The type holds every client to that, so a member that needs a
+ *  service fails the typecheck. */
+type Member = Effect.Effect<unknown, unknown, never> | ((...args: ReadonlyArray<never>) => unknown);
+
+const clients = (fault: Error): Record<string, Record<string, Member>> => ({
   Project: ProjectClient.make(rejecting(fault)),
   Process: ProcessClient.make(rejecting(fault)),
   Gateway: GatewayClient.make(rejecting(fault)),
@@ -42,9 +53,17 @@ const clients = (fault: Error) => ({
   Bucket: BucketClient.make(rejecting(fault)),
 });
 
-const methods = Object.entries(clients(new Error("probe"))).flatMap(([client, service]) =>
-  Object.keys(service).map((method) => `${client}.${method}`),
+const methods = Rec.toEntries(clients(new Error("probe"))).flatMap(([client, service]) =>
+  Rec.keys<string, unknown>(service).map((method) => `${client}.${method}`),
 );
+
+/** Runs one client member: a call is given `request`, and a member that is an Effect runs as it is. */
+const run = (member: Member | undefined, request: Request): Effect.Effect<unknown, unknown> =>
+  Effect.isEffect(member)
+    ? member
+    : typeof member === "function"
+      ? Reflect.apply(member, undefined, [request])
+      : Effect.die(`no client member: ${String(member)}`);
 
 it.effect.prop(
   "a rejected platform call fails with LedgerError unreachable, carrying the thrown error's name and text",
@@ -55,17 +74,12 @@ it.effect.prop(
   },
   ({ call, name, text }) =>
     Effect.gen(function* () {
-      const [client = "", method = ""] = call.split(".");
+      const [client = "", method = ""] = Str.split(call, ".");
       const kind = faults.find((fault) => fault.name === name)!;
-
-      const service: Record<string, (request: Request) => Effect.Effect<unknown, unknown>> = Reflect.get(
-        clients(kind.make(text)),
-        client,
-      );
-
+      const member = clients(kind.make(text))[client]?.[method];
       // A real Request, so a client that hands `fetch` to a typed stub has one to read; the
       // rejecting stub ignores what every other method is given.
-      const error = yield* Effect.flip(service[method]!(new Request("http://127.0.0.1:8787/client/a/b")));
+      const error = yield* Effect.flip(run(member, new Request("http://127.0.0.1:8787/client/a/b")));
       expect(error).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
       expect(Reflect.get(Object(error), "message")).toContain(kind.name);
       expect(Reflect.get(Object(error), "message")).toContain(text);
@@ -78,7 +92,7 @@ it.effect.prop(
 // answer is `unreachable`, with Alchemy's RpcCallError kept as its cause. The methods come from the
 // client's own keys. Plants: map every failure to `unreachable`; build `unreachable` from the
 // thrown value alone, so the RpcCallError is dropped.
-const processMethods = Object.keys(ProcessClient.make(rejecting(new Error("probe"))));
+const processMethods: ReadonlyArray<string> = Rec.keys(ProcessClient.make(rejecting(new Error("probe"))));
 
 /** A Process stub whose every method resolves with `answer`, as the object's bridge does. */
 const answeringProcess = <A>(answer: unknown) => new Proxy({}, { get: () => async () => answer }) as A;
@@ -136,7 +150,7 @@ it.effect.prop(
 // above and error-cause.test.ts hold it.
 // Plants: no `errors: [LedgerError]` on the stub; map every failure to `unreachable`; keep the
 // thrown value and drop the RpcCallError.
-const calls = Object.keys(GatewayClient.make(rejecting(new Error("probe")))).filter((method) => method !== "fetch");
+const calls = Rec.keys(GatewayClient.make(rejecting(new Error("probe")))).filter((method) => method !== "fetch");
 
 /** A Connection stub whose every call resolves with `answer`, as the object's bridge answers. */
 const answering = <A>(answer: unknown) =>
@@ -265,8 +279,7 @@ it.effect.prop(
       const waiting = {
         fetch: (_: Request, init?: RequestInit) => {
           Deferred.doneUnsafe(reached, Effect.succeed(init?.signal ?? undefined));
-
-          return new Promise<Response>(() => {});
+          return Effect.runPromise(Effect.never);
         },
       };
 
@@ -336,8 +349,7 @@ it.effect.prop(
         fault !== undefined ? fault.make(secret) : name === "text" ? secret : { message: secret, news: secret };
 
       const captured = RepliesTest.capture();
-      const [client = "", method = ""] = call.split(".");
-
+      const [client = "", method = ""] = Str.split(call, ".");
       const service =
         client === "Gateway" ? GatewayClient.make(rejecting(thrown)) : ProcessClient.make(rejecting(thrown));
 
@@ -389,7 +401,7 @@ it.effect.prop(
         new LedgerError({ reason, message: `Error: ${text}` }),
         new LedgerError({ reason }),
         new LedgerError({ reason: "unreachable" }),
-        new LedgerError({ reason: "unreachable", message: text.replaceAll(": ", "") }),
+        new LedgerError({ reason: "unreachable", message: Str.replaceAll(": ", "")(text) }),
         new Error(`Error: ${text}`),
       ];
 

@@ -5,7 +5,15 @@ import {
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Cause, Deferred, Effect, Exit, Layer, Option, type Scope } from "effect";
+import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import type * as Scope from "effect/Scope";
+
 import fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
@@ -170,9 +178,9 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
           const runtime = yield* Effect.acquireRelease(
             Effect.sync(() =>
               processRuntime(
-                platform<State>({ id: { name: JSON.stringify(["alarm-project", "alarm:866"]) }, storage }),
+                platform<State>({ id: { name: Formatter.formatJson(["alarm-project", "alarm:866"]) }, storage }),
                 platform<Environment>({
-                  INSTANCE: JSON.stringify(start),
+                  INSTANCE: Formatter.formatJson(start),
                   PROJECT: { getByName: () => project },
                   MEASUREMENTS: stub,
                 }),
@@ -386,13 +394,13 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
           const constructor = platform<Constructor>(Option.getOrThrow(Option.fromUndefinedOr(made.value)));
           const state = fromDurableObjectState(
             platform<Parameters<typeof fromDurableObjectState>[0]>({
-              id: { name: JSON.stringify(["alarm-project", "alarm:502"]) },
+              id: { name: Formatter.formatJson(["alarm-project", "alarm:502"]) },
               storage,
               abort: unexpected,
             }),
           );
           const environment = platform<WorkerEnvironment["Service"]>({
-            INSTANCE: JSON.stringify(start),
+            INSTANCE: Formatter.formatJson(start),
             PROJECT: { getByName: () => project },
             MEASUREMENTS: stub,
           });

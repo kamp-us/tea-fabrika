@@ -1,15 +1,29 @@
 /**
  * The gateway: the door a client connects to. It proves who a client is, admits it, and routes the
  * calls it sends to the project.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import { Context, Duration, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
+import {
+  Context,
+  Duration,
+  Effect,
+  Exit,
+  Formatter,
+  Layer,
+  Option,
+  Result,
+  Schema,
+  Semaphore,
+  Stream,
+  Tracer,
+} from "effect";
 import * as Cause from "effect/Cause";
+import * as DateTime from "effect/DateTime";
 import { Base64, Base64Url } from "effect/encoding";
 import { RateLimiter } from "effect/persistence/RateLimiter";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Str from "effect/String";
 import { admitted, MemberEvent, Saw } from "../access/Access.ts";
 import { foldAccess } from "../access/AccessFold.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
@@ -65,7 +79,6 @@ const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
  * The id of one connection to the gateway, a non-empty string the gateway makes when the connection
  * opens. It names a connection, not a client key.
  *
- * @stability unstable
  * @category models
  */
 export type ConnectionId = typeof ConnectionId.Type;
@@ -81,7 +94,7 @@ const rawObject = (a: unknown): Record<string, unknown> | null =>
 
 const reserved = (a: unknown) => {
   const value = rawObject(a);
-  return value !== null && ["id", "by", "for", "arrivedAt"].some((key) => Object.hasOwn(value, key));
+  return value !== null && ["id", "by", "for", "arrivedAt"].some((key) => Rec.has(value, key));
 };
 
 const no = (reason: string) => Answer.cases.refused.make({ reason });
@@ -728,9 +741,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         location: options.location,
         has: attached.hello.has,
         as: params.as ?? "window",
-        code: String(crypto.getRandomValues(new Uint32Array(1))[0] ?? 0)
-          .slice(-6)
-          .padStart(6, "0"),
+        code: Str.padStart(6, "0")(Str.slice(-6)(String(crypto.getRandomValues(new Uint32Array(1))[0] ?? 0))),
         pass: params.pass ?? null,
         at,
       });
@@ -933,8 +944,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           issued === null ||
           issued.used ||
           pass.nonce !== issued.nonce ||
-          JSON.stringify(issued.binding) !==
-            JSON.stringify(
+          Formatter.formatJson(issued.binding) !==
+            Formatter.formatJson(
               Enrollment.make({
                 id: c.add.id,
                 to: c.add.to,
@@ -1076,7 +1087,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
             for (const connection of connections) {
               const name = String(connection.name),
-                client = name.slice(4);
+                client = Str.slice(4)(name);
               const key = yield* store.atomic(() => store.get(name, Schema.String));
 
               if (key !== null && "reason" in admitted(latest, key)) {
@@ -1235,7 +1246,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         : yield* parkOn(asked.success.stream, asked.success.after, reader);
     }
 
-    if (method.startsWith("tasks.")) {
+    if (Str.startsWith("tasks.")(method)) {
       // One span for the whole tasks call: the write turn, the finish's record and the wake, so the
       // wake joins the trace the finish saved. `flush` runs after it, so the span is written too.
       const routeTasks = Effect.fn("gateway.route")(
@@ -1341,8 +1352,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       }
     }
 
-    const digest = yield* hash(JSON.stringify(params));
-    const bodyHash = yield* hash(JSON.stringify(message));
+    const digest = yield* hash(Formatter.formatJson(params));
+    const bodyHash = yield* hash(Formatter.formatJson(message));
     const process = yield* allocateStart();
     const inputId = yield* ids
       .next(InputId)
@@ -1417,7 +1428,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           digest,
           arrivedAt: at,
           span: { traceId: span.traceId, spanId: span.spanId },
-          sentAt: request !== null && Result.isSuccess(request) ? request.success.sentAt : new Date(at).toISOString(),
+          sentAt:
+            request !== null && Result.isSuccess(request)
+              ? request.success.sentAt
+              : DateTime.formatIso(DateTime.makeUnsafe(at)),
           state: EnvelopeState.cases.allocated.make({}),
         };
 
@@ -1780,7 +1794,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return yield* new LedgerError({ reason: "bad_row" });
     }
 
-    if (binding.hash !== (yield* hash(JSON.stringify(message)))) {
+    if (binding.hash !== (yield* hash(Formatter.formatJson(message)))) {
       return yield* new NotGranted({});
     }
 
@@ -1841,7 +1855,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       if (
         event === null ||
         event._tag !== a.kind ||
-        a.stream.startsWith("gateway/") ||
+        Str.startsWith("gateway/")(a.stream) ||
         brainOnly({ stream: a.stream, id: a.id, tag: a.kind })
       ) {
         return yield* new SigningRefused({ reason: "not_delivered" });
@@ -1856,7 +1870,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         return yield* new SigningRefused({ reason: "not_delivered" });
       }
 
-      const digest = yield* hash(JSON.stringify(decoded.success));
+      const digest = yield* hash(Formatter.formatJson(decoded.success));
       const at = yield* clock;
       const meta = yield* store.atomic(() => {
         const prior = store.get(`append/${a.id}`, AppendMeta);
@@ -1865,7 +1879,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           return prior.digest === digest && prior.stream === a.stream ? prior : null;
         }
 
-        const next = { sentAt: new Date(at).toISOString(), digest, stream: a.stream };
+        const next = { sentAt: DateTime.formatIso(DateTime.makeUnsafe(at)), digest, stream: a.stream };
         store.set(`append/${a.id}`, AppendMeta, next);
         return next;
       });
@@ -1949,15 +1963,15 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
       if (
         !["delivered", "retryable", "settled"].includes(binding.state._tag) ||
-        JSON.stringify(by) !== JSON.stringify(binding.by) ||
-        JSON.stringify(by) !== JSON.stringify(input.envelope.by) ||
+        Formatter.formatJson(by) !== Formatter.formatJson(binding.by) ||
+        Formatter.formatJson(by) !== Formatter.formatJson(input.envelope.by) ||
         binding.arrivedAt !== input.envelope.arrivedAt ||
         binding.sentAt !== input.sentAt ||
         (binding.seen ?? 0) !== input.seen ||
         binding.span.traceId !== input.span.traceId ||
         binding.span.spanId !== input.span.spanId ||
         binding.hash === undefined ||
-        binding.hash !== (yield* hash(JSON.stringify(input.envelope.input)))
+        binding.hash !== (yield* hash(Formatter.formatJson(input.envelope.input)))
       ) {
         return yield* new SigningRefused({ reason: "not_delivered" });
       }
@@ -1991,7 +2005,6 @@ type Appended = Ledger["Service"]["append"] extends (...args: Array<never>) => E
  * sent an input delivered to a process, refused as `sign` is, and writes nothing: the brain asks it
  * before a start (0170).
  *
- * @stability unstable
  * @category services
  */
 export class Gateway extends Context.Service<
@@ -2108,7 +2121,7 @@ const HelloEvent = Schema.TaggedStruct("initialized", {
 const random = () => Base64Url.encode(crypto.getRandomValues(new Uint8Array(24)));
 
 const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
-  const bytes = line ? Base64.decode(value.split(/\s+/)[1] ?? "") : Base64Url.decode(value);
+  const bytes = line ? Base64.decode(Str.split(value, /\s+/)[1] ?? "") : Base64Url.decode(value);
 
   if (Result.isFailure(bytes)) {
     return yield* new NotGranted({});
@@ -2119,7 +2132,7 @@ const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", body), catch: fail });
   const digest = yield* work;
-  return `SHA256:${Base64.encode(new Uint8Array(digest)).replace(/=+$/, "")}`;
+  return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(digest)))}`;
 });
 
 const hash = Effect.fnUntraced(function* (text: string) {

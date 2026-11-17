@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-cloudflare-process-sync-has-no-law",
+  "date": "2026-11-16",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/cloudflare/runtime.ts",
+    "line": 2299
+  },
+  "says": "No law holds that the Cloudflare process runtime hands ProcessStore a sync that calls the object's storage.sync; every storage fake on this path has a sync that records nothing, so dropping the flush that experiment 231 shows keeps the stepping marker goes unseen.",
+  "proof": "In a scratch checkout at 36476866e, runtime.ts:2299 changed to `sync: () => Effect.void`, then vitest run on next/apps/fabrika/src/runtime-quotas.laws.test.ts printed 'Tests 2 passed (2)'; the fakes at runtime-quotas.laws.test.ts:231, runtime-recovery.laws.integration.test.ts:403 and checklist-instance.laws.integration.test.ts:166 are all `sync: async () => {}`.",
+  "cost": "A change that drops or skips the sync on the Cloudflare path would pass CI and lose the stepping marker on an abort right after the put, so an interrupted step would read as idle on recovery.",
+  "head": "36476866ef1a3c0ccd3ba9417e95c672643926d8",
+  "ticket": "1075",
+  "pr": null
+}

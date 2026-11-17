@@ -75,6 +75,10 @@
                 "schemaStructWithTag": "error"
               }
             }
+          },
+          {
+            "include": ["e2e/**/*.ts"],
+            "options": { "diagnosticSeverity": { "newPromise": "error" } }
           }
         ]
       }

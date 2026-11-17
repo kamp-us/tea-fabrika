@@ -13,7 +13,9 @@
 //
 // `add` answers "queued", never "merged": the merge is GitHub's, later. `settle` is how code learns
 // it happened. Read through its module: `Queue.add(...)`.
-import { Duration, Effect, Option, Schedule, Schema } from "effect";
+
+import { String as Str, pipe, Option, Array as Arr, Duration, Effect, Schedule, Schema } from "effect";
+
 import { Checks, type Job } from "../ci/Checks.ts";
 import * as Leaks from "./Leaks.ts";
 import * as Names from "./Names.ts";
@@ -151,12 +153,14 @@ const PHRASE = /^[ \t]*fabrika close ticket ([0-9]+)[ \t]*$/;
  */
 export const namedTickets = (body: string): ReadonlyArray<number> => [
   ...new Set(
-    body
-      .replaceAll("\r", "")
-      .split("\n")
-      .map((row) => PHRASE.exec(row)?.[1])
-      .filter((n) => n !== undefined)
-      .map(Number),
+    pipe(
+      body,
+      Str.replaceAll("\r", ""),
+      Str.split("\n"),
+      Arr.map((row) => PHRASE.exec(row)?.[1]),
+      Arr.filter((n) => n !== undefined),
+      Arr.map(Number),
+    ),
   ),
 ];
 
@@ -185,7 +189,7 @@ const closeNamed = Effect.fn("Queue.closeNamed")(function* (repo: string, found:
   const open = yield* tickets.open.pipe(Effect.option);
 
   if (open._tag === "None") {
-    return [said(`cannot read the tracker; closed no tickets: ${named.join(" ")}`)];
+    return [said(`cannot read the tracker; closed no tickets: ${Arr.join(Arr.map(named, String), " ")}`)];
   }
 
   const lines: Array<string> = [];

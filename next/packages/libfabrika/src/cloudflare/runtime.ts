@@ -1,8 +1,6 @@
 /**
  * The Cloudflare runtime of a brain: the Project and Process Durable Objects' services and layers, the
  * stubs and RPC replies they talk through, and the bucket and recording layers they share.
- *
- * @stability unstable
  */
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
 import { applyCell } from "@demlik/tea";
@@ -14,6 +12,7 @@ import {
   Equal,
   Exit,
   Fiber,
+  Formatter,
   Layer,
   Option,
   Result,
@@ -23,7 +22,9 @@ import {
   Tracer,
 } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Str from "effect/String";
 import { admitted } from "../access/Access.ts";
 import { ClientManager } from "../access/ClientManager.ts";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
@@ -167,7 +168,6 @@ const SavedDescriptor = Schema.Struct({
  * The bindings a brain's Worker and objects read: the start's `INSTANCE` JSON, the four Durable Object
  * namespaces, the Worker Loader and the measurements bucket.
  *
- * @stability unstable
  * @category models
  */
 export interface Env {
@@ -183,7 +183,6 @@ export interface Env {
 /**
  * The start's input a brain is configured with, as `SettingsStart.Input`.
  *
- * @stability unstable
  * @category models
  */
 export type BrainOptions = SettingsStart.Input;
@@ -192,7 +191,6 @@ export type BrainOptions = SettingsStart.Input;
  * Decodes the `INSTANCE` binding's JSON as a start's input and checks its settings. Returns the
  * input, the decoded values and the snapshot in its canonical encoding. It records nothing.
  *
- * @stability unstable
  * @category decoding
  */
 export const settings = (env: Pick<Env, "INSTANCE">) => SettingsInput.decode(env.INSTANCE);
@@ -212,7 +210,6 @@ type CheckedSettings = Effect.Success<ReturnType<typeof settings>>;
  * records it over RPC with the Project object the input names. The Project object does not use
  * this layer: it records the start in its own ledger.
  *
- * @stability unstable
  * @category layers
  */
 export function recordedLayer(env: Env): Layer.Layer<RecordedStart, Starts.StartsError>;
@@ -237,7 +234,6 @@ export {
   /**
    * A runtime for one layer whose build can be tried again after it fails.
    *
-   * @stability unstable
    * @category constructors
    */
   SettingsRuntime,
@@ -247,7 +243,6 @@ export {
  * Converts a `Starts` answer into the reply sent over RPC: `ok` with the receipt, or the failure's
  * reason by its tag alone. The effect no longer fails with `StartsError`.
  *
- * @stability unstable
  * @category error handling
  */
 export const settingsReply = <R>(work: Effect.Effect<SettingsStart.Receipt, Starts.StartsError, R>) =>
@@ -271,7 +266,6 @@ export const settingsReply = <R>(work: Effect.Effect<SettingsStart.Receipt, Star
  * Use when a failure leaves the Worker or an object. A cause may hold the start's input, and this
  * keeps it inside.
  *
- * @stability unstable
  * @category error handling
  */
 export const settingsFailure = <A, E, R>(work: Effect.Effect<A, E | Starts.StartsError, R>) =>
@@ -314,7 +308,6 @@ export const settingsFailure = <A, E, R>(work: Effect.Effect<A, E | Starts.Start
  * `runPromise` gets the context, provides it to the work and runs it. When the context fails to
  * build, a `StartsError` becomes `Start.Failure`, and a `LedgerError` keeps only its `reason`.
  *
- * @stability unstable
  * @category constructors
  */
 export const settingsWire = <R, E>(context: Effect.Effect<Context.Context<R>, E>) => {
@@ -333,7 +326,6 @@ export const settingsWire = <R, E>(context: Effect.Effect<Context.Context<R>, E>
  * What the Project hands its door: the SQL handle, the founder, the write turn and the process
  * calls the door needs.
  *
- * @stability unstable
  * @category models
  */
 export interface ProjectDoorOptions {
@@ -371,7 +363,6 @@ type Boots = readonly [Boot, ...ReadonlyArray<Boot>];
  * What a Project object is built with: its built-in programs, the processes it boots, the door it
  * serves, and optionally its start's input, mail grants, configuration and start grants.
  *
- * @stability unstable
  * @category models
  */
 export interface ProjectOptions {
@@ -405,7 +396,6 @@ export interface ProjectOptions {
 /**
  * Returns the stub of the Project object of the given name.
  *
- * @stability unstable
  * @category constructors
  */
 export const projectStub = (env: Env, name: string) => env.PROJECT.getByName(name);
@@ -414,7 +404,6 @@ export const projectStub = (env: Env, name: string) => env.PROJECT.getByName(nam
  * Returns the stub of the Process object for a registered name in a project. One object holds
  * every process ID of that name, the first and each successor.
  *
- * @stability unstable
  * @category constructors
  */
 export const processStub = (env: Pick<Env, "PROCESS">, project: string, name: string) =>
@@ -423,7 +412,6 @@ export const processStub = (env: Pick<Env, "PROCESS">, project: string, name: st
 /**
  * Returns the RPC stub of the Record object for a name in a project; a `SinkError` crosses it typed.
  *
- * @stability unstable
  * @category constructors
  */
 export const recordStub = (env: Env, project: string, name: string) =>
@@ -433,7 +421,6 @@ export const recordStub = (env: Env, project: string, name: string) =>
 /**
  * Runs a binding call that already entered Effect, under its own `runtime.rpc` span.
  *
- * @stability unstable
  * @category combinators
  */
 export const rpc = Effect.fn("runtime.rpc")(function* <A, E>(work: Effect.Effect<A, E>) {
@@ -459,7 +446,6 @@ const checkedReply = Effect.fnUntraced(function* <A, B>(work: Effect.Effect<A, u
  * Converts a signing call into its RPC reply: `ok` with the `Session`, or a `SigningRefused` or
  * `NotGranted` refusal as data. Any other failure still fails the call.
  *
- * @stability unstable
  * @category error handling
  */
 export const signingReply = Effect.fn("project.signingReply")(function* (work: Effect.Effect<Session, unknown>) {
@@ -470,7 +456,6 @@ export const signingReply = Effect.fn("project.signingReply")(function* (work: E
  * Converts a commit into its RPC reply: `ok` with the `Appended` entry, or a `SigningRefused` or
  * `NotGranted` refusal as data. Any other failure still fails the call.
  *
- * @stability unstable
  * @category error handling
  */
 export const commitReply = Effect.fn("project.commitReply")(function* (work: Effect.Effect<Appended, unknown>) {
@@ -481,7 +466,6 @@ export const commitReply = Effect.fn("project.commitReply")(function* (work: Eff
  * Converts a `ProcessManager` call into its RPC reply: `ok` with the value, or a `ProcessError`
  * refusal as data. Any other failure still fails the call.
  *
- * @stability unstable
  * @category error handling
  */
 export const processReply = <A, E>(work: Effect.Effect<A, E | ProcessError>): Effect.Effect<ProcessReply<A>, E> =>
@@ -598,7 +582,6 @@ const checkedValue = Effect.fnUntraced(function* <A>(
  * that letter with no client call. A saved wake time is kept; with none, the alarm is set for now
  * and saved.
  *
- * @stability unstable
  * @category constructors
  */
 export const configureProcess = Effect.fn("process.configure")(function* <E>(
@@ -628,7 +611,6 @@ export const configureProcess = Effect.fn("process.configure")(function* <E>(
 /**
  * Returns the wake time a Process object saved, or `undefined` when none is saved.
  *
- * @stability unstable
  * @category getters
  */
 export const savedAlarm = Effect.fn("process.savedAlarm")(function* (ctx: DurableObjectState) {
@@ -644,7 +626,6 @@ export const savedAlarm = Effect.fn("process.savedAlarm")(function* (ctx: Durabl
  * A descriptor or checkpoint that does not decode fails with a `LedgerError` of reason `bad_row`, and
  * a failed read with reason `storage`.
  *
- * @stability unstable
  * @category getters
  */
 export const processDescriptor = Effect.fn("process.descriptor")(function* (ctx: DurableObjectState, pid?: string) {
@@ -671,7 +652,8 @@ export const processDescriptor = Effect.fn("process.descriptor")(function* (ctx:
   return { ...descriptor, id: pid ?? descriptor.id, build: checkpoint.saved.build };
 });
 
-const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), (n) => n.toString(16).padStart(2, "0")).join("");
+const hex = (bytes: ArrayBuffer) =>
+  Array.from(new Uint8Array(bytes), (n) => Str.padStart(2, "0")(n.toString(16))).join("");
 
 // R2 refuses a body whose SHA-256 differs from the one sent. The local bucket does not check,
 // so the adapter checks first and both places fail the same way.
@@ -679,7 +661,6 @@ const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), (n) => n.t
  * Puts a body in the bucket after checking its SHA-256 against `sha256`, as R2 itself does; a
  * mismatch fails with a `LedgerError` of reason `bad_row`, before anything is written.
  *
- * @stability unstable
  * @category combinators
  */
 export const checkedPut = Effect.fnUntraced(function* (
@@ -694,7 +675,7 @@ export const checkedPut = Effect.fnUntraced(function* (
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", copy), catch: fail });
   const digest = yield* work;
 
-  if (hex(digest) !== sha256.toLowerCase()) {
+  if (hex(digest) !== Str.toLowerCase(sha256)) {
     return yield* new LedgerError({ reason: "bad_row" });
   }
 
@@ -704,7 +685,6 @@ export const checkedPut = Effect.fnUntraced(function* (
 /**
  * Returns a bucket object's SHA-256 as hex, or `null` when the object or its checksum is absent.
  *
- * @stability unstable
  * @category getters
  */
 export const bucketHead = Effect.fn(function* (bucket: R2Bucket, key: string) {
@@ -715,7 +695,6 @@ export const bucketHead = Effect.fn(function* (bucket: R2Bucket, key: string) {
 /**
  * Returns the bucket's `put` and `head` as the Promise calls the archive takes.
  *
- * @stability unstable
  * @category constructors
  */
 export const bucketCalls = (bucket: R2Bucket): BucketCalls => ({
@@ -741,7 +720,6 @@ const flushed = SpanSink.use((sink) => sink.flush);
  * value, or when it answered a `reserved`, `rate_limited` or `quota` refusal. A failed flush fails a call that
  * succeeded; a call that failed keeps its own failure.
  *
- * @stability unstable
  * @category combinators
  */
 export const complete = Effect.fn(function* <A, E, R>(
@@ -777,7 +755,6 @@ export const complete = Effect.fn(function* <A, E, R>(
  * Layer that provides an object's recording: the remote Record calls, the archive and the span sink
  * on its own SQL, with every span tagged with the start's settings hash and build.
  *
- * @stability unstable
  * @category layers
  */
 export const recordingLayer = (sql: Sql, env: Env, project: string, object: string) =>
@@ -805,8 +782,8 @@ export const recordingLayer = (sql: Sql, env: Env, project: string, object: stri
   );
 
 const fingerprint = Effect.fnUntraced(function* (value: string) {
-  const ssh = value.startsWith("ssh-");
-  const blob = ssh ? Base64.decode(value.trim().split(/\s+/)[1] ?? "") : Base64Url.decode(value);
+  const ssh = Str.startsWith("ssh-")(value);
+  const blob = ssh ? Base64.decode(Str.split(Str.trim(value), /\s+/)[1] ?? "") : Base64Url.decode(value);
 
   if (Result.isFailure(blob)) {
     return yield* new LedgerError({ reason: "bad_row", cause: blob.failure });
@@ -818,7 +795,7 @@ const fingerprint = Effect.fnUntraced(function* (value: string) {
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail });
   const hash = yield* work;
-  return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
+  return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(hash)))}`;
 });
 
 const projectLedger = (
@@ -868,7 +845,7 @@ const projectLedger = (
     RefereeSql.layer(sql),
     LedgerStreamsSql.layer(sql),
   ).pipe(Layer.provideMerge(ProjectQuotas.project(sql, `brain:${name}`, input)), Layer.provide(bell));
-  const starts = SettingsStartsLedger.fromLedger().pipe(Layer.provide(ledgerLayer));
+  const starts = SettingsStartsLedger.fromLedger.pipe(Layer.provide(ledgerLayer));
   return { sql, turn, write, ledgerLayer, starts };
 };
 
@@ -949,7 +926,7 @@ const projectLogic = Effect.fn("project.init")(function* (
   // table lives as long as the session, never folded again from rev 0 for each call.
   const windows = new Map<string, { readonly session: string; readonly manager: typeof ProcessManager.Service }>();
   const windowManager = Effect.fnUntraced(function* (to: typeof Recipient.cases.client.Type) {
-    const key = JSON.stringify([to.client, to.session]);
+    const key = Formatter.formatJson([to.client, to.session]);
     const kept = windows.get(key);
 
     if (kept !== undefined) {
@@ -973,7 +950,7 @@ const projectLogic = Effect.fn("project.init")(function* (
   };
   const codes = yield* CodeStore.pipe(Effect.provide(CodeStoreSql.layer(sql)));
 
-  for (const source of Object.values(programs)) {
+  for (const source of Rec.values(programs)) {
     const built = yield* Schema.decodeUnknownEffect(BuiltProgram)(source);
     yield* codes.put(built);
   }
@@ -1024,7 +1001,7 @@ const projectLogic = Effect.fn("project.init")(function* (
           : (yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(row.value).pipe(
               Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
             )).build;
-      const target = Object.hasOwn(programs, process.program) ? programs[process.program] : undefined;
+      const target = Rec.has(programs, process.program) ? programs[process.program] : undefined;
 
       for (const was of new Set([process.build, ...(recorded === undefined ? [] : [recorded])])) {
         if (target === undefined || moved.has(was) || Option.isSome(yield* codes.get(was))) {
@@ -1106,10 +1083,10 @@ const projectLogic = Effect.fn("project.init")(function* (
   const policies = new Map<string, InputPolicy>();
   const remember = (owner: string, declaration: Declaration): InputPolicy => {
     const policy = {
-      inputs: Object.entries(declaration.inputs)
+      inputs: Rec.toEntries(declaration.inputs)
         .filter(([, p]) => p.personOnly)
         .map(([name]) => name),
-      events: Object.entries(declaration.writes)
+      events: Rec.toEntries(declaration.writes)
         .filter(([, p]) => p.personOnly)
         .map(([name]) => name),
     };
@@ -1148,7 +1125,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       sql.exec(
         "INSERT INTO dev_descriptors (process,value,pending) VALUES (?,?,?)",
         process.process,
-        JSON.stringify({ ...descriptor, id: process.process, build: process.build }),
+        Formatter.formatJson({ ...descriptor, id: process.process, build: process.build }),
         requester?._tag === "process" ? 2 : 0,
       );
     }
@@ -1175,7 +1152,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     sql.exec(
       "INSERT INTO dev_descriptors (process,value) VALUES (?,?) ON CONFLICT(process) DO UPDATE SET value=excluded.value",
       process.process,
-      JSON.stringify(descriptor),
+      Formatter.formatJson(descriptor),
     );
   }
 
@@ -1337,7 +1314,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
     );
 
-    if (!Object.hasOwn(programs, request.code.program)) {
+    if (!Rec.has(programs, request.code.program)) {
       return yield* new LedgerError({ reason: "refused" });
     }
 
@@ -1381,7 +1358,7 @@ const projectLogic = Effect.fn("project.init")(function* (
           sql.exec(
             "INSERT OR IGNORE INTO dev_starts (id,request,hash) VALUES (?,?,?)",
             request.id,
-            JSON.stringify(request),
+            Formatter.formatJson(request),
             chosen.code.hash,
           );
         }
@@ -1413,7 +1390,7 @@ const projectLogic = Effect.fn("project.init")(function* (
         sql.exec(
           "INSERT OR IGNORE INTO dev_descriptors (process,value,pending) VALUES (?,?,?)",
           result.process,
-          JSON.stringify(descriptor),
+          Formatter.formatJson(descriptor),
           request._tag === "first" ? 1 : 0,
         );
         return result;
@@ -1446,7 +1423,11 @@ const projectLogic = Effect.fn("project.init")(function* (
 
     const current = yield* loader.load(program, "check", undefined, hash);
     remember(descriptor.name, current.declaration);
-    sql.exec("UPDATE dev_descriptors SET value=? WHERE process=?", JSON.stringify({ ...descriptor, build: hash }), pid);
+    sql.exec(
+      "UPDATE dev_descriptors SET value=? WHERE process=?",
+      Formatter.formatJson({ ...descriptor, build: hash }),
+      pid,
+    );
   });
   // A swap publishes its running build before releasing the Process permit. Its durable fact
   // also repairs a lost reply; re-reading the newest fact cannot undo a later swap on a retry.
@@ -1495,7 +1476,7 @@ const projectLogic = Effect.fn("project.init")(function* (
           sql.exec(
             "INSERT OR IGNORE INTO dev_descriptors (process,value,pending) VALUES (?,?,2)",
             answer.process,
-            JSON.stringify(descriptor),
+            Formatter.formatJson(descriptor),
           );
         }
 
@@ -1571,9 +1552,9 @@ const projectLogic = Effect.fn("project.init")(function* (
     const { path, line, ...body } = fact;
     const safe =
       path !== undefined &&
-      !path.startsWith("/") &&
-      !path.includes("..") &&
-      !path.includes("\\") &&
+      !Str.startsWith("/")(path) &&
+      !Str.includes("..")(path) &&
+      !Str.includes("\\")(path) &&
       !/^[A-Za-z]:/.test(path);
     yield* ledger.append(
       "gateway/code",
@@ -1729,7 +1710,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     Effect.tap((answer) => Effect.annotateCurrentSpan("outcome", answer._tag)),
   );
 
-  for (const [program, built] of Object.entries(programs)) {
+  for (const [program, built] of Rec.toEntries(programs)) {
     if (selected[program] === undefined) {
       yield* accept({ id: `code.boot:${program}:${built.hash}`, program, ...built, from: "boot" });
     }
@@ -1809,7 +1790,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       return yield* new LedgerError({ reason: "refused" });
     }
 
-    if (stream.startsWith("gateway/") || stream.startsWith("processes")) {
+    if (Str.startsWith("gateway/")(stream) || Str.startsWith("processes")(stream)) {
       return yield* new LedgerError({ reason: "refused" });
     }
 
@@ -2010,7 +1991,6 @@ type ProjectFailure = LedgerError | SinkError;
  * Service for the Project object's calls: the ledger, the door, code install, processes, mail and its
  * boot.
  *
- * @stability unstable
  * @category services
  */
 export class ProjectService extends Context.Service<
@@ -2160,7 +2140,6 @@ export class ProjectService extends Context.Service<
  * Layer that provides `ProjectService` for one Project object, after its start's input is decoded and
  * recorded in its own ledger.
  *
- * @stability unstable
  * @category layers
  */
 export const projectLayer = (
@@ -2201,7 +2180,6 @@ export const projectLayer = (
  * Creates the Project object's runtime: the full `ProjectService`, plus `settingsStart` and
  * `settingsRead`, which run on a smaller runtime of its ledger and starts alone.
  *
- * @stability unstable
  * @category constructors
  */
 export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) => {
@@ -2248,7 +2226,6 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env, options: Proje
  * Layer that provides durable task storage on the Project's own database, for trusted startup code.
  * A task's doorbell rings the Connection object it names.
  *
- * @stability unstable
  * @category layers
  */
 export const projectTasksLayer = (ctx: DurableObjectState, env: Env) =>
@@ -2292,9 +2269,15 @@ const processLogic = Effect.fnUntraced(function* (
   const accounting = yield* ProjectQuotas.process(sql, saved.name, checked.values);
   const ledger = LedgerRemote.layer(stub, { reader: saved.id });
   const base = Layer.mergeAll(ledger, recordingLayer(sql, env, project, saved.id));
-  const all = Layer.mergeAll(ProcessStore.layer(sql, { process: saved.id, storage, accounting }), Mailbox.layer).pipe(
-    Layer.provideMerge(base),
-  );
+  // ProcessStore takes `sync` as a call, so each runtime and its tests can hand it their own.
+  const all = Layer.mergeAll(
+    ProcessStore.layer(sql, {
+      process: saved.id,
+      storage: { put: storage.put, sync: () => storage.sync, get: storage.get },
+      accounting,
+    }),
+    Mailbox.layer,
+  ).pipe(Layer.provideMerge(base));
   const services = yield* Layer.build(all).pipe(Effect.provideService(RecordedStart, checked));
   const store = Context.get(services, ProcessStore),
     sink = Context.get(services, SpanSink);
@@ -2401,7 +2384,7 @@ const processLogic = Effect.fnUntraced(function* (
       // Keep the program's wake; the platform requires a positive alarm time.
       set: (at) =>
         (at === null
-          ? rpc(storage.delete("wake")).pipe(Effect.andThen(rpc(storage.deleteAlarm())))
+          ? rpc(storage.delete("wake")).pipe(Effect.andThen(rpc(storage.deleteAlarm)))
           : rpc(storage.put("wake", at)).pipe(Effect.andThen(rpc(storage.setAlarm(Math.max(1, at)))))
         ).pipe(Effect.orDie),
     }),
@@ -2499,7 +2482,6 @@ type RunnerFailure =
  * Service for a Process object's calls: its runner's turns, its code swap, its alarm and its saved
  * activity.
  *
- * @stability unstable
  * @category services
  */
 export class ProcessService extends Context.Service<
@@ -2532,7 +2514,6 @@ export class ProcessService extends Context.Service<
  * `input` is the instance's checked settings, read as the app reads them. Without it the layer
  * reads the `INSTANCE` binding itself, and a bad setting fails with `StartsError`.
  *
- * @stability unstable
  * @category layers
  */
 export const processLayer = (
@@ -2549,7 +2530,6 @@ export const processLayer = (
  * Creates a Process object's runtime: `ProcessService` over its built-in programs, with the start
  * recorded with the Project.
  *
- * @stability unstable
  * @category constructors
  */
 export const processRuntime = (ctx: DurableObjectState, env: Env, programs: Readonly<Record<string, ProgramSource>>) =>

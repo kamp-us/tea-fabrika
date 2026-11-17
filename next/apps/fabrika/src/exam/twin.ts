@@ -1,7 +1,8 @@
 // P12, next/. Read the real stack and the installed provider registrations.
 // This exam fails closed on syntax it cannot follow. It does not keep a second resource list.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, FileSystem, Path } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec, Console, Effect, FileSystem, Path } from "effect";
+
 import { parseSync, type ModuleExportName } from "oxc-parser";
 
 type Tree = any;
@@ -22,15 +23,13 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     return body;
   };
-
-  const source = (file: string, spec: string) => resolve(dirname(file), spec.replace(/\.js$/, ".ts"));
-
+  const source = (file: string, spec: string) => resolve(dirname(file), pipe(spec, Str.replace(/\.js$/, ".ts")));
   const nodes = (node: Tree, visit: (node: Tree) => void): void => {
     if (node === null || typeof node !== "object") {
       return;
     }
 
-    if (Array.isArray(node)) {
+    if (Arr.isArray(node)) {
       for (const n of node) {
         nodes(n, visit);
       }
@@ -40,7 +39,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     visit(node);
 
-    for (const [key, child] of Object.entries(node)) {
+    for (const [key, child] of Rec.toEntries(node)) {
       if (!["comments", "tokens"].includes(key)) {
         nodes(child, visit);
       }
@@ -58,7 +57,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     const parsed = parseSync(file, body ?? text(file));
 
-    if (parsed.errors.length) {
+    if (parsed.errors.length > 0) {
       throw new Error(`unsupported-case: cannot parse ${file}`);
     }
 
@@ -93,7 +92,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
       return node.name;
     }
 
-    if (node?.type === "MemberExpression" && !node.computed) {
+    if (node?.type === "MemberExpression" && node.computed !== true) {
       const base = member(node.object);
 
       return base === null ? null : `${base}.${node.property.name}`;
@@ -116,7 +115,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
   // Follow the package's actual namespace and star exports, including aliases.
   const exported = (file: string, path: ReadonlyArray<string>, seen = new Set<string>()): string | null => {
-    const key = `${file}:${path.join(".")}`;
+    const key = `${file}:${Arr.join(path, ".")}`;
 
     if (seen.has(key) || !sources.has(file)) {
       return null;
@@ -127,16 +126,16 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     for (const node of ast.body) {
       if (node.type === "ExportAllDeclaration") {
-        if (node.exported && name(node.exported) === path[0]) {
+        if (node.exported !== null && name(node.exported) === path[0]) {
           const found = exported(source(file, node.source.value), path.slice(1), seen);
 
-          if (found) {
+          if (found !== null && found !== "") {
             return found;
           }
-        } else if (!node.exported) {
+        } else if (node.exported === null) {
           const found = exported(source(file, node.source.value), path, seen);
 
-          if (found) {
+          if (found !== null && found !== "") {
             return found;
           }
         }
@@ -149,19 +148,19 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
       if (
         path.length === 1 &&
         node.declaration?.type === "VariableDeclaration" &&
-        node.declaration.declarations.some((d) => d.id.type === "Identifier" && d.id.name === path[0])
+        Arr.some(node.declaration.declarations, (d) => d.id.type === "Identifier" && d.id.name === path[0])
       ) {
         return file;
       }
 
       for (const spec of node.specifiers ?? []) {
-        if (name(spec.exported) !== path[0] || !node.source) {
+        if (name(spec.exported) !== path[0] || node.source === null) {
           continue;
         }
 
         const found = exported(source(file, node.source.value), [name(spec.local), ...path.slice(1)], seen);
 
-        if (found) {
+        if (found !== null && found !== "") {
           return found;
         }
       }
@@ -174,7 +173,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
     const result = new Map<string, { file: string; name: string }>();
 
     for (const n of tree(file).body) {
-      if (n.type === "ImportDeclaration" && n.source.value.startsWith(".")) {
+      if (n.type === "ImportDeclaration" && pipe(n.source.value, Str.startsWith("."))) {
         for (const s of n.specifiers) {
           if (s.type === "ImportSpecifier") {
             result.set(s.local.name, { file: source(file, n.source.value), name: name(s.imported) });
@@ -260,7 +259,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
       const props = node.arguments[1]?.properties ?? [];
       dual = props.some(
-        (p: Tree) => p.key?.name === "local" && /ProviderLocal/.test(text(targetFile).slice(p.start, p.end)),
+        (p: Tree) => p.key?.name === "local" && /ProviderLocal/.test(pipe(text(targetFile), Str.slice(p.start, p.end))),
       );
     });
 
@@ -317,7 +316,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
     };
 
     const report = (node: Tree, reason: string) =>
-      found.push({ file, line: body.slice(0, node.start).split("\n").length, reason });
+      found.push({ file, line: pipe(body, Str.slice(0, node.start), Str.split("\n")).length, reason });
 
     for (const node of ast.body) {
       if (node.type === "ImportDeclaration") {
@@ -328,13 +327,13 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         if (!["@alchemy.run/cloudflare", "alchemy", "effect"].includes(node.source.value)) {
           if (
             node.specifiers.length === 0 ||
-            node.specifiers.some((s) => s.type !== "ImportSpecifier" || s.importKind !== "type")
+            Arr.some(node.specifiers, (s) => s.type !== "ImportSpecifier" || s.importKind !== "type")
           ) {
             report(node, "unsupported-case: unfollowed stack import");
           }
         }
 
-        if (node.source.value.startsWith(".")) {
+        if (pipe(node.source.value, Str.startsWith("."))) {
           for (const spec of node.specifiers) {
             if (spec.type !== "ImportSpecifier" || spec.importKind !== "type") {
               helpers.add(spec.local.name);
@@ -342,7 +341,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
           }
         }
 
-        if (node.source.value.startsWith("@alchemy.run/cloudflare/")) {
+        if (pipe(node.source.value, Str.startsWith("@alchemy.run/cloudflare/"))) {
           report(node, "unsupported-case: Cloudflare subpath import");
         }
 
@@ -370,7 +369,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         }
       } else if (
         (node.type === "ExportAllDeclaration" || node.type === "ExportNamedDeclaration") &&
-        node.source &&
+        node.source !== null &&
         node.exportKind !== "type"
       ) {
         report(node, "unsupported-case: unfollowed stack re-export");
@@ -380,8 +379,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
     let total = 0;
 
     const isRemote = (callee: string | null) =>
-      callee !== null && (remote.has(callee) || [...alchemy].some((a) => callee === `${a}.remote`));
-
+      callee !== null && (remote.has(callee) || Arr.some([...alchemy], (a) => callee === `${a}.remote`));
     nodes(ast, (node) => {
       if (node.type === "VariableDeclarator") {
         const alias = member(node.init);
@@ -402,22 +400,26 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         report(node, "remote override");
       }
 
-      if ([...alchemy].some((a) => callee === `${a}.Stack` || callee === `${a}.localState`)) {
+      if (Arr.some([...alchemy], (a) => callee === `${a}.Stack` || callee === `${a}.localState`)) {
         checkRoot(node.callee);
       }
 
-      const call = callee?.split(".") ?? [];
+      const call = callee === null ? [] : Str.split(callee, ".");
       const first = call[0];
       const imported = first === undefined ? undefined : named.get(first);
 
-      if (first && helpers.has(first)) {
+      if (first !== undefined && first !== "" && helpers.has(first)) {
         report(node, "unsupported-case: unfollowed stack helper");
       }
 
       const parts =
-        first && cloud.has(first) ? call.slice(1) : imported !== undefined ? [imported, ...call.slice(1)] : null;
+        first !== undefined && first !== "" && cloud.has(first)
+          ? call.slice(1)
+          : imported !== undefined
+            ? [imported, ...call.slice(1)]
+            : null;
 
-      if (!parts) {
+      if (parts === null) {
         // Computed Cloudflare calls and aliased constructors must be understood before blocking.
         if (cloudImport(node.callee)) {
           checkRoot(node.callee);
@@ -429,10 +431,9 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
       checkRoot(node.callee);
 
-      if (["Worker", "Workers.Worker"].includes(parts.join("."))) {
+      if (["Worker", "Workers.Worker"].includes(Arr.join(parts, "."))) {
         const props = unwrap(node.arguments[1]);
-        const key = (p: Tree) => (p?.computed ? null : (p?.key?.name ?? p?.key?.value));
-
+        const key = (p: Tree) => (p?.computed === true ? null : (p?.key?.name ?? p?.key?.value));
         const literalKeys = (object: Tree): boolean => {
           if (object?.type !== "ObjectExpression") {
             report(object ?? node, "unsupported-case: class-name bindings are not a literal object");
@@ -477,7 +478,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
             }
           });
 
-          if (contracts.length !== 1 || !contracts[0]) {
+          if (contracts.length !== 1 || contracts[0] === undefined || contracts[0] === null) {
             throw new Error("missing Brain contract");
           }
 
@@ -490,13 +491,17 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
           hostName = host.value;
           const shape = contracts[0].callee?.typeArguments?.params?.[2];
 
-          if (!shape) {
+          if (shape === undefined || shape === null) {
             throw new Error("missing hosted objects");
           }
 
           const types = shape.type === "TSUnionType" ? shape.types : [shape];
           hostedNames = types.map((type: Tree) => {
-            if (type.type !== "TSTypeReference" || type.typeName?.type !== "Identifier" || type.typeArguments) {
+            if (
+              type.type !== "TSTypeReference" ||
+              type.typeName?.type !== "Identifier" ||
+              (type.typeArguments !== undefined && type.typeArguments !== null)
+            ) {
               throw new Error("unsupported host contract");
             }
 
@@ -527,10 +532,12 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
               }
 
               const value = unwrap(binding.value);
-              const called = member(value?.callee)?.split(".") ?? [];
+              const calledName = member(value?.callee);
+              const called = calledName === null ? [] : Str.split(calledName, ".");
               const first = called[0];
               const imported = first === undefined ? undefined : named.get(first);
-              const target = first && cloud.has(first) ? called.slice(1).join(".") : imported;
+              const target =
+                first !== undefined && first !== "" && cloud.has(first) ? Arr.join(called.slice(1), ".") : imported;
 
               if (
                 value?.type === "CallExpression" &&
@@ -555,15 +562,14 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         }
       }
 
-      if (["providers", "localState"].includes(parts.join("."))) {
+      if (["providers", "localState"].includes(Arr.join(parts, "."))) {
         return;
       }
 
       const owner = exported(join(CF, "index.ts"), parts);
 
       if (owner === null) {
-        report(node, `unsupported-case: unknown Cloudflare.${parts.join(".")}`);
-
+        report(node, `unsupported-case: unknown Cloudflare.${Arr.join(parts, ".")}`);
         return;
       }
 
@@ -579,14 +585,14 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         total++;
 
         if (!registered(owner, symbol)) {
-          report(node, `no local provider: Cloudflare.${parts.join(".")}`);
+          report(node, `no local provider: Cloudflare.${Arr.join(parts, ".")}`);
         }
       } else {
         // A binding constructor must actually be exported as such by the installed package.
         const declaration = text(owner);
 
-        if (!/DurableObject|WorkerLoader/.test(symbol) || !declaration.includes(symbol)) {
-          report(node, `unsupported-case: Cloudflare.${parts.join(".")}`);
+        if (!/DurableObject|WorkerLoader/.test(symbol) || !pipe(declaration, Str.includes(symbol))) {
+          report(node, `unsupported-case: Cloudflare.${Arr.join(parts, ".")}`);
         }
       }
     });
@@ -596,7 +602,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         return;
       }
 
-      if (Array.isArray(node)) {
+      if (Arr.isArray(node)) {
         for (const child of node) {
           references(child);
         }
@@ -624,7 +630,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
       // spelling looks like an ordinary direct constructor or decorator call.
       if (
         (node.type === "CallExpression" || node.type === "MemberExpression") &&
-        node.optional &&
+        node.optional === true &&
         (cloudImport(node) ||
           cloudImport(node.callee) ||
           alchemy.has(root(node) ?? "") ||
@@ -633,13 +639,13 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         report(node, "unsupported-case: optional resource or remote call");
       }
 
-      for (const [key, child] of Object.entries(node)) {
+      for (const [key, child] of Rec.toEntries(node)) {
         // The name after a dot, and a literal object's key, are names rather than references.
-        if (node.type === "MemberExpression" && !node.computed && key === "property") {
+        if (node.type === "MemberExpression" && node.computed !== true && key === "property") {
           continue;
         }
 
-        if (node.type === "Property" && !node.computed && key === "key") {
+        if (node.type === "Property" && node.computed !== true && key === "key") {
           continue;
         }
 

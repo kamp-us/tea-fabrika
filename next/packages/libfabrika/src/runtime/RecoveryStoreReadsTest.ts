@@ -11,6 +11,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Schema, type Scope } from "effect";
+import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { property } from "../Testing.test-support.ts";
@@ -44,7 +46,7 @@ const receipt = (letter: string, value: number, pad = ""): Receipt => ({
 const journal = (n: number, receipts: ReadonlyMap<string, number>): Journal => ({
   name: NAME,
   n,
-  receipts: [...receipts].map(([letter, value]) => receipt(letter, value)),
+  receipts: Arr.map([...receipts], ([letter, value]) => receipt(letter, value)),
 });
 
 /** A save the walk sends: the journal, and the value of each receipt it carries. */
@@ -187,9 +189,10 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
 
               // The generated history, and the domain's end, so a failure prints the count at TOP; each
               // through a store that loaded first and one that did not.
-              const runs = [...new Set([kept, TOP])]
-                .sort((a, b) => a - b)
-                .flatMap((history) => [true, false].map((loaded) => ({ history, loaded })));
+              const runs = Arr.flatMap(
+                [...new Set([kept, TOP])].sort((a, b) => a - b),
+                (history) => Arr.map([true, false], (loaded) => ({ history, loaded })),
+              );
 
               for (const { history, loaded } of runs) {
                 const sql = yield* open;
@@ -236,7 +239,9 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                 seen.push(`last save at n=${last.n}: ${last.rows} rows (law: ${last.expected})`);
               }
 
-              expect(wrong, `L5: rows SQL returned during a save, by receipts kept: ${seen.join("; ")}`).toBe(false);
+              expect(wrong, `L5: rows SQL returned during a save, by receipts kept: ${Arr.join(seen, "; ")}`).toBe(
+                false,
+              );
             }),
           { numRuns: runsFor({ fast: 5, full: 50 }) },
         ),
@@ -275,7 +280,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                 }
 
                 // A left-out receipt stays stored, as the runner's old snapshots rely on.
-                return sent(n, new Map([...receipts].filter((_, i) => ((cell.drop >> (i % 30)) & 1) === 0)));
+                return sent(n, new Map(Arr.filter([...receipts], (_, i) => ((cell.drop >> (i % 30)) & 1) === 0)));
               };
 
               const committed = (save: Sent, by: "kept" | "other" = "kept") => {
@@ -305,7 +310,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
               });
 
               const possible = (): ReadonlyArray<Move> =>
-                MOVES.filter((move) =>
+                Arr.filter(MOVES, (move) =>
                   move === "retry" ? failed !== null : move === "again" ? mine.last !== null : true,
                 );
 
@@ -326,7 +331,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
 
                     const saved = {
                       ...save.saved,
-                      receipts: [...save.saved.receipts, receipt("huge", 0, "x".repeat(CAPACITY))],
+                      receipts: [...save.saved.receipts, receipt("huge", 0, Str.repeat(CAPACITY)("x"))],
                     };
 
                     expect(yield* both(saved, kept.save(saved)), "L6: a save past capacity is refused").toBe(false);
@@ -406,7 +411,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                     // The journal row is the one this store last wrote, but a receipt under it is not.
                     if (
                       save.n === world.n &&
-                      [...save.values].some(([letter, v]) => world.receipts.get(letter) !== v)
+                      Arr.some([...save.values], ([letter, v]) => world.receipts.get(letter) !== v)
                     ) {
                       done.add("again_over_other");
                     }
@@ -472,7 +477,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
             Effect.gen(function* () {
               const sql = yield* open;
               const { sql: watched, writes } = writing(sql);
-              const saved = journal(n, new Map(values.map((value, i): [string, number] => [`l-${i}`, value])));
+              const saved = journal(n, new Map(Arr.map(values, (value, i): [string, number] => [`l-${i}`, value])));
               const first = store(watched);
               yield* first.save(saved).pipe(Effect.orDie);
               const before = rows(sql);

@@ -6,9 +6,12 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { brainOutbox } from "./local-dev.ts";
 
@@ -48,7 +51,7 @@ const disk = (calls: Partial<FileSystem.FileSystem>) => Layer.merge(FileSystem.l
 
 const fails = <A>(failure: unknown) => Effect.fail(failure as never) as Effect.Effect<A, never>;
 
-const pendingFile = (path: string) => path.endsWith("brain.pending.jsonl");
+const pendingFile = (path: string) => Function.pipe(path, Str.endsWith("brain.pending.jsonl"));
 
 type Read = "exists" | "read" | "decode";
 

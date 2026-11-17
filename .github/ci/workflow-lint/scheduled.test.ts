@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -98,7 +99,7 @@ const scheduled = fc
     w.jobs["changed"]!.strategy!["max-parallel"] = most;
     step(w, "select", "set").env!["MOST"] = most;
 
-    for (const job of Object.values(w.jobs)) {
+    for (const job of Rec.values(w.jobs)) {
       if ("if" in job) {
         job["if"] = spaced(job["if"], gap);
       }
@@ -918,7 +919,7 @@ it("SC1 and SC16 property: a cron at any minute from 1 to 59 every hour, and any
     options,
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
 });

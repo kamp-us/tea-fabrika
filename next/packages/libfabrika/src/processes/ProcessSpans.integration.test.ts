@@ -1,8 +1,19 @@
 // P33 extends p97/p99 through P37's real SQLite sink and JobRecords.
 // Raw process failure text may be content. It must never become tags or measurements data.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Layer, Redacted, Schema, Stream, Tracer } from "effect";
-import { TestClock } from "effect/testing";
+import * as Arbitrary from "effect/Arbitrary";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
+
 import * as Id from "../Id.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
@@ -49,7 +60,12 @@ const nat = (max: number) =>
   );
 
 const date = Arbitrary.schema(
-  Schema.Date.check(Schema.isBetweenDate({ minimum: new Date("1900-01-01"), maximum: new Date("2100-01-01") })),
+  Schema.Date.check(
+    Schema.isBetweenDate({
+      minimum: DateTime.toDateUtc(DateTime.makeUnsafe("1900-01-01")),
+      maximum: DateTime.toDateUtc(DateTime.makeUnsafe("2100-01-01")),
+    }),
+  ),
 ).pipe(Arbitrary.map((date) => date.toISOString()));
 
 const capture = () => {
@@ -108,7 +124,7 @@ const leakFree = (rows: ReadonlyArray<SpanRow>, marks: ReadonlyArray<string>) =>
       expect(text, row.name).not.toContain(mark);
     }
 
-    for (const value of Object.values(row.attributes)) {
+    for (const value of Rec.values(row.attributes)) {
       if (typeof value === "string") {
         expect(value.length, row.name).toBeLessThanOrEqual(128);
       }
@@ -153,9 +169,9 @@ describe("p97, process calls", () => {
         }
 
         const refusal = trace.ended("process.start")[2]!;
-        expect([...refusal.attributes].find(([key]) => key.endsWith(".reason"))?.[1]).toBe("id_reused");
+        expect([...refusal.attributes].find(([key]) => Str.endsWith(".reason")(key))?.[1]).toBe("id_reused");
         expect(trace.ended("process.start")[0]!.attributes.get("fab.process")).toBe(A);
-        expect([...trace.ended("process.start")[0]!.attributes].find(([key]) => key.endsWith(".rev"))?.[1]).toBe(
+        expect([...trace.ended("process.start")[0]!.attributes].find(([key]) => Str.endsWith(".rev")(key))?.[1]).toBe(
           placed.rev,
         );
         expect(trace.ended("process.exit")[0]!.attributes.get("fab.process")).toBe(A);
@@ -190,11 +206,11 @@ describe("p97, process calls", () => {
         expect(old.filter((row) => row.name === "process.exit")).toHaveLength(1);
         expect(replacement.filter((row) => row.name === "process.start")).toHaveLength(1);
         expect(
-          old.filter((row) => row.name.startsWith("process.")).every((row) => row.attributes["fab.process"] === A),
+          old.filter((row) => Str.startsWith("process.")(row.name)).every((row) => row.attributes["fab.process"] === A),
         ).toBe(true);
         expect(
           replacement
-            .filter((row) => row.name.startsWith("process."))
+            .filter((row) => Str.startsWith("process.")(row.name))
             .every((row) => row.attributes["fab.process"] === B),
         ).toBe(true);
         expect(world.parts.has(`job/${A}/0`)).toBe(true);
@@ -239,7 +255,7 @@ describe("p97, process calls", () => {
 
           expect(measurements).toHaveLength(1);
           expect(measurements[0]?.["lag"]).toBe(lag);
-        }).pipe(Effect.provide(world.layer), Effect.provide(TestClock.layer()));
+        }).pipe(Effect.provide(world.layer.pipe(Layer.provideMerge(TestClock.layer()))));
       },
     ),
     options,
@@ -283,7 +299,7 @@ describe("p99, process content stays out of span tags and measurements", () => {
         expect(rows.some((row) => row.name === "process.receive")).toBe(true);
         expect(rows.some((row) => row.name === "process.exit" && !row.ok)).toBe(true);
         leakFree(rows, [MESSAGE, SECRET, "SQLITE_FULL planted after an earlier write"]);
-        const measurements = JSON.stringify(world.sink.db().prepare("SELECT * FROM measurements").all());
+        const measurements = Formatter.formatJson(world.sink.db().prepare("SELECT * FROM measurements").all());
 
         for (const mark of [MESSAGE, SECRET, "SQLITE_FULL planted after an earlier write"]) {
           expect(measurements).not.toContain(mark);

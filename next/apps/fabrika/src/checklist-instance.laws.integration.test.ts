@@ -37,7 +37,20 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import { tezgah } from "@kampus/tezgah";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Schema } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Cause,
+  DateTime,
+  Effect,
+  Exit,
+  Formatter,
+  Option,
+  Schema,
+  Duration,
+  Fiber,
+} from "effect";
+
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -166,7 +179,14 @@ type Entry = {
   object: ReturnType<typeof processObject>;
   readonly db: DatabaseSync;
   readonly ctx: DurableObjectState;
-  timer: ReturnType<typeof setTimeout> | undefined;
+  timer: Fiber.Fiber<void> | undefined;
+};
+
+/** Cancels a pending alarm the way clearTimeout did: the interrupt lands before this returns. */
+const cancel = (timer: Fiber.Fiber<void> | undefined) => {
+  if (timer !== undefined) {
+    Effect.runFork(Fiber.interrupt(timer));
+  }
 };
 
 /** What a client was sent, and what each Process published for it, in order. */
@@ -236,7 +256,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
 
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but lack workerd's nominal brands
       const env = {
-        INSTANCE: JSON.stringify(
+        INSTANCE: Formatter.formatJson(
           yield* RecordWireTest.settingsFixture({
             name: "project-test",
             person: PERSON,
@@ -274,14 +294,17 @@ const world = (options: { readonly lacks?: string } = {}) =>
                   return;
                 }
 
-                clearTimeout(entry.timer);
+                cancel(entry.timer);
 
                 if (at !== null && !closed) {
-                  entry.timer = setTimeout(
-                    () => {
-                      entry!.object.call("alarm", []).catch(() => {});
-                    },
-                    Math.max(0, at - Date.now()),
+                  entry.timer = Effect.runFork(
+                    Effect.sleep(Duration.millis(Math.max(0, at - DateTime.toEpochMillis(DateTime.nowUnsafe())))).pipe(
+                      Effect.andThen(
+                        Effect.sync(() => {
+                          entry!.object.call("alarm", []).catch(() => {});
+                        }),
+                      ),
+                    ),
                   );
                 }
               });
@@ -342,9 +365,9 @@ const world = (options: { readonly lacks?: string } = {}) =>
           get: (id: string) => ({
             getEntrypoint: () => {
               const Box = programBox(
-                id.startsWith(`${CODE.checklist.hash}/`)
+                Str.startsWith(`${CODE.checklist.hash}/`)(id)
                   ? checklist
-                  : id.startsWith(`${CODE.tezgah.hash}/`)
+                  : Str.startsWith(`${CODE.tezgah.hash}/`)(id)
                     ? tezgah
                     : counter,
                 id,
@@ -389,7 +412,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
           closed = true;
 
           for (const p of processes.values()) {
-            clearTimeout(p.timer);
+            cancel(p.timer);
             await p.object.runtime.dispose();
             p.db.close();
           }
@@ -415,7 +438,7 @@ const placings = (w: World) =>
     BOOT,
     (name) =>
       call(w, (p) => p.read(`processes/${name}`, 0, "audit")).pipe(
-        Effect.map((entries) => entries.filter(Schema.is(Started)).map((e) => e.body.process)),
+        Effect.map((entries) => Arr.map(Arr.filter(entries, Schema.is(Started)), (e) => e.body.process)),
       ),
     { concurrency: 1 },
   );
@@ -452,7 +475,7 @@ const admit = (w: World) =>
     return client;
   });
 
-const settle = Effect.promise(() => new Promise<void>((done) => setTimeout(done, 50)));
+const settle = Effect.sleep("50 millis");
 
 describe("L21: the boot list", () => {
   it("each entry starts once, in order; a reopen starts none again and reads each entry's first placing", async () => {
@@ -468,11 +491,11 @@ describe("L21: the boot list", () => {
                 expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit())), "the boot failed").toBe(true);
                 yield* Effect.promise(() => vi.waitFor(() => expect(w.startsPending()).toBe(0), { timeout: 2_000 }));
                 expect(
-                  w.configured.map((d) => d.name),
+                  Arr.map(w.configured, (d) => d.name),
                   "the boot list started once each, in order",
                 ).toEqual([...BOOT]);
                 const first = yield* placings(w);
-                expect(first.map((p) => p.length)).toEqual([1, 1, 1]);
+                expect(Arr.map(first, (p) => p.length)).toEqual([1, 1, 1]);
                 const live = new Set(first.flat());
                 const client = yield* admit(w);
 
@@ -561,8 +584,7 @@ describe("L13: notices name their process", () => {
             Effect.gen(function* () {
               const w = yield* world();
               expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
-
-              const [, [pid]] = Schema.decodeUnknownSync(
+              const [, [pid]] = yield* Schema.decodeUnknownEffect(
                 Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String), Schema.Array(Schema.String)]),
               )(yield* placings(w));
 
@@ -571,7 +593,10 @@ describe("L13: notices name their process", () => {
               let model = checklistMachine.init(null, {})[0];
 
               for (const [n] of names.entries()) {
-                const name = names.filter((candidate) => !model.items.some((item) => item.name === candidate))[0]!;
+                const name = Arr.filter(
+                  names,
+                  (candidate) => !Arr.some(model.items, (item) => item.name === candidate),
+                )[0]!;
                 const msg = { type: "add" as const, name };
 
                 const answer = yield* call(w, (p) =>
@@ -592,21 +617,20 @@ describe("L13: notices name their process", () => {
                 yield* settle;
                 const late = yield* admit(w);
                 const opened = yield* call(w, (p) => p.route(late, "view.open", { pid }));
-
-                const { result } = Schema.decodeUnknownSync(
+                const { result } = yield* Schema.decodeUnknownEffect(
                   Schema.Struct({ result: Schema.Struct({ rev: Schema.Int, view: checklistView }) }),
                 )(opened);
 
                 // Ticket 866 saves wake 0 and delivers timer {at: 0}. That is a requested wake,
                 // not today's time: an item added just now must not already be a day old.
                 expect(
-                  result.view.items.find((item) => item.name === name)?.state,
+                  Option.getOrUndefined(Arr.findFirst(result.view.items, (item) => item.name === name))?.state,
                   "a fresh item's immediate wake leaves it open, never late",
                 ).toBe("open");
                 expect(
-                  result.view.items.map((item) => item.name),
+                  Arr.map(result.view.items, (item) => item.name),
                   "a late subscriber gets the current view",
-                ).toEqual(model.items.map((item) => item.name));
+                ).toEqual(Arr.map(model.items, (item) => item.name));
               }
             }),
           ),
@@ -635,8 +659,7 @@ describe("L13: notices name their process", () => {
               Effect.gen(function* () {
                 const w = yield* world();
                 expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
-
-                const [, [pid]] = Schema.decodeUnknownSync(
+                const [, [pid]] = yield* Schema.decodeUnknownEffect(
                   Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String), Schema.Array(Schema.String)]),
                 )(yield* placings(w));
 
@@ -658,7 +681,7 @@ describe("L13: notices name their process", () => {
                       ? []
                       : [
                           { type: "add", name: held },
-                          { type: items.get(held) ? "uncheck" : "check", name: held },
+                          { type: items.get(held) === true ? "uncheck" : "check", name: held },
                           { type: "remove", name: held },
                         ]),
                   ];
@@ -675,8 +698,7 @@ describe("L13: notices name their process", () => {
                         seen: 0,
                       }),
                     );
-
-                    const refused = JSON.stringify(answer).includes('"refused"');
+                    const refused = Str.includes('"refused"')(Formatter.formatJson(answer));
                     seen.refused += refused ? 1 : 0;
 
                     if (!refused) {
@@ -694,19 +716,19 @@ describe("L13: notices name their process", () => {
                 }
 
                 yield* settle;
-                const views = w.heard.filter((h) => Schema.is(Notice)(h.news));
-                const theirs = w.published.filter((h) => Reflect.get(Object(h.news), "type") !== undefined);
+                const views = Arr.filter(w.heard, (h) => Schema.is(Notice)(h.news));
+                const theirs = Arr.filter(w.published, (h) => Reflect.get(Object(h.news), "type") !== undefined);
                 expect(views.length, "the client heard the checklist's views").toBeGreaterThan(0);
                 expect(views.length).toBe(theirs.length);
 
                 for (const [i, h] of views.entries()) {
-                  const news = Schema.decodeUnknownSync(Notice)(h.news);
+                  const news = yield* Schema.decodeUnknownEffect(Notice)(h.news);
                   expect(news.params.pid, "a notice names its process").toBe(pid);
                   expect(without(news.params), "the update reached the client unchanged").toEqual(
                     without(Object(theirs[i]!.news)),
                   );
                   seen[news.method === "view.whole" ? "whole" : "patch"]++;
-                  seen.arrays += JSON.stringify(news.params).includes('"/items/') ? 1 : 0;
+                  seen.arrays += Str.includes('"/items/')(Formatter.formatJson(news.params)) ? 1 : 0;
                 }
               }),
             ),

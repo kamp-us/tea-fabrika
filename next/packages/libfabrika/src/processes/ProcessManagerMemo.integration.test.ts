@@ -3,7 +3,8 @@
 // build kept for a whole history; a fresh one is built for a single call and folds from rev 0.
 // `storage()` reopens real SQLite files (Process.test-support.ts), so it is `.integration.` (0584).
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Layer } from "effect";
+import { Cause, Effect, Exit, Layer, Predicate } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -143,7 +144,7 @@ const answer = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<Answer> =>
     if (Exit.isSuccess(exit)) {
       const value: unknown = exit.value;
 
-      if (typeof value === "object" && value !== null && Object.hasOwn(value, "at")) {
+      if (Predicate.isObject(value) && Rec.has(value, "at")) {
         const { at: _at, ...rest } = value as { readonly at: unknown };
 
         return { ok: rest };
@@ -230,7 +231,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, law: (a: A) => Effect.Effect<void,
     const context = yield* Effect.context<R>();
     yield* Effect.promise(() =>
       fc.assert(
-        fc.asyncProperty(arb, (a) => Effect.runPromise(law(a).pipe(Effect.provideContext(context)))),
+        fc.asyncProperty(arb, (a) => Effect.runPromiseWith(context)(law(a))),
         { seed: 119120, numRuns: 100, includeErrorInReport: true },
       ),
     );

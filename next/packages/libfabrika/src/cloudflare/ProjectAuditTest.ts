@@ -1,10 +1,12 @@
 // P13 slice 2, next/. Project audit laws take scoped storage and RPC handles from their driver (0062).
 import { Machine } from "@demlik/tea/effect";
-import { Effect, Layer, Schema, type Scope, Stream } from "effect";
+import { Effect, Layer, Schema, type Scope, Stream, Formatter } from "effect";
+
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Signature from "effect/crypto/Signature";
 import * as Base64Url from "effect/encoding/Base64Url";
+
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
 import { InputId } from "../Id.ts";
@@ -19,6 +21,7 @@ import * as StartsTest from "../settings/StartsTest.ts";
 import type { Sql } from "../Sql.ts";
 import * as PublicKey from "../transport/PublicKey.ts";
 import { writeSshsig } from "../transport/Sshsig.ts";
+
 import { programBox } from "./box.ts";
 import { ProjectService, projectLayer, type ProjectOptions } from "./runtime.ts";
 import { Props, receive } from "./tail.ts";
@@ -222,7 +225,7 @@ const projectWalk = Effect.fnUntraced(function* (
     Effect.provide(
       projectLayer(
         ctx,
-        { ...env, INSTANCE: JSON.stringify(instance) },
+        { ...env, INSTANCE: Formatter.formatJson(instance) },
         {
           programs: { [PROGRAM]: CODE },
           bootstrap: [{ name: NAME, id: "project-start", program: PROGRAM }],
@@ -295,9 +298,11 @@ const projectWalk = Effect.fnUntraced(function* (
 
     if (usage) {
       const key = `${CODE.hash}/${project.boot.process}`;
-      const loaded = Schema.decodeUnknownSync(Schema.Struct({ tails: Schema.Array(Schema.Unknown) }))(loads.get(key));
+      const loaded = yield* Schema.decodeUnknownEffect(Schema.Struct({ tails: Schema.Array(Schema.Unknown) }))(
+        loads.get(key),
+      );
       expect(loaded.tails).toHaveLength(1);
-      const props = Schema.decodeUnknownSync(Props)(bound.get(loaded.tails[0]));
+      const props = yield* Schema.decodeUnknownEffect(Props)(bound.get(loaded.tails[0]));
       expect(props).toEqual({ project: "p13-project", name: NAME, process: project.boot.process });
       const cpuMs = accepted + (entropy % 100);
       const wallMs = cpuMs + 1;
@@ -319,7 +324,7 @@ const projectWalk = Effect.fnUntraced(function* (
       ]);
       expect(reported.slice(before)).toEqual([
         {
-          object: JSON.stringify(["p13-project", NAME]),
+          object: Formatter.formatJson(["p13-project", NAME]),
           rows: [{ process: project.boot.process, method: "audit", outcome: "ok", cpuMs, wallMs }],
         },
       ]);
@@ -335,7 +340,7 @@ const projectWalk = Effect.fnUntraced(function* (
     }
 
     if (selector !== "plain") {
-      const binding = Schema.decodeUnknownSync(Schema.Struct({ id: InputId }))(
+      const binding = yield* Schema.decodeUnknownEffect(Schema.Struct({ id: InputId }))(
         sql.exec("SELECT id FROM gateway_bindings WHERE letter=?", `${project.boot.process}/${letter}`)[0],
       );
 
@@ -348,7 +353,7 @@ const projectWalk = Effect.fnUntraced(function* (
       if (prior !== undefined) {
         expect(rows).toEqual(records.get(letter));
       } else {
-        const recorded = Schema.decodeUnknownSync(Recorded)(rows.at(0)?.body);
+        const recorded = yield* Schema.decodeUnknownEffect(Recorded)(rows.at(0)?.body);
 
         if (move === "valid") {
           expect(recorded.input).toEqual(

@@ -46,6 +46,7 @@
 // whether an example compiles, and a name sent on under a new binding (`const b = a; export { b }`),
 // which is asked for its block at `b`.
 import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
+import { Array as Arr, pipe, Option } from "effect";
 import {
   buildTags,
   type DocScope,
@@ -104,11 +105,14 @@ const withSince = (found: ReadonlyArray<JSDocDiagnostic>, block: JSDocBlock, sin
   const kept =
     since === "required"
       ? found
-      : found.filter((d) => d.code !== "invalid-since" && !(d.code === "missing-tag" && d.message.endsWith("@since")));
+      : Arr.filter(
+          found,
+          (d) => d.code !== "invalid-since" && !(d.code === "missing-tag" && d.message.endsWith("@since")),
+        );
 
-  const messages = kept.map((d) => d.message);
+  const messages = Arr.map(kept, (d) => d.message);
 
-  if (since === "absent" && block.tags.some((tag) => tag.name === "since")) {
+  if (since === "absent" && Arr.some(block.tags, (tag) => tag.name === "since")) {
     messages.push("@since is not written until libfabrika's first release (0118)");
   }
 
@@ -160,16 +164,16 @@ const literalsIn = (type: Node | null | undefined): ReadonlyArray<ReadonlyArray<
       return [type.members];
     case "TSUnionType":
     case "TSIntersectionType":
-      return type.types.flatMap(literalsIn);
+      return Arr.flatMap(type.types, literalsIn);
     case "TSParenthesizedType":
     case "TSTypeOperator":
       return literalsIn(type.typeAnnotation);
     case "TSArrayType":
       return literalsIn(type.elementType);
     case "TSConditionalType":
-      return [type.checkType, type.extendsType, type.trueType, type.falseType].flatMap(literalsIn);
+      return Arr.flatMap([type.checkType, type.extendsType, type.trueType, type.falseType], literalsIn);
     case "TSTypeReference":
-      return type.typeArguments?.params.flatMap(literalsIn) ?? [];
+      return type.typeArguments == null ? [] : Arr.flatMap(type.typeArguments.params, literalsIn);
     case "TSMappedType":
       return literalsIn(type.typeAnnotation);
     default:
@@ -206,7 +210,7 @@ const membersOf = (declaration: Node): ReadonlyArray<ReadonlyArray<Node>> => {
     case "TSTypeAliasDeclaration":
       return literalsIn(declaration.typeAnnotation);
     case "VariableDeclaration":
-      return declaration.declarations.flatMap((d) => literalsIn(d.id.typeAnnotation));
+      return Arr.flatMap(declaration.declarations, (d) => literalsIn(d.id.typeAnnotation));
     case "FunctionDeclaration":
     case "TSDeclareFunction":
       return literalsIn(declaration.returnType);
@@ -242,7 +246,11 @@ const nameOfMember = (member: Node, source: Context["sourceCode"]): string =>
 const declarationName = (declaration: Node, source: Context["sourceCode"]): string => {
   switch (declaration.type) {
     case "VariableDeclaration":
-      return declaration.declarations.map((d) => bindingName(d.id, source)).join(", ");
+      return pipe(
+        declaration.declarations,
+        Arr.map((d) => bindingName(d.id, source)),
+        Arr.join(", "),
+      );
     case "FunctionDeclaration":
     case "TSDeclareFunction":
     case "ClassDeclaration":
@@ -261,7 +269,7 @@ const consts = (statement: Node | undefined): ReadonlySet<string> =>
   statement?.type === "ExportNamedDeclaration" &&
   statement.declaration?.type === "VariableDeclaration" &&
   statement.declaration.kind === "const"
-    ? new Set(statement.declaration.declarations.flatMap((d) => (d.id.type === "Identifier" ? [d.id.name] : [])))
+    ? new Set(Arr.flatMap(statement.declaration.declarations, (d) => (d.id.type === "Identifier" ? [d.id.name] : [])))
     : new Set();
 
 export const jsdocs: CreateRule = {
@@ -281,12 +289,13 @@ export const jsdocs: CreateRule = {
     const since = sinceOf(context.options);
 
     /** The last `/** *\/` right before a node, the block Effect's checker reads for it. */
-    const docBefore = (node: Node): Comment | undefined => source.getCommentsBefore(node).findLast(isDoc);
+    const docBefore = (node: Node): Comment | undefined =>
+      Option.getOrUndefined(Arr.findLast(source.getCommentsBefore(node), isDoc));
 
     /** Every problem of these members, depth first, named. A member whose block fails is not entered. */
     const memberProblems = (lists: ReadonlyArray<ReadonlyArray<Node>>): ReadonlyArray<string> =>
-      lists.flatMap((members) =>
-        members.flatMap((member) => {
+      Arr.flatMap(lists, (members) =>
+        Arr.flatMap(members, (member) => {
           if (!isReadMember(member)) {
             return [];
           }
@@ -304,7 +313,7 @@ export const jsdocs: CreateRule = {
           }
 
           const name = nameOfMember(member, source);
-          const own = problems.map((p) => `member \`${name}\`: ${p}`);
+          const own = Arr.map(problems, (p) => `member \`${name}\`: ${p}`);
 
           return problems.length > 0 ? own : memberProblems(literalsIn(memberType(member)));
         }),
@@ -345,7 +354,7 @@ export const jsdocs: CreateRule = {
       if (all.length > 0) {
         context.report({
           node,
-          message: `\`${name}\`'s doc block is out of Effect's shape (E6, 0023): ${all.join("; ")}.`,
+          message: `\`${name}\`'s doc block is out of Effect's shape (E6, 0023): ${Arr.join(all, "; ")}.`,
         });
 
         return "reported";
@@ -391,7 +400,7 @@ export const jsdocs: CreateRule = {
         const overloads = new Set<string>();
         let checked = 0;
 
-        program.body.forEach((statement, index) => {
+        Arr.forEach(program.body, (statement, index) => {
           if (statement.type === "ExportAllDeclaration") {
             if (statement.exported !== null) {
               const named = check(statement, exportedName(statement.exported), "namespace", {
@@ -468,10 +477,10 @@ export const jsdocs: CreateRule = {
     function checkModule(program: ESTree.Program) {
       const [first] = program.body;
       const leading = first === undefined ? program.comments : source.getCommentsBefore(first);
-      const head = leading.find((comment) => comment.type !== "Line");
-      const docs = leading.filter(isDoc);
+      const head = Arr.findFirst(leading, (comment) => comment.type !== "Line");
+      const docs = Arr.filter(leading, isDoc);
       const own = first !== undefined && first.type !== "ImportDeclaration" && docs.length === 1;
-      const block = head !== undefined && isDoc(head) && !own ? head : undefined;
+      const block = Option.isSome(head) && isDoc(head.value) && !own ? head.value : undefined;
 
       if (block === undefined) {
         context.report({
@@ -501,7 +510,7 @@ export const jsdocs: CreateRule = {
       if (problems.length > 0) {
         context.report({
           node: block,
-          message: `The module block is out of Effect's shape (E6, 0023): ${problems.join("; ")}.`,
+          message: `The module block is out of Effect's shape (E6, 0023): ${Arr.join(problems, "; ")}.`,
         });
       }
     }

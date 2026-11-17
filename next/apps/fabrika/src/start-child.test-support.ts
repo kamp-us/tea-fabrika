@@ -16,10 +16,12 @@ import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path, Schema, Array as Arr, String as Str, Formatter } from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import { programs } from "virtual:fabrika-built";
 import { build } from "./build.ts";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -36,44 +38,31 @@ export const PROJECT = "p42-children";
 export type Key = SshsigTest.Identity;
 
 /** Asks the host for a child on `start`, and keeps every answer it was told. */
-const starterSource = [
-  'import {Machine} from "@demlik/tea/effect";',
-  'import {Schema} from "effect";',
-  'import {startChild} from "@kampus/libfabrika/runtime/StartChild";',
-  "const Model = Schema.Struct({asked: Schema.Int, told: Schema.Array(Schema.Json)});",
-  'const Msg = Schema.Struct({type: Schema.Literal("start"), program: Schema.String, name: Schema.String, input: Schema.optionalKey(Schema.Json)});',
-  "const machine = Machine.make({model: Model, msg: Msg, cmds: [startChild], init: (loaded) => [loaded ?? {asked: 0, told: []}, []], update: {start: (s, m) => [{...s, asked: s.asked + 1}, [startChild({program: m.program, name: m.name, ...(m.input === undefined ? {} : {input: m.input})})]], start_child_ok: (s, m) => [{...s, told: [...s.told, m.value]}, []], start_child_err: (s, m) => [{...s, told: [...s.told, m.reason]}, []]}});",
-  'export const program = {name: "p42/starter", machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {start: {_tag: "write", schema: Msg, description: "Start a child", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};',
-].join("\n");
+const starterSource = Arr.join(
+  [
+    'import {Machine} from "@demlik/tea/effect";',
+    'import {Schema} from "effect";',
+    'import {startChild} from "@kampus/libfabrika/runtime/StartChild";',
+    "const Model = Schema.Struct({asked: Schema.Int, told: Schema.Array(Schema.Json)});",
+    'const Msg = Schema.Struct({type: Schema.Literal("start"), program: Schema.String, name: Schema.String, input: Schema.optionalKey(Schema.Json)});',
+    "const machine = Machine.make({model: Model, msg: Msg, cmds: [startChild], init: (loaded) => [loaded ?? {asked: 0, told: []}, []], update: {start: (s, m) => [{...s, asked: s.asked + 1}, [startChild({program: m.program, name: m.name, ...(m.input === undefined ? {} : {input: m.input})})]], start_child_ok: (s, m) => [{...s, told: [...s.told, m.value]}, []], start_child_err: (s, m) => [{...s, told: [...s.told, m.reason]}, []]}});",
+    'export const program = {name: "p42/starter", machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {start: {_tag: "write", schema: Msg, description: "Start a child", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};',
+  ],
+  "\n",
+);
 
 /** Counts `inc` and throws on `throw`: the supervision the boot's child has must restart it. */
-const childSource = [
-  'import {Machine} from "@demlik/tea/effect";',
-  'import {Schema} from "effect";',
-  "const Model = Schema.Struct({count: Schema.Int});",
-  'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("inc")})]);',
-  'const machine = Machine.make({model: Model, msg: Msg, cmds: [], init: (loaded) => [loaded ?? {count: 0}, []], update: {throw: () => {throw new TypeError("child failure P42");}, inc: (s) => [{count: s.count + 1}, []]}});',
-  'export const program = {name: "p42/child", maxDeliveries: 2, machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {throw: {_tag: "write", schema: Msg, description: "Fail", personOnly: false}, inc: {_tag: "write", schema: Msg, description: "Count", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};',
-].join("\n");
-
-/** Sets one env value for the scope; the release puts the old value back, or deletes it when unset. */
-const env = (key: string, value: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const old = process.env[key];
-      process.env[key] = value;
-
-      return old;
-    }),
-    (old) =>
-      Effect.sync(() => {
-        if (old === undefined) {
-          delete process.env[key];
-        } else {
-          process.env[key] = old;
-        }
-      }),
-  );
+const childSource = Arr.join(
+  [
+    'import {Machine} from "@demlik/tea/effect";',
+    'import {Schema} from "effect";',
+    "const Model = Schema.Struct({count: Schema.Int});",
+    'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("inc")})]);',
+    'const machine = Machine.make({model: Model, msg: Msg, cmds: [], init: (loaded) => [loaded ?? {count: 0}, []], update: {throw: () => {throw new TypeError("child failure P42");}, inc: (s) => [{count: s.count + 1}, []]}});',
+    'export const program = {name: "p42/child", maxDeliveries: 2, machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {throw: {_tag: "write", schema: Msg, description: "Fail", personOnly: false}, inc: {_tag: "write", schema: Msg, description: "Count", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};',
+  ],
+  "\n",
+);
 
 /**
  * One home with both test programs built in and `starts` as its start grants, and a way to boot it.
@@ -85,10 +74,10 @@ export const childHome = Effect.fnUntraced(
   function* (starts: ReadonlyArray<{ readonly source: string; readonly to: string }>) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    yield* env("DO_NOT_TRACK", "1");
+    yield* Effect.sync(noTracking);
     // A short home: a socket path has a 103-byte limit.
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "p42w-" });
-    yield* env("FABRIKA_HOME", home);
+    yield* scopedEnv({ FABRIKA_HOME: home });
     yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
     yield* fs.writeFileString(path.join(home, "starter.ts"), starterSource);
     yield* fs.writeFileString(path.join(home, "child.ts"), childSource);
@@ -226,7 +215,7 @@ export const childProject = Effect.fnUntraced(function* () {
     sql: {
       exec: (query: string, ...params: Array<string | number | null>) => {
         // Keep each occurrence, including repeated reads before and after the write turn.
-        observe(query.replace(/\s+/g, " ").trim());
+        observe(Str.trim(Str.replace(/\s+/g, " ")(query)));
 
         const process = typeof params[0] === "string" ? params[0] : undefined;
 
@@ -243,7 +232,7 @@ export const childProject = Effect.fnUntraced(function* () {
         } else if (/INSERT INTO entries/.test(query)) {
           if (params[12] === "exited") {
             trip("exit_write");
-          } else if (params[12] === "send" && String(params[13]).includes('"DOWN"')) {
+          } else if (params[12] === "send" && Str.includes('"DOWN"')(String(params[13]))) {
             trip("down");
           } else if (params[12] === "demonitored") {
             trip("watch_cleanup");
@@ -288,7 +277,7 @@ export const childProject = Effect.fnUntraced(function* () {
 
   // oxlint-disable-next-line fabrika/no-type-assertions -- only platform transports are supplied; authority, ledger and start logic are real
   const env = {
-    INSTANCE: JSON.stringify(
+    INSTANCE: Formatter.formatJson(
       yield* RecordWireTest.settingsFixture({
         name: PROJECT,
         person: PERSON,
@@ -362,7 +351,7 @@ export const childProject = Effect.fnUntraced(function* () {
             remote(
               Effect.sync(() => ({
                 // The loader keys an isolate by `<hash>/<process>`, so the hash says which program it holds.
-                name: id.startsWith(`${programs["p42/child"]?.hash}/`) ? "p42/child" : "fabrika/counter",
+                name: Str.startsWith(`${programs["p42/child"]?.hash}/`)(id) ? "p42/child" : "fabrika/counter",
                 v: 1,
                 writes: {},
                 inputs: { inc: { write: true, personOnly: false } },
@@ -425,11 +414,9 @@ export const childProject = Effect.fnUntraced(function* () {
         ),
       ),
     rows: () =>
-      sql
-        .exec("SELECT name FROM sqlite_master WHERE type='table'")
-        .flatMap(({ name }) =>
-          typeof name === "string" ? sql.exec(`SELECT * FROM "${name.replaceAll('"', '""')}"`) : [],
-        ),
+      Arr.flatMap(sql.exec("SELECT name FROM sqlite_master WHERE type='table'"), ({ name }) =>
+        typeof name === "string" ? sql.exec(`SELECT * FROM "${Str.replaceAll('"', '""')(name)}"`) : [],
+      ),
     observe: (operation?: number, error?: Error) => {
       operations = [];
       observing = true;

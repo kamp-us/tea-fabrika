@@ -109,7 +109,7 @@ const localLimits = () => {
 
   const pinned = packageJson.engines.node;
 
-  if (!process.env.CI && process.versions.node !== pinned) {
+  if ((process.env.CI ?? "") === "" && process.versions.node !== pinned) {
     throw new Error(
       `Local test run refused. Running Node ${process.version}; pinned Node v${pinned}. Use: volta run --node ${pinned} pnpm exec vitest run --maxWorkers=1 <narrow path>`,
     );
@@ -121,7 +121,7 @@ const localLimits = () => {
     return !/[*?[\]{}]/.test(path) && /(?:^|\/)[^/]+\.test\.[cm]?[jt]sx?(?::[\d-]+)?$/.test(path);
   };
 
-  if (!process.env.CI && !(cli.filter.length > 0 && cli.filter.every(narrow))) {
+  if ((process.env.CI ?? "") === "" && !(cli.filter.length > 0 && cli.filter.every(narrow))) {
     const changed = cli.options.changed;
     // The same three sets as Vitest 5.0.5's GitVCSProvider. A net diff loses staged
     // changes canceled in the worktree; two endpoints lose divergent branch changes.

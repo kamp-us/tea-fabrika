@@ -4,15 +4,18 @@
  * it, the signal it sends, and the durable outbox for its lifecycle events.
  */
 import { applyCell } from "@demlik/tea";
+import * as Arr from "effect/Array";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { devLife, type DevState } from "./DevLife.ts";
@@ -263,7 +266,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
     const text = yield* fs.readFileString(file);
 
     return yield* Effect.forEach(
-      text.split("\n").filter(Boolean),
+      Arr.filter(Str.split(text, "\n"), Boolean),
       (row) => Schema.decodeEffect(Schema.fromJsonString(PendingEvent))(row),
       { concurrency: 1 },
     );
@@ -293,13 +296,19 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
   );
 
   const write = (rows: ReadonlyArray<typeof BrainEvent.Type>) =>
-    durableWrite(file, rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""));
+    durableWrite(
+      file,
+      Arr.join(
+        Arr.map(rows, (row) => JSON.stringify(row)),
+        "\n",
+      ) + (rows.length > 0 ? "\n" : ""),
+    );
 
   const last = Effect.fnUntraced(function* () {
-    const pending = (yield* read).filter((event) => event._tag === "started").at(-1);
+    const pending = Arr.last(Arr.filter(yield* read, (event) => event._tag === "started"));
 
-    if (pending !== undefined) {
-      return pending.start;
+    if (Option.isSome(pending)) {
+      return pending.value.start;
     }
 
     return yield* Effect.gen(function* () {
@@ -320,7 +329,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
       return;
     }
 
-    yield* durableWrite(lastFile, JSON.stringify(start));
+    yield* durableWrite(lastFile, Formatter.formatJson(start));
   });
 
   return {
@@ -333,10 +342,10 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
         );
 
         const rows = yield* read;
-        const old = rows.find((row) => row.id === event.id);
+        const old = Arr.findFirst(rows, (row) => row.id === event.id);
 
-        if (old !== undefined) {
-          if (JSON.stringify(old) !== JSON.stringify(event)) {
+        if (Option.isSome(old)) {
+          if (Formatter.formatJson(old.value) !== Formatter.formatJson(event)) {
             return yield* BrainError.make({ reason: "id_reused" });
           }
 

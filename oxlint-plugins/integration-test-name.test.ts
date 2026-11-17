@@ -15,6 +15,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
+import { Array as Arr, pipe, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -35,7 +36,12 @@ type Spelling = "named" | "renamed" | "namespace";
 /** One import in a spelling: its line, and how the code writes the dotted `name` after it. */
 const from = (module: string, name: string, spelling: Spelling, alias: string) => {
   const [head = name, ...rest] = name.split(".");
-  const tail = rest.map((part) => `.${part}`).join("");
+
+  const tail = pipe(
+    rest,
+    Arr.map((part) => `.${part}`),
+    Arr.join(""),
+  );
 
   switch (spelling) {
     case "named":
@@ -58,23 +64,25 @@ const one = (module: string, name: string, alias: string, line: (ref: string) =>
 
 /** Every starter of 0584's list, in any import spelling; the calls on globals ignore the spelling. */
 const REAL: ReadonlyArray<{ readonly tag: Tag; readonly build: (spelling: Spelling) => Real }> = [
-  ...["spawn", "spawnSync", "exec", "execSync", "execFile", "execFileSync", "fork"].map((name) => ({
+  ...Arr.map(["spawn", "spawnSync", "exec", "execSync", "execFile", "execFileSync", "fork"], (name) => ({
     tag: "process" as const,
     build: one("node:child_process", name, "cp", (ref) => `${ref}("git", ["init"]);`),
   })),
   // Each port starter, called with options and no literal URL, so it opens a socket on this machine.
-  ...Object.entries({
-    "node:net": ["createServer", "createConnection", "connect"],
-    "node:http": ["createServer", "request", "get"],
-    https: ["createServer", "request", "get"],
-    "node:http2": ["createServer", "createSecureServer", "connect"],
-    "node:tls": ["createServer", "connect"],
-    "node:dgram": ["createSocket"],
-  }).flatMap(([module, names]) =>
-    names.map((name) => ({
-      tag: "port" as const,
-      build: one(module, name, "net", (ref) => `const socket = ${ref}(options);`),
-    })),
+  ...Arr.flatMap(
+    Rec.toEntries({
+      "node:net": ["createServer", "createConnection", "connect"],
+      "node:http": ["createServer", "request", "get"],
+      https: ["createServer", "request", "get"],
+      "node:http2": ["createServer", "createSecureServer", "connect"],
+      "node:tls": ["createServer", "connect"],
+      "node:dgram": ["createSocket"],
+    }),
+    ([module, names]) =>
+      Arr.map(names, (name) => ({
+        tag: "port" as const,
+        build: one(module, name, "net", (ref) => `const socket = ${ref}(options);`),
+      })),
   ),
   { tag: "port", build: one("node:net", "Server", "net", (ref) => `new ${ref}().listen(0);`) },
   // A client call to a literal URL on another machine reaches the network.
@@ -82,8 +90,8 @@ const REAL: ReadonlyArray<{ readonly tag: Tag; readonly build: (spelling: Spelli
     tag: "network",
     build: one("node:https", "get", "https", (ref) => `${ref}("https://api.example.com/v1", (res) => res);`),
   },
-  ...["chromium", "firefox", "webkit", "_electron"].flatMap((browser) =>
-    ["launch", "launchPersistentContext", "launchServer"].map((method) => ({
+  ...Arr.flatMap(["chromium", "firefox", "webkit", "_electron"], (browser) =>
+    Arr.map(["launch", "launchPersistentContext", "launchServer"], (method) => ({
       tag: "browser" as const,
       build: one("playwright", `${browser}.${method}`, "pw", (ref) => `await ${ref}({});`),
     })),
@@ -109,21 +117,24 @@ const REAL: ReadonlyArray<{ readonly tag: Tag; readonly build: (spelling: Spelli
     },
   },
   // A spawner's `spawn`, on the service bound by name or written in place, on Node's layer.
-  ...[
-    (service: string) => `const spawner = yield* ${service}; const child = yield* spawner.spawn(command)`,
-    (service: string) => `const child = yield* (yield* ${service}).spawn(command)`,
-  ].map((body) => ({
-    tag: "process" as const,
-    build: (s: Spelling) => {
-      const service = from("effect/process", "ChildProcessSpawner.ChildProcessSpawner", s, "P");
-      const layer = from("@effect/platform-node", "NodeServices.layer", s, "PN");
+  ...Arr.map(
+    [
+      (service: string) => `const spawner = yield* ${service}; const child = yield* spawner.spawn(command)`,
+      (service: string) => `const child = yield* (yield* ${service}).spawn(command)`,
+    ],
+    (body) => ({
+      tag: "process" as const,
+      build: (s: Spelling) => {
+        const service = from("effect/process", "ChildProcessSpawner.ChildProcessSpawner", s, "P");
+        const layer = from("@effect/platform-node", "NodeServices.layer", s, "PN");
 
-      return {
-        imports: [service.line, layer.line],
-        line: `const run = Effect.gen(function* () { ${body(service.ref)}; }).pipe(Effect.provide(${layer.ref}));`,
-      };
-    },
-  })),
+        return {
+          imports: [service.line, layer.line],
+          line: `const run = Effect.gen(function* () { ${body(service.ref)}; }).pipe(Effect.provide(${layer.ref}));`,
+        };
+      },
+    }),
+  ),
   {
     tag: "disk",
     build: one("node:sqlite", "DatabaseSync", "sqlite", (ref) => `const db = new ${ref}(join(home, "ledger.db"));`),
@@ -133,15 +144,18 @@ const REAL: ReadonlyArray<{ readonly tag: Tag; readonly build: (spelling: Spelli
     tag: "disk" as const,
     build: one("@kampus/vitest/TestDatabase", name, "TestDatabase", (ref) => `const db = yield* ${ref}(file);`),
   })),
-  ...[
-    ["node:fs", "mkdtempSync"],
-    ["node:fs", "mkdtemp"],
-    ["node:fs", "promises.mkdtemp"],
-    ["node:fs/promises", "mkdtemp"],
-  ].map(([module = "", name = ""]) => ({
-    tag: "disk" as const,
-    build: one(module, name, "fs", (ref) => `const home = ${ref}("t1073-");`),
-  })),
+  ...Arr.map(
+    [
+      ["node:fs", "mkdtempSync"],
+      ["node:fs", "mkdtemp"],
+      ["node:fs", "promises.mkdtemp"],
+      ["node:fs/promises", "mkdtemp"],
+    ],
+    ([module = "", name = ""]) => ({
+      tag: "disk" as const,
+      build: one(module, name, "fs", (ref) => `const home = ${ref}("t1073-");`),
+    }),
+  ),
   // `fs.promises` through a default import, the one spelling `from` does not write.
   {
     tag: "disk",
@@ -151,8 +165,8 @@ const REAL: ReadonlyArray<{ readonly tag: Tag; readonly build: (spelling: Spelli
     }),
   },
   // Each temp method on a FileSystem service, on each layer that writes disk.
-  ...["makeTempDirectory", "makeTempDirectoryScoped", "makeTempFile", "makeTempFileScoped"].flatMap((method) =>
-    ["NodeServices.layer", "NodeFileSystem.layer"].map((layer) => ({
+  ...Arr.flatMap(["makeTempDirectory", "makeTempDirectoryScoped", "makeTempFile", "makeTempFileScoped"], (method) =>
+    Arr.map(["NodeServices.layer", "NodeFileSystem.layer"], (layer) => ({
       tag: "disk" as const,
       build: (s: Spelling) => {
         const service = from("effect", "FileSystem.FileSystem", s, "E");
@@ -187,7 +201,7 @@ const spelling = fc.constantFrom<Spelling>("named", "renamed", "namespace");
 
 /** The file's text: its imports, then a law body with one line of setup before the line that starts the thing. */
 const fileOf = ({ imports, line }: Real) => ({
-  code: `${[...imports, "async function* law() {", "  const setup = () => 1;", `  ${line}`, "}"].join("\n")}\n`,
+  code: `${Arr.join([...imports, "async function* law() {", "  const setup = () => 1;", `  ${line}`, "}"], "\n")}\n`,
   line: imports.length + 3,
 });
 
@@ -217,7 +231,7 @@ it("K1: every starter fires in a plain next/ test file at its line, in any impor
   }
 
   // Coverage: every kind 0584 names that a call shows is in the list.
-  expect([...new Set(REAL.map((real) => real.tag))].sort()).toEqual([
+  expect([...new Set(Arr.map(REAL, (real) => real.tag))].sort()).toEqual([
     "browser",
     "disk",
     "instance",
@@ -313,7 +327,7 @@ const fires = (paths: readonly string[]) => {
 
   const found = new Map<string, number[]>();
 
-  for (const d of report.diagnostics.filter((each) => each.code === "fabrika(integration-test-name)")) {
+  for (const d of Arr.filter(report.diagnostics, (each) => each.code === "fabrika(integration-test-name)")) {
     found.set(d.filename, [...(found.get(d.filename) ?? []), d.labels[0]!.span.line]);
   }
 
@@ -334,7 +348,7 @@ it("scenario: the repo's .oxlintrc.json wires the rule for next/'s test files", 
     }
 
     const found = fires([relative(root, folder)]);
-    expect(Object.fromEntries(found)).toEqual({ [relative(root, plain)]: [2] });
+    expect(Rec.fromEntries(found)).toEqual({ [relative(root, plain)]: [2] });
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
@@ -344,5 +358,5 @@ it("scenario: next/'s tree is at zero, so the rule blocks from the start (0523)"
   // The real tree is the input. Measured on main before the renames (oxlint-plugins/README.md): 4
   // plain files fired, all 4 start git or write a temp folder, and each was renamed or given a
   // stand-in: 0 false alarms.
-  expect(Object.fromEntries(fires(committed()))).toEqual({});
+  expect(Rec.fromEntries(fires(committed()))).toEqual({});
 });

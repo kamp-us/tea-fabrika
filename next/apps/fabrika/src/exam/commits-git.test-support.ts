@@ -8,6 +8,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { runsFor } from "@kampus/vitest";
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { afterAll, expect } from "vitest";
 import { type Role, signedText } from "./commits.ts";
@@ -40,7 +41,7 @@ const sh = (cwd: string, cmd: string, args: string[], input?: string, env = ENV)
   const ran = spawnSync(cmd, args, { cwd, env, input, encoding: "utf8" });
 
   if (ran.status !== 0) {
-    throw new Error(`${cmd} ${args.join(" ")}: ${ran.stderr}`);
+    throw new Error(`${cmd} ${Arr.join(args, " ")}: ${ran.stderr}`);
   }
 
   return ran.stdout;
@@ -59,20 +60,17 @@ for (const signer of ["tests", "build", "lead", "stranger", "person"]) {
 sh(KEYS, "ssh-keygen", ["-q", "-t", "ecdsa", "-N", "", "-C", "ecdsa", "-f", join(KEYS, "ecdsa")]);
 
 const pub = (signer: string) =>
-  readFileSync(join(KEYS, `${signer}.pub`), "utf8")
-    .split(" ")
-    .slice(0, 2)
-    .join(" ");
+  Arr.join(Str.split(readFileSync(join(KEYS, `${signer}.pub`), "utf8"), " ").slice(0, 2), " ");
 
 /** A key's fingerprint, as `ssh-keygen -l` prints it and a note's `key` holds it. */
 const fingerprint = (signer: string) =>
   // oxlint-disable-next-line typescript/no-non-null-assertion -- Moved test setup reads ssh-keygen's fixed output after checking its exit code.
-  sh(KEYS, "ssh-keygen", ["-l", "-f", join(KEYS, `${signer}.pub`)]).split(" ")[1]!;
+  Str.split(sh(KEYS, "ssh-keygen", ["-l", "-f", join(KEYS, `${signer}.pub`)]), " ")[1]!;
 
 const keyLine = (role: string, signer: string) => `${role} namespaces="fabrika-step" ${pub(signer)}`;
 
 const stepKeys = (build = "build") =>
-  `${[keyLine("tests", "tests"), keyLine("build", build), keyLine("lead", "lead")].join("\n")}\n`;
+  `${Arr.join([keyLine("tests", "tests"), keyLine("build", build), keyLine("lead", "lead")], "\n")}\n`;
 
 const GOOD_KEYS = stepKeys();
 
@@ -148,7 +146,7 @@ class Repo {
   }
 
   head(rev = "HEAD") {
-    return this.git("rev-parse", rev).trim();
+    return Str.trim(this.git("rev-parse", rev));
   }
 
   /** Commits one file under `next/`, the usual product change. */
@@ -190,11 +188,11 @@ class Repo {
 
   run(args: string[], env = ENV, cwd = this.dir) {
     const ran = spawnSync("node", [PROGRAM, ...args], { cwd, env, encoding: "utf8" });
-
-    const answers = ran.stdout
-      .split("\n")
-      .filter((l) => l.startsWith("{"))
-      .map((l) => JSON.parse(l) as Record<string, unknown>);
+    const answers = pipe(
+      Str.split(ran.stdout, "\n"),
+      Arr.filter((l) => pipe(l, Str.startsWith("{"))),
+      Arr.map((l) => JSON.parse(l) as Record<string, unknown>),
+    );
 
     return { code: ran.status, answers, out: ran.stdout, err: ran.stderr };
   }
@@ -240,19 +238,22 @@ const acceptPgp = (r: Repo) => {
   const verifier = join(TOP, "pgp-verifier");
   writeFileSync(
     verifier,
-    [
-      "#!/bin/sh",
-      "cat >/dev/null",
-      "cat <<'STATUS'",
-      "[GNUPG:] NEWSIG",
-      "[GNUPG:] GOODSIG 1111111111111111 Fixture",
-      "[GNUPG:] VALIDSIG 1111111111111111111111111111111111111111 2026-11-08 1794168000 0 4 0 1 10 00 1111111111111111111111111111111111111111",
-      "[GNUPG:] TRUST_FULLY",
-      "STATUS",
-      // Keep the logged key check from hiding a header parsing bug after the squash.
-      `echo 'fixture key ${fingerprint("person")}' >&2`,
-      "",
-    ].join("\n"),
+    Arr.join(
+      [
+        "#!/bin/sh",
+        "cat >/dev/null",
+        "cat <<'STATUS'",
+        "[GNUPG:] NEWSIG",
+        "[GNUPG:] GOODSIG 1111111111111111 Fixture",
+        "[GNUPG:] VALIDSIG 1111111111111111111111111111111111111111 2026-11-08 1794168000 0 4 0 1 10 00 1111111111111111111111111111111111111111",
+        "[GNUPG:] TRUST_FULLY",
+        "STATUS",
+        // Keep the logged key check from hiding a header parsing bug after the squash.
+        `echo 'fixture key ${fingerprint("person")}' >&2`,
+        "",
+      ],
+      "\n",
+    ),
     { mode: 0o700 },
   );
   r.git("config", "gpg.program", verifier);
@@ -272,7 +273,7 @@ const personLink = (r: Repo, sha: string, signer = "person") => {
     to: r.head(`${sha}^{tree}`),
     key: fingerprint(signer),
     // oxlint-disable-next-line typescript/no-non-null-assertion -- The moved test assertion above requires the git signature header.
-    sig: `${signature![1]!.replaceAll("\n ", "\n")}\n`,
+    sig: `${pipe(signature![1]!, Str.replaceAll("\n ", "\n"))}\n`,
   };
 };
 
@@ -294,8 +295,8 @@ const squashed = (r: Repo, notes: Array<{ note: object; commit: string }>, moveM
 
   r.git("merge", "--squash", "-q", "pr");
   const squash = r.commit("squash");
-
-  const rows = notes.map(
+  const rows = Arr.map(
+    notes,
     ({ note, commit }, i): { date: string; run: string; attested: Array<Record<string, unknown>> } => ({
       date: "2026-11-07",
       run: `r${i}`,
@@ -320,8 +321,14 @@ const squashed = (r: Repo, notes: Array<{ note: object; commit: string }>, moveM
 };
 
 const log = (r: Repo, rows: object[]) => {
-  r.write("field/runs.jsonl", `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
-
+  r.write(
+    "field/runs.jsonl",
+    `${pipe(
+      rows,
+      Arr.map((row) => JSON.stringify(row)),
+      Arr.join("\n"),
+    )}\n`,
+  );
   return r.commit("log");
 };
 

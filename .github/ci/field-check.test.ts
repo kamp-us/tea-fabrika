@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Arbitrary, Effect, Schema } from "effect";
+import { Arbitrary, DateTime, Effect, Record as Rec, Schema, Struct } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import * as checker from "./field-check.ts";
@@ -135,7 +135,7 @@ it("added rows preserve occurrence counts and head line numbers", () => {
   const line = fc.string({ maxLength: 24 }).map((s) => JSON.stringify(s));
   fc.assert(
     fc.property(fc.array(line, { maxLength: 15 }), fc.array(line, { minLength: 1, maxLength: 15 }), (base, extra) => {
-      const head = [...base.toReversed(), ...extra, ...(base.length ? [base[0]!] : [])];
+      const head = [...base.toReversed(), ...extra, ...(base.length > 0 ? [base[0]!] : [])];
       const remaining = [...base];
 
       const expected = head.flatMap((text, i) => {
@@ -150,7 +150,9 @@ it("added rows preserve occurrence counts and head line numbers", () => {
         return [];
       });
 
-      expect(checker.selectAdded(base.length ? `${base.join("\n")}\n` : "", `${head.join("\n")}\n`)).toEqual(expected);
+      expect(checker.selectAdded(base.length > 0 ? `${base.join("\n")}\n` : "", `${head.join("\n")}\n`)).toEqual(
+        expected,
+      );
       expect(checker.selectAdded("", "\n")).toEqual([{ line: 1, text: "" }]);
       expect(checker.selectAdded(`${head.join("\n")}\n`, `${head.join("\n")}\n`)).toEqual([]);
     }),
@@ -177,7 +179,7 @@ it("a push keeps its two event trees and refuses failed diff, tree or blob reads
               ? (args[4] === base ? existed : remains)
                 ? `${file}\0`
                 : ""
-              : args[1]?.startsWith(base)
+              : args[1]?.startsWith(base) === true
                 ? baseText
                 : headText;
 
@@ -233,7 +235,7 @@ it("a PR's field rows compare to the merge base while main moves ahead", () => {
           const git = gitIn(dir);
 
           const commit = (files: Record<string, string>, message: string) => {
-            for (const [file, body] of Object.entries(files)) {
+            for (const [file, body] of Rec.toEntries(files)) {
               mkdirSync(dirname(join(dir, file)), { recursive: true });
               writeFileSync(join(dir, file), body);
             }
@@ -384,8 +386,8 @@ it("a run row written before the plan change passes without note", () => {
     Arbitrary.checkEffect(
       Arbitrary.all([Arbitrary.schema(Run), daysBack]),
       ([row, back]) => {
-        const date = new Date(Date.UTC(2026, 10, 8) - back * 86_400_000).toISOString().slice(0, 10);
-        const old = Object.fromEntries(Object.entries(own({ ...row, date }, "run")).filter(([key]) => key !== "note"));
+        const date = DateTime.formatIso(DateTime.makeUnsafe(Date.UTC(2026, 10, 8) - back * 86_400_000)).slice(0, 10);
+        const old = without(own({ ...row, date }, "run"), "note");
         const report = checker.checkFile(fileOf("runs"), "", `${JSON.stringify(old)}\n`);
 
         return report.exitCode === 0 && report.findings.every((f) => f._tag !== "error") && report.added === 1;
@@ -432,12 +434,7 @@ it("valid cores pass, each blocking field rejects bad types, optional facts stay
           });
 
           const missing = required.every(
-            (field) =>
-              checker.checkFile(
-                file,
-                "",
-                JSON.stringify(Object.fromEntries(Object.entries(row).filter(([key]) => key !== field))),
-              ).exitCode !== 0,
+            (field) => checker.checkFile(file, "", JSON.stringify(without(row, field))).exitCode !== 0,
           );
 
           return good.exitCode === 0 && good.added === 1 && broken && missing;
@@ -468,11 +465,11 @@ it("negative and nonfinite counts, missing cores and wrong dates fail without co
             "cachedTokens",
             "outputTokens",
           ].flatMap((field) => [-1, "0", true].map((bad) => ({ ...row, [field]: bad }))),
-          ...Object.keys(Run.fields)
+          ...Rec.keys(Run.fields)
             .slice(0, 10)
             // `note` is optional for rows written before the plan change.
             .filter((field) => field !== "note")
-            .map((field) => Object.fromEntries(Object.entries(row).filter(([key]) => key !== field))),
+            .map((field) => without(row, field)),
           { ...row, date: "yesterday" },
         ];
 
@@ -501,7 +498,7 @@ it("a run row's plants pass whole, and one plant with a result outside red and g
     ]),
     ([plant, word, key, drop]) =>
       drop
-        ? Object.fromEntries(Object.entries(plant).filter(([k]) => k !== key))
+        ? Rec.fromEntries(Rec.toEntries(plant).filter(([k]) => k !== key))
         : { ...plant, result: word === "red" || word === "green" ? `${word}!` : word },
   );
 
@@ -623,8 +620,7 @@ const errorsOf = (row: unknown) => {
   };
 };
 
-const without = (row: object, field: string) =>
-  Object.fromEntries(Object.entries(row).filter(([key]) => key !== field));
+const without = (row: object, field: string) => Rec.fromEntries(Rec.toEntries(row).filter(([key]) => key !== field));
 
 it("a finding or rated row passes whole, and each core field blocks when wrong or missing", () => {
   for (const schema of [Found, Rated]) {
@@ -635,7 +631,7 @@ it("a finding or rated row passes whole, and each core field blocks when wrong o
         (row) => {
           const good = errorsOf({ ...row, extra: { future: true } });
 
-          const each = Object.keys(schema.fields).every((field) => {
+          const each = Struct.keys(schema.fields).every((field) => {
             const bad = errorsOf({ ...row, [field]: { bad: true } });
             const gone = errorsOf(without(row, field));
             // A row with no readable `_tag` is refused as a whole.
@@ -869,7 +865,7 @@ it("real notes written before the rename pass whole, as they are saved", () => {
   ]) {
     const file = `field/notes/${name}.json`;
     const text = readFileSync(new URL(`../../${file}`, import.meta.url), "utf8");
-    expect(Object.keys(JSON.parse(text))).toContain("lanes");
+    expect(Rec.keys(JSON.parse(text))).toContain("lanes");
     const report = checker.checkFile(file, "", text);
     expect(report.findings.filter((f) => f._tag === "error")).toEqual([]);
     expect(report.exitCode).toBe(0);

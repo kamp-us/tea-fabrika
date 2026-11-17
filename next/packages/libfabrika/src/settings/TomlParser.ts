@@ -2,7 +2,14 @@
  * The only adapter that knows the TOML parser and serializer. Edit receives source positions and text.
  */
 import { stringify } from "@decimalturn/toml-patch";
-import { Effect, Layer, Predicate, Result, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import { type AST, getStaticTOMLValue, ParseError, parseTOML } from "toml-eslint-parser";
 import * as Edit from "./internal/edit.ts";
 import { Conflict, Syntax, Toml, type TomlDocument, TomlError, Value } from "./Toml.ts";
@@ -14,7 +21,11 @@ const key = (node: AST.TOMLKey): Array<string> => getStaticTOMLValue(node);
 // A terminator keeps 1.0.3's EOF-zero token range complete, without changing source offsets.
 const syntax = (text: string): AST.TOMLProgram => parseTOML(`${text} `);
 
-// Own properties matter here: TOML keys may spell __proto__, constructor or toString.
+// Own properties matter here: TOML keys may spell __proto__, constructor or toString, and a hole in
+// an array stays missing when its prototype holds that index.
+const owns = <P extends string | number>(target: object, name: P): target is { [K in P]: unknown } =>
+  Predicate.hasProperty(target, name) && Rec.has<string, unknown>(target, String(name));
+
 const put = (table: object, path: Edit.Path, value: unknown): void => {
   let parent = table;
 
@@ -22,7 +33,7 @@ const put = (table: object, path: Edit.Path, value: unknown): void => {
     if (i === path.length - 1) {
       Object.defineProperty(parent, segment, { value, enumerable: true, writable: true, configurable: true });
     } else {
-      if (!Object.hasOwn(parent, segment)) {
+      if (!owns(parent, segment)) {
         Object.defineProperty(parent, segment, {
           value: typeof path[i + 1] === "number" ? [] : {},
           enumerable: true,
@@ -31,8 +42,7 @@ const put = (table: object, path: Edit.Path, value: unknown): void => {
         });
       }
 
-      const next =
-        Predicate.hasProperty(parent, segment) && Object.hasOwn(parent, segment) ? parent[segment] : undefined;
+      const next = owns(parent, segment) ? parent[segment] : undefined;
 
       // An array of tables is a step too. The parser refuses a document that writes through a
       // scalar, so a scalar here is a bug in this walk, and it fails as main's defineProperty did.
@@ -64,12 +74,13 @@ const content = (node: AST.TOMLContentNode): unknown => {
 };
 
 const sectionStart = (text: string, node: AST.TOMLTable): number => {
-  let start = text.lastIndexOf("\n", node.range[0] - 1) + 1;
+  let start = Edit.lineStart(text, node.range[0]);
 
   while (start > 0) {
-    const previous = start < 2 ? 0 : text.lastIndexOf("\n", start - 2) + 1;
+    // start - 1 is the newline that ends the line above.
+    const previous = Edit.lineStart(text, start - 1);
 
-    if (!/^\s*(?:#[^\r\n]*)?\s*$/.test(text.slice(previous, start))) {
+    if (!/^\s*(?:#[^\r\n]*)?\s*$/.test(Str.slice(previous, start)(text))) {
       break;
     }
 
@@ -87,7 +98,7 @@ const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
   const inlines: Array<Edit.Inline> = [];
 
   const sections: [Edit.Section, ...Array<Edit.Section>] = [
-    { path: [], line: 1, end: tables[0] ? sectionStart(text, tables[0]) : text.length },
+    { path: [], line: 1, end: tables[0] !== undefined ? sectionStart(text, tables[0]) : text.length },
   ];
 
   const visit = (parent: Edit.Path, node: AST.TOMLKeyValue, inline?: Edit.Range): Edit.Assignment => {
@@ -98,7 +109,7 @@ const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
       path,
       line: node.loc.start.line,
       value: range(node.value),
-      ...(inline ? { inline } : {}),
+      ...(inline !== undefined ? { inline } : {}),
     };
 
     assignments.push(assignment);
@@ -128,7 +139,7 @@ const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
     sections.push({
       path: table.resolvedKey,
       line: table.loc.start.line,
-      end: next ? sectionStart(text, next) : text.length,
+      end: next !== undefined ? sectionStart(text, next) : text.length,
     });
 
     if (Edit.read(value, table.resolvedKey) === undefined) {
@@ -181,7 +192,7 @@ const encoded = (value: unknown, ancestors: ReadonlySet<object> = new Set()): un
 
     if (Array.isArray(value)) {
       for (let i = 0; i < value.length; i++) {
-        if (!Object.hasOwn(value, i)) {
+        if (!owns(value, i)) {
           throw new TypeError("A TOML array cannot contain a missing element.");
         }
       }
@@ -196,7 +207,7 @@ const encoded = (value: unknown, ancestors: ReadonlySet<object> = new Set()): un
       throw new TypeError("A TOML table must be a plain record with string keys.");
     }
 
-    return Object.fromEntries(Object.entries(value).map(([name, child]) => [name, encoded(child, next)]));
+    return Rec.fromEntries(Rec.toEntries(value).map(([name, child]) => [name, encoded(child, next)]));
   }
 
   const result = scalar(value);
@@ -222,17 +233,16 @@ const render = Effect.fnUntraced(function* (path: ReadonlyArray<string>, value: 
       }
 
       const keys = path.map((segment) => {
-        const text = stringify(Object.fromEntries([[segment, 0]]), format);
+        const text = stringify(Rec.fromEntries([[segment, 0]]), format);
         const node = syntax(text).body[0].body[0];
 
         if (node?.type !== "TOMLKeyValue") {
           throw new TypeError("The encoder did not produce a TOML key.");
         }
 
-        return text.slice(...node.key.range);
+        return Str.slice(...node.key.range)(text);
       });
-
-      return { value: checked, text: source.slice(...assignment.value.range), keys };
+      return { value: checked, text: Str.slice(...assignment.value.range)(source), keys };
     },
     catch: (cause: unknown) => failure(new Value({ cause }), 1),
   });

@@ -7,6 +7,11 @@ import type { Sql } from "../Sql.ts";
 import * as Publish from "./Publish.ts";
 import * as WatcherManagerRemote from "./WatcherManagerRemote.ts";
 
+/** A failure the stand-in send or RPC answers with, which the remote reads as unreachable. */
+class Fault extends Schema.TaggedError<Fault, { readonly brand: unique symbol }>()("Fault", {
+  message: Schema.String,
+}) {}
+
 const Step = Arbitrary.all({
   pick: Arbitrary.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   client: Arbitrary.schema(Schema.NonEmptyString.check(Schema.isMaxLength(240))),
@@ -41,7 +46,7 @@ describe("watcher delivery evidence, next/", () => {
           const publish = Publish.make(sql, (connection: string, client: string, news: unknown) =>
             Effect.suspend(() => {
               if (failSend) {
-                return Effect.fail(new Error("unknown send failure"));
+                return Effect.fail(Fault.make({ message: "unknown send failure" }));
               }
 
               delivered.push({ connection, client, news });
@@ -55,9 +60,9 @@ describe("watcher delivery evidence, next/", () => {
 
           const context = yield* Layer.build(
             WatcherManagerRemote.layer((client, update) =>
-              Effect.suspend((): Effect.Effect<unknown, Error> => {
+              Effect.suspend((): Effect.Effect<unknown, Fault> => {
                 if (rpc === "throw") {
-                  return Effect.fail(new Error("RPC unreachable"));
+                  return Effect.fail(Fault.make({ message: "RPC unreachable" }));
                 }
 
                 if (rpc === "malformed") {
@@ -80,7 +85,9 @@ describe("watcher delivery evidence, next/", () => {
             }
 
             expect(Cause.hasFails(exit.cause)).toBe(true);
-            const error = Schema.decodeUnknownSync(Schema.toType(WatcherManagerError))(Cause.squash(exit.cause));
+            const error = yield* Schema.decodeUnknownEffect(Schema.toType(WatcherManagerError))(
+              Cause.squash(exit.cause),
+            );
             expect(error._tag).toBe("WatcherManagerError");
             expect(error.reason.cause).toBeDefined();
 
@@ -89,7 +96,7 @@ describe("watcher delivery evidence, next/", () => {
 
           for (const step of steps) {
             const held = [...routes.keys()];
-            const client = held.length && step.pick % 2 ? nth(held, step.pick) : step.client;
+            const client = held.length > 0 && step.pick % 2 !== 0 ? nth(held, step.pick) : step.client;
             routes.delete(client);
             expect(yield* publish(client, patch)).toEqual(Publication.cases.gone.make({}));
             expect(yield* reason(client)).toBe("Gone");

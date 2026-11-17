@@ -5,8 +5,9 @@
 import { deserialize } from "node:v8";
 import { NodeServices } from "@effect/platform-node";
 import { Activity } from "@kampus/libfabrika/processes/Process";
-import { Effect, FileSystem, Path, Schema, Stream } from "effect";
+import { Array as Arr, String as Str, Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
+
 import { instanceDatabase } from "./instance-database.test-support.ts";
 
 const processes = Effect.gen(function* () {
@@ -20,7 +21,7 @@ type Row = { readonly pid: number; readonly parent: number; readonly command: st
 
 /** `parent` and every process below it, from one `ps` read. */
 export const tree = Effect.fn("workerd.tree")(function* (parent: number) {
-  const rows = (yield* processes).split("\n").flatMap((row): Array<Row> => {
+  const rows = Arr.flatMap(Str.split(yield* processes, "\n"), (row): Array<Row> => {
     const [, pid, ppid, command] = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row) ?? [];
 
     return pid === undefined || ppid === undefined || command === undefined
@@ -38,12 +39,15 @@ export const tree = Effect.fn("workerd.tree")(function* (parent: number) {
     }
   }
 
-  return rows.filter((row) => pids.has(row.pid));
+  return Arr.filter(rows, (row) => pids.has(row.pid));
 });
 
 /** The pid of the one `workerd` among `parent`'s descendants. More or fewer than one fails the test. */
 const workerd = Effect.fn("workerd.find")(function* (parent: number) {
-  const pids = (yield* tree(parent)).filter((row) => /\/workerd(?:\s|$)/.test(row.command)).map((row) => row.pid);
+  const pids = Arr.map(
+    Arr.filter(yield* tree(parent), (row) => /\/workerd(?:\s|$)/.test(row.command)),
+    (row) => row.pid,
+  );
 
   const [only] = pids;
 
@@ -83,7 +87,7 @@ const Saved = Schema.fromJsonString(
 const objectRows = (db: Effect.Success<ReturnType<typeof instanceDatabase>>, name: string) => {
   const table = (t: string) => db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(t);
 
-  if (!table("process_recovery")) {
+  if (table("process_recovery") === undefined) {
     return null;
   }
 
@@ -94,8 +98,8 @@ const objectRows = (db: Effect.Success<ReturnType<typeof instanceDatabase>>, nam
   }
 
   // workerd's own key-value table (`_cf_KV`, key TEXT, value BLOB), read for its one `activity` row.
-  const kv = table("_cf_KV") ? db.prepare("SELECT value FROM _cf_KV WHERE key='activity'").get() : undefined;
-
+  const kv =
+    table("_cf_KV") !== undefined ? db.prepare("SELECT value FROM _cf_KV WHERE key='activity'").get() : undefined;
   return {
     journal: Schema.decodeUnknownSync(Saved)(saved.value).journal,
     marker: kv === undefined ? undefined : Schema.decodeUnknownSync(Activity)(deserialize(kv.value as Uint8Array)),

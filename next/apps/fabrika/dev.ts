@@ -9,10 +9,25 @@ import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import * as RepositoryTrustLedger from "@kampus/libfabrika/packs/RepositoryTrustLedger";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
-import { Config, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
+import {
+  Array as Arr,
+  Record as Rec,
+  String as Str,
+  Config,
+  ConfigProvider,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Schema,
+  Stream,
+  Formatter,
+} from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
 import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
+
 import { build } from "./src/build.ts";
 import { localInstance } from "./src/local-instance.ts";
 import { Founding } from "./src/settings.ts";
@@ -28,8 +43,8 @@ const declarations = Declarations.all.declarations;
 
 // Each declared setting is a flag at its own path, as --instance.port. --port stays the port's
 // alias, for the commands and instance tests written before the setting.
-const settings = Object.fromEntries(
-  declarations.map((d) => {
+const settings = Rec.fromEntries(
+  Arr.map(declarations, (d) => {
     const flag = Flag.String(d.path);
 
     return [d.path, (d === Declarations.port ? Flag.withAlias(flag, "port") : flag).pipe(Flag.withDefault(undefined))];
@@ -42,7 +57,19 @@ const Saved = Schema.Struct({ ...Founding.fields, port: Schema.optionalKey(Decla
 
 /** The entries that hold a value, as one record. */
 const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
-  Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => entry[1] !== undefined));
+  Rec.fromEntries(Arr.filter(entries, (entry): entry is readonly [string, string] => entry[1] !== undefined));
+
+/** One variable of this process's environment through Config; unset is `undefined`. */
+const variable = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
+
+/**
+ * The home folder's variable and each declared setting's, through Config. A start reads them when
+ * it runs, as process.env was read: an empty variable stays empty, and an unset one is left out.
+ */
+const environment = Config.all({
+  home: variable("FABRIKA_HOME"),
+  settings: Config.all(Object.fromEntries(declarations.map((d) => [d.env, variable(d.env)]))),
+});
 
 // The settings flags are one nested record, so the start reads each by its declared path.
 const flags = {
@@ -65,7 +92,7 @@ for (let n = 2; n < process.argv.length; n++) {
 
   const flag =
     (/^--(repo|port|name|person|founder|window|parent)$/.test(word) ||
-      declarations.some((d) => word === `--${d.path}`)) &&
+      Arr.some(declarations, (d) => word === `--${d.path}`)) &&
     value !== undefined;
 
   words.push(flag ? `${word}=${value}` : word);
@@ -96,19 +123,18 @@ const command = Command.make("dev", flags, (options) => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem,
           path = yield* Path.Path;
-
-        const home = process.env.FABRIKA_HOME ?? path.join(yield* Config.String("HOME"), ".fabrika");
-
+        const env = yield* environment.parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
+        const home = env.home ?? path.join(yield* Config.String("HOME"), ".fabrika");
         // A person reads their file's name from ~ or FABRIKA_HOME, never as this machine's path.
         const person = {
           path: path.join(home, "fabrika.toml"),
-          name: `${process.env.FABRIKA_HOME === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
+          name: `${env.home === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
         };
 
         const loadOptions = {
           person,
-          flags: present(declarations.map((d) => [d.path, options.settings[d.path]])),
-          env: present(declarations.map((d) => [d.env, process.env[d.env]])),
+          flags: present(Arr.map(declarations, (d) => [d.path, options.settings[d.path]])),
+          env: present(Rec.toEntries(env.settings)),
           version: VERSION,
         };
 
@@ -159,7 +185,7 @@ const command = Command.make("dev", flags, (options) => {
         }).pipe(Effect.mapError((cause) => InstanceError.make({ reason: "settings", cause })));
 
         yield* fs
-          .writeFileString(file, JSON.stringify(state), { mode: 0o600 })
+          .writeFileString(file, Formatter.formatJson(state), { mode: 0o600 })
           .pipe(Effect.mapError((cause) => InstanceError.make({ reason: "settings", cause })));
         const built = yield* build({ out: path.join(home, "build") });
 
@@ -201,8 +227,7 @@ const command = Command.make("dev", flags, (options) => {
               ),
             ),
           );
-
-          process.stdout.write(`${JSON.stringify(selected)}\n`);
+          process.stdout.write(`${Formatter.formatJson(selected)}\n`);
 
           if (selected._tag === "refused") {
             return yield* InstanceError.make({ reason: "repository_refused" });
@@ -231,9 +256,9 @@ const command = Command.make("dev", flags, (options) => {
                 for (const { name, outcome } of answer.processes) {
                   const text =
                     outcome._tag === "swapped"
-                      ? `${name} runs ${answer.hash.slice(0, 8)} now`
+                      ? `${name} runs ${Str.slice(0, 8)(answer.hash)} now`
                       : outcome._tag === "refused"
-                        ? `${name} stays on ${outcome.was.slice(0, 8)}: ${outcome.reason === "shape" ? "the new code can't read its state" : outcome.reason === "newer" ? "its state has a newer version" : "the new code could not load"}`
+                        ? `${name} stays on ${Str.slice(0, 8)(outcome.was)}: ${outcome.reason === "shape" ? "the new code can't read its state" : outcome.reason === "newer" ? "its state has a newer version" : "the new code could not load"}`
                         : outcome._tag === "not_now"
                           ? `${name} will try the new code at the next brain start`
                           : `${name} already runs this code`;
@@ -245,7 +270,7 @@ const command = Command.make("dev", flags, (options) => {
         );
 
         process.stdout.write(
-          `${JSON.stringify({ ready: `http://127.0.0.1:${loaded.values.port}`, build: built.build })}\n`,
+          `${Formatter.formatJson({ ready: `http://127.0.0.1:${loaded.values.port}`, build: built.build })}\n`,
         );
 
         return yield* Effect.never;

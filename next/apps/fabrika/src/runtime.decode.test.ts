@@ -5,8 +5,9 @@
 import { RecordedStart } from "@kampus/libfabrika";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Exit, Layer, Result } from "effect";
+import { Effect, Exit, Formatter, Layer, Result } from "effect";
 import { Digest } from "effect/crypto";
+
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -55,10 +56,10 @@ StartsTest.law(
   ([recipe]) =>
     Effect.gen(function* () {
       const input = yield* StartsTest.input(recipe);
-      const config = yield* decode({ INSTANCE: JSON.stringify(input) });
+      const config = yield* decode({ INSTANCE: Formatter.formatJson(input) });
       expect(config.port).toBe(recipe.port);
       expect(config.build).toBe(recipe.build);
-      const bad = yield* Effect.exit(decode({ INSTANCE: JSON.stringify(StartsTest.corrupt(input, 6)) }));
+      const bad = yield* Effect.exit(decode({ INSTANCE: Formatter.formatJson(StartsTest.corrupt(input, 6)) }));
       expect(Exit.isFailure(bad)).toBe(true);
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
 );

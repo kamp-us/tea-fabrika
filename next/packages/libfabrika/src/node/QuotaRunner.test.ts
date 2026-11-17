@@ -1,10 +1,13 @@
 // P34c, next/. Only the Node runner imports the driver; all policy and recovery are real code.
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
+import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import { Writer } from "../access/SessionManager.ts";
@@ -90,8 +93,8 @@ const program = (name: string) => ({
   msg: Msg,
   view: { data: Model, select: (s: typeof Model.Type) => s },
   refuse: () => null,
-  inputs: Object.fromEntries(
-    ["inc", "throw", "work", "schedule"].map((key) => [
+  inputs: Rec.fromEntries(
+    Arr.map(["inc", "throw", "work", "schedule"], (key) => [
       key,
       {
         ...Schema.TaggedStruct("write", {}).make({}),
@@ -109,10 +112,11 @@ const program = (name: string) => ({
 const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
 
 const snapshot = (sql: Sql) =>
-  Object.fromEntries(
-    sql
-      .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-      .map(({ name }) => [String(name), sql.exec(`SELECT * FROM ${quote(String(name))}`)]),
+  Rec.fromEntries(
+    Arr.map(
+      sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"),
+      ({ name }) => [String(name), sql.exec(`SELECT * FROM ${quote(String(name))}`)],
+    ),
   );
 
 const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
@@ -287,7 +291,14 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
       });
     }),
     alarm: (name) =>
-      Effect.map(store.alarms.saved, (alarms) => alarms.find((alarm) => alarm.name === name)?.at ?? null),
+      Effect.map(store.alarms.saved, (alarms) =>
+        Option.getOrNull(
+          Option.map(
+            Arr.findFirst(alarms, (alarm) => alarm.name === name),
+            (alarm) => alarm.at,
+          ),
+        ),
+      ),
     input: Effect.fnUntraced(function* (name, id, m) {
       // Admission only, so laws can inspect charges before the real step starts.
       return yield* Mailbox.use((mailbox) => mailbox.send(name, id, m, { ...from(), parent: null })).pipe(
@@ -319,9 +330,9 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
         accounting: accounting(name),
       }).load,
     entries: Effect.sync(() =>
-      project.exec("SELECT * FROM entries ORDER BY rev").map((row) => Schema.decodeUnknownSync(Row)(row)),
+      Arr.map(project.exec("SELECT * FROM entries ORDER BY rev"), (row) => Schema.decodeUnknownSync(Row)(row)),
     ),
-    snapshot: Effect.sync(() => Object.fromEntries([...sqls].map(([name, db]) => [name, snapshot(db)]))),
+    snapshot: Effect.sync(() => Rec.fromEntries(Arr.map([...sqls], ([name, db]) => [name, snapshot(db)]))),
     reopen: store.reopen,
     cut: (at) => {
       cut = at;
@@ -356,7 +367,7 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
           return;
         }
 
-        const alarm = (yield* store.alarms.saved).find((a) => a.name === name);
+        const alarm = Option.getOrUndefined(Arr.findFirst(yield* store.alarms.saved, (a) => a.name === name));
 
         if (alarm === undefined) {
           return yield* Effect.die("unfinished recovery has no saved alarm");

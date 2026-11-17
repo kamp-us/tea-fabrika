@@ -23,14 +23,18 @@
 // Plants (after build): H2, read `executing` without a result as nothing, so the command runs
 // again. H5, move every work state to `offline` on a drop, losing the result.
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
+
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { fcTypeId } from "../tasks/TasksTest.ts";
@@ -64,10 +68,12 @@ const identity = (() => {
 
   return {
     fingerprint: KEY,
-    raw: btoa(String.fromCharCode(...raw))
-      .replaceAll("+", "-")
-      .replaceAll("/", "_")
-      .replace(/=+$/, ""),
+    raw: Function.pipe(
+      btoa(String.fromCharCode(...raw)),
+      Str.replaceAll("+", "-"),
+      Str.replaceAll("/", "_"),
+      Str.replace(/=+$/, ""),
+    ),
     line: Schema.decodeSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
     found: "reused" as const,
     sign: () => Effect.succeed(new Uint8Array(64)),
@@ -162,10 +168,10 @@ const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
       const now = work();
       const stopped = yield* Deferred.isDone(s.stopped);
       const held = yield* Deferred.isDone(s.paused);
-      const open = b.all().filter((j) => j.phase !== "finished");
+      const open = Arr.filter(b.all(), (j) => j.phase !== "finished");
       // A new task is asked for a process only when that process has no open task (0093): two open
       // tasks of one process wedge `tasks.take` (finding 2026-11-15-jobs-take-ambiguous-wedges).
-      const free = tape.processes.filter((p) => !open.some((j) => j.request.process === p));
+      const free = Arr.filter(tape.processes, (p) => !Arr.some(open, (j) => j.request.process === p));
       const asks = free.length === 0 ? [] : open.length === 0 ? ["request", "request"] : ["request"];
 
       const options: Array<string> =
@@ -240,7 +246,7 @@ const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
       yield* crash;
     }
 
-    for (let i = 0; i < 400 && b.all().some((j) => j.phase !== "finished"); i++) {
+    for (let i = 0; i < 400 && Arr.some(b.all(), (j) => j.phase !== "finished"); i++) {
       yield* pass(i % 10 === 0 ? 30_000 : 1_000);
     }
 

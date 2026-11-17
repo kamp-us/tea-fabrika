@@ -3,7 +3,11 @@
 // The laws, and no driver (0062): a runner in the module that owns a driver calls
 // `RecordPartTest.suite(open)`, and `open` acquires each store in a scope (0061).
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, type PlatformError, type Scope } from "effect";
+import { Array as Arr } from "effect";
+import * as Effect from "effect/Effect";
+import type * as PlatformError from "effect/PlatformError";
+import type * as Scope from "effect/Scope";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import type { SpanRow } from "./Trace.ts";
@@ -47,7 +51,7 @@ const Roll: [fc.Arbitrary<number[]>, fc.Arbitrary<number>, fc.Arbitrary<number>]
 
 const span = (n: number): SpanRow => ({
   traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
-  spanId: n.toString(16).padStart(16, "0"),
+  spanId: Str.padStart(16, "0")(n.toString(16)),
   parentSpanId: null,
   name: "runner.step",
   kind: "internal",
@@ -83,12 +87,12 @@ const reopen = (open: Open, total: number, content: string, at: number) =>
         Effect.gen(function* () {
           const part: Part = recordPart(sql, { _tag: "spans" }, 0, 1_000_000_000);
           // T641: the reopened file already holds the first write, before the retry writes again.
-          expect((yield* part.read(0)).spans).toEqual(rows.slice(0, 500).map((r) => r.span));
+          expect((yield* part.read(0)).spans).toEqual(Arr.map(rows.slice(0, 500), (r) => r.span));
           expect(yield* part.write(rows)).toEqual({ _tag: "written" });
           const first = yield* part.read(0);
           const last = yield* part.read(first.after);
-          expect(first.spans).toEqual(rows.slice(0, 500).map((r) => r.span));
-          expect(last.spans).toEqual(rows.slice(500).map((r) => r.span));
+          expect(first.spans).toEqual(Arr.map(rows.slice(0, 500), (r) => r.span));
+          expect(last.spans).toEqual(Arr.map(rows.slice(500), (r) => r.span));
           expect(yield* part.content(span(total - 1).spanId)).toMatchObject({
             _tag: "found",
             content: { _tag: "kept", message: content },
@@ -148,16 +152,20 @@ export const suite = (open: Open) =>
   describe("P12 single record part", () => {
     it.effect("P37 wiring plant: reopen, page past 500, and retry without duplicating a span", () =>
       Effect.gen(function* () {
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+        const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated case
-        const property = fc.asyncProperty(...Page, (...input) => Effect.runPromise(reopen(open, ...input)));
+        const property = fc.asyncProperty(...Page, (...input) => runPromise(reopen(open, ...input)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 20, examples: [pageBoundary] }));
       }),
     );
     it.effect("P37 wiring plant: check held IDs before cap, return had, keep each part separate", () =>
       Effect.gen(function* () {
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+        const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated case
-        const property = fc.asyncProperty(...Roll, (...input) => Effect.runPromise(separate(open, ...input)));
+        const property = fc.asyncProperty(...Roll, (...input) => runPromise(separate(open, ...input)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, { seed: SEED, examples: [rollAtCap] }));
       }),

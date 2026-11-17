@@ -30,10 +30,12 @@
 // same shell, in Codex's own sandbox (`codex sandbox`) and with the same overrides, which Node it
 // finds, and a turn whose shell finds another than the pin fails to start, before any model call.
 
+import { String as Str, pipe, Option, Array as Arr, Effect, FileSystem, Schema, Stream } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+
 import { Agent } from "@kampus/fabrika-old";
 import { rawOfLine } from "@kampus/fabrika-old/agents/codex";
-import { Effect, FileSystem, Option, Schema, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+
 import { holdsPin, NODE_PROBE } from "./boxnode.ts";
 
 /** What a turn may do in its folder: change it, or only read it (a plan, a review). */
@@ -56,7 +58,7 @@ export interface CodexExecConfig {
 export const CAPACITY = /at capacity|rate limit|503|overloaded/i;
 
 /** A config value as TOML: a JSON string is a TOML basic string, but for DEL, which TOML takes only escaped. */
-const tomlText = (text: string) => JSON.stringify(text).replaceAll("\x7f", "\\u007f");
+const tomlText = (text: string) => pipe(JSON.stringify(text), Str.replaceAll("\x7f", "\\u007f"));
 
 /**
  * How Codex runs a command, the same for a turn and for its probe: the sandbox, and a shell that
@@ -111,9 +113,9 @@ export const execArgs = (a: ExecAsk): string[] => [
   ...routeArgs(a.access),
   "-c",
   'approval_policy="never"',
-  ...(a.system === null || a.system.trim() === "" ? [] : ["-c", `developer_instructions=${tomlText(a.system)}`]),
+  ...(a.system === null || Str.trim(a.system) === "" ? [] : ["-c", `developer_instructions=${tomlText(a.system)}`]),
   ...(a.resume === null ? [] : ["resume", a.resume]),
-  a.prompt.startsWith("-") ? `\n${a.prompt}` : a.prompt,
+  pipe(a.prompt, Str.startsWith("-")) ? `\n${a.prompt}` : a.prompt,
 ];
 
 const ErrorEvent = Schema.Struct({ type: Schema.Literal("error"), message: Schema.String });
@@ -163,7 +165,7 @@ const probe = (config: CodexExecConfig, folder: string) =>
       return yield* Agent.failed(
         "start",
         `the box's shell finds no Node ${config.pin}, so a test run there would be refused: ` +
-          `\`${NODE_PROBE}\` printed ${JSON.stringify(said.trim())}`,
+          `\`${NODE_PROBE}\` printed ${JSON.stringify(Str.trim(said))}`,
       );
     }
   });
@@ -228,12 +230,12 @@ export const codexExecAdapter = (
 
           // What went wrong, from both sides: Codex's `error` events (it says capacity there) and its stderr.
           const said = { errors: "", stderr: "", ended: null as Agent.Raw | null };
-          const trouble = () => `${said.errors}\n${said.stderr}`.trim().slice(-TAIL);
+          const trouble = () => pipe(Str.trim(`${said.errors}\n${said.stderr}`), Str.slice(-TAIL));
           yield* handle.stderr.pipe(
             Stream.decodeText(),
             Stream.runForEach((text) =>
               Effect.sync(() => {
-                said.stderr = (said.stderr + text).slice(-TAIL);
+                said.stderr = pipe(said.stderr + text, Str.slice(-TAIL));
               }),
             ),
             Effect.ignore,
@@ -248,19 +250,22 @@ export const codexExecAdapter = (
               const error = readError(line);
 
               if (Option.isSome(error)) {
-                said.errors = `${said.errors}\n${error.value.message}`.slice(-TAIL);
+                said.errors = pipe(`${said.errors}\n${error.value.message}`, Str.slice(-TAIL));
               }
 
               const raws = rawOfLine(line);
 
-              if (!Array.isArray(raws)) {
+              if (!Arr.isArray(raws)) {
                 return Effect.fail(Agent.failed("broke", `${raws.broke}; ${trouble()}`));
               }
 
               // The end waits for the last message file, which Codex writes on its way out.
-              said.ended = raws.find((r) => r._tag === "ended") ?? said.ended;
+              said.ended = Option.getOrElse(
+                Arr.findFirst(raws, (r) => r._tag === "ended"),
+                () => said.ended,
+              );
 
-              return Effect.succeed(raws.filter((r) => r._tag !== "ended"));
+              return Effect.succeed(Arr.filter(raws, (r) => r._tag !== "ended"));
             }),
             Stream.flattenIterable,
           );
@@ -270,7 +275,7 @@ export const codexExecAdapter = (
             const code = yield* handle.exitCode.pipe(Effect.orElseSucceed(() => -1));
             const text = yield* fs.readFileString(last).pipe(Effect.orElseSucceed(() => ""));
 
-            if (text.trim() === "") {
+            if (Str.trim(text) === "") {
               return yield* Agent.failed("broke", `codex exited (${code}) with no last message: ${trouble()}`);
             }
 

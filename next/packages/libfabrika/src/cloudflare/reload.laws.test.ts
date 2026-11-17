@@ -21,21 +21,23 @@
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import {
-  Cause,
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Logger,
-  Option,
-  Redacted,
-  Schedule,
-  Schema,
-  Scope,
-} from "effect";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { expectTypeOf, vi } from "vitest";
 import { lineFor } from "../ledger/Log.ts";
@@ -106,10 +108,13 @@ const Fixture = Schema.Struct({
 type Fixture = typeof Fixture.Type;
 
 /** A fixture's source: plain module text that names its declaration; `pad` makes it as big as asked. */
-const sourceFor = (f: Fixture, pad = 0) => `export default {};\n// fixture ${JSON.stringify(f)}\n${"/".repeat(pad)}`;
+const sourceFor = (f: Fixture, pad = 0) =>
+  `export default {};\n// fixture ${JSON.stringify(f)}\n${Str.repeat(pad)("/")}`;
 
 const readFixture = (source: string): Fixture =>
-  Schema.decodeUnknownSync(Schema.fromJsonString(Fixture))(source.split("\n")[1]!.slice("// fixture ".length));
+  Schema.decodeUnknownSync(Schema.fromJsonString(Fixture))(
+    Str.slice("// fixture ".length)(Str.split(source, "\n")[1]!),
+  );
 
 const declaration = (f: Fixture) => {
   const model = Schema.Struct({ count: Schema.Int });
@@ -149,6 +154,7 @@ expectTypeOf<Omit<Pushed, "name">>().toEqualTypeOf<Parameters<ProcessBinding["sw
 
 /** One booted Project over one SQLite file, with every platform handle recorded. */
 const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: ReadonlyArray<Fixture> = []) {
+  const services = yield* Effect.context<never>();
   const parent = yield* Scope.Scope;
 
   const db = yield* Effect.acquireRelease(
@@ -220,15 +226,15 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
 
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
-    INSTANCE: JSON.stringify(START),
+    INSTANCE: Formatter.formatJson(START),
     PROJECT: {
       getByName: () => ({
         codeInstall: (install: unknown) =>
-          Effect.runPromise(run(Effect.flatMap(ProjectService, (p) => p.codeInstall(install)))),
+          Effect.runPromiseWith(services)(run(Effect.flatMap(ProjectService, (p) => p.codeInstall(install)))),
         codeFailed: (fact: unknown) =>
-          Effect.runPromise(run(Effect.flatMap(ProjectService, (p) => p.codeFailed(fact)))),
+          Effect.runPromiseWith(services)(run(Effect.flatMap(ProjectService, (p) => p.codeFailed(fact)))),
         processObject: (pid: string) =>
-          Effect.runPromise(run(Effect.flatMap(ProjectService, (p) => p.processObject(pid)))),
+          Effect.runPromiseWith(services)(run(Effect.flatMap(ProjectService, (p) => p.processObject(pid)))),
       }),
     },
     PROCESS: {
@@ -244,7 +250,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
             const gate = configureGates.get(name);
 
             if (gate !== undefined) {
-              await Effect.runPromise(gate);
+              await Effect.runPromiseWith(services)(gate);
             }
 
             descriptors.set(name, d);
@@ -274,7 +280,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
             const gate = swapGates.get(request.hash);
 
             if (gate !== undefined) {
-              await Effect.runPromise(gate);
+              await Effect.runPromiseWith(services)(gate);
             }
 
             const pid = descriptors.get(name)!.id;
@@ -293,7 +299,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
             const reply = swapReplies.get(request.hash);
 
             if (reply !== undefined) {
-              await Effect.runPromise(reply);
+              await Effect.runPromiseWith(services)(reply);
             }
 
             return { _tag: "swapped", was };
@@ -328,7 +334,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
                 throw new Error("a module that throws as it loads");
               }
 
-              return Effect.runPromise(declaration(fixture));
+              return Effect.runPromiseWith(services)(declaration(fixture));
             },
             init: record("init"),
             step: record("step"),
@@ -343,7 +349,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
     },
   } as unknown as Env;
 
-  const door = Object.fromEntries(
+  const door = Rec.fromEntries(
     [
       "connect",
       "challenge",
@@ -503,8 +509,9 @@ const origin: Parameters<ProjectService["Service"]["start"]>[1] = {
 
 const law = (body: (g: fc.GeneratorValue) => Effect.Effect<void, unknown, Scope.Scope>, runs: number) =>
   Effect.gen(function* () {
+    const context = yield* Effect.context<never>();
     // edge: fast-check owns the Promise callback; each generated run owns a fresh Effect scope.
-    const property = fc.asyncProperty(fc.gen(), (g) => Effect.runPromise(Effect.scoped(body(g))));
+    const property = fc.asyncProperty(fc.gen(), (g) => Effect.runPromiseWith(context)(Effect.scoped(body(g))));
     const options = { seed: SEED, numRuns: runs, endOnFailure: true };
     // edge: fast-check answers its assertion through a Promise.
     yield* Effect.tryPromise({ try: () => fc.assert(property, options), catch: rejected });
@@ -638,7 +645,7 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
 
     // The candidate check calls only describe(), never init, a step or a Cmd.
     for (const [id, calls] of i.isolates) {
-      if (id.endsWith("/check")) {
+      if (Str.endsWith("/check")(id)) {
         expect(
           calls.filter((c) => c !== "describe"),
           `${id} ran more than describe`,
@@ -826,7 +833,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
 
             if (down) {
               yield* settled(
-                () => left.every(({ pid }) => lines.some((line) => line.includes(pid))),
+                () => left.every(({ pid }) => lines.some((line) => Str.includes(pid)(line))),
                 "a failed boot swap left no log line for its process",
               );
               expect(behind(), "a failed swap leaves each process on its old code").toEqual(left);
@@ -1238,7 +1245,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             expect(
               Exit.isFailure(exit)
                 ? Cause.squash(exit.cause)
-                : { opened: [...i.isolates.keys()].filter((id) => !before.has(id) && id.endsWith(`/${pid}`)) },
+                : { opened: [...i.isolates.keys()].filter((id) => !before.has(id) && Str.endsWith(`/${pid}`)(id)) },
               "the open fails loud, and counter:1 runs no other code",
             ).toMatchObject({ _tag: "ProgramDown", reason: "no_program" });
           }),
@@ -1296,13 +1303,13 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             for (const e of entries) {
               const start = e.body.code as { readonly hash?: string } | undefined;
 
-              if (e.stream.startsWith("processes/") && typeof start?.hash === "string") {
+              if (Str.startsWith("processes/")(e.stream) && typeof start?.hash === "string") {
                 expect(earlier(start.hash, e.rev), `${e.stream} ${e.id} starts on ${start.hash}`).toBe(true);
               }
 
-              if (e.stream.startsWith("gateway/")) {
+              if (Str.startsWith("gateway/")(e.stream)) {
                 expect(e.build, `${e.stream} ${e.id} is the brain's own entry`).toBe(BRAIN_BUILD);
-              } else if (e.stream.startsWith("app/")) {
+              } else if (Str.startsWith("app/")(e.stream)) {
                 expect(earlier(e.build, e.rev), "a process record's build was loaded first").toBe(true);
               }
             }

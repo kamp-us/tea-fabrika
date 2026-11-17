@@ -12,7 +12,8 @@
 // workspace, whose first tile tezgah starts itself. Every move is picked from tezgah's view as it
 // stands: a split from a live tile, a close of a live tile.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Predicate, Schema, type Scope } from "effect";
+import { Array as Arr, Effect, Formatter, Option, Predicate, Schema } from "effect";
+import type { Scope } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;
@@ -74,15 +75,18 @@ type View = typeof View.Type;
 const order = (node: unknown): ReadonlyArray<string> =>
   Predicate.isString(node)
     ? [node]
-    : Predicate.hasProperty(node, "parts") && Array.isArray(node.parts)
-      ? node.parts.flatMap((p: unknown) => (Predicate.hasProperty(p, "inner") ? order(p.inner) : []))
+    : Predicate.hasProperty(node, "parts") && Arr.isArray(node.parts)
+      ? Arr.flatMap(node.parts, (p: unknown) => (Predicate.hasProperty(p, "inner") ? order(p.inner) : []))
       : [];
 
-const tilesOn = (v: View, n: number) => {
-  const space = v.workspaces.find((w) => w.n === n);
-
-  return space === undefined ? [] : order(space.layout).flatMap((id) => v.tiles.filter((t) => t.id === id));
-};
+const tilesOn = (v: View, n: number) =>
+  Option.match(
+    Arr.findFirst(v.workspaces, (w) => w.n === n),
+    {
+      onNone: () => [],
+      onSome: (space) => Arr.flatMap(order(space.layout), (id) => Arr.filter(v.tiles, (t) => t.id === id)),
+    },
+  );
 
 const via = Schema.encodeSync(Via)(Via.cases.key.make({ keys: "ctrl+b x" }));
 
@@ -107,7 +111,7 @@ const until = <A>(label: string, look: Effect.Effect<A>, done: (a: A) => boolean
       yield* Effect.sleep("1 second");
     }
 
-    return yield* Effect.die(new Error(`${label}: no answer in ${WAIT} s; last saw ${JSON.stringify(last)}`));
+    return yield* Effect.die(new Error(`${label}: no answer in ${WAIT} s; last saw ${Formatter.format(last)}`));
   });
 
 const readView = (live: Live) => Effect.map(live.view, (v) => Schema.decodeUnknownSync(View)(v));
@@ -132,7 +136,7 @@ const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: 
     const does = m.kind === "split_right" ? "tezgah.split_right" : "tezgah.split_down";
     expect(answered(yield* live.send({ type: "did", does, from: from.id, via, tile }))._tag).toBe("accepted");
     yield* until(`the split's ${tile} on workspace ${n}`, readView(live), (v) =>
-      tilesOn(v, n).some((t) => t.id === tile),
+      Arr.some(tilesOn(v, n), (t) => t.id === tile),
     );
 
     return;
@@ -150,8 +154,8 @@ const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: 
   }
 
   expect(answer._tag).toBe("accepted");
-  yield* until(`the close of ${from.id}`, readView(live), (v) => !tilesOn(v, n).some((t) => t.id === from.id));
-  const others = before.tiles.filter((t) => t.id !== from.id);
+  yield* until(`the close of ${from.id}`, readView(live), (v) => !Arr.some(tilesOn(v, n), (t) => t.id === from.id));
+  const others = Arr.filter(before.tiles, (t) => t.id !== from.id);
 
   seen[from.child ? "child" : "other"]++;
 
@@ -160,7 +164,7 @@ const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: 
     expect(ended.exited.length, `L8: one more exit for ${from.shows}`).toBe(was.exited.length + 1);
     expect(
       Predicate.isTagged(ended.exited.at(-1), "shutdown"),
-      `L8: ${from.shows}, a tile tezgah started, ends with shutdown, not ${JSON.stringify(ended.exited.at(-1))}`,
+      `L8: ${from.shows}, a tile tezgah started, ends with shutdown, not ${Formatter.format(ended.exited.at(-1))}`,
     ).toBe(true);
   } else {
     // A stop takes its turn within a second on a quiet instance; give it three before reading.
@@ -221,7 +225,7 @@ export const suite = (open: Open) =>
 
             expect(
               seen.child > 0 && seen.other > 0,
-              `L8: the walks closed a tile tezgah started and one it did not ${JSON.stringify(seen)}`,
+              `L8: the walks closed a tile tezgah started and one it did not ${Formatter.format(seen)}`,
             ).toBe(true);
           }),
         ),

@@ -23,24 +23,30 @@
 // Plants, each run once and undone (recorded in this round's field row): the hello carries `d` as
 // an extra field; a span attribute holds the JWK; an error message includes the JWK text.
 import { describe, expect, it, vi } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Hex from "effect/encoding/Hex";
 import * as Exit from "effect/Exit";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
+import * as Rec from "effect/Record";
 import * as References from "effect/References";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import { brain, door, type Gate, HelloAnswer } from "../../client/HandsDoor.test-support.ts";
 import { start } from "../../client/HandsStart.ts";
@@ -78,7 +84,13 @@ const forms = (d: string): ReadonlyArray<string> => {
 
   const padded = Base64.encode(bytes.success);
 
-  return [d, Base64Url.encode(bytes.success), padded, padded.replace(/=+$/, ""), Hex.encode(bytes.success)];
+  return [
+    d,
+    Base64Url.encode(bytes.success),
+    padded,
+    Function.pipe(padded, Str.replace(/=+$/, "")),
+    Hex.encode(bytes.success),
+  ];
 };
 
 /** Any value as text, Maps, bigints and errors included, so a scan reads every field. */
@@ -87,7 +99,7 @@ const text = (value: unknown): string =>
     typeof v === "bigint"
       ? String(v)
       : v instanceof Map
-        ? Object.fromEntries(v)
+        ? Rec.fromEntries(v)
         : v instanceof Error
           ? { ...v, name: v.name, message: v.message, stack: v.stack, cause: v.cause }
           : v,
@@ -97,17 +109,20 @@ const text = (value: unknown): string =>
 const exitText = (exit: Exit.Exit<unknown, unknown>): string =>
   Exit.isSuccess(exit)
     ? text(exit.value)
-    : [text(exit), Cause.pretty(exit.cause), ...Cause.prettyErrors(exit.cause).map(text)].join("\n");
+    : Arr.join([text(exit), Cause.pretty(exit.cause), ...Arr.map(Cause.prettyErrors(exit.cause), text)], "\n");
 
 /** A span as every text a tracer exports of it: name, attributes, events, links and its exit. */
 const spanText = (span: Tracer.NativeSpan): string =>
-  [
-    span.name,
-    text([...span.attributes]),
-    text(span.events),
-    text(span.links.map((l) => l.attributes)),
-    span.status._tag === "Ended" ? exitText(span.status.exit) : "",
-  ].join("\n");
+  Arr.join(
+    [
+      span.name,
+      text([...span.attributes]),
+      text(span.events),
+      text(Arr.map(span.links, (l) => l.attributes)),
+      span.status._tag === "Ended" ? exitText(span.status.exit) : "",
+    ],
+    "\n",
+  );
 
 const bytes = (s: string) => new TextEncoder().encode(s);
 
@@ -286,7 +301,7 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
           // Ask again after a removal: the stored key's own fingerprint is replaced by a new key.
           const known = yield* current(null);
           const made = Exit.isSuccess(known) ? yield* current(known.value.fingerprint) : known;
-          out.errors.push(...[known, made].filter(Exit.isFailure).map(exitText));
+          out.errors.push(...Arr.map(Arr.filter([known, made], Exit.isFailure), exitText));
           done.add(`key:${Exit.isSuccess(made) ? made.value.found : "failed"}`);
           remember();
         } else if (c === "damage" && entry?.type === "File") {
@@ -298,7 +313,7 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
           done.add("file:wide");
         } else if (c === "unreadable" && entry?.type === "File") {
           // A folder where the key file should be: it stats, and reading it fails.
-          disk.entries.set(FILE, { type: "Directory", mode: 0o700, mtime: new Date(0) });
+          disk.entries.set(FILE, { type: "Directory", mode: 0o700, mtime: DateTime.toDateUtc(DateTime.makeUnsafe(0)) });
           done.add("file:unreadable");
         } else if (c !== "none" && entry !== undefined) {
           // A person deletes the key file, or one that cannot be used any more.
@@ -311,8 +326,8 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
       yield* pass(0);
       const link = live === null ? null : live.run.getState().link._tag;
       done.add(`link:${link ?? "stopped"}`);
-      const open = b.all().filter((t) => t.phase !== "finished");
-      const free = f.processes.filter((p) => !open.some((t) => t.request.process === p));
+      const open = Arr.filter(b.all(), (t) => t.phase !== "finished");
+      const free = Arr.filter(f.processes, (p) => !Arr.some(open, (t) => t.request.process === p));
 
       const options: ReadonlyArray<string> =
         live === null
@@ -359,13 +374,13 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
     }
 
     // Quiet now: a live client works through what it was asked, then every span ends with its exit.
-    for (let i = 0; i < 200 && live !== null && b.all().some((t) => t.phase !== "finished"); i++) {
+    for (let i = 0; i < 200 && live !== null && Arr.some(b.all(), (t) => t.phase !== "finished"); i++) {
       yield* pass(i % 10 === 0 ? 30_000 : 1_000);
     }
 
     yield* pass(60_000);
     yield* stop;
-    out.frames.push(...d.state.sockets.flatMap((s) => [s.url, ...s.sent]));
+    out.frames.push(...Arr.flatMap(d.state.sockets, (s) => [s.url, ...s.sent]));
     const kv = Context.get(journal, KeyValueStore.KeyValueStore);
     const keys = yield* kv.keys.pipe(Effect.orDie);
     out.rows.push(
@@ -417,7 +432,7 @@ describe("P39 slice 4b: the hands key's private half stays in its file", () => {
               // own error sink included, is a log line too.
               yield* Effect.acquireRelease(
                 Effect.sync(() => [
-                  ...(["log", "info", "warn", "error", "debug"] as const).map((method) =>
+                  ...Arr.map(["log", "info", "warn", "error", "debug"] as const, (method) =>
                     vi.spyOn(console, method).mockImplementation((...args) => void out.logs.push(args)),
                   ),
                   vi.spyOn(process.stdout, "write").mockImplementation((chunk) => out.logs.push(String(chunk)) > 0),
@@ -439,29 +454,29 @@ describe("P39 slice 4b: the hands key's private half stays in its file", () => {
 
               const outputs: Record<string, ReadonlyArray<string>> = {
                 frames: out.frames,
-                spans: out.spans.map(spanText),
-                logs: out.logs.map(text),
+                spans: Arr.map(out.spans, spanText),
+                logs: Arr.map(out.logs, text),
                 errors: out.errors,
-                journal: out.rows.map(text),
-                states: out.states.map(text),
+                journal: Arr.map(out.rows, text),
+                states: Arr.map(out.states, text),
               };
 
               expect(secrets.size, "S2: the flow stored at least one key to look for").toBeGreaterThan(0);
 
-              for (const [name, texts] of Object.entries(outputs)) {
+              for (const [name, texts] of Rec.toEntries(outputs)) {
                 for (const secret of secrets) {
                   for (const form of forms(secret)) {
-                    const at = texts.findIndex((t) => t.includes(form));
+                    const leak = Arr.findFirst(texts, (t) => Function.pipe(t, Str.includes(form)));
                     expect(
-                      at,
-                      `S2: [secrets] the private half is in no ${name}: ${at < 0 ? "" : (texts[at] ?? "").slice(0, 400)}`,
-                    ).toBe(-1);
+                      Option.isNone(leak),
+                      `S2: [secrets] the private half is in no ${name}: ${Option.match(leak, { onNone: () => "", onSome: (t) => Function.pipe(t, Str.slice(0, 400)) })}`,
+                    ).toBe(true);
                   }
                 }
               }
 
-              done.add(out.spans.some((s) => s.name === "Commands.execute") ? "span:execute" : "span:none");
-              done.add(out.spans.some((s) => s.name === "Hands.hello") ? "span:hello" : "span:no-hello");
+              done.add(Arr.some(out.spans, (s) => s.name === "Commands.execute") ? "span:execute" : "span:none");
+              done.add(Arr.some(out.spans, (s) => s.name === "Hands.hello") ? "span:hello" : "span:no-hello");
             }),
           { numRuns: 100 },
         );

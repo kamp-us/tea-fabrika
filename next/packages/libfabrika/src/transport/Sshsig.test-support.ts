@@ -3,12 +3,15 @@
 // real `ssh-keygen` and so runs on the schedule (0536).
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import * as Arr from "effect/Array";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Signature from "effect/crypto/Signature";
 import * as Effect from "effect/Effect";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import type * as ClientKey from "./ClientKey.ts";
 import { checkSshsig, KeyLine, writeSshsig } from "./Sshsig.ts";
 
@@ -24,12 +27,9 @@ export const at = (name: string): string => readFileSync(join(VECTORS, name), "u
 export const text = at("text.txt");
 
 export const goodSig = at("good.sig");
-
-export const signer = at("signer.pub").trim();
-
-export const other = at("other.pub").trim();
-
-export const ecdsa = at("ecdsa.pub").trim();
+export const signer = Str.trim(at("signer.pub"));
+export const other = Str.trim(at("other.pub"));
+export const ecdsa = Str.trim(at("ecdsa.pub"));
 
 export const check = (armored: string, signers: ReadonlyArray<string>, body: string = text) =>
   checkSshsig({ text: body, armored, space: SPACE, signers });
@@ -38,13 +38,12 @@ export const check = (armored: string, signers: ReadonlyArray<string>, body: str
 export const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
 
 export const join8 = (...parts: ReadonlyArray<Uint8Array>): Uint8Array => {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  parts.reduce((offset, p) => {
+  const out = new Uint8Array(Arr.reduce(parts, 0, (n, p) => n + p.length));
+  Arr.reduce(parts, 0, (offset, p) => {
     out.set(p, offset);
 
     return offset + p.length;
-  }, 0);
-
+  });
   return out;
 };
 
@@ -63,17 +62,18 @@ export const str = (s: Uint8Array | string): Uint8Array => {
 
 export const base64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64");
 
-export const rows = (body: string): string => (body.match(/.{1,70}/g) ?? []).join("\n");
+export const rows = (body: string): string =>
+  Option.match(Str.match(/.{1,70}/g)(body), { onNone: () => "", onSome: (found) => Arr.join(found, "\n") });
 
 export const armor = (blob: Uint8Array): string =>
   `-----BEGIN SSH SIGNATURE-----\n${rows(base64(blob))}\n-----END SSH SIGNATURE-----\n`;
 
 export const unarmor = (armored: string): Uint8Array =>
   Buffer.from(
-    armored
-      .split("\n")
-      .filter((row) => !row.startsWith("-----"))
-      .join(""),
+    Arr.join(
+      Arr.filter(Str.split(armored, "\n"), (row) => !Str.startsWith("-----")(row)),
+      "",
+    ),
     "base64",
   );
 
@@ -233,7 +233,7 @@ const fromSigner = Effect.fnUntraced(function* (
 ): Effect.fn.Return<Identity> {
   const blob = keyBlob(publicKey);
   const fingerprint = (bytes: Uint8Array) =>
-    digest("SHA-256", bytes).pipe(Effect.map((hashed) => `SHA256:${base64(hashed).replace(/=+$/, "")}`));
+    digest("SHA-256", bytes).pipe(Effect.map((hashed) => `SHA256:${Str.replace(/=+$/, "")(base64(hashed))}`));
 
   return {
     raw: Base64Url.encode(publicKey),

@@ -1,11 +1,16 @@
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 // P16, next/. The tables one built brain file carries: each program's compiled source with its
 // hash, each window file with its route. Outside values decode through Effect with typed failures,
 // malformed JSON included. Builder contract: `app/built.ts` exports `Built`, `BuiltProgram`,
 // `Asset` and `decodeBuilt(raw)`, and a bad value fails as `BuildError`. P40: a program's key is
 // its qualified identity, `pack/program`, and a table with any other key fails whole: no entry is
 // dropped to make it pass.
-import { Effect, Schema } from "effect";
+
+import * as Arr from "effect/Array";
 import * as Digest from "effect/crypto/Digest";
+import * as Rec from "effect/Record";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 
@@ -41,8 +46,8 @@ const sha = (s: string) =>
 
 /** Each program row as the table holds it, keyed by its name, with its source's hash. */
 const programTable = async (rows: ReadonlyArray<{ readonly name: string; readonly source: string }>) =>
-  Object.fromEntries(
-    await Promise.all(rows.map(async ({ name, source }) => [name, { hash: await sha(source), source }] as const)),
+  Rec.fromEntries(
+    await Promise.all(Arr.map(rows, async ({ name, source }) => [name, { hash: await sha(source), source }] as const)),
   );
 
 // P14 slice 1: a tab's page is one more checked asset type, generated beside scripts and stylesheets.
@@ -63,8 +68,8 @@ const routes = fc.uniqueArray(
   fc.record({
     route: fc
       .array(fc.stringMatching(/^[\w-][\w.-]{0,8}$/), { minLength: 1, maxLength: 3 })
-      .filter((parts) => parts.every((p) => p !== "." && p !== ".."))
-      .map((parts) => `/${parts.join("/")}`),
+      .filter((parts) => Arr.every(parts, (p) => p !== "." && p !== ".."))
+      .map((parts) => `/${Arr.join(parts, "/")}`),
     type: fc.constantFrom(...types),
     body: fc.string({ maxLength: 40, unit: "grapheme" }),
   }),
@@ -86,9 +91,9 @@ describe("P16 checked built tables", () => {
       fc.asyncProperty(rows, routes, async (rows, assets) => {
         const raw: Built = {
           programs: await programTable(rows),
-          assets: Object.fromEntries(
+          assets: Rec.fromEntries(
             await Promise.all(
-              assets.map(async ({ route, type, body }) => [route, { hash: await sha(body), type, body }] as const),
+              Arr.map(assets, async ({ route, type, body }) => [route, { hash: await sha(body), type, body }] as const),
             ),
           ),
         };
@@ -96,11 +101,11 @@ describe("P16 checked built tables", () => {
         expect(await Effect.runPromise(api.decodeBuilt(raw))).toEqual(raw);
         expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.Built)(raw))).toEqual(raw);
 
-        for (const program of Object.values(raw.programs)) {
+        for (const program of Rec.values(raw.programs)) {
           expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.BuiltProgram)(program))).toEqual(program);
         }
 
-        for (const asset of Object.values(raw.assets)) {
+        for (const asset of Rec.values(raw.assets)) {
           expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.Asset)(asset))).toEqual(asset);
         }
       }),
@@ -171,18 +176,18 @@ describe("P16 checked built tables", () => {
 
     // Each break keeps the current key inside it, so a check on one end or one segment passes it.
     const breaks: ReadonlyArray<(key: string) => string> = [
-      (key) => key.split("/")[1]!,
-      (key) => key.split("/")[0]!,
+      (key) => Str.split(key, "/")[1]!,
+      (key) => Str.split(key, "/")[0]!,
       (key) => `/${key}`,
       (key) => `${key}/`,
-      (key) => key.replace("/", "//"),
+      (key) => Str.replace("/", "//")(key),
       (key) => `${key}/extra`,
       (key) => `../${key}`,
-      (key) => key.replace("/", "/./"),
-      (key) => key.replace("/", "."),
-      (key) => key.replace("/", ":"),
+      (key) => Str.replace("/", "/./")(key),
+      (key) => Str.replace("/", ".")(key),
+      (key) => Str.replace("/", ":")(key),
       (key) => `${key} `,
-      (key) => `${key}${"x".repeat(257 - key.length)}`,
+      (key) => `${key}${Str.repeat(257 - key.length)("x")}`,
     ];
 
     // The walk: start from a completed table, then each step either adds a program under a fresh
@@ -197,13 +202,13 @@ describe("P16 checked built tables", () => {
           refused = 0;
 
         for (const [i, n] of tape.entries()) {
-          const keys = Object.keys(programs);
+          const keys = Rec.keys(programs);
 
           if (i % 2 === 0) {
             const key = `pack${n % 5}/added${i}`;
             programs[key] = { hash: await sha(key), source: key };
             const decoded = await Effect.runPromise(api.decodeBuilt({ programs, assets: {} }));
-            expect(Object.keys(decoded.programs).sort()).toEqual(Object.keys(programs).sort());
+            expect(Rec.keys(decoded.programs).sort()).toEqual(Rec.keys(programs).sort());
             expect(decoded.programs).toEqual(programs);
             added++;
           } else {

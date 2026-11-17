@@ -1,7 +1,16 @@
 // T753, next/. Shared start laws take their storage driver from the calling module (0062).
 import { describe, expect, it } from "@effect/vitest";
-import { type Config, DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
-import { Digest } from "effect/crypto";
+import type * as Config from "effect/Config";
+import * as Digest from "effect/crypto/Digest";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+
+import * as Rec from "effect/Record";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { property } from "../Testing.test-support.ts";
 import * as Declarations from "./Declarations.ts";
@@ -54,7 +63,7 @@ export const originFault = (kind: (typeof originKinds)[number]): fc.Arbitrary<Or
         kind === "flag"
           ? Origin.cases.flag.make({ name: `--undeclared.${word}` })
           : kind === "env"
-            ? Origin.cases.env.make({ name: `FABRIKA_UNDECLARED_${word.replaceAll("-", "_")}` })
+            ? Origin.cases.env.make({ name: `FABRIKA_UNDECLARED_${Str.replaceAll("-", "_")(word)}` })
             : Origin.cases.file.make({
                 file:
                   choice % 3 === 0
@@ -96,10 +105,10 @@ export const rateLimit = { limit: 100_000, window: 60_000 };
 
 /** Each declaration's default value, by its key, and the default origin, by its path. */
 const defaults = {
-  values: Object.fromEntries(
-    Object.entries(Declarations.all.settings).map(([key, d]) => [key, d.default]),
+  values: Rec.fromEntries(
+    Rec.toEntries(Declarations.all.settings).map(([key, d]) => [key, d.default]),
   ) as Config.Success<typeof Declarations.all>,
-  origins: Object.fromEntries(Declarations.all.declarations.map((d) => [d.path, Origin.cases.default.make({})])),
+  origins: Rec.fromEntries(Declarations.all.declarations.map((d) => [d.path, Origin.cases.default.make({})])),
 };
 
 /** Declared values a fixture sets in place of their defaults, by each setting's key. */
@@ -107,8 +116,8 @@ export type Values = Partial<Config.Success<typeof Declarations.all>>;
 
 /** A flag origin for each value a fixture sets, so the snapshot never says a chosen value is a default. */
 const chosen = (values: Values) =>
-  Object.fromEntries(
-    Object.keys(values).map((key) => {
+  Rec.fromEntries(
+    Rec.keys<string, unknown>(values).map((key) => {
       const path = Declarations.all.settings[key as keyof Values].path;
       return [path, Origin.cases.flag.make({ name: `--${path}` })];
     }),
@@ -233,7 +242,7 @@ export const sentinel = fc
   .map(([word, mark]) => `private-${word}${mark}end`);
 
 export const exclude = (output: unknown, secret: string) => {
-  const forms = [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
+  const forms = [secret, Str.slice(1, -1)(JSON.stringify(secret)), encodeURIComponent(secret)];
   const seen = new WeakSet<object>();
   const visit = (value: unknown): void => {
     if (typeof value === "string") {
@@ -241,7 +250,7 @@ export const exclude = (output: unknown, secret: string) => {
         // A walk visits every string of every output after each move. One assertion per string
         // took two thirds of an entry flow law's time, so only a string that holds the form
         // reaches the assertion, which then fails with its usual message.
-        if (value.includes(form)) {
+        if (Str.includes(form)(value)) {
           expect(value).not.toContain(form);
         }
       }
@@ -256,7 +265,7 @@ export const exclude = (output: unknown, secret: string) => {
         visit(new TextDecoder().decode(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)));
       }
 
-      for (const [key, item] of Object.entries(value)) {
+      for (const [key, item] of Rec.toEntries(value)) {
         visit(key);
         visit(item);
       }
@@ -333,13 +342,15 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
         fc.record({
           by: fc.uuid(),
           for: fc.uuid(),
-          sentAt: fc.integer({ min: 0, max: 2_000_000_000_000 }).map((ms) => new Date(ms).toISOString()),
+          sentAt: fc
+            .integer({ min: 0, max: 2_000_000_000_000 })
+            .map((ms) => DateTime.formatIso(DateTime.makeUnsafe(ms))),
           seen: fc.nat(),
           parent: fc.option(
-            fc.integer({ min: 1, max: 1_000_000 }).map((id) => `in-process_${"0".repeat(26)}-${id}`),
+            fc.integer({ min: 1, max: 1_000_000 }).map((id) => `in-process_${Str.repeat(26)("0")}-${id}`),
             { nil: null },
           ),
-          traceId: fc.uuid().map((id) => id.replaceAll("-", "")),
+          traceId: fc.uuid().map((id) => Str.replaceAll("-", "")(id)),
         }),
         fc.array(fc.nat(), { minLength: 12, maxLength: 50 }),
       ),
@@ -397,10 +408,10 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
                         ? original.seen + 1
                         : key === "parent"
                           ? original.parent === null
-                            ? `in-process_${"0".repeat(26)}-1`
+                            ? `in-process_${Str.repeat(26)("0")}-1`
                             : null
                           : key === "traceId"
-                            ? `${original.traceId[0] === "0" ? "1" : "0"}${original.traceId.slice(1)}`
+                            ? `${original.traceId[0] === "0" ? "1" : "0"}${Str.slice(1)(original.traceId)}`
                             : key === "sentAt"
                               ? DateTime.formatIso(DateTime.makeUnsafe(Date.parse(original.sentAt) + 1))
                               : `${original[key]}-different`,

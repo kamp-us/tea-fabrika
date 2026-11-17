@@ -9,11 +9,13 @@ import {
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Recorder, runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Cause, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Redacted, Schema, Formatter } from "effect";
+
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Signature from "effect/crypto/Signature";
 import * as Base64Url from "effect/encoding/Base64Url";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
@@ -141,9 +143,9 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                 ...w.ctx.id,
                 name:
                   path === "Process"
-                    ? JSON.stringify(["settings-law", "worker"])
+                    ? Formatter.formatJson(["settings-law", "worker"])
                     : path === "RecordPart"
-                      ? JSON.stringify(["settings-law", "spans/0"])
+                      ? Formatter.formatJson(["settings-law", "spans/0"])
                       : "settings-law",
               },
               getWebSockets: () => {
@@ -181,7 +183,7 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
 
             const env = {
               ...w.env,
-              INSTANCE: JSON.stringify(bad),
+              INSTANCE: Formatter.formatJson(bad),
               PROJECT: new Proxy(w.env.PROJECT, {
                 get: (target, key) =>
                   key === "getByName"
@@ -757,7 +759,7 @@ StartsTest.law(
 
       const ctx = {
         ...w.ctx,
-        id: { ...w.ctx.id, name: JSON.stringify(["settings-law", "spans/0"]) },
+        id: { ...w.ctx.id, name: Formatter.formatJson(["settings-law", "spans/0"]) },
         storage: {
           ...w.ctx.storage,
           sql: new Proxy(raw, { get: (target, key) => (key === "databaseSize" ? size : Reflect.get(target, key)) }),
@@ -769,7 +771,7 @@ StartsTest.law(
       const row = (n: number) => ({
         span: {
           traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
-          spanId: n.toString(16).padStart(16, "0"),
+          spanId: Str.padStart(16, "0")(n.toString(16)),
           parentSpanId: null,
           name: "settings-cap-fixture",
           kind: "internal" as const,

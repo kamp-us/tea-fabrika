@@ -1,7 +1,8 @@
 // The typed half of no-promises. Oxlint's JS plugins have no type checker. This lint
 // command uses the installed TypeScript 7.0.2 API, without emitting code or type diagnostics.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path } from "effect";
+import { String as Str, pipe, Array as Arr, Effect, FileSystem, Path } from "effect";
+
 import * as ts from "typescript/unstable/ast";
 import {
   API,
@@ -49,12 +50,11 @@ export const checkPromiseTypes = (
 
     const yes =
       type.isUnionType() || type.isIntersectionType()
-        ? (type.getTypes() ?? []).some((t) => carries(t, seen))
+        ? Arr.some(type.getTypes() ?? [], (t) => carries(t, seen))
         : (thenType !== undefined && checker.getSignaturesOfType(thenType, SignatureKind.Call).length > 0) ||
-          checker
-            .getSignaturesOfType(type, SignatureKind.Call)
-            .some((signature) => carries(checker.getReturnTypeOfSignature(signature), seen));
-
+          Arr.some(checker.getSignaturesOfType(type, SignatureKind.Call), (signature) =>
+            carries(checker.getReturnTypeOfSignature(signature), seen),
+          );
     memo.set(type.id, yes);
 
     return yes;
@@ -75,17 +75,16 @@ export const checkPromiseTypes = (
   };
 
   const keyNames = (type: Type | undefined): readonly string[] | undefined => {
-    if (type?.isStringLiteralType()) {
+    if (type?.isStringLiteralType() === true) {
       return [type.value];
     }
 
-    if (!type?.isUnionType()) {
+    if (type?.isUnionType() !== true) {
       return undefined;
     }
 
-    const names = type.getTypes().map(keyNames);
-
-    return names.every((name) => name !== undefined) ? names.flat() : undefined;
+    const names = Arr.map(type.getTypes(), keyNames);
+    return Arr.every(names, (name) => name !== undefined) ? names.flat() : undefined;
   };
 
   const bridgeProperty = (
@@ -101,7 +100,7 @@ export const checkPromiseTypes = (
       type !== undefined &&
       names !== undefined &&
       names.length > 0 &&
-      names.every((name) => bridgeSymbol(checker.getPropertyOfType(type, name), seen))
+      Arr.every(names, (name) => bridgeSymbol(checker.getPropertyOfType(type, name), seen))
     );
   };
 
@@ -120,10 +119,10 @@ export const checkPromiseTypes = (
 
     if (
       ["tryPromise", "promise"].includes(target.name) &&
-      target.declarations.some((declaration) =>
+      Arr.some(target.declarations, (declaration) =>
         // TypeScript folds path case on case-insensitive file systems.
         /(?:^|\/)node_modules\/effect\/(?:dist\/Effect\.d\.ts|src\/Effect\.ts)$/i.test(
-          declaration.path.replaceAll("\\", "/"),
+          pipe(declaration.path, Str.replaceAll("\\", "/")),
         ),
       )
     ) {
@@ -186,9 +185,13 @@ export const checkPromiseTypes = (
   };
 
   for (const path of program.getSourceFileNames()) {
-    const file = pathService.relative(root, path).replaceAll("\\", "/");
+    const file = pipe(pathService.relative(root, path), Str.replaceAll("\\", "/"));
 
-    if (!file.startsWith("next/") || file.includes("node_modules/") || /\.(?:test|test-support|d)\.tsx?$/.test(file)) {
+    if (
+      !pipe(file, Str.startsWith("next/")) ||
+      pipe(file, Str.includes("node_modules/")) ||
+      /\.(?:test|test-support|d)\.tsx?$/.test(file)
+    ) {
       continue;
     }
 
@@ -239,19 +242,19 @@ export const checkPromiseTypes = (
         candidates.set(node.body, "function returns a Promise or a Promise thunk");
       }
 
-      node.forEachChild((child) => visit(child, inPromise || (bridge && node.arguments.some((arg) => arg === child))));
+      node.forEachChild((child) =>
+        visit(child, inPromise || (bridge && Arr.some(node.arguments, (arg) => arg === child))),
+      );
     };
 
     visit(source);
     const nodes = [...candidates.keys()];
     const types = checker.getTypeAtLocation(nodes);
-    const lines = source.text.split("\n");
-
+    const lines = Str.split(source.text, "\n");
     const marked = (line: number): boolean => {
       // A marker covers only the next physical line, even inside a wrapped statement.
       const edge = /^\s*\/\/ oxlint-disable-next-line (.+?) -- edge: \S/.exec(lines[line - 1] ?? "");
-      const rules = new Set(edge?.[1]?.split(/[,\s]+/));
-
+      const rules = new Set(edge?.[1] === undefined ? [] : Str.split(edge[1], /[,\s]+/));
       // Oxlint separately checks that each comment is used.
       return rules.has("fabrika/no-promises") || rules.has("fabrika/no-effect-run-outside-edge");
     };
@@ -302,7 +305,7 @@ export const checkPromiseTypes = (
     }
   }
 
-  return [...found.values()].sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+  return [...found.values()].sort((a, b) => pipe(a.file, Str.localeCompare(b.file)) || a.line - b.line);
 };
 
 const main = Effect.gen(function* () {
@@ -312,12 +315,14 @@ const main = Effect.gen(function* () {
   const api = new API({ cwd: root });
 
   try {
-    const configs = (yield* fs.glob("next/**/tsconfig.json", {
-      root,
-      exclude: ["**/node_modules/**"],
-    }))
-      .filter((file) => !file.includes("node_modules/"))
-      .map((file) => path.join(root, file));
+    const configs = pipe(
+      yield* fs.glob("next/**/tsconfig.json", {
+        root,
+        exclude: ["**/node_modules/**"],
+      }),
+      Arr.filter((file) => !pipe(file, Str.includes("node_modules/"))),
+      Arr.map((file) => path.join(root, file)),
+    );
 
     const snapshot = api.updateSnapshot({ openProjects: configs });
 

@@ -2,7 +2,7 @@
 // Audit sites: `build.ts:34` (finding the `.tsx` files the Compiler checks) and `runtime.ts:15`
 // (the instance's settings). `local-instance.ts:20` and `:26` translate a failed module import, which no
 // generated input can cause in-process.
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, FileSystem, Formatter, Layer, Path, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { build } from "./build.ts";
@@ -75,8 +75,7 @@ describe("T695, the app's wiring keeps what failed", () => {
                   settings: { ...valid.settings, values: { ...valid.settings.values, "instance.port": bad } },
                 }
               : { ...valid, [field]: bad };
-
-        const instance = JSON.stringify(damaged);
+        const instance = Formatter.formatJson(damaged);
         const error = yield* Effect.flip(settings({ INSTANCE: instance } as Env));
         expect(error.reason).toBe("bad_row");
         expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);

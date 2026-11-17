@@ -28,6 +28,7 @@
 //
 // `.oxlintrc.json` turns it on for `next/` and off for tests: a test's stand-in is not a contract.
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
+import { Array as Arr } from "effect";
 import type { Node } from "./match.ts";
 
 /** The import an identifier is bound to: its source and the name it imports (`*` for a namespace). */
@@ -80,7 +81,7 @@ function* parts(node: Node): Generator<Node> {
       continue;
     }
 
-    for (const part of Array.isArray(value) ? value : [value]) {
+    for (const part of Arr.isArray(value) ? value : [value]) {
       if (part !== null && typeof part === "object" && typeof part.type === "string") {
         yield part;
       }

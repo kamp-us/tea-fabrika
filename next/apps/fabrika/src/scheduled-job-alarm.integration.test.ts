@@ -3,9 +3,11 @@
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
-import { Clock, Effect, FileSystem, Path, Schema } from "effect";
+import { Clock, Effect, FileSystem, Path, Schema, Array as Arr, Formatter } from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import { expect, it } from "vitest";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -35,7 +37,7 @@ const until = <A>(label: string, look: Effect.Effect<A, unknown>, done: (value: 
       yield* Effect.sleep("50 millis");
     }
 
-    return yield* Effect.die(new Error(`${label}: timed out; last observed ${JSON.stringify(last)}`));
+    return yield* Effect.die(new Error(`${label}: timed out; last observed ${Formatter.format(last)}`));
   });
 
 const Beat = Schema.TaggedStruct("beat", {
@@ -64,34 +66,9 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "sjob-" });
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const previous = {
-            home: process.env.FABRIKA_HOME,
-            alchemy: process.env.ALCHEMY_HOME,
-            tracking: process.env.DO_NOT_TRACK,
-          };
-
-          process.env.FABRIKA_HOME = home;
-          process.env.DO_NOT_TRACK = "1";
-
-          return previous;
-        }),
-        (previous) =>
-          Effect.sync(() => {
-            for (const [key, value] of [
-              ["FABRIKA_HOME", previous.home],
-              ["ALCHEMY_HOME", previous.alchemy],
-              ["DO_NOT_TRACK", previous.tracking],
-            ] as const) {
-              if (value === undefined) {
-                delete process.env[key];
-              } else {
-                process.env[key] = value;
-              }
-            }
-          }),
-      );
+      // localInstance sets ALCHEMY_HOME, so it goes back as it was too.
+      yield* scopedEnv({ FABRIKA_HOME: home }, ["ALCHEMY_HOME"]);
+      yield* Effect.sync(noTracking);
       const { localState } = yield* Effect.promise(() => import("alchemy/State/LocalState"));
       const { build } = yield* Effect.promise(() => import("./build.ts"));
       const { localInstance } = yield* Effect.promise(() => import("./local-instance.ts"));
@@ -135,13 +112,11 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
             from,
           ),
         );
-
-        const pid = Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
-
+        const pid = (yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(started)).process;
         const beats = yield* until(
           "three beat facts",
           Effect.promise(() => Reflect.get(instance.project(PROJECT), "read")("beats", 0, "audit")).pipe(
-            Effect.map(Schema.decodeUnknownSync(Schema.Array(Beat))),
+            Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Beat))),
           ),
           (rows) => rows.length >= 3,
         );
@@ -156,16 +131,15 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
           expect(beat.body.period).toBeGreaterThan(0);
         }
 
-        const rows = Schema.decodeUnknownSync(Schema.Array(Letter))(
+        const rows = yield* Schema.decodeUnknownEffect(Schema.Array(Letter))(
           yield* Effect.promise(() => Reflect.get(instance.project(PROJECT), "read")(`${NAME}/inbox`, 0, "audit")),
         );
-
-        const timers = rows.filter((row) => Schema.is(Timer)(row.body.m));
+        const timers = Arr.filter(rows, (row) => Schema.is(Timer)(row.body.m));
         expect(timers.length).toBeGreaterThanOrEqual(3);
-        expect(new Set(timers.map((row) => row.id)).size).toBe(timers.length);
+        expect(new Set(Arr.map(timers, (row) => row.id)).size).toBe(timers.length);
 
         for (const row of timers) {
-          const timer = Schema.decodeUnknownSync(Timer)(row.body.m);
+          const timer = yield* Schema.decodeUnknownEffect(Timer)(row.body.m);
           // format: the runner writes a timer letter's id as `<process>/due/<at>/<pos>`, with the inbox
           // position whose model asked for this wake, so the same wake asked for again is a new
           // letter (P14 slice 2, plan amendment A-Timer-4). The letter itself lands next, at `pos + 1`.
@@ -173,20 +147,19 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
         }
 
         for (const beat of beats) {
-          expect(timers.some((row) => row.id === `${pid}/due/${beat.body.due}/${row.pos - 1}`)).toBe(true);
+          expect(Arr.some(timers, (row) => row.id === `${pid}/due/${beat.body.due}/${row.pos - 1}`)).toBe(true);
         }
 
         // Bracket the alarm read with views: retry when a tick crosses the observation.
         const stable = yield* until(
           "stable idle view around saved alarm",
           Effect.gen(function* () {
-            const before = Schema.decodeUnknownSync(View)(
+            const before = yield* Schema.decodeUnknownEffect(View)(
               yield* Effect.promise(() => Reflect.get(instance.process(pid), "open")("scheduled-job-observer")),
             );
 
             const alarm = yield* Effect.promise(() => Reflect.get(instance.process(pid), "savedAlarm")());
-
-            const after = Schema.decodeUnknownSync(View)(
+            const after = yield* Schema.decodeUnknownEffect(View)(
               yield* Effect.promise(() => Reflect.get(instance.process(pid), "open")("scheduled-job-observer")),
             );
 

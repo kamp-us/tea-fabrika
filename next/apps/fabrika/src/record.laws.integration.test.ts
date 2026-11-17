@@ -10,7 +10,18 @@ import type { RecordShape } from "@kampus/libfabrika/workers/objects";
 import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
 import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Context, Effect, Layer, Option, Result, Schema } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Context,
+  Effect,
+  Formatter,
+  Layer,
+  Option,
+  Result,
+  Schema,
+  Record as Rec,
+} from "effect";
 
 import { recordCall, recordWire } from "./record-wire.test-support.ts";
 
@@ -83,16 +94,16 @@ const Input = Schema.Struct({
 const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
   const repair = (value: unknown): unknown => {
     if (typeof value === "string") {
-      return value.replace(/\p{Cs}/gu, "�");
+      return Str.replace(/\p{Cs}/gu, "�")(value);
     }
 
-    if (Array.isArray(value)) {
-      return value.map(repair);
+    if (Arr.isArray(value)) {
+      return Arr.map(value, repair);
     }
 
     if (value !== null && typeof value === "object") {
-      return Object.fromEntries(
-        Object.entries(value).map(([key, item]) => [key.replace(/\p{Cs}/gu, "�"), repair(item)]),
+      return Rec.fromEntries(
+        Arr.map(Rec.toEntries(value), ([key, item]) => [Str.replace(/\p{Cs}/gu, "�")(key), repair(item)]),
       );
     }
 
@@ -159,17 +170,16 @@ for (const [kind, live] of [
           const input = wellFormed(generated);
 
           const chain = input.job
-            ? Chain.cases.job.make({ process: `process_01m6v5270hf3c8x2q7w9z4k5${String(input.at).padStart(2, "0")}` })
+            ? Chain.cases.job.make({
+                process: `process_01m6v5270hf3c8x2q7w9z4k5${Str.padStart(2, "0")(String(input.at))}`,
+              })
             : Chain.cases.spans.make({});
-
-          const name = JSON.stringify([`law-${sequence++}`, partName(chain, input.at)]);
+          const name = Formatter.formatJson([`law-${sequence++}`, partName(chain, input.at)]);
           const { driver } = yield* Wire;
 
           const actual = yield* driver(name, cap),
             oracle = yield* node(name, cap);
-
-          const rows = input.rows.map((r, index) => ({ ...r, span: { ...r.span, spanId: String(index) } }));
-
+          const rows = Arr.map(input.rows, (r, index) => ({ ...r, span: { ...r.span, spanId: String(index) } }));
           const exercise = (part: Part) =>
             Effect.gen(function* () {
               // The cap is checked before a batch: this first batch lands whole,
@@ -194,7 +204,7 @@ for (const [kind, live] of [
           expect(result).toEqual(yield* exercise(oracle));
           expect(result.write).toEqual({ _tag: "written" });
           expect(result.read).toMatchObject({
-            spans: rows.slice(input.after).map((r) => ({ spanId: r.span.spanId })),
+            spans: Arr.map(rows.slice(input.after), (r) => ({ spanId: r.span.spanId })),
             after: Math.max(input.after, rows.length),
             rolled: false,
           });
@@ -211,12 +221,11 @@ for (const [kind, live] of [
         Effect.gen(function* () {
           const input = wellFormed(generated);
           const chain = Chain.cases.spans.make({});
-          const name = JSON.stringify([`full-${sequence++}`, partName(chain, input.at)]);
-
-          const rows = input.rows.map((row, index) => ({
+          const name = Formatter.formatJson([`full-${sequence++}`, partName(chain, input.at)]);
+          const rows = Arr.map(input.rows, (row, index) => ({
             ...row,
             span: { ...row.span, spanId: String(index) },
-            content: "x".repeat(cap) + (row.content ?? ""),
+            content: Str.repeat(cap)("x") + (row.content ?? ""),
           }));
 
           const fresh = { ...rows[0]!, span: { ...rows[0]!.span, spanId: "fresh" } };
@@ -237,10 +246,10 @@ for (const [kind, live] of [
           expect(actual.written).toEqual({
             _tag: "rolled",
             next: partName(chain, input.at + 1),
-            had: rows.map((row) => row.span.spanId),
+            had: Arr.map(rows, (row) => row.span.spanId),
           });
           expect(actual.page).toMatchObject({
-            spans: rows.map((row) => ({ spanId: row.span.spanId })),
+            spans: Arr.map(rows, (row) => ({ spanId: row.span.spanId })),
             after: rows.length,
             rolled: true,
           });
@@ -286,7 +295,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const input = wellFormed(generated);
       const chain = Chain.cases.spans.make({});
-      const name = JSON.stringify([`cap-${sequence++}`, partName(chain, input.at)]);
+      const name = Formatter.formatJson([`cap-${sequence++}`, partName(chain, input.at)]);
       const part = yield* node(name, 1);
       const expected = yield* (yield* node(name, 1)).write(chain, input.at, input.rows);
       expect(yield* part.write(chain, input.at, input.rows)).toEqual(expected);

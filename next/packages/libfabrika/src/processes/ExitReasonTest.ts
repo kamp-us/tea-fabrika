@@ -3,7 +3,18 @@
 // scope and gives it back when that scope closes.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Predicate, Result, Schema, type Scope, Stream } from "effect";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
@@ -185,7 +196,7 @@ const check = (rows: ReadonlyArray<Entry>, world: World) => {
     seen.set(key, m.reason);
   }
 
-  expect(Object.fromEntries(seen)).toEqual(Object.fromEntries(world.downs));
+  expect(Rec.fromEntries(seen)).toEqual(Rec.fromEntries(world.downs));
 };
 
 const startRequest = (world: World, slot: number) => {
@@ -332,8 +343,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
             [...world.watches.entries()].filter(([, w]) => w.live),
             step.pick,
           );
-
-          const ref = key.slice(key.lastIndexOf("|") + 1);
+          const ref = Arr.lastNonEmpty(Str.split(key, "|"));
           const caller = watch.to._tag === "client" ? brain() : watcher(watch.to.process);
           const answer = yield* as(caller, (p) => p.demonitor(ref, from()));
           expect(Result.isSuccess(answer), "a cancel of a live watch is placed").toBe(true);
@@ -383,7 +393,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
         case "bad": {
           const target = choose(live(world), step.pick);
           const answer = yield* as(brain(), (p) => p.exit(target.process, step.bad as ExitReason, from()));
-          refused(answer, `invalid input is refused: ${JSON.stringify(step.bad)}`, "bad_text");
+          refused(answer, `invalid input is refused: ${Formatter.format(step.bad)}`, "bad_text");
           expect(yield* facts(sql, world), "a refused exit leaves every lifecycle fact as it was").toEqual(before);
           const still = yield* as(brain(), (p) => p.isLive(target.process));
           expect(Result.getOrThrow(still), "the process still lives").toBe(true);
@@ -450,10 +460,11 @@ const prop = (
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const done = new Set<Move>();
         const law = walk(open, moves, done);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
         const checks = { seed: 119120, numRuns: runsFor({ fast: 10, full: 40 }), includeErrorInReport: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));

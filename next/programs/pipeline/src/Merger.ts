@@ -117,7 +117,7 @@ const answers = <const N extends string, F extends Schema.Struct.Fields, O exten
     Schema.Struct({
       type: Schema.Literal(`${name}_err`),
       cmd,
-      error: Schema.Union(tags.map((tag) => Schema.TaggedStruct(tag, {}))),
+      error: Schema.Union(Arr.map(tags, (tag) => Schema.TaggedStruct(tag, {}))),
       at: Schema.Finite,
     }),
   ]);

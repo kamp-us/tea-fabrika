@@ -7,11 +7,13 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Context, Effect, Exit, Layer, Option, Schema, Scope, Tracer } from "effect";
+import { Context, Effect, Exit, Layer, Option, Schema, Scope, Tracer, Formatter } from "effect";
+
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Signature from "effect/crypto/Signature";
 import * as Base64Url from "effect/encoding/Base64Url";
+import * as Str from "effect/String";
 import { vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -22,10 +24,10 @@ import { Chain } from "../telemetry/Trace.ts";
 import { Attached } from "../transport/Wire.ts";
 import type { GatewayCalls } from "./bindings.ts";
 import { ConnectionService, connectionRuntime } from "./connection.ts";
-import { fetch } from "./fetch.ts";
-import type { RecordShape } from "./objects.ts";
 // Loading record.ts registers RecordPart's constructor, which the objects.ts mock below captures.
 import "./record.ts";
+import { fetch } from "./fetch.ts";
+import type { RecordShape } from "./objects.ts";
 import { ProcessService, ProjectService, processRuntime, projectRuntime, settingsReply, type Env } from "./runtime.ts";
 import * as SettingsTest from "./SettingsTest.ts";
 
@@ -66,7 +68,7 @@ const freshPublicKey = Signature.Signature.use((signature) => signature.generate
 const settingsExec =
   (base: Sql, failed: () => boolean, cause: Error, counted: (kind: "read" | "append") => void): Sql["exec"] =>
   (query, ...args) => {
-    const settings = args.some((arg) => typeof arg === "string" && arg.startsWith("settings/instance/"));
+    const settings = args.some((arg) => typeof arg === "string" && Str.startsWith("settings/instance/")(arg));
 
     if (settings && /SELECT \* FROM entries WHERE stream = \? AND rev > \?/i.test(query)) {
       counted("read");
@@ -137,7 +139,7 @@ SettingsTest.suite((recipe, secret) =>
       founding: { person: "person_01m6v5270hf3c8x2q7w9z4k5mn", founder: key, window: null },
     };
 
-    captured.transport.push(JSON.stringify(input));
+    captured.transport.push(Formatter.formatJson(input));
     const lower = new Error(secret, { cause: { password: secret } });
 
     const database = Effect.acquireRelease(
@@ -241,6 +243,7 @@ SettingsTest.suite((recipe, secret) =>
     );
 
     const open: SettingsTest.Driver["open"] = Effect.fnUntraced(function* (path, corrupt) {
+      const context = yield* Effect.context<never>();
       const config = { ...input, ...input.founding, port: Number(input.settings.values["instance.port"]) };
       const db = path === "Project" ? local : yield* database;
       const sql = path === "Project" ? settingsSql : nodeSql(db);
@@ -252,7 +255,7 @@ SettingsTest.suite((recipe, secret) =>
         build: input.build,
         owner: Writer.cases.person.make({ key: "fixture-writer", for: input.founding.person }),
       });
-      const encoded = JSON.stringify(corrupt === undefined ? input : StartsTest.corrupt(input, corrupt, secret));
+      const encoded = Formatter.formatJson(corrupt === undefined ? input : StartsTest.corrupt(input, corrupt, secret));
 
       let attached = Attached.cases.online.make({
         client: "fixture-client",
@@ -281,9 +284,9 @@ SettingsTest.suite((recipe, secret) =>
         id: {
           name:
             path === "Process"
-              ? JSON.stringify([input.name, "worker"])
+              ? Formatter.formatJson([input.name, "worker"])
               : path === "RecordPart"
-                ? JSON.stringify([input.name, "spans/0"])
+                ? Formatter.formatJson([input.name, "spans/0"])
                 : input.name,
         },
         storage: {
@@ -332,7 +335,7 @@ SettingsTest.suite((recipe, secret) =>
         UNRELATED_PASSWORD: secret,
         PROJECT: {
           getByName: () => ({
-            settingsStart: (wire: unknown) => Effect.runPromise(gate(wire)),
+            settingsStart: (wire: unknown) => Effect.runPromiseWith(context)(gate(wire)),
             route: async () => ({ _tag: "ok", result: {} }),
           }),
         },
@@ -494,7 +497,7 @@ SettingsTest.suite((recipe, secret) =>
     return {
       deploy: Effect.fnUntraced(function* (next: StartsTest.Recipe) {
         input = { ...(yield* StartsTest.input(next)), founding: input.founding };
-        captured.transport.push(JSON.stringify(input));
+        captured.transport.push(Formatter.formatJson(input));
       }, Effect.provide(Digest.layerWebCrypto)),
       open,
       fault: (next) => {

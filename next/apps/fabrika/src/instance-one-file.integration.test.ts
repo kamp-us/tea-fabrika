@@ -9,9 +9,28 @@ import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { workerLoader } from "@kampus/libfabrika/workers";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Context, Effect, Exit, FileSystem, Layer, Path, Schema, Scope } from "effect";
+import {
+  Context,
+  Effect,
+  Exit,
+  FileSystem,
+  Layer,
+  Path,
+  Schema,
+  Scope,
+  Array as Arr,
+  String as Str,
+  Config,
+  ConfigProvider,
+  Option,
+  Formatter,
+  Predicate,
+  Record as Rec,
+} from "effect";
+
 import { Digest, SecureRandom } from "effect/crypto";
-import { HttpServer, HttpServerResponse } from "effect/http";
+import { HttpServer, HttpServerResponse, FetchHttpClient, HttpClient } from "effect/http";
+
 import { NetAddress } from "effect/net";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
@@ -19,6 +38,11 @@ import { parseSync } from "oxc-parser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
+
+class CheckError extends Schema.TaggedError<CheckError, { readonly brand: unique symbol }>()("CheckError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
 
 /** One step on the real disk, through Effect's FileSystem and Path. */
 const disk = <A, E>(use: (fs: FileSystem.FileSystem, path: Path.Path) => Effect.Effect<A, E>) =>
@@ -42,6 +66,17 @@ const hash = (value: string | Uint8Array) =>
     Digest.Digest.use((digest) =>
       digest.digestHex(Digest.sha256, typeof value === "string" ? new TextEncoder().encode(value) : value),
     ).pipe(Effect.provide(Digest.layerWebCrypto)),
+  );
+
+// One GET's status through Effect's fetch client, for this file's Promise code. The request has its
+// own scope, so closing it releases the unread body.
+const status = (url: string) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const client = HttpClient.withScope(yield* HttpClient.HttpClient);
+
+      return (yield* client.get(url)).status;
+    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );
 
 // The platform's loader and stub types come from the code under test, never by their ambient
@@ -135,13 +170,17 @@ const plantPolicy = (source: string, mode: "binding" | "outbound", name: string,
     if (node.type === "ObjectExpression") {
       const prop = (key: string) => node.properties.find((p: any) => p.key?.name === key || p.key?.value === key);
 
-      if (prop("mainModule")?.value?.value === "program.js" && prop("env") && prop("globalOutbound")) {
+      if (
+        prop("mainModule")?.value?.value === "program.js" &&
+        prop("env") !== undefined &&
+        prop("globalOutbound") !== undefined
+      ) {
         const target = mode === "binding" ? prop("env").value : prop("globalOutbound");
         ranges.push({ start: target.start, end: target.end });
       }
     }
 
-    for (const child of Object.values(node)) {
+    for (const child of Rec.values(node)) {
       visit(child);
     }
   };
@@ -152,10 +191,9 @@ const plantPolicy = (source: string, mode: "binding" | "outbound", name: string,
 
   // An empty spread removes the policy without leaving a spare comma before the tail options.
   const changed =
-    source.slice(0, at.start) +
+    Str.slice(0, at.start)(source) +
     (mode === "binding" ? JSON.stringify({ [name]: value }) : "...{}") +
-    source.slice(at.end);
-
+    Str.slice(at.end)(source);
   assert.equal(parseSync("brain.mjs", changed).errors.length, 0, "plant must leave executable JavaScript");
 
   return changed;
@@ -284,7 +322,8 @@ const exportsWindow = (from: string, selected: ReadonlyArray<{ readonly package:
   disk((fs) =>
     Effect.gen(function* () {
       for (const { package: name } of selected) {
-        const file = name.startsWith(".") || path.isAbsolute(name) ? undefined : yield* findManifest(fs, from, name);
+        const file =
+          Str.startsWith(".")(name) || path.isAbsolute(name) ? undefined : yield* findManifest(fs, from, name);
 
         if (file === undefined) {
           continue;
@@ -292,7 +331,7 @@ const exportsWindow = (from: string, selected: ReadonlyArray<{ readonly package:
 
         const exports: unknown = JSON.parse(yield* fs.readFileString(file)).exports;
 
-        if (typeof exports === "object" && exports !== null && Object.hasOwn(exports, "./window")) {
+        if (Predicate.isObject(exports) && Rec.has(exports, "./window")) {
           return true;
         }
       }
@@ -318,7 +357,7 @@ const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean)
 
     assert(sample.load.length > 0, "load missing");
 
-    for (const value of Object.values(readings(sample))) {
+    for (const value of Rec.values(readings(sample))) {
       assert(Number.isFinite(value) && value >= 0, "invalid reading");
     }
   }
@@ -337,11 +376,11 @@ const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean)
     assert(bar.sizes.window > 0, "window bytes missing for a program with a window");
   }
 
-  for (const key of Object.keys(bar.caps) as Array<keyof typeof bar.caps>) {
+  for (const key of Rec.keys(bar.caps) as Array<keyof typeof bar.caps>) {
     assert(Number.isFinite(bar.caps[key]) && bar.caps[key] > 0, "recorded cap missing");
 
     if (enforce) {
-      assert(median(bar.head.map((s) => readings(s)[key])) <= bar.caps[key], `local bar regressed: ${key}`);
+      assert(median(Arr.map(bar.head, (s) => readings(s)[key])) <= bar.caps[key], `local bar regressed: ${key}`);
     }
   }
 };
@@ -387,7 +426,7 @@ describe("P16 stack and sealed loader", () => {
               name,
               port: 18787,
               person: "person-test",
-              founder: (multibyte ? "雪" : "a").repeat(length),
+              founder: Str.repeat(length)(multibyte ? "雪" : "a"),
               window: null,
               build: built.build,
             }),
@@ -410,7 +449,7 @@ describe("P16 stack and sealed loader", () => {
           expect(call.main, "the instance runs the completed file").toBe(built.brain);
           expect(call.bundle, "no second bundle pass").toBe(false);
 
-          for (const [name, value] of Object.entries(call.env)) {
+          for (const [name, value] of Rec.toEntries(call.env)) {
             expect(name).not.toMatch(/WINDOW_JS|PROGRAM_SOURCE/);
             expect(JSON.stringify(value)).not.toContain("program-marker");
 
@@ -430,15 +469,15 @@ describe("P16 stack and sealed loader", () => {
         // multibyte setting that passes a character count.
         const real = calls[0];
 
-        if (real) {
+        if (real !== undefined) {
           for (const plant of [
             { ...real, env: { ...real.env, WINDOW_JS: "export const x = 1;" } },
             { ...real, env: { ...real.env, CODE: "program-marker" } },
-            { ...real, env: { ...real.env, WIDE: "雪".repeat(1800) } },
+            { ...real, env: { ...real.env, WIDE: Str.repeat(1800)("雪") } },
             { ...real, main: path.join(APP, "src/brain.ts") },
             { ...real, bundle: true },
           ]) {
-            expect("雪".repeat(1800).length).toBeLessThan(5 * 1024);
+            expect(Str.repeat(1800)("雪").length).toBeLessThan(5 * 1024);
             expect(() => verify(plant)).toThrow();
           }
         }
@@ -549,7 +588,7 @@ class Client {
     this.url = url;
     this.key = key;
     this.tab = tab;
-    this.ws = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
+    this.ws = new WebSocket(`${Str.replace("http", "ws")(url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
     this.ws.addEventListener("error", () => this.frames.push({ closed: true }));
     this.ws.addEventListener("close", () => this.frames.push({ closed: true }));
     this.ws.addEventListener("message", ({ data }) => this.frames.push(JSON.parse(String(data))));
@@ -557,17 +596,17 @@ class Client {
 
   async next(match: (x: any) => boolean): Promise<any> {
     for (;;) {
-      const at = this.frames.findIndex(match);
+      const at = Arr.findFirstIndex(this.frames, match);
 
-      if (at >= 0) {
-        return this.frames.splice(at, 1)[0];
+      if (Option.isSome(at)) {
+        return this.frames.splice(at.value, 1)[0];
       }
 
-      if (this.frames.some((x) => x.closed)) {
+      if (Arr.some(this.frames, (x) => x.closed)) {
         throw Error("wire closed");
       }
 
-      await new Promise((done) => setTimeout(done, 10));
+      await Effect.runPromise(Effect.sleep("10 millis"));
     }
   }
 
@@ -681,7 +720,7 @@ describe("P16 copied-file real instance, serial", () => {
           );
 
           const target = `http://127.0.0.1:${port}/probe-${n}`;
-          expect((await fetch(target)).ok).toBe(true);
+          expect(await status(target)).toBe(200);
           hits = 0;
           const file = path.join(h, "sealed.ts");
           await disk((fs) => fs.symlink(path.join(APP, "node_modules"), path.join(h, "node_modules")));
@@ -704,7 +743,7 @@ describe("P16 copied-file real instance, serial", () => {
               out: path.join(h, "dist"),
               files: [],
               ledger: [],
-              programs: Object.fromEntries(Array.from({ length: (n % 3) + 1 }, (_, i) => [`p33/sealed-${i}`, file])),
+              programs: Rec.fromEntries(Array.from({ length: (n % 3) + 1 }, (_, i) => [`p33/sealed-${i}`, file])),
             }).pipe(Effect.provide(NodeServices.layer)),
           );
 
@@ -746,12 +785,13 @@ describe("P16 copied-file real instance, serial", () => {
                           port: brainPort,
                         }),
                       );
+                      const services = yield* Effect.context<never>();
 
                       yield* Effect.tryPromise({
                         try: async () => {
-                          expect(Object.keys(built.programs).length).toBeGreaterThan(0);
+                          expect(Rec.keys(built.programs).length).toBeGreaterThan(0);
 
-                          for (const name of Object.keys(built.programs)) {
+                          for (const name of Rec.keys(built.programs)) {
                             const program: Loaded = await instance.loader.load(name, `probe-${n}-${mode}-${name}`);
 
                             if (name === "fabrika/counter") {
@@ -779,7 +819,7 @@ describe("P16 copied-file real instance, serial", () => {
 
                             // Read until the program's own fetch settles. The test time limit bounds the wait.
                             while (model.outbound === "pending") {
-                              await new Promise((done) => setTimeout(done, 10));
+                              await Effect.runPromiseWith(services)(Effect.sleep("10 millis"));
                               model = (await turn(SealedTurn, program, "step", [model, { type: "read" }])).model;
                             }
 
@@ -803,7 +843,7 @@ describe("P16 copied-file real instance, serial", () => {
                             }
                           }
                         },
-                        catch: (error) => new Error("P16 isolation check failed", { cause: error }),
+                        catch: (error) => CheckError.make({ message: "P16 isolation check failed", cause: error }),
                       });
                     }),
                   ),
@@ -922,8 +962,7 @@ describe("P16 copied-file real instance, serial", () => {
 
                           const inbox = (await a.call("ledger.read", { stream: "counter:1/inbox", after: 0 })).result
                             .entries;
-
-                          const acknowledged = inbox.filter((r: any) => String(r.id).startsWith("p16-"));
+                          const acknowledged = inbox.filter((r: any) => Str.startsWith("p16-")(String(r.id)));
                           expect(acknowledged).toHaveLength(messages.length);
                           expect(new Set(acknowledged.map((r: any) => r.id)).size).toBe(messages.length);
                           const input = inbox[0].parent;
@@ -967,7 +1006,7 @@ describe("P16 copied-file real instance, serial", () => {
                             }
 
                             a.ws.send(
-                              JSON.stringify({
+                              Formatter.formatJson({
                                 jsonrpc: "2.0",
                                 id: 999999,
                                 method: "process.send",
@@ -984,14 +1023,13 @@ describe("P16 copied-file real instance, serial", () => {
                           }
 
                           // Every embedded route must answer from this one file. P14 is absent on this base.
-                          const missing = await fetch(`${runtime.url}/p16-missing.js`);
-                          expect(missing.status).toBe(404);
+                          expect(await status(`${runtime.url}/p16-missing.js`)).toBe(404);
                         } finally {
                           a.ws.close();
                           b.ws.close();
                         }
                       },
-                      catch: (error) => new Error("P16 recovery check failed", { cause: error }),
+                      catch: (error) => CheckError.make({ message: "P16 recovery check failed", cause: error }),
                     });
                   }),
                 ),
@@ -1014,9 +1052,17 @@ describe("P16 copied-file real instance, serial", () => {
   });
   // scenario: a fixed base/head benchmark, because it measures real laptop performance.
   it("scenario: T10 timing checks experiment 241's four base and five head readings on the laptop; without a bar file it skips the cap check", async () => {
-    const barFile = process.env.P16_LOCAL_BAR;
+    // The laptop's variables through Config, read when the scenario runs. An empty one stays empty,
+    // as a read of process.env gave it, so an empty P16_LOCAL_BAR still skips and an empty CI is off.
+    const text = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
+    const env = Effect.runSync(
+      Config.all({ bar: text("P16_LOCAL_BAR"), brain: text("P16_BRAIN"), ci: text("CI") }).parse(
+        ConfigProvider.fromEnv({ preserveEmptyStrings: true }),
+      ),
+    );
+    const barFile = env.bar;
 
-    if (!barFile) {
+    if (barFile === undefined || barFile === "") {
       console.log(
         "T10 cap check skipped: P16_LOCAL_BAR is unset, so there is no bar file; the bar blocks on the laptop only",
       );
@@ -1025,17 +1071,17 @@ describe("P16 copied-file real instance, serial", () => {
     }
 
     const bar = Schema.decodeSync(Schema.fromJsonString(Bar))(await disk((fs) => fs.readFileString(barFile)));
-    const brain = process.env.P16_BRAIN;
+    const brain = env.brain;
     assert(brain, "final brain path missing");
     const digest = await hash(await disk((fs) => fs.readFile(brain)));
     const { programs } = await import("./table.ts");
     const windowed = await exportsWindow(path.join(APP, "src"), programs);
-    localBar(bar, digest, !process.env.CI, windowed);
+    localBar(bar, digest, !env.ci, windowed);
     console.log(
       JSON.stringify({
         law: "T10",
-        base: bar.base.map(readings),
-        head: bar.head.map(readings),
+        base: Arr.map(bar.base, readings),
+        head: Arr.map(bar.head, readings),
         sizes: bar.sizes,
       }),
     );
@@ -1043,9 +1089,9 @@ describe("P16 copied-file real instance, serial", () => {
       localBar(
         {
           ...bar,
-          head: bar.head.map((s) => ({
+          head: Arr.map(bar.head, (s) => ({
             ...s,
-            sendMs: s.sendMs.map(() => bar.caps.acceptedSend + 1),
+            sendMs: Arr.map(s.sendMs, () => bar.caps.acceptedSend + 1),
           })),
         },
         digest,
@@ -1054,7 +1100,12 @@ describe("P16 copied-file real instance, serial", () => {
       ),
     ).toThrow("acceptedSend");
     expect(() =>
-      localBar({ ...bar, head: bar.head.map((s) => ({ ...s, error: "planted failure" })) }, digest, false, windowed),
+      localBar(
+        { ...bar, head: Arr.map(bar.head, (s) => ({ ...s, error: "planted failure" })) },
+        digest,
+        false,
+        windowed,
+      ),
     ).toThrow("failed run");
     expect(() => localBar(bar, "wrong digest", false, windowed)).toThrow("wrong built bytes");
     expect(() => localBar({ ...bar, capsFrom: "ticket-115's rule (a guess)" }, digest, false, windowed)).toThrow(

@@ -22,7 +22,19 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream } from "effect";
+import {
+  String as Str,
+  pipe,
+  Array as Arr,
+  Arbitrary,
+  Cause,
+  Effect,
+  Exit,
+  FileSystem,
+  Layer,
+  Schema,
+  Stream,
+} from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { RateLimiter } from "effect/persistence";
 
@@ -40,7 +52,12 @@ const GatewayCalls = Arbitrary.schema(
 type DoorCall = typeof GatewayCalls extends Arbitrary.Arbitrary<infer C> ? C : never;
 
 // WebCrypto owns ephemeral test key generation and signing. No machine key is read or printed.
-const web = <A>(f: () => Promise<A>) => Effect.tryPromise({ try: f, catch: () => new Error("test crypto failed") });
+class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
+  message: Schema.String,
+}) {}
+
+const web = <A>(f: () => Promise<A>) =>
+  Effect.tryPromise({ try: f, catch: () => WebCryptoError.make({ message: "test crypto failed" }) });
 
 const key = Effect.fnUntraced(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
@@ -51,8 +68,7 @@ const key = Effect.fnUntraced(function* () {
   new DataView(blob.buffer).setUint32(15, 32);
   blob.set(raw, 19);
   const line = Schema.decodeSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
-  const fingerprint = `SHA256:${Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))).replace(/=+$/, "")}`;
-
+  const fingerprint = `SHA256:${pipe(Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))), Str.replace(/=+$/, ""))}`;
   return {
     raw: Base64Url.encode(raw),
     line,
@@ -237,7 +253,7 @@ it.effect.prop(
 
       for (const role of ["person", "window", "agent"]) {
         const before = w.delivered.length;
-        const hello = yield* w.hello(stranger, `${role}-${c.name.slice(0, 80)}`, role);
+        const hello = yield* w.hello(stranger, `${role}-${pipe(c.name, Str.slice(0, 80))}`, role);
         expect(hello.result._tag).not.toBe("online");
         expect(yield* w.door.route(hello.client, "process.send", request(c.body))).toEqual({
           _tag: "refused",
@@ -289,7 +305,7 @@ it.effect.prop(
       yield* w.door.route(client, "process.send", request(c.body));
       const input = w.delivered.at(-1);
 
-      if (!input) {
+      if (input === undefined) {
         return yield* Effect.die("no checked delivery");
       }
 
@@ -319,8 +335,7 @@ it.effect.prop(
 // Every kind of /grant change (coordination/text.ts Change: granted, revoked, added), each with generated labels.
 const changes = Effect.fnUntraced(function* (w: World, c: DoorCall) {
   const joining = yield* key(),
-    label = c.name.slice(0, 96);
-
+    label = pipe(c.name, Str.slice(0, 96));
   return {
     granted: grantText({
       id: "grant_0000000000e008000000000002",
@@ -428,7 +443,7 @@ it.effect.prop(
       yield* w.door.route(client, "process.send", request(c.body));
       const input = w.delivered.at(-1);
 
-      if (!input) {
+      if (input === undefined) {
         return yield* Effect.die("no delivery");
       }
 
@@ -521,7 +536,7 @@ const paths = [
 ];
 
 const presence = (files: ReadonlySet<string>, load: () => PolicyDoor): PolicyDoor | null => {
-  if (!paths.some((p) => files.has(p))) {
+  if (!Arr.some(paths, (p) => files.has(p))) {
     return null;
   }
 
@@ -582,7 +597,7 @@ it.effect.prop(
         }
       }
 
-      if (!paths.some((p) => found.has(p))) {
+      if (!Arr.some(paths, (p) => found.has(p))) {
         ctx.skip("not built: P25 agent policy");
       }
 
@@ -602,7 +617,7 @@ it.effect.prop(
         { name: "uncheck", readOnly: false, personOnly: false },
         { name: "left", readOnly: true, personOnly: false },
         { name: "items", readOnly: true, personOnly: false },
-        ...personInputs.map((name) => ({ name, readOnly: false, personOnly: true })),
+        ...Arr.map(personInputs, (name) => ({ name, readOnly: false, personOnly: true })),
       ]);
       yield* installedRefusal(policy, `planted.${c.unknown}`, c.body);
 
@@ -713,8 +728,7 @@ it.effect.prop(
 
       const dispatch = Effect.fnUntraced(function* (method: string) {
         const h = handler.get(method);
-
-        return h ? { _tag: "ok", result: yield* h() } : { _tag: "refused", reason: "unknown_method" };
+        return h !== undefined ? { _tag: "ok", result: yield* h() } : { _tag: "refused", reason: "unknown_method" };
       });
 
       const clean: PolicyDoor = {

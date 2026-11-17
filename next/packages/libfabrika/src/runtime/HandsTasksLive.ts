@@ -1,7 +1,8 @@
 /**
  * The `HandsTasks` layer over `Tasks`, run in the Project inside its shared write turn.
  */
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
+import * as Arr from "effect/Array";
 import type { From } from "../processes/Mailbox.ts";
 import { needs } from "../tasks/Task.ts";
 import { Tasks, type TasksError } from "../tasks/Tasks.ts";
@@ -64,7 +65,9 @@ export const layer = (options: { readonly target: string | null; readonly settin
           }
 
           if (s._tag !== "finished" && s._tag !== "collected") {
-            const requested = saved.events.find((event) => event.event === "requested");
+            const requested = Option.getOrUndefined(
+              Arr.findFirst(saved.events, (event) => event.event === "requested"),
+            );
 
             if (requested === undefined) {
               return yield* new HandsTasksError({ reason: "storage" });

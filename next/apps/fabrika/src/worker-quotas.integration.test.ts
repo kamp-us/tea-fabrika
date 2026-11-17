@@ -8,10 +8,12 @@ import * as QuotasSql from "@kampus/libfabrika/processes/QuotasSql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { ByteSize, Effect, FileSystem, Path, Schema } from "effect";
+import { String as Str, ByteSize, Effect, FileSystem, Formatter, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import { expect } from "vitest";
 import { build } from "./build.ts";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -69,7 +71,9 @@ const wire = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity)
   const frames: Array<typeof Frame.Type> = [];
   const socket = yield* Effect.acquireRelease(
     Effect.sync(() => {
-      const socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
+      const socket = new WebSocket(
+        `${Str.replace("http", "ws")(url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+      );
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
           frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data)));
@@ -96,7 +100,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity)
   let serial = 0;
   const call = Effect.fnUntraced(function* (method: string, params: unknown) {
     const id = ++serial;
-    socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+    socket.send(Formatter.formatJson({ jsonrpc: "2.0", id, method, params }));
     return yield* next((frame) => frame.id === id);
   });
   const challenge = yield* next((frame) => frame.method === "challenge");
@@ -150,28 +154,9 @@ const world = Effect.fnUntraced(function* (mode: "writes" | "storage" | "reserve
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "q13-" });
-  yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const previous = { home: process.env.FABRIKA_HOME, alchemy: process.env.ALCHEMY_HOME };
-      process.env.FABRIKA_HOME = home;
-      process.env.DO_NOT_TRACK = "1";
-      return previous;
-    }),
-    (previous) =>
-      Effect.sync(() => {
-        if (previous.home === undefined) {
-          delete process.env.FABRIKA_HOME;
-        } else {
-          process.env.FABRIKA_HOME = previous.home;
-        }
-
-        if (previous.alchemy === undefined) {
-          delete process.env.ALCHEMY_HOME;
-        } else {
-          process.env.ALCHEMY_HOME = previous.alchemy;
-        }
-      }),
-  );
+  // localInstance sets ALCHEMY_HOME, so it goes back as it was too.
+  yield* scopedEnv({ FABRIKA_HOME: home }, ["ALCHEMY_HOME"]);
+  yield* Effect.sync(noTracking);
   yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
   const files: Record<string, string> = {};
 
@@ -213,17 +198,17 @@ const world = Effect.fnUntraced(function* (mode: "writes" | "storage" | "reserve
   const from = { ...FROM, by: key.fingerprint, build: built.build };
   const start = Effect.fnUntraced(function* (name: string, program: string) {
     const code = built.programs[program]!;
-    return Schema.decodeUnknownSync(started)(
+    return (yield* Schema.decodeUnknownEffect(started)(
       yield* rpc(
         project,
         "start",
         { _tag: "first", id: `start:${name}`, name, code: { program, hash: code.hash } },
         from,
       ),
-    ).process;
+    )).process;
   });
   const facts = Effect.fnUntraced(function* (stream: string) {
-    return Schema.decodeUnknownSync(Rows)(yield* rpc(project, "read", stream, 0, "audit"));
+    return yield* Schema.decodeUnknownEffect(Rows)(yield* rpc(project, "read", stream, 0, "audit"));
   });
   // A restart names the build of the program it reloads: that program's code hash, never the brain file's.
   const hash = (program: string) => built.programs[program]!.hash;
@@ -316,7 +301,7 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
           expect(before.process).toHaveProperty("recovery.total", { writes: 0, bytes: 0 });
 
           if (mode === "storage") {
-            expect(yield* w.send(alpha, "too-large", { type: "inc", text: "😀".repeat(6000) })).toMatchObject({
+            expect(yield* w.send(alpha, "too-large", { type: "inc", text: Str.repeat(6000)("😀") })).toMatchObject({
               error: { data: { reason: "quota" } },
             });
             expect(yield* w.facts("alpha:1/inbox")).toHaveLength(ordinary);
@@ -351,7 +336,7 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
             expect(yield* w.facts(`${alpha}/dead`)).toHaveLength(1);
 
             if (mode === "writes") {
-              const info = Schema.decodeUnknownSync(
+              const info = yield* Schema.decodeUnknownEffect(
                 Schema.Array(Schema.Struct({ name: Schema.String, process: Schema.String })),
               )(yield* rpc(w.project, "info"));
               const successor = info.find((r) => r.name === "alpha:1")!.process;
@@ -368,9 +353,9 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
                 "a checked person restart must complete at the program cap",
               );
               expect(restarted.filter((r) => r._tag === "restarted")).toHaveLength(2);
-              const current = Schema.decodeUnknownSync(
+              const current = (yield* Schema.decodeUnknownEffect(
                 Schema.Array(Schema.Struct({ name: Schema.String, process: Schema.String })),
-              )(yield* rpc(w.project, "info")).find((r) => r.name === "alpha:1")!.process;
+              )(yield* rpc(w.project, "info"))).find((r) => r.name === "alpha:1")!.process;
               // Plant: a restart that loses the program's quota state answers this input accepted.
               expect(yield* w.send(current, "excess", { type: "inc", text: "" })).toMatchObject({
                 error: { data: { reason: "quota" } },

@@ -5,7 +5,9 @@ import { SinkError } from "@kampus/libfabrika/telemetry/Sink";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import { build } from "./build.ts";
+import { keptEnv } from "./env.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 
@@ -48,16 +50,8 @@ export const recordWire = Effect.fnUntraced(
     const port = yield* Effect.acquireRelease(heldPort(), (p) => p.release);
     const key = yield* SshsigTest.identity;
     const built = yield* build({ out: path.join(home, "dist") });
-    const old = process.env.ALCHEMY_HOME;
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        if (old === undefined) {
-          delete process.env.ALCHEMY_HOME;
-        } else {
-          process.env.ALCHEMY_HOME = old;
-        }
-      }),
-    );
+    // localInstance sets ALCHEMY_HOME; it goes back as it was when the scope closes.
+    yield* keptEnv(["ALCHEMY_HOME"]);
     return yield* localInstance(
       built,
       yield* startupFixture({

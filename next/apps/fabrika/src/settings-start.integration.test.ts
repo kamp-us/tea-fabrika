@@ -17,16 +17,35 @@ import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, FileSystem, Layer, Path, Ref, Schedule, Schema, Stream } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Effect,
+  Exit,
+  FileSystem,
+  Formatter,
+  Layer,
+  Path,
+  Ref,
+  Schedule,
+  Schema,
+  Stream,
+} from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
+
 import * as fc from "fast-check";
 import { rolldown } from "rolldown";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import { killWorkerd } from "./workerd.test-support.ts";
+
+/** The proxy answered, but not yet with the reopened Worker: a reply that is retried. */
+class NotReopened extends Schema.TaggedError<NotReopened, { readonly brand: unique symbol }>()("NotReopened", {
+  status: Schema.Int,
+}) {}
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
@@ -161,7 +180,7 @@ describe("L13, each process start keeps the exact settings and hash it began wit
                   processes.push({
                     port,
                     held: loaded.snapshot,
-                    saved: JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(loaded.snapshot)),
+                    saved: yield* Schema.encodeEffect(Schema.fromJsonString(Snapshot.Snapshot))(loaded.snapshot),
                   });
                 });
 
@@ -175,7 +194,7 @@ describe("L13, each process start keeps the exact settings and hash it began wit
                   yield* begin(a.env);
                 } else if (processes.length > 0) {
                   const p = processes[a.which % processes.length]!;
-                  const replayed = Schema.decodeUnknownSync(Snapshot.Snapshot)(JSON.parse(p.saved));
+                  const replayed = yield* Schema.decodeEffect(Schema.fromJsonString(Snapshot.Snapshot))(p.saved);
                   expect(replayed.values["instance.port"]).toBe(p.port);
                   // The process's own value never moves, though files changed since it began.
                   expect(p.held.values["instance.port"]).toBe(p.port);
@@ -199,11 +218,11 @@ describe("L13, each process start keeps the exact settings and hash it began wit
 });
 
 /** Every form a secret may take in text: raw, JSON-escaped and URL-encoded. */
-const forms = (secret: string) => [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
+const forms = (secret: string) => [secret, Str.slice(1, -1)(JSON.stringify(secret)), encodeURIComponent(secret)];
 
 const secret = fc
   .tuple(fc.stringMatching(/^[A-Za-z0-9]{6,12}$/), fc.constantFrom('"', "/", " ", "+", "&"))
-  .map(([word, mark]) => `sk-${word}${mark}${word.slice(0, 3)}`);
+  .map(([word, mark]) => `sk-${word}${mark}${Str.slice(0, 3)(word)}`);
 
 /** Where the files hold the secret: nowhere, at an unknown key, or nested under a declared key. */
 const placed = (port: number, word: string) => {
@@ -244,8 +263,7 @@ describe("L14 [secrets], a start saves and says only declared settings", () => {
                   env: { [field]: word },
                   version: "0.0.0",
                 });
-
-                return JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(loaded.snapshot));
+                return yield* Schema.encodeEffect(Schema.fromJsonString(Snapshot.Snapshot))(loaded.snapshot);
               }),
             ).pipe(Effect.provide(services)),
           );
@@ -449,7 +467,7 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
     yield* request.pipe(
       Effect.filterOrFail(
         (response) => response.status === 200,
-        () => new Error("Worker has not reopened"),
+        (response) => NotReopened.make({ status: response.status }),
       ),
       Effect.retry({ times: 100, schedule: Schedule.spaced("100 millis") }),
     );
@@ -484,7 +502,7 @@ it.live("scenario: requests that reach a fresh Worker while its first read of th
 
     const request = HttpClient.get(`${instance.url}/`);
     const answers = yield* Effect.forEach(Array.from({ length: 24 }), () => request, { concurrency: "unbounded" });
-    expect(answers.map((response) => response.status)).toEqual(answers.map(() => 200));
+    expect(Arr.map(answers, (response) => response.status)).toEqual(Arr.map(answers, () => 200));
     // A read has finished, so a later request answers from it.
     expect((yield* request).status).toBe(200);
   }).pipe(
@@ -551,9 +569,9 @@ describe("L12, startup uses the selected port, and a taken port stops naming ins
       const { port } = yield* held;
       const word = "sk-T664unrelated/+&secret";
       const first = yield* dev(port, { UNRELATED_TOKEN: word });
-      const ready = `{"ready":${JSON.stringify(`http://127.0.0.1:${port}`)},"build":`;
+      const ready = `{"ready":${Formatter.formatJson(`http://127.0.0.1:${port}`)},"build":`;
 
-      for (let n = 0; !(yield* first.output).includes(ready); n++) {
+      for (let n = 0; !Str.includes(ready)(yield* first.output); n++) {
         expect(yield* first.child.isRunning, `dev.ts stopped: ${yield* first.output}`).toBe(true);
         expect(n, `no ready line on port ${port}: ${yield* first.output}`).toBeLessThan(1200);
         yield* Effect.sleep("100 millis");

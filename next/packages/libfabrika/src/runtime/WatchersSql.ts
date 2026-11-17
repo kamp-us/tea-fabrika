@@ -4,6 +4,7 @@
  */
 import { applyCell } from "@demlik/tea";
 import { Clock, Effect, Layer, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import type { Sql } from "../Sql.ts";
 import type { Update } from "./Entry.ts";
 import { Model, watchers } from "./internal/watchers.ts";
@@ -80,9 +81,13 @@ export const layer = (
           descriptor.name,
           encode({ v: 1, build: descriptor.build, name: descriptor.name, state: next }),
         );
-        const held = new Set(next._tag === "empty" ? [] : next.clients.map((c) => c.client));
-
-        return before._tag === "watching" ? before.clients.filter((c) => !held.has(c.client)).map((c) => c.client) : [];
+        const held = new Set(next._tag === "empty" ? [] : Arr.map(next.clients, (c) => c.client));
+        return before._tag === "watching"
+          ? Arr.map(
+              Arr.filter(before.clients, (c) => !held.has(c.client)),
+              (c) => c.client,
+            )
+          : [];
       };
 
       // Read at each call: `build` is the code the process runs now, which a swap or an open moves.

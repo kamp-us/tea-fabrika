@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e79-tests2",
+  "ticket": "kamp-us/tea-fabrika#1075",
+  "pr": null,
+  "started": "2026-11-15T23:14:00-08:00",
+  "ended": "2026-11-15T23:39:05-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "pipeline, tracker ticket 1075, test_writer: tests step, round 2, for judgment slice E79 of the Effect-checker sweep, check preferEffectString, in next/ (folders app:src, lib:runtime, lib:settings, lib:telemetry, lib:cloudflare, lib:processes, lib:ledger, lib:gateway). Pull request 1366 is merged, so origin/main was merged into the branch first (one conflict, the import lines of lib/settings/TomlEdit.test.ts, kept both sides: runsFor from main, Option and effect/String from this branch). Recounted with only this check at error through --lspconfig on next/packages/libfabrika and next/apps/fabrika, nothing written to a tsconfig: 128 hits met, 68 in exam paths and 60 in product files, none waiting on 1366. The 91 hits once listed as waiting on 1366 are part of that count, and the merge added new files with hits (the P34c quota laws and suites). All 68 exam-path hits are fixed and the recount is 0 there. The checker has no quick fix for this check, so the scratchpad codemod from round 1, never committed, rewrote all 68: a native call becomes the effect/String call with the string last (Str.startsWith(p)(s)), split data-first (Str.split(s, sep)), and an import added (namespace effect/String in libfabrika, the barrel String as Str in the app). No hit needed a hand edit: none answered an Option. Every repeat count was read by hand and none can be negative (each is a modulo of a nonnegative draw, a Math.max(0, ...) or a constant), where Effect clamps and the native call threw. No assertion was dropped or narrowed and no law was loosened. pnpm format hoisted the new import above the header comment in nine libfabrika files; each header was put back on top from HEAD, and a second format left them there. Comment-line counts are unchanged in every touched file. Files: app/record-wire.test-support.ts 2, app/runtime-quotas.laws.test.ts 11, app/runtime-recovery.laws.integration.test.ts 11, app/worker-quotas.integration.test.ts 3, lib/cloudflare/ObjectService.test.ts 1, lib/cloudflare/alarm.laws.test.ts 2, lib/processes/QuotasTest.ts 8, lib/processes/internal/programMail.test.ts 1, lib/runtime/QuotaRunnerTest.ts 3, lib/runtime/Runner.integration.test.ts 17, lib/settings/QuotaSettings.test.ts 1, lib/settings/StartsTest.ts 7, lib/telemetry/QuotaRefusalTest.ts 1. Left for the build step, 60 product hits: lib/cloudflare/connection.ts:81,265,267; lib/cloudflare/runtime.ts:674,697,808,809,809,821,1574,1575,1576,1812,1812; lib/gateway/Gateway.ts:732,733,1079,1238,1844,2111,2122; lib/ledger/Log.ts:34; lib/processes/QuotasSql.ts:80,82,83,84,85,86,87,200,206; lib/runtime/ProcessStore.ts:322,326; lib/runtime/Runner.ts:1428,1490,1491,1682,1683,2130; lib/telemetry/Sink.ts:133,161,166,167,168,168,168,184,184,185,199,199,200,204,204,204,220,223,223,234,239. Lock: none, by the owner ruling.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/cloudflare/ObjectService.test.ts, law 3 and law 3 for the Process shell: any bad instance setting fails each call with its wire failure (its broken recipe now cuts the JSON with Str.slice)",
+      "plant": "next/packages/libfabrika/src/cloudflare/SettingsInput.ts, decode: an instance setting that is not JSON dies instead of failing with its typed error",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/cloudflare/SettingsInput.test.ts, L3 deployment, corruption and repeat delivery check complete snapshots every time (its secret guard StartsTest.exclude now finds a secret inside a string with Str.includes)",
+      "plant": "next/packages/libfabrika/src/cloudflare/SettingsInput.ts, read: the decoded result carries an unrelated Worker secret wrapped in other text",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "note": "Checks: pnpm format, pnpm lint (with NODE_OPTIONS=--max-old-space-size=6144) and the list ratchet passed, and one pnpm typecheck passed. Tests ran on the working tree over the merge commit 2502844, before the commit: vitest --changed HEAD, project next, 27 files and 169 tests passed; project next-integration, 29 of 30 files passed (444 tests). The one failure, next/apps/fabrika/src/start-child.laws.integration.test.ts L11 (every storage read and write in the child and lifecycle flows keeps error text and metadata out of outputs), was a 60 s timeout under three workers. It reaches this change only through record-wire.test-support.ts, whose rewritten line gives the same hash name. Run alone it passed, 23 of 23 tests. It is the known near-limit law already in field/findings/2026-11-15-start-child-l11-runs-near-its-limit.json and field/findings/2026-11-15-l11-storage-walk-near-its-timeout.json, so no new row was added. No .visual. test ran. Each plant ran once and was restored by copy. The 0178 guard refused nothing.",
+  "step": "test_writer"
+}

@@ -10,6 +10,7 @@
 //
 // Without `--lead` it formats, lints and reads governance, then parks on the lead sign with `ask`.
 
+import { String as Str, pipe } from "effect";
 import * as Flow from "../Flow.ts";
 import * as Step from "../Step.ts";
 
@@ -27,7 +28,7 @@ export type Decision = {
 };
 
 export const landDecision = (d: Decision): Flow.Flow =>
-  Flow.make(`land-${d.branch.replace(/^fabrikalfa\//, "")}`, [
+  Flow.make(`land-${pipe(d.branch, Str.replace(/^fabrikalfa\//, ""))}`, [
     Step.act("format", { dir: d.dir }),
     Step.check("lint", { dir: d.dir }),
     Step.gather("governance", { dir: d.dir }),

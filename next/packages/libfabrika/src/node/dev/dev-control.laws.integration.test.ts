@@ -7,6 +7,7 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -14,15 +15,20 @@ import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
-import { vi } from "vitest";
+
+import { vi, type Mock } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
-import { bodyText, fetchClient } from "./dev-client.test-support.ts";
+import { bodyText } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
@@ -159,7 +165,7 @@ const legal = (world: World): ReadonlyArray<readonly [Kind, number]> => {
 
 const choose = (world: World, move: Move): Kind => {
   const moves = legal(world);
-  const total = moves.reduce((sum, [, weight]) => sum + weight, 0);
+  const total = Arr.reduce(moves, 0, (sum, [, weight]) => sum + weight);
   let left = move.pick % total;
 
   for (const [kind, weight] of moves) {
@@ -190,7 +196,7 @@ type Seen = {
   readonly woken: Woken | null;
 };
 
-const run = Effect.fnUntraced(function* (walk: Walk) {
+const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalThis.fetch>) {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t708-" });
   const clock = yield* Clock.Clock;
@@ -271,7 +277,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
       if (key === "rename") {
         return (from: string, to: string) =>
           Effect.gen(function* () {
-            const held = to.endsWith("brain.pending.jsonl") ? gate : null;
+            const held = Function.pipe(to, Str.endsWith("brain.pending.jsonl")) ? gate : null;
 
             if (held !== null) {
               yield* Deferred.await(held);
@@ -279,7 +285,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 
             yield* target.rename(from, to);
             // The startup flush rewrites the file too; only the walk's own writes are counted.
-            synced = to.endsWith("brain.pending.jsonl") && mode === "walk";
+            synced = Function.pipe(to, Str.endsWith("brain.pending.jsonl")) && mode === "walk";
           });
       }
 
@@ -304,39 +310,34 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
     },
   });
 
-  yield* Effect.acquireRelease(
-    Effect.sync(() =>
-      vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
-        const body = JSON.parse(bodyText(options)) as Call["body"];
-        // The address as `fetch` parses it, given as a string or as the client's URL object.
-        sent.push({ url: new URL(String(url)).href, body });
+  fetch.mockImplementation(async (url, options) => {
+    const body = JSON.parse(bodyText(options)) as Call["body"];
+    // The address as `fetch` parses it, given as a string or as the client's URL object.
+    sent.push({ url: new URL(String(url)).href, body });
 
-        if (mode === "startup") {
-          return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
-        }
+    if (mode === "startup") {
+      return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
+    }
 
-        if (body.method === "brain") {
-          // Keep lifecycle rows in the real outbox so the walk can read every one.
-          return Response.json({ error: { reason: "offline" } });
-        }
+    if (body.method === "brain") {
+      // Keep lifecycle rows in the real outbox so the walk can read every one.
+      return Response.json({ error: { reason: "offline" } });
+    }
 
-        if (body.target === "record") {
-          return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
-        }
+    if (body.target === "record") {
+      return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
+    }
 
-        if (world.phase !== "up") {
-          throw new Error("connection refused");
-        }
+    if (world.phase !== "up") {
+      throw new Error("connection refused");
+    }
 
-        const answer = answers.get(body.name) ?? "value";
+    const answer = answers.get(body.name) ?? "value";
 
-        return Response.json(
-          answer === "value" ? { value: { echo: body.name } } : { error: { reason: `remote-${body.name}` } },
-        );
-      }),
-    ),
-    (spy) => Effect.sync(() => spy.mockRestore()),
-  );
+    return Response.json(
+      answer === "value" ? { value: { echo: body.name } } : { error: { reason: `remote-${body.name}` } },
+    );
+  });
   yield* Effect.acquireRelease(
     Effect.sync(() =>
       vi.spyOn(process, "kill").mockImplementation((pid) => {
@@ -360,8 +361,11 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
         Effect.gen(function* () {
           observe = Context.get(local, RuntimeLifecycle);
 
-          const plugin = [...local.mapUnsafe.values()].find(
-            (value) => typeof value === "object" && value !== null && "sockets" in value,
+          const plugin = Option.getOrUndefined(
+            Arr.findFirst(
+              [...local.mapUnsafe.values()],
+              (value) => typeof value === "object" && value !== null && "sockets" in value,
+            ),
           ) as { start: (ports: Record<string, unknown>) => Effect.Effect<unknown> };
 
           listen = (port) => plugin.start({ "fabrika-control": port });
@@ -371,7 +375,9 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
       );
 
       // The startup flush delivered the first started row; its brain call keeps what it said.
-      const startup = sent.find((call) => call.body.method === "brain")!.body.args[0] as Row;
+      const startup = Option.getOrThrow(Arr.findFirst(sent, (call) => call.body.method === "brain")).body
+        .args[0] as Row;
+
       facts.push({ _tag: "started", at: walk.base, pid: walk.pid, cause: { reason: "open" } });
       world.cause = { reason: "crash" };
       mode = "walk";
@@ -586,25 +592,31 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   ).pipe(Effect.provide(rssLayer(() => 0)));
 
   for (const [index, call] of calls.entries()) {
-    calls[index] = { ...call, sent: sent.filter((c) => c.body.target === "process" && c.body.name === call.name) };
+    calls[index] = { ...call, sent: Arr.filter(sent, (c) => c.body.target === "process" && c.body.name === call.name) };
   }
 
-  const spans = sent
-    .filter((call) => call.body.target === "record" && call.body.method === "write")
-    .flatMap((call) => (call.body.args[2] as ReadonlyArray<Span> | undefined) ?? []);
+  const writes = Arr.filter(sent, (call) => call.body.target === "record" && call.body.method === "write");
+  const spans = Arr.flatMap(writes, (call) => (call.body.args[2] as ReadonlyArray<Span> | undefined) ?? []);
 
   return { startup, rows, facts, calls, restartReads, spans, world, kills };
 });
 
-// Each run gets its own clock, file system, process ids and secrets.
-const walked = (walk: Walk) =>
-  run(walk).pipe(
-    Effect.provide(fetchClient),
-    Effect.provide(ProcessIdGenerator.layer),
-    Effect.provide(SecureRandom.layerWebCrypto),
-    Effect.provide(NodeServices.layer),
-    Effect.provide(TestClock.layer()),
+// Each run gets its own clock, file system, process ids, secrets and platform stand-in.
+const walked = (walk: Walk) => {
+  const fetch = vi.fn<typeof globalThis.fetch>();
+
+  return run(walk, fetch).pipe(
+    Effect.provide(
+      FetchHttpClient.layer.pipe(
+        Layer.provideMerge(ProcessIdGenerator.layer),
+        Layer.provideMerge(SecureRandom.layerWebCrypto),
+        Layer.provideMerge(NodeServices.layer),
+        Layer.provideMerge(TestClock.layer()),
+      ),
+    ),
+    Effect.provideService(FetchHttpClient.Fetch, fetch),
   );
+};
 
 describe("T708 dev control laws", () => {
   // Plant (the memory restart plan's L8, crash path): dial `address` in place of `reachable`: a call
@@ -658,7 +670,9 @@ describe("T708 dev control laws", () => {
     ({ walk }) =>
       Effect.gen(function* () {
         const { startup, rows, facts, restartReads } = yield* walked(walk);
-        expect([startup, ...rows].map((row) => [row._tag, row.at])).toEqual(facts.map((fact) => [fact._tag, fact.at]));
+        expect(Arr.map([startup, ...rows], (row) => [row._tag, row.at])).toEqual(
+          Arr.map(facts, (fact) => [fact._tag, fact.at]),
+        );
 
         // The restart deadline and the restarting row read the clock separately.
         for (const count of restartReads) {
@@ -675,8 +689,8 @@ describe("T708 dev control laws", () => {
       Effect.gen(function* () {
         const { startup, rows, facts, spans, world, kills } = yield* walked(walk);
         const all = [startup, ...rows];
-        expect(all.map((row) => row._tag)).toEqual(facts.map((fact) => fact._tag));
-        expect(new Set(all.map((row) => row.id)).size).toBe(all.length);
+        expect(Arr.map(all, (row) => row._tag)).toEqual(Arr.map(facts, (fact) => fact._tag));
+        expect(new Set(Arr.map(all, (row) => row.id)).size).toBe(all.length);
         let start: string | null = null;
 
         for (const [index, row] of all.entries()) {
@@ -715,10 +729,10 @@ describe("T708 dev control laws", () => {
         }
 
         // The listener completes a waiting replacement; a brake fails it with ControlError.
-        const restarts = spans.filter(({ span }) => span.name === "brain.restart");
-        expect(restarts.filter(({ span }) => span.ok)).toHaveLength(world.completed);
+        const restarts = Arr.filter(spans, ({ span }) => span.name === "brain.restart");
+        expect(Arr.filter(restarts, ({ span }) => span.ok)).toHaveLength(world.completed);
         expect(
-          restarts.filter(({ span }) => !span.ok && span.attributes["error.type"] === "ControlError"),
+          Arr.filter(restarts, ({ span }) => !span.ok && span.attributes["error.type"] === "ControlError"),
         ).toHaveLength(world.failed);
       }),
     { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },

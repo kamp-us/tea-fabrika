@@ -19,13 +19,35 @@ import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Tracer } from "effect";
+import {
+  Cause,
+  Deferred,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Schedule,
+  Schema,
+  Scope,
+  Tracer,
+  Array as Arr,
+  String as Str,
+  DateTime,
+  Formatter,
+  Record as Rec,
+} from "effect";
+
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings, type Env } from "./runtime.ts";
 import { Settings } from "./settings.ts";
+
+class ReopenError extends Schema.TaggedError<ReopenError, { readonly brand: unique symbol }>()("ReopenError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
 
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 
@@ -223,8 +245,8 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
         const [, storageKey] = JSON.parse(name) as [string, string];
 
         const owned = () =>
-          descriptors.get(storageKey) ?? [...descriptors.values()].findLast((d) => d.name === storageKey);
-
+          descriptors.get(storageKey) ??
+          Option.getOrUndefined(Arr.findLast([...descriptors.values()], (d) => d.name === storageKey));
         return {
           configure: async (descriptor: Descriptor) => {
             if (options.callback === true) {
@@ -254,8 +276,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
     RECORD: {
       getByName: () => ({
         write: async (_chain: unknown, _part: number, rows: ReadonlyArray<{ span: SpanRow }>) => {
-          recorded.push(...rows.map((row) => row.span));
-
+          recorded.push(...Arr.map(rows, (row) => row.span));
           return { _tag: "written" };
         },
       }),
@@ -269,7 +290,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
               value: Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String }))(message),
             }),
           describe: async () =>
-            id.startsWith(`${approvalCode.hash}/`)
+            Str.startsWith(`${approvalCode.hash}/`)(id)
               ? {
                   name: "p12/approvals",
                   v: 1,
@@ -448,20 +469,20 @@ StartsTest.law(
 
       const checkSaved = Effect.fnUntraced(function* () {
         const rows = w.db.prepare("SELECT * FROM entries").all();
-        expect(rows.some((row) => row._tag === "instance_started")).toBe(true);
+        expect(Arr.some(rows, (row) => row._tag === "instance_started")).toBe(true);
 
         for (const row of rows) {
           const body = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(row.body);
           expect(body).not.toHaveProperty("starts");
-          expect(JSON.stringify(row)).not.toContain(`unused-${word}`);
-          expect(JSON.stringify(row)).not.toContain(`unused-target-${word}`);
+          expect(Formatter.formatJson(row)).not.toContain(`unused-${word}`);
+          expect(Formatter.formatJson(row)).not.toContain(`unused-target-${word}`);
         }
 
         const input = yield* Schema.decodeEffect(Schema.fromJsonString(Settings))(w.env.INSTANCE);
         const receipt = yield* w.settingsRead(input.start);
         expect(receipt).toMatchObject({ _tag: "ok" });
         expect(receipt).not.toHaveProperty("value.starts");
-        expect(JSON.stringify(receipt)).not.toContain(`unused-${word}`);
+        expect(Formatter.formatJson(receipt)).not.toContain(`unused-${word}`);
       });
 
       for (const [index, choice] of choices.entries()) {
@@ -502,7 +523,7 @@ const bends: ReadonlyArray<(name: string) => string> = [
   () => "fabrika/counter",
   (name) => `fabrika/${name}`,
   (name) => `${name}/x`,
-  (name) => name.replace(/[:.]/, "/"),
+  (name) => Str.replace(/[:.]/, "/")(name),
 ];
 
 // The walk: from the brain's own bootstrap, each step starts the core code under a fresh valid
@@ -521,10 +542,12 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
     [...list].sort((a, b) => (a.name < b.name ? -1 : 1));
 
   const others = (list: ReadonlyArray<{ readonly name: string; readonly program: string }>) =>
-    list.filter((p) => p.program !== "fabrika/counter").map((p) => ({ name: p.name, program: p.program }));
-
+    Arr.map(
+      Arr.filter(list, (p) => p.program !== "fabrika/counter"),
+      (p) => ({ name: p.name, program: p.program }),
+    );
   let refused = 0;
-  expect(w.configured.map((d) => ({ name: d.name, program: d.program }))).toEqual([
+  expect(Arr.map(w.configured, (d) => ({ name: d.name, program: d.program }))).toEqual([
     { name: "counter:1", program: "fabrika/counter" },
     ...boots,
   ]);
@@ -550,10 +573,10 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
     }
 
     const info = await w.run(w.p.info);
-    expect(info.map((p) => p.name).sort()).toEqual([...names, ...boots.map((b) => b.name)].sort());
+    expect(Arr.map(info, (p) => p.name).sort()).toEqual([...names, ...Arr.map(boots, (b) => b.name)].sort());
     expect(byName(others(info))).toEqual(byName(boots));
     expect(byName(others(w.configured))).toEqual(byName(boots));
-    expect(w.configured.every((d) => !d.name.includes("/"))).toBe(true);
+    expect(Arr.every(w.configured, (d) => !Str.includes("/")(d.name))).toBe(true);
   }
 
   expect(refused).toBeGreaterThan(0);
@@ -740,7 +763,7 @@ describe("P12 Project authority", () => {
     const result = await Effect.runPromiseExit(
       Effect.tryPromise({
         try: w.reopen,
-        catch: (cause) => new Error("project reopen failed", { cause }),
+        catch: (cause) => ReopenError.make({ message: "project reopen failed", cause }),
       }),
     );
 
@@ -763,7 +786,7 @@ describe("P12 Project authority", () => {
       const built = await Effect.runPromise(Effect.promise(() => building).pipe(Effect.timeoutOption("3 seconds")));
       const w = await building;
       expect(Option.isSome(built), "the Project's build waited on its own bootstrap's configure").toBe(true);
-      expect(w.configured.filter((d) => d.id === w.p.boot.process)).toHaveLength(1);
+      expect(Arr.filter(w.configured, (d) => d.id === w.p.boot.process)).toHaveLength(1);
       // P14 slice 2: the boot is a list, so each entry's configure calls back once, in the list's order.
       expect(w.statuses, "each boot entry's configure saw the Project answer its status").toMatchObject([
         { _tag: "ok", value: { name: "counter:1", state: { process: w.p.boot.process } } },
@@ -914,7 +937,7 @@ describe("P12 WebCrypto failures", () => {
               } else {
                 // oxlint-disable-next-line fabrika/no-type-assertions -- the digest must fail before any R2 method runs
                 const bucket = { put } as unknown as R2Bucket;
-                await expect(bucketCalls(bucket).put("measurements", body, "0".repeat(64))).rejects.toMatchObject({
+                await expect(bucketCalls(bucket).put("measurements", body, Str.repeat(64)("0"))).rejects.toMatchObject({
                   _tag: "LedgerError",
                   reason: "crypto",
                 });
@@ -971,7 +994,7 @@ describe("P12 Connection recording", () => {
         storage: storage(db),
         getWebSockets: () => [ws],
         getTags: () => ["session-test", "tab-a", w.key.fingerprint],
-        getWebSocketAutoResponseTimestamp: () => new Date(42),
+        getWebSocketAutoResponseTimestamp: () => DateTime.toDateUtc(DateTime.makeUnsafe(42)),
       } as unknown as DurableObjectState;
 
       // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
@@ -1003,10 +1026,10 @@ describe("P12 Connection recording", () => {
 
         await runtime.runPromise(Effect.exit(action));
         const rows = w.recorded.slice(before);
-        expect(rows.some((row) => row.name === `connection.${operation}`)).toBe(true);
+        expect(Arr.some(rows, (row) => row.name === `connection.${operation}`)).toBe(true);
 
         if (operation === "notify") {
-          expect(rows.some((row) => !row.ok)).toBe(true);
+          expect(Arr.some(rows, (row) => !row.ok)).toBe(true);
         }
       } finally {
         await runtime.dispose();
@@ -1057,7 +1080,7 @@ describe("P12 Connection recording", () => {
       storage: storage(db),
       getWebSockets: () => [ws],
       getTags: () => ["session-test", "tab-a", w.key.fingerprint],
-      getWebSocketAutoResponseTimestamp: () => new Date(42),
+      getWebSocketAutoResponseTimestamp: () => DateTime.toDateUtc(DateTime.makeUnsafe(42)),
     } as unknown as DurableObjectState;
 
     // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
@@ -1094,12 +1117,12 @@ describe("P12 Connection recording", () => {
     await fc.assert(
       fc.asyncProperty(
         rejected,
-        fc.string({ minLength: 8, maxLength: 64 }).filter((text) => !FRAME.includes(text)),
+        fc.string({ minLength: 8, maxLength: 64 }).filter((text) => !Str.includes(text)(FRAME)),
         (kind, text) =>
           owned(async (open) => {
             const { sent } = await refusedCall(open, kind.make(text));
             expect(sent).toEqual([FRAME]);
-            expect(sent.join("")).not.toContain(text);
+            expect(Arr.join(sent, "")).not.toContain(text);
           }, signal),
       ),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
@@ -1113,12 +1136,12 @@ describe("P12 Connection recording", () => {
       fc.asyncProperty(rejected, fc.string({ minLength: 8, maxLength: 64 }), (kind, text) =>
         owned(async (open) => {
           const { spans } = await refusedCall(open, kind.make(text));
-          const refused = spans.filter((row) => row.name === "gateway.refused");
+          const refused = Arr.filter(spans, (row) => row.name === "gateway.refused");
           expect(refused).toHaveLength(1);
           expect(refused[0]).toMatchObject({ ok: false, attributes: { "error.type": kind.name } });
           // Failure text is deletable content (P37), never a span tag.
           expect(
-            Object.values(refused[0]!.attributes).filter((tag) => typeof tag === "string" && tag.includes(text)),
+            Arr.filter(Rec.values(refused[0]!.attributes), (tag) => typeof tag === "string" && Str.includes(text)(tag)),
           ).toEqual([]);
         }, signal),
       ),

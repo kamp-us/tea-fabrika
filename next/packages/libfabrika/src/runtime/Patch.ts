@@ -2,7 +2,13 @@
  * View patches: the RFC 6902 operations that turn one JSON view into the next. A watcher gets the
  * whole view once, then a patch per step. Pure, and it never changes its inputs.
  */
-import { Result, Schema } from "effect";
+import * as Arr from "effect/Array";
+
+import * as Function from "effect/Function";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 
 /**
  * One RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs.
@@ -15,22 +21,22 @@ export type Patch =
   | { readonly op: "replace"; readonly path: string; readonly value: unknown };
 
 /** A JSON Pointer token: `~` as `~0`, `/` as `~1` (RFC 6901). */
-const token = (key: string | number): string => String(key).replaceAll("~", "~0").replaceAll("/", "~1");
+const token = (key: string | number): string =>
+  Function.pipe(String(key), Str.replaceAll("~", "~0"), Str.replaceAll("/", "~1"));
 
 type Plain = { [key: string]: unknown };
 
-const isPlain = (u: unknown): u is Plain => typeof u === "object" && u !== null && !Array.isArray(u);
+const isPlain = (u: unknown): u is Plain => typeof u === "object" && u !== null && !Arr.isArray(u);
 
 /** Same JSON value: `Object.is` for leaves, so `0` and `-0` differ as they do to a watcher. */
 const same = (a: unknown, b: unknown): boolean => {
-  if (Array.isArray(a) && Array.isArray(b)) {
-    return a.length === b.length && a.every((one, i) => same(one, b[i]));
+  if (Arr.isArray(a) && Arr.isArray(b)) {
+    return a.length === b.length && Arr.every(a, (one, i) => same(one, b[i]));
   }
 
   if (isPlain(a) && isPlain(b)) {
-    const keys = Object.keys(a);
-
-    return keys.length === Object.keys(b).length && keys.every((key) => Object.hasOwn(b, key) && same(a[key], b[key]));
+    const keys = Rec.keys(a);
+    return keys.length === Rec.keys(b).length && Arr.every(keys, (key) => Rec.has(b, key) && same(a[key], b[key]));
   }
 
   return Object.is(a, b);
@@ -41,7 +47,7 @@ const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>):
     return;
   }
 
-  if (Array.isArray(before) && Array.isArray(after)) {
+  if (Arr.isArray(before) && Arr.isArray(after)) {
     const common = Math.min(before.length, after.length);
 
     for (let i = 0; i < common; i++) {
@@ -60,16 +66,16 @@ const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>):
   }
 
   if (isPlain(before) && isPlain(after)) {
-    for (const key of Object.keys(before)) {
-      if (!Object.hasOwn(after, key)) {
+    for (const key of Rec.keys(before)) {
+      if (!Rec.has(after, key)) {
         out.push({ op: "remove", path: `${path}/${token(key)}` });
       }
     }
 
-    for (const [key, value] of Object.entries(after)) {
+    for (const [key, value] of Rec.toEntries(after)) {
       const at = `${path}/${token(key)}`;
 
-      if (Object.hasOwn(before, key)) {
+      if (Rec.has(before, key)) {
         walk(at, before[key], value, out);
       } else {
         out.push({ op: "add", path: at, value: structuredClone(value) });
@@ -130,19 +136,19 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
   let root = structuredClone(json.success);
 
   for (const op of decoded.success) {
-    if (op.path !== "" && !op.path.startsWith("/")) {
+    if (op.path !== "" && !Str.startsWith("/")(op.path)) {
       return invalid();
     }
 
-    const encoded = op.path === "" ? [] : op.path.slice(1).split("/");
+    const encoded: ReadonlyArray<string> = op.path === "" ? [] : Str.split(Str.slice(1)(op.path), "/");
 
-    if (encoded.some((p) => /~(?![01])/.test(p))) {
+    if (Arr.some(encoded, (p) => /~(?![01])/.test(p))) {
       return invalid();
     }
 
-    const path = encoded.map((p) => p.replaceAll("~1", "/").replaceAll("~0", "~"));
+    const path = Arr.map(encoded, (p) => Function.pipe(p, Str.replaceAll("~1", "/"), Str.replaceAll("~0", "~")));
 
-    if (path.some((p) => unsafe.has(p))) {
+    if (Arr.some(path, (p) => unsafe.has(p))) {
       return invalid();
     }
 
@@ -154,13 +160,13 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
     let parent: unknown = root;
 
     for (const part of path.slice(0, -1)) {
-      if (Array.isArray(parent)) {
+      if (Arr.isArray(parent)) {
         if (!/^(0|[1-9][0-9]*)$/.test(part) || Number(part) >= parent.length) {
           return invalid();
         }
 
         parent = parent[Number(part)] ?? null;
-      } else if (isPlain(parent) && Object.hasOwn(parent, part)) {
+      } else if (isPlain(parent) && Rec.has(parent, part)) {
         parent = parent[part];
       } else {
         return invalid();
@@ -169,7 +175,7 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
 
     const key = path.at(-1) ?? "";
 
-    if (Array.isArray(parent)) {
+    if (Arr.isArray(parent)) {
       const index = key === "-" && op.op === "add" ? parent.length : /^(0|[1-9][0-9]*)$/.test(key) ? Number(key) : -1;
 
       if (index < 0 || index >= parent.length + (op.op === "add" ? 1 : 0)) {
@@ -184,7 +190,7 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
         parent[index] = structuredClone(op.value);
       }
     } else if (isPlain(parent)) {
-      if (op.op !== "add" && !Object.hasOwn(parent, key)) {
+      if (op.op !== "add" && !Rec.has(parent, key)) {
         return invalid();
       }
 

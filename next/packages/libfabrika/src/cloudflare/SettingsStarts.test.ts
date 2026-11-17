@@ -1,7 +1,7 @@
 // T753, next/. The caller owns the SQLite driver; settings/StartsTest owns the shared laws.
 import { DatabaseSync } from "node:sqlite"; // edge: the ledger's synchronous Sql driver needs node:sqlite
 import { describe, expect } from "@effect/vitest";
-import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
+import { Context, Effect, Exit, Formatter, Layer, Option, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -102,7 +102,7 @@ for (const kind of StartsTest.originKinds) {
             poisoned = move === "poison";
             // Simulate a saved entry received from storage, bypassing today's writer.
             db.prepare("UPDATE entries SET body = ? WHERE id = ?").run(
-              JSON.stringify({
+              Formatter.formatJson({
                 start: input.start,
                 settings: poisoned ? bad.settings : input.settings,
                 build: input.build,
@@ -214,7 +214,7 @@ StartsTest.law(
 
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: namespace doubles count any non-ledger work without workerd's nominal brands
       const env = {
-        INSTANCE: JSON.stringify(input),
+        INSTANCE: Formatter.formatJson(input),
         PROJECT: { getByName: unexpected },
         PROCESS: { getByName: unexpected },
         CONNECTION: { getByName: unexpected },
@@ -382,6 +382,65 @@ StartsTest.law(
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
 );
 
+// T1075 E99, next/. Effect shares a built layer by reference (effect/Layer.ts, MemoMap), and a
+// context that Layer.build answers carries its memo map on. So a second ledger built inside the
+// first one's context must still get Starts of its own, over its own Sql, as `fromLedger` answers
+// when each call makes a new layer. The walk records into either ledger and reads any known start
+// from either; every walk ends by reading the first start from the other ledger.
+// Plant: `fromLedger` as one shared `Layer.effect` value, so the second `layer(sql)` reuses the first.
+StartsTest.law(
+  "L18 two ledgers keep their own starts, even when one is built inside the other's context",
+  fc.tuple(StartsTest.recipe, fc.array(fc.nat(), { minLength: 1, maxLength: 20 })),
+  ([recipe, choices]) =>
+    Effect.gen(function* () {
+      const ledger = Effect.fnUntraced(function* () {
+        const db = yield* Effect.acquireRelease(
+          Effect.sync(() => new DatabaseSync(":memory:")),
+          (owned) => Effect.sync(() => owned.close()),
+        );
+        return yield* Layer.build(SettingsStartsLedger.layer(nodeSql(db)));
+      });
+      const first = yield* ledger();
+      const second = yield* ledger().pipe(Effect.provide(first));
+      const ledgers = [Context.get(first, Starts), Context.get(second, Starts)] as const;
+      const held = [new Map<string, Start.Receipt>(), new Map<string, Start.Receipt>()] as const;
+      let crossed = false;
+      const read = Effect.fnUntraced(function* (side: 0 | 1, start: string) {
+        const exit = yield* Effect.exit(ledgers[side].read(start));
+        const receipt = held[side].get(start);
+        crossed ||= receipt === undefined;
+        // A start this ledger holds reads back its receipt; one only the other holds is Missing here.
+        expect(exit).toMatchObject(
+          receipt === undefined
+            ? { cause: { reasons: [{ _tag: "Fail", error: { _tag: "StartsError", reason: { _tag: "Missing" } } }] } }
+            : { _tag: "Success", value: receipt },
+        );
+      });
+      const record = Effect.fnUntraced(function* (side: 0 | 1, index: number) {
+        const input = yield* StartsTest.input({ ...recipe, start: `${recipe.start}-${index}` });
+        held[side].set(input.start, yield* ledgers[side].record(input));
+        return input.start;
+      });
+      const opening = yield* record(0, 0);
+
+      for (const [index, choice] of choices.entries()) {
+        const side = choice % 2 === 0 ? 0 : 1;
+        const known = [...held[0].keys(), ...held[1].keys()];
+        const start = known[Math.floor(choice / 2) % known.length];
+
+        if (Math.floor(choice / 2) % 3 === 0 || start === undefined) {
+          yield* record(side, index + 1);
+        } else {
+          yield* read(side, start);
+        }
+      }
+
+      yield* read(1, opening);
+      // Coverage: a read of a start only the other ledger holds is reached on every walk.
+      expect(crossed, "a start one ledger holds was read from the other").toBe(true);
+    }).pipe(Effect.provide(Digest.layerWebCrypto)),
+);
+
 StartsTest.law(
   "L10 [secrets] nested lower failures stay out of checked RPC failures and start records",
   fc.tuple(StartsTest.recipe, StartsTest.sentinel, fc.array(fc.nat(), { minLength: 8, maxLength: 35 })),
@@ -412,9 +471,9 @@ StartsTest.law(
 
           const reply = yield* settingsReply(Effect.fail(new StartsError({ reason })));
           StartsTest.exclude(reply, secret);
-          expect(JSON.stringify(reply)).not.toContain("cause");
+          expect(Formatter.formatJson(reply)).not.toContain("cause");
         } else {
-          StartsTest.exclude(JSON.stringify(input), secret);
+          StartsTest.exclude(Formatter.formatJson(input), secret);
           const receipt = yield* move === "read" ? driver.read(input.start) : driver.record(input);
           placed = true;
           StartsTest.exclude(receipt, secret);

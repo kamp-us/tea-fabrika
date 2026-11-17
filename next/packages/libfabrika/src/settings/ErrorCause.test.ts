@@ -10,6 +10,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Exit, Schema } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { SettingsError } from "./Files.ts";
 import { SnapshotError } from "./Snapshot.ts";
@@ -79,7 +80,7 @@ const encoded = fc
  * field: an Error keeps `message` as an own key that does not enumerate.
  */
 const own = (value: object) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     Object.getOwnPropertyNames(value)
       .filter((key) => key !== "stack")
       .map((key) => [key, Object.getOwnPropertyDescriptor(value, key)?.value]),

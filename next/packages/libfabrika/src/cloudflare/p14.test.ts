@@ -1,3 +1,6 @@
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 // P14 slice 1, next/ (ticket 698): the Worker serves a built tab's page at `/` (S1.3). Later slices
 // add the control and bootstrap laws here.
 //
@@ -10,8 +13,10 @@
 // S1.3 is a generated walk. Each step reads the walk's state (the table the brain carries now, the
 // tables it carried before) and builds a move that state allows: a rebuild, or a request for a route
 // the current table holds, a fresh absent route or `/`, with the current validator or a stale one.
-import { Cause, Effect, Exit } from "effect";
+
 import * as Digest from "effect/crypto/Digest";
+import * as Rec from "effect/Record";
+
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import * as StartsTest from "../settings/StartsTest.ts";
@@ -154,7 +159,7 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
           for (const s of steps) {
             // A rebuild is always possible; the first move of a walk with no table yet may also be one.
             if (s.move % 4 === 0) {
-              for (const asset of Object.values(current ?? {})) {
+              for (const asset of Rec.values(current ?? {})) {
                 stale.push(asset.hash);
               }
 
@@ -162,16 +167,16 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
               continue;
             }
 
-            const routes = Object.keys(current ?? {});
+            const routes = Rec.keys(current ?? {});
             const choices = ["/", ...routes, `/${s.word}-absent.js`];
             const path = choices[s.pick % choices.length]!;
             const method = METHODS[s.method % METHODS.length]!;
             const wrongHost = s.host % 5 === 0;
             const originHeader = s.origin % 5 === 0 ? "http://evil.example" : s.origin % 5 === 1 ? origin : null;
-            const target = path === "/" ? (current !== undefined && Object.hasOwn(current, PAGE) ? PAGE : null) : path;
+            const target = path === "/" ? (current !== undefined && Rec.has(current, PAGE) ? PAGE : null) : path;
 
             const asset =
-              target !== null && current !== undefined && Object.hasOwn(current, target) ? current[target] : undefined;
+              target !== null && current !== undefined && Rec.has(current, target) ? current[target] : undefined;
 
             const validators = [
               ...(asset === undefined ? [] : [`"${asset.hash}"`]),

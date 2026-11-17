@@ -1,6 +1,7 @@
 // next/ uses Effect's platform. A native import needs a reason on its source line.
 import { builtinModules } from "node:module";
 import type { CreateRule } from "@oxlint/plugins";
+import { Array as Arr } from "effect";
 import { heldToNext, pathIn, type Node } from "./match.ts";
 
 const builtins = new Set(builtinModules);
@@ -70,7 +71,8 @@ export const noNodeImports: CreateRule = {
       // Only a real line comment on the module string's line counts. A nearby comment,
       // a string containing // edge:, or an empty reason must not bless another import.
       if (
-        comments.some(
+        Arr.some(
+          comments,
           (comment) =>
             comment.type === "Line" &&
             comment.loc.start.line === source.loc.start.line &&

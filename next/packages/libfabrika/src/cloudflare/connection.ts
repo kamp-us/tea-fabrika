@@ -1,4 +1,13 @@
-import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
@@ -49,7 +58,7 @@ const routed = Effect.fnUntraced(function* (work: Effect.Effect<typeof Answer.Ty
 // `LedgerError` of reason `bad_row`, in the typed channel.
 const waitOn = (p: ProjectClient["Service"]) =>
   Effect.fnUntraced(function* (client: ConnectionId, stream: string, after: number, reader: string) {
-    const asked = stream.startsWith(targetStream(""))
+    const asked = Str.startsWith(targetStream(""))(stream)
       ? p.route(client, "tasks.wait", { after }, reader)
       : p.route(client, "ledger.wait", { stream, after }, reader);
     const answer = yield* rpc(routed(asked));
@@ -294,7 +303,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
               ws.close(news.close, "permission changed");
             } else {
               ws.send(
-                JSON.stringify({
+                Formatter.formatJson({
                   jsonrpc: "2.0",
                   ...(typeof news === "object" && news !== null ? news : {}),
                 }),
@@ -314,9 +323,14 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
   return {
     fetch: Effect.fnUntraced(function* (request: Request) {
-      const path = new URL(request.url).pathname.split("/");
+      const path = Str.split(new URL(request.url).pathname, "/");
 
-      if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+      if (
+        !Option.exists(
+          Option.fromNullishOr(request.headers.get("upgrade")),
+          (upgrade) => Str.toLowerCase(upgrade) === "websocket",
+        )
+      ) {
         return new Response("WebSocket required", { status: 426 });
       }
 
@@ -337,7 +351,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       server.serializeAttachment(Attached.cases.new.make({ client, nonce }));
       yield* rpc(p.register(client, gateway, session));
       yield* make(server);
-      server.send(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce } }));
+      server.send(Formatter.formatJson({ jsonrpc: "2.0", method: "challenge", params: { nonce } }));
       return new Response(null, { status: 101, webSocket: pair[0] });
     }),
     message: Effect.fnUntraced(function* (ws: WebSocket, text: string | ArrayBuffer) {

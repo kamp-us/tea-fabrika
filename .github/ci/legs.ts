@@ -28,6 +28,8 @@ import { appendFileSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Record as Rec, Config, ConfigProvider, Effect, Option } from "effect";
+
 import { assign, measured, median } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
@@ -90,7 +92,7 @@ export const budgetOf = (value: string | undefined): number => {
 
 /** A file's row, or undefined when the table has none, as `Shards` reads it. */
 const rowOf = (table: Readonly<Record<string, number>>, path: string) =>
-  Object.hasOwn(table, path) ? table[path] : undefined;
+  Rec.has(table, path) ? table[path] : undefined;
 
 /** Each leg's files when `assign` splits `files` over `count` legs, as `Shards` keeps them. */
 export const split = (files: readonly string[], count: number, table = measured): string[][] => {
@@ -98,7 +100,7 @@ export const split = (files: readonly string[], count: number, table = measured)
     files.map((path) => ({ path, seconds: rowOf(table, path) })),
     count,
     [],
-    median(Object.values(table)),
+    median(Rec.values(table)),
   );
 
   return Array.from({ length: count }, (_, leg) => files.filter((_, i) => placed[i] === leg));
@@ -106,7 +108,7 @@ export const split = (files: readonly string[], count: number, table = measured)
 
 /** The seconds of a leg's files, a file with no row at the table's median. */
 export const seconds = (files: readonly string[], table: Readonly<Record<string, number>>) => {
-  const unmeasured = median(Object.values(table));
+  const unmeasured = median(Rec.values(table));
 
   return files.reduce((sum, path) => sum + (rowOf(table, path) ?? unmeasured), 0);
 };
@@ -233,18 +235,34 @@ export const list = (root: string, args: readonly string[]): string[] => {
 
 // Under Vitest `import.meta.main` is false, so a test that imports this file never lists or writes.
 if (import.meta.main) {
+  // The step's variables, read through Effect's Config. An empty variable stays empty, as a read of
+  // process.env gave it, so an empty FILTER still means the reader tests alone.
+  const text = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
+
+  const env = Effect.runSync(
+    Config.all({
+      event: text("EVENT"),
+      filter: text("FILTER"),
+      base: text("BASE"),
+      visual: text("VISUAL"),
+      budget: text("BUDGET"),
+      output: text("GITHUB_OUTPUT"),
+      summary: text("GITHUB_STEP_SUMMARY"),
+    }).parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true })),
+  );
+
   const root = fileURLToPath(new URL("../../", import.meta.url));
   const workflow = readFileSync(join(root, ".github/workflows/check.yaml"), "utf8");
   const full = { vitest: vitestLegs(workflow).length, e2e: e2eLegs(workflow).length };
 
   const run: Run = {
-    event: process.env["EVENT"] ?? "",
-    scope: (process.env["FILTER"] ?? "next/") === "next/" ? "all" : "readers",
-    base: process.env["BASE"] ?? "",
-    visual: process.env["VISUAL"] === "true",
+    event: env.event ?? "",
+    scope: (env.filter ?? "next/") === "next/" ? "all" : "readers",
+    base: env.base ?? "",
+    visual: env.visual === "true",
   };
 
-  const limit = limits(nextMinutes(workflow), budgetOf(process.env["BUDGET"]));
+  const limit = limits(nextMinutes(workflow), budgetOf(env.budget));
   // `--changed` from the base on a run of all of next/; none on a run of the reader tests alone.
   const changed = run.scope === "all" ? [`--changed=${run.base}`] : [];
   const sized = sizes(run);
@@ -276,13 +294,13 @@ if (import.meta.main) {
 
   console.log(note);
   console.log(lines.join("\n"));
-  const output = process.env["GITHUB_OUTPUT"];
+  const output = env.output;
 
   if (output !== undefined && output !== "") {
     appendFileSync(output, `${lines.join("\n")}\n`);
   }
 
-  const summary = process.env["GITHUB_STEP_SUMMARY"];
+  const summary = env.summary;
 
   if (summary !== undefined && summary !== "") {
     appendFileSync(summary, `${note}\n`);

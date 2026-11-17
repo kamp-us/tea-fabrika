@@ -4,26 +4,28 @@
  * through the gateway's checked writer, folds what landed and installs it. Only then do its Cmds
  * run, each saved as dispatched first, each answer saved as a letter before the program sees it. A
  * wake folds saved letters and runs none of their Cmds.
- *
- * @stability unstable
  */
 import { applyCell, type Outcome } from "@demlik/tea";
-import {
-  ByteSize,
-  Cause,
-  Clock,
-  Context,
-  DateTime,
-  Effect,
-  Exit,
-  Layer,
-  Option,
-  Result,
-  Schema,
-  Semaphore,
-  Stream,
-  Tracer,
-} from "effect";
+import * as Arr from "effect/Array";
+import * as ByteSize from "effect/ByteSize";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+import * as Tracer from "effect/Tracer";
+
 import { type SessionManagerError } from "../access/SessionManager.ts";
 import {
   Activity,
@@ -108,7 +110,6 @@ export {
    * deliveries of one letter, a restart intensity of 5 over a 5000 ms period, and a backoff from 100
    * ms to 800 ms that resets after 5000 ms.
    *
-   * @stability unstable
    * @category models
    */
   defaultPolicy,
@@ -116,7 +117,6 @@ export {
    * Schema for the saved supervision state the runner keeps for one process: its name, restart
    * policy, build, recent restarts and the journal of the one unfinished recovery job.
    *
-   * @stability unstable
    * @category schemas
    */
   Supervision,
@@ -128,7 +128,6 @@ export {
  * `not_now` with the supervision journal's current tag (such as `stepping` or `writing_reply`)
  * while a recovery job is unfinished, which keeps the swap from running yet.
  *
- * @stability unstable
  * @category schemas
  */
 export const Swapped = Schema.TaggedUnion({
@@ -140,7 +139,6 @@ export const Swapped = Schema.TaggedUnion({
 /**
  * What a swap answers, as `Swapped` decodes it.
  *
- * @stability unstable
  * @category schemas
  */
 export type Swapped = typeof Swapped.Type;
@@ -149,7 +147,6 @@ export type Swapped = typeof Swapped.Type;
  * Schema for what `msg` answers: the input's placing in the inbox (`accepted`), or why it was not
  * taken (`refused`).
  *
- * @stability unstable
  * @category schemas
  */
 export const Sent = Schema.TaggedUnion({
@@ -159,7 +156,6 @@ export const Sent = Schema.TaggedUnion({
 /**
  * What `msg` answers, as `Sent` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Sent = typeof Sent.Type;
@@ -167,7 +163,6 @@ export type Sent = typeof Sent.Type;
 /**
  * What `open` answers: the inbox position the view was made at, and the view.
  *
- * @stability unstable
  * @category models
  */
 export type Opened = { readonly rev: number; readonly view: View };
@@ -176,7 +171,6 @@ export type Opened = { readonly rev: number; readonly view: View };
  * The process a runner steps: its id, its registered name (its inbox), its program, the build of
  * the code stepping it, and its checked owner, the writer of its own writes.
  *
- * @stability unstable
  * @category models
  */
 export type Descriptor = {
@@ -219,10 +213,10 @@ const decodeDispatched = Schema.decodeUnknownResult(Schema.Array(Dispatched));
 const Turn = Schema.TaggedUnion({ prepared: { id: Schema.NonEmptyString } });
 
 /** The runtime's own events and lifecycle events a program may never write, even if declared. */
-const RESERVED = new Set([
-  ...Object.keys(ProcessEvent.cases),
-  ...Object.keys(MemberEvent.cases),
-  ...Object.keys(RuntimeRecord.cases),
+const RESERVED = new Set<string>([
+  ...Rec.keys(ProcessEvent.cases),
+  ...Rec.keys(MemberEvent.cases),
+  ...Rec.keys(RuntimeRecord.cases),
 ]);
 
 /** The Cmd the runner itself performs: a checked write, signed for its parent or the owner. */
@@ -263,7 +257,7 @@ const HOST = new Set([SEND, SEND_CHUNKS, START_CHILD, STOP_CHILD, EXIT, HANDS, M
  *  again. A hands task that only waits on the hands is owed nothing: a wake or a due asks it again
  *  (0105). */
 const owesHostCmd = (cmds: ReadonlyArray<Dispatched>): boolean =>
-  cmds.some((cmd) => (cmd.mail === true && cmd.hands?._tag !== "waiting") || cmd.state === "waiting_answer");
+  Arr.some(cmds, (cmd) => (cmd.mail === true && cmd.hands?._tag !== "waiting") || cmd.state === "waiting_answer");
 
 /** The name a send or a send_chunks mails, or none for any other Cmd. */
 const mailTarget = (job: Dispatched): Option.Option<string> =>
@@ -274,13 +268,17 @@ const mailTarget = (job: Dispatched): Option.Option<string> =>
  *  order its Cmds were made, as OTP keeps per pair. */
 const behind = (cmds: ReadonlyArray<Dispatched>, job: Dispatched): boolean => {
   const to = Option.getOrUndefined(mailTarget(job));
-  const index = cmds.findIndex((cmd) => cmd.id === job.id);
+  const index = Option.getOrElse(
+    Arr.findFirstIndex(cmds, (cmd) => cmd.id === job.id),
+    () => -1,
+  );
   return (
     to !== undefined &&
     index > 0 &&
-    cmds
-      .slice(0, index)
-      .some((cmd) => cmd.mail === true && cmdType(cmd) === SEND_CHUNKS && Option.contains(mailTarget(cmd), to))
+    Arr.some(
+      cmds.slice(0, index),
+      (cmd) => cmd.mail === true && cmdType(cmd) === SEND_CHUNKS && Option.contains(mailTarget(cmd), to),
+    )
   );
 };
 
@@ -288,13 +286,13 @@ const behind = (cmds: ReadonlyArray<Dispatched>, job: Dispatched): boolean => {
  * A Cmd's operands, without the `type` its maker adds, when its input schema names every one. The
  * names are checked before the strict decode, since an empty struct takes any field.
  */
-const operands = (cmd: unknown, fields: object): Option.Option<Record<string, unknown>> => {
-  if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd)) {
+const operands = (cmd: unknown, fields: Readonly<Record<string, unknown>>): Option.Option<Record<string, unknown>> => {
+  if (!Predicate.isObject(cmd)) {
     return Option.none();
   }
 
-  const { type: _type, ...rest } = cmd as Record<string, unknown>;
-  return Object.keys(rest).every((key) => Object.hasOwn(fields, key)) ? Option.some(rest) : Option.none();
+  const { type: _type, ...rest } = cmd;
+  return Arr.every(Rec.keys(rest), (key) => Rec.has(fields, key)) ? Option.some(rest) : Option.none();
 };
 
 const strictStartChild = Schema.decodeUnknownOption(StartChildInput, { onExcessProperty: "error" });
@@ -316,11 +314,11 @@ const encoder = new TextEncoder();
 /** A start_child's operands without its input: what every `ok` answer echoes, so no row holds the
  *  first letter twice. */
 const withoutInput = (cmd: unknown): unknown => {
-  if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd) || !Object.hasOwn(cmd, "input")) {
+  if (!Predicate.isObject(cmd) || !Rec.has(cmd, "input")) {
     return cmd;
   }
 
-  const { input: _input, ...rest } = cmd as Record<string, unknown>;
+  const { input: _input, ...rest } = cmd;
   return rest;
 };
 
@@ -392,7 +390,7 @@ const decodeDown = Schema.decodeUnknownOption(Down);
 
 const inputDigest = Effect.fnUntraced(function* (input: Delivery) {
   return yield* sha256(
-    new TextEncoder().encode(JSON.stringify([input.envelope.by, input.envelope.input, input.sentAt, input.seen])),
+    new TextEncoder().encode(Formatter.formatJson([input.envelope.by, input.envelope.input, input.sentAt, input.seen])),
   );
 });
 
@@ -419,7 +417,6 @@ const failure = (reason: string) => Schema.TaggedStruct(reason, {}).make({});
  * What the wiring gives a runner beside its services: the restart policy, where recovery is kept,
  * a hook that cuts a recovery short, and the chunk size of a chunked send.
  *
- * @stability unstable
  * @category models
  */
 export type RunnerOptions = {
@@ -465,7 +462,6 @@ export type RunnerOptions = {
  * A wake folds saved letters and runs none of their Cmds again. The process's ended spans are
  * flushed after every call, on success and on failure.
  *
- * @stability unstable
  * @category services
  */
 export class ProgramRunner extends Context.Service<
@@ -666,7 +662,7 @@ export class ProgramRunner extends Context.Service<
           const now = yield* Clock.currentTimeMillis;
           const backoff = supervision?.policy.backoff.minMs ?? defaultPolicy.backoff.minMs;
           sendRetry = !owes ? null : sendRetry !== null && sendRetry > now ? sendRetry : now + backoff;
-          const times = [waited, running ? mailRetry : null, sendRetry].filter((at) => at !== null);
+          const times = Arr.filter([waited, running ? mailRetry : null, sendRetry], (at) => at !== null);
           const until = retryAt ?? (times.length === 0 ? null : Math.min(...times));
 
           // Loading supplies the live program's wake; do not clear it before then.
@@ -753,7 +749,7 @@ export class ProgramRunner extends Context.Service<
             change.origin,
           );
           yield* fault("after_swap_record");
-          const times = [next.wake, mailRetry, sendRetry].filter((at) => at !== null);
+          const times = Arr.filter([next.wake, mailRetry, sendRetry], (at) => at !== null);
           const wake = times.length === 0 ? null : Math.min(...times);
           yield* alarm.set(wake);
           alarmAt = wake;
@@ -768,7 +764,8 @@ export class ProgramRunner extends Context.Service<
           live = next;
 
           if (prepared === undefined) {
-            retry = cmds.filter(
+            retry = Arr.filter(
+              cmds,
               (cmd) => cmd.mail === true || Option.exists(decodeTyped(cmd.cmd), (c) => c.type === WRITE),
             );
           }
@@ -798,8 +795,11 @@ export class ProgramRunner extends Context.Service<
               }
               case "writing_dead": {
                 const { failure } = j;
-                const receipt = s.receipts.find(
-                  (r) => r.letter === failure.letter && r.process === failure.process && r.result !== null,
+                const receipt = Option.getOrUndefined(
+                  Arr.findFirst(
+                    s.receipts,
+                    (r) => r.letter === failure.letter && r.process === failure.process && r.result !== null,
+                  ),
                 );
 
                 if (receipt === undefined) {
@@ -994,18 +994,13 @@ export class ProgramRunner extends Context.Service<
 
             if (supervision === null) {
               const loaded = yield* loader.load(status.state.code.program, status.state.code.hash);
-              const policy = yield* Effect.try({
-                try: () => {
-                  const wiring = options.policy ?? defaultPolicy;
-                  return Schema.decodeUnknownSync(Policy)(
-                    loaded.declaration.policy ?? {
-                      ...wiring,
-                      maxDeliveries: wiring.maxDeliveries ?? defaultPolicy.maxDeliveries,
-                    },
-                  );
+              const wiring = options.policy ?? defaultPolicy;
+              const policy = yield* Schema.decodeUnknownEffect(Policy)(
+                loaded.declaration.policy ?? {
+                  ...wiring,
+                  maxDeliveries: wiring.maxDeliveries ?? defaultPolicy.maxDeliveries,
                 },
-                catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
-              });
+              ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
               const started = supervisor.init(null, {
                 policy,
                 process: status.state.process,
@@ -1181,7 +1176,7 @@ export class ProgramRunner extends Context.Service<
               return yield* wrapped;
             }
 
-            const original = Object.hasOwn(wrapped, "cause") ? wrapped.cause : wrapped;
+            const original = "cause" in wrapped ? wrapped.cause : wrapped;
             const error = wrapped.errorClass;
             const failure = (reason === "step" ? Failure.cases.fresh : Failure.cases.saved).make({ ...attempt, error });
             const msg: SupervisorMsg =
@@ -1249,7 +1244,7 @@ export class ProgramRunner extends Context.Service<
                 yield* observed(
                   { type: "threw", seq: attempt.seq, error, reason: fromFailure(failure), from: meta },
                   attempt.process,
-                  { failure, content: Object.hasOwn(down, "cause") ? down.cause : down },
+                  { failure, content: "cause" in down ? down.cause : down },
                 ).pipe(Effect.mapError(() => down));
                 return yield* down;
               }),
@@ -1323,7 +1318,8 @@ export class ProgramRunner extends Context.Service<
                   onNone: () => 0,
                   onSome: (letter) => (letter.rev === next.after ? letter.pos : 0),
                 });
-          retry = cmds.filter(
+          retry = Arr.filter(
+            cmds,
             (cmd) =>
               cmd.mail === true ||
               cmd.state === "waiting_answer" ||
@@ -1402,8 +1398,8 @@ export class ProgramRunner extends Context.Service<
           const prepared = Schema.decodeUnknownOption(Turn)(saved?.turn);
           // The raw inbox keeps canceled signals; the manager filters them for this process.
           const signals = new Set(
-            letters.some((letter) => inSignalSpace(letter.id))
-              ? (yield* Stream.runCollect(manager.receive(process.id, state.after))).map((letter) => letter.id)
+            Arr.some(letters, (letter) => inSignalSpace(letter.id))
+              ? Arr.map(yield* Stream.runCollect(manager.receive(process.id, state.after)), (letter) => letter.id)
               : [],
           );
           let mine = Option.none<History>();
@@ -1425,11 +1421,14 @@ export class ProgramRunner extends Context.Service<
               continue;
             }
 
-            const own = inRunnerSpace(letter.id) && letter.id.startsWith(`${process.id}/`);
-            const ending = cmds.findIndex((job) => exits(state, job));
+            const own = inRunnerSpace(letter.id) && Str.startsWith(`${process.id}/`)(letter.id);
+            const ending = Option.getOrElse(
+              Arr.findFirstIndex(cmds, (job) => exits(state, job)),
+              () => -1,
+            );
 
             // Only answers to Cmds before exit may still fold. Ordinary mail waits for the next life.
-            if (ending >= 0 && !cmds.slice(0, ending).some((job) => own && letter.id === `${job.id}/answer`)) {
+            if (ending >= 0 && !Arr.some(cmds.slice(0, ending), (job) => own && letter.id === `${job.id}/answer`)) {
               stop = Math.min(stop, index);
               continue;
             }
@@ -1485,16 +1484,17 @@ export class ProgramRunner extends Context.Service<
             placed.push({ id: letter.id, rev: letter.rev, pos: letter.pos });
             // The brain saves a monitor's answer in its own turn, so any catch-up may fold it first:
             // what its step made is still this life's to run, as if `settle` had folded it.
-            const settled = own && cmds.some((cmd) => letter.id === `${cmd.id}/answer` && cmdType(cmd) === MONITOR);
+            const settled =
+              own && Arr.some(cmds, (cmd) => letter.id === `${cmd.id}/answer` && cmdType(cmd) === MONITOR);
 
-            if (own && letter.id.endsWith("/answer")) {
-              cmds = cmds.filter((cmd) => cmd.id !== letter.id.slice(0, -"/answer".length));
+            if (own && Str.endsWith("/answer")(letter.id)) {
+              cmds = Arr.filter(cmds, (cmd) => cmd.id !== Str.slice(0, -"/answer".length)(letter.id));
             }
 
             const owed = !accepted || settled || letter.id === options.mine;
             // Host Cmds retry by stable id after a prepared turn's checkpoint failed.
             const preparedTurn = Option.exists(prepared, (turn) => turn.id === letter.id);
-            const dispatched = folded.cmds.map((cmd, index): Dispatched => ({
+            const dispatched = Arr.map(folded.cmds, (cmd, index): Dispatched => ({
               id: `${process.id}/${letter.pos}/${index}`,
               cmd,
               state: "dispatched",
@@ -1513,7 +1513,7 @@ export class ProgramRunner extends Context.Service<
               mine = Option.some(letter);
               fresh.push(...dispatched);
             } else {
-              drain.push(...dispatched.filter((job) => !accepted || settled || job.mail === true));
+              drain.push(...Arr.filter(dispatched, (job) => !accepted || settled || job.mail === true));
             }
           }
 
@@ -1599,7 +1599,10 @@ export class ProgramRunner extends Context.Service<
         /** Takes the writes and sends an earlier life left dispatched, and the Cmds a drain of
          *  ordinary mail made, to run them once. */
         const takeRetry = () => {
-          const taken = [...retry, ...drained].filter((job) => live?.cmds.some((cmd) => cmd.id === job.id));
+          const taken = Arr.filter(
+            [...retry, ...drained],
+            (job) => live !== null && Arr.some(live.cmds, (cmd) => cmd.id === job.id),
+          );
           retry = [];
           drained = [];
           return taken;
@@ -1670,7 +1673,7 @@ export class ProgramRunner extends Context.Service<
           const event = asked.event;
           const kind = typeof event._tag === "string" ? event._tag : null;
           const writes = state.loaded.declaration.writes;
-          const policy = kind !== null && Object.hasOwn(writes, kind) ? writes[kind] : undefined;
+          const policy = kind !== null && Rec.has(writes, kind) ? writes[kind] : undefined;
 
           if (kind === null || RESERVED.has(kind) || policy === undefined || !isEvent(event)) {
             return yield* err(job, "bad_cmd");
@@ -1679,8 +1682,8 @@ export class ProgramRunner extends Context.Service<
           if (
             brainOnly({ stream, id: job.id, tag: kind }) ||
             stream === "gateway" ||
-            stream.startsWith("gateway/") ||
-            (stream.endsWith("/inbox") && stream !== `${process.name}/inbox`)
+            Str.startsWith("gateway/")(stream) ||
+            (Str.endsWith("/inbox")(stream) && stream !== `${process.name}/inbox`)
           ) {
             return yield* err(job, "forbidden");
           }
@@ -1792,7 +1795,7 @@ export class ProgramRunner extends Context.Service<
             m: input.success.m,
           });
           return Result.isSuccess(queued)
-            ? yield* ok(job, Schema.encodeSync(Queued)(queued.success))
+            ? yield* ok(job, yield* Schema.encodeEffect(Queued)(queued.success).pipe(Effect.orDie))
             : yield* err(job, queued.failure);
         });
 
@@ -1839,15 +1842,17 @@ export class ProgramRunner extends Context.Service<
             }
           }
 
-          return Option.some(
-            yield* ok(job, Schema.encodeSync(Chunked)(Chunked.make({ id: job.id, letters: cut.success.length }))),
-          );
+          const chunked = yield* Schema.encodeEffect(Chunked)(
+            Chunked.make({ id: job.id, letters: cut.success.length }),
+          ).pipe(Effect.orDie);
+          return Option.some(yield* ok(job, chunked));
         });
 
         /** Saves a hands Cmd's waiting task on its dispatched entry, so this life owes it nothing until
          *  a wake or a due asks again. The permit is held. */
         const wait = Effect.fnUntraced(function* (job: Dispatched, waiting: NonNullable<Dispatched["hands"]>) {
-          const saved = live?.cmds.find((cmd) => cmd.id === job.id);
+          const saved =
+            live === null ? undefined : Option.getOrUndefined(Arr.findFirst(live.cmds, (cmd) => cmd.id === job.id));
 
           if (live === null || saved === undefined || saved.hands?._tag === waiting._tag) {
             return;
@@ -1855,7 +1860,7 @@ export class ProgramRunner extends Context.Service<
 
           const next = {
             ...live,
-            cmds: live.cmds.map((cmd) => (cmd.id === job.id ? { ...cmd, hands: waiting } : cmd)),
+            cmds: Arr.map(live.cmds, (cmd) => (cmd.id === job.id ? { ...cmd, hands: waiting } : cmd)),
           };
           yield* store.save(checkpoint(next, null));
           live = next;
@@ -1972,7 +1977,7 @@ export class ProgramRunner extends Context.Service<
             .pipe(Effect.result);
 
           if (Result.isSuccess(started)) {
-            return yield* ok(job, Schema.encodeSync(Started)(started.success));
+            return yield* ok(job, yield* Schema.encodeEffect(Started)(started.success).pipe(Effect.orDie));
           }
 
           const { reason } = started.failure;
@@ -2111,7 +2116,7 @@ export class ProgramRunner extends Context.Service<
           return yield* state.loaded.execution.reply(job.cmd, { ...outcome, at: yield* at }).pipe(
             Effect.map((m) => {
               const tag = outcome._tag === "Err" ? errTag(outcome.error) : undefined;
-              return tag !== undefined && typeof m === "object" && m !== null && !Array.isArray(m)
+              return tag !== undefined && typeof m === "object" && m !== null && !Arr.isArray(m)
                 ? { ...m, reason: tag }
                 : m;
             }),
@@ -2127,7 +2132,7 @@ export class ProgramRunner extends Context.Service<
         const dispatch = Effect.fnUntraced(function* (
           job: Dispatched,
         ): Effect.fn.Return<ReadonlyArray<Dispatched>, RunnerFailure> {
-          if (!job.id.startsWith(`${process.id}/`) || (yield* ended) || recovering(supervision)) {
+          if (!Str.startsWith(`${process.id}/`)(job.id) || (yield* ended) || recovering(supervision)) {
             return [];
           }
 
@@ -2212,10 +2217,12 @@ export class ProgramRunner extends Context.Service<
                 const answer = `${job.id}/answer`;
 
                 if (origin.id !== process.id || recovering(supervision)) {
+                  // The answer is one this runner built or its box encoded, so one that is not JSON is a bug.
+                  const json = yield* Schema.decodeUnknownEffect(Schema.Json)(m).pipe(Effect.orDie);
                   yield* originStore.record(
                     answer,
                     RuntimeRecord.cases["cmd.answered"].make({
-                      m: Schema.decodeUnknownSync(Schema.Json)(m),
+                      m: json,
                       cmd: job.id,
                       build: origin.build,
                     }),
@@ -2226,7 +2233,8 @@ export class ProgramRunner extends Context.Service<
                   if (old !== null) {
                     yield* originStore.save({
                       ...old,
-                      cmds: old.cmds.filter(
+                      cmds: Arr.filter(
+                        old.cmds,
                         (cmd) => typeof cmd !== "object" || cmd === null || !("id" in cmd) || cmd.id !== job.id,
                       ),
                     });
@@ -2259,7 +2267,7 @@ export class ProgramRunner extends Context.Service<
                       const answer = yield* Schema.decodeUnknownEffect(Schema.Json)(m).pipe(Effect.orDie);
                       const next = {
                         ...live,
-                        cmds: live.cmds.map((cmd): Dispatched =>
+                        cmds: Arr.map(live.cmds, (cmd): Dispatched =>
                           cmd.id === job.id ? { ...cmd, state: "waiting_answer", answer } : cmd,
                         ),
                       };
@@ -2299,7 +2307,7 @@ export class ProgramRunner extends Context.Service<
         /** A host Cmd runs once at a time while dispatched; its owed entry keeps the retry alarm. */
         const sendOnce = (job: Dispatched): Effect.Effect<ReadonlyArray<Dispatched>, RunnerFailure> =>
           Effect.suspend(() => {
-            if (sending.has(job.id) || live?.cmds.some((cmd) => cmd.id === job.id) !== true) {
+            if (sending.has(job.id) || live === null || !Arr.some(live.cmds, (cmd) => cmd.id === job.id)) {
               return Effect.succeed([]);
             }
 
@@ -2527,9 +2535,9 @@ export class ProgramRunner extends Context.Service<
 
                 if (placed !== null) {
                   const letter = yield* Stream.runHead(mailbox.read(process.name, placed.rev - 1));
-                  const asked = JSON.stringify(input.envelope.input);
+                  const asked = Formatter.formatJson(input.envelope.input);
 
-                  if (Option.exists(letter, (l) => l.id === input.id && JSON.stringify(l.m) !== asked)) {
+                  if (Option.exists(letter, (l) => l.id === input.id && Formatter.formatJson(l.m) !== asked)) {
                     return { answer: Sent.cases.refused.make({ reason: "id_reused" }), jobs: [] };
                   }
 
@@ -2541,7 +2549,10 @@ export class ProgramRunner extends Context.Service<
                   return { answer: Sent.cases.refused.make({ reason: "ended" }), jobs: [] };
                 }
 
-                const receipt = supervision?.receipts.find((r) => r.letter === input.id);
+                const receipt =
+                  supervision === null
+                    ? undefined
+                    : Option.getOrUndefined(Arr.findFirst(supervision.receipts, (r) => r.letter === input.id));
 
                 if (receipt !== undefined) {
                   const digest =
@@ -2587,7 +2598,7 @@ export class ProgramRunner extends Context.Service<
                 // Any alarm tries again every host Cmd a failure left dispatched.
                 mailRetry = null;
                 const state = yield* ready();
-                const sends = state.cmds.filter((cmd) => cmd.mail === true || cmd.state === "waiting_answer");
+                const sends = Arr.filter(state.cmds, (cmd) => cmd.mail === true || cmd.state === "waiting_answer");
 
                 if (state.wake === null || state.wake > time) {
                   yield* setAlarm();
@@ -2664,7 +2675,8 @@ export class ProgramRunner extends Context.Service<
                     ? j.origin.request
                     : undefined;
                 const prior =
-                  s.requests.find((r) => r.id === request.id) ?? (flying?.id === request.id ? flying : undefined);
+                  Option.getOrUndefined(Arr.findFirst(s.requests, (r) => r.id === request.id)) ??
+                  (flying?.id === request.id ? flying : undefined);
 
                 if (prior !== undefined) {
                   if (prior.build !== request.build) {
@@ -2724,7 +2736,7 @@ export class ProgramRunner extends Context.Service<
               return { answer: Sent.cases.accepted.make({ rev: prior.rev, pos: prior.pos }), jobs: [] };
             }
 
-            if ((yield* ended) || state.cmds.some((job) => exits(state, job))) {
+            if ((yield* ended) || Arr.some(state.cmds, (job) => exits(state, job))) {
               return { answer: Sent.cases.refused.make({ reason: "ended" }), jobs: [] };
             }
 
@@ -2823,7 +2835,10 @@ export class ProgramRunner extends Context.Service<
             );
 
             if (Result.isFailure(preparation)) {
-              const terminal = supervision?.receipts.find((r) => r.letter === input.id)?.result;
+              const terminal =
+                supervision === null
+                  ? undefined
+                  : Option.getOrUndefined(Arr.findFirst(supervision.receipts, (r) => r.letter === input.id))?.result;
 
               if (
                 preparation.failure instanceof ProgramDown &&
@@ -2861,7 +2876,7 @@ export class ProgramRunner extends Context.Service<
 
             // The inbox now holds the accepted input. Failed deliveries keep their original body.
             if (supervision !== null) {
-              const receipt = supervision.receipts.find((r) => r.letter === input.id);
+              const receipt = Option.getOrUndefined(Arr.findFirst(supervision.receipts, (r) => r.letter === input.id));
 
               if (receipt !== undefined && receipt.tries === 0) {
                 yield* send({
@@ -2891,7 +2906,6 @@ export class ProgramRunner extends Context.Service<
  * `bad_input` is a delivery that does not decode, or a restart request that reuses an `id` with
  * another build. `bad_client` is a watcher's client id that is empty or over 256 characters.
  *
- * @stability unstable
  * @category errors
  */
 export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError", {
@@ -2928,7 +2942,7 @@ const inputPort = (state: Live, m: unknown) =>
     onNone: () => undefined,
     onSome: ({ type }) => {
       const inputs = state.loaded.declaration.inputs;
-      return Object.hasOwn(inputs, type) ? inputs[type] : undefined;
+      return Rec.has(inputs, type) ? inputs[type] : undefined;
     },
   });
 

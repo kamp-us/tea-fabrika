@@ -14,11 +14,11 @@
 // list grew or no longer reads as a list, 0 when none did or there is no base, 2 when the base is
 // not a sha, git fails, or the base's own file does not read (main is broken, so it fails closed).
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Exit, Option, Schema, Stream } from "effect";
+import { String as Str, pipe, Array as Arr, Console, Effect, Exit, Formatter, Option, Schema, Stream } from "effect";
+import type { PlatformError } from "effect";
 import { ChildProcess } from "effect/process";
 
-const ZEROS = "0".repeat(40);
-
+const ZEROS = pipe("0", Str.repeat(40));
 const Sha = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
 
 const LintRows = Schema.fromJsonString(
@@ -39,14 +39,14 @@ type Renames = ReadonlyMap<string, string>;
 const lintKeys = (text: string, renames: Renames = new Map()) =>
   Schema.decodeEffect(LintRows)(text).pipe(
     Effect.map(({ entries }) =>
-      entries.map((row) => JSON.stringify([renames.get(row.file) ?? row.file, row.rule, row.code])),
+      Arr.map(entries, (row) => JSON.stringify([renames.get(row.file) ?? row.file, row.rule, row.code])),
     ),
   );
 
 // code-graph's ids name a file too, but no rename reaches them here: they are matched as written.
 const deadKeys = (text: string, _renames?: Renames) =>
   Schema.decodeEffect(DeadRows)(text).pipe(
-    Effect.map(({ entries }) => entries.map((row) => JSON.stringify([row.scope, row.kind, row.id]))),
+    Effect.map(({ entries }) => Arr.map(entries, (row) => JSON.stringify([row.scope, row.kind, row.id]))),
   );
 
 /** One list file, and the key its own reader matches a row on. */
@@ -70,7 +70,7 @@ export const added = (base: ReadonlyArray<string>, head: ReadonlyArray<string>):
     left.set(key, (left.get(key) ?? 0) + 1);
   }
 
-  return head.filter((key) => {
+  return Arr.filter(head, (key) => {
     const n = left.get(key) ?? 0;
     left.set(key, n - 1);
 
@@ -131,7 +131,8 @@ class Failed extends Schema.TaggedError<Failed, { readonly brand: unique symbol 
   message: Schema.String,
 }) {}
 
-const text = (s: Stream.Stream<Uint8Array, unknown>) => s.pipe(Stream.decodeText(), Stream.mkString);
+const text = (s: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
+  s.pipe(Stream.decodeText(), Stream.mkString);
 
 /** One git command's output and exit code. */
 const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
@@ -152,7 +153,7 @@ const must = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
   const r = yield* git(args);
 
   if (r.code !== 0) {
-    return yield* Failed.make({ message: `git ${args.join(" ")}: ${r.err.trim()}` });
+    return yield* Failed.make({ message: `git ${Arr.join(args, " ")}: ${Str.trim(r.err)}` });
   }
 
   return r.out;
@@ -174,7 +175,8 @@ const baseFrom = Effect.fnUntraced(function* (flag: string | undefined) {
 });
 
 /** A GitHub workflow command's text, with its line breaks kept as `%0A`. */
-const escape = (s: string) => s.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
+const escape = (s: string) =>
+  pipe(s, Str.replaceAll("%", "%25"), Str.replaceAll("\r", "%0D"), Str.replaceAll("\n", "%0A"));
 
 const annotation = (answer: Answer, sha: string) => {
   if (answer._tag === "done") {
@@ -185,8 +187,7 @@ const annotation = (answer: Answer, sha: string) => {
     answer.reason === "not_a_list"
       ? `${answer.file} does not read as a list at HEAD.`
       : `${answer.rows.length} row(s) added against ${sha}. A list only shrinks (0524): fix the code, or, where the code is right and the rule does not fit, mark that one line with a disable comment and its reason.`;
-
-  return [`::error file=${answer.file}::${escape([head, ...answer.rows].join("\n"))}`];
+  return [`::error file=${answer.file}::${escape(Arr.join([head, ...answer.rows], "\n"))}`];
 };
 
 const main = Effect.gen(function* () {
@@ -201,7 +202,7 @@ const main = Effect.gen(function* () {
   }
 
   const sha = base.value;
-  const top = (yield* must(["rev-parse", "--show-toplevel"])).trim();
+  const top = Str.trim(yield* must(["rev-parse", "--show-toplevel"]));
   const at = (more: ReadonlyArray<string>) => ["-C", top, ...more];
 
   // The `check` job's checkout is shallow, so the base may need fetching first.
@@ -221,10 +222,10 @@ const main = Effect.gen(function* () {
   // that was split, its old path now holding a small new file, shows as `C<score>`, copied to the
   // part that kept its text (0536 split five files this way): its rows are read under that name too.
   // A row left at the old path as well is still counted as added, so a copy cannot hide a new row.
-  const moved = (yield* must(at(["diff", "--name-status", "-z", "-B", "-M", "--diff-filter=RC", sha, "HEAD"])))
-    .split("\0")
-    .filter((part) => part !== "");
-
+  const moved = Arr.filter(
+    Str.split(yield* must(at(["diff", "--name-status", "-z", "-B", "-M", "--diff-filter=RC", sha, "HEAD"])), "\0"),
+    (part) => part !== "",
+  );
   const renames = new Map<string, string>();
 
   for (let i = 0; i + 2 < moved.length; i += 3) {
@@ -240,7 +241,7 @@ const main = Effect.gen(function* () {
   for (const list of LISTS) {
     const answer = yield* judge(list, yield* fileAt(sha, list.file), yield* fileAt("HEAD", list.file), renames);
     grew = grew || answer._tag === "stuck";
-    yield* Console.log(JSON.stringify(answer));
+    yield* Console.log(Formatter.formatJson(answer));
 
     for (const line of annotation(answer, sha)) {
       yield* Console.log(line);

@@ -2,6 +2,7 @@
 import { Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Layer, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
@@ -19,6 +20,11 @@ import { programBox } from "./box.ts";
 
 // Only Cloudflare's base class is supplied. No execution or supervision method is replaced.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
+
+/** The rejection a stand-in RPC answers with, as a lost call to another object rejects. */
+class RpcFault extends Schema.TaggedError<RpcFault, { readonly brand: unique symbol }>()("RpcFault", {
+  message: Schema.String,
+}) {}
 
 const NAME = "counter:1";
 
@@ -118,6 +124,7 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
     const loader = Layer.effect(
       ProgramLoader,
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const real = yield* ProgramLoader;
         const loaded = yield* real.load("counter", BUILD);
         const Box = programBox(declared, BUILD);
@@ -126,7 +133,7 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
         const declaration =
           adapter === "node"
             ? loaded.declaration
-            : Schema.decodeUnknownSync(Declaration)(
+            : yield* Schema.decodeUnknownEffect(Declaration)(
                 yield* Effect.tryPromise({
                   try: () => box.describe(),
                   catch: (cause) => new ProgramDown({ reason: "load", cause }),
@@ -140,7 +147,9 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
                 init: (s) => box.init(s),
                 fresh: async (s, m) => {
                   if (move === "rpc") {
-                    return Effect.runPromise(Effect.fail(new Error("transport failed before checking")));
+                    return Effect.runPromiseWith(context)(
+                      Effect.fail(RpcFault.make({ message: "transport failed before checking" })),
+                    );
                   }
 
                   if (move === "decode") {
@@ -153,7 +162,9 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
                 audit: (m) => box.audit(m),
                 step: async (s, m) => {
                   if (move === "rpc") {
-                    return Effect.runPromise(Effect.fail(new Error("transport failed before the program")));
+                    return Effect.runPromiseWith(context)(
+                      Effect.fail(RpcFault.make({ message: "transport failed before the program" })),
+                    );
                   }
 
                   if (move === "decode") {
@@ -387,7 +398,7 @@ it("P1: the Worker description carries the checked policy and rejects corrupt RP
               cmds: [],
               inputs: {},
               writes: {},
-              ...(Object.hasOwn(r.raw, "policy") ? { policy: r.raw.policy } : {}),
+              ...(Rec.has(r.raw, "policy") ? { policy: r.raw.policy } : {}),
             };
 
             const decoded = Schema.decodeUnknownOption(Declaration)(r.described ?? raw);
@@ -519,7 +530,7 @@ it("P2: runners select policy before init and retain policy, pending recovery an
 
             const real = {
               run: (action: string, m: Model, edge: number) =>
-                Effect.runPromise(
+                Effect.runPromiseWith(context)(
                   Effect.gen(function* () {
                     const invoke = <A, E>(f: (r: ProgramRunner["Service"]) => Effect.Effect<A, E>) =>
                       ProgramRunner.use(f).pipe(Effect.provide(w.layer()));

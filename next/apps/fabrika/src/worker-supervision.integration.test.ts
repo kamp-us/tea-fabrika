@@ -5,9 +5,11 @@ import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path, Schema, Array as Arr, Duration, DateTime, Formatter, Option } from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import { describe, expect } from "vitest";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
@@ -32,14 +34,17 @@ type Key = SshsigTest.Identity;
 
 // A small program that throws a TypeError on "throw" and counts on "inc". It declares
 // maxDeliveries, so the box's declaration must carry the program's own limit.
-const poisonSource = [
-  'import {Machine} from "@demlik/tea/effect";',
-  'import {Schema} from "effect";',
-  "const Model = Schema.Struct({count: Schema.Int});",
-  'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("inc")})]);',
-  'const machine = Machine.make({model: Model, msg: Msg, cmds: [], init: (loaded) => [loaded ?? {count: 0}, []], update: {throw: () => {throw new TypeError("private failure P34");}, inc: (s) => [{count: s.count + 1}, []]}});',
-  `export const program = {name: ${JSON.stringify(PROGRAM)}, maxDeliveries: ${LIMIT}, machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {throw: {_tag: "write", schema: Msg, description: "Fail", personOnly: false}, inc: {_tag: "write", schema: Msg, description: "Count", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};`,
-].join("\n");
+const poisonSource = Arr.join(
+  [
+    'import {Machine} from "@demlik/tea/effect";',
+    'import {Schema} from "effect";',
+    "const Model = Schema.Struct({count: Schema.Int});",
+    'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("inc")})]);',
+    'const machine = Machine.make({model: Model, msg: Msg, cmds: [], init: (loaded) => [loaded ?? {count: 0}, []], update: {throw: () => {throw new TypeError("private failure P34");}, inc: (s) => [{count: s.count + 1}, []]}});',
+    `export const program = {name: ${JSON.stringify(PROGRAM)}, maxDeliveries: ${LIMIT}, machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {throw: {_tag: "write", schema: Msg, description: "Fail", personOnly: false}, inc: {_tag: "write", schema: Msg, description: "Count", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};`,
+  ],
+  "\n",
+);
 
 type Instance = any;
 
@@ -50,90 +55,83 @@ type Fixture = {
 };
 
 const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => Promise<void>) => {
-  process.env.DO_NOT_TRACK = "1";
+  noTracking();
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
 
-  const previousHome = process.env.FABRIKA_HOME;
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      // A short home: a socket path has a 103-byte limit. It is acquired first, so it goes last:
+      // localInstance closes with its scope before its durable files go.
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "p34w-" });
+      const key = yield* SshsigTest.identity;
+      yield* scopedEnv({ FABRIKA_HOME: home });
+      yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
+      const poison = path.join(home, "poison.ts");
+      yield* fs.writeFileString(poison, poisonSource);
+      const built = yield* build({ out: path.join(home, "dist"), programs: { [PROGRAM]: poison } });
+      const code = built.programs[PROGRAM];
+      expect(code, "the fixture program must be built").toBeDefined();
+      // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
+      const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
 
-  try {
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        // A short home: a socket path has a 103-byte limit. It is acquired first, so it goes last:
-        // localInstance closes with its scope before its durable files go.
-        const home = yield* fs.makeTempDirectoryScoped({ prefix: "p34w-" });
-        const key = yield* SshsigTest.identity;
-        process.env.FABRIKA_HOME = home;
-        yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
-        const poison = path.join(home, "poison.ts");
-        yield* fs.writeFileString(poison, poisonSource);
-        const built = yield* build({ out: path.join(home, "dist"), programs: { [PROGRAM]: poison } });
-        const code = built.programs[PROGRAM];
-        expect(code, "the fixture program must be built").toBeDefined();
-        // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
-        const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+      const instance = yield* localInstance(
+        built,
+        yield* RecordWireTest.startupFixture({
+          home,
+          name: PROJECT,
+          person: PERSON,
+          founder: key.line,
+          window: key.raw,
+          port: at.port,
+        }),
+      );
 
-        const instance = yield* localInstance(
-          built,
-          yield* RecordWireTest.startupFixture({
-            home,
-            name: PROJECT,
-            person: PERSON,
-            founder: key.line,
-            window: key.raw,
-            port: at.port,
-          }),
-        );
+      const from: From = {
+        by: key.fingerprint,
+        for: PERSON,
+        sentAt: SENT,
+        seen: 0,
+        parent: null,
+        traceId: TRACE,
+        build: built.build,
+      };
 
-        const from: From = {
-          by: key.fingerprint,
-          for: PERSON,
-          sentAt: SENT,
-          seen: 0,
-          parent: null,
-          traceId: TRACE,
-          build: built.build,
-        };
+      yield* Effect.promise(() =>
+        test(instance, key, {
+          from,
+          hash: code!.hash,
+          start: async (name) => {
+            const started = await Reflect.get(instance.project(PROJECT), "start")(
+              {
+                _tag: "first",
+                id: `start-${name}`,
+                name,
+                code: { program: PROGRAM, hash: code!.hash },
+              },
+              from,
+            );
 
-        yield* Effect.promise(() =>
-          test(instance, key, {
-            from,
-            hash: code!.hash,
-            start: async (name) => {
-              const started = await Reflect.get(instance.project(PROJECT), "start")(
-                {
-                  _tag: "first",
-                  id: `start-${name}`,
-                  name,
-                  code: { program: PROGRAM, hash: code!.hash },
-                },
-                from,
-              );
-
-              return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
-            },
-          }),
-        );
-      }).pipe(
-        Effect.scoped,
-        Effect.provide(localState()),
-        Effect.provide(SecureRandom.layerWebCrypto),
-        Effect.provide(NodeServices.layer),
-      ),
-    );
-  } finally {
-    if (previousHome === undefined) {
-      delete process.env.FABRIKA_HOME;
-    } else {
-      process.env.FABRIKA_HOME = previousHome;
-    }
-  }
+            return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
+          },
+        }),
+      );
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(localState()),
+      Effect.provide(SecureRandom.layerWebCrypto),
+      Effect.provide(NodeServices.layer),
+    ),
+  );
 };
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
+
+/** The wall clock in ms, for the polls that wait on real workerd. */
+const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(
@@ -142,10 +140,10 @@ const until = async <A>(
   done: (value: A) => boolean,
   ms = WAIT,
 ): Promise<A> => {
-  const end = Date.now() + ms;
+  const end = now() + ms;
   let last: { value: A } | { error: string } | null = null;
 
-  while (Date.now() < end) {
+  while (now() < end) {
     try {
       const value = await look();
       last = { value };
@@ -185,13 +183,13 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
   });
 
   const next = async (match: (frame: any) => boolean) => {
-    const end = Date.now() + WAIT;
+    const end = now() + WAIT;
 
-    while (Date.now() < end) {
-      const index = frames.findIndex(match);
+    while (now() < end) {
+      const index = Arr.findFirstIndex(frames, match);
 
-      if (index >= 0) {
-        return frames.splice(index, 1)[0];
+      if (Option.isSome(index)) {
+        return frames.splice(index.value, 1)[0];
       }
 
       if (closeCode !== undefined) {
@@ -241,16 +239,18 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
 };
 
 const facts = async (instance: Instance, stream: string) =>
-  ((await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>).map((row) => ({
+  Arr.map((await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>, (row) => ({
     ...row.body,
     _tag: row._tag,
   }));
 
 const restarts = async (instance: Instance, name: string) =>
-  (await facts(instance, `processes/${name}`)).filter((fact) => fact._tag === "restarted");
+  Arr.filter(await facts(instance, `processes/${name}`), (fact) => fact._tag === "restarted");
 
 const livePid = async (instance: Instance, name: string): Promise<string | undefined> =>
-  ((await instance.project(PROJECT).info()) as Array<any>).find((row) => row.name === name)?.process;
+  Option.getOrUndefined(
+    Arr.findFirst((await instance.project(PROJECT).info()) as Array<any>, (row) => row.name === name),
+  )?.process;
 
 const send = (pid: string, letter: string, type: "throw" | "inc") => ({
   pid,
@@ -270,23 +270,8 @@ const worldScoped = Effect.gen(function* () {
   const path = yield* Path.Path;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "p34w-" });
 
-  yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const previous = process.env.FABRIKA_HOME;
-      process.env.FABRIKA_HOME = home;
-      process.env.DO_NOT_TRACK = "1";
-
-      return previous;
-    }),
-    (previous) =>
-      Effect.sync(() => {
-        if (previous === undefined) {
-          delete process.env.FABRIKA_HOME;
-        } else {
-          process.env.FABRIKA_HOME = previous;
-        }
-      }),
-  );
+  yield* scopedEnv({ FABRIKA_HOME: home });
+  yield* Effect.sync(noTracking);
   const { localState } = yield* Effect.promise(() => import("alchemy/State/LocalState"));
   const { build } = yield* Effect.promise(() => import("./build.ts"));
   const { localInstance } = yield* Effect.promise(() => import("./local-instance.ts"));
@@ -373,17 +358,19 @@ const rows = async (instance: Instance, stream: string) =>
  *  fact in WAIT fails the test with the rows it saw, so a missing restart is a failure, never a hang. */
 const restartedAfter = (c: Awaited<ReturnType<typeof wire>>, name: string, after: string) =>
   Effect.promise(async () => {
-    const end = Date.now() + WAIT,
+    const end = now() + WAIT,
       seenRows: Array<unknown> = [];
 
     let seen = 0;
 
-    while (Date.now() < end) {
+    while (now() < end) {
       const read = await c.call("ledger.read", { stream: `processes/${name}`, after: seen });
       expect(read.error, `reading processes/${name}`).toBeUndefined();
-
-      const found = (read.result.entries as Array<any>).find(
-        (entry) => entry._tag === "restarted" && entry.body.after === after,
+      const found = Option.getOrUndefined(
+        Arr.findFirst(
+          read.result.entries as Array<any>,
+          (entry) => entry._tag === "restarted" && entry.body.after === after,
+        ),
       );
 
       if (found !== undefined) {
@@ -398,7 +385,7 @@ const restartedAfter = (c: Awaited<ReturnType<typeof wire>>, name: string, after
       }
     }
 
-    throw new Error(`no restarted after ${after} on ${name} in ${WAIT} ms; saw ${JSON.stringify(seenRows)}`);
+    throw new Error(`no restarted after ${after} on ${name} in ${WAIT} ms; saw ${Formatter.format(seenRows)}`);
   });
 
 /** Live means it also accepts a healthy input: an info row alone is not enough. */
@@ -683,7 +670,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
         expect(restarted).toMatchObject({ _tag: "restarted", body: { after: first, name } });
         expect(second).not.toBe(first);
 
-        for (const n of range(10).map((at) => at + 10)) {
+        for (const n of Arr.map(range(10), (at) => at + 10)) {
           expect(
             yield* Effect.promise(() => after.call("process.send", letter(n))),
             `k-${n} after the restart`,
@@ -694,7 +681,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
 
         const inbox = yield* Effect.promise(() => rows(instance, `${name}/inbox`));
         expect(inbox).toHaveLength(20);
-        expect(new Set(inbox.map((row) => row.id)).size).toBe(20);
+        expect(new Set(Arr.map(inbox, (row) => row.id)).size).toBe(20);
         expect(yield* Effect.promise(() => restarts(instance, name))).toHaveLength(1);
         expect(yield* Effect.promise(() => livePid(instance, name))).toBe(second);
         expect(yield* Effect.promise(() => after.call("view.open", { pid: second }))).toMatchObject({

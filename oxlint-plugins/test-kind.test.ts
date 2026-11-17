@@ -10,6 +10,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import { Array as Arr, pipe } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import type { Tag } from "./starters.ts";
@@ -77,10 +78,10 @@ it("K3: in memory, an .integration. file fails exactly when no chain of value im
       }),
       ({ integration, hops, end: last, side }) => {
         const test = `next/apps/x/src/t.${integration ? "integration." : ""}test.ts`;
-        const chain = [test, ...hops.map((_, k) => `next/apps/x/src/m${k + 1}.ts`)];
+        const chain = [test, ...Arr.map(hops, (_, k) => `next/apps/x/src/m${k + 1}.ts`)];
 
         const modules = new Map<string, Module>(
-          chain.map((file, k) => {
+          Arr.map(chain, (file, k) => {
             const hop = hops[k];
 
             const imports = [
@@ -99,26 +100,34 @@ it("K3: in memory, an .integration. file fails exactly when no chain of value im
 
         modules.set("next/apps/x/src/side.ts", { source: "export const side = 1;\n", imports: [] });
 
-        const open = hops.every((hop) => hop !== "type-only");
+        const open = Arr.every(hops, (hop) => hop !== "type-only");
         const fails = integration && !(open && reaches(last));
         const advised = !integration && hops.length > 0 && open && alone(last);
         const findings = judge(modules);
 
         seen.add(`${hops.length}:${last._tag}:${fails}:${advised}`);
-        expect(findings.filter((f) => f._tag === "integration_opens_nothing").map((f) => f.file)).toEqual(
-          fails ? [test] : [],
-        );
-        expect(findings.filter((f) => f._tag === "plain_opens").map((f) => [f.file, f.via])).toEqual(
-          advised ? [[test, chain]] : [],
-        );
+        expect(
+          pipe(
+            findings,
+            Arr.filter((f) => f._tag === "integration_opens_nothing"),
+            Arr.map((f) => f.file),
+          ),
+        ).toEqual(fails ? [test] : []);
+        expect(
+          pipe(
+            findings,
+            Arr.filter((f) => f._tag === "plain_opens"),
+            Arr.map((f) => [f.file, f.via]),
+          ),
+        ).toEqual(advised ? [[test, chain]] : []);
       },
     ),
     { seed: 119120, numRuns: 100 },
   );
   // Coverage: a chain of three hops that passes, one that fails, and advice two hops down were all generated.
-  expect([...seen].some((key) => key.startsWith("3:") && key.endsWith(":false:false"))).toBe(true);
-  expect([...seen].some((key) => key.endsWith(":true:false"))).toBe(true);
-  expect([...seen].some((key) => /^[23]:opens:false:true$/.test(key))).toBe(true);
+  expect(Arr.some([...seen], (key) => key.startsWith("3:") && key.endsWith(":false:false"))).toBe(true);
+  expect(Arr.some([...seen], (key) => key.endsWith(":true:false"))).toBe(true);
+  expect(Arr.some([...seen], (key) => /^[23]:opens:false:true$/.test(key))).toBe(true);
 });
 
 /** How one hop names the next module: a relative path, the package's exact export, or a `*` pattern. */
@@ -148,12 +157,12 @@ const plant = (chains: ReadonlyArray<Chain>) => {
   const exports: Record<string, string> = { "./p/*": "./src/*.ts" };
   const tests: Array<{ readonly file: string; readonly chain: Chain }> = [];
 
-  chains.forEach((c, i) => {
+  Arr.forEach(chains, (c, i) => {
     const test = `${APP}/src/c${i}.${c.integration ? "integration." : ""}test.ts`;
     let at = test;
     let text = "";
 
-    c.hops.forEach((hop, k) => {
+    Arr.forEach(c.hops, (hop, k) => {
       const name = `c${i}m${k + 1}`;
       // A relative hop stays in the importer's package; a workspace hop goes into the library.
       const next = hop === "relative" ? `${dirname(at)}/${name}.ts` : `${LIB}/src/${name}.ts`;
@@ -203,14 +212,25 @@ it("K3 and K4: through the real command and code-graph, every hop kind is follow
 
       try {
         const run = spawnSync(process.execPath, [COMMAND, root], { encoding: "utf8" });
-        const fails = tests.filter(({ chain: c }) => c.integration && !reaches(c.end)).map(({ file }) => file);
 
-        const advised = tests
-          .filter(({ chain: c }) => !c.integration && c.hops.length > 0 && alone(c.end))
-          .map(({ file }) => file);
+        const fails = pipe(
+          tests,
+          Arr.filter(({ chain: c }) => c.integration && !reaches(c.end)),
+          Arr.map(({ file }) => file),
+        );
+
+        const advised = pipe(
+          tests,
+          Arr.filter(({ chain: c }) => !c.integration && c.hops.length > 0 && alone(c.end)),
+          Arr.map(({ file }) => file),
+        );
 
         const named = (out: string, prefix: string) =>
-          tests.map(({ file }) => file).filter((file) => out.split("\n").some((l) => l.startsWith(`${prefix}${file}`)));
+          pipe(
+            tests,
+            Arr.map(({ file }) => file),
+            Arr.filter((file) => Arr.some(out.split("\n"), (l) => l.startsWith(`${prefix}${file}`))),
+          );
 
         for (const { chain: c } of tests) {
           for (const hop of c.hops) {
@@ -231,7 +251,7 @@ it("K3 and K4: through the real command and code-graph, every hop kind is follow
     { seed: 119120, numRuns: 20 },
   );
   // Coverage: every hop kind, a failing tree, and a passing tree that still printed advice.
-  expect([...seen].filter((k) => !k.startsWith("exit")).sort()).toEqual(["exact", "pattern", "relative"]);
+  expect(Arr.filter([...seen], (k) => !k.startsWith("exit")).sort()).toEqual(["exact", "pattern", "relative"]);
   expect(seen.has("exit 0 with advice")).toBe(true);
-  expect([...seen].some((k) => k.startsWith("exit 1"))).toBe(true);
+  expect(Arr.some([...seen], (k) => k.startsWith("exit 1"))).toBe(true);
 });

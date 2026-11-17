@@ -10,6 +10,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { Array as Arr, pipe, Record as Rec, Result } from "effect";
 import { parse } from "yaml";
 
 /** Folders whose packages are starts: nothing depends on an app, a tutorial or a tool. */
@@ -21,7 +22,7 @@ const LEFT_OUT = /^next\//;
 const FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
 
 const isMap = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+  typeof value === "object" && value !== null && !Arr.isArray(value);
 
 /** A pnpm-workspace.yaml glob as a test on a folder: `*` is one path part, as pnpm reads it here. */
 const matcher = (glob: string): RegExp =>
@@ -43,10 +44,10 @@ const read = (file: string): Manifest => {
     throw new Error(`${file}: not an object`);
   }
 
-  const deps = FIELDS.flatMap((field) => {
+  const deps = Arr.flatMap(FIELDS, (field) => {
     const map = manifest[field];
 
-    return isMap(map) ? Object.keys(map) : [];
+    return isMap(map) ? Rec.keys(map) : [];
   });
 
   return { name: typeof manifest["name"] === "string" ? manifest["name"] : null, deps };
@@ -69,15 +70,22 @@ if (tracked.status !== 0) {
 
 const run = (): { readonly unreached: readonly string[]; readonly total: number } => {
   const workspace: unknown = parse(readFileSync(join(root, "pnpm-workspace.yaml"), "utf8"));
-  const globs = isMap(workspace) && Array.isArray(workspace["packages"]) ? workspace["packages"] : [];
-  const members = globs.filter((g): g is string => typeof g === "string").map(matcher);
-  const starts = STARTS.map(matcher);
+  const globs = isMap(workspace) && Arr.isArray(workspace["packages"]) ? workspace["packages"] : [];
 
-  const folders = tracked.stdout
-    .split("\0")
-    .filter((file) => file !== "" && file !== "package.json")
-    .map((file) => dirname(file))
-    .filter((folder) => !LEFT_OUT.test(folder) && members.some((m) => m.test(folder)));
+  const members = pipe(
+    globs,
+    Arr.filter((g): g is string => typeof g === "string"),
+    Arr.map(matcher),
+  );
+
+  const starts = Arr.map(STARTS, matcher);
+
+  const folders = pipe(
+    tracked.stdout.split("\0"),
+    Arr.filter((file) => file !== "" && file !== "package.json"),
+    Arr.map((file) => dirname(file)),
+    Arr.filter((folder) => !LEFT_OUT.test(folder) && Arr.some(members, (m) => m.test(folder))),
+  );
 
   const byName = new Map<string, { readonly folder: string; readonly manifest: Manifest }>();
 
@@ -93,9 +101,11 @@ const run = (): { readonly unreached: readonly string[]; readonly total: number 
 
   const queue = [
     ...read("package.json").deps,
-    ...[...byName.values()]
-      .filter(({ folder }) => starts.some((s) => s.test(folder)))
-      .flatMap(({ manifest }) => (manifest.name === null ? [] : [manifest.name])),
+    ...pipe(
+      [...byName.values()],
+      Arr.filter(({ folder }) => Arr.some(starts, (s) => s.test(folder))),
+      Arr.flatMap(({ manifest }) => (manifest.name === null ? [] : [manifest.name])),
+    ),
   ];
 
   for (let name = queue.pop(); name !== undefined; name = queue.pop()) {
@@ -109,21 +119,19 @@ const run = (): { readonly unreached: readonly string[]; readonly total: number 
     queue.push(...found.manifest.deps);
   }
 
-  const unreached = [...byName.entries()]
-    .filter(([name]) => !reached.has(name))
-    .map(([name, { folder }]) => `${folder} (${name})`)
-    .sort();
+  const unreached = pipe(
+    [...byName.entries()],
+    Arr.filter(([name]) => !reached.has(name)),
+    Arr.map(([name, { folder }]) => `${folder} (${name})`),
+  ).sort();
 
   return { unreached, total: byName.size };
 };
 
-let result: ReturnType<typeof run> = { unreached: [], total: 0 };
-
-try {
-  result = run();
-} catch (error) {
-  fail(`could not read: ${String(error)}`);
-}
+const result: ReturnType<typeof run> = Result.match(Result.try(run), {
+  onSuccess: (ran) => ran,
+  onFailure: (error) => fail(`could not read: ${String(error)}`),
+});
 
 if (result.unreached.length > 0) {
   for (const line of result.unreached) {

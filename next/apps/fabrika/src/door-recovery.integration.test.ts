@@ -27,9 +27,10 @@ import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Layer, Path, Schema, Scope, Stream } from "effect";
+import { Effect, FileSystem, Layer, Path, Schema, Scope, Stream, Array as Arr, String as Str } from "effect";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
+
 import * as fc from "fast-check";
 import { Gateway } from "./door.ts";
 
@@ -55,11 +56,14 @@ const disks = Effect.gen(function* () {
   const top = yield* FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ prefix: "p34-door-" }));
   const paths = yield* Path.Path;
   let file = 0;
+  // `open` is a plain call (a disk reopens its file outside any Effect), so it runs with the
+  // services this Effect already has.
+  const context = yield* Effect.context();
 
   // A test process never loses power, so `TestDatabase.make` skips the sync and keeps the rollback
   // journal in memory. Every byte a law reads stays in the file and survives reopen (ticket 585,
   // decision 0052).
-  const open = (path: string) => Effect.runSync(Scope.provide(scope)(TestDatabase.make(path)));
+  const open = (path: string) => Effect.runSyncWith(context)(Scope.provide(scope)(TestDatabase.make(path)));
 
   const disk = () => {
     const path = paths.join(top, `${++file}.db`);
@@ -311,8 +315,8 @@ const world = ({ disk }: Disks, { window, other }: Effect.Success<typeof people>
     exec: (query, ...args) => {
       if (
         controls.cutRecorded &&
-        query.startsWith("UPDATE gateway_bindings") &&
-        args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"recorded"'))
+        Str.startsWith("UPDATE gateway_bindings")(query) &&
+        Arr.some(args, (arg) => typeof arg === "string" && Str.includes('"_tag":"recorded"')(arg))
       ) {
         controls.cutRecorded = false;
         controls.cuts++;
@@ -321,8 +325,8 @@ const world = ({ disk }: Disks, { window, other }: Effect.Success<typeof people>
 
       if (
         controls.cutRetryable &&
-        query.startsWith("UPDATE gateway_bindings") &&
-        args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"retryable"'))
+        Str.startsWith("UPDATE gateway_bindings")(query) &&
+        Arr.some(args, (arg) => typeof arg === "string" && Str.includes('"_tag":"retryable"')(arg))
       ) {
         controls.cutRetryable = false;
         controls.retryableCuts++;

@@ -4,16 +4,23 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as ScopedRef from "effect/ScopedRef";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
+
 import * as fc from "fast-check";
 import { ProcessReplies } from "../cloudflare/bindings.ts";
 import { workerLoader } from "../cloudflare/index.ts";
@@ -169,6 +176,7 @@ const invoke = (process: string) =>
 
 const runner = (usage: Effect.Effect<void, unknown>) =>
   Effect.gen(function* () {
+    const services = yield* Effect.context<never>();
     const ledger = yield* open;
     const state = yield* open;
     let executions = 0;
@@ -189,12 +197,12 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
           inputs: { add: { write: true, personOnly: false } },
           cmds: [],
         }),
-      init: (saved: unknown) => Effect.runPromise(execution.init(saved)),
-      step: (model: unknown, msg: unknown) => Effect.runPromise(execution.step(model, msg)),
-      fresh: (model: unknown, msg: unknown) => Effect.runPromise(execution.fresh(model, msg)),
-      update: (model: unknown, msg: unknown) => Effect.runPromise(execution.update(model, msg)),
+      init: (saved: unknown) => Effect.runPromiseWith(services)(execution.init(saved)),
+      step: (model: unknown, msg: unknown) => Effect.runPromiseWith(services)(execution.step(model, msg)),
+      fresh: (model: unknown, msg: unknown) => Effect.runPromiseWith(services)(execution.fresh(model, msg)),
+      update: (model: unknown, msg: unknown) => Effect.runPromiseWith(services)(execution.update(model, msg)),
       audit: (msg: unknown) =>
-        Effect.runPromise(
+        Effect.runPromiseWith(services)(
           execution.audit(msg).pipe(
             Effect.match({
               onSuccess: (value: Schema.Json) => Audit.Answer.cases.ok.make({ value }),
@@ -202,11 +210,11 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
             }),
           ),
         ),
-      fold: (model: unknown, msg: unknown) => Effect.runPromise(execution.fold(model, msg)),
-      upgrade: (saved: unknown) => Effect.runPromise(execution.upgrade(saved)),
-      reply: (cmd: unknown, outcome: unknown) => Effect.runPromise(execution.reply(cmd, outcome)),
-      check: (kind: string, event: unknown) => Effect.runPromise(execution.check(kind, event)),
-      admit: (msg: unknown) => Effect.runPromise(execution.admit(msg)),
+      fold: (model: unknown, msg: unknown) => Effect.runPromiseWith(services)(execution.fold(model, msg)),
+      upgrade: (saved: unknown) => Effect.runPromiseWith(services)(execution.upgrade(saved)),
+      reply: (cmd: unknown, outcome: unknown) => Effect.runPromiseWith(services)(execution.reply(cmd, outcome)),
+      check: (kind: string, event: unknown) => Effect.runPromiseWith(services)(execution.check(kind, event)),
+      admit: (msg: unknown) => Effect.runPromiseWith(services)(execution.admit(msg)),
     };
 
     // oxlint-disable-next-line fabrika/no-type-assertions -- only the platform loader and opaque tail fetcher are doubled
@@ -220,7 +228,8 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
 
     // oxlint-disable-next-line fabrika/no-type-assertions -- an opaque platform tail represents this runner's independent usage invocation
     const bound = {
-      fetch: () => Effect.runPromise(usage.pipe(Effect.as(new Response())), { signal: controller.signal }),
+      fetch: () =>
+        Effect.runPromiseWith(services)(usage.pipe(Effect.as(new Response())), { signal: controller.signal }),
     } as unknown as NonNullable<Parameters<typeof loader.load>[2]>;
 
     const data = Layer.mergeAll(
@@ -275,8 +284,8 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
     yield* service.open("fixture");
 
     const snapshot = Effect.sync(() =>
-      Object.fromEntries(
-        ["process_state", "process_letters", "process_recovery", "process_receipts"].map((table) => [
+      Rec.fromEntries(
+        Arr.map(["process_state", "process_letters", "process_recovery", "process_receipts"], (table) => [
           table,
           state.sql.exec(`SELECT * FROM ${table} ORDER BY rowid`),
         ]),
@@ -318,9 +327,9 @@ const telemetry: IsolateUsageTest.Rig["telemetry"] = (sql, object) =>
 const rows: IsolateUsageTest.Rig["rows"] = (sql) =>
   sql.exec("SELECT name FROM sqlite_master WHERE name='unsent'").length === 0
     ? []
-    : sql
-        .exec("SELECT row FROM unsent ORDER BY rowid")
-        .map((r) => Schema.decodeUnknownSync(Schema.fromJsonString(SpanRow))(r.row));
+    : Arr.map(sql.exec("SELECT row FROM unsent ORDER BY rowid"), (r) =>
+        Schema.decodeUnknownSync(Schema.fromJsonString(SpanRow))(r.row),
+      );
 
 const health: IsolateUsageTest.Rig["health"] = (sql) =>
   sql.exec("SELECT name FROM sqlite_master WHERE name='measurements'").length === 0
@@ -351,7 +360,7 @@ for (const accepted of [true, false]) {
 
           // oxlint-disable-next-line fabrika/no-type-assertions -- native storage handles only; the Process service and telemetry sink are real
           const ctx = {
-            id: { name: JSON.stringify(["project-test", NAME]) },
+            id: { name: Formatter.formatJson(["project-test", NAME]) },
             storage: {
               sql: {
                 exec: state.sql.exec,
@@ -366,12 +375,12 @@ for (const accepted of [true, false]) {
 
           // oxlint-disable-next-line fabrika/no-type-assertions -- record RPC is captured at the platform edge; program execution must remain unopened
           const env = {
-            INSTANCE: JSON.stringify(START),
+            INSTANCE: Formatter.formatJson(START),
             PROJECT: { getByName: () => ({ settingsStart }) },
             RECORD: {
               getByName: () => ({
                 write: (_chain: unknown, _part: number, sent: ReadonlyArray<{ span: SpanRow }>) => {
-                  written.push(...sent.map(({ span }) => span));
+                  written.push(...Arr.map(sent, ({ span }) => span));
 
                   return Promise.resolve(Written.cases.written.make({}));
                 },
@@ -387,7 +396,7 @@ for (const accepted of [true, false]) {
           // Initialize first, so no startup flush can accidentally satisfy the wake's obligation.
           yield* Effect.promise(() => runtime.runPromise(ProcessService));
           written.length = 0;
-          const input = accepted ? batch : batch.map((row) => ({ ...row, cpuMs: -row.cpuMs - 1 }));
+          const input = accepted ? batch : Arr.map(batch, (row) => ({ ...row, cpuMs: -row.cpuMs - 1 }));
 
           const result = yield* Effect.promise(() =>
             runtime.runPromise(ProcessService.use((service) => Effect.exit(service.usage(input)))),
@@ -395,10 +404,10 @@ for (const accepted of [true, false]) {
 
           expect(Exit.isSuccess(result)).toBe(accepted);
           // Inspect delivery now, before disposal or any other service call can flush it.
-          const calls = written.filter((row) => row.name === "process.usage");
+          const calls = Arr.filter(written, (row) => row.name === "process.usage");
           expect(calls, "the ended usage span must reach the record during this wake").toHaveLength(1);
           expect(calls[0]?.ok).toBe(accepted);
-          expect(written.filter((row) => row.name === "isolate.cpu")).toHaveLength(accepted ? batch.length : 0);
+          expect(Arr.filter(written, (row) => row.name === "isolate.cpu")).toHaveLength(accepted ? batch.length : 0);
           expect(rows(state.sql), "the wake must leave no telemetry awaiting a later runner call").toHaveLength(0);
         }),
       ),
@@ -408,6 +417,8 @@ for (const accepted of [true, false]) {
 
 it.effect("U3 batched refused spans keep only hourly counts, including batches with no accepted span", () =>
   Effect.gen(function* () {
+    const services = yield* Effect.context<never>();
+
     const once = (batches: ReadonlyArray<{ refused: ReadonlyArray<string>; accepted: number }>) =>
       Effect.scoped(
         Effect.gen(function* () {
@@ -446,11 +457,11 @@ it.effect("U3 batched refused spans keep only hourly counts, including batches w
               accepted += keep;
               expect(rows(store.sql)).toHaveLength(accepted);
               expect(store.sql.exec("SELECT * FROM measurements WHERE piece='gateway.route'")).toHaveLength(accepted);
-              expect(rows(store.sql).every((row) => row.attributes[REFUSED] === undefined)).toBe(true);
+              expect(Arr.every(rows(store.sql), (row) => row.attributes[REFUSED] === undefined)).toBe(true);
               // Read the sampled hour only after it closes; each batch above samples that same hour.
               yield* TestClock.setTime(3_600_000);
               const sums = yield* sink.sums("gateway.route", 0, 3_600_000);
-              expect(sums.map(({ refused, count }) => [refused, count])).toEqual([...counts].sort());
+              expect(Arr.map(sums, ({ refused, count }) => [refused, count])).toEqual([...counts].sort());
               expect(store.sql.exec("SELECT * FROM sums")).toHaveLength(counts.size);
             }
           }
@@ -469,7 +480,7 @@ it.effect("U3 batched refused spans keep only hourly counts, including batches w
       { minLength: 1, maxLength: 12 },
     );
 
-    const property = fc.asyncProperty(batches, (tape) => Effect.runPromise(once(tape)));
+    const property = fc.asyncProperty(batches, (tape) => Effect.runPromiseWith(services)(once(tape)));
     yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }) }));
   }),
 );
@@ -482,6 +493,8 @@ it.effect(
   "U8 Process and rebuilt Project runtimes bind every load to its own process",
   () =>
     Effect.gen(function* () {
+      const services = yield* Effect.context<never>();
+
       const once = (tape: ReadonlyArray<boolean>) =>
         Effect.scoped(
           Effect.gen(function* () {
@@ -501,7 +514,7 @@ it.effect(
                   recipient: Recipient.cases.client.make({ client: "test", session: PID }),
                   by: FROM.by,
                 },
-                Effect.sync(() => `process_0000000000e00800${String(++next).padStart(10, "0")}`),
+                Effect.sync(() => `process_0000000000e00800${Function.pipe(String(++next), Str.padStart(10, "0"))}`),
               ).pipe(Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data)))),
             );
 
@@ -517,9 +530,7 @@ it.effect(
                 FROM,
               )
               .pipe(Effect.provideContext(context));
-
-            const rpc = <A, E>(work: Effect.Effect<A, E>) =>
-              Effect.runPromise(work.pipe(Effect.provideContext(context)));
+            const rpc = <A, E>(work: Effect.Effect<A, E>) => Effect.runPromiseWith(context)(work);
 
             const ok = <A, E>(work: Effect.Effect<A, E>) =>
               rpc(Effect.map(work, (value) => ProcessReplies.cases.ok.make({ value })));
@@ -552,7 +563,7 @@ it.effect(
 
             // oxlint-disable-next-line fabrika/no-type-assertions -- only native object handles are supplied; processRuntime and its loader are real
             const ctx = {
-              id: { name: JSON.stringify(["project-test", NAME]) },
+              id: { name: Formatter.formatJson(["project-test", NAME]) },
               storage: {
                 sql: {
                   exec: state.sql.exec,
@@ -577,7 +588,7 @@ it.effect(
 
             // oxlint-disable-next-line fabrika/no-type-assertions -- native RPC handles and loader transport only; ledger, manager, runner and bindings stay real
             const env = {
-              INSTANCE: JSON.stringify(START),
+              INSTANCE: Formatter.formatJson(START),
               PROJECT: { getByName: () => project },
               RECORD: { getByName: () => ({ write: () => Promise.resolve(Written.cases.written.make({})) }) },
               LOADER: {
@@ -628,8 +639,12 @@ it.effect(
 
             for (const load of seen) {
               expect(load.tails).toHaveLength(1);
-              expect(load.tails?.map((tail) => bound.get(tail))).toEqual([
-                { project: "project-test", name: NAME, process: load.key.slice(`${CODE.hash}/`.length) },
+              expect(Arr.map(load.tails ?? [], (tail) => bound.get(tail))).toEqual([
+                {
+                  project: "project-test",
+                  name: NAME,
+                  process: Function.pipe(load.key, Str.slice(`${CODE.hash}/`.length)),
+                },
               ]);
             }
 
@@ -713,7 +728,7 @@ it.effect(
             expect(bootstrap.length).toBeGreaterThan(0);
 
             for (const load of bootstrap) {
-              expect(load.key.startsWith(`${CODE.hash}/project:`)).toBe(true);
+              expect(Function.pipe(load.key, Str.startsWith(`${CODE.hash}/project:`))).toBe(true);
               expect(load.tails).toBeUndefined();
             }
 
@@ -725,7 +740,7 @@ it.effect(
                   recipient: Recipient.cases.client.make({ client: "starter", session: PID }),
                   by: "brain:project-test",
                 },
-                Effect.sync(() => `process_0000000000e00800${String(++next).padStart(10, "0")}`),
+                Effect.sync(() => `process_0000000000e00800${Function.pipe(String(++next), Str.padStart(10, "0"))}`),
               ).pipe(Layer.provide(LedgerTransactionSql.layer(projectStore.sql).pipe(Layer.provide(quiet)))),
             );
 
@@ -758,12 +773,12 @@ it.effect(
               );
 
               const after = successor.process;
-              descriptors.set(JSON.stringify(["project-test", name]), { ...saved, id: after, name });
+              descriptors.set(Formatter.formatJson(["project-test", name]), { ...saved, id: after, name });
               yield* policy(after);
               const load = seen.at(-1);
               expect(load?.key).toBe(`${CODE.hash}/${after}`);
               expect(load?.tails).toHaveLength(1);
-              expect(load?.tails?.map((tail) => bound.get(tail))).toEqual([
+              expect(Arr.map(load?.tails ?? [], (tail) => bound.get(tail))).toEqual([
                 { project: "project-test", name, process: after },
               ]);
             }
@@ -776,18 +791,30 @@ it.effect(
             const restored = yield* Layer.build(projectLayer(projectCtx, projectEnv, projectOptions));
             expect(yield* Context.get(restored, ProjectService).info).toEqual(live);
             const restoredLoads = seen.slice(beforeRestore);
-            const bootstrapLoads = restoredLoads.filter((load) => load.key.startsWith(`${CODE.hash}/project:`));
+
+            const bootstrapLoads = Arr.filter(restoredLoads, (load) =>
+              Function.pipe(load.key, Str.startsWith(`${CODE.hash}/project:`)),
+            );
+
             expect(bootstrapLoads).toHaveLength(1);
             expect(bootstrapLoads[0]?.tails).toBeUndefined();
-            const programLoads = restoredLoads.filter((load) => !load.key.startsWith(`${CODE.hash}/project:`));
-            expect(programLoads.map((load) => load.key).sort()).toEqual(
-              live.map((process) => `${CODE.hash}/${process.process}`).sort(),
+
+            const programLoads = Arr.filter(
+              restoredLoads,
+              (load) => !Function.pipe(load.key, Str.startsWith(`${CODE.hash}/project:`)),
+            );
+
+            expect(Arr.map(programLoads, (load) => load.key).sort()).toEqual(
+              Arr.map(live, (process) => `${CODE.hash}/${process.process}`).sort(),
             );
 
             for (const process of live) {
-              const load = programLoads.find((load) => load.key === `${CODE.hash}/${process.process}`);
+              const load = Option.getOrUndefined(
+                Arr.findFirst(programLoads, (load) => load.key === `${CODE.hash}/${process.process}`),
+              );
+
               expect(load?.tails).toHaveLength(1);
-              expect(load?.tails?.map((tail) => bound.get(tail))).toEqual([
+              expect(Arr.map(load?.tails ?? [], (tail) => bound.get(tail))).toEqual([
                 { project: "project-test", name: process.name, process: process.process },
               ]);
             }
@@ -796,7 +823,7 @@ it.effect(
 
       // Every tape exercises a successor; later moves reload the live process or replace it.
       const tape = fc.array(fc.boolean(), { minLength: 1, maxLength: 8 }).map((moves) => [true, ...moves]);
-      const property = fc.asyncProperty(tape, (moves) => Effect.runPromise(once(moves)));
+      const property = fc.asyncProperty(tape, (moves) => Effect.runPromiseWith(services)(once(moves)));
       yield* Effect.promise(() => fc.assert(property, u8Runs));
     }),
   { timeout: u8Runs.numRuns * 2_000 },

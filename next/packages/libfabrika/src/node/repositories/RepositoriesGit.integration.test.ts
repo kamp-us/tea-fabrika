@@ -5,19 +5,24 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Digest from "effect/crypto/Digest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { Repositories } from "../../repositories/Repositories.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";
@@ -41,8 +46,8 @@ const services = Layer.mergeAll(NodeServices.layer, Digest.layerWebCrypto);
 describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) => {
   it(
     "L1: every prefix keeps the pinned tree after checkout edits, branch switches and origin moves",
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(
           fc.constantFrom("sha1" as const, "sha256" as const),
           fc.stringMatching(/^[a-z][a-z0-9]{0,7}$/).map((word) => `trunk-${word}`),
@@ -101,15 +106,14 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
             ),
         ),
         runs,
-      );
-    },
+      ),
     runs.numRuns * pinnedReadGitCommands * gitCommandBudget,
   );
 
   it(
     "L2: only an absent tree entry is an empty document; every requested Git failure refuses",
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) =>
           Effect.runPromise(
             Effect.scoped(
@@ -131,7 +135,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                 yield* git(f.repo, ["revert", "--no-edit", "HEAD"]);
                 yield* git(f.repo, ["push", "origin", f.branch]);
                 const real = yield* ChildProcessSpawner.ChildProcessSpawner;
-                const object = "a".repeat(40);
+                const object = Function.pipe("a", Str.repeat(40));
                 const validHead = `ref: refs/heads/release\tHEAD\n${object}\tHEAD\n`;
 
                 const faults = [
@@ -145,7 +149,12 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                   { operation: "ls-remote", flag: "--symref", output: `${object}\tHEAD\n`, code: 0 },
                   { operation: "ls-remote", flag: "--symref", output: validHead + validHead, code: 0 },
                   { operation: "ls-remote", flag: "--symref", output: "ref: refs/heads/release\tHEAD\n", code: 0 },
-                  { operation: "ls-remote", flag: "--symref", output: validHead.replace(object, "invalid"), code: 0 },
+                  {
+                    operation: "ls-remote",
+                    flag: "--symref",
+                    output: Function.pipe(validHead, Str.replace(object, "invalid")),
+                    code: 0,
+                  },
                   {
                     operation: "ls-tree",
                     flag: ".fabrika/fabrika.toml",
@@ -225,7 +234,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                   expect(Exit.isFailure(exit)).toBe(true);
 
                   if (Exit.isFailure(exit)) {
-                    const fail = exit.cause.reasons.find((r) => r._tag === "Fail");
+                    const fail = Option.getOrUndefined(Arr.findFirst(exit.cause.reasons, (r) => r._tag === "Fail"));
                     expect(fail?._tag === "Fail" && fail.error._tag).toBe("RepositoriesError");
                   }
                 }
@@ -247,15 +256,14 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
           ),
         ),
         runs,
-      );
-    },
+      ),
     runs.numRuns * failedReadGitCommands * gitCommandBudget,
   );
 
   it(
     "L2: each committed legacy-file combination keeps its refusal rule despite opposite checkout files",
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) =>
           Effect.runPromise(
             Effect.scoped(
@@ -312,13 +320,12 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
           ),
         ),
         runs,
-      );
-    },
+      ),
     runs.numRuns * legacyGitCommands * gitCommandBudget,
   );
 
-  it("L10: success, refusal and interruption release every acquired Git child and temporary directory", async () => {
-    await fc.assert(
+  it("L10: success, refusal and interruption release every acquired Git child and temporary directory", () =>
+    fc.assert(
       fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) => {
         await Effect.runPromise(
           Effect.gen(function* () {
@@ -415,8 +422,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
         );
       }),
       { seed: 119120, numRuns: runsFor({ fast: 10, full: 100 }) },
-    );
-  });
+    ));
 });
 
 // In-process Git replies exercise the adapter in a box. The real-Git laws above still run on the lead.
@@ -437,12 +443,12 @@ it.effect.prop(
         yield* fs.makeDirectory(common);
         yield* fs.makeDirectory(path.join(repo, ".fabrika"), { recursive: true });
 
-        const first = "a".repeat(width),
-          second = "b".repeat(width);
+        const first = Function.pipe("a", Str.repeat(width)),
+          second = Function.pipe("b", Str.repeat(width));
 
-        const documentId = "c".repeat(width),
-          firstBlob = "d".repeat(width),
-          secondBlob = "e".repeat(width);
+        const documentId = Function.pipe("c", Str.repeat(width)),
+          firstBlob = Function.pipe("d", Str.repeat(width)),
+          secondBlob = Function.pipe("e", Str.repeat(width));
 
         let head = first;
         let fault: "fetch" | "tree" | "blob" | "type" | "absent" | null = null;
@@ -472,10 +478,13 @@ it.effect.prop(
                 }),
             ),
           makeDirectory: (directory, options) =>
-            directory.startsWith(isolatedBase) ? Effect.void : fs.makeDirectory(directory, options),
+            Function.pipe(directory, Str.startsWith(isolatedBase)) ? Effect.void : fs.makeDirectory(directory, options),
           writeFileString: (file, value, options) =>
-            file.startsWith(isolatedBase) ? Effect.void : fs.writeFileString(file, value, options),
-          exists: (file) => (file.startsWith(isolatedBase) ? Effect.sync(() => temporary.has(file)) : fs.exists(file)),
+            Function.pipe(file, Str.startsWith(isolatedBase)) ? Effect.void : fs.writeFileString(file, value, options),
+          exists: (file) =>
+            Function.pipe(file, Str.startsWith(isolatedBase))
+              ? Effect.sync(() => temporary.has(file))
+              : fs.exists(file),
         };
 
         const spawner = ChildProcessSpawner.make((command) =>
@@ -582,7 +591,10 @@ it.effect.prop(
               if (Exit.isSuccess(result)) {
                 expect(result.value.snapshot.text).toBeNull();
               } else {
-                const reason = result.cause.reasons.find((reason) => reason._tag === "Fail");
+                const reason = Option.getOrUndefined(
+                  Arr.findFirst(result.cause.reasons, (reason) => reason._tag === "Fail"),
+                );
+
                 expect(reason?._tag === "Fail" && reason.error._tag).toBe("RepositoriesError");
               }
 

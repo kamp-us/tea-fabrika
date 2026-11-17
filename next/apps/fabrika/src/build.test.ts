@@ -2,7 +2,8 @@
 // build.integration.test.ts, which runs Rolldown and so runs on the schedule (0536).
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Path } from "effect";
+import { Effect, FileSystem, Path, Array as Arr, Option, String as Str } from "effect";
+
 import { parseSync } from "oxc-parser";
 
 // L11: production React does not repeat mounts. Check the real entry's module-level boot instead: the
@@ -20,18 +21,19 @@ it.effect(
       const isRunMain = (node: { readonly type: string; readonly name?: unknown }) =>
         node.type === "Identifier" && node.name === "runMain";
 
-      const imported = parsed.program.body.filter(
+      const imported = Arr.filter(
+        parsed.program.body,
         (node) =>
           node.type === "ImportDeclaration" &&
           node.source.value === "@kampus/tuval/browser" &&
-          node.specifiers.some((s) => s.type === "ImportSpecifier" && isRunMain(s.imported) && isRunMain(s.local)),
+          Arr.some(node.specifiers, (s) => s.type === "ImportSpecifier" && isRunMain(s.imported) && isRunMain(s.local)),
       );
 
       expect(imported, "runMain comes from @kampus/tuval/browser").toHaveLength(1);
 
       // A start is `program.pipe(runMain)`, `runMain(program)` or `runMain(options)(program)`, as a
       // statement of the module itself.
-      const boots = parsed.program.body.filter((node) => {
+      const boots = Arr.filter(parsed.program.body, (node) => {
         if (node.type !== "ExpressionStatement" || node.expression.type !== "CallExpression") {
           return false;
         }
@@ -53,7 +55,10 @@ it.effect(
 
       expect(boots, "a React mount never owns the page's Effect run").toHaveLength(1);
       // The import and the one start: any other `runMain`, in a function or a component, is a second start.
-      expect(source.match(/\brunMain\b/g), "there is only one page runtime").toHaveLength(2);
-      expect(source.match(/\brun(?!Main\b)[A-Z]\w*/g), "the entry calls no Effect.run*").toBeNull();
+      expect(Option.getOrNull(Str.match(/\brunMain\b/g)(source)), "there is only one page runtime").toHaveLength(2);
+      expect(
+        Option.getOrNull(Str.match(/\brun(?!Main\b)[A-Z]\w*/g)(source)),
+        "the entry calls no Effect.run*",
+      ).toBeNull();
     }).pipe(Effect.provide(NodeServices.layer)),
 );

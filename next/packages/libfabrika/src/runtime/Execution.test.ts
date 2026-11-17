@@ -232,6 +232,7 @@ describe("P12 Effect execution adapter", () => {
         (n, saved) =>
           Effect.runPromise(
             Effect.gen(function* () {
+              const context = yield* Effect.context<never>();
               const pure = yield* Effect.fromResult(stepper(declared));
               const node: Execution = nodeExecution(declared);
 
@@ -243,7 +244,7 @@ describe("P12 Effect execution adapter", () => {
                 update: async (model: unknown, msg: unknown) => Result.getOrThrow(pure.update(model, msg)),
                 audit: async (msg: unknown) => ({
                   _tag: "ok",
-                  value: await Effect.runPromise(nodeExecution(declared).audit(msg)),
+                  value: await Effect.runPromiseWith(context)(nodeExecution(declared).audit(msg)),
                 }),
                 fold: async (model: unknown, msg: unknown) => pure.fold(model, msg),
                 upgrade: async (saved: unknown) => Saved.upgrade(saved, declared.state, "build-a"),
@@ -295,7 +296,12 @@ describe("P12 Effect execution adapter", () => {
               ] as const) {
                 const result = yield* Effect.flip(action);
                 expect(result).toMatchObject({ _tag: "ProgramDown", reason });
-                expect(JSON.stringify(result)).not.toContain("private RPC body");
+                // The JSON the error writes as it is: Formatter.formatJson would also write the nested
+                // Error's message, which plain JSON leaves out.
+                const written = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result).pipe(
+                  Effect.orDie,
+                );
+                expect(written).not.toContain("private RPC body");
               }
             }),
           ),

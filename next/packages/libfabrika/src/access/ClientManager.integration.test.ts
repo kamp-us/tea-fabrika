@@ -23,12 +23,16 @@ import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as References from "effect/References";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
@@ -41,6 +45,15 @@ import type { MemberEvent, Access } from "./Access.ts";
 import { foldAccess } from "./AccessFold.ts";
 import { ClientManager } from "./ClientManager.ts";
 import * as ClientManagerLedger from "./ClientManagerLedger.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
@@ -121,12 +134,12 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: NoInfer<A>[], law: (a: A
     const context = yield* Effect.context<R>();
     yield* Effect.promise(() =>
       fc.assert(
-        fc.asyncProperty(arb, (a) => Effect.runPromise(law(a).pipe(Effect.provideContext(context)))),
+        fc.asyncProperty(arb, (a) => Effect.runPromiseWith(context)(law(a))),
         {
           seed: SEED,
           numRuns: runsFor({ fast: 4, full: 40 }),
           includeErrorInReport: true,
-          examples: examples.map((a): [A] => [a]),
+          examples: Arr.map(examples, (a): [A] => [a]),
         },
       ),
     );
@@ -181,7 +194,7 @@ const signed = (signer: string) => ({
 
 let made = 0;
 
-const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
+const nextId = (prefix: string): string => `${prefix}_${Str.padStart(26, "0")(String(++made))}`;
 
 const granted = (
   signer: string,
@@ -267,9 +280,9 @@ const eventId = (event: MemberEvent): string => {
 const view = (m: Access) => ({
   person: m.person,
   name: m.name,
-  keys: [...m.keys.entries()]
-    .map(([key, k]) => ({ key, rank: k.rank, live: k.live, under: k.under }))
-    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
+  keys: Arr.map([...m.keys.entries()], ([key, k]) => ({ key, rank: k.rank, live: k.live, under: k.under })).sort(
+    (a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
+  ),
   spent: [...m.spent].sort(),
 });
 
@@ -293,7 +306,7 @@ describe("p96 and p97, replay and write answers", () => {
 
         expect(yield* write(granted("pA", key))).toMatchObject({ _tag: "applied" });
         expect((yield* entries).at(-1)?.seen).toBe(2);
-      }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+      }).pipe(Effect.provide(fresh().pipe(onSql, clientsOn))),
     ),
   );
   it.effect("each write span keeps its answer and a refusal's reason", () =>
@@ -312,14 +325,14 @@ describe("p96 and p97, replay and write answers", () => {
       return Effect.gen(function* () {
         for (const signer of ["pA", "wA", "unknown-signer"]) {
           const answer = yield* write(granted(signer, key));
-          const span = spans.filter((s) => s.name === "access.write").at(-1)!;
+          const span = Arr.filter(spans, (s) => s.name === "access.write").at(-1)!;
           expect(span.attributes.get("fab.access.answer")).toBe(answer._tag);
 
           if (answer._tag === "refused") {
             expect(span.attributes.get("fab.access.reason")).toBe(answer.reason);
           }
         }
-      }).pipe(Effect.provide(clientsOn(onSql(fresh()))), Effect.withTracer(tracer));
+      }).pipe(Effect.provide(fresh().pipe(onSql, clientsOn)), Effect.withTracer(tracer));
     }),
   );
 });
@@ -373,7 +386,7 @@ describe("p96, founded is written once, by the first call", () => {
           ),
         );
         const written = yield* entries;
-        expect(written.map((e) => [e.id, e._tag, e.rev])).toEqual([["founded", "founded", 1]]);
+        expect(Arr.map(written, (e) => [e.id, e._tag, e.rev])).toEqual([["founded", "founded", 1]]);
         yield* members;
         expect((yield* entries).length).toBe(1);
       }).pipe(Effect.provide(clientsOn(onSql(fresh()), founder))),
@@ -402,7 +415,7 @@ describe("p96, founded is written once, by the first call", () => {
     check(leaf, ["t1"], (key) =>
       Effect.gen(function* () {
         const sql = yield* shared();
-        const one = clientsOn(onSql(sql));
+        const one = sql.pipe(onSql, clientsOn);
         const two = ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)));
         yield* Effect.all(
           [
@@ -414,7 +427,12 @@ describe("p96, founded is written once, by the first call", () => {
           { concurrency: "unbounded" },
         ).pipe(Effect.provideService(References.MaxOpsBeforeYield, 3));
         const written = yield* entries.pipe(Effect.provide(onSql(sql)));
-        expect(written.filter((e) => e._tag === "founded").map((e) => e.id)).toEqual(["founded"]);
+        expect(
+          Arr.map(
+            Arr.filter(written, (e) => e._tag === "founded"),
+            (e) => e.id,
+          ),
+        ).toEqual(["founded"]);
       }),
     ),
   );
@@ -452,7 +470,7 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
     const two = ClientManagerLedger.layer(noBuild);
     // @ts-expect-error neither can be left out
     const three = ClientManagerLedger.layer(base);
-    expect([one, two, three].every(Layer.isLayer)).toBe(true);
+    expect(Arr.every([one, two, three], Layer.isLayer)).toBe(true);
   });
 
   /** A Ledger whose append of `founded` is refused with `reason`, after `before` runs. */
@@ -504,7 +522,7 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
         return Effect.gen(function* () {
           expect(view(yield* members)).toEqual(view(foldAccess([FOUNDED])));
           expect(yield* write(granted("pA", key))).toEqual({ _tag: "applied", rev: 2 });
-          expect((yield* entries).map((e) => e.id)[0]).toBe("founded");
+          expect(Arr.map(yield* entries, (e) => e.id)[0]).toBe("founded");
         }).pipe(Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provideMerge(raced))));
       }),
     ),
@@ -550,7 +568,7 @@ describe("p96, the traced history from the plan", () => {
         const m = yield* members;
         expect(view(m)).toEqual(view(foldAccess(kept)));
         expect([...m.spent]).toEqual(["r1"]);
-      }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+      }).pipe(Effect.provide(fresh().pipe(onSql, clientsOn))),
     ),
   );
 
@@ -591,7 +609,7 @@ describe("p96, the traced history from the plan", () => {
             traceId: TRACE,
           });
           expect(second?.by).toBe("SHA256:door-2");
-        }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+        }).pipe(Effect.provide(fresh().pipe(onSql, clientsOn))),
     ),
   );
 });
@@ -617,7 +635,7 @@ describe("p96, why a write is refused", () => {
           reason: "used",
         });
         expect((yield* entries).length).toBe(before);
-      }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+      }).pipe(Effect.provide(fresh().pipe(onSql, clientsOn))),
     ),
   );
 
@@ -630,7 +648,7 @@ describe("p96, why a write is refused", () => {
         expect(yield* write(other)).toEqual({ _tag: "refused", reason: "id_reused" });
         expect((yield* entries).length).toBe(2);
         expect((yield* members).keys.has("t2")).toBe(false);
-      }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+      }).pipe(Effect.provide(fresh().pipe(onSql, clientsOn))),
     ),
   );
 
@@ -648,7 +666,7 @@ describe("p96, why a write is refused", () => {
         expect((yield* entries).length).toBe(before);
         expect(view(yield* members)).toEqual(view(foldAccess([FOUNDED])));
         expect((yield* write(denied(key, "SHA256:menu")))._tag).not.toBe("ignored");
-      }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+      }).pipe(Effect.provide(fresh().pipe(onSql, clientsOn))),
     ),
   );
 });
@@ -687,7 +705,12 @@ describe("p96, the stolen sheet race", () => {
           expect(m.keys.get("pC")?.live ?? false).toBe(false);
           expect(m.keys.get("pA")?.live).toBe(true);
           // Both events are in the log; the fold took only the first.
-          expect((yield* entries).map((e) => e.id)).toEqual(["founded", eventId(sheet), eventId(macX), eventId(macC)]);
+          expect(Arr.map(yield* entries, (e) => e.id)).toEqual([
+            "founded",
+            eventId(sheet),
+            eventId(macX),
+            eventId(macC),
+          ]);
         }).pipe(Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provideMerge(racing(sql, hook)))));
       }),
     ),
@@ -701,7 +724,7 @@ describe("p96, the stolen sheet race", () => {
         Effect.gen(function* () {
           for (let round = 0; round < 12; round++) {
             const sql = yield* shared();
-            const one = clientsOn(onSql(sql));
+            const one = sql.pipe(onSql, clientsOn);
             const two = ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)));
             yield* write(addedSheet("pA", "r1")).pipe(Effect.provide(one));
 
@@ -713,12 +736,12 @@ describe("p96, the stolen sheet race", () => {
               { concurrency: "unbounded" },
             ).pipe(Effect.provideService(References.MaxOpsBeforeYield, 3));
 
-            expect(answers.filter((a) => a._tag === "applied").length, `round ${round}`).toBe(1);
-            const lost = answers.find((a) => a._tag !== "applied");
+            expect(Arr.filter(answers, (a) => a._tag === "applied").length, `round ${round}`).toBe(1);
+            const lost = Option.getOrUndefined(Arr.findFirst(answers, (a) => a._tag !== "applied"));
             expect(lost?._tag === "ignored" || lost?._tag === "refused", `round ${round}`).toBe(true);
             expect(lost !== undefined && "reason" in lost ? lost.reason : null).toBe("used");
             const m = yield* members.pipe(Effect.provide(one));
-            expect([m.keys.get(device)?.live, m.keys.get("pX")?.live].filter((l) => l === true)).toEqual([true]);
+            expect(Arr.filter([m.keys.get(device)?.live, m.keys.get("pX")?.live], (l) => l === true)).toEqual([true]);
           }
         }),
     ),
@@ -785,59 +808,64 @@ const event: fc.Arbitrary<() => MemberEvent> = fc.oneof(
 );
 
 describe("p96, write tells the truth over any history", () => {
-  it("refused writes nothing and the fold skips it; an event that changes who belongs is applied", async () => {
-    let applied = 0;
-    let refused = 0;
-    await fc.assert(
-      fc.asyncProperty(fc.array(event, { minLength: 1, maxLength: 20 }), (makes) =>
-        Effect.runPromise(
-          Effect.gen(function* () {
-            const kept: Array<MemberEvent> = [FOUNDED];
-            yield* members;
+  it.live("refused writes nothing and the fold skips it; an event that changes who belongs is applied", () =>
+    Effect.gen(function* () {
+      let applied = 0;
+      let refused = 0;
+      yield* promised(() =>
+        fc.assert(
+          fc.asyncProperty(fc.array(event, { minLength: 1, maxLength: 20 }), (makes) =>
+            Effect.runPromise(
+              Effect.gen(function* () {
+                const kept: Array<MemberEvent> = [FOUNDED];
+                yield* members;
 
-            for (const make of makes) {
-              const next = make();
-              const before = yield* entries;
-              const head = before.at(-1)?.rev ?? 0;
-              const answer = yield* write(next);
-              const after = yield* entries;
+                for (const make of makes) {
+                  const next = make();
+                  const before = yield* entries;
+                  const head = before.at(-1)?.rev ?? 0;
+                  const answer = yield* write(next);
+                  const after = yield* entries;
 
-              const changes =
-                JSON.stringify(view(foldAccess([...kept, next]))) !== JSON.stringify(view(foldAccess(kept)));
+                  const changes =
+                    Formatter.formatJson(view(foldAccess([...kept, next]))) !==
+                    Formatter.formatJson(view(foldAccess(kept)));
 
-              expect(answer._tag, "no race, so nothing is ignored").not.toBe("ignored");
+                  expect(answer._tag, "no race, so nothing is ignored").not.toBe("ignored");
 
-              if (changes) {
-                expect(answer, next._tag).toEqual({ _tag: "applied", rev: expect.any(Number) });
-              }
+                  if (changes) {
+                    expect(answer, next._tag).toEqual({ _tag: "applied", rev: expect.any(Number) });
+                  }
 
-              if (answer._tag === "refused") {
-                refused++;
-                expect(after.length, next._tag).toBe(before.length);
-                expect(changes, next._tag).toBe(false);
-              }
+                  if (answer._tag === "refused") {
+                    refused++;
+                    expect(after.length, next._tag).toBe(before.length);
+                    expect(changes, next._tag).toBe(false);
+                  }
 
-              if (answer._tag === "applied") {
-                applied++;
-                const placed = after.find((e) => e.rev === answer.rev);
-                expect(placed?.id, next._tag).toBe(eventId(next));
+                  if (answer._tag === "applied") {
+                    applied++;
+                    const placed = Option.getOrUndefined(Arr.findFirst(after, (e) => e.rev === answer.rev));
+                    expect(placed?.id, next._tag).toBe(eventId(next));
 
-                if (answer.rev > head) {
-                  kept.push(next);
+                    if (answer.rev > head) {
+                      kept.push(next);
+                    }
+                  }
                 }
-              }
-            }
 
-            expect(view(yield* members)).toEqual(view(foldAccess(kept)));
-          }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+                expect(view(yield* members)).toEqual(view(foldAccess(kept)));
+              }).pipe(Effect.provide(fresh().pipe(onSql, clientsOn))),
+            ),
+          ),
+          // The law counts more than 60 applied and 60 refused writes, so a pull request runs all 60.
+          { seed: SEED, numRuns: runsFor({ fast: 60, full: 60 }) },
         ),
-      ),
-      // The law counts more than 60 applied and 60 refused writes, so a pull request runs all 60.
-      { seed: SEED, numRuns: runsFor({ fast: 60, full: 60 }) },
-    );
-    expect(applied).toBeGreaterThan(60);
-    expect(refused).toBeGreaterThan(60);
-  });
+      );
+      expect(applied).toBeGreaterThan(60);
+      expect(refused).toBeGreaterThan(60);
+    }),
+  );
 });
 
 // Gaps the mutation step found on the build (ticket 236): answers the tests above held loose.
@@ -851,7 +879,7 @@ describe("p96, a write tells the truth about a key that is out", () => {
         const before = (yield* entries).length;
         expect(yield* write(granted("pA", key))).toEqual({ _tag: "refused", reason: "revoked" });
         expect((yield* entries).length).toBe(before);
-      }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+      }).pipe(Effect.provide(fresh().pipe(onSql, clientsOn))),
     ),
   );
 
@@ -864,7 +892,7 @@ describe("p96, a write tells the truth about a key that is out", () => {
         const before = (yield* entries).length;
         expect(yield* write(revoked("pB", key))).toEqual({ _tag: "refused", reason: "revoked" });
         expect((yield* entries).length).toBe(before);
-      }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+      }).pipe(Effect.provide(fresh().pipe(onSql, clientsOn))),
     ),
   );
 
@@ -880,7 +908,7 @@ describe("p96, a write tells the truth about a key that is out", () => {
         });
         // The new sheet still works: the one it ended was the live one, and there was none.
         expect((yield* write(addedDevice("r2", "pY", "wY", { old })))._tag).toBe("applied");
-      }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+      }).pipe(Effect.provide(fresh().pipe(onSql, clientsOn))),
     ),
   );
 });

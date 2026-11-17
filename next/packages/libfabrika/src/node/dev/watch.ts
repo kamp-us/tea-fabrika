@@ -6,12 +6,16 @@ import { run } from "@demlik/tea/effect";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import { watch, type RolldownWatcherEvent } from "rolldown";
 import * as Id from "../../Id.ts";
 import { hash } from "../../runtime/Built.ts";
@@ -64,7 +68,7 @@ const details = (raw: unknown, root: string, path: Path.Path) => {
 
   const relative = path.isAbsolute(file) ? path.relative(root, file) : file;
 
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+  if (Function.pipe(relative, Str.startsWith("..")) || path.isAbsolute(relative)) {
     return {};
   }
 
@@ -100,6 +104,8 @@ export const watchPrograms = (options: {
     Effect.gen(function* () {
       const path = yield* Path.Path;
       const fs = yield* FileSystem.FileSystem;
+      // The services Rolldown's listener runs each event on.
+      const context = yield* Effect.context<never>();
       const generated = path.join(path.dirname(options.entry), "program.watch.generated.ts");
       const events = yield* Queue.unbounded<RolldownWatcherEvent>();
       // Results are owned as soon as the callback receives them, including during interruption.
@@ -153,7 +159,7 @@ export const watchPrograms = (options: {
                   }
                 },
                 transform(code, id) {
-                  if (id.endsWith(".tsx")) {
+                  if (Function.pipe(id, Str.endsWith(".tsx"))) {
                     return { code: compile(id, code).code };
                   }
                 },
@@ -162,7 +168,7 @@ export const watchPrograms = (options: {
           });
 
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Rolldown awaits its listener before END
-          watcher.on("event", (event) => Effect.runPromise(received(event)));
+          watcher.on("event", (event) => Effect.runPromiseWith(context)(received(event)));
 
           return watcher;
         }),
@@ -227,7 +233,9 @@ export const watchPrograms = (options: {
               buildPrograms({ root, entry: options.entry, programs: [selected] }, undefined, inputs),
             );
 
-            const digest = yield* hash(JSON.stringify([...inputs].sort(([a], [b]) => a.localeCompare(b))));
+            const digest = yield* hash(
+              Formatter.formatJson([...inputs].sort(([a], [b]) => Function.pipe(a, Str.localeCompare(b)))),
+            );
 
             if (built._tag === "Failure" && phase.getState().failedInputs === digest) {
               return yield* finish(Option.none());

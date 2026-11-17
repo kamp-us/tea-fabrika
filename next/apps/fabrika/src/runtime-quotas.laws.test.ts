@@ -34,9 +34,10 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, Clock, Effect, Option, Schema } from "effect";
+import { ByteSize, Clock, Effect, Option, Schema, String as Str, Record as Rec } from "effect";
 import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
+
 import { programs } from "virtual:fabrika-built";
 import { vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -62,7 +63,7 @@ const PROGRAMS = ["quota/alpha", "quota/beta"] as const;
 // Where the brain records how far each name's reader has read its inbox. An ack is the brain's own
 // record, so no account pays for one.
 const ACKS: ReadonlyArray<string> = NAMES.map(acked);
-const programFor = (name: string) => (name.startsWith("alpha:") ? "quota/alpha" : "quota/beta");
+const programFor = (name: string) => (Str.startsWith("alpha:")(name) ? "quota/alpha" : "quota/beta");
 const required = <A>(value: A | undefined): A => Option.getOrThrow(Option.fromUndefinedOr(value));
 const live = TestClock.withLive;
 
@@ -159,13 +160,13 @@ const declared = (limits: Limits) => ({
 
 /** Row counts of every table, so a law can say "nothing was saved" without naming a table. */
 const counts = (db: DatabaseSync) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
       .all()
       .map(({ name }) => [
         String(name),
-        db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
+        db.prepare(`SELECT count(*) AS n FROM "${Str.replaceAll('"', '""')(String(name))}"`).get()?.n,
       ]),
   );
 
@@ -234,7 +235,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     traceId: TRACE,
     build: "quota-laws",
   };
-  const everyone = Object.fromEntries(NAMES.map((name) => [name, NAMES.filter((other) => other !== name)]));
+  const everyone = Rec.fromEntries(NAMES.map((name) => [name, NAMES.filter((other) => other !== name)]));
   let projectHeld = undefined as ReturnType<typeof projectRuntime> | undefined;
   // What the Project class hands off: one service call on the object's runtime.
   const project = <A, E>(use: (p: ProjectCalls) => Effect.Effect<A, E>) =>
@@ -349,9 +350,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => {
-          const alpha = id.startsWith(`${alphaCode.hash}/`);
+          const alpha = Str.startsWith(`${alphaCode.hash}/`)(id);
 
-          if (alpha || id.startsWith(`${betaCode.hash}/`)) {
+          if (alpha || Str.startsWith(`${betaCode.hash}/`)(id)) {
             // The real box around the fixture program.
             const Box = programBox(
               worker(alpha ? "quota/alpha" : "quota/beta"),
@@ -373,7 +374,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
             };
           }
 
-          if (id.startsWith(`${checklistCode.hash}/`)) {
+          if (Str.startsWith(`${checklistCode.hash}/`)(id)) {
             const Box = programBox(checklist, checklistCode.hash);
             return Reflect.construct(Box, []);
           }
@@ -497,7 +498,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
   ).toMatchObject({ _tag: "online" });
   const view = Effect.fnUntraced(function* (name: string) {
     const store = yield* storeFor(name);
-    return Schema.decodeUnknownSync(View)(yield* process(store, (p) => p.open("audit"))).view;
+    return (yield* Schema.decodeUnknownEffect(View)(yield* process(store, (p) => p.open("audit")))).view;
   });
   /** Fires each saved alarm that is due, as the platform would, until `done` holds and none is saved. */
   const settle = Effect.fnUntraced(function* (done: Effect.Effect<boolean, unknown>) {
@@ -572,9 +573,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
       "the live assembly installs accounting in both stores; a read never creates it",
     ).toEqual(rows);
     return {
-      program: Object.fromEntries(program),
-      recovery: Object.fromEntries(recovery),
-      local: Object.fromEntries(local),
+      program: Rec.fromEntries(program),
+      recovery: Rec.fromEntries(recovery),
+      local: Rec.fromEntries(local),
     };
   });
   return {
@@ -597,7 +598,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
           (entry) =>
             entry.rev > rev &&
             entry.stream !== "gateway" &&
-            !entry.stream.startsWith("gateway/") &&
+            !Str.startsWith("gateway/")(entry.stream) &&
             !ACKS.includes(entry.stream),
         ),
       ),
@@ -704,7 +705,7 @@ describe("P34c live wiring, both object stores", () => {
                   ? { type: "tell", to: peer }
                   : move === "ask"
                     ? { type: "ask" }
-                    : { type: "inc", text: "é😀".repeat(c.amount % 64) };
+                    : { type: "inc", text: Str.repeat(c.amount % 64)("é😀") };
               expect(yield* w.input(name, `${move}:${n}`, m)).toMatchObject(accepted);
 
               if (move === "tell") {
@@ -849,7 +850,7 @@ describe("P34c live wiring, both object stores", () => {
               Effect.map(w.entries(0), (entries) => cost(entries.filter((e) => ids.includes(e.id))).bytes);
             const bare = yield* pair(["first", "step:first"]);
             const left = cap - required((yield* w.accounts).program["quota/alpha"]).bytes;
-            const text = "a".repeat(Math.max(0, left - bare - (Math.floor(first.amount / 8) % 12)));
+            const text = Str.repeat(Math.max(0, left - bare - (Math.floor(first.amount / 8) % 12)))("a");
 
             if (!(yield* one("alpha:1", "aimed", text))) {
               // A refusal is true only if the message did not fit: with the wall moved away the same
@@ -864,7 +865,7 @@ describe("P34c live wiring, both object stores", () => {
 
           for (const [n, c] of tape.entries()) {
             const name = required(NAMES[c.pick % 2]);
-            const text = resource === "storage" ? "é😀".repeat(c.amount) : "";
+            const text = resource === "storage" ? Str.repeat(c.amount)("é😀") : "";
             yield* one(name, `fill:${n}`, text);
 
             if (c.reopen) {
@@ -876,7 +877,7 @@ describe("P34c live wiring, both object stores", () => {
 
           // Drive to the wall: the refusal must occur, and it repeats without a new row.
           for (let n = 0; n < 12 && refusals < 2; n++) {
-            yield* one("alpha:2", `wall:${n}`, resource === "storage" ? "😀".repeat(cap) : "");
+            yield* one("alpha:2", `wall:${n}`, resource === "storage" ? Str.repeat(cap)("😀") : "");
           }
 
           expect(refusals).toBeGreaterThanOrEqual(2);

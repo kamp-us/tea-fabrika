@@ -15,22 +15,24 @@
 // product's fold.
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import {
-  Cause,
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Logger,
-  Option,
-  Result,
-  Schema,
-  type Scope,
-  Stream,
-  Tracer,
-} from "effect";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -60,7 +62,7 @@ export type Store = {
 
 const PIDS: ReadonlyArray<string> = Array.from(
   { length: 40 },
-  (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`,
+  (_, n) => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`,
 );
 
 const ids = (...values: ReadonlyArray<string>) => {
@@ -173,7 +175,7 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
   const tables = sql
     .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     .map((row) => String(row.name));
-  return Object.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
+  return Rec.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
 };
 
 const body = (entry: Entry): Record<string, unknown> =>
@@ -295,8 +297,8 @@ const reorder = (value: unknown): unknown =>
   Array.isArray(value)
     ? value.map(reorder)
     : typeof value === "object" && value !== null
-      ? Object.fromEntries(
-          Object.entries(value)
+      ? Rec.fromEntries(
+          Rec.toEntries(value)
             .reverse()
             .map(([k, v]) => [k, reorder(v)]),
         )
@@ -307,8 +309,8 @@ const sorted = (value: unknown): unknown =>
   Array.isArray(value)
     ? value.map(sorted)
     : typeof value === "object" && value !== null
-      ? Object.fromEntries(
-          Object.entries(value)
+      ? Rec.fromEntries(
+          Rec.toEntries(value)
             .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
             .map(([k, v]) => [k, sorted(v)]),
         )
@@ -359,7 +361,7 @@ const inputFor = (cell: Cell): { readonly input?: Schema.Json } => {
 const said = (cell: Cell, parent: string): From =>
   from({
     by: "SHA256:program-writer",
-    sentAt: new Date(Date.UTC(2026, 10, 11) + cell.clock).toISOString(),
+    sentAt: DateTime.formatIso(DateTime.makeUnsafe(Date.UTC(2026, 10, 11) + cell.clock)),
     build: cell.build,
     traceId: cell.trace,
     parent,
@@ -621,7 +623,7 @@ const walk = (
           program: held.program,
           owner: Owner.cases.brain.make({}),
         });
-        const letters = all.filter((e) => e.stream === `${name}/inbox` && e.id.startsWith('["start",'));
+        const letters = all.filter((e) => e.stream === `${name}/inbox` && Str.startsWith('["start",')(e.id));
         expect(
           letters.map((e) => ({ id: e.id, m: body(e)["m"] })),
           `L1, L3: ${name}'s first letters, each once and written by its start`,
@@ -819,7 +821,16 @@ const walk = (
             world.saved.size > 0 && cell.pick % 3 === 0
               ? choose([...world.saved.values()], cell.pick).child
               : childFor(cell, choose(liveProcesses(world), cell.pick));
-          const names = ["", "m".repeat(257), "processes", "gateway", "Merger:1", "merger/1", "client:x", "-merger"];
+          const names = [
+            "",
+            Str.repeat(257)("m"),
+            "processes",
+            "gateway",
+            "Merger:1",
+            "merger/1",
+            "client:x",
+            "-merger",
+          ];
           const kind = cell.alt % 7;
           const bad: { child: unknown; reason: Reason } =
             kind === 0
@@ -828,7 +839,7 @@ const walk = (
                 ? // A bad name and a bad input at once: the name is judged first.
                   { child: { ...base, name: choose(names, cell.name), input: () => 1 }, reason: "bad_name" }
                 : kind === 2
-                  ? { child: { ...base, id: cell.name % 2 === 0 ? "" : "i".repeat(257) }, reason: "bad_input" }
+                  ? { child: { ...base, id: cell.name % 2 === 0 ? "" : Str.repeat(257)("i") }, reason: "bad_input" }
                   : kind === 3
                     ? {
                         child: {
@@ -862,7 +873,7 @@ const walk = (
           const over = cell.alt % 2 === 0;
           const child: Child = {
             ...childFor(cell, choose(liveProcesses(world), cell.pick)),
-            input: "x".repeat(over ? ROW_LIMIT + 1 : ROW_LIMIT - 10_000),
+            input: Str.repeat(over ? ROW_LIMIT + 1 : ROW_LIMIT - 10_000)("x"),
           };
 
           if (over) {
@@ -967,7 +978,7 @@ const walk = (
 
           held.state = "ended";
           const exited = (yield* rowsNow([holder(world, requester)?.name ?? ""])).find(
-            (e) => e._tag === "exited" && body(e)["process"] === requester && e.stream.startsWith("processes/"),
+            (e) => e._tag === "exited" && body(e)["process"] === requester && Str.startsWith("processes/")(e.stream),
           ) as Entry;
 
           if (Result.isSuccess(answer) && answer.success._tag === "started") {
@@ -1019,11 +1030,12 @@ const prop = (
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const done = new Set<Move>();
         const seen: Tally = new Set();
         const law = walk(open, moves, done, seen);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
         const checks = { seed: SEED, numRuns: runsFor(runs), includeErrorInReport: true, endOnFailure: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
@@ -1264,7 +1276,7 @@ const Secret = fc
   .map(([word, suffix]) => word + suffix);
 
 /** Every form a secret could take in an output: raw, JSON-escaped and percent-encoded. */
-const forms = (secret: string) => [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
+const forms = (secret: string) => [secret, Str.slice(1, -1)(JSON.stringify(secret)), encodeURIComponent(secret)];
 
 const capture = Effect.fnUntraced(function* (sql: Sql) {
   const context = yield* Layer.build(SpanSink.layer(sql, { object: "p42-secrets" }));
@@ -1322,7 +1334,9 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
 
       for (const output of outputs) {
         for (const form of forms(secret)) {
-          expect(output.includes(form), `L11: a secret reached an output: ${output.slice(0, 200)}`).toBe(false);
+          expect(Str.includes(form)(output), `L11: a secret reached an output: ${Str.slice(0, 200)(output)}`).toBe(
+            false,
+          );
         }
       }
     };
@@ -1452,15 +1466,19 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       { fast: 60, full: 200 },
     );
 
-    it.effect(
+    // Live services: each racer's turn sleeps on the real clock, as it did when the race ran apart
+    // from the test's TestClock.
+    it.live(
       "L2: racing starts of one free name make at most one process, and every racer answers by its own last turn",
       () =>
         Effect.gen(function* () {
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+          const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
           const seen: Tally = new Set();
           const law = race(open, seen);
           const turns = fc.scheduler();
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each race
-          const property = fc.asyncProperty(turns, Race, (s, p) => Effect.runPromise(Effect.scoped(law(s, p))));
+          const property = fc.asyncProperty(turns, Race, (s, p) => runPromise(Effect.scoped(law(s, p))));
           const checks = {
             seed: SEED,
             // 20 races never answer already_present at this seed.
@@ -1536,10 +1554,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       "L11: a secret in the input, a storage cause or a defect stays out of answers, error messages, spans and logs",
       () =>
         Effect.gen(function* () {
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+          const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
           const seen: Tally = new Set();
           const law = secrets(open, seen);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
-          const property = fc.asyncProperty(Secret, Tape, (x, tape) => Effect.runPromise(Effect.scoped(law(x, tape))));
+          const property = fc.asyncProperty(Secret, Tape, (x, tape) => runPromise(Effect.scoped(law(x, tape))));
           const checks = {
             seed: SEED,
             numRuns: runsFor({ fast: 20, full: 100 }),

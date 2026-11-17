@@ -12,12 +12,28 @@ import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { CommitReply, SigningReply } from "@kampus/libfabrika/workers/bindings";
-import { Context, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
+import {
+  Context,
+  Effect,
+  FileSystem,
+  Layer,
+  Path,
+  Schema,
+  Stream,
+  Array as Arr,
+  String as Str,
+  Duration,
+  DateTime,
+  Option,
+} from "effect";
+import { scopedEnv, noTracking } from "./env.test-support.ts";
+
 import { Digest, SecureRandom } from "effect/crypto";
 import { HttpServer, HttpServerResponse } from "effect/http";
 import { NetAddress } from "effect/net";
 import { rolldown } from "rolldown";
 import { describe, expect, it } from "vitest";
+
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { tree } from "./workerd.test-support.ts";
@@ -47,13 +63,13 @@ const processId = () => Effect.runSync(ids.next(Id.Process));
 const span = (n: number) =>
   Schema.decodeSync(SpanRow)({
     traceId: TRACE,
-    spanId: n.toString(16).padStart(16, "0"),
+    spanId: Str.padStart(16, "0")(n.toString(16)),
     parentSpanId: null,
     name: "runner.step",
     kind: "internal",
     startTimeUnixNano: "1794096000000000000",
     endTimeUnixNano: "1794096000001000000",
-    attributes: { "fab.fill": "x".repeat(2000) },
+    attributes: { "fab.fill": Str.repeat(2000)("x") },
     events: [],
     links: [],
     resource: { attributes: { "fab.object": "record-test" } },
@@ -72,7 +88,7 @@ const world = async (
   ) => Promise<void>,
   instrument = false,
 ) => {
-  process.env.DO_NOT_TRACK = "1";
+  noTracking();
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
@@ -87,22 +103,7 @@ const world = async (
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "p12-o-" });
       const key = yield* SshsigTest.identity;
 
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const previous = process.env.FABRIKA_HOME;
-          process.env.FABRIKA_HOME = home;
-
-          return previous;
-        }),
-        (previous) =>
-          Effect.sync(() => {
-            if (previous === undefined) {
-              delete process.env.FABRIKA_HOME;
-            } else {
-              process.env.FABRIKA_HOME = previous;
-            }
-          }),
-      );
+      yield* scopedEnv({ FABRIKA_HOME: home });
 
       // The outbound probe the sealed program tries to reach: every request it answers is a hit.
       let hits = 0;
@@ -131,16 +132,19 @@ const world = async (
         timer = path.join(home, "timer.ts"),
         sealed = path.join(home, "sealed.ts");
 
-      const common = [
-        'import {Machine, Cmd} from "@demlik/tea/effect";',
-        'import {Schema} from "effect";',
-        'const noted = Schema.TaggedStruct("noted", {n: Schema.Int});',
-        "const Model = Schema.Struct({count: Schema.Int, replies: Schema.Int, wake: Schema.NullOr(Schema.Number)});",
-        'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("prepare")}), Schema.Struct({type: Schema.Literal("schedule"), at: Schema.Number}), Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number})]);',
-        'const write = Cmd.make("write", {input: Schema.Struct({stream: Schema.String, write: Schema.Json}), ok: Schema.Json, err: ["not_delivered"]});',
-        'const machine = Machine.make({model: Model, msg: Msg, cmds: [write], init: (loaded) => [loaded ?? {count:0,replies:0,wake:null}, []], update: {throw: () => {throw new Error("private failure P12");}, prepare: s => [s,[]], schedule: (s,m) => [{...s,wake:m.at},[]], timer: (s,m) => [{...s,count:s.count+1,wake:m.at+10},[write({stream:"timer-events",write:{_tag:"own",event:{_tag:"noted",n:s.count+1}}})]], write_ok: s => [{...s,replies:s.replies+1},[]], write_err: s => [{...s,replies:s.replies+1},[]]}});',
-        'const declaration = {machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{throw:{_tag:"write",schema:Msg,description:"Fail",personOnly:false},prepare:{_tag:"write",schema:Msg,description:"Prepare",personOnly:false},schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false}},outputs:{},writes:{noted:{schema:noted,personOnly:false}},wake:s=>s.wake};',
-      ].join("\n");
+      const common = Arr.join(
+        [
+          'import {Machine, Cmd} from "@demlik/tea/effect";',
+          'import {Schema} from "effect";',
+          'const noted = Schema.TaggedStruct("noted", {n: Schema.Int});',
+          "const Model = Schema.Struct({count: Schema.Int, replies: Schema.Int, wake: Schema.NullOr(Schema.Number)});",
+          'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("prepare")}), Schema.Struct({type: Schema.Literal("schedule"), at: Schema.Number}), Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number})]);',
+          'const write = Cmd.make("write", {input: Schema.Struct({stream: Schema.String, write: Schema.Json}), ok: Schema.Json, err: ["not_delivered"]});',
+          'const machine = Machine.make({model: Model, msg: Msg, cmds: [write], init: (loaded) => [loaded ?? {count:0,replies:0,wake:null}, []], update: {throw: () => {throw new Error("private failure P12");}, prepare: s => [s,[]], schedule: (s,m) => [{...s,wake:m.at},[]], timer: (s,m) => [{...s,count:s.count+1,wake:m.at+10},[write({stream:"timer-events",write:{_tag:"own",event:{_tag:"noted",n:s.count+1}}})]], write_ok: s => [{...s,replies:s.replies+1},[]], write_err: s => [{...s,replies:s.replies+1},[]]}});',
+          'const declaration = {machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{throw:{_tag:"write",schema:Msg,description:"Fail",personOnly:false},prepare:{_tag:"write",schema:Msg,description:"Prepare",personOnly:false},schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false}},outputs:{},writes:{noted:{schema:noted,personOnly:false}},wake:s=>s.wake};',
+        ],
+        "\n",
+      );
 
       yield* fs.writeFileString(
         writer,
@@ -149,29 +153,35 @@ const world = async (
       yield* fs.writeFileString(timer, `${common}\nexport const program = {...declaration,name:"p12/timer-fixture"};`);
       yield* fs.writeFileString(
         sealed,
-        [
-          'import {env} from "cloudflare:workers";',
-          'import {Machine} from "@demlik/tea/effect"; import {Schema} from "effect";',
-          'let outbound = "blocked";',
-          `try { await fetch("http://127.0.0.1:${destination.port}"); outbound = "allowed"; } catch {}`,
-          "const Model = Schema.Struct({bindings: Schema.Array(Schema.String), outbound: Schema.String});",
-          'const Msg = Schema.Struct({type: Schema.Literal("read")});',
-          "const machine = Machine.make({model:Model,msg:Msg,cmds:[],init:loaded=>[loaded??{bindings:Object.keys(env),outbound},[]],update:{read:s=>[s,[]]}});",
-          'export const program = {name:"p12/sealed-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};',
-        ].join("\n"),
+        Arr.join(
+          [
+            'import {env} from "cloudflare:workers";',
+            'import {Machine} from "@demlik/tea/effect"; import {Schema} from "effect";',
+            'let outbound = "blocked";',
+            `try { await fetch("http://127.0.0.1:${destination.port}"); outbound = "allowed"; } catch {}`,
+            "const Model = Schema.Struct({bindings: Schema.Array(Schema.String), outbound: Schema.String});",
+            'const Msg = Schema.Struct({type: Schema.Literal("read")});',
+            "const machine = Machine.make({model:Model,msg:Msg,cmds:[],init:loaded=>[loaded??{bindings:Object.keys(env),outbound},[]],update:{read:s=>[s,[]]}});",
+            'export const program = {name:"p12/sealed-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};',
+          ],
+          "\n",
+        ),
       );
       // Ticket 502 slice S2: one wake, asked for by `schedule`, dropped by `cancel`, and never asked
       // for again by `timer`. So each alarm the platform delivers is one the test asked for.
       const alarm = path.join(home, "alarm.ts");
       yield* fs.writeFileString(
         alarm,
-        [
-          'import {Machine} from "@demlik/tea/effect"; import {Schema} from "effect";',
-          "const Model = Schema.Struct({fired: Schema.Int, wake: Schema.NullOr(Schema.Number)});",
-          'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("schedule"), at: Schema.Number}), Schema.Struct({type: Schema.Literal("cancel")}), Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number})]);',
-          "const machine = Machine.make({model:Model,msg:Msg,cmds:[],init:loaded=>[loaded??{fired:0,wake:null},[]],update:{schedule:(s,m)=>[{...s,wake:m.at},[]],cancel:s=>[{...s,wake:null},[]],timer:s=>[{fired:s.fired+1,wake:null},[]]}});",
-          'export const program = {name:"p12/alarm-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false},cancel:{_tag:"write",schema:Msg,description:"Cancel",personOnly:false}},outputs:{},writes:{},wake:s=>s.wake};',
-        ].join("\n"),
+        Arr.join(
+          [
+            'import {Machine} from "@demlik/tea/effect"; import {Schema} from "effect";',
+            "const Model = Schema.Struct({fired: Schema.Int, wake: Schema.NullOr(Schema.Number)});",
+            'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("schedule"), at: Schema.Number}), Schema.Struct({type: Schema.Literal("cancel")}), Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number})]);',
+            "const machine = Machine.make({model:Model,msg:Msg,cmds:[],init:loaded=>[loaded??{fired:0,wake:null},[]],update:{schedule:(s,m)=>[{...s,wake:m.at},[]],cancel:s=>[{...s,wake:null},[]],timer:s=>[{fired:s.fired+1,wake:null},[]]}});",
+            'export const program = {name:"p12/alarm-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false},cancel:{_tag:"write",schema:Msg,description:"Cancel",personOnly:false}},outputs:{},writes:{},wake:s=>s.wake};',
+          ],
+          "\n",
+        ),
       );
 
       const built = yield* build({
@@ -342,24 +352,30 @@ export class Control extends Brain.Control {
     Effect.flatMap((out) =>
       fs.writeFileString(
         brain,
-        out.output
-          .filter((item) => item.type === "chunk")
-          .map((item) => item.code)
-          .join("\n"),
+        Arr.join(
+          Arr.map(
+            Arr.filter(out.output, (item) => item.type === "chunk"),
+            (item) => item.code,
+          ),
+          "\n",
+        ),
       ),
     ),
     Effect.scoped,
   );
 });
 
-const pause = (ms = 20) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 20) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
+
+/** The wall clock in ms, for the waits and the wakes set against real workerd. */
+const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
 
 /** Looks until `done` says yes, for at most `wait` ms. The platform's alarm retry sets the bound. */
 const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) => boolean, wait = 25_000) => {
-  const end = Date.now() + wait;
+  const end = now() + wait;
   let last: A | undefined;
 
-  while (Date.now() < end) {
+  while (now() < end) {
     last = await look();
 
     if (done(last)) {
@@ -394,10 +410,10 @@ const wire = async (instance: any, key: SshsigTest.Identity, tab: string) => {
 
   const next = async (match: (frame: any) => boolean) => {
     for (;;) {
-      const index = frames.findIndex(match);
+      const index = Arr.findFirstIndex(frames, match);
 
-      if (index >= 0) {
-        return frames.splice(index, 1)[0];
+      if (Option.isSome(index)) {
+        return frames.splice(index.value, 1)[0];
       }
 
       if (closeCode !== undefined) {
@@ -438,7 +454,7 @@ const wire = async (instance: any, key: SshsigTest.Identity, tab: string) => {
 
 const workerdPid = async () => {
   const rows = await Effect.runPromise(tree(process.pid));
-  const matches = rows.filter((row) => /\/workerd(?:\s|$)/.test(row.command));
+  const matches = Arr.filter(rows, (row) => /\/workerd(?:\s|$)/.test(row.command));
   expect(matches.length).toBeLessThanOrEqual(1);
 
   return matches[0]?.pid ?? 0;
@@ -516,7 +532,7 @@ describe("P12 real object adapters", () => {
           let waiting = wait();
           let before = await gateway("testState");
 
-          while (!before.sockets.some((row: any) => row.attachment.waits?.length === 1)) {
+          while (before.sockets.some((row: any) => row.attachment.waits?.length === 1) !== true) {
             await pause();
             before = await gateway("testState");
           }
@@ -576,7 +592,7 @@ describe("P12 real object adapters", () => {
               waiting = wait();
               let saved = await gateway("testState");
 
-              while (!saved.sockets.some((row: any) => row.attachment.waits?.length === 1)) {
+              while (saved.sockets.some((row: any) => row.attachment.waits?.length === 1) !== true) {
                 await pause();
                 saved = await gateway("testState");
               }
@@ -639,7 +655,7 @@ describe("P12 real object adapters", () => {
           () => ({ closed: true }),
         );
 
-        while (!(await process.testEntered())) {
+        while ((await process.testEntered()) !== true) {
           await pause();
         }
 
@@ -752,8 +768,7 @@ describe("P12 real object adapters", () => {
       const found = await Effect.runPromise(
         RecordManager.use((r) => Stream.runCollect(r.read(chain))).pipe(Effect.provide(manager)),
       );
-
-      expect(found.map((r) => r.spanId)).toEqual(rows.map((r) => r.span.spanId));
+      expect(Arr.map(found, (r) => r.spanId)).toEqual(Arr.map(rows, (r) => r.span.spanId));
       const held = await first.read(chain, 0, 0);
       const retry = await first.write(chain, 0, [rows[0], { span: span(99), content: null }]);
       expect(retry).toMatchObject({ _tag: "rolled", had: [rows[0]!.span.spanId] });
@@ -762,7 +777,7 @@ describe("P12 real object adapters", () => {
       expect((await instance.record("project-b", "spans/0").read(chain, 0, 0)).spans.map((r: any) => r.spanId)).toEqual(
         [span(100).spanId],
       );
-      expect(found.some((r) => r.spanId === span(100).spanId)).toBe(false);
+      expect(Arr.some(found, (r) => r.spanId === span(100).spanId)).toBe(false);
     });
   });
   it("scenario: R2 archive plant: unlike checksum encodings or a lost acknowledgement must not lose the local copy", async () => {
@@ -777,7 +792,7 @@ describe("P12 real object adapters", () => {
       );
       await calls.put("p12/health.json", body, expected);
       expect(await calls.head("p12/health.json")).toEqual({ sha256: expected });
-      await expect(calls.put("p12/bad.json", body, "0".repeat(64))).rejects.toThrow();
+      await expect(calls.put("p12/bad.json", body, Str.repeat(64)("0"))).rejects.toThrow();
       const archive = Archive.bucket(calls);
       expect(
         await Effect.runPromise(Archive.use((a) => a.put("p12/health.json", body)).pipe(Effect.provide(archive))),
@@ -799,7 +814,7 @@ describe("P12 real object adapters", () => {
                   },
                   head: calls.head,
                 }
-              : { put: calls.put, head: async () => ({ sha256: "0".repeat(64) }) },
+              : { put: calls.put, head: async () => ({ sha256: Str.repeat(64)("0") }) },
           );
 
           const records = RecordManager.remote((name) => recordCalls(instance.record("p12-records", name)));
@@ -870,20 +885,20 @@ describe("P12 real object adapters", () => {
         Effect.runPromise(RecordManager.use((r) => Stream.runCollect(r.read(chain))).pipe(Effect.provide(manager)));
 
       const job = await collect({ _tag: "job", process: pid });
-      expect(job.some((r) => r.name === "runner.step" && r.endTimeUnixNano !== "0")).toBe(true);
+      expect(Arr.some(job, (r) => r.name === "runner.step" && r.endTimeUnixNano !== "0")).toBe(true);
       const failures = await collect({ _tag: "job", process: broken.process });
-      expect(failures.some((r) => r.ok === false && r.name === "runner.step")).toBe(true);
-      expect(job.every((r) => r.attributes["fab.process"] === pid)).toBe(true);
+      expect(Arr.some(failures, (r) => r.ok === false && r.name === "runner.step")).toBe(true);
+      expect(Arr.every(job, (r) => r.attributes["fab.process"] === pid)).toBe(true);
       const outside = await collect({ _tag: "spans" });
-      expect(outside.some((r) => r.name === "gateway.initialize")).toBe(true);
+      expect(Arr.some(outside, (r) => r.name === "gateway.initialize")).toBe(true);
       const permanent = JSON.stringify([...job, ...outside, ...failures]);
       expect(permanent).not.toContain("private raw frame P12");
       expect(permanent).not.toContain("private failure P12");
       expect(permanent).not.toContain("PRIVATE KEY");
-      expect([...job, ...outside].some((r) => /record\.(write|read)|sink\.flush/.test(r.name))).toBe(false);
+      expect(Arr.some([...job, ...outside], (r) => /record\.(write|read)|sink\.flush/.test(r.name))).toBe(false);
       const again = await collect({ _tag: "job", process: pid });
-      expect(again.map((r) => r.spanId)).toEqual(job.map((r) => r.spanId));
-      expect(new Set(job.map((r) => r.spanId)).size).toBe(job.length);
+      expect(Arr.map(again, (r) => r.spanId)).toEqual(Arr.map(job, (r) => r.spanId));
+      expect(new Set(Arr.map(job, (r) => r.spanId)).size).toBe(job.length);
     });
   });
   it.each(["revoke", "exit"] as const)(
@@ -1006,7 +1021,7 @@ describe("P12 real object adapters", () => {
       const started = await fixture.start("sleeper:1", "p12/alarm-fixture");
       const object = instance.process(started.process);
       // An hour away: the wake is saved, and no alarm arrives to keep the object awake.
-      const far = Date.now() + 3_600_000;
+      const far = now() + 3_600_000;
 
       const send = (letter: string, m: unknown) =>
         routed(p, client, "process.send", { pid: started.process, letter, m, sentAt: SENT, seen: 0 });
@@ -1051,7 +1066,7 @@ describe("P12 real object adapters", () => {
 
       // 1. A saved alarm fires once: one timer letter for the wake, and the wake is spent.
       const once = await fixture.start("once:1", "p12/alarm-fixture");
-      const first = Date.now() + 1_000;
+      const first = now() + 1_000;
       expect(await send(once.process, "arm", { type: "schedule", at: first })).toMatchObject(accepted);
       expect(await instance.process(once.process).alarm()).toBe(first);
       await until(
@@ -1072,12 +1087,12 @@ describe("P12 real object adapters", () => {
 
       // 2. A deleted alarm never fires: the platform delivers nothing after the wake is dropped.
       const never = await fixture.start("never:1", "p12/alarm-fixture");
-      const second = Date.now() + 2_000;
+      const second = now() + 2_000;
       expect(await send(never.process, "arm", { type: "schedule", at: second })).toMatchObject(accepted);
       expect(await instance.process(never.process).alarm()).toBe(second);
       expect(await send(never.process, "drop", { type: "cancel" })).toMatchObject(accepted);
       expect(await instance.process(never.process).alarm()).toBeNull();
-      await pause(Math.max(0, second - Date.now()) + 1_500);
+      await pause(Math.max(0, second - now()) + 1_500);
       expect(await timers("never:1")).toEqual([]);
       expect(await instance.process(never.process).testAlarms()).toEqual({ delivered: 0, failed: 0 });
       expect(await instance.process(never.process).open("audit")).toMatchObject({ view: { fired: 0, wake: null } });
@@ -1085,7 +1100,7 @@ describe("P12 real object adapters", () => {
       // 3. A failed alarm is retried: it fails while the descriptor is gone, and its wake is
       // delivered, once, by a later try after the descriptor is back.
       const retried = await fixture.start("retry:1", "p12/alarm-fixture");
-      const third = Date.now() + 2_000;
+      const third = now() + 2_000;
       expect(await send(retried.process, "arm", { type: "schedule", at: third })).toMatchObject(accepted);
       // Both exam calls end in a platform abort, which rejects the call that asked for it.
       await instance

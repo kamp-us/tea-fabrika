@@ -6,10 +6,23 @@ import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
-import { Context, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import {
+  Context,
+  Effect,
+  FileSystem,
+  Layer,
+  Path,
+  Schema,
+  Array as Arr,
+  String as Str,
+  Formatter,
+  Option,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import { expect } from "vitest";
 import { build } from "./build.ts";
+import { scopedEnv } from "./env.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -59,7 +72,9 @@ const wire = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity)
 
   const socket = yield* Effect.acquireRelease(
     Effect.sync(() => {
-      const socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
+      const socket = new WebSocket(
+        `${Str.replace("http", "ws")(url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+      );
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
           frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data)));
@@ -74,9 +89,8 @@ const wire = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity)
   const next = (match: (frame: typeof Frame.Type) => boolean) =>
     until(
       Effect.sync(() => {
-        const at = frames.findIndex(match);
-
-        return at < 0 ? undefined : frames.splice(at, 1)[0];
+        const at = Arr.findFirstIndex(frames, match);
+        return Option.isNone(at) ? undefined : frames.splice(at.value, 1)[0];
       }),
       (frame) => frame !== undefined || socket.readyState === WebSocket.CLOSED,
       "the signed client received no matching frame within 10 seconds",
@@ -93,8 +107,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity)
 
   const call = Effect.fnUntraced(function* (method: string, params: unknown) {
     const id = ++serial;
-    socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
-
+    socket.send(Formatter.formatJson({ jsonrpc: "2.0", id, method, params }));
     return yield* next((frame) => frame.id === id);
   });
 
@@ -122,40 +135,24 @@ const wire = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity)
   });
 });
 
-const spinSource = [
-  'import {Machine} from "@demlik/tea/effect";',
-  'import {Schema} from "effect";',
-  "const Model=Schema.Struct({checksum: Schema.Int});",
-  'const Msg=Schema.Struct({type: Schema.Literals(["idle","spin"])});',
-  "const machine=Machine.make({model: Model, msg: Msg, cmds: [], init: (s)=>[s??{checksum:0},[]], update: {idle:s=>[s,[]], spin:s=>{let checksum=s.checksum;for(let i=0;i<40000000;i++){checksum=(checksum+i)|0;}return [{checksum},[]];}}});",
-  'export const program={name:"usage/spin",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{idle:{_tag:"write",schema:Msg,description:"Idle",personOnly:false},spin:{_tag:"write",schema:Msg,description:"Spin",personOnly:false}},outputs:{},writes:{},wake:()=>null};',
-].join("\n");
+const spinSource = Arr.join(
+  [
+    'import {Machine} from "@demlik/tea/effect";',
+    'import {Schema} from "effect";',
+    "const Model=Schema.Struct({checksum: Schema.Int});",
+    'const Msg=Schema.Struct({type: Schema.Literals(["idle","spin"])});',
+    "const machine=Machine.make({model: Model, msg: Msg, cmds: [], init: (s)=>[s??{checksum:0},[]], update: {idle:s=>[s,[]], spin:s=>{let checksum=s.checksum;for(let i=0;i<40000000;i++){checksum=(checksum+i)|0;}return [{checksum},[]];}}});",
+    'export const program={name:"usage/spin",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{idle:{_tag:"write",schema:Msg,description:"Idle",personOnly:false},spin:{_tag:"write",schema:Msg,description:"Spin",personOnly:false}},outputs:{},writes:{},wake:()=>null};',
+  ],
+  "\n",
+);
 
 const world = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "usage-worker-" });
-  const oldAlchemy = process.env.ALCHEMY_HOME;
-  const oldHome = process.env.FABRIKA_HOME;
-  yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      process.env.FABRIKA_HOME = home;
-    }),
-    () =>
-      Effect.sync(() => {
-        if (oldHome === undefined) {
-          delete process.env.FABRIKA_HOME;
-        } else {
-          process.env.FABRIKA_HOME = oldHome;
-        }
-
-        if (oldAlchemy === undefined) {
-          delete process.env.ALCHEMY_HOME;
-        } else {
-          process.env.ALCHEMY_HOME = oldAlchemy;
-        }
-      }),
-  );
+  // localInstance sets ALCHEMY_HOME, so it goes back as it was too.
+  yield* scopedEnv({ FABRIKA_HOME: home }, ["ALCHEMY_HOME"]);
   yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
   const file = path.join(home, "spin.ts");
   yield* fs.writeFileString(file, spinSource);
@@ -213,7 +210,9 @@ const healthRows = (home: string) =>
           );
 
           for (const row of rows) {
-            found.push(Schema.decodeUnknownSync(Schema.Struct({ spanId: Schema.String, ms: Schema.Finite }))(row));
+            found.push(
+              yield* Schema.decodeUnknownEffect(Schema.Struct({ spanId: Schema.String, ms: Schema.Finite }))(row),
+            );
           }
         }
       }
@@ -278,10 +277,10 @@ const read = (world: World["Service"], process: string) =>
   });
 
 const cpu = (rows: ReadonlyArray<SpanRow>, method: string) =>
-  rows.filter((row) => row.name === "isolate.cpu" && row.attributes["fab.isolate.method"] === method);
+  Arr.filter(rows, (row) => row.name === "isolate.cpu" && row.attributes["fab.isolate.method"] === method);
 
 const calls = (rows: ReadonlyArray<SpanRow>, method: string) =>
-  rows.filter((row) => row.name === `execution.${method}`);
+  Arr.filter(rows, (row) => row.name === `execution.${method}`);
 
 const duration = (row: SpanRow) => Number(BigInt(row.endTimeUnixNano) - BigInt(row.startTimeUnixNano)) / 1_000_000;
 
@@ -289,8 +288,10 @@ const checkHealth = (home: string, spans: ReadonlyArray<SpanRow>) =>
   Effect.gen(function* () {
     const health = yield* healthRows(home);
 
-    for (const span of spans.filter((row) => row.name === "isolate.cpu")) {
-      expect(health.filter((row) => row.spanId === span.spanId)).toEqual([{ spanId: span.spanId, ms: duration(span) }]);
+    for (const span of Arr.filter(spans, (row) => row.name === "isolate.cpu")) {
+      expect(Arr.filter(health, (row) => row.spanId === span.spanId)).toEqual([
+        { spanId: span.spanId, ms: duration(span) },
+      ]);
     }
   });
 
@@ -314,9 +315,8 @@ const spinSample = Effect.gen(function* () {
     (rows) => cpu(rows, "update").length === 2,
     "the spinning update produced no second isolate.cpu row",
   );
-
-  const baseline = cpu(idle, "update").map(duration);
-  const later = cpu(busy, "update").filter((row) => !idle.some((old) => old.spanId === row.spanId));
+  const baseline = Arr.map(cpu(idle, "update"), duration);
+  const later = Arr.filter(cpu(busy, "update"), (row) => !Arr.some(idle, (old) => old.spanId === row.spanId));
   expect(later).toHaveLength(1);
   const [spinning] = later;
 
@@ -371,11 +371,11 @@ it.layer(
           invoke(instance.project(PROJECT), "read", "processes/checklist:2", 0, "usage-probe").pipe(
             Effect.flatMap(Schema.decodeUnknownEffect(lifecycle)),
           ),
-          (rows) => rows.some((row) => row.body.after === checklist),
+          (rows) => Arr.some(rows, (row) => row.body.after === checklist),
           "restart recorded no successor within 10 seconds",
         );
-
-        const successor = started.find((row) => row.body.after === checklist)?.body.process;
+        const successor = Option.getOrUndefined(Arr.findFirst(started, (row) => row.body.after === checklist))?.body
+          .process;
 
         if (successor === undefined) {
           return yield* Effect.die("restart recorded no successor");
@@ -398,7 +398,7 @@ it.layer(
           [checklist, updated],
           [successor, folded],
         ] as const) {
-          for (const span of spans.filter((row) => row.name === "isolate.cpu")) {
+          for (const span of Arr.filter(spans, (row) => row.name === "isolate.cpu")) {
             expect(span.attributes["fab.process"]).toBe(process);
             expect(span.attributes["fab.isolate.outcome"]).toBe("ok");
           }

@@ -44,7 +44,7 @@
 // Exit 0 with an answer. Exit 1 when origin/main cannot be fetched or read: it prints that the list
 // is unknown, never "0 records" and never a next number. Exit 2 when the command line is wrong.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Exit, Option, Predicate, Schema, Stream } from "effect";
+import { Array as Arr, pipe, String as Str, Console, Effect, Exit, Option, Predicate, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 
@@ -131,11 +131,11 @@ const recordNumber = (name: string): number | undefined => {
  * that is not its README, or, in a nested folder, a subfolder's README.
  */
 export const isRecord = (folder: Folder, path: string): boolean => {
-  if (!path.startsWith(`${folder}/`) || !path.endsWith(".md")) {
+  if (!pipe(path, Str.startsWith(`${folder}/`)) || !pipe(path, Str.endsWith(".md"))) {
     return false;
   }
 
-  const parts = path.slice(folder.length + 1).split("/");
+  const parts = pipe(path, Str.slice(folder.length + 1), Str.split("/"));
 
   if (parts.length === 1) {
     return parts[0] !== "README.md" && (folder !== ".decisions" || recordNumber(parts[0] ?? "") !== undefined);
@@ -150,13 +150,13 @@ type Top = { readonly fields: ReadonlyMap<string, string>; readonly heading: str
 const JsonString = Schema.fromJsonString(Schema.String);
 
 const unquoted = (raw: string): string =>
-  raw.startsWith('"') ? Option.getOrElse(Schema.decodeOption(JsonString)(raw), () => raw) : raw;
+  pipe(raw, Str.startsWith('"')) ? Option.getOrElse(Schema.decodeOption(JsonString)(raw), () => raw) : raw;
 
 /** Reads a record's top: a frontmatter block when the text opens with one, then the first heading. */
 export const readTop = (text: string): Top => {
-  const lines = text.split("\n");
+  const lines = Str.split(text, "\n");
   const fields = new Map<string, string>();
-  let rest = lines;
+  let rest: string[] = lines;
 
   if (lines[0] === "---") {
     const end = lines.indexOf("---", 1);
@@ -166,7 +166,7 @@ export const readTop = (text: string): Top => {
         const pair = /^([a-z]+):\s*(.*)$/.exec(line);
 
         if (pair?.[1] !== undefined && pair[2] !== undefined) {
-          fields.set(pair[1], unquoted(pair[2].trim()));
+          fields.set(pair[1], unquoted(Str.trim(pair[2])));
         }
       }
 
@@ -174,18 +174,19 @@ export const readTop = (text: string): Top => {
     }
   }
 
-  const heading = rest
-    .find((line) => line.startsWith("# "))
-    ?.slice(2)
-    .trim();
+  const heading = pipe(
+    Arr.findFirst(rest, (line) => pipe(line, Str.startsWith("# "))),
+    Option.map((line) => pipe(line, Str.slice(2), Str.trim)),
+    Option.getOrUndefined,
+  );
 
   return { fields, heading };
 };
 
-const oneLine = (value: string) => value.replace(/\s+/g, " ").trim();
+const oneLine = (value: string) => pipe(value, Str.replace(/\s+/g, " "), Str.trim);
 
 // A heading often repeats the record's number: "# 286. Can ...", "# 153: Codex ...", "# Experiment 176: ...".
-const withoutNumber = (heading: string) => heading.replace(/^(experiment\s+)?\d+[a-z]?[.:]\s+/i, "");
+const withoutNumber = (heading: string) => pipe(heading, Str.replace(/^(experiment\s+)?\d+[a-z]?[.:]\s+/i, ""));
 
 /** A record's title, from where its folder keeps it. */
 const recordTitle = (folder: Folder, top: Top): string | undefined =>
@@ -199,7 +200,7 @@ const recordTitle = (folder: Folder, top: Top): string | undefined =>
 export const recordLine = (folder: Folder, path: string, text: string): string => {
   const spec = specs[folder];
   const top = readTop(text);
-  const name = path.slice(folder.length + 1).replace(/\.md$/, "");
+  const name = pipe(path, Str.slice(folder.length + 1), Str.replace(/\.md$/, ""));
   const id = spec.width === undefined ? name : (/^\d+[a-z]?(?=-)/.exec(name)?.[0] ?? name);
 
   const field = (key: string) => {
@@ -210,14 +211,19 @@ export const recordLine = (folder: Folder, path: string, text: string): string =
 
   const title = recordTitle(folder, top);
 
-  return [
-    id,
-    ...spec.before.map(field),
-    title === undefined ? "(no title)" : oneLine(title),
-    ...spec.after
-      .filter((key) => top.fields.has(key) || !spec.optional.includes(key))
-      .map((key) => `${key}: ${field(key)}`),
-  ].join("  ");
+  return Arr.join(
+    [
+      id,
+      ...Arr.map(spec.before, field),
+      title === undefined ? "(no title)" : oneLine(title),
+      ...pipe(
+        spec.after,
+        Arr.filter((key) => top.fields.has(key) || !spec.optional.includes(key)),
+        Arr.map((key) => `${key}: ${field(key)}`),
+      ),
+    ],
+    "  ",
+  );
 };
 
 /**
@@ -231,12 +237,14 @@ export const nextNumber = (folder: Folder, paths: ReadonlyArray<string>): string
     return undefined;
   }
 
-  const numbers = paths
-    .filter((path) => isRecord(folder, path))
-    .map((path) => recordNumber(path.slice(folder.length + 1)))
-    .filter((n) => n !== undefined);
+  const numbers = pipe(
+    paths,
+    Arr.filter((path) => isRecord(folder, path)),
+    Arr.map((path) => recordNumber(pipe(path, Str.slice(folder.length + 1)))),
+    Arr.filter((n) => n !== undefined),
+  );
 
-  return String(Math.max(0, ...numbers) + 1).padStart(width, "0");
+  return pipe(String(Math.max(0, ...numbers) + 1), Str.padStart(width, "0"));
 };
 
 /**
@@ -244,11 +252,14 @@ export const nextNumber = (folder: Folder, paths: ReadonlyArray<string>): string
  * folder, so 65 comes before 203 and a record with no number after them, then by name.
  */
 export const inOrder = (folder: Folder, paths: ReadonlyArray<string>): ReadonlyArray<string> =>
-  paths
-    .filter((path) => isRecord(folder, path))
-    .map((path) => ({ path, number: recordNumber(path.slice(folder.length + 1)) ?? Infinity }))
-    .sort((a, b) => a.number - b.number || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
-    .map((r) => r.path);
+  Arr.map(
+    pipe(
+      paths,
+      Arr.filter((path) => isRecord(folder, path)),
+      Arr.map((path) => ({ path, number: recordNumber(pipe(path, Str.slice(folder.length + 1))) ?? Infinity })),
+    ).sort((a, b) => a.number - b.number || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)),
+    (r) => r.path,
+  );
 
 // ---------------------------------------------------------------- find and resolve
 
@@ -265,7 +276,8 @@ const FLOOR = 10;
  * most records hold is worth almost nothing.
  */
 const STOPWORDS = new Set(
-  `a about above after again against all also although always am an and any are as at be because
+  Str.split(
+    `a about above after again against all also although always am an and any are as at be because
   been before being below between both but by can cannot could did do does doing done down during
   each either else even ever every few for from further had has have having her here hers him his
   how however if in instead into is it its itself just less let like made make makes many may
@@ -273,16 +285,18 @@ const STOPWORDS = new Set(
   own per rather same shall she should since so some still such than that the their them then
   there these they this those though through thus to too two under until up upon use used uses
   using very was way we well were what when where whether which while who whom whose why will with
-  within without would yet you your`.split(/\s+/),
+  within without would yet you your`,
+    /\s+/,
+  ),
 );
 
 /** A text's words: lowercase, three letters or more, never only digits (that is an id), no stopword. */
 export const wordsIn = (text: string): ReadonlySet<string> =>
   new Set(
-    text
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((word) => word.length >= 3 && !/^\d+$/.test(word) && !STOPWORDS.has(word)),
+    Arr.filter(
+      pipe(text, Str.toLowerCase, Str.split(/[^a-z0-9]+/)),
+      (word) => word.length >= 3 && !/^\d+$/.test(word) && !STOPWORDS.has(word),
+    ),
   );
 
 /** A decision's status, read from its frontmatter. An amendment narrows a decision; it is still in force. */
@@ -296,8 +310,8 @@ export type Status = typeof Status.Type;
 
 /** Reads `accepted`, `amended-in-part by [0525](...), [0530](...)` or `superseded by [0043](...)`. */
 export const readStatus = (raw: string | undefined): Status => {
-  const status = (raw ?? "").trim();
-  const ids = [...status.matchAll(/\[(\d{4})\]/g)].map((m) => m[1] ?? "");
+  const status = Str.trim(raw ?? "");
+  const ids = Arr.map([...pipe(status, Str.matchAll(/\[(\d{4})\]/g))], (m) => m[1] ?? "");
 
   if (/^superseded by\b/i.test(status)) {
     return Status.cases.superseded.make({ by: ids });
@@ -318,25 +332,29 @@ export type Entry = {
 
 /** The part of a decision that says what it decides: its gloss line and its `## Decision` section. */
 const decidingText = (text: string): string => {
-  const body = text.replace(/^---\n[\s\S]*?\n---/, "");
+  const body = pipe(text, Str.replace(/^---\n[\s\S]*?\n---/, ""));
   const gloss = /^\*\*What this decides:\*\*([^\n]*(?:\n(?!\n)[^\n]*)*)/m.exec(body)?.[1] ?? "";
+
   // A decision with no Decision section gives its whole body, so it is still found.
-  const decision = body.split(/^##\s+/m).find((section) => /^Decision\b/.test(section)) ?? body;
+  const decision = pipe(
+    Arr.findFirst(Str.split(body, /^##\s+/m), (section) => /^Decision\b/.test(section)),
+    Option.getOrElse(() => body),
+  );
 
   return `${gloss}\n${decision}`;
 };
 
 /** A glossary table's rows, header rows left out: the first cell is the term, the row is its words. */
 const glossaryEntries = (path: string, text: string): ReadonlyArray<Entry> => {
-  const lines = text.split("\n");
+  const lines = Str.split(text, "\n");
   const separator = (line: string | undefined) => line !== undefined && /^\|\s*:?-{3}/.test(line);
 
-  return lines.flatMap((line, i) => {
-    if (!line.startsWith("|") || separator(line) || separator(lines[i + 1])) {
+  return Arr.flatMap(lines, (line, i) => {
+    if (!pipe(line, Str.startsWith("|")) || separator(line) || separator(lines[i + 1])) {
       return [];
     }
 
-    const term = (line.split(/(?<!\\)\|/)[1] ?? "").trim();
+    const term = Str.trim(Str.split(line, /(?<!\\)\|/)[1] ?? "");
 
     return term === "" ? [] : [{ path, title: term, words: wordsIn(line), decision: undefined }];
   });
@@ -348,25 +366,27 @@ export const readEntries = (path: string, text: string): ReadonlyArray<Entry> =>
     return glossaryEntries(path, text);
   }
 
-  const folder = searched.find((at) => isRecord(at, path));
+  const found = Arr.findFirst(searched, (at) => isRecord(at, path));
 
-  if (folder === undefined) {
+  if (Option.isNone(found)) {
     return [];
   }
 
+  const folder = found.value;
+
   const top = readTop(text);
   const title = oneLine(recordTitle(folder, top) ?? "(no title)");
-  const keys = specs[folder].words.map((key) => top.fields.get(key) ?? "");
-  const id = recordNumber(path.slice(folder.length + 1));
+  const keys = Arr.map(specs[folder].words, (key) => top.fields.get(key) ?? "");
+  const id = recordNumber(pipe(path, Str.slice(folder.length + 1)));
 
   const decision =
     folder === ".decisions" && id !== undefined
-      ? { id: String(id).padStart(4, "0"), status: readStatus(top.fields.get("status")) }
+      ? { id: pipe(String(id), Str.padStart(4, "0")), status: readStatus(top.fields.get("status")) }
       : undefined;
 
   const body = decision === undefined ? "" : decidingText(text);
 
-  return [{ path, title, words: wordsIn([title, ...keys, body].join("\n")), decision }];
+  return [{ path, title, words: wordsIn(Arr.join([title, ...keys, body], "\n")), decision }];
 };
 
 /** Where a cited decision lands: itself when it is in force, or the live decisions that superseded it. */
@@ -476,7 +496,7 @@ export const find = (
   entries: ReadonlyArray<Entry>,
   options: { readonly limit: number; readonly all: boolean },
 ): Found => {
-  const live = entries.filter((e) => e.decision === undefined || Status.isAnyOf(["accepted"])(e.decision.status));
+  const live = Arr.filter(entries, (e) => e.decision === undefined || Status.isAnyOf(["accepted"])(e.decision.status));
 
   if (live.length < FLOOR) {
     return Found.cases.indeterminate.make({
@@ -493,9 +513,11 @@ export const find = (
   }
 
   const weights = new Map(
-    [...wordsIn(query)]
-      .filter((word) => (df.get(word) ?? 0) < live.length)
-      .map((word) => [word, Math.log(live.length / Math.max(df.get(word) ?? 0, 1))] as const),
+    pipe(
+      [...wordsIn(query)],
+      Arr.filter((word) => (df.get(word) ?? 0) < live.length),
+      Arr.map((word) => [word, Math.log(live.length / Math.max(df.get(word) ?? 0, 1))] as const),
+    ),
   );
 
   if (weights.size === 0) {
@@ -503,16 +525,19 @@ export const find = (
   }
 
   const statuses = new Map(
-    entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e.decision.status] as const])),
+    Arr.flatMap(entries, (e) => (e.decision === undefined ? [] : [[e.decision.id, e.decision.status] as const])),
   );
 
-  const decisions = new Map(entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e] as const])));
-  const byPath = new Map([...decisions.values()].map((e) => [e.path, e.decision] as const));
+  const decisions = new Map(
+    Arr.flatMap(entries, (e) => (e.decision === undefined ? [] : [[e.decision.id, e] as const])),
+  );
+
+  const byPath = new Map(Arr.map([...decisions.values()], (e) => [e.path, e.decision] as const));
 
   // A proposed or unknown decision is in force nowhere, so only `all` ranks it.
   const ranked = options.all
     ? entries
-    : entries.filter((e) => e.decision === undefined || !Status.isAnyOf(["other"])(e.decision.status));
+    : Arr.filter(entries, (e) => e.decision === undefined || !Status.isAnyOf(["other"])(e.decision.status));
 
   const hits = new Map<string, Hit>();
 
@@ -525,14 +550,14 @@ export const find = (
       title: entry.title,
       score: Math.max(score, was?.score ?? 0),
       // In the query's order, whichever record brought each word.
-      words: [...weights.keys()].filter((word) => words.includes(word) || was?.words.includes(word) === true),
+      words: Arr.filter([...weights.keys()], (word) => words.includes(word) || was?.words.includes(word) === true),
       notes,
     });
   };
 
   for (const entry of ranked) {
-    const words = [...weights.keys()].filter((word) => entry.words.has(word));
-    const score = Math.round(words.reduce((sum, word) => sum + (weights.get(word) ?? 0), 0) * 100) / 100;
+    const words = Arr.filter([...weights.keys()], (word) => entry.words.has(word));
+    const score = Math.round(Arr.reduce(words, 0, (sum, word) => sum + (weights.get(word) ?? 0)) * 100) / 100;
 
     if (score === 0) {
       continue;
@@ -563,15 +588,15 @@ export const find = (
     );
   }
 
-  const shown = [...hits.values()].map((hit) => {
+  const shown = Arr.map([...hits.values()], (hit) => {
     const decision = byPath.get(hit.path);
 
     const status =
       decision === undefined
         ? []
         : Status.match(decision.status, {
-            accepted: (s) => (s.amendedBy.length === 0 ? [] : [`amended by: ${s.amendedBy.join(", ")}`]),
-            superseded: (s) => [`superseded by: ${s.by.join(", ")}`],
+            accepted: (s) => (s.amendedBy.length === 0 ? [] : [`amended by: ${Arr.join(s.amendedBy, ", ")}`]),
+            superseded: (s) => [`superseded by: ${Arr.join(s.by, ", ")}`],
             other: (s) => [`status: ${s.status}`],
           });
 
@@ -595,8 +620,15 @@ export const foundLines = (found: Found): ReadonlyArray<string> =>
     noOverlap: (f) => [`no overlap: none of ${f.ranked} records shares a rare word; that is not a clearance`],
     shortlist: (f) => [
       `shortlist: ${f.hits.length} of ${f.ranked} records, by rare shared words; not a clearance`,
-      ...f.hits.map((hit) =>
-        [hit.score.toFixed(2).padStart(6), hit.path, hit.title, ...hit.notes, `words: ${hit.words.join(", ")}`].join(
+      ...Arr.map(f.hits, (hit) =>
+        Arr.join(
+          [
+            pipe(hit.score.toFixed(2), Str.padStart(6)),
+            hit.path,
+            hit.title,
+            ...hit.notes,
+            `words: ${Arr.join(hit.words, ", ")}`,
+          ],
           "  ",
         ),
       ),
@@ -607,14 +639,29 @@ export const foundLines = (found: Found): ReadonlyArray<string> =>
 export const resolutionLine = (resolution: Resolution, paths: ReadonlyMap<string, string>): string =>
   Resolution.match(resolution, {
     accepted: (r) =>
-      [
-        r.id,
-        "accepted",
-        paths.get(r.id) ?? "",
-        ...(r.amendedBy.length === 0 ? [] : [`amended by: ${r.amendedBy.join(", ")}`]),
-      ].join("  "),
-    superseded: (r) => [r.id, "superseded", `live: ${r.by.map((id) => paths.get(id) ?? id).join(", ")}`].join("  "),
-    other: (r) => [r.id, `status: ${r.status}`, paths.get(r.id) ?? ""].join("  "),
+      Arr.join(
+        [
+          r.id,
+          "accepted",
+          paths.get(r.id) ?? "",
+          ...(r.amendedBy.length === 0 ? [] : [`amended by: ${Arr.join(r.amendedBy, ", ")}`]),
+        ],
+        "  ",
+      ),
+    superseded: (r) =>
+      Arr.join(
+        [
+          r.id,
+          "superseded",
+          `live: ${pipe(
+            r.by,
+            Arr.map((id) => paths.get(id) ?? id),
+            Arr.join(", "),
+          )}`,
+        ],
+        "  ",
+      ),
+    other: (r) => Arr.join([r.id, `status: ${r.status}`, paths.get(r.id) ?? ""], "  "),
     absent: (r) => `${r.id}  absent from main`,
     broken: (r) => `${r.id}  broken: ${r.reason}`,
   });
@@ -632,7 +679,7 @@ class NoNumbers extends Schema.TaggedError<NoNumbers, { readonly brand: unique s
 }) {}
 
 const collected = (chunks: ReadonlyArray<Uint8Array>) => {
-  const bytes = new Uint8Array(chunks.reduce((n, chunk) => n + chunk.length, 0));
+  const bytes = new Uint8Array(Arr.reduce(chunks, 0, (n, chunk) => n + chunk.length));
   let at = 0;
 
   for (const chunk of chunks) {
@@ -654,7 +701,7 @@ const git = Effect.fnUntraced(
       { concurrency: 3 },
     );
 
-    return { out: collected(out), err: err.trim(), code: Number(code) };
+    return { out: collected(out), err: Str.trim(err), code: Number(code) };
   },
   Effect.scoped,
   (effect) => Effect.mapError(effect, (e) => Unknown.make({ reason: `git could not run: ${e.message}` })),
@@ -703,18 +750,30 @@ const filesAt = Effect.fn("records.filesAt")(function* (
   const listed = yield* git(repo, ["ls-tree", "-r", "-z", "--name-only", BASE, "--", ...roots]);
 
   if (listed.code !== 0) {
-    return yield* Unknown.make({ reason: `cannot read ${roots.join(", ")} at ${BASE}: ${listed.err}` });
+    return yield* Unknown.make({ reason: `cannot read ${Arr.join(roots, ", ")} at ${BASE}: ${listed.err}` });
   }
 
-  const paths = keep(new TextDecoder().decode(listed.out).split("\0"));
-  const read = yield* git(repo, ["cat-file", "--batch"], paths.map((path) => `${BASE}:${path}\n`).join(""));
+  const paths = keep(Str.split(new TextDecoder().decode(listed.out), "\0"));
+
+  const read = yield* git(
+    repo,
+    ["cat-file", "--batch"],
+    pipe(
+      paths,
+      Arr.map((path) => `${BASE}:${path}\n`),
+      Arr.join(""),
+    ),
+  );
+
   const texts = batchTexts(read.out);
 
   if (read.code !== 0 || texts.length !== paths.length || texts.includes(undefined)) {
-    return yield* Unknown.make({ reason: `cannot read the records of ${roots.join(", ")} at ${BASE}: ${read.err}` });
+    return yield* Unknown.make({
+      reason: `cannot read the records of ${Arr.join(roots, ", ")} at ${BASE}: ${read.err}`,
+    });
   }
 
-  return paths.map((path, i) => ({ path, text: texts[i] ?? "" }));
+  return Arr.map(paths, (path, i) => ({ path, text: texts[i] ?? "" }));
 });
 
 /** The folder's records on origin/main, in the order a reader expects. */
@@ -722,9 +781,9 @@ const recordsAt = (repo: string, folder: Folder) => filesAt(repo, [`${folder}/`]
 
 /** Every entry `find` ranks, from origin/main: the searched folders' records and the glossary's rows. */
 const entriesAt = (repo: string) =>
-  filesAt(repo, [...searched.map((folder) => `${folder}/`), GLOSSARY], (paths) =>
-    paths.filter((path) => path === GLOSSARY || searched.some((folder) => isRecord(folder, path))),
-  ).pipe(Effect.map((files) => files.flatMap((file) => readEntries(file.path, file.text))));
+  filesAt(repo, [...Arr.map(searched, (folder) => `${folder}/`), GLOSSARY], (paths) =>
+    Arr.filter(paths, (path) => path === GLOSSARY || Arr.some(searched, (folder) => isRecord(folder, path))),
+  ).pipe(Effect.map((files) => Arr.flatMap(files, (file) => readEntries(file.path, file.text))));
 
 const FolderArgument = Argument.ChoiceWithValue("folder", [
   [".decisions", ".decisions"],
@@ -744,11 +803,17 @@ const list = Command.make(
   { folder: FolderArgument },
   Effect.fn("records.list")(function* ({ folder }) {
     const records = yield* recordsAt(process.cwd(), folder);
-    yield* Console.log(records.map((r) => recordLine(folder, r.path, r.text)).join("\n"));
+    yield* Console.log(
+      pipe(
+        records,
+        Arr.map((r) => recordLine(folder, r.path, r.text)),
+        Arr.join("\n"),
+      ),
+    );
 
     const next = nextNumber(
       folder,
-      records.map((r) => r.path),
+      Arr.map(records, (r) => r.path),
     );
 
     if (next !== undefined) {
@@ -765,7 +830,7 @@ const next = Command.make(
 
     const number = nextNumber(
       folder,
-      records.map((r) => r.path),
+      Arr.map(records, (r) => r.path),
     );
 
     if (number === undefined) {
@@ -785,7 +850,7 @@ const findCommand = Command.make(
   },
   Effect.fn("records.find")(function* ({ words, limit, all }) {
     const entries = yield* entriesAt(process.cwd());
-    yield* Console.log(foundLines(find(words.join(" "), entries, { limit, all })).join("\n"));
+    yield* Console.log(Arr.join(foundLines(find(Arr.join(words, " "), entries, { limit, all })), "\n"));
   }),
 );
 
@@ -794,16 +859,30 @@ const resolveCommand = Command.make(
   { ids: Argument.String("id").pipe(Argument.atLeast(1)) },
   Effect.fn("records.resolve")(function* ({ ids }) {
     const decisions = yield* recordsAt(process.cwd(), ".decisions");
-    const entries = decisions.flatMap((file) => readEntries(file.path, file.text));
+    const entries = Arr.flatMap(decisions, (file) => readEntries(file.path, file.text));
 
     const statuses = new Map(
-      entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e.decision.status] as const])),
+      Arr.flatMap(entries, (e) => (e.decision === undefined ? [] : [[e.decision.id, e.decision.status] as const])),
     );
 
-    const paths = new Map(entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e.path] as const])));
+    const paths = new Map(
+      Arr.flatMap(entries, (e) => (e.decision === undefined ? [] : [[e.decision.id, e.path] as const])),
+    );
+
     // `34`, `0034` and `0034-slug` all name decision 0034.
-    const decisionId = (arg: string) => /^\d+/.exec(arg)?.[0].padStart(4, "0") ?? arg;
-    yield* Console.log(ids.map((arg) => resolutionLine(resolve(decisionId(arg), statuses), paths)).join("\n"));
+    const decisionId = (arg: string) => {
+      const digits = /^\d+/.exec(arg)?.[0];
+
+      return digits === undefined ? arg : pipe(digits, Str.padStart(4, "0"));
+    };
+
+    yield* Console.log(
+      pipe(
+        ids,
+        Arr.map((arg) => resolutionLine(resolve(decisionId(arg), statuses), paths)),
+        Arr.join("\n"),
+      ),
+    );
   }),
 );
 
