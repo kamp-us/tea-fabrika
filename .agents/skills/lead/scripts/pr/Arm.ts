@@ -3,8 +3,8 @@
 //
 //   arm   the pull request is open, into main, and no plan -> the leak gate (./Leaks.ts) passes on
 //         its change, its commits and its words -> each new exported name is named under
-//         `## New names` (Names.ts, 0587) -> the proof run (scheduled.yaml) on its branch is read at
-//         its head -> green on every job: marked ready if a draft, then merge when ready on, as a
+//         `## New names` (Names.ts, 0587) -> scheduled proof at its head, or automatic ready CI
+//         with related-test coverage, is read -> green: marked ready if a draft, then merge when ready on, as a
 //         squash pinned to that head
 //
 // A branch's proof run tests the full set or, since 0590, the changed set: the tests its change
@@ -22,7 +22,10 @@
 //
 // No run at the head arms, as 0544 lets a reviewed pull request be armed with no full run first, and
 // says so in one line with how to start one. A run at the head that is red or has not ended refuses.
-// With none at the head, the branch's newest run at an older head counts: a green full run arms with
+// With no scheduled proof at the head, the newest exact-head automatic check can prove the related
+// set. It must be a successful ready PR run from this repository, with select, related and the real
+// ci-required check complete. Red or unfinished new-route CI refuses. Legacy and draft checks do
+// not count. With no matching automatic route, the branch's newest older scheduled run counts: a green full run arms with
 // the note; a changed-set run, or one red or not ended, refuses. Read through its module:
 // `Arm.arm(...)`.
 import { Effect, Option, Schema } from "effect";
@@ -33,8 +36,10 @@ import * as Leaks from "./Leaks.ts";
 import * as Names from "./Names.ts";
 import { type Detail, PullRequests } from "./PullRequests.ts";
 
-/** The full run's workflow file: the whole suite, which a pull request's own checks never run (0534, 0536). */
+/** The separately started proof workflow, still authoritative when present at the current head. */
 export const WORKFLOW = "scheduled.yaml";
+
+const AUTOMATIC = "check.yaml";
 
 /** The folders of a docs pull request: only words, which no full run tests. */
 export const DOCS = [".decisions/", "docs/", "field/", ".glossary/", ".runbooks/"] as const;
@@ -56,7 +61,7 @@ export const passes = (job: Job): boolean =>
   (job.conclusion === "success" || (job.conclusion === "skipped" && SKIPPED_BY_DESIGN.includes(job.name)));
 
 /** What a proof run tested: every test, or the changed set of its head's diff (0590). */
-const Kind = Schema.Literals(["full", "changed"]);
+const Kind = Schema.Literals(["full", "changed", "automatic"]);
 
 type Kind = typeof Kind.Type;
 
@@ -80,7 +85,7 @@ export const Verdict = Schema.TaggedUnion({
   /** Not ended yet. */
   unfinished: { run: Schema.Finite, status: Schema.String },
   /** Ended, and these jobs are not green. */
-  red: { run: Schema.Finite, jobs: Schema.Array(Job) },
+  red: { run: Schema.Finite, jobs: Schema.Array(Job), reason: Schema.optional(Schema.String) },
 });
 
 export type Verdict = typeof Verdict.Type;
@@ -122,6 +127,77 @@ const judge = Effect.fn("Arm.judge")(function* (run: Run) {
     : Verdict.cases.red.make({ run: run.id, jobs: bad });
 });
 
+/** Ready CI's required check covers both the existing matrix and the new related matrix. */
+const automaticAt = Effect.fn("Arm.automaticAt")(function* (branch: string, head: string) {
+  const runs = yield* Runs;
+  const { at } = pick(head, yield* runs.on(AUTOMATIC, branch));
+
+  if (Option.isNone(at)) {
+    return Option.none<Verdict>();
+  }
+
+  const run = at.value;
+  const source = run.source;
+
+  if (
+    source === undefined ||
+    source.event !== "pull_request" ||
+    source.path !== `.github/workflows/${AUTOMATIC}` ||
+    !Number.isSafeInteger(source.repository) ||
+    source.repository <= 0 ||
+    !Number.isSafeInteger(source.headRepository) ||
+    source.headRepository <= 0 ||
+    source.repository !== source.headRepository
+  ) {
+    return Option.none<Verdict>();
+  }
+
+  const jobs = yield* runs.jobs(run.id);
+
+  // Queued jobs may not exist yet; absence cannot stand in for completed coverage.
+  if (run.status !== "completed") {
+    return Option.some(Verdict.cases.unfinished.make({ run: run.id, status: run.status }));
+  }
+
+  const related = jobs.filter((job) => job.name.startsWith("related"));
+
+  // A legacy or draft run never stands in for ready CI's new resource coverage.
+  if (
+    (!jobs.some((job) => job.name === "select") && related.length === 0) ||
+    jobs.some((job) => job.name === "ci-required (draft)" || job.name === "lint")
+  ) {
+    return Option.none<Verdict>();
+  }
+
+  const succeeded = (name: string) => {
+    const found = jobs.filter((job) => job.name === name);
+
+    return found.length === 1 && found.every((job) => job.status === "completed" && job.conclusion === "success");
+  };
+  const skipped = related.length === 1 && related[0]?.name === "related" && related[0]?.conclusion === "skipped";
+  const legs =
+    related.length <= 9 &&
+    related
+      .toSorted((a, b) => a.name.localeCompare(b.name))
+      .every((job, i) => job.name === `related (${i + 1})` && job.conclusion === "success");
+  const covered =
+    related.length > 0 &&
+    new Set(related.map((job) => job.name)).size === related.length &&
+    related.every((job) => job.status === "completed") &&
+    (skipped || legs);
+
+  return run.conclusion === "success" && succeeded("ci-required") && succeeded("select") && covered
+    ? Option.some(Verdict.cases.green.make({ run: run.id, kind: "automatic" }))
+    : Option.some(
+        Verdict.cases.red.make({
+          run: run.id,
+          jobs,
+          reason:
+            "automatic ready CI needs a successful run, ci-required and select, and complete successful related legs or one explicitly skipped empty related matrix",
+        }),
+      );
+});
+
 /** The full run on `branch` that `head` is judged by: the newest at the head, else the newest older one. */
 export const fullRunAt = Effect.fn("Arm.fullRunAt")(function* (branch: string, head: string) {
   const runs = yield* Runs;
@@ -129,6 +205,12 @@ export const fullRunAt = Effect.fn("Arm.fullRunAt")(function* (branch: string, h
 
   if (Option.isSome(at)) {
     return FullRun.cases.at.make({ verdict: yield* judge(at.value) });
+  }
+
+  const automatic = yield* automaticAt(branch, head);
+
+  if (Option.isSome(automatic)) {
+    return FullRun.cases.at.make({ verdict: automatic.value });
   }
 
   if (Option.isNone(newest)) {
@@ -208,9 +290,18 @@ export type Armed = typeof Armed.Type;
 const runUrl = (repo: string, run: number) => `https://github.com/${repo}/actions/runs/${run}`;
 
 /** Each job that is not green, its failed steps, and what its log says failed. */
-const redReport = Effect.fn("Arm.redReport")(function* (repo: string, run: number, jobs: ReadonlyArray<Job>) {
+const redReport = Effect.fn("Arm.redReport")(function* (
+  repo: string,
+  run: number,
+  jobs: ReadonlyArray<Job>,
+  reason?: string,
+) {
   const checks = yield* Checks;
   const lines = [`the full run ${runUrl(repo, run)} is not green on every job:`];
+
+  if (reason !== undefined) {
+    lines.push(`  ${reason}`);
+  }
 
   if (jobs.length === 0) {
     lines.push("  it has no jobs at all");
@@ -301,8 +392,8 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
         Effect.fail(
           refuse(`${place}: the full run ${runUrl(a.repo, run)} is ${status}, not ended; arm it once it is green`),
         ),
-      red: ({ run, jobs }) =>
-        Effect.flatMap(redReport(a.repo, run, jobs), (report) => Effect.fail(refuse(`${place}: ${report}`))),
+      red: ({ run, jobs, reason }) =>
+        Effect.flatMap(redReport(a.repo, run, jobs, reason), (report) => Effect.fail(refuse(`${place}: ${report}`))),
     });
 
   const full = yield* fullRunAt(found.head, found.oid);
@@ -314,7 +405,9 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
         Effect.succeed(
           kind === "full"
             ? `full run ${run} green on every job at ${found.oid.slice(0, 12)}`
-            : `changed-set run ${run} green on every job at ${found.oid.slice(0, 12)}, the tests this change reaches (0590)`,
+            : kind === "automatic"
+              ? `automatic ready check ${run} green with related-test coverage at ${found.oid.slice(0, 12)}`
+              : `changed-set run ${run} green on every job at ${found.oid.slice(0, 12)}, the tests this change reaches (0590)`,
         ),
       ),
     older: ({ head, verdict }) => {
