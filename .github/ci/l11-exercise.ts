@@ -22,6 +22,7 @@ import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Cases from "./l11-cases.ts";
 import { Reason, Phase, Outcome as PhaseOutcome, Model, machine } from "./l11-machine.ts";
+import { Attribution, Metadata } from "./l11-reporter.ts";
 import { diffOptions, unchanged, type Snapshot as PlantSnapshot } from "./plant.ts";
 
 const Nonnegative = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0));
@@ -33,6 +34,7 @@ const Assertion = Schema.Struct({
   status: Status,
   duration: Schema.optional(Schema.NullOr(Nonnegative)),
   failureMessages: Schema.NullOr(Schema.Array(Schema.String)),
+  meta: Schema.optional(Metadata),
 });
 
 const Reporter = Schema.Struct({
@@ -112,6 +114,8 @@ export const Fact = Schema.Struct({
   timeout: Schema.Boolean,
   lowerBound: Schema.NullOr(Schema.Literal(60000)),
   final: Schema.Boolean,
+  observations: Schema.Array(Attribution),
+  assertion: Schema.NullOr(Schema.Struct({ line: Schema.Int, column: Schema.Int })),
 });
 
 export type Fact = typeof Fact.Type;
@@ -136,28 +140,6 @@ const target = (name: string): Fact["target"] => {
 
 const timeout = (messages: readonly string[]) =>
   messages.some((message) => /Test timed out in 60000ms|Test timed out in 60000 ms/.test(message));
-
-const finalScan = (request: Cases.Request, name: string, messages: readonly string[]) => {
-  const channel = Cases.output(request);
-
-  if (channel === null) {
-    return false;
-  }
-
-  if (name === Cases.aggregate) {
-    return messages.some(
-      (message) =>
-        /L11: \d+ storage operations were cut; storage text or metadata reached these outputs/.test(message) &&
-        message.includes(`-> ${channel}`),
-    );
-  }
-
-  return Cases.paths.some(
-    (path) =>
-      name === Cases.sibling(path, channel) &&
-      messages.some((message) => message.includes(`L11: ${path} leaked storage text or metadata into ${channel}`)),
-  );
-};
 
 export const reconcile = (request: Cases.Request, collection: unknown, report: unknown, exit: number): Observation => {
   const listed = Schema.decodeUnknownResult(Collection)(collection, { onExcessProperty: "ignore" });
@@ -227,9 +209,13 @@ export const reconcile = (request: Cases.Request, collection: unknown, report: u
     target: target(entry.fullName),
     status: entry.status,
     duration: entry.duration ?? null,
-    timeout: timeout(entry.failureMessages ?? []),
-    lowerBound: timeout(entry.failureMessages ?? []) ? 60000 : null,
-    final: finalScan(request, entry.fullName, entry.failureMessages ?? []),
+    timeout: timeout(entry.failureMessages ?? []) || entry.meta?.l11Causal?.timeout === true,
+    lowerBound: timeout(entry.failureMessages ?? []) || entry.meta?.l11Causal?.timeout === true ? 60000 : null,
+    final:
+      Cases.output(request) !== null &&
+      entry.meta?.l11Causal?.finals.some((output) => output === Cases.output(request)) === true,
+    observations: entry.meta?.l11 ?? [],
+    assertion: entry.meta?.l11Causal?.assertion ?? null,
   }));
 
   if (
@@ -867,6 +853,7 @@ const TraceFacts = Schema.Struct({
 const InputFacts = Schema.Struct({ equal: Schema.Boolean, partial: Schema.Array(TraceFacts) });
 
 const TargetFact = Schema.Struct({
+  observations: Schema.Array(Attribution),
   title: Schema.Literals(Cases.titles),
   final: Schema.Boolean,
   output: Schema.Literals(Cases.outputs),
@@ -1054,12 +1041,41 @@ const targetFacts = (request: Cases.Request, record: TestRecord): Array<typeof T
     const assertion = assertions.find((fact) => fact.target === title);
     const final = assertion?.final === true && assertion.status === "failed" && !assertion.timeout;
 
+    const field =
+      request.case === "l11-span-name"
+        ? "name"
+        : request.case === "l11-span-code"
+          ? "code"
+          : request.case === "l11-span-errcode"
+            ? "errcode"
+            : null;
+
+    const path = Cases.paths.find((path) => title === Cases.sibling(path, "span"));
+
+    const observations =
+      channel !== "span" || field === null || !final
+        ? []
+        : (assertion?.observations ?? []).filter(
+            (fact) =>
+              fact.field === field &&
+              (title === Cases.aggregate
+                ? Cases.storagePaths.some((path) => path === fact.path) && fact.operation !== null
+                : fact.path === path && fact.operation === null),
+          );
+
+    const encodings = [...new Set(observations.map((fact) => fact.encoding))].sort();
+
     return {
       title,
       final,
       output: channel,
-      encodings: [],
-      reason: !final ? "wrong_assertion" : channel === "span" ? "encoding_missing" : null,
+      observations,
+      encodings,
+      reason: !final
+        ? "wrong_assertion"
+        : channel === "span" && (encodings.length === 0 || (field !== "name" && !encodings.includes(2)))
+          ? "encoding_missing"
+          : null,
     };
   });
 };
@@ -2160,21 +2176,43 @@ export const live = Effect.fnUntraced(function* (
       const raw = yield* fs.readFileString(output);
 
       const rows = yield* Schema.decodeUnknownEffect(
-        Schema.fromJsonString(Schema.Array(Schema.Struct({ name: Schema.Literals(Cases.names), file: Schema.String }))),
+        Schema.fromJsonString(
+          Schema.Array(
+            Schema.Struct({ name: Schema.Literals(Cases.collection.map((row) => row.name)), file: Schema.String }),
+          ),
+        ),
       )(raw).pipe(Effect.mapError(() => reason("collection_mismatch")));
 
       if (
         rows.length === 0 ||
         new Set(rows.map((row) => row.name)).size !== rows.length ||
-        !Cases.selected(request).every((name) => rows.some((row) => row.name === name)) ||
+        !Cases.selected(request).every((name) =>
+          rows.some((row) => Cases.collection.some((fixed) => fixed.reporter === name && fixed.name === row.name)),
+        ) ||
         rows.some((row) => row.file !== path.join(source(variant), Cases.file))
       ) {
         return yield* reason("collection_mismatch");
       }
 
-      collection.set(variant, rows);
+      const projected: Array<{ name: string; file: string }> = [];
 
-      return rows;
+      for (const row of rows) {
+        const fixed = Cases.collection.find((entry) => entry.name === row.name);
+
+        if (fixed === undefined) {
+          return yield* reason("collection_mismatch");
+        }
+
+        projected.push({ name: fixed.reporter, file: row.file });
+      }
+
+      if (!Cases.selected(request).every((name) => projected.some((row) => row.name === name))) {
+        return yield* reason("collection_mismatch");
+      }
+
+      collection.set(variant, projected);
+
+      return projected;
     },
     Effect.mapError(issue("missing_collection")),
   );
@@ -2276,7 +2314,13 @@ export const live = Effect.fnUntraced(function* (
 
   const test = Effect.fnUntraced(function* (variant: Cases.Variant, phase: Phase) {
     const output = path.join(scratch, `report-${variant}-${phase}.json`);
-    const actual = yield* capture("pnpm", Cases.argv(request, output), source(variant), { variant, phase });
+
+    const actual = yield* capture(
+      "pnpm",
+      Cases.argv(request, output, false, path.join(root, ".github/ci/l11-reporter.ts")),
+      source(variant),
+      { variant, phase },
+    );
 
     const report = yield* fs.readFileString(output).pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(Json)),

@@ -57,17 +57,17 @@ export const transformed: Readonly<Record<string, Readonly<Record<string, string
   "l11-span-name/cached": {
     [runtime]: "9efff0058347b04ee9bc7d6689e006a49d7256ba272df228684c1130dbb1e37a",
     [children]: "ffa01bb783d683691039fe89657ae84e200892607c0dea5849696f41569cfe43",
-    [file]: "f5d0f78c9952b7aa5b66b714f97182fe7589dd4a7078e89ce3716492353375e2",
+    [file]: "364043301ef9d4245de0cbff34ff0f7d029ee42b37bb145448fa6d07b0aafe1c",
   },
   "l11-span-code/cached": {
     [runtime]: "b3faa7d900b833da95590fce8cf4d7300b7045395088ec685c4543dd6b5e8dbd",
     [children]: "f5e91df698d971c89eeb36004293b7ba0130ce72a04f5da5fa50ecc58db5f1cc",
-    [file]: "0f5912b9a8fc811fb6cd64f189f5bcaa724bba5b6487df7a445437d9d1afdc95",
+    [file]: "abe88136f0a736afe7a6059a6e50c2fc10359aaca190324a8094149ce5a601b7",
   },
   "l11-span-errcode/cached": {
     [runtime]: "b3faa7d900b833da95590fce8cf4d7300b7045395088ec685c4543dd6b5e8dbd",
     [children]: "f5e91df698d971c89eeb36004293b7ba0130ce72a04f5da5fa50ecc58db5f1cc",
-    [file]: "c01e6bcfadd4bc85b9271bdce94f0ac38c605ca5a3d64fcfb62c06a1fe78d79f",
+    [file]: "467db2781c222a489f3ccdc15e17fb13b51e85a9b042316c7674d392d4ca339b",
   },
 };
 
@@ -75,9 +75,9 @@ export const diffs: Readonly<Record<string, string>> = {
   "l11-inputs/cached": "07b9a4c2a742106a906fc09fc583c339e8f92e20dfe470baf1b6ef7b1d8bd5e6",
   "l11-inputs/uncached": "c61c599f22261cc12981f76e745c1ffcdafbc7de9aeef84d78f7749f07c4c2da",
   "l11-reply/cached": "aaef72006996d6a43955a4c7b7e5cd343c111a72c3e886743e493a4efdb10fa7",
-  "l11-span-name/cached": "66f69406944f8c12d9697a1da5445685deb566841bf90ec3569a565ef9b56e13",
-  "l11-span-code/cached": "f30599be1ecda5a3a5b89aa3ee3b1cff417a265b6e3e915200babb06f8fc9e83",
-  "l11-span-errcode/cached": "1334bf0448853aae99a42e04815d6d4724a73c709c08139b01806d58b8f500f1",
+  "l11-span-name/cached": "dfa0a390f5f2fb5cd3f61523e80170ad7193955c63a363539c9e7eb5e469e695",
+  "l11-span-code/cached": "6a3816e8a6fb0c3331c533e979cb3bacf27270cbaecd5de3737edb410a7fd8a8",
+  "l11-span-errcode/cached": "fb06a138aed40318a2aae59e922523b38a549d9cb8134be8e2dddd2512a4155e",
   "l11-log/cached": "2b41ae92822378b45575fcb9b14196106dcc96df534f7767abc6e6aef26ef3f2",
 };
 
@@ -158,6 +158,23 @@ export const names = [
   "Desk S1: start and stop refusals decode by name L4: every stop_child and start_child refusal decodes by its name, and no other word does",
 ];
 
+const cliName = (name: string): string => {
+  for (const suite of [
+    "P42 slice 1: a code start on the real Worker path",
+    "Desk S1: start and stop refusals decode by name",
+  ]) {
+    const start = `${suite} `;
+
+    if (name.startsWith(start)) {
+      return `${suite} > ${name.slice(start.length)}`;
+    }
+  }
+
+  throw new Error("unmapped fixed L11 title");
+};
+
+export const collection = names.map((reporter) => ({ name: cliName(reporter), reporter }));
+
 export const output = (request: Request): (typeof outputs)[number] | null => {
   switch (request.case) {
     case "l11-reply":
@@ -183,7 +200,7 @@ export const selected = (request: Request) => {
 
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-export const argv = (request: Request, report: string, list = false) => {
+export const argv = (request: Request, report: string, list = false, reporter?: string) => {
   const args = [
     "exec",
     "vitest",
@@ -199,10 +216,17 @@ export const argv = (request: Request, report: string, list = false) => {
   }
 
   if (output(request) !== null) {
-    args.push(`--testNamePattern=^(?:${selected(request).map(escaped).join("|")})$`);
+    args.push(`--testNamePattern=^(?:${selected(request).map(cliName).map(escaped).join("|")})$`);
   }
 
-  return list ? [...args, `--json=${report}`] : [...args, "--reporter=json", `--outputFile=${report}`];
+  return list
+    ? [...args, `--json=${report}`]
+    : [
+        ...args,
+        "--reporter=json",
+        ...(output(request) !== null && reporter !== undefined ? [`--reporter=${reporter}`] : []),
+        `--outputFile=${report}`,
+      ];
 };
 
 export const Edit = Schema.Struct({
@@ -254,6 +278,60 @@ const fault = (field: "name" | "code" | "errcode") => {
   ];
 };
 
+const spanObservation = (field: "name" | "code" | "errcode"): readonly Edit[] => {
+  const attribute = field === "name" ? "error.type" : "fab.ledger.code";
+
+  const helper = `const l11Attribution = Schema.Struct({
+  path: Schema.Literals(${JSON.stringify([...new Set([...storagePaths, ...paths])])}),
+  field: Schema.Literal(${JSON.stringify(field)}), encoding: Schema.Literals([1, 2]),
+  operation: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+});
+const l11Observe = (batches: readonly unknown[], secret: string, marker: string, encoding: number, path: (typeof l11Attribution.Type)["path"], operation: number | null = null) => {
+  if ((encoding !== 1 && encoding !== 2) || marker === secret) { return; }
+  const matched = batches.some((batch) => {
+    const rows = Schema.decodeUnknownResult(Schema.Array(Schema.Struct({ span: SpanRow })))(batch);
+    return Result.isSuccess(rows) && rows.success.some((row) => row.span.attributes[${JSON.stringify(attribute)}] === marker);
+  });
+  if (!matched) { return; }
+  const task = TestRunner.getCurrentTest();
+  if (task === undefined) { return; }
+  const before = Schema.decodeUnknownResult(Schema.Struct({ l11: Schema.optional(Schema.Array(l11Attribution)) }))(task.meta);
+  if (Result.isFailure(before)) { return; }
+  Object.assign(task.meta, { l11: [...(before.success.l11 ?? []), l11Attribution.make({ path, field: ${JSON.stringify(field)}, encoding, operation })] });
+};
+
+`;
+
+  return [
+    edit(
+      file,
+      'import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";',
+      'import { assert, describe, expect, expectTypeOf, it, vi, TestRunner } from "vitest";',
+    ),
+    edit(file, "const forms = (text: string) =>", `${helper}const forms = (text: string) =>`),
+    edit(
+      file,
+      "  const fixture = yield* childProject();\n  const outputs: Record<ChildOutput, Array<string>>",
+      "  const l11Picks: Array<{ marker: string; encoding: number }> = [];\n  const fixture = yield* childProject();\n  const outputs: Record<ChildOutput, Array<string>>",
+    ),
+    edit(
+      file,
+      '    fixture.fail(point, error, path === "exit" || point === "owner" ? undefined : pid);',
+      '    l11Picks.push({ marker, encoding: pick.encoding });\n    fixture.fail(point, error, path === "exit" || point === "owner" ? undefined : pid);',
+    ),
+    edit(
+      file,
+      "  const secretForms = forms(secret);\n\n  for (const text of outputs[output])",
+      '  const secretForms = forms(secret);\n  if (output === "span") {\n    for (const pick of l11Picks) { l11Observe(fixture.recorded, secret, pick.marker, pick.encoding, path); }\n  }\n\n  for (const text of outputs[output])',
+    ),
+    edit(
+      file,
+      "            outputs.span.push(...outputText(fixture.recorded));\n          }),",
+      "            outputs.span.push(...outputText(fixture.recorded));\n            l11Observe(fixture.recorded, secret, marker, pick.encoding, cut.path, cut.operation);\n          }),",
+    ),
+  ];
+};
+
 export const mappings = (request: Request): readonly Edit[] => {
   switch (request.case) {
     case "l11-reply":
@@ -273,11 +351,11 @@ export const mappings = (request: Request): readonly Edit[] => {
         ),
       ];
     case "l11-span-name":
-      return [guard(runtime, "name"), guard(children, "name"), ...fault("name")];
+      return [guard(runtime, "name"), guard(children, "name"), ...fault("name"), ...spanObservation("name")];
     case "l11-span-code":
-      return [guard(runtime, "code"), guard(children, "code"), ...fault("code")];
+      return [guard(runtime, "code"), guard(children, "code"), ...fault("code"), ...spanObservation("code")];
     case "l11-span-errcode":
-      return [guard(runtime, "code"), guard(children, "code"), ...fault("errcode")];
+      return [guard(runtime, "code"), guard(children, "code"), ...fault("errcode"), ...spanObservation("errcode")];
     default:
       return [];
   }

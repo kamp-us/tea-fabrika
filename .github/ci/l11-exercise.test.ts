@@ -1,16 +1,52 @@
+import { readFileSync } from "node:fs";
+import { compileFunction } from "node:vm";
 // Today's tooling on memory-only services. Synthetic traces here provide no actual-input proof.
-import { ByteSize, Effect, Exit, FileSystem, Option, Path, Ref, Result, Sink, Stream } from "effect";
+import { ByteSize, Effect, Exit, FileSystem, Option, Path, Ref, Result, Schema, Sink, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { HttpClient } from "effect/http";
 import { ChildProcessSpawner } from "effect/process";
 import fc from "fast-check";
-import { expect, it } from "vitest";
+import { parseSync } from "oxc-parser";
+import { assert, describe, expect, it, TestRunner } from "vitest";
 import * as Cases from "./l11-cases.ts";
 import * as Exercise from "./l11-exercise.ts";
+import L11Reporter, { Attribution, Metadata, causal } from "./l11-reporter.ts";
 
 const request: Cases.Request = { case: "l11-compare", sha: Cases.cached };
 
 const bytes = (text: string) => new TextEncoder().encode(text);
+
+const originalSource = (variant: Cases.Variant): Uint8Array => {
+  const uncached = new Uint8Array(readFileSync(new URL("./l11-source.fixture", import.meta.url)));
+
+  if (variant === "uncached") {
+    return uncached;
+  }
+
+  const cached = Cases.derive(new Map([[Cases.file, uncached]]), [
+    {
+      path: Cases.file,
+      before: "    let moves = 0;",
+      after: "    let moves = 0;\n    const secretForms = forms(secret);",
+    },
+    {
+      path: Cases.file,
+      before: "      const marker = forms(secret)[pick.encoding] ?? secret;",
+      after: "      const marker = secretForms[pick.encoding] ?? secret;",
+    },
+    {
+      path: Cases.file,
+      before: "        if (texts.some((text) => forms(secret).some((form) => text.includes(form)))) {",
+      after: "        if (texts.some((text) => secretForms.some((form) => text.includes(form)))) {",
+    },
+  ]);
+
+  if (Result.isFailure(cached) || !cached.success.has(Cases.file)) {
+    throw new Error("invalid historical source fixture");
+  }
+
+  return cached.success.get(Cases.file)!;
+};
 
 it("fixed source and transform hashes refuse every changed input before writing", async () => {
   // Plant: omit the source digest check. The Digest stand-in identifies generated snapshots; it supplies no real-source proof.
@@ -27,12 +63,14 @@ it("fixed source and transform hashes refuse every changed input before writing"
         const saved = new Map(
           paths.map((path) => [
             path,
-            bytes(
-              edits
-                .filter((edit) => edit.path === path)
-                .map((edit) => edit.before)
-                .join("\n") + suffix,
-            ),
+            path === Cases.file
+              ? bytes(new TextDecoder().decode(originalSource("cached")) + suffix)
+              : bytes(
+                  edits
+                    .filter((edit) => edit.path === path)
+                    .map((edit) => edit.before)
+                    .join("\n") + suffix,
+                ),
           ]),
         );
 
@@ -90,13 +128,21 @@ it("strict requests reject caller additions and every unsupported case or source
       const chosen = Cases.Request.make({ case: name, sha: Cases.cached });
       const pattern = Cases.argv(chosen, "private.json").find((arg) => arg.startsWith("--testNamePattern="));
       expect(Cases.argv(chosen, "private.json").includes("--disableConsoleIntercept")).toBe(name === "l11-inputs");
+      expect(
+        Cases.argv(chosen, "private.json", false, "trusted-reporter.ts").filter((arg) => arg.startsWith("--reporter=")),
+      ).toEqual(
+        Cases.output(chosen) === null ? ["--reporter=json"] : ["--reporter=json", "--reporter=trusted-reporter.ts"],
+      );
       expect(pattern === undefined).toBe(Cases.output(chosen) === null);
 
       if (pattern !== undefined) {
         const matcher = new RegExp(pattern.slice("--testNamePattern=".length));
 
         for (const title of Cases.titles) {
-          expect(matcher.test(title)).toBe(Cases.selected(chosen).includes(title));
+          const listed = Cases.collection.find((row) => row.reporter === title);
+          expect(listed).toBeDefined();
+          expect(matcher.test(listed!.name)).toBe(Cases.selected(chosen).includes(title));
+          expect(matcher.test(title)).toBe(false);
           expect(matcher.test(`${title}suffix`)).toBe(false);
         }
       }
@@ -862,6 +908,7 @@ it("scoped adapters check every parent and restore every target through injected
         original.set(`${source}/pnpm-workspace.yaml`, bytes("workspace"));
         const files = new Map([...original].map(([file, value]) => [file, value.slice()]));
         const writes: string[] = [];
+        let listed: readonly string[] = [];
         const gitCalls: string[] = [];
         let changedIndex = false;
 
@@ -893,6 +940,15 @@ it("scoped adapters check every parent and restore every target through injected
           realPath: (file) => Effect.succeed(file),
           readFile: (file) => Effect.sync(() => files.get(file) ?? bytes("")),
           writeFileString: () => Effect.void,
+          readFileString: () =>
+            Effect.succeed(
+              JSON.stringify(
+                Cases.selected(request).map((name) => ({
+                  name: `P42 slice 1: a code start on the real Worker path > ${name.slice("P42 slice 1: a code start on the real Worker path ".length)}`,
+                  file: `${source}/${Cases.file}`,
+                })),
+              ),
+            ),
           chmod: () => Effect.void,
           open: (file) =>
             Effect.succeed({
@@ -919,7 +975,7 @@ it("scoped adapters check every parent and restore every target through injected
 
         const spawner = ChildProcessSpawner.make((command) =>
           Effect.sync(() => {
-            if (command._tag !== "StandardCommand" || command.command !== "git") {
+            if (command._tag !== "StandardCommand" || !["git", "nice"].includes(command.command)) {
               throw new Error("unexpected child");
             }
 
@@ -1038,6 +1094,8 @@ it("scoped adapters check every parent and restore every target through injected
                 const inspected = yield* backend.executor.inspect("cached").pipe(Effect.exit);
 
                 if (Exit.isSuccess(inspected)) {
+                  listed = (yield* backend.executor.collect("cached")).map((row) => row.name);
+
                   for (const file of paths) {
                     files.set(`${source}/${file}`, bytes("temporary changed bytes"));
                   }
@@ -1067,6 +1125,7 @@ it("scoped adapters check every parent and restore every target through injected
           expect(writes).toEqual([]);
         } else {
           expect(Exit.isSuccess(result.captured)).toBe(true);
+          expect(listed).toEqual(Cases.selected(request));
           expect(result.cleanup).toHaveLength(1);
           expect(result.cleanup[0]?.restored).toBe(fault === "none");
 
@@ -1143,5 +1202,338 @@ it("comparison collector checks both actual source jobs and keeps failed timing 
       },
     ),
     { numRuns: 100 },
+  );
+});
+
+// The running task is Vitest's real in-memory task, not a second runner or a protected law.
+describe("P42 slice 1: a code start on the real Worker path", () => {
+  it("format: installed nested task names select the exact L11 targets and normalize reporter titles", (context) => {
+    // Plant: use space-joined reporter titles in the CLI selector or accept raw list names as reporter titles.
+    expect(TestRunner.getCurrentTest()?.id).toBe(context.task.id);
+    expect(context.task.fullTestName).toBe(`P42 slice 1: a code start on the real Worker path > ${context.task.name}`);
+    fc.assert(
+      fc.property(fc.constantFrom(...Cases.cases), fc.boolean(), (name, reverse) => {
+        const request = Cases.Request.make({ case: name, sha: Cases.cached });
+        const selected = Cases.selected(request);
+        const cli = Cases.argv(request, "private.json").find((arg) => arg.startsWith("--testNamePattern="));
+        const listing = Cases.collection.map((row) => row.name);
+        expect(new Set(listing).size).toBe(listing.length);
+
+        if (reverse) {
+          listing.reverse();
+        }
+
+        if (Cases.output(request) === null) {
+          expect(cli).toBeUndefined();
+        } else {
+          const pattern = new RegExp(cli!.slice("--testNamePattern=".length));
+          const actual = listing.filter((title) => pattern.test(title));
+          expect(actual).toHaveLength(selected.length);
+          expect(actual.map((title) => Cases.collection.find((row) => row.name === title)?.reporter).sort()).toEqual(
+            [...selected].sort(),
+          );
+          expect(selected.some((title) => pattern.test(title))).toBe(false);
+        }
+      }),
+      { numRuns: 100 },
+    );
+  });
+});
+
+it("fixed observer bytes parse and round-trip both exact source variants before any execution", async () => {
+  // Plant: remove an observer edit or accept a changed original source digest.
+  // Repository bytes are read only. Neither the source law nor a child process is started.
+  const uncached = originalSource("uncached");
+  const cached = originalSource("cached");
+  await fc.assert(
+    fc.asyncProperty(
+      fc.constantFrom(...Cases.Variant.literals),
+      fc.string({ minLength: 1, maxLength: 30 }),
+      async (variant, extra) => {
+        const source = variant === "cached" ? cached : uncached;
+        const original = new Map([[Cases.file, source]]);
+        const request = Cases.Request.make({ case: "l11-inputs", sha: Cases.cached });
+
+        const result = await Effect.runPromise(
+          Effect.gen(function* () {
+            const digest = yield* Digest.Digest;
+            expect(yield* digest.digestHex(Digest.sha256, source)).toBe(Cases.sources[variant].law);
+            const prepared = yield* Cases.prepare(request, variant, original);
+            expect(Result.isSuccess(prepared)).toBe(true);
+
+            if (Result.isFailure(prepared)) {
+              return yield* Effect.die("observer refused original bytes");
+            }
+
+            const changed = prepared.success.get(Cases.file)!;
+            expect(parseSync("observer.ts", new TextDecoder().decode(changed)).errors).toEqual([]);
+
+            const reversed = Cases.derive(
+              new Map([[Cases.file, changed]]),
+              Cases.observer(variant)
+                .toReversed()
+                .map((edit) => ({ ...edit, before: edit.after, after: edit.before })),
+            );
+
+            expect(Result.isSuccess(reversed)).toBe(true);
+
+            if (Result.isSuccess(reversed)) {
+              expect(reversed.success.get(Cases.file)).toEqual(source);
+            }
+
+            return yield* Cases.prepare(
+              request,
+              variant,
+              new Map([[Cases.file, new Uint8Array([...source, ...bytes(extra)])]]),
+            );
+          }).pipe(Effect.provide(Digest.layerWebCrypto)),
+        );
+
+        expect(Result.isFailure(result)).toBe(true);
+      },
+    ),
+    { numRuns: 100 },
+  );
+});
+
+it("causal metadata recognizes real wrapped final assertions and refuses unrelated failures", () => {
+  // Plant: inspect the outer fast-check Error only, or accept an unrelated cause as a final scan.
+  fc.assert(
+    fc.property(
+      fc.constantFrom(...Cases.paths),
+      fc.constantFrom(...Cases.outputs),
+      fc.boolean(),
+      (path, output, early) => {
+        const title = Cases.sibling(path, output);
+
+        const error = Result.try(() =>
+          fc.assert(
+            fc.property(fc.constant(null), () => {
+              assert(
+                false,
+                early
+                  ? "L11: storage failure is an RPC rejection"
+                  : `L11: ${path} leaked storage text or metadata into ${output}`,
+              );
+            }),
+            { numRuns: 1, endOnFailure: true },
+          ),
+        );
+
+        expect(Result.isFailure(error)).toBe(true);
+
+        if (Result.isSuccess(error)) {
+          throw new Error("missing actual assertion failure");
+        }
+
+        const metadata = {};
+        new L11Reporter().onTestCaseResult({
+          fullName: `P42 slice 1: a code start on the real Worker path > ${title.slice("P42 slice 1: a code start on the real Worker path ".length)}`,
+          meta: () => metadata,
+          result: () => ({ state: "failed", errors: [error.failure] }),
+        });
+        const decoded = Schema.decodeUnknownSync(Metadata)(metadata);
+        expect(decoded.l11Causal?.finals).toEqual(early ? [] : [output]);
+        expect(
+          causal(title, [new Error(`L11: ${path} leaked storage text or metadata into ${output}`)]).finals,
+        ).toEqual([]);
+        expect(causal(title, [error.failure, error.failure]).finals).toEqual([]);
+
+        for (const serialized of [false, true]) {
+          const leaked = [`fresh/0 SELECT ' -> reply', ' -> span', ' -> row', ' -> log' -> ${output}`];
+
+          const aggregate = {
+            name: "AssertionError",
+            message: "L11: 1 storage operations were cut; storage text or metadata reached these outputs",
+            actual: serialized ? JSON.stringify(leaked).replace(/]$/, ",]") : leaked,
+          };
+
+          expect(causal(Cases.aggregate, [aggregate]).finals).toEqual([output]);
+        }
+
+        const cycle = { name: "Error", message: "cycle", cause: {} };
+        cycle.cause = cycle;
+        expect(causal(title, [cycle]).finals).toEqual([]);
+      },
+    ),
+    { numRuns: 100 },
+  );
+});
+
+const spanHelper = (request: Cases.Request) => {
+  const mapped = Cases.derive(
+    new Map([[Cases.file, originalSource("cached")]]),
+    Cases.mappings(request).filter((edit) => edit.path === Cases.file),
+  );
+
+  if (Result.isFailure(mapped)) {
+    throw new Error("invalid fixed span source");
+  }
+
+  const source = new TextDecoder().decode(mapped.success.get(Cases.file));
+  const parsed = parseSync("span.ts", source);
+
+  for (const statement of parsed.program.body) {
+    if (statement.type !== "VariableDeclaration") {
+      continue;
+    }
+
+    for (const declaration of statement.declarations) {
+      if (
+        declaration.id.type === "Identifier" &&
+        declaration.id.name === "l11Observe" &&
+        declaration.init?.type === "ArrowFunctionExpression" &&
+        declaration.init.body.type === "BlockStatement"
+      ) {
+        // Compile only the new pure observation body. No historical law, import, generator or fixture runs.
+        return compileFunction(source.slice(declaration.init.body.start + 1, declaration.init.body.end - 1), [
+          "batches",
+          "secret",
+          "marker",
+          "encoding",
+          "path",
+          "operation",
+          "Schema",
+          "Result",
+          "SpanRow",
+          "TestRunner",
+          "l11Attribution",
+        ]);
+      }
+    }
+  }
+
+  throw new Error("missing fixed span observation body");
+};
+
+it("[secrets] span evidence requires the actual selected attribute, encoding and final assertion", async () => {
+  // Plant: record encoding2 without reading the selected span attribute, or accept another field's evidence.
+  // Pinned: the 9cb audit found all three span cases permanently incomplete; each keeps a positive control.
+  // Only the fixed observation helper runs, with memory-only SpanRow/TestRunner stand-ins. The protected law never runs.
+  await fc.assert(
+    fc.asyncProperty(
+      fc.constantFrom("l11-span-name", "l11-span-code", "l11-span-errcode"),
+      fc.constantFrom(0, 1, 2),
+      fc.constantFrom("match", "other_attribute", "early", "foreign"),
+      fc.stringMatching(/^[A-Z]{12}$/),
+      async (name, encoding, kind, word) => {
+        const request = Cases.Request.make({ case: name, sha: Cases.cached });
+        const field = name === "l11-span-name" ? "name" : name === "l11-span-code" ? "code" : "errcode";
+        const key = field === "name" ? "error.type" : "fab.ledger.code";
+        const secret = `private-${word}\n/%☃`;
+        const marker = [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)][encoding]!;
+        const observe = spanHelper(request);
+        const raw = testReport(request, true);
+
+        for (const assertion of raw.testResults[0]!.assertionResults) {
+          const path = Cases.paths.find((path) => assertion.fullName === Cases.sibling(path, "span"));
+          const metadata = {};
+          const recorded = [[{ span: { attributes: { [kind === "other_attribute" ? "message" : key]: marker } } }]];
+          observe(
+            recorded,
+            secret,
+            marker,
+            encoding,
+            path ?? "fresh",
+            path === undefined ? 0 : null,
+            Schema,
+            Result,
+            Schema.Struct({ attributes: Schema.Record(Schema.String, Schema.Unknown) }),
+            { getCurrentTest: () => ({ meta: metadata }) },
+            Attribution,
+          );
+
+          const error = Result.try(() =>
+            fc.assert(
+              fc.property(fc.constant(null), () => {
+                expect.hasAssertions();
+
+                if (kind === "early") {
+                  assert(false, "L11: storage failure is an RPC rejection");
+                }
+
+                if (path === undefined) {
+                  expect(
+                    ["fresh/0 SELECT 1 -> span"],
+                    "L11: 1 storage operations were cut; storage text or metadata reached these outputs",
+                  ).toEqual([]);
+                } else {
+                  assert(false, `L11: ${path} leaked storage text or metadata into span`);
+                }
+              }),
+              { numRuns: 1, endOnFailure: true },
+            ),
+          );
+
+          if (Result.isSuccess(error)) {
+            throw new Error("missing final assertion");
+          }
+
+          new L11Reporter().onTestCaseResult({
+            fullName: Cases.collection.find((row) => row.reporter === assertion.fullName)!.name,
+            meta: () => metadata,
+            result: () => ({ state: "failed", errors: [error.failure] }),
+          });
+
+          if (kind === "foreign") {
+            Object.assign(metadata, {
+              l11: [
+                {
+                  field: field === "name" ? "code" : "name",
+                  path: path ?? "fresh",
+                  operation: path === undefined ? 0 : null,
+                  encoding: 2,
+                },
+              ],
+            });
+          }
+
+          Object.assign(assertion, { meta: metadata });
+          expect(JSON.stringify(metadata)).not.toContain(word);
+        }
+
+        const mock = standin(request);
+
+        const io = Exercise.Executor.of({
+          ...mock.io,
+          test: (variant, phase) =>
+            phase === "broken"
+              ? Effect.succeed({
+                  exit: 1,
+                  started: stamp,
+                  ended: stamp,
+                  elapsed: 1,
+                  stdout: "",
+                  stderr: "",
+                  report: JSON.parse(JSON.stringify(raw)),
+                })
+              : mock.io.test(variant, phase),
+        });
+
+        const result = await run(request, Exercise.Internal.cases.output.make({}), identity("output"), io);
+        const supported = kind === "match" && encoding !== 0 && (field === "name" || encoding === 2);
+        expect(result.result._tag).toBe(supported ? "observed" : "incomplete");
+        expect(result.tests.map((test) => test.phase)).toEqual(["baseline", "broken", "restored"]);
+        expect(result.targets).toHaveLength(5);
+        expect(JSON.stringify(result)).not.toContain(word);
+
+        if (supported) {
+          expect(
+            result.targets.every(
+              (target) =>
+                target.observations.every((fact) => fact.field === field) && target.encodings.includes(encoding),
+            ),
+          ).toBe(true);
+        }
+      },
+    ),
+    {
+      numRuns: 100,
+      examples: [
+        ["l11-span-name", 1, "match", "ABCDEFGHIJKL"],
+        ["l11-span-code", 2, "match", "ABCDEFGHIJKL"],
+        ["l11-span-errcode", 2, "match", "ABCDEFGHIJKL"],
+      ],
+    },
   );
 });
