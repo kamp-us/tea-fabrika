@@ -55,6 +55,12 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+Today's lead tooling adds a separate manual [L11 exercise](../../.github/workflows/l11-exercise.yaml), ticket 1135,
+for `next/` ticket 1129. It fixes one source pair, compares ordinary whole-file runs and private generated inputs,
+and declares ten serial clean jobs. Fixed output faults restore every edited file and publish only decoded facts.
+The actual adapters remain unexercised until the workflow runs on disposable CI after landing. Row, initialization,
+Runner and CPU-profile gaps stay open. These measurements supply no branch proof or reliability claim.
+
 Today's lead tooling adds a manual [plant exercise](../../.github/workflows/plant.yaml) for two `next/` laws, ticket 1133.
 It accepts only a fixed case and an exact source commit, then records baseline, broken and restored observations.
 The real Git and Vitest adapters remain unexercised until the trusted-main workflow runs after landing.

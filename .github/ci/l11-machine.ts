@@ -39,6 +39,10 @@ export const Reason = Schema.Literals([
   "lock_mismatch",
   "batch_incomplete",
   "batch_failed",
+  "request_invalid",
+  "metadata_unavailable",
+  "diff_mismatch",
+  "attribution_missing",
 ]);
 
 export type Reason = typeof Reason.Type;
@@ -82,7 +86,7 @@ export const Model = Schema.TaggedUnion({
   baseline: fields,
   broken: fields,
   restore: { ...fields, next: Schema.Literals(["observed", "restored", "incomplete"]), reason: Schema.NullOr(Reason) },
-  restored: fields,
+  restored: { ...fields, reason: Schema.NullOr(Reason) },
   observed: fields,
   incomplete: { ...fields, reason: Reason },
 });
@@ -161,7 +165,7 @@ const accept = (model: Model, seen: Observation): Next => {
     broken: () =>
       restore(
         { ...model, ...facts },
-        failed === null && Outcome.isAnyOf(["leaked"])(seen.outcome) ? "restored" : "incomplete",
+        "restored",
         failed ?? (Outcome.isAnyOf(["leaked"])(seen.outcome) ? null : "green_plant"),
       ),
     restore: ({ next, reason }) => {
@@ -173,14 +177,16 @@ const accept = (model: Model, seen: Observation): Next => {
         case "observed":
           return stay(Model.cases.observed.make(facts));
         case "restored":
-          return enter(Model.cases.restored.make(facts), "restored");
+          return enter(Model.cases.restored.make({ ...facts, reason }), "restored");
         case "incomplete":
           return incomplete({ ...model, ...facts }, reason ?? "operation_failed");
       }
     },
-    restored: () =>
+    restored: ({ reason }) =>
       failed === null && Outcome.isAnyOf(["passed"])(seen.outcome)
-        ? stay(Model.cases.observed.make(facts))
+        ? reason === null
+          ? stay(Model.cases.observed.make(facts))
+          : incomplete({ ...model, ...facts }, reason)
         : incomplete({ ...model, ...facts }, failed ?? "restored_failed"),
     observed: () => stay(model),
     incomplete: () => stay(model),

@@ -1,6 +1,8 @@
 // Today's tooling on memory-only services. Synthetic traces here provide no actual-input proof.
-import { Effect, Exit, Result } from "effect";
+import { ByteSize, Effect, Exit, FileSystem, Option, Path, Ref, Result, Sink, Stream } from "effect";
 import { Digest } from "effect/crypto";
+import { HttpClient } from "effect/http";
+import { ChildProcessSpawner } from "effect/process";
 import fc from "fast-check";
 import { expect, it } from "vitest";
 import * as Cases from "./l11-cases.ts";
@@ -543,6 +545,601 @@ it("multiple-file restoration attempts every saved file after each injected I/O 
             expect(journal.filter((label) => label === `write:${path}`).length).toBeGreaterThan(0);
           }
         }
+      },
+    ),
+    { numRuns: 100 },
+  );
+});
+
+const stamp = "2026-11-17T08:00:00.000Z";
+
+const workflowSha = "a".repeat(40);
+
+const url = (id: number) => `https://github.com/kamp-us/tea-fabrika/actions/runs/123/job/${id}`;
+
+const identity = (job: Exercise.IdentityRecord["job"], id = 1) =>
+  Exercise.IdentityRecord.cases.verified.make({
+    run: "123",
+    attempt: 1,
+    caller: 5,
+    workflow: workflowSha,
+    head: workflowSha,
+    job,
+    id,
+    url: url(id),
+    dispatched: null,
+  });
+
+const versions = { node: "26.13.0", effect: "4.1.3", vitest: "5.0.5", fastCheck: "4.10.2", tea: "0.27.0" } as const;
+
+const sourceFact = (variant: Cases.Variant) =>
+  Exercise.SourceFact.make({
+    variant,
+    sha: Cases.sources[variant].sha,
+    tree: "b".repeat(40),
+    product: Cases.hashes.product,
+    index: "b".repeat(40),
+    law: Cases.sources[variant].law,
+    lock: Cases.hashes.lock,
+    node: "26.13.0",
+    git: "git version 2.50.0",
+    versions: null,
+  });
+
+const clean = (variant: Cases.Variant): Exercise.Cleanup => ({
+  variant,
+  restored: true,
+  files: true,
+  head: true,
+  index: true,
+  status: true,
+});
+
+const testReport = (request: Cases.Request, failed = false, timeout = false, raw = "") => ({
+  success: !failed,
+  testResults: [
+    {
+      name: Cases.file,
+      status: failed ? "failed" : "passed",
+      message: "",
+      startTime: 0,
+      endTime: 1,
+      assertionResults: Cases.selected(request).map((fullName) => ({
+        fullName,
+        status: failed ? "failed" : "passed",
+        duration: timeout ? 60000 : 1,
+        failureMessages: failed ? [timeout ? "Test timed out in 60000ms" : `assertion failed ${raw}`] : [],
+      })),
+    },
+  ],
+});
+
+const standin = (
+  request: Cases.Request,
+  options: {
+    readonly fail?: string;
+    readonly timeout?: boolean;
+    readonly secret?: string;
+    readonly reports?: readonly unknown[];
+    readonly jobs?: readonly Exercise.ActionJob[];
+  } = {},
+) => {
+  const calls: string[] = [];
+  const checkpoints: Exercise.Report[] = [];
+
+  const boundary = (name: string) =>
+    Effect.gen(function* () {
+      calls.push(name);
+
+      if (options.fail === name) {
+        return yield* Exercise.WorkspaceError.make({ reason: "operation_failed" });
+      }
+    });
+
+  const io = Exercise.Executor.of({
+    now: Effect.succeed(stamp),
+    inspect: (variant) => boundary(`inspect:${variant}`).pipe(Effect.as(sourceFact(variant))),
+    install: (variant) => boundary(`install:${variant}`).pipe(Effect.as(versions)),
+    collect: (variant) =>
+      boundary(`collect:${variant}`).pipe(
+        Effect.as(Cases.selected(request).map((name) => ({ name, file: Cases.file }))),
+      ),
+    apply: (variant) => boundary(`apply:${variant}`).pipe(Effect.as("f".repeat(64))),
+    test: (variant, phase) =>
+      boundary(`test:${variant}:${phase}`).pipe(
+        Effect.as({
+          exit: options.timeout ? 1 : 0,
+          started: stamp,
+          ended: stamp,
+          elapsed: options.timeout ? 60000 : 1,
+          stdout: options.secret ?? "",
+          stderr: options.secret ?? "",
+          pid: 10,
+          report: testReport(request, options.timeout, options.timeout, options.secret),
+        }),
+      ),
+    restore: (variant) => boundary(`restore:${variant}`).pipe(Effect.as(clean(variant))),
+    hash: () => Effect.succeed("e".repeat(64)),
+    reports: Effect.succeed(options.reports ?? []),
+    jobs: Effect.succeed(options.jobs ?? []),
+    checkpoint: (report) =>
+      boundary("checkpoint").pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            checkpoints.push(structuredClone(report));
+          }),
+        ),
+      ),
+  });
+
+  return { io, calls, checkpoints };
+};
+
+const run = (
+  request: Cases.Request,
+  mode: Exercise.Internal,
+  id: Exercise.IdentityRecord,
+  io: typeof Exercise.Executor.Service,
+) => Effect.runPromise(Exercise.execute(request, mode, id).pipe(Effect.provideService(Exercise.Executor, io)));
+
+it("executor preserves timing failures, cleans plants and continues both diagnostic variants", async () => {
+  // Plant: stop the diagnostic after the first timed-out test; omit restoration after a broken run.
+  await fc.assert(
+    fc.asyncProperty(
+      fc.constantFrom(...Cases.cases),
+      fc.boolean(),
+      fc.nat({ max: 8 }),
+      async (name, timeout, failure) => {
+        const request = Cases.Request.make({ case: name, sha: Cases.cached });
+
+        const mode =
+          name === "l11-compare"
+            ? Exercise.Internal.cases.compare.make({ variant: "cached" })
+            : name === "l11-batch"
+              ? Exercise.Internal.cases.batch.make({ slot: 1 })
+              : name === "l11-inputs"
+                ? Exercise.Internal.cases.inputs.make({})
+                : Exercise.Internal.cases.output.make({});
+
+        const points = [
+          "none",
+          "inspect:cached",
+          "install:cached",
+          "collect:cached",
+          "apply:cached",
+          "test:cached:broken",
+          "test:cached:measurement",
+          "checkpoint",
+          "none",
+        ];
+
+        const mock = standin(request, { timeout, fail: points[failure] });
+
+        const result = await run(
+          request,
+          mode,
+          identity(
+            name === "l11-compare"
+              ? "compare"
+              : name === "l11-batch"
+                ? "slot-1"
+                : name === "l11-inputs"
+                  ? "inputs"
+                  : "output",
+          ),
+          mock.io,
+        );
+
+        expect(Exercise.Report.make(result)).toEqual(result);
+
+        if (name === "l11-row") {
+          expect(mock.calls).toEqual([]);
+          expect(result.result).toEqual({ _tag: "incomplete", reason: "row_mapping_missing" });
+        }
+
+        if (name === "l11-inputs" && mock.calls.includes("test:uncached:diagnostic")) {
+          expect(mock.calls).toContain("apply:cached");
+        }
+
+        if (mock.calls.includes("test:cached:broken")) {
+          expect(mock.calls).toContain("restore:cached");
+          expect(mock.calls).toContain("test:cached:restored");
+        }
+
+        if (name === "l11-compare" && points[failure] === "none") {
+          expect(result.result._tag).toBe("observed");
+          expect(result.tests[0]?.observation._tag).toBe("observed");
+          expect(Exercise.exitCode(result)).toBe(timeout ? 1 : 0);
+        }
+      },
+    ),
+    { numRuns: 100 },
+  );
+});
+
+it("collector keeps all ten slots and rejects retry, wrong job and missing report credits", async () => {
+  // Plant: accept a slot report from a different job ID, or drop a missing slot from the manifest.
+  await fc.assert(
+    fc.asyncProperty(
+      fc.integer({ min: 1, max: 10 }),
+      fc.constantFrom("none", "missing", "job", "retry", "failed"),
+      async (slot, fault) => {
+        const request = Cases.Request.make({ case: "l11-batch", sha: Cases.cached });
+
+        const manifest = await run(
+          request,
+          Exercise.Internal.cases.manifest.make({}),
+          identity("manifest", 20),
+          standin(request).io,
+        );
+
+        const reports: Exercise.Report[] = [manifest];
+        const jobs: Exercise.ActionJob[] = [{ key: "manifest", variant: null, id: 20, url: url(20), state: "passed" }];
+
+        for (const number of Cases.Slot.literals) {
+          const key = `slot-${number}` as const;
+          const mode = Exercise.Internal.cases.batch.make({ slot: number });
+          const mock = standin(request, { timeout: number === slot && fault === "failed" });
+          const actual = await run(request, mode, identity(key, number), mock.io);
+
+          if (!(number === slot && fault === "missing")) {
+            reports.push(
+              number === slot && fault === "retry"
+                ? { ...actual, identity: { ...actual.identity, attempt: 2 } }
+                : actual,
+            );
+          }
+
+          jobs.push({
+            key,
+            variant: null,
+            id: number === slot && fault === "job" ? 99 : number,
+            url: url(number),
+            state: number === slot && fault === "failed" ? "failed" : "passed",
+          });
+        }
+
+        const mock = standin(request, { reports, jobs });
+        const result = await run(request, Exercise.Internal.cases.collect.make({}), identity("collect", 30), mock.io);
+        expect(result.slots.map((row) => row.slot)).toEqual(Cases.Slot.literals);
+        expect(result.result._tag).toBe(fault === "none" ? "observed" : "incomplete");
+        expect(result.receipts.length).toBe(fault === "missing" || fault === "retry" ? 10 : 11);
+
+        if (fault !== "none") {
+          expect(result.slots[slot - 1]?.state).not.toBe("passed");
+        }
+
+        expect(mock.checkpoints.length).toBeGreaterThan(0);
+      },
+    ),
+    { numRuns: 100 },
+  );
+});
+
+it("[secrets] every public report and checkpoint drops generated child and error content", async () => {
+  // Plant: include raw child output or an unknown error message in a checkpoint.
+  await fc.assert(
+    fc.asyncProperty(fc.stringMatching(/^[A-Z]{12}$/), fc.boolean(), async (word, timeout) => {
+      const marker = `private-${word}/%?\\n`;
+      const request = Cases.Request.make({ case: "l11-compare", sha: Cases.cached });
+      const mock = standin(request, { secret: marker, timeout });
+
+      const result = await run(
+        request,
+        Exercise.Internal.cases.compare.make({ variant: "cached" }),
+        identity("compare"),
+        mock.io,
+      );
+
+      for (const report of [result, ...mock.checkpoints]) {
+        const published = JSON.stringify(report);
+        expect(published).not.toContain(word);
+        expect(published).not.toContain(encodeURIComponent(word));
+        expect(published).not.toContain("failureMessages");
+        expect(published).not.toContain("/private/");
+      }
+    }),
+    { numRuns: 100 },
+  );
+});
+
+it("scoped adapters check every parent and restore every target through injected filesystem and Git failures", async () => {
+  // Plant: skip parent lstat, accept a changed Git index, or restore only one of the three saved targets.
+  // All processes, filesystem operations and HTTP calls are memory stand-ins.
+  await fc.assert(
+    fc.asyncProperty(
+      fc.constantFrom("none", "parent", "mode", "index", "write"),
+      fc.integer({ min: 0, max: 2 }),
+      async (fault, index) => {
+        const request = Cases.Request.make({ case: "l11-span-code", sha: Cases.cached });
+        const root = "/memory/work";
+        const temp = "/memory/temp";
+        const scratch = `${temp}/private`;
+        const source = `${root}/source-cached`;
+        const paths = [Cases.file, Cases.runtime, Cases.children];
+        const original = new Map(paths.map((file) => [`${source}/${file}`, bytes(file)]));
+        original.set(`${source}/pnpm-lock.yaml`, bytes("lock"));
+        original.set(`${source}/pnpm-workspace.yaml`, bytes("workspace"));
+        const files = new Map([...original].map(([file, value]) => [file, value.slice()]));
+        const writes: string[] = [];
+        const gitCalls: string[] = [];
+        let changedIndex = false;
+
+        const info = (file: string): FileSystem.File.Info => ({
+          type:
+            fault === "parent" && file === `${source}/next/packages`
+              ? "SymbolicLink"
+              : files.has(file)
+                ? "File"
+                : "Directory",
+          mode: fault === "mode" && file === `${source}/${paths[index]}` ? 0o100755 : 0o100644,
+          mtime: Option.none(),
+          atime: Option.none(),
+          birthtime: Option.none(),
+          dev: 0n,
+          ino: Option.none(),
+          nlink: Option.none(),
+          uid: Option.none(),
+          gid: Option.none(),
+          rdev: Option.none(),
+          size: ByteSize.bytes(files.get(file)?.length ?? 0),
+          blksize: Option.none(),
+          blocks: Option.none(),
+        });
+
+        const fs = FileSystem.makeNoop({
+          makeDirectory: () => Effect.void,
+          lstat: (file) => Effect.succeed(info(file)),
+          realPath: (file) => Effect.succeed(file),
+          readFile: (file) => Effect.sync(() => files.get(file) ?? bytes("")),
+          writeFileString: () => Effect.void,
+          chmod: () => Effect.void,
+          open: (file) =>
+            Effect.succeed({
+              [FileSystem.FileTypeId]: FileSystem.FileTypeId,
+              stat: Effect.succeed(info(file)),
+              seek: () => Effect.succeed(0n),
+              sync: Effect.void,
+              read: () => Effect.succeed(0),
+              readAlloc: () => Effect.succeed(Option.none()),
+              truncate: () => Effect.void,
+              write: (value) => Effect.succeed(value.length),
+              writeAll: (value) =>
+                Effect.sync(() => {
+                  writes.push(file);
+
+                  if (fault === "write" && file === `${source}/${paths[index]}`) {
+                    throw new Error("injected private failure");
+                  }
+
+                  files.set(file, value.slice());
+                }),
+            }),
+        });
+
+        const spawner = ChildProcessSpawner.make((command) =>
+          Effect.sync(() => {
+            if (command._tag !== "StandardCommand" || command.command !== "git") {
+              throw new Error("unexpected child");
+            }
+
+            expect(command.options.extendEnv).toBe(false);
+            expect(Object.keys(command.options.env ?? {}).sort()).toEqual([
+              "CI",
+              "FABRIKA_MAX_WORKERS",
+              "FABRIKA_TEST_DEPTH",
+              "HOME",
+              "LANG",
+              "PATH",
+              "TMPDIR",
+            ]);
+            const args = command.args.join(" ");
+            gitCalls.push(args);
+
+            const output =
+              args === "rev-parse HEAD"
+                ? Cases.cached
+                : args === "write-tree"
+                  ? changedIndex
+                    ? "c".repeat(40)
+                    : "b".repeat(40)
+                  : args === "rev-parse HEAD:next/packages/libfabrika"
+                    ? Cases.hashes.product
+                    : args === "rev-parse HEAD^{tree}"
+                      ? "b".repeat(40)
+                      : args === "--version"
+                        ? "git version 2.50.0"
+                        : "";
+
+            return ChildProcessSpawner.makeHandle({
+              pid: ChildProcessSpawner.ProcessId(10),
+              exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+              isRunning: Effect.succeed(false),
+              kill: () => Effect.void,
+              stdin: Sink.drain,
+              stdout: Stream.make(bytes(output)),
+              stderr: Stream.empty,
+              all: Stream.empty,
+              getInputFd: () => Sink.drain,
+              getOutputFd: () => Stream.empty,
+              unref: Effect.succeed(Effect.void),
+            });
+          }),
+        );
+
+        const digest = Digest.Digest.of({
+          digest: () => Effect.succeed(bytes("")),
+          digestHex: (_algorithm, value) =>
+            Effect.succeed(
+              new TextDecoder().decode(value) === Cases.file
+                ? Cases.sources.cached.law
+                : new TextDecoder().decode(value) === Cases.runtime
+                  ? Cases.hashes[Cases.runtime]
+                  : new TextDecoder().decode(value) === Cases.children
+                    ? Cases.hashes[Cases.children]
+                    : new TextDecoder().decode(value) === "lock"
+                      ? Cases.hashes.lock
+                      : Cases.hashes.workspace,
+            ),
+        });
+
+        const env = Exercise.context({
+          CI: "true",
+          GITHUB_ACTIONS: "true",
+          RUNNER_OS: "Linux",
+          GITHUB_EVENT_NAME: "workflow_dispatch",
+          GITHUB_REF: "refs/heads/main",
+          GITHUB_REPOSITORY: "kamp-us/tea-fabrika",
+          GITHUB_WORKFLOW_REF: "kamp-us/tea-fabrika/.github/workflows/l11-exercise.yaml@refs/heads/main",
+          GITHUB_WORKFLOW_SHA: workflowSha,
+          GITHUB_SHA: workflowSha,
+          GITHUB_RUN_ID: "123",
+          GITHUB_RUN_ATTEMPT: "1",
+          GITHUB_JOB: "output",
+          GITHUB_WORKSPACE: root,
+          GITHUB_EVENT_PATH: `${temp}/event.json`,
+          RUNNER_TEMP: temp,
+          RUNNER_NAME: "memory",
+          PATH: "/memory/bin",
+          L11_CASE: request.case,
+          L11_SHA: Cases.cached,
+          L11_MODE: "output",
+        });
+
+        if (Result.isFailure(env)) {
+          throw new Error("invalid fixture");
+        }
+
+        const seed = await run(
+          { case: "l11-batch", sha: Cases.cached },
+          Exercise.Internal.cases.manifest.make({}),
+          identity("manifest"),
+          standin({ case: "l11-batch", sha: Cases.cached }).io,
+        );
+
+        const finalizers = Ref.make<readonly Exercise.Cleanup[]>([]);
+
+        const result = await Effect.runPromise(
+          Effect.gen(function* () {
+            const last = yield* Ref.make(seed);
+            const closed = yield* finalizers;
+
+            const captured = yield* Effect.scoped(
+              Effect.gen(function* () {
+                const backend = yield* Exercise.live(
+                  env.success,
+                  request,
+                  Exercise.Internal.cases.output.make({}),
+                  scratch,
+                  last,
+                  closed,
+                );
+
+                const inspected = yield* backend.executor.inspect("cached").pipe(Effect.exit);
+
+                if (Exit.isSuccess(inspected)) {
+                  for (const file of paths) {
+                    files.set(`${source}/${file}`, bytes("temporary changed bytes"));
+                  }
+
+                  changedIndex = fault === "index";
+                }
+
+                return inspected;
+              }),
+            );
+
+            return { captured, cleanup: yield* Ref.get(closed) };
+          }).pipe(
+            Effect.provideService(FileSystem.FileSystem, fs),
+            Effect.provide(Path.layer),
+            Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+            Effect.provideService(Digest.Digest, digest),
+            Effect.provideService(
+              HttpClient.HttpClient,
+              HttpClient.make(() => Effect.die("unexpected request")),
+            ),
+          ),
+        );
+
+        if (fault === "parent" || fault === "mode") {
+          expect(Exit.isFailure(result.captured)).toBe(true);
+          expect(writes).toEqual([]);
+        } else {
+          expect(Exit.isSuccess(result.captured)).toBe(true);
+          expect(result.cleanup).toHaveLength(1);
+          expect(result.cleanup[0]?.restored).toBe(fault === "none");
+
+          for (const file of paths) {
+            expect(writes).toContain(`${source}/${file}`);
+          }
+
+          expect(gitCalls.filter((call) => call === "write-tree").length).toBeGreaterThan(1);
+
+          if (fault === "none") {
+            for (const [file, before] of original) {
+              expect(files.get(file)).toEqual(before);
+            }
+          }
+        }
+      },
+    ),
+    { numRuns: 100 },
+  );
+});
+
+it("comparison collector checks both actual source jobs and keeps failed timing observations", async () => {
+  // Plant: accept a report whose actual job state disagrees with its test result.
+  await fc.assert(
+    fc.asyncProperty(
+      fc.boolean(),
+      fc.constantFrom("none", "missing", "state", "source", "identity"),
+      async (timeout, fault) => {
+        const request = Cases.Request.make({ case: "l11-compare", sha: Cases.cached });
+        const reports: Exercise.Report[] = [];
+        const jobs: Exercise.ActionJob[] = [];
+
+        for (const [at, variant] of Cases.Variant.literals.entries()) {
+          const report = await run(
+            request,
+            Exercise.Internal.cases.compare.make({ variant }),
+            identity("compare", at + 1),
+            standin(request, { timeout }).io,
+          );
+
+          reports.push(
+            variant === "cached" && fault === "source"
+              ? { ...report, sources: report.sources.map((source) => ({ ...source, sha: Cases.uncached })) }
+              : variant === "cached" && fault === "identity"
+                ? { ...report, identity: { ...report.identity, head: "c".repeat(40) } }
+                : report,
+          );
+          jobs.push({
+            key: "compare",
+            variant,
+            id: at + 1,
+            url: url(at + 1),
+            state:
+              variant === "cached" && fault === "state"
+                ? timeout
+                  ? "passed"
+                  : "failed"
+                : timeout
+                  ? "failed"
+                  : "passed",
+          });
+        }
+
+        const result = await run(
+          request,
+          Exercise.Internal.cases.collect.make({}),
+          identity("collect", 3),
+          standin(request, { reports: fault === "missing" ? reports.slice(1) : reports, jobs }).io,
+        );
+
+        expect(result.paired).toBe(fault === "none");
+        expect(result.result._tag).toBe(fault === "none" ? "observed" : "incomplete");
+        expect(result.tests.length).toBe(fault === "missing" || fault === "identity" ? 1 : 2);
       },
     ),
     { numRuns: 100 },

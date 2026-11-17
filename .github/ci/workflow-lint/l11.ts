@@ -1,9 +1,11 @@
-// Today's tooling. Wire this family when the L11 workflow and real adapters land together.
+// Today's tooling. This manual exercise supplies no branch proof.
 import { parse } from "yaml";
-import { cached, cases, uncached } from "../l11-cases.ts";
+import { bootstrap, cached, cases, uncached } from "../l11-cases.ts";
 import { allSteps, compact, map, sameEntries } from "./shared.ts";
 
 const expression = (value: string) => `$` + `{{ ${value} }}`;
+
+const install = 'pnpm install --frozen-lockfile > "$RUNNER_TEMP/l11-trusted-install.log" 2>&1';
 
 const command = "nice -n 19 node .github/ci/l11-exercise.ts";
 
@@ -98,7 +100,7 @@ export const lintL11 = (text: string): string[] => {
       expectedEnv["L11_VARIANT"] = expression("matrix.variant");
     }
 
-    require(plain(job["name"]) &&
+    require(job["name"] === `l11-${name}${name === "compare" ? `-${expression("matrix.variant")}` : ""}` &&
       steps.every((step) => plain(step["name"])) &&
       keys(job, ["name", "runs-on", "timeout-minutes", "needs", "if", "strategy", "steps"]) &&
       job["runs-on"] === "ubuntu-latest" &&
@@ -146,7 +148,7 @@ export const lintL11 = (text: string): string[] => {
           with_["lfs"] === false, `L6 ${name}: source checkouts are fixed and credential-free`);
       } else if (uses === "./.github/actions/pnpm") {
         require(keys(step, ["name", "uses"]), `L6 ${name}: the trusted pnpm action stays unchanged`);
-      } else if (step["run"] === "pnpm install --frozen-lockfile") {
+      } else if (step["run"] === install || step["run"] === bootstrap) {
         require(keys(step, ["name", "run"]), `L6 ${name}: installation has no caller configuration`);
       } else if (uses === "actions/upload-artifact@v7") {
         const with_ = map(step["with"]);
@@ -168,9 +170,22 @@ export const lintL11 = (text: string): string[] => {
       }
     }
 
-    require(steps.some(
-      (step) => step["uses"] === "actions/upload-artifact@v7",
-    ), `L7 ${name}: reports survive failed execution`);
+    const setup = steps.slice(2, 7);
+    require(setup.length === 5 &&
+      setup[0]?.["uses"] === "actions/checkout@v7" &&
+      setup[1]?.["uses"] === "actions/checkout@v7" &&
+      map(setup[0]?.["with"])["ref"] === cached &&
+      map(setup[0]?.["with"])["path"] === "source-cached" &&
+      map(setup[1]?.["with"])["ref"] === uncached &&
+      map(setup[1]?.["with"])["path"] === "source-uncached" &&
+      setup[2]?.["run"] === bootstrap &&
+      setup[3]?.["uses"] === "./.github/actions/pnpm" &&
+      setup[4]?.["run"] === install &&
+      steps.length === (name === "collect" ? 10 : 9) &&
+      steps[name === "collect" ? 8 : 7] === execution &&
+      (name !== "collect" || steps[7]?.["uses"] === "actions/download-artifact@v8") &&
+      steps.at(-1)?.["uses"] ===
+        "actions/upload-artifact@v7", `L7 ${name}: exact hashes precede installation and only sanitized reports survive execution`);
 
     if (index >= 0) {
       require(same(list(job["needs"]), [index === 0 ? "manifest" : slots[index - 1]]) &&

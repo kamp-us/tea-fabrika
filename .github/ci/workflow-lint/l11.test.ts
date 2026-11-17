@@ -1,8 +1,9 @@
+import { readFileSync } from "node:fs";
 // Policy inputs only. No Actions workflow or real adapter is started here.
 import fc from "fast-check";
 import { expect, it } from "vitest";
-import { stringify } from "yaml";
-import { cached, cases } from "../l11-cases.ts";
+import { parse, stringify } from "yaml";
+import { bootstrap, cached, cases, uncached } from "../l11-cases.ts";
 import { lintL11 } from "./l11.ts";
 import { allSteps, map } from "./shared.ts";
 
@@ -64,6 +65,7 @@ const workflow = () => ({
       return [
         name,
         {
+          name: `l11-${name}${name === "compare" ? `-\${{ matrix.variant }}` : ""}`,
           "runs-on": "ubuntu-latest",
           "timeout-minutes": 20,
           if: when,
@@ -78,8 +80,23 @@ const workflow = () => ({
           steps: [
             checkout,
             trust,
+            ...(
+              [
+                [cached, "source-cached"],
+                [uncached, "source-uncached"],
+              ] as const
+            ).map(([ref, path]) => ({ uses: "actions/checkout@v7", with: { ...checkout.with, ref, path } })),
+            { run: bootstrap },
             { uses: "./.github/actions/pnpm" },
-            { run: "pnpm install --frozen-lockfile" },
+            { run: 'pnpm install --frozen-lockfile > "$RUNNER_TEMP/l11-trusted-install.log" 2>&1' },
+            ...(name === "collect"
+              ? [
+                  {
+                    uses: "actions/download-artifact@v8",
+                    with: { pattern: "l11-exercise-*", path: `\${{ runner.temp }}/l11-exercise/collected` },
+                  },
+                ]
+              : []),
             { id: "l11", run: "nice -n 19 node .github/ci/l11-exercise.ts", "timeout-minutes": 17, env },
             {
               uses: "actions/upload-artifact@v7",
@@ -103,7 +120,7 @@ const execute = (value: ReturnType<typeof workflow>, name: string) =>
   allSteps(job(value, name)).find((step) => step["id"] === "l11")!;
 
 it("workflow policy accepts supported mapping order, expression spacing and YAML aliases", () => {
-  // This measures generated policy inputs only. An actual workflow still needs its own sample before the family blocks it.
+  // The actual workflow and generated variants measure zero false alarms before activation.
   // Plant: require manifest first in the YAML mapping rather than through needs.
   fc.assert(
     fc.property(fc.boolean(), fc.boolean(), (reverse, yaml) => {
@@ -115,8 +132,17 @@ it("workflow policy accepts supported mapping order, expression spacing and YAML
         map(map(job(valid, "compare")["strategy"])["matrix"])["variant"] = ["cached", "uncached"];
       }
 
-      const text = yaml ? stringify(valid, { aliasDuplicateObjects: true }) : JSON.stringify(valid);
-      expect(lintL11(text)).toEqual([]);
+      const actual = map(parse(readFileSync(new URL("../../workflows/l11-exercise.yaml", import.meta.url), "utf8")));
+
+      if (reverse) {
+        actual["jobs"] = Object.fromEntries(Object.entries(map(actual["jobs"])).toReversed());
+        map(map(map(map(actual["on"])["workflow_dispatch"])["inputs"])["case"])["options"] = [...cases].reverse();
+      }
+
+      for (const value of [valid, actual]) {
+        const text = yaml ? stringify(value, { aliasDuplicateObjects: true }) : JSON.stringify(value);
+        expect(lintL11(text)).toEqual([]);
+      }
     }),
     { numRuns: 100 },
   );
@@ -127,6 +153,17 @@ it("workflow policy refuses caller controls, parallel slots, weak trust and raw 
   fc.assert(
     fc.property(fc.integer({ min: 2, max: 10 }), fc.string(), (slot, text) => {
       const mutations: Array<(value: ReturnType<typeof workflow>) => void> = [
+        (value) => {
+          allSteps(job(value, "inputs"))[4]!["run"] = "true";
+        },
+        (value) => {
+          const steps = allSteps(job(value, "output"));
+          [steps[4], steps[5]] = [steps[5]!, steps[4]!];
+          job(value, "output")["steps"] = steps;
+        },
+        (value) => {
+          map(allSteps(job(value, "output"))[2]!["with"])["path"] = "source-uncached";
+        },
         (value) => {
           map(value.on.workflow_dispatch.inputs)["command"] = { type: "string", default: text };
         },

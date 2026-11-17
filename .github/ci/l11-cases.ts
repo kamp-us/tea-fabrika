@@ -71,6 +71,51 @@ export const transformed: Readonly<Record<string, Readonly<Record<string, string
   },
 };
 
+export const diffs: Readonly<Record<string, string>> = {
+  "l11-inputs/cached": "07b9a4c2a742106a906fc09fc583c339e8f92e20dfe470baf1b6ef7b1d8bd5e6",
+  "l11-inputs/uncached": "c61c599f22261cc12981f76e745c1ffcdafbc7de9aeef84d78f7749f07c4c2da",
+  "l11-reply/cached": "aaef72006996d6a43955a4c7b7e5cd343c111a72c3e886743e493a4efdb10fa7",
+  "l11-span-name/cached": "66f69406944f8c12d9697a1da5445685deb566841bf90ec3569a565ef9b56e13",
+  "l11-span-code/cached": "f30599be1ecda5a3a5b89aa3ee3b1cff417a265b6e3e915200babb06f8fc9e83",
+  "l11-span-errcode/cached": "1334bf0448853aae99a42e04815d6d4724a73c709c08139b01806d58b8f500f1",
+  "l11-log/cached": "2b41ae92822378b45575fcb9b14196106dcc96df534f7767abc6e6aef26ef3f2",
+};
+
+const setupHashes: ReadonlyArray<readonly [string, string]> = [
+  [hashes.lock, "pnpm-lock.yaml"],
+  ...(["cached", "uncached"] as const).flatMap((variant): Array<[string, string]> => [
+    [hashes.lock, `source-${variant}/pnpm-lock.yaml`],
+    [hashes.workspace, `source-${variant}/pnpm-workspace.yaml`],
+    [sources[variant].law, `source-${variant}/${file}`],
+    [hashes[runtime], `source-${variant}/${runtime}`],
+    [hashes[children], `source-${variant}/${children}`],
+  ]),
+];
+
+export const bootstrap = [
+  `test "$(git -C source-cached rev-parse HEAD)" = ${cached}`,
+  `test "$(git -C source-uncached rev-parse HEAD)" = ${uncached}`,
+  ...[
+    ...new Set(
+      setupHashes.flatMap(([, path]) =>
+        path
+          .split("/")
+          .slice(0, -1)
+          .map((_, index) =>
+            path
+              .split("/")
+              .slice(0, index + 1)
+              .join("/"),
+          ),
+      ),
+    ),
+  ].map((path) => `test -d '${path}' && test ! -L '${path}'`),
+  ...setupHashes.flatMap(([hash, path]) => [
+    `test -f '${path}' && test ! -L '${path}'`,
+    `printf '%s\\n' '${hash}  ${path}' | sha256sum --check --status`,
+  ]),
+].join("\n");
+
 const prefix = "P42 slice 1: a code start on the real Worker path ";
 
 export const aggregate = `${prefix}L11: every storage read and write in the child and lifecycle flows keeps error text and metadata out of outputs`;
@@ -102,6 +147,16 @@ export const sibling = (path: (typeof paths)[number], output: (typeof outputs)[n
   `${prefix}L11: Project.${path === "exit" ? "processExit" : "processChild"} ${path} failures keep storage text and metadata out of ${output}`;
 
 export const titles = [aggregate, ...paths.flatMap((path) => outputs.map((output) => sibling(path, output)))];
+
+export const names = [
+  ...titles,
+  `${prefix}scenario: L10: a committed child without its descriptor recovers and configures once`,
+  `${prefix}scenario: L10: a retry after the first alarm write fails arms the saved wake`,
+  `${prefix}scenario: Desk S1 L1, L2: the founder's letter starts two programs with no start grant, as the fabrika's owner, and each started line names the founder as member`,
+  `${prefix}scenario: L9: a code start sends nothing to any client: no view, no notify, no focus`,
+  `${prefix}scenario: L10: a started child runs, and a throw restarts it in its own object while others keep their counts`,
+  "Desk S1: start and stop refusals decode by name L4: every stop_child and start_child refusal decodes by its name, and no other word does",
+];
 
 export const output = (request: Request): (typeof outputs)[number] | null => {
   switch (request.case) {
