@@ -21,7 +21,7 @@ on:
         description: Exact cached source commit
         required: true
         type: string
-        default: 461d3f93a8c3d84fc25e8139493c59cab5632ebd
+        default: 07c65ba2f2065cc87dfdab106b81534652af011e
 permissions:
   contents: read
 jobs:
@@ -48,7 +48,7 @@ jobs:
       - &a3
         uses: actions/checkout@v7
         with:
-          ref: 461d3f93a8c3d84fc25e8139493c59cab5632ebd
+          ref: 07c65ba2f2065cc87dfdab106b81534652af011e
           path: source-cached
           persist-credentials: false
           fetch-depth: 1
@@ -57,7 +57,7 @@ jobs:
       - &a4
         uses: actions/checkout@v7
         with:
-          ref: e3754f43e9b9cc27f2bf44918e8d657f2a863c9d
+          ref: 610ab4c2097e363979cc16ec89675f9aa9d64a44
           path: source-uncached
           persist-credentials: false
           fetch-depth: 1
@@ -66,8 +66,8 @@ jobs:
       - &a5
         name: verify exact source before setup
         run: |-
-          test "$(git -C source-cached rev-parse HEAD)" = 461d3f93a8c3d84fc25e8139493c59cab5632ebd
-          test "$(git -C source-uncached rev-parse HEAD)" = e3754f43e9b9cc27f2bf44918e8d657f2a863c9d
+          test "$(git -C source-cached rev-parse HEAD)" = 07c65ba2f2065cc87dfdab106b81534652af011e
+          test "$(git -C source-uncached rev-parse HEAD)" = 610ab4c2097e363979cc16ec89675f9aa9d64a44
           test -d 'source-cached' && test ! -L 'source-cached'
           test -d 'source-cached/next' && test ! -L 'source-cached/next'
           test -d 'source-cached/next/apps' && test ! -L 'source-cached/next/apps'
