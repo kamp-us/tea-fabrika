@@ -1,4 +1,4 @@
-import { applyCell } from "@demlik/tea";
+import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
 import { type ProgramList } from "../check.ts";
@@ -115,6 +115,8 @@ const answer = Cmd.make("answer", {
   ok: Schema.Null,
   err: [],
 });
+
+const CMDS = [write, submit, interrupt, close, keep, answer];
 
 type Output =
   | ReturnType<typeof write>
@@ -660,11 +662,13 @@ const statusRow = (text: string, cols: number): string => {
   return `\x1b[90m${cut}\x1b[0m`;
 };
 
+const unchanged = (s: Model): Step => [s, []];
+
 /** The pure S1 editor. A parent steps it; no runtime, terminal or history file is opened here. */
-export const editor = Machine.make({
+export const editor = Machine.make<Model, typeof Msg.Type, (typeof CMDS)[number], Sub<never>, Context>({
   model: Model,
   msg: Msg,
-  cmds: [write, submit, interrupt, close, keep, answer],
+  cmds: CMDS,
   init: (loaded, ctx: Context): Step => {
     const limit = Math.max(1, Math.floor(ctx.historyLimit));
     const [framing] = keys.init(null, undefined);
@@ -764,5 +768,17 @@ export const editor = Machine.make({
         (): Step => [s, []],
       ),
     ended: (s): Step => [{ ...s, mode: Mode.cases.ended.make({}) }, [write({ bytes: "\x1b[?2004l" })]],
+    write_ok: unchanged,
+    write_err: unchanged,
+    submit_ok: unchanged,
+    submit_err: unchanged,
+    interrupt_ok: unchanged,
+    interrupt_err: unchanged,
+    close_ok: unchanged,
+    close_err: unchanged,
+    keep_ok: unchanged,
+    keep_err: unchanged,
+    answer_ok: unchanged,
+    answer_err: unchanged,
   },
 });

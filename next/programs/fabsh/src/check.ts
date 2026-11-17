@@ -22,7 +22,7 @@ const accepts = (writer: SchemaAST.AST, reader: SchemaAST.AST): boolean => {
     return true;
   }
 
-  if ((reader.checks ?? []).some((check) => !(writer.checks ?? []).includes(check))) {
+  if ((reader.checks ?? []).some((check) => !writer.checks?.includes(check))) {
     return false;
   }
 
