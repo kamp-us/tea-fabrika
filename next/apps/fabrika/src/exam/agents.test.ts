@@ -466,7 +466,7 @@ it.prop(
     personRefusalControls();
 
     for (const inputs of declarationSets(declarations)) {
-      expect(Result.isSuccess(Schema.decodeUnknownResult(Programs.Program.schema)(declared(inputs)))).toBe(true);
+      expect(Result.isSuccess(Schema.decodeResult(Programs.Program.schema)(declared(inputs)))).toBe(true);
     }
 
     checkDeclarations(cleanTools, declarations);
