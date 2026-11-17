@@ -288,12 +288,13 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
   running (a program's window, the desk, keys, the look) or need to bind a socket is run by a Claude
   agent instead. A Codex box can start neither, so a Codex build there would come back half checked.
   Still one agent per step.
-- **A tool that needs ports, sockets or its own processes runs in a container with its own
-  network** (owner, 2026-11-09,
-  [0045](../../../.decisions/0045-test-steps-run-in-containers.md)), never behind a hole in a
-  sandbox row. Mutation's Stryker run is the first: it runs through `mutbox.ts`, now in the hourly
-  run against main (0066); a quest parked inside its mutation step before 0066 still finishes it,
-  with `drive.ts` running `mutbox.ts` before that step's Claude agent starts (`drive.ts --agent claude`).
+- **Check execution:** ordinary safe checks run directly in parallel under the existing resource
+  caps. Launchd, real Electron and process-signal laws use disposable macOS CI. Read
+  [0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md) for the split; checks that still need
+  network isolation keep [0045](../../../.decisions/0045-test-steps-run-in-containers.md)'s fence.
+  Inspect the actual selected tests and cleanup before a direct run. A plain filename is not
+  clearance; narrow a `--changed` selection that reaches these laws to verified-safe local paths.
+  Mutation still runs through `mutbox.ts` on its hourly schedule (0066).
 - **One fresh Claude agent per step, not one long driver per ticket** (owner, 2026-11-09). Each
   step gets a new agent with a short brief. It reads the quest's state file
   (`BOXES/state/<quest>.md`), does its one step, and writes the state file back for the next agent:
@@ -491,8 +492,8 @@ visible, and never weaken the rules to hide this message.
    (above). No builder starts before tests that exist. Each brief names its skill.
    Never start a review while a host-only law the plan names has not passed on a real machine
    ([0178](../../../.decisions/0178-host-only-laws-run-first.md)). The build runs it, or you run it right after
-   the build (step 7). On the owner's Mac it runs only after you have read every line it can reach
-   that signals a process or calls launchd, and the owner has said yes (0178).
+   the build (step 7). Launchd, real Electron and process-signal laws run on disposable macOS CI,
+   never on the owner's laptop ([0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md)).
    box.sh run --step checks order and slots, and saves the run row.
 6. **After each step:** read drive's last line, the report and the diff, and log the run the same day:
    one row file in `field/runs/` (`fieldrow.py` for Codex, `clauderow.ts` for a Claude agent, a
@@ -505,15 +506,12 @@ visible, and never weaken the rules to hide this message.
    Step-commit checks file owners.
    Each correction the owner makes, and each slip of the lead's own, gets a note too, with the code
    that would have caught it. Running the steps by hand is how `next/`'s pipeline learns.
-7. **Run what the box cannot,** yourself: Electron e2e and screenshots. One Electron app at a time,
-   each run with its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`. Look at every shot.
-   A host-only law runs here before the first review, never at the end of the quest (0178). Before
-   it runs on the owner's Mac, read every line it can reach that signals a process or calls
-   launchd, and work out the worst target each could get: a pid or group of 0, 1 or -1 reaches
-   every process the owner has, and so does `launchctl bootout` of a whole domain. Then ask the
-   owner, and run it only on a yes. On the
-   real machine a test touches only its own label, files and processes: its own temp home and its
-   own test label under launchd, no focus taken, and nothing left behind.
+7. **Obtain proof the box cannot supply** before the first review (0178). Use eligible CI for each
+   law. Launchd, real Electron and process-signal laws use disposable macOS CI, never the owner's
+   laptop ([0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md)). A workflow's green result
+   proves only the laws it actually ran. Keep the test's own temp home, label, files and processes;
+   one Electron app at a time, each with its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`.
+   No focus taken and nothing left behind. Look at every screenshot.
 8. **Ready to land.** A quest agent never signs as lead, pushes, opens the pull request or adds
    it to the merge queue: the permission check refuses a subagent the lead key, and the quest stops
    ([0056](../../../.decisions/0056-lead-runs-a-refused-step-itself.md), ticket 652). Its last act
