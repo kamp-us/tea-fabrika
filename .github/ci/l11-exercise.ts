@@ -1005,7 +1005,7 @@ const variants = (mode: Internal): readonly Cases.Variant[] =>
       compare: ({ variant }) => [variant],
       inputs: () => ["uncached", "cached"] as const,
     },
-    () => ["cached"],
+    () => ["cached"] as const,
   );
 
 const observed = (record: TestRecord) =>
