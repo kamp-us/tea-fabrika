@@ -636,7 +636,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
     );
   });
 
-  // scenario: pnpm 12 refuses exec in the staged copy's folder, which has no package.
+  // scenario: package-manager startup is unavailable; the installed formatter still works.
   it("scenario: staged formatting uses the installed formatter in a folder without a package", () => {
     withRepo(
       [
@@ -644,8 +644,13 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
         ["field/one.json", "tests"],
       ],
       (r) => {
-        r.env.PATH = process.env.PATH;
-        r.env.HOME = process.env.HOME;
+        writeFileSync(
+          join(r.dir, "bin/pnpm"),
+          `#!${process.execPath}\nconsole.error("fixture refuses pnpm exec startup"); process.exit(97);\n`,
+          { mode: 0o755 },
+        );
+        const unavailable = r.call("pnpm", ["exec", "oxfmt", "--version"]);
+        expect(unavailable.code, unavailable.text).toBe(97);
 
         r.changed(".oxfmtrc.json", '{"useTabs":true,"printWidth":100,"ignorePatterns":["field/**"]}\n');
         const source = 'export const value = () => {\n\treturn "changed";\n};\n';
