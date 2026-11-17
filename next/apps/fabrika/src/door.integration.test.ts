@@ -420,6 +420,7 @@ const world = Effect.fnUntraced(function* (
 
   const deliveries: Array<Delivery> = [],
     notices: Array<{ client: string; news: News }> = [];
+
   const controls = {
     deliver: (_: Delivery): DeliveryCheck => Effect.void,
     notify: (_client: string, _news: News): Effect.Effect<void, LedgerError> => Effect.void,

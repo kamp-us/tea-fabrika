@@ -13,6 +13,7 @@ import { Patch } from "./Patch.ts";
  * @category schemas
  */
 export const View = Schema.Json;
+
 /**
  * A view as JSON, as `View` decodes it.
  *
@@ -21,6 +22,7 @@ export const View = Schema.Json;
 export type View = typeof View.Type;
 
 const whole = { type: Schema.Literal("whole"), rev: Schema.Number, view: View };
+
 const patch = { type: Schema.Literal("patch"), base: Schema.Number, rev: Schema.Number, patch: Schema.Array(Patch) };
 
 /**
@@ -31,6 +33,7 @@ const patch = { type: Schema.Literal("patch"), base: Schema.Number, rev: Schema.
  * @category schemas
  */
 export const Update = Schema.Union([Schema.Struct(whole), Schema.Struct(patch)]);
+
 /**
  * One view update, as `Update` decodes it.
  *
@@ -48,6 +51,7 @@ export const Published = Schema.Union([
   Schema.Struct({ ...whole, pid: Schema.String }),
   Schema.Struct({ ...patch, pid: Schema.String }),
 ]);
+
 /**
  * One view update with its pid, as `Published` decodes it.
  *
@@ -67,6 +71,7 @@ export const News = Schema.TaggedUnion({
   granted: { nonce: Schema.String },
   view: { update: Published },
 });
+
 /**
  * One piece of news for a client, as `News` decodes it.
  *

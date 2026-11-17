@@ -163,6 +163,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
 
   const deliveries: Incoming[] = [],
     notices: Array<{ client: string; news: News }> = [];
+
   const controls = {
     letter: "",
     open: (_process: string, _client: string): Effect.Effect<Schema.Json> => Effect.succeed(null),

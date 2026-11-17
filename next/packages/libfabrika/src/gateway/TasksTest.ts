@@ -258,6 +258,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
   ]);
 
   const urls: Array<string> = [URL];
+
   const notices: Array<{ client: string; news: News }> = [],
     delivered: Array<unknown> = [],
     opened: Array<unknown> = [],
