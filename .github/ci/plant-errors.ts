@@ -145,6 +145,15 @@ const diagnostic = (key: Request["case"], error: typeof ErrorDetails.Type) => {
     return null;
   }
 
+  if (
+    key === "checklist-pid" &&
+    message === "the client heard the checklist's views: expected 0 to be greater than 0" &&
+    error.actual === 0 &&
+    error.expected === 0
+  ) {
+    return "AssertionError: the client heard the checklist's views";
+  }
+
   if (key === "checklist-pid" && /^a notice names its process(?::|\n|$)/.test(message)) {
     return "AssertionError: a notice names its process";
   }
@@ -248,6 +257,16 @@ export const failure = (key: Request["case"], errors: readonly unknown[]) => {
       !selected.failures.some(
         (entry) => entry.diagnostic === safe && entry.line === assertion?.line && entry.column === assertion.column,
       )
+    ) {
+      return null;
+    }
+
+    if (
+      key === "checklist-pid" &&
+      safe === "AssertionError: the client heard the checklist's views" &&
+      (assertion?.line !== 824 ||
+        assertion.column !== 80 ||
+        !new RegExp(`(?:^|[/( ])${Regex.escape(selected.test)}:824:80(?:[)\\s]|$)`).test(error.stack ?? ""))
     ) {
       return null;
     }

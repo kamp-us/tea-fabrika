@@ -519,6 +519,95 @@ it.prop(
   options,
 );
 
+// Plant: treat any PID failure, matcher value or nearby frame as the current missing-field witness.
+it.prop(
+  "current missing-PID proof requires the exact zero-view assertion and causal frame",
+  { content: Schema.String, offset: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30 })) },
+  ({ content, offset }) => {
+    const key = "checklist-pid";
+    const selected = cases[key];
+    const marker = `private-value-${JSON.stringify(content)}-end`;
+
+    const generated = Result.match(
+      Result.try(() => expect(0, "the client heard the checklist's views").toBeGreaterThan(0)),
+      {
+        onSuccess: () => Matcher.make({ name: "Error", message: "matcher did not fail" }),
+        onFailure: (error) => Schema.decodeUnknownSync(Matcher)(error),
+      },
+    );
+
+    const error = { ...generated, stack: `at selected (${root}/${selected.test}:824:80)` };
+
+    const expected = {
+      diagnostic: "AssertionError: the client heard the checklist's views",
+      assertion: { line: 824, column: 80 },
+    };
+
+    expect(generated.actual).toBe(0);
+    expect(generated.expected).toBe(0);
+    expect(failure(key, [error])).toEqual(expected);
+    expect(failure(key, [{ name: "Error", message: marker, cause: error }])).toEqual(expected);
+
+    const invalid: readonly unknown[] = [
+      { ...error, name: "Error" },
+      { ...error, name: "TypeError" },
+      { ...error, name: "SyntaxError" },
+      { ...error, cause: error },
+      { name: "Error", message: marker, cause: [error] },
+      { ...error, message: "another assertion: expected 0 to be greater than 0" },
+      { ...error, message: "the client heard the checklist's views: expected 0 to be greater than or equal to 0" },
+      { ...error, message: "the client heard the checklist's views: expected 0 to be 1 // Object.is equality" },
+      { ...error, message: `${marker}${generated.message}` },
+      { ...error, message: `${generated.message}${marker}` },
+      { ...error, message: `${generated.message}\n` },
+      { ...error, actual: offset },
+      { ...error, actual: -offset },
+      { ...error, expected: offset },
+      { ...error, actual: "0" },
+      { ...error, expected: "0" },
+      { ...error, actual: null },
+      { ...error, expected: null },
+      { ...error, actual: undefined },
+      { ...error, expected: undefined },
+      { ...error, actual: false },
+      { ...error, expected: false },
+      { ...error, stack: `at selected (${root}/${selected.test}:${824 + offset}:80)` },
+      { ...error, stack: `at selected (${root}/${selected.test}:824:${80 + offset})` },
+      { ...error, stack: `at selected (${root}/unrelated.test.ts:824:80)` },
+      { ...error, stack: `at selected (${root}/not-${selected.test}:824:80)` },
+      { ...error, stack: `at selected (${root}/${selected.test}:824:80private)` },
+      { ...error, stack: `at selected (${root}/${selected.test}:828:68)` },
+      { ...error, stack: undefined },
+      { ...error, message: "Test timed out in 60000ms" },
+      marker,
+      null,
+      {},
+    ];
+
+    for (const value of invalid) {
+      expect(failure(key, [value])).toBeNull();
+    }
+
+    expect(failure(key, [error, error])).toBeNull();
+    expect(failure(key, [])).toBeNull();
+
+    for (const other of Request.fields.case.literals.filter((other) => other !== key)) {
+      expect(failure(other, [error])).toBeNull();
+    }
+
+    const raw = report(key, "failed", [marker]);
+    raw.testResults[0]!.assertionResults[0]!.meta.plant = failure(key, [error]);
+    const observed = observation(key, root, JSON.stringify(raw), 1, 12);
+
+    expect(observed).toMatchObject({ _tag: "failed", ...expected });
+    expect(JSON.stringify(observed)).not.toContain(marker);
+    expect(JSON.stringify(observed)).not.toContain("actual");
+    expect(JSON.stringify(observed)).not.toContain("expected");
+    expect(JSON.stringify(observed)).not.toContain(root);
+  },
+  options,
+);
+
 // Plant: require formatted minus/plus diff lines absent from JSON failureMessages
 it.prop(
   "watcher observations decode installed matcher stacks and keep ambiguous outcomes incomplete",

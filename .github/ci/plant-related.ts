@@ -30,9 +30,9 @@ export const accepted = (key: Request["case"], model: Model): boolean => {
 
   return (
     key !== "checklist-pid" ||
-    (model.broken.diagnostic === "AssertionError: a notice names its process" &&
-      model.broken.assertion?.line === 828 &&
-      model.broken.assertion.column === 68)
+    (model.broken.diagnostic === "AssertionError: the client heard the checklist's views" &&
+      model.broken.assertion?.line === 824 &&
+      model.broken.assertion.column === 80)
   );
 };
 

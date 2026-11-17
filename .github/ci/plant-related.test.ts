@@ -23,8 +23,8 @@ it.prop(
       ...details,
       exit: 1,
       category: "assertion",
-      diagnostic: "AssertionError: a notice names its process",
-      assertion: { line: 828, column: 68 },
+      diagnostic: "AssertionError: the client heard the checklist's views",
+      assertion: { line: 824, column: 80 },
       counts: { ...details.counts, passed: 0, failed: 1 },
       suites: { ...details.suites, passed: 0, failed: 1 },
     });
@@ -36,8 +36,10 @@ it.prop(
     for (const wrong of [
       { ...broken, diagnostic: "AssertionError: another assertion" },
       { ...broken, assertion: null },
-      { ...broken, assertion: { line: 828 + offset, column: 68 } },
-      { ...broken, assertion: { line: 828, column: 68 + offset } },
+      { ...broken, assertion: { line: 824 + offset, column: 80 } },
+      { ...broken, assertion: { line: 824, column: 80 + offset } },
+      { ...broken, diagnostic: "AssertionError: a notice names its process", assertion: { line: 828, column: 68 } },
+      { ...broken, assertion: { line: 828, column: 68 } },
     ]) {
       expect(accepted("checklist-pid", { ...model, broken: wrong })).toBe(false);
     }
