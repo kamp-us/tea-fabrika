@@ -96,6 +96,16 @@ describe("a tracked shell or Python file", () => {
       how,
       kinds: how === "direct" ? [] : words.map(({ kind }) => kind),
       bang: how === "direct" ? `#!${folder}${name}${args}` : `#!/usr/bin/${how} ${spoken(words)}${name}${args}`,
+      aliases:
+        how === "env -S"
+          ? [
+              `#!/usr/bin/env -S ${spoken(words)}"${name}"${args}`,
+              `#!/usr/bin/env -S ${spoken(words)}'${name}'${args}`,
+              `#!/usr/bin/env --split-string=${spoken(words)}${name}${args}`,
+              `#!/usr/bin/env --split-string=${spoken(words)}"${name}"${args}`,
+              `#!/usr/bin/env --split-string ${spoken(words)}'${name}'${args}`,
+            ]
+          : [],
     }));
 
   /** A `#!` line naming an interpreter that is neither a shell nor Python. */
@@ -134,16 +144,20 @@ describe("a tracked shell or Python file", () => {
         reached.add(script.name.startsWith("python") ? "python" : "shell");
         const body = rest.split("\n").slice(1).join("\n");
 
-        const findings = check(
-          [...LISTED, path, fine],
-          reader({ [path]: `${script.bang}\n${body}`, [fine]: `${other}\n${body}` }),
-        );
+        // F2 from the whole-source review: GNU env removes split-string quotes and accepts
+        // --split-string= too. Each generated interpreter and option prefix reaches every spelling.
+        for (const bang of [script.bang, ...script.aliases]) {
+          const findings = check(
+            [...LISTED, path, fine],
+            reader({ [path]: `${bang}\n${body}`, [fine]: `${other}\n${body}` }),
+          );
 
-        expect(findings).toEqual([{ _tag: "new_script", path }]);
-        expect(findings.map(line).join("\n")).toContain(path);
-        // A marked edge passes, as a `.sh` file does.
-        const marked = `${script.bang}\n# edge: runs before Node exists (0113)\n${body}`;
-        expect(check([...LISTED, path], reader({ [path]: marked }))).toEqual([]);
+          expect(findings).toEqual([{ _tag: "new_script", path }]);
+          expect(findings.map(line).join("\n")).toContain(path);
+          // A marked edge passes, as a `.sh` file does.
+          const marked = `${bang}\n# edge: runs before Node exists (0113)\n${body}`;
+          expect(check([...LISTED, path], reader({ [path]: marked }))).toEqual([]);
+        }
       }),
       runs,
     );

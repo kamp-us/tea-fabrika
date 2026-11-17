@@ -269,10 +269,13 @@ const cases: fc.Arbitrary<Case> = fc
       }),
       { nil: null },
     ),
-    model: fc.record({ flag: fc.option(named, { nil: null }), env: fc.option(named, { nil: null }) }),
+    model: fc.record({
+      flag: fc.option(named, { nil: null }),
+      env: fc.option(fc.oneof(named, fc.constant("")), { nil: null }),
+    }),
     effort: fc.record({
       flag: fc.option(fc.constantFrom("low", "medium", "high"), { nil: null }),
-      env: fc.option(fc.constantFrom("low", "medium", "high", "xhigh"), { nil: null }),
+      env: fc.option(fc.constantFrom("", "low", "medium", "high", "xhigh"), { nil: null }),
     }),
     parent: fc.option(word, { nil: null }),
     step: fc.option(fc.constantFrom("tests", "build", "review"), { nil: null }),
@@ -419,6 +422,8 @@ const reaches = (c: Case): ReadonlyArray<string> => {
     ["file times", c.lines !== null && c.started === null],
     ["given times", c.started !== null],
     ["model from env", c.model.flag === null && c.model.env !== null],
+    ["empty model from env", c.model.flag === null && c.model.env === ""],
+    ["empty effort from env", c.effort.flag === null && c.effort.env === ""],
     ["model default", c.model.flag === null && c.model.env === null],
     ["step bounds", c.step !== null && c.status !== null],
     ["bounds without step", c.step === null && c.status !== null],
@@ -430,6 +435,8 @@ const reaches = (c: Case): ReadonlyArray<string> => {
 
 const REQUIRED = [
   "bounds without step",
+  "empty effort from env",
+  "empty model from env",
   "file times",
   "given times",
   "model default",
