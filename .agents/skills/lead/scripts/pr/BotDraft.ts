@@ -38,7 +38,7 @@ type Ask = {
 export const run = (ask: Ask): void => {
   const program = Effect.gen(function* () {
     if (!ask.write) {
-      return yield* new DraftRefused({ reason: "installation lacks pull request write permission" });
+      return yield* DraftRefused.make({ reason: "installation lacks pull request write permission" });
     }
 
     const client = yield* HttpClient.HttpClient;
@@ -59,17 +59,17 @@ export const run = (ask: Ask): void => {
 
       const response = yield* client
         .execute(request)
-        .pipe(Effect.mapError(() => new DraftRefused({ reason: "GitHub request failed" })));
+        .pipe(Effect.mapError(() => DraftRefused.make({ reason: "GitHub request failed" })));
 
       if (response.status < 200 || response.status >= 300) {
-        return yield* new DraftRefused({
+        return yield* DraftRefused.make({
           reason: `GitHub refused draft request: ${response.status}`,
           status: response.status,
         });
       }
 
       return yield* response.json.pipe(
-        Effect.mapError(() => new DraftRefused({ reason: "GitHub returned unreadable JSON" })),
+        Effect.mapError(() => DraftRefused.make({ reason: "GitHub returned unreadable JSON" })),
       );
     });
 
@@ -82,7 +82,7 @@ export const run = (ask: Ask): void => {
     const head = remote.commit.sha;
 
     if (!/^[a-f0-9]{40}$/.test(head) || head !== ask.head) {
-      return yield* new DraftRefused({ reason: "remote branch differs from the expected head" });
+      return yield* DraftRefused.make({ reason: "remote branch differs from the expected head" });
     }
 
     const path = `/repos/${ask.repo}/pulls`;
@@ -125,7 +125,7 @@ export const run = (ask: Ask): void => {
       pr.user.type !== "Bot" ||
       pr.user.login !== `${app.slug}[bot]`
     ) {
-      return yield* new DraftRefused({
+      return yield* DraftRefused.make({
         reason: "pull request actor, text, draft, base or head differs; lead read required",
       });
     }
