@@ -124,6 +124,7 @@ const note = (row: Readonly<Record<string, unknown>>) =>
  *  `exit` listeners on that exit, synchronously, as the `tmp` package's graceful cleanup does. */
 const onExit = (undo: () => void) => {
   process.on("exit", undo);
+
   return () => process.off("exit", undo);
 };
 

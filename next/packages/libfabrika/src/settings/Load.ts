@@ -32,6 +32,7 @@ interface Place {
 export const file = Effect.fnUntraced(function* (place: Place) {
   const fs = yield* FileSystem.FileSystem;
   const toml = yield* Toml;
+
   const text = yield* fs.readFileString(place.path).pipe(
     Effect.catchTag("PlatformError", (cause) =>
       cause.reason._tag === "NotFound"
@@ -45,6 +46,7 @@ export const file = Effect.fnUntraced(function* (place: Place) {
           ),
     ),
   );
+
   const document = yield* toml.parse(text).pipe(
     Effect.mapError(
       (cause) =>
@@ -55,6 +57,7 @@ export const file = Effect.fnUntraced(function* (place: Place) {
         }),
     ),
   );
+
   return { file: place.name, document };
 });
 
@@ -79,13 +82,16 @@ export const resolve = Effect.fnUntraced(function* <A, R extends Record<string, 
 ) {
   const { repo, person } = options;
   yield* Files.validate(group, { repo, person }, { version: options.version });
+
   const resolved = yield* Sources.resolve(group, {
     flags: Sources.flags(options.flags),
     env: Sources.env(group.app, options.env),
     repo: Sources.file(repo.file, repo.document),
     person: Sources.file(person.file, person.document),
   });
+
   const saved = yield* Snapshot.make(group, resolved);
+
   return yield* Snapshot.read(group, saved).pipe(
     Effect.mapError(
       (cause) =>
@@ -123,10 +129,12 @@ export const load = Effect.fnUntraced(function* <A, R extends Record<string, Set
   const moved = options.env[app.home];
   const repo = yield* file({ path: path.join(options.repo, app.repo), name: app.repo });
   yield* Files.supported(app, repo, options.version);
+
   const person = yield* file(
     moved === undefined
       ? { path: path.join(options.home, `.${app.name}`, `${app.name}.toml`), name: app.person }
       : { path: path.join(moved, `${app.name}.toml`), name: `$${app.home}/${app.name}.toml` },
   );
+
   return yield* resolve(group, { repo, person, flags: options.flags, env: options.env, version: options.version });
 });

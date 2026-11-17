@@ -40,6 +40,7 @@ export const report = (rows: ReadonlyArray<Row>, options: { readonly all: boolea
 
   const hidden = rows.length - shown.length;
   const list = rows[0]?.app.list;
+
   const rest =
     hidden === 0 || list === undefined ? [] : [`Keys left at their defaults: ${hidden}. ${list} --all shows them.`];
 

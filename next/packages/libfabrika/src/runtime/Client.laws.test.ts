@@ -399,6 +399,7 @@ const brainStep = (b: Brain, c: ViewChoice): unknown => {
   const after = edit(b.kind, before, c.edit, c.at, c.word);
   b.views.push(after);
   b.rev += 1;
+
   return { type: "patch", base: b.rev - 1, rev: b.rev, patch: diff(json(before), json(after)) };
 };
 

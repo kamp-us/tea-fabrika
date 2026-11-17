@@ -1032,6 +1032,7 @@ describe("P12 Connection recording", () => {
       try {
         const gateway = await runtime.runPromise(ConnectionService),
           before = w.recorded.length;
+
         const actions: Record<typeof operation, () => Effect.Effect<unknown, unknown>> = {
           ring: () => gateway.ring("events", rev),
           probe: () => gateway.probe("session-test"),
@@ -1045,6 +1046,7 @@ describe("P12 Connection recording", () => {
               }),
             ),
         };
+
         await runtime.runPromise(Effect.exit(actions[operation]()));
         const rows = w.recorded.slice(before);
         expect(rows.some((row) => row.name === `connection.${operation}`)).toBe(true);

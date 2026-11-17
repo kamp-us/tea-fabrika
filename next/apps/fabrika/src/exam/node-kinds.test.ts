@@ -18,6 +18,7 @@ const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
 const CODE = /\.[cm]?[jt]sx?$/;
 
 const TEST = /(?:\.test\.tsx?|Test\.ts|\.test-support\.ts)$/;
+
 /** code-graph 0.15.0's `TEST_FILE` in `isTestFile`: the files whose exports it never judges. */
 const UNJUDGED = /\.((test|spec)(-d)?|type-test)\.tsx?$/;
 
@@ -38,6 +39,7 @@ const untracked = (path: string, name: string) =>
 const walk = (dir: string): ReadonlyArray<string> =>
   readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((entry) => {
     const path = dir === "" ? entry.name : `${dir}/${entry.name}`;
+
     return entry.isDirectory() ? (untracked(path, entry.name) ? [] : walk(path)) : entry.isFile() ? [path] : [];
   });
 

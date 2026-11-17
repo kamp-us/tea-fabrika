@@ -232,6 +232,7 @@ const refusal = Effect.fnUntraced(function* (operation: Effect.Effect<unknown, T
 
 // The keys a walk down a path must read as own keys: each one names a member every object inherits.
 const hostile = ["__proto__", "constructor", "toString"] as const;
+
 const Key = Schema.Literals([...hostile, "leaf", "a.b", "雪"]);
 
 // What a write through an inherited key would land on: the prototype, its constructor and its

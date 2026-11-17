@@ -301,6 +301,7 @@ beforeEach(async () => {
 });
 
 const top = mkdtempSync(join(tmpdir(), "p10-door-"));
+
 // A world opens its files with plain calls, so each is acquired into this one scope, which the
 // file's last hook closes before it removes the folder.
 const files = Scope.makeUnsafe();
@@ -419,6 +420,7 @@ const world = Effect.fnUntraced(function* (
 
   const deliveries: Array<Delivery> = [],
     notices: Array<{ client: string; news: News }> = [];
+
   const controls = {
     deliver: (_: Delivery): DeliveryCheck => Effect.void,
     notify: (_client: string, _news: News): Effect.Effect<void, LedgerError> => Effect.void,

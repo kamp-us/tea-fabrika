@@ -77,7 +77,9 @@ export const supervision = Supervision;
 const required = <A>(value: A | undefined): A => Option.getOrThrow(Option.fromUndefinedOr(value));
 
 const Nat = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }));
+
 const Cell = Schema.Struct({ pick: Nat, amount: Nat, reopen: Schema.Boolean });
+
 const Tape = Schema.Array(Cell).check(Schema.isMinLength(5), Schema.isMaxLength(25));
 
 const History = Schema.Array(
@@ -88,6 +90,7 @@ const History = Schema.Array(
 ).check(Schema.isMinLength(1), Schema.isMaxLength(3));
 
 const options = { timeout: 600_000, arbitrary: { seed: 119120, runs: 40, size: 100 } };
+
 const names = ["alpha:1", "alpha:2", "beta:1"];
 
 const call = Effect.fnUntraced(function* (
@@ -116,8 +119,10 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               const old = yield* w.local("alpha:1");
               const model = c.pick % 3 === 0 ? previous.saved.model : { payload: "😀é\n".repeat(c.amount % 120) };
               const next = { ...previous, saved: { ...previous.saved, model } };
+
               const delta =
                 new TextEncoder().encode(encode(next)).length - new TextEncoder().encode(encode(previous)).length;
+
               yield* w.replace("alpha:1", next);
               const use = yield* w.local("alpha:1");
               expect(use.program.bytes - old.program.bytes).toBe(delta);
@@ -325,10 +330,12 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             // Project alone, the call's recovery writes there may fit, and then a later one, on a
             // saved alarm, runs out.
             const spare = required(tape[1]).pick % 2;
+
             const tighten = (allowance: Limits["recovery"]["process"]) => ({
               ...allowance,
               ...(resource === "writes" ? { writes: spare } : { bytes: 1 }),
             });
+
             w.limits({
               ...defaults,
               recovery: {

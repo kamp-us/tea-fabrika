@@ -2921,34 +2921,7 @@
     {
       // 0563, 0021: a blank line before a `return` and every control statement, around a multi-line
       // binding, and between top-level statements, as the rule ships.
-      "files": [
-        ".agents/**",
-        ".github/ci/**",
-        "oxlint-plugins/**",
-        "next/packages/libfabrika/src/*",
-        "next/packages/libfabrika/src/access/**",
-        "next/packages/libfabrika/src/ci/**",
-        "next/packages/libfabrika/src/client/**",
-        "next/packages/libfabrika/src/codehost/**",
-        "next/packages/libfabrika/src/coordination/**",
-        "next/packages/libfabrika/src/desktop/**",
-        "next/packages/libfabrika/src/node/**",
-        "next/packages/libfabrika/src/packs/**",
-        "next/packages/libfabrika/src/permissions/**",
-        "next/packages/libfabrika/src/presence/**",
-        "next/packages/libfabrika/src/repositories/**",
-        "next/packages/libfabrika/src/schedules/**",
-        "next/packages/libfabrika/src/tasks/**",
-        "next/packages/libfabrika/src/tezgah/**",
-        "next/packages/tuval/**",
-        "next/packages/vitest/**",
-        "next/programs/chaos/**",
-        "next/programs/checklist/**",
-        "next/programs/counter/**",
-        "next/programs/inbox/**",
-        "next/programs/pipeline/**",
-        "next/programs/tezgah/**"
-      ],
+      "files": [".agents/**", ".github/ci/**", "oxlint-plugins/**", "next/**"],
       "rules": { "anti-slop/require-readable-spacing": "error" }
     }
   ]

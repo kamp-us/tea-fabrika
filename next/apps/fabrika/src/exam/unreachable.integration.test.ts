@@ -24,15 +24,18 @@ import { runsFor } from "@kampus/vitest";
 import { Effect, Schema } from "effect";
 
 const ROOT = resolve(import.meta.dirname, "../../../../..");
+
 const bin = resolve(ROOT, "node_modules", ".bin", "code-graph");
 
 // A planter owns every tree its case plants. The case's scope removes them when the case ends (0061).
 const planter = Effect.acquireRelease(
   Effect.sync(() => {
     const roots: Array<string> = [];
+
     const plant = (files: Readonly<Record<string, string>>): string => {
       const root = realpathSync(mkdtempSync(join(tmpdir(), "next-dead-")));
       roots.push(root);
+
       const base = {
         "package.json": JSON.stringify({ name: "plant", private: true }),
         "tsconfig.json": JSON.stringify({
@@ -50,6 +53,7 @@ const planter = Effect.acquireRelease(
 
       return root;
     };
+
     return { plant, roots };
   }),
   ({ roots }) =>
@@ -73,13 +77,16 @@ const reported = (root: string) => {
     cwd: root,
     encoding: "utf8",
   });
+
   expect(run.status, run.stderr).toBe(0);
+
   return Schema.decodeSync(Report)(run.stdout);
 };
 
 /** Every export the pass reports, by id, as `pnpm lint:dead` would gate it. */
 const flagged = (root: string) => {
   const report = reported(root);
+
   return [...report.unreachable.map((u) => u.id), ...report.unusedExports.map((u) => u.id)].sort();
 };
 
@@ -114,9 +121,12 @@ const Segment = Schema.String.check(
 
 /** A folder below next/: one to three generated segments deep. */
 const Folder = Schema.Array(Segment).check(Schema.isMinLength(1), Schema.isMaxLength(3));
+
 const Name = Schema.String.check(Schema.isPattern(/^[a-z][a-zA-Z0-9]{1,8}$/));
+
 /** Distinct export names. Each use gives them a prefix, so no two kinds of name collide. */
 const Names = Schema.UniqueArray(Name).check(Schema.isMinLength(1), Schema.isMaxLength(4));
+
 /** As `Names`, with at least two, for a file of several. */
 const Several = Schema.UniqueArray(Name).check(Schema.isMinLength(2), Schema.isMaxLength(4));
 
@@ -174,6 +184,7 @@ describe("node-kinds.json on the --unreachable pass (lint:dead)", () => {
         const { plant } = yield* planter;
         const nested = ["next", ...folder].join("/");
         const support = `${base}.test-support.ts`;
+
         // One helper at next/'s top, and a file of several in a nested folder, each used by its test.
         const files = {
           [`next/${support}`]: source([`t${one}`]),
@@ -181,6 +192,7 @@ describe("node-kinds.json on the --unreachable pass (lint:dead)", () => {
           [`${nested}/${support}`]: source(helpers.map((h) => `h${h}`)),
           [`${nested}/${base}.test.ts`]: user(helpers.map((h) => [support, `h${h}`])),
         };
+
         const supports = Object.keys(files).filter((path) => path.endsWith(".test-support.ts"));
         // The cases the law must meet: a helper at next/'s top, one deeper, and a file of several.
         expect(supports, "no case planted a helper at next/'s top").toContain(`next/${support}`);
@@ -213,6 +225,7 @@ describe("node-kinds.json on the --unreachable pass (lint:dead)", () => {
           dirs.filter((dir) => dir !== "next"),
           "no case planted a dead export in a nested folder",
         ).not.toEqual([]);
+
         const files = Object.fromEntries(
           dirs.flatMap((dir, i) => [
             [`${dir}/${base}.ts`, source(deads.map((d) => `d${i}${d}`))],
@@ -220,6 +233,7 @@ describe("node-kinds.json on the --unreachable pass (lint:dead)", () => {
             [`${dir}/${base}.test.ts`, user([[`${base}.test-support.ts`, `helper${i}`]])],
           ]),
         );
+
         const found = flagged(plant(files));
         expect(found).toEqual(
           expect.arrayContaining(dirs.flatMap((dir, i) => deads.map((d) => `${dir}/${base}.ts:d${i}${d}`))),
@@ -247,6 +261,7 @@ describe("node-kinds.json on the --unreachable pass (lint:dead)", () => {
         const places = EXTENSIONS.flatMap((ext) => spellings(base, suffix, ext).map((path) => `${dir}/${ext}/${path}`));
         const test = `${dir}/${base}.test.ts`;
         const named = (i: number) => helpers.map((h) => `h${i}${h}`);
+
         const files = {
           ...Object.fromEntries(places.map((path, i) => [path, source(named(i))])),
           [test]: user(places.flatMap((path, i) => named(i).map((n) => [relative(dirname(test), path), n] as const))),
@@ -303,6 +318,7 @@ describe("node-kinds.json on the --unreachable pass (lint:dead)", () => {
         const dirs = ["next", ["next", ...folder].join("/")];
         const fns = (i: number) => unused.map((u) => `u${i}${u}`);
         const consts = (i: number) => unused.map((u) => `c${i}${u}`);
+
         const files = Object.fromEntries(
           dirs.flatMap((dir, i) => [
             [
