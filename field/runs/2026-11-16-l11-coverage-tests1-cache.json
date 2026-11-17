@@ -1,0 +1,94 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-l11-coverage-tests1-cache",
+  "ticket": "1129",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1379",
+  "started": "2026-11-16T20:06:44-08:00",
+  "ended": "2026-11-16T20:09:09-08:00",
+  "parent": "2026-11-16-l11-coverage-tests1-baseline",
+  "active": null,
+  "role": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "next/ approved cache-only tests edit complete for lead commit. forms(secret) is calculated once per generated secret in storageSecrets and reused for marker selection and every output scan. Inverting the three edits reproduces integrated baseline byte-for-byte. Original generator reach, fresh scoped Project per cut, all16flows, sibling laws, error fields, encodings, assertions, seed119120,100runs and60000ms deadline remain. This is source/check completion, not runtime or speed proof.",
+  "step": "tests",
+  "head": "e3754f43e9b9cc27f2bf44918e8d657f2a863c9d",
+  "baseline": "e3754f43e9b9cc27f2bf44918e8d657f2a863c9d",
+  "planBody": "60f93d9b86e9",
+  "files": [
+    {
+      "path": "next/apps/fabrika/src/start-child.laws.integration.test.ts",
+      "baselineBlob": "50534934ca279d4eed07bcdd61aed578b03c801b",
+      "afterBlob": "a52494225e68abf7a72e9d9f4d2fd0a17617d2d4",
+      "sha256": "9eae1ecb08f3db5834a8c5de8488773ddf280f8f058971725321156d15d083e0",
+      "inverseCacheOnlyEqualsBaseline": true
+    }
+  ],
+  "laws": [
+    {
+      "law": "L11: every storage read and write in the child and lifecycle flows keeps error text and metadata out of outputs",
+      "red": "not run locally per assigned boundary; original coverage restored and assertion code unchanged; eligible remote proof owed"
+    },
+    {
+      "law": "16 L11 Project descriptor/recovery/configuration/exit sibling laws across reply/span/row/log",
+      "red": "not run locally; source unchanged byte-for-byte from integrated baseline"
+    }
+  ],
+  "plants": [],
+  "checks": [
+    {
+      "command": "pinned Node26.13.0/nice19 pnpm install --frozen-lockfile",
+      "result": "passed; dependencies were absent, no tracked dependency changes"
+    },
+    {
+      "command": "pinned Node26.13.0/nice19 pnpm format",
+      "result": "passed,0blocking; only owned source file dirty"
+    },
+    {
+      "command": "pinned Node26.13.0/nice19 pnpm lint",
+      "result": "passed exit0"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "owned git diff piped to leakgrep.sh",
+      "result": "passed,added text clean"
+    },
+    {
+      "command": "inverse3cache-edits comparison to baseline",
+      "result": "byte-identical,includes all generators/assertions/siblings"
+    }
+  ],
+  "runtime": {
+    "proofReady": false,
+    "seed": 119120,
+    "runs": 100,
+    "deadlineMs": 60000,
+    "inventory": null,
+    "cuts": null,
+    "encodingReach": null,
+    "durationMs": null,
+    "replayPath": null,
+    "runUrl": null,
+    "jobUrl": null
+  },
+  "privateEvidence": {
+    "diff": "../boxes/l11-coverage-tests1-cache.diff",
+    "sourceComparison": "../boxes/l11-coverage-tests1-cache-comparison.json",
+    "syntheticSequences": "../boxes/l11-coverage-tests1-pure-sequences.json"
+  },
+  "missing": [
+    "Eligible direct-run capability for baseline identical to main has not been supplied; no fake source difference created to force selection",
+    "Actual observed-inventory command/input sequence comparison and baseline/after ordinary timings",
+    "Each named-output plant, including encoded metadata-only leakage",
+    "Final-head whole integration file with all siblings and predeclared bounded consecutive after-passes",
+    "Lead/build coordinated typecheck and fresh exact-head review"
+  ],
+  "note": "No new product export/helper/API. No guarded integration law, plant, benchmark/profile, broadchanged run, pnpm typecheck, guard variable, local signal, CI dispatch/wait, extra optimization or subagent. No source test was imported/executed locally. Index, lead plan and public field rows untouched; no commit/push/publication. Pure earlier samples are synthetic inventory checks only. Lead owns commit/publication to originalPR1379.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null
+}
