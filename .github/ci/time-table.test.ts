@@ -1,5 +1,7 @@
 import { relative, resolve } from "node:path";
-import { type Duration, Effect } from "effect";
+import { it as effectIt } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
+import { type Duration, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import {
@@ -405,3 +407,69 @@ it("TT7: a step or file name with a pipe or a line break stays in its own cell",
     options,
   );
 });
+
+// The existing timing properties above keep their generators, assertions and run counts.
+effectIt.effect.prop(
+  "P3 missing or broken final results preserve independent progress and never invent file timings",
+  { count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30 })), broken: Schema.Boolean },
+  ({ count, broken }) =>
+    Effect.gen(function* () {
+      // Plant: require the final JSON before reading the progress journal.
+      const identity = {
+        run: env.GITHUB_RUN_ID,
+        attempt: env.GITHUB_RUN_ATTEMPT,
+        workflow: env.GITHUB_WORKFLOW,
+        event: env.GITHUB_EVENT_NAME,
+        sha: env.HEAD,
+        job: env.GITHUB_JOB,
+        leg: env.LEG,
+      };
+
+      const events = Array.from({ length: count }, (_, i) => ({
+        _tag: "test",
+        phase: "started",
+        project: "next",
+        file: `next/sample-${i}.test.ts`,
+        id: `123_${i}`,
+        seq: i + 1,
+        at: i + 1,
+        line: i + 1,
+        column: 0,
+      }));
+
+      const text = [{ _tag: "run", phase: "started", version: 1, leg: identity, seq: 0, at: 0 }, ...events]
+        .map((line) => `${JSON.stringify(line)}\n`)
+        .join("");
+
+      const given: Io = {
+        job: () => Effect.succeed(job),
+        read: (path) =>
+          path.endsWith("vitest-progress.ndjson")
+            ? Effect.succeed(text)
+            : broken
+              ? Effect.succeed("{broken")
+              : Effect.fail(Unread.make({ cause: new Error("missing report") })),
+      };
+
+      const actual = yield* collect({ ...env, RUNNER_TEMP: "/runner/temp" }, root, given, 0);
+      expect(actual.steps._tag).toBe("read");
+      expect(actual.files._tag).toBe("unavailable");
+      expect(actual.progress?._tag).toBe("partial");
+
+      if (actual.progress && actual.progress._tag !== "unavailable") {
+        expect(actual.progress.events).toEqual(events);
+        expect(actual.progress.active).toEqual(events);
+      }
+
+      const summary = markdown(actual);
+
+      for (const event of events) {
+        expect(summary).toContain(`| next | ${event.file} | ${event.id} | ${event.line}:0 |`);
+      }
+
+      expect(summary).toContain("Last observed activity");
+      expect(summary).not.toContain("hung");
+      expect(summary).not.toContain("current test");
+    }),
+  { arbitrary: { runs: runsFor({ fast: 100, full: 100 }), size: 30, concurrency: 1 } },
+);

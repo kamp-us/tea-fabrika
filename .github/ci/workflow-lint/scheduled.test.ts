@@ -1,4 +1,7 @@
 import { readFileSync } from "node:fs";
+import { it as effectIt } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
+import { Schema } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -1059,3 +1062,29 @@ it("property: the schedule's legs follow check.yaml's full matrix, so a new leg 
     options,
   );
 });
+
+effectIt.prop(
+  "P7 every scheduled test command requires its progress reporter and existing reporters and changed leg identity",
+  { index: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 })), substitute: Schema.Boolean },
+  ({ index, substitute }) => {
+    // Plant: remove the custom reporter requirement from the shared exact command rule.
+    const good = real();
+    expect(lintScheduled(JSON.stringify(good), check)).toEqual([]);
+
+    const targets = Object.values(good.jobs)
+      .flatMap((job) => job.steps)
+      .filter((item) => typeof item["run"] === "string" && item["run"].startsWith("pnpm exec vitest run"));
+
+    expect(targets).toHaveLength(4);
+    const item = targets[index]!;
+    item["run"] = String(item["run"]).replace(
+      "--reporter=./.github/ci/progress-reporter.ts ",
+      substitute ? "--reporter=./other.ts " : "",
+    );
+    expect(lintScheduled(JSON.stringify(good), check).length).toBeGreaterThan(0);
+    const missingLeg = real();
+    Reflect.deleteProperty(step(missingLeg, "changed", "vitest").env!, "LEG");
+    expect(lintScheduled(JSON.stringify(missingLeg), check).length).toBeGreaterThan(0);
+  },
+  { arbitrary: { runs: runsFor({ fast: 100, full: 100 }), size: 30, concurrency: 1 } },
+);

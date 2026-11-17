@@ -206,7 +206,7 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}/5
           FABRIKA_TEST_DEPTH: full
-        run: pnpm exec vitest run --project next --project next-integration --shard "$SHARD" --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
+        run: pnpm exec vitest run --project next --project next-integration --shard "$SHARD" --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
       # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
       # that answers, as in check.yaml.
       - name: chromium
@@ -221,7 +221,7 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}/2
           FABRIKA_TEST_DEPTH: full
-        run: pnpm exec vitest run --project next-visual --shard "${SHARD#e2e-}" --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
+        run: pnpm exec vitest run --project next-visual --shard "${SHARD#e2e-}" --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
       # Leg `tooling-k` runs shard `k/2` of the tooling tests, with the limit check.yaml's tooling
       # legs had before 0539 took them off the merge line, on the step itself, as next's.
       - name: tooling tests
@@ -230,7 +230,7 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}/2
           FABRIKA_TEST_DEPTH: full
-        run: pnpm exec vitest run --project tooling --shard "${SHARD#tooling-}" --passWithNoTests --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
+        run: pnpm exec vitest run --project tooling --shard "${SHARD#tooling-}" --passWithNoTests --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
       # The leg's Vitest report, for the report job to name each failing test. After a red step too,
       # so the leg that failed is the one whose report is kept. Named `results-next-<leg>` and
       # `results-tooling-<k>`, as before the two jobs became one: vitest.shards.ts's rows are
@@ -357,8 +357,9 @@ jobs:
         timeout-minutes: *next-limit
         env:
           FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
+          LEG: ${{ matrix.shard }}
           FABRIKA_TEST_DEPTH: full
-        run: pnpm exec vitest run --project next --project next-integration --project next-visual --project tooling $FILES --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
+        run: pnpm exec vitest run --project next --project next-integration --project next-visual --project tooling $FILES --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
       - name: results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7

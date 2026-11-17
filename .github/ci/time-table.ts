@@ -10,6 +10,7 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Duration, Effect, Result, Schedule, Schema } from "effect";
+import * as Progress from "./progress.ts";
 
 /** The step's name in every test leg; it times the steps before it. workflow-lint.ts holds both. */
 export const STEP = "time table";
@@ -55,7 +56,11 @@ export type Leg = {
 };
 
 /** The artifact: one leg's steps and test files. */
-export type Timings = Leg & { readonly steps: Section<Step>; readonly files: Section<TestFile> };
+export type Timings = Leg & {
+  readonly steps: Section<Step>;
+  readonly files: Section<TestFile>;
+  readonly progress?: Progress.Progress;
+};
 
 const Time = Schema.NullOr(Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)));
 
@@ -196,6 +201,7 @@ export const markdown = (timings: Timings): string =>
     `## Time table: ${cell(timings.job)}, leg ${cell(timings.leg)}`,
     section("Steps", timings.steps, stepTable),
     section("Slowest test files", timings.files, fileTable),
+    Progress.markdown(timings.progress ?? Progress.Progress.cases.unavailable.make({ reason: "unread" })),
     "",
   ].join("\n\n");
 
@@ -213,7 +219,7 @@ export class Unread extends Schema.TaggedError<Unread, { readonly brand: unique 
   cause: Schema.Defect(),
 }) {}
 
-const legOf = (env: Readonly<Record<string, string | undefined>>): Leg => ({
+export const legOf = (env: Readonly<Record<string, string | undefined>>): Leg => ({
   run: env["GITHUB_RUN_ID"] ?? "",
   attempt: env["GITHUB_RUN_ATTEMPT"] ?? "",
   workflow: env["GITHUB_WORKFLOW"] ?? "",
@@ -247,6 +253,14 @@ const filesOf = (path: string | undefined, root: string, io: Io): Effect.Effect<
       )
     : Effect.succeed(unavailable("REPORT is not set"));
 
+const progressOf = (env: Readonly<Record<string, string | undefined>>, io: Io): Effect.Effect<Progress.Progress> =>
+  env["RUNNER_TEMP"]
+    ? io.read(join(env["RUNNER_TEMP"], "vitest-progress.ndjson")).pipe(
+        Effect.map((text) => Progress.read(text, legOf(env))),
+        Effect.catchCause(() => Effect.succeed(Progress.Progress.cases.unavailable.make({ reason: "unread" }))),
+      )
+    : Effect.succeed(Progress.Progress.cases.unavailable.make({ reason: "unread" }));
+
 /**
  * One leg's timings from its environment and what `io` answers. It cannot fail. The two inputs are
  * read side by side: the report needs no wait on the jobs API's pauses.
@@ -258,9 +272,20 @@ export const collect = (
   pause: Duration.Input = PAUSE,
 ): Effect.Effect<Timings> =>
   Effect.all(
-    { steps: stepsOf(env["JOB_ID"], io, pause), files: filesOf(env["REPORT"], root, io) },
-    { concurrency: 2 },
-  ).pipe(Effect.map(({ steps, files }) => ({ ...legOf(env), steps, files })));
+    {
+      steps: stepsOf(env["JOB_ID"], io, pause),
+      files: filesOf(env["REPORT"], root, io),
+      progress: progressOf(env, io),
+    },
+    { concurrency: 3 },
+  ).pipe(
+    Effect.map(({ steps, files, progress }) => ({
+      ...legOf(env),
+      steps,
+      files,
+      ...(env["RUNNER_TEMP"] ? { progress } : {}),
+    })),
+  );
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const env = process.env;
