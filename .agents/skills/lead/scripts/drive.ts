@@ -2,7 +2,7 @@
 // lead tooling, run on our own laptop; it is not product. Run it in the background and read the
 // last line only: one JSON object with the outcome, the new head and the report's path.
 //
-//   node drive.ts <quest> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude]
+//   node drive.ts <quest> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude] [--sandbox danger-full-access]
 //                 [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>]
 //                 [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]
 //
@@ -123,6 +123,7 @@ import {
   stepRow,
   type Turned,
 } from "./agents.ts";
+import type { Sandbox } from "./codexexec.ts";
 import { pgrepAnswer, skipLine } from "./pgrep.ts";
 import * as Publish from "./pr/Publish.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
@@ -332,6 +333,7 @@ const Ask = Schema.Struct({
   quest: Schema.String,
   step: Schema.Literals(STEPS),
   agent: Schema.Literals(AGENTS),
+  sandbox: Schema.optionalKey(Schema.Literal("danger-full-access")),
   /** The model as the harness names it, and its effort where the harness offers one. */
   model: Schema.String,
   effort: Schema.NullOr(Schema.String),
@@ -1954,7 +1956,7 @@ export const holdsElectron = (step: StepName, flagged: boolean) => step === "mut
 
 const usage = () => {
   console.error(
-    "usage: node drive.ts <quest> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
+    "usage: node drive.ts <quest> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude] [--sandbox danger-full-access] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
   );
   process.exit(2);
 };
@@ -2059,6 +2061,7 @@ export interface StepArgs {
   readonly step: StepName;
   readonly brief: string;
   readonly agent: AgentName;
+  readonly sandbox?: Sandbox | undefined;
   /** Claude's model; a Codex box runs env.sh's CODEX_MODEL. */
   readonly model?: string | undefined;
   readonly electron: boolean;
@@ -2093,6 +2096,10 @@ const usageError = (reason: string): Refusal => refusal({ outcome: "usage", reas
  */
 export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   const { quest, step, agent, electron } = p;
+
+  if (p.sandbox !== undefined && (agent !== "codex-exec" || p.sandbox !== "danger-full-access")) {
+    return usageError("--sandbox danger-full-access is for --agent codex-exec");
+  }
 
   if (!/^[a-z0-9][a-z0-9-]*$/.test(quest) || !existsSync(p.brief)) {
     return usageError("a quest name and a brief file are required");
@@ -2191,6 +2198,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     quest,
     step,
     agent,
+    ...(p.sandbox === undefined ? {} : { sandbox: p.sandbox }),
     model: claude ? (p.model ?? "sonnet") : env.CODEX_MODEL,
     effort: claude ? null : env.CODEX_EFFORT,
     ticket,
@@ -2437,10 +2445,12 @@ const main = () => {
   const args = process.argv.slice(2);
   const [quest = "", step = "", brief = ""] = args;
   const agent = flag(args, "--agent") ?? "codex";
+  const sandbox = flag(args, "--sandbox");
 
   if (
     !(STEPS as readonly string[]).includes(step) ||
     !(AGENTS as readonly string[]).includes(agent) ||
+    (args.includes("--sandbox") && (agent !== "codex-exec" || sandbox !== "danger-full-access")) ||
     !existsSync(brief)
   ) {
     usage();
@@ -2455,6 +2465,7 @@ const main = () => {
     step: step as StepName,
     brief,
     agent: agent as AgentName,
+    ...(sandbox === "danger-full-access" ? { sandbox } : {}),
     model: flag(args, "--model"),
     electron: args.includes("--electron"),
     ticket: flag(args, "--ticket"),
@@ -2492,7 +2503,7 @@ const main = () => {
   }
 
   const program = Effect.gen(function* () {
-    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN);
+    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN, prepared.ask.sandbox);
     const line = yield* driveStep(env, agents, prepared);
     console.log(JSON.stringify(line));
     process.exitCode = line.exit;
