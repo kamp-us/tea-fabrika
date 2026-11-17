@@ -6,6 +6,11 @@ import ProgressReporter, { recording } from "./progress-reporter.ts";
 import * as Progress from "./progress.ts";
 import { collect, markdown as timingMarkdown } from "./time-table.ts";
 
+class CallbackFailure extends Schema.TaggedError<CallbackFailure, { readonly brand: unique symbol }>()(
+  "CallbackFailure",
+  {},
+) {}
+
 const options = { arbitrary: { runs: runsFor({ fast: 100, full: 100 }), size: 30, concurrency: 1 } };
 
 const Count = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 30 }));
@@ -347,7 +352,7 @@ it.effect.prop(
         result: () => ({ errors: [new Error(secret)] }),
       };
 
-      const edge = (call: () => Promise<void>) => Effect.tryPromise({ try: call, catch: (error) => error });
+      const edge = (call: () => Promise<void>) => Effect.tryPromise({ try: call, catch: () => CallbackFailure.make() });
       yield* edge(() => reporter.onTestRunStart());
       yield* edge(() => reporter.onTestModuleQueued(module));
       yield* edge(() => reporter.onTestModuleCollected(module));
@@ -468,7 +473,7 @@ it.effect.prop(
       });
 
       reporter.onInit({ config: { root: "/memory/root" } });
-      const edge = (call: () => Promise<void>) => Effect.tryPromise({ try: call, catch: (error) => error });
+      const edge = (call: () => Promise<void>) => Effect.tryPromise({ try: call, catch: () => CallbackFailure.make() });
       yield* edge(() => reporter.onTestRunStart());
 
       const module = {

@@ -51,8 +51,7 @@ export const Event = Schema.TaggedUnion({
 
 export type Event = typeof Event.Type;
 
-export const Header = Schema.Struct({
-  _tag: Schema.Literal("run"),
+export const Header = Schema.TaggedStruct("run", {
   phase: Schema.Literal("started"),
   version: Schema.Literal(1),
   leg: LegIdentity,
@@ -60,8 +59,7 @@ export const Header = Schema.Struct({
   at: Count,
 });
 
-export const End = Schema.Struct({
-  _tag: Schema.Literal("run"),
+export const End = Schema.TaggedStruct("run", {
   phase: Schema.Literal("ended"),
   reason: EndReason,
   seq: Position,
@@ -80,9 +78,8 @@ const Reason = Schema.Literals([
   "after_end",
 ]);
 
-const HookStart = Schema.Struct({
+const HookStart = Schema.TaggedStruct("hook", {
   ...fields,
-  _tag: Schema.Literal("hook"),
   phase: Schema.Literal("started"),
   hook: Hook,
 });
