@@ -11,6 +11,7 @@ import { ciRequired } from "./workflow-lint/ci-required.ts";
 import { lintCiSpeed } from "./workflow-lint/ci-speed.ts";
 import { classifyStep } from "./workflow-lint/classify.ts";
 import { failFast } from "./workflow-lint/fail-fast.ts";
+import { lintHost } from "./workflow-lint/host.ts";
 import { lintIssues } from "./workflow-lint/issues.ts";
 import { jobLaws } from "./workflow-lint/jobs.ts";
 import { lintNoTooling, mergeLine } from "./workflow-lint/merge-line.ts";
@@ -90,6 +91,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       ...lintIssues(files.workflows),
       ...lintCaches(files),
       ...lintCiSpeed(read(".github/workflows/ci-speed.yaml")),
+      ...lintHost(read(".github/workflows/host.yaml")),
     ];
 
     const manifest: unknown = JSON.parse(read("package.json"));
