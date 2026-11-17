@@ -1,7 +1,7 @@
 ---
 id: 0012
 title: At most 12 code agents run at once, still with one type check, one Electron app and one Docker box
-status: accepted
+status: amended-in-part by [0596](0596-eight-active-tracker-tickets.md)
 date: 2026-11-09
 tags: [machine, load, agents, laptop]
 ---
