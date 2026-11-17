@@ -1,13 +1,13 @@
 /**
  * The quota settings as a Worker reads them from a settings snapshot.
  */
+import * as Snapshot from "@kalfa/config/Snapshot";
 import * as ByteSize from "effect/ByteSize";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import type { Allowance, Limits } from "../processes/Quotas.ts";
 import * as Declarations from "../settings/Declarations.ts";
-import * as Snapshot from "../settings/Snapshot.ts";
 
 type Declared = {
   readonly writes: (typeof Declarations.writes.schema)["Type"];

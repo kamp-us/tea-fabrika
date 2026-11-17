@@ -2,9 +2,9 @@
  * The brain lifecycle's saved control state and commands.
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
+import type * as Snapshot from "@kalfa/config/Snapshot";
 import * as Schema from "effect/Schema";
 import * as Id from "../Id.ts";
-import type * as Snapshot from "../settings/Snapshot.ts";
 import { Status } from "./BrainControl.ts";
 import { Children, Readiness } from "./BrainProbe.ts";
 import { BrainSpec } from "./BrainSpec.ts";

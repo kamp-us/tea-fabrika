@@ -3,11 +3,11 @@
  * from the `INSTANCE` binding and from RPC replies.
  */
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
+import * as Codec from "@kalfa/config/Codec";
+import * as Snapshot from "@kalfa/config/Snapshot";
 import { Effect, Equal, Schema } from "effect";
 import { Digest } from "effect/crypto";
-import * as Codec from "../settings/Codec.ts";
 import * as Declarations from "../settings/Declarations.ts";
-import * as Snapshot from "../settings/Snapshot.ts";
 import * as Start from "../settings/Start.ts";
 import { Decode, StartsError } from "../settings/Starts.ts";
 

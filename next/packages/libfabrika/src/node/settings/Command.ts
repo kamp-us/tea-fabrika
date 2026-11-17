@@ -5,6 +5,8 @@
  * before anything prints, and it writes nothing and starts nothing.
  */
 
+import * as Print from "@kalfa/config/Print";
+import * as Reference from "@kalfa/config/Reference";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import * as Config from "effect/Config";
@@ -13,8 +15,6 @@ import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Declarations from "../../settings/Declarations.ts";
 import { Fabrika } from "../../settings/Fabrika.ts";
-import * as Print from "../../settings/Print.ts";
-import * as Reference from "../../settings/Reference.ts";
 import * as Load from "./Load.ts";
 
 const declarations = Declarations.all.declarations;

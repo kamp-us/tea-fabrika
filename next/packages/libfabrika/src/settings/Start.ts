@@ -2,8 +2,8 @@
  * The shapes of one instance start: what a host hands in, what the ledger keeps of it, and what
  * comes back as its receipt.
  */
+import * as Snapshot from "@kalfa/config/Snapshot";
 import { Schema } from "effect";
-import * as Snapshot from "./Snapshot.ts";
 
 const Text = Schema.NonEmptyString.check(Schema.isMaxLength(256));
 

@@ -2,6 +2,7 @@
  * Effect driver for the single brain lifecycle machine.
  */
 import { applyCell } from "@demlik/tea";
+import type * as Snapshot from "@kalfa/config/Snapshot";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -13,7 +14,6 @@ import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Id from "../Id.ts";
 import * as Declarations from "../settings/Declarations.ts";
-import type * as Snapshot from "../settings/Snapshot.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";

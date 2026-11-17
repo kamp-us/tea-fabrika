@@ -1,4 +1,5 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import { Id } from "@kampus/libfabrika";
 import type { LedgerCalls } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerRemote from "@kampus/libfabrika/ledger/LedgerRemote";
@@ -8,7 +9,6 @@ import * as Load from "@kampus/libfabrika/node/settings/Load";
 import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import * as RepositoryTrustLedger from "@kampus/libfabrika/packs/RepositoryTrustLedger";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
-import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Config, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
 import { Digest, SecureRandom } from "effect/crypto";
