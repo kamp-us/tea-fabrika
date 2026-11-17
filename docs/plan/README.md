@@ -104,7 +104,7 @@ in `next/`, and [host pinning and discovery](../../field/notes/2026-11-17-host-r
 The [three remaining host faults](../../field/notes/2026-11-17-host-remaining-fault-exercises.json) now have the same actual observations:
 ignoring the requested pin, omitting the native pnpm directory and reversing prepared-environment precedence.
 Each accepted exercise passed before the deliberate break, failed at its intended assertion, then passed after restoration.
-The watcher case and six other checklist fault or probe groups still need their own evidence.
+Each product change records its own source-bound fault evidence separately from these tooling fixtures.
 These exercises supply neither whole-product review nor branch proof; the affected product tickets remain open.
 
 [Checklist L13's fixture repair](https://github.com/kamp-us/tea-fabrika/pull/1543), ticket 1126,
