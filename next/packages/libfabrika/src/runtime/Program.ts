@@ -539,7 +539,7 @@ export function port(program: typeof Declaration.Type, key: string): Option.Opti
     return Option.none();
   }
 
-  if (input._tag === "read") {
+  if (Input.isAnyOf(["read"])(input)) {
     return Option.some(input.schema);
   }
 

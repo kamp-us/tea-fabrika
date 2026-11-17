@@ -257,7 +257,10 @@ const named = (node: unknown, member = false): boolean => {
 const inputSchema = (program: AnyProgram, key: string, input: Program.Input, name: string) => {
   const document = Result.try({
     try: () =>
-      Schema.toJsonSchemaDocument(input._tag === "read" ? Schema.Struct({ value: input.schema }) : program.msg, closed),
+      Schema.toJsonSchemaDocument(
+        Program.Input.isAnyOf(["read"])(input) ? Schema.Struct({ value: input.schema }) : program.msg,
+        closed,
+      ),
     catch: (cause) => new ToolsError({ reason: "unsupported_schema", tool: name, cause }),
   });
 
@@ -266,18 +269,17 @@ const inputSchema = (program: AnyProgram, key: string, input: Program.Input, nam
   }
 
   const { schema, definitions: defs } = document.success;
-  const root =
-    input._tag === "read"
-      ? Result.succeed(schema)
-      : Result.map(
-          Result.flatMap(members(schema, defs), (all) => value(all, key)),
-          (value) => ({
-            type: "object",
-            properties: { value },
-            required: ["value"],
-            additionalProperties: false,
-          }),
-        );
+  const root = Program.Input.isAnyOf(["read"])(input)
+    ? Result.succeed(schema)
+    : Result.map(
+        Result.flatMap(members(schema, defs), (all) => value(all, key)),
+        (value) => ({
+          type: "object",
+          properties: { value },
+          required: ["value"],
+          additionalProperties: false,
+        }),
+      );
   return Result.mapError(
     Result.flatMap(
       Result.flatMap(root, (schema) => definitions(schema, defs)),
@@ -293,7 +295,7 @@ const inputSchema = (program: AnyProgram, key: string, input: Program.Input, nam
 const ports = (programs: ReadonlyArray<AnyProgram>) =>
   programs.flatMap((program) =>
     Object.entries(program.inputs).flatMap(([key, input]) =>
-      input._tag === "write" && input.personOnly
+      Program.Input.isAnyOf(["write"])(input) && input.personOnly
         ? []
         : [{ program, key, input, name: `${program.name.slice(program.name.lastIndexOf("/") + 1)}_${key}` }],
     ),
@@ -342,7 +344,7 @@ export const list = (programs: ReadonlyArray<AnyProgram>): Result.Result<Readonl
           name,
           description: input.description,
           inputSchema: Schema.decodeUnknownSync(Schema.Json)(listed.success),
-          ...(input._tag === "read" ? { annotations: { readOnlyHint: true as const } } : {}),
+          ...(Program.Input.isAnyOf(["read"])(input) ? { annotations: { readOnlyHint: true as const } } : {}),
         }),
       catch: (cause) => new ToolsError({ reason: "unsupported_schema", tool: name, cause }),
     });
@@ -397,7 +399,7 @@ export const read = (programs: ReadonlyArray<AnyProgram>, name: string, args: un
     }
 
     const value = Schema.decodeUnknownResult(
-      input._tag === "read"
+      Program.Input.isAnyOf(["read"])(input)
         ? Schema.toCodecJson(Schema.Struct({ value: schema.value }))
         : Schema.Struct({ value: schema.value }),
       closed,
@@ -407,7 +409,7 @@ export const read = (programs: ReadonlyArray<AnyProgram>, name: string, args: un
       return refused({ reason: "bad_input" });
     }
 
-    if (input._tag === "read") {
+    if (Program.Input.isAnyOf(["read"])(input)) {
       const query = Schema.encodeUnknownResult(Schema.toCodecJson(input.schema))(value.success.value);
       return Result.isFailure(query)
         ? refused({ reason: "bad_input" })
