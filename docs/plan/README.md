@@ -153,6 +153,18 @@ before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `al
 the first cloud deploy. The other open calls are listed in
 [the section](./tier-1.md#the-owners-walks-and-decisions-by-step), each tied to its step.
 
+*2026-11-17:* P25 slice 1's library code half in `next/` is proved at code head
+`0e2bd3a9708a8f2e9746f9933646fcb865262c88` in [PR1099](https://github.com/kamp-us/tea-fabrika/pull/1099).
+[Ordinary CI](https://github.com/kamp-us/tea-fabrika/actions/runs/44154987776) passed compiler,
+lint and selected tests. [Full GitHub proof](https://github.com/kamp-us/tea-fabrika/actions/runs/44155042561)
+matched all 544 source files: 6,014 ordinary passes, one expected failure and nine documented skips.
+All 19 layer checks passed; the actual T5 import faults and restoration are recorded. Fresh
+independent review returned merge-ready for this code half, with two nonblocking findings.
+The lead records those findings and updates these docs without changing code. Normal CI and the
+same reviewer's documentation recheck govern this follow-up. The existing gateway audit decoder
+needs follow-through before later gateway integration. Ticket 905's schema gaps, the real agent
+experiment and slices 2 to 4 remain open. Tickets 888 and 328 stay open; no Tier 1 row is finished.
+
 *2026-11-15:* P39's slice 4a, the hands client, is built in `next/` as draft
 [PR 1315](https://github.com/kamp-us/tea-fabrika/pull/1315), waiting for the owner's look: the
 hands list their open tasks, wait for new ones, and run each once with a journal. Slice 4b (the real

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-17-p25-audit-uses-raw-message-codec",
+  "date": "2026-11-17",
+  "by": "review",
+  "model": null,
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Audit.ts",
+    "line": 105
+  },
+  "says": "In next/, the existing gateway audit path still decodes the raw Msg schema and can reject canonical JSON messages accepted by the new library path.",
+  "proof": "Tools.ts:423 encodes Schema.toCodecJson(program.msg), while Audit.ts:105 decodes program.msg directly. Gateway.ts:1488 passes the stamped message into audit, and cloudflare/runtime.ts:1232 forwards it to execution.audit. Installed Effect Schema.ts:9776 requires a Date instance for Schema.Date, while its JSON codec at :9789 uses a string. Thus a Date message accepted by the current W5 result is rejected by audit before its selector runs. The same mismatch covers bigint strings, base64 bytes, nonfinite-number strings and optional fields represented as null. This is source proof, not a new runtime execution.",
+  "cost": "Later gateway integration can fail before recording or delivering messages whose canonical JSON form differs from the raw schema's encoded form. Both default and custom audit selection share this decoder.",
+  "head": "0e2bd3a9708a8f2e9746f9933646fcb865262c88",
+  "ticket": "kamp-us/tea-fabrika#888",
+  "pr": "kamp-us/tea-fabrika#1099"
+}
