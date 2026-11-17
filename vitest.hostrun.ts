@@ -22,6 +22,7 @@
 // box is refused again, which is the safe side. Nothing stops a shell from setting `CI` or the
 // owner's variable itself: this guards against an accident, not against an agent that means to get
 // around it.
+import { Match } from "effect";
 import { openers } from "./oxlint-plugins/test-kind.ts";
 
 /** The owner's named yes for one command, after the lead's read (0178). */
@@ -55,18 +56,36 @@ export const hostFiles = (
   source: (path: string) => string,
 ): readonly string[] => {
   const where = hostRun(env, platform);
-  const remote = where._tag === "allow" && where.reason !== "owner";
+  const remote = Match.valueTags(where, {
+    allow: ({ reason }) => reason !== "owner",
+    refuse: () => false,
+  });
 
   if (remote) {
     return [];
   }
 
+  const refused = Match.valueTags(where, {
+    allow: () => false,
+    refuse: () => true,
+  });
+
   return [...new Set(files)].filter((path) => {
-    if (/\.(?:integration|visual)\.test\.[cm]?[jt]sx?$/.test(path) && where._tag === "refuse") {
+    if (/\.(?:integration|visual)\.test\.[cm]?[jt]sx?$/.test(path) && refused) {
       return true;
     }
 
     // 0594 keeps signals, real windows and real instances off the laptop, even under a plain name.
-    return openers(path, source(path)).alone.some((open) => ["signal", "browser", "instance"].includes(open._tag));
+    return openers(path, source(path)).alone.some((open) =>
+      Match.valueTags(open, {
+        signal: () => true,
+        browser: () => true,
+        instance: () => true,
+        process: () => false,
+        port: () => false,
+        network: () => false,
+        disk: () => false,
+      }),
+    );
   });
 };
