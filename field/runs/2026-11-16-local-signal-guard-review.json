@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-local-signal-guard-review",
+  "ticket": "tea-fabrika#1130",
+  "pr": null,
+  "started": "2026-11-16T21:03:33-08:00",
+  "ended": "2026-11-16T21:05:49-08:00",
+  "parent": null,
+  "role": "hand",
+  "step": "review",
+  "model": null,
+  "effort": null,
+  "outcome": "fail",
+  "why": "One blocking class: existing caps guard tests still require removed approval instructions and expect a selected signal-bearing caps file to pass locally.",
+  "note": "Today's lead tooling. Read all five changed files at the named head, existing parser/starters, selected box source and saved safe-test and six fault logs. No tests, compiler, signals, CI actions or public writes by this reviewer. Direct recognized source protection holds; eligible remote proof and final checks remain the merger's work. Private review report contains exact paths and lines.",
+  "head": "658c251ede350ee744b3551487b7586abf036553",
+  "base": "dac18a5ad407e26509acd4bd8d3ebe178aab8954",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null
+}

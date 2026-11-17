@@ -1,0 +1,51 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-local-signal-guard-lead",
+  "role": "lead",
+  "ticket": "tea-fabrika#1130",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "note": "Today's tooling: the local guard now parses Vitest-selected plain tests with the existing starter reader. The box signal law is refused without executing it. Safe Git fixture calls remain eligible locally; CI on Linux and macOS retains its route. Ten guard tests passed. No signal law, broad changed run or typecheck ran locally; exact remote signal proof remains separate. Calls hidden inside helpers or shell text remain beyond this reader.",
+  "why": "The filename-only guard let a selected plain tooling file with real process signals through.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "plants": [
+    {
+      "law": "plain selected files with signals or real windows are refused in every project",
+      "plant": "Classify only integration and visual filenames.",
+      "result": "red"
+    },
+    {
+      "law": "safe explicit files stay runnable without relying on their folder or filename",
+      "plant": "Refuse all process starters, including safe Git fixtures.",
+      "result": "red"
+    },
+    {
+      "law": "CI and remote Linux retain the existing routes",
+      "plant": "Require macOS for the CI allowance.",
+      "result": "red"
+    },
+    {
+      "law": "integration and visual files retain their existing local refusal",
+      "plant": "Drop the existing filename guard.",
+      "result": "red"
+    },
+    {
+      "law": "only selected files are inspected and unreadable selected source fails closed",
+      "plant": "Read an unselected signal file instead of the selected plain file.",
+      "result": "red"
+    },
+    {
+      "law": "only selected files are inspected and unreadable selected source fails closed",
+      "plant": "Swallow a source read error and allow the file.",
+      "result": "red"
+    },
+    {
+      "law": "the selected box law is refused without running any of its code",
+      "plant": "Retain only the old filename guard.",
+      "result": "red"
+    }
+  ]
+}
