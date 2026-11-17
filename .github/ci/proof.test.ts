@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
+import { expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
+import { Schema } from "effect";
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { rowsAt } from "../../vitest.shards.ts";
 import { E2E_SETUP, room } from "./legs.ts";
@@ -89,7 +91,7 @@ it("pinned: a change to any rerun trigger 0590 names runs the full set, whatever
 
     const { base, head, at, vitest } = seen([]);
     expect(proof, path).toStrictEqual({ _tag: "full", base, head, at, vitest, triggers: [path] });
-    expect(outputs(proof), path).toEqual(["scope=full", "legs=[]", "files={}"]);
+    expect(outputs(proof, 9), path).toEqual(["scope=full", "legs=[]", "files={}", identitySlots]);
   }
 
   for (const path of PLAIN) {
@@ -112,7 +114,7 @@ it("pinned: a changed set of zero files is a green run with no leg, and its reco
   // Plant, run once on proof.ts and restored: `outputs` gives one empty leg (red: `legs=["1"]`).
   const proof = choose(seen(["docs/plan/README.md"]), [], [], real);
   expect(proof).toEqual({ ...seen(["docs/plan/README.md"]), _tag: "changed", legs: {}, seconds: {} });
-  expect(outputs(proof)).toEqual(["scope=changed", "legs=[]", "files={}"]);
+  expect(outputs(proof, 9)).toEqual(["scope=changed", "legs=[]", "files={}", identitySlots]);
   expect(summary(proof)).toContain("no leg starts and the run is green");
 });
 
@@ -141,6 +143,93 @@ const set = fc
       })),
   );
 
+const sharedSlots = Array.from({ length: 9 }, (_, index) => String(index + 1));
+const propertyOptions = { arbitrary: { seed: 119120, runs: runsFor({ fast: 100, full: 100 }), size: 100 } };
+const identitySlots = `slots=${JSON.stringify(Object.fromEntries(sharedSlots.map((slot) => [slot, slot])))}`;
+
+// Plant: accept a missing, nonpositive, fractional, infinite or unsafe run number.
+it.prop(
+  "property: invalid or missing run numbers fail before any proof output",
+  { number: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000_000 })) },
+  ({ number }) => {
+    const proofs = [
+      choose(seen(["package.json"]), ["package.json"], [], real),
+      choose(seen(["next/a.ts"]), [], [], real),
+      choose(seen(["next/a.ts"]), [], ["next/a.test.ts"], real),
+    ];
+
+    for (const proof of proofs) {
+      for (const run of [0, -number, number + 0.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+        expect(() => outputs(proof, run), String(run)).toThrow(/RUN_NUMBER/);
+      }
+
+      // @ts-expect-error A missing run number can still reach the runtime boundary.
+      expect(() => outputs(proof)).toThrow(/RUN_NUMBER/);
+    }
+  },
+  propertyOptions,
+);
+
+// Plant: keep the old fixed assignment, reuse one slot, or key the files by physical slot.
+it.prop(
+  "property: changed-leg rotation visits every shared slot and preserves all leg counts",
+  {
+    run: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER - 8 })),
+    files: Schema.Array(Schema.String.check(Schema.isPattern(/^next\/[a-z]{1,8}\/[a-z]{1,8}\.test\.ts$/))).check(
+      Schema.isMinLength(9),
+      Schema.isMaxLength(9),
+      Schema.isUnique(),
+    ),
+  },
+  ({ run, files }) => {
+    const visited = new Map(sharedSlots.map((leg) => [leg, new Set<string>()]));
+
+    for (let offset = 0; offset < 9; offset++) {
+      for (let most = 1; most <= 9; most++) {
+        const selected = files.slice(0, most);
+        const proof = choose(seen(["next/a.ts"]), [], selected, {
+          most,
+          limit: 1,
+          table: Object.fromEntries(files.map((file) => [file, 1])),
+        });
+        const before = structuredClone(proof);
+        const emitted = outputs(proof, run + offset);
+        expect(emitted).toHaveLength(4);
+        expect(emitted[0]).toBe("scope=changed");
+        expect(emitted[3]).toMatch(/^slots=/);
+        const names: string[] = JSON.parse(emitted[1]!.slice("legs=".length));
+        const words: Record<string, string> = JSON.parse(emitted[2]!.slice("files=".length));
+        const slots: Record<string, string> = JSON.parse(emitted[3]!.slice("slots=".length));
+        expect(names).toEqual(sharedSlots.slice(0, most));
+        expect(Object.keys(words)).toEqual(names);
+        expect(names.flatMap((leg) => words[leg]!.split(" ")).toSorted()).toEqual([...selected].toSorted());
+        expect(
+          proof._tag === "changed" &&
+            Object.fromEntries(Object.entries(proof.legs).map(([leg, list]) => [leg, list.join(" ")])),
+        ).toEqual(words);
+        expect(Object.keys(slots)).toEqual(sharedSlots);
+        expect(Object.values(slots).toSorted()).toEqual(sharedSlots);
+        expect(Number(slots["1"]) - 1).toBe((run + offset) % 9);
+
+        for (let index = 0; index < sharedSlots.length; index++) {
+          const leg = sharedSlots[index]!;
+          const next = sharedSlots[(index + 1) % 9]!;
+          expect(Number(slots[next])).toBe((Number(slots[leg]) % 9) + 1);
+          visited.get(leg)!.add(slots[leg]!);
+        }
+
+        expect(outputs(proof, run + offset)).toEqual(emitted);
+        expect(proof).toEqual(before);
+      }
+    }
+
+    for (const slots of visited.values()) {
+      expect([...slots].toSorted()).toEqual(sharedSlots);
+    }
+  },
+  propertyOptions,
+);
+
 it("property: the legs hold every file of the set once, numbered from 1, at most MOST, and one leg when it fits one", () => {
   // Plants, each run once on proof.ts and restored: `legsOf` takes `most` legs always (red: a small
   // set gets several legs); it drops the last leg (red: a file is missing).
@@ -168,7 +257,7 @@ it("property: the outputs give the changed job its legs and each leg its files a
   fc.assert(
     fc.property(set, ({ files, sizing }) => {
       const proof = choose(seen(["next/a/b.ts"]), [], files, sizing);
-      const [scope, legs, lists] = outputs(proof);
+      const [scope, legs, lists] = outputs(proof, 9);
       expect(scope).toBe("scope=changed");
       const parsed: string[] = JSON.parse(legs!.slice("legs=".length));
       const words: Record<string, string> = JSON.parse(lists!.slice("files=".length));
