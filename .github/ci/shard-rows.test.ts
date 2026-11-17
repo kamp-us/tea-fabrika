@@ -50,6 +50,7 @@ const rows = fc
     fc.oneof(
       fc.string(),
       fc.string().map((name) => `next/${name}`),
+      fc.string().map((name) => `kalfa/${name}`),
     ),
     { maxLength: 50 },
   )
@@ -62,11 +63,11 @@ const rows = fc
 // L2. Plants, each run once on shard-rows.ts and restored: return [] always (red); list the
 // selected files with no row, as the old check did (red); drop the next/ prefix test, so a row of
 // today's version counts as stale (red).
-it("L2: stale rows are exactly next/ rows whose file Vitest does not select, sorted in either input order", () => {
+it("L2: stale rows are exactly next/ or Kalfa rows whose file Vitest does not select, sorted in either input order", () => {
   fc.assert(
     fc.property(rows, ({ table, files }) => {
       const expected = Object.keys(table)
-        .filter((path) => path.startsWith("next/") && !files.includes(path))
+        .filter((path) => (path.startsWith("next/") || path.startsWith("kalfa/")) && !files.includes(path))
         .toSorted();
 
       expect(stale(table, files)).toEqual(expected);
@@ -79,6 +80,13 @@ it("L2: stale rows are exactly next/ rows whose file Vitest does not select, sor
         [{ table: { "next/a.test.ts": 1 }, files: ["next/a.test.ts", "next/new.test.ts"] }],
         // A row for a file gone from the selection is stale; a row outside next/ is not this check's.
         [{ table: { "next/gone.test.ts": 4, "next/a.test.ts": 0.0, "apps/x.test.ts": 2 }, files: ["next/a.test.ts"] }],
+        // T1076: moved rows stay guarded; missing new rows keep the existing fallback.
+        [
+          {
+            table: { "kalfa/config/src/gone.test.ts": 0, "kalfa/config/src/App.test.ts": 0.2, "kalfaish/x.test.ts": 2 },
+            files: ["kalfa/config/src/App.test.ts", "kalfa/config/src/new.test.ts"],
+          },
+        ],
         // An own key that is also an Object prototype name is still a row.
         [{ table: { "next/constructor": 0, constructor: 0 }, files: [] }],
       ],
@@ -106,7 +114,10 @@ it("scenario: L3 the real config finds TSX and integration tests and excludes vi
     "next/apps/toy/src/db.integration.test.ts",
     "next/apps/toy/src/plain.test.ts",
     "next/apps/toy/src/view.test.tsx",
-  ];
+    "kalfa/toy/src/plain.test.ts",
+    "kalfa/toy/src/view.test.tsx",
+    "kalfa/toy/src/stored.integration.test.ts",
+  ].toSorted();
 
   const excluded = [
     "next/apps/toy/e2e/wire.test.ts",
@@ -114,6 +125,11 @@ it("scenario: L3 the real config finds TSX and integration tests and excludes vi
     "next/apps/toy/src/page.visual.test.tsx",
     "next/apps/toy/src/node_modules/dependency.test.ts",
     "next/apps/toy/src/dist/generated.test.ts",
+    "kalfa/toy/src/window.visual.test.ts",
+    "kalfa/toy/src/node_modules/dependency.test.ts",
+    "kalfa/toy/src/dist/generated.test.ts",
+    "kalfa/toy/test/consumer.test.ts",
+    "other/toy/src/plain.test.ts",
   ];
 
   try {
@@ -188,7 +204,7 @@ const segment = fc.oneof(
 
 const testPath = fc
   .tuple(
-    fc.constantFrom("next/apps", "next/packages", "next/programs"),
+    fc.constantFrom("next/apps", "next/packages", "next/programs", "kalfa"),
     segment,
     fc.constantFrom("src", "e2e", ".src"),
     fc.array(segment, { maxLength: 2 }),
@@ -254,7 +270,7 @@ it("format: L4 one diagnostic naming each stale row, exit 1 for stale rows and 0
         expect(lines).toEqual(
           rows.map(
             (path) =>
-              `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in vitest.shards.json`,
+              `stale shard row: ${path} is not a next/ or Kalfa test file Vitest selects; delete its row in vitest.shards.json`,
           ),
         );
         // The full-depth table's rows are named with their own file.
@@ -286,7 +302,8 @@ it("scenario: L4 the Node entry passes the real table and file set to the report
 
   const lines = (stale: readonly string[], table: string) =>
     stale.map(
-      (path) => `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in ${table}\n`,
+      (path) =>
+        `stale shard row: ${path} is not a next/ or Kalfa test file Vitest selects; delete its row in ${table}\n`,
     );
 
   expect(result.stderr).toBe(
@@ -297,8 +314,8 @@ it("scenario: L4 the Node entry passes the real table and file set to the report
 // 0536: a next/ test file runs on exactly one layer. Plants, each run once on vitest.config.ts and
 // restored: drop the integration glob from the `next` project's exclude (red: every integration file
 // in two projects); narrow the visual glob to `next/apps/**` (red: tuval's key laws in none).
-it("scenario: every tracked next/ test file is in exactly one of next, next-integration and next-visual", async () => {
-  const tracked = spawnSync("git", ["ls-files", "-z", "--", "next"], { cwd: root, encoding: "utf8" })
+it("scenario: every tracked next/ or Kalfa test file is in exactly one of next, next-integration and next-visual", async () => {
+  const tracked = spawnSync("git", ["ls-files", "-z", "--", "next", "kalfa"], { cwd: root, encoding: "utf8" })
     .stdout.split("\0")
     .filter((path) => /\.test\.tsx?$/.test(path) && !/(?:^|\/)dist\//.test(path));
 

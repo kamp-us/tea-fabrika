@@ -41,11 +41,11 @@ const PLUGINS = [
   { name: "anti-slop-effect", specifier: "vendor/anti-slop/src/effect/index.ts" },
 ];
 
-/** The four globs of the whole scope. A rule's list becomes these once every folder is on it. */
-export const WHOLE: ReadonlyArray<string> = ["next/**", ".agents/**", "oxlint-plugins/**", ".github/ci/**"];
+/** The globs of the whole scope. A rule's list becomes these once every folder is on it. */
+export const WHOLE: ReadonlyArray<string> = ["next/**", "kalfa/**", ".agents/**", "oxlint-plugins/**", ".github/ci/**"];
 
-/** The folders the zero lock's run reads: the scope, as the four globs name it. */
-const ROOTS = ["next", ".agents", "oxlint-plugins", ".github/ci"];
+/** The folders the zero lock's run reads: the scope, as the whole-scope globs name it. */
+const ROOTS = ["next", "kalfa", ".agents", "oxlint-plugins", ".github/ci"];
 
 const LIBFABRIKA = "next/packages/libfabrika/src";
 
@@ -69,13 +69,17 @@ export const folders = (root: string): ReadonlyArray<string> => [
   ...subfolders(root, "next/packages").filter((glob) => glob !== "next/packages/libfabrika/**"),
   ...subfolders(root, "next/programs"),
   ...subfolders(root, "next/apps"),
+  ...subfolders(root, "kalfa").flatMap((glob) => [
+    ...subfolders(root, glob.slice(0, -"/**".length)).filter((folder) => folder.endsWith("/src/**")),
+    glob,
+  ]),
 ];
 
 /** What the zero lock asks of one rule's list. */
 interface Lock {
   /** The folders of the scope with no hit of the rule that its list does not name yet. */
   readonly add: ReadonlyArray<string>;
-  /** The globs on its list that are neither a folder of the scope nor one of the four whole-scope globs. */
+  /** The globs on its list that are neither a folder of the scope nor one of the whole-scope globs. */
   readonly refused: ReadonlyArray<string>;
 }
 

@@ -15,7 +15,8 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { Predicate, Schema } from "effect";
+import { it as effectIt } from "@effect/vitest";
+import { Effect, Predicate, Schema } from "effect";
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -390,3 +391,29 @@ describe("L7 the config loads the fork's two plugins only from vendor/anti-slop/
     expect(printout).toContain("anti-slop-effect");
   });
 });
+
+const KalfaScope = Schema.Struct({
+  name: Schema.String.check(Schema.isPattern(/^[a-z]{1,6}$/)),
+  hits: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3 })),
+});
+
+effectIt.effect.prop(
+  "T1076 Kalfa package and source folders retain the same zero lock as next folders",
+  { input: KalfaScope },
+  ({ input }) =>
+    Effect.sync(() => {
+      // Plants unrun locally: omit Kalfa from WHOLE/folders, or ignore its zero-hit folders.
+      expect(WHOLE).toContain("kalfa/**");
+      const actual = folders(ROOT);
+      expect(actual).toContain("kalfa/config/**");
+      expect(actual).toContain("kalfa/config/src/**");
+      const scope = [`kalfa/${input.name}/**`, `kalfa/${input.name}/src/**`, `next/programs/${input.name}/**`];
+      expect(lock(scope, [], new Map()).add).toEqual(scope);
+      expect(lock(scope, [], new Map(scope.map((folder) => [folder, input.hits]))).add).toEqual([]);
+      expect(lock(scope, ["kalfa/**"], new Map()).add).toEqual([scope[2]]);
+      expect(lock(scope, ["kalfa/**"], new Map()).refused).toEqual([]);
+      const gone = `kalfa/${input.name}/absent/**`;
+      expect(lock(scope, [gone], new Map()).refused).toEqual([gone]);
+    }),
+  { arbitrary: { runs: 100, size: 100 } },
+);
