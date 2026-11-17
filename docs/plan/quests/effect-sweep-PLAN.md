@@ -1,6 +1,6 @@
-Approved by the lead agent, builds 0565, 0574, 0575, 0576, 0577, 0524, 0523, 0168, 0573; body ee6019175e73
+Approved by the lead agent, builds 0565 and its amendments 0573, 0574, 0575, 0576, 0577, with 0584 and 0591; body 586d6719677b
 Plancheck-Version: 3
-# Plan: every check of the Effect checker ends at error and zero hits in next/ and our tooling, one check and one folder set per pull request
+# Plan: the Effect checker sweep in next/ and our tooling, one check and one folder set per pull request
 
 `next/` and our tooling (`.agents/`, `oxlint-plugins/`, `.github/ci/`). Today's version is not
 touched. Every number below was counted on `origin/main` at `82296f5cf` on 2026-11-15. The ticket is
@@ -13,6 +13,19 @@ amended by [0574](../../../.decisions/0574-no-stability-tag-and-unstable-api-is-
 [0523](../../../.decisions/0523-advice-rules-block-where-clean.md) and
 [0168](../../../.decisions/0168-old-lint-breaks-are-fixed.md).
 
+**Current scope, after 0565's amendments.** The counts and slice numbers below are the dated
+inventory, not a new count. `strictEffectProvide` locks library and program source, not test
+files. Entry points keep the check on with a reasoned next-line exception. Every check's lock
+excludes these four bare-Node CI scripts by exact path, because they run before dependencies are
+installed: `.github/ci/changes.mjs`, `.github/ci/gate.mjs`, `.github/ci/required.mjs` and
+`.github/ci/scheduled.mjs`. No glob stands for those exclusions. The lock law keeps those same
+exclusions. E30, E50, E58 and E80 recount within that scope before work starts; their historical
+test hits do not become fixes or locks. `apiStabilityLeak` still follows E100's conditional
+recount under 0574.
+
+The quotas branch, [PR 1366](https://github.com/kamp-us/tea-fabrika/pull/1366), merged on
+2026-11-16. Its wait below is cleared; the original counts and dependency order stay as history.
+
 ```jsonc
 // The whole idea. One slice: one check, the folders it brings to zero, and the same pull request
 // locks them. tsconfig.base.json, one more entry in "overrides" (E8, a real slice below):
@@ -20,7 +33,8 @@ amended by [0574](../../../.decisions/0574-no-stability-tag-and-unstable-api-is-
   "include": ["next/**/*.ts", "next/**/*.tsx", ".agents/**/*.ts", "oxlint-plugins/**/*.ts", /* ... */],
   "options": { "diagnosticSeverity": { "unnecessaryArrowBlock": "error" } }
 }
-// From then on a new hit there fails `pnpm typecheck`, and a law fails if the entry is dropped.
+// Each entry also lists the four exact CI-script exclusions named above.
+// From then on a new hit in the lock's scope fails `pnpm typecheck`, and a law fails if the entry is dropped.
 ```
 
 ## The answer
@@ -36,10 +50,11 @@ amended by [0574](../../../.decisions/0574-no-stability-tag-and-unstable-api-is-
   outside the quotas branch's files and names the unstable Effect parts we use, as 0574 rules. The
   25 mechanical slices that start now take out 14,995 hits, 38% of the total.
 - **Only the quotas branch waits.** Its files are fixed in the 40 "after 1366" slices. Nine other
-  open pull requests touch files with hits; none waits, and the one that lands second rebases.
+  open pull requests touch files with hits; none waits, and the one that lands second merges main
+  in as a lead commit. Only a native stacked child follows 0004's `gh stack` commands.
 - **The lock** is the check at `error` for the slice's folders (a `type` law: the typecheck fails
-  on a new hit), plus one pinned law, `oxlint-plugins/effect-checks.test.ts`, that fails if any
-  locked folder stops ending at `error`.
+  on a new hit), plus one law, `oxlint-plugins/effect-checks.test.ts`, that fails if any
+  locked folder stops ending at `error`, within the current scope and exclusions above.
 - **Steps for a mechanical slice:** tests (the lock, the law row, and the hits in exam paths),
   build (the hits in product files, skipped when there are none), one review. No decision lets the
   lead merge tests and build into one agent for product code. Details under "Pipeline steps".
@@ -199,7 +214,8 @@ checks touch different lines.
 
 - Every check but the two import checks: an entry in `overrides` of `tsconfig.base.json`, one per
   check (a pair of checks with one fix shares one). Its `include` grows a folder glob per slice.
-  The slice that brings a check's last folder to zero replaces the list with the scope's globs.
+  The slice that brings a check's last folder to zero replaces the list with that check's scope
+  globs, keeping the four exact CI-script exclusions and `strictEffectProvide`'s source-only scope.
 - `preferNamespaceImport`: libfabrika's and tuval's own tsconfig, with `overrides` there until the
   package is at zero (0577); vitest is at zero and takes the package-wide block in E0. E2 moves the
   two libfabrika entries out of `tsconfig.base.json`.
@@ -230,6 +246,8 @@ checks touch different lines.
 // "next/**/*.ts", "next/**/*.tsx", "fixtures/next/**/*.ts", ".agents/**/*.ts",
 // ".github/ci/**/*.ts", ".github/ci/**/*.mjs", "oxlint-plugins/**/*.ts",
 // "oxlint-plugins/**/*.mjs", "stylelint.config.ts"
+// Each entry's exclude names the four exact CI-script paths under "Current scope".
+// strictEffectProvide uses its source-only include, not SCOPE.
 ```
 
 **The ignore line,** for a line that is right where the check does not fit (0565). E0 teaches
@@ -251,7 +269,7 @@ together, merged key by key as 0577 proved the checker does.
 
 ```ts
 // A sketch of oxlint-plugins/effect-checks.test.ts; the tests step settles the exact lines
-// pinned: the folders each slice locked, on the day it landed. Only grows; a slice adds its row.
+// The folders each slice locked, on the day it landed. Only grows; a slice adds its row.
 const LOCKED: Readonly<Record<string, ReadonlyArray<string>>> = {
   preferNamespaceImport: ["next/packages/libfabrika/src/ci/**/*.ts", "next/packages/libfabrika/src/codehost/**/*.ts"],
   unnecessaryArrowBlock: SCOPE,
@@ -261,15 +279,27 @@ const LOCKED: Readonly<Record<string, ReadonlyArray<string>>> = {
 /** The level a file ends at: base map, base overrides in order, then the package's block and its overrides. */
 const levelAt = (check: string, file: string): string | undefined => { /* the merge, as today's law does */ };
 
-it("pinned: every folder a slice locked still ends at error for its check", () => {
+it("every folder a slice locked still ends at error for its check", () => {
   for (const [check, globs] of Object.entries(LOCKED))
-    for (const file of filesMatching(globs)) expect([check, file, levelAt(check, file)]).toEqual([check, file, "error"]);
+    for (const file of filesMatching(check, globs))
+      expect([check, file, levelAt(check, file)]).toEqual([check, file, "error"]);
+}, {
+  format: "Effect checker configuration for the folders each landed slice locked",
+  plant: "delete a locked glob, lower its level, or add a later override that turns it off",
+  reads: ["tsconfig.base.json", "next/*/*/tsconfig.json", ".agents/tsconfig.json",
+    ".github/ci/tsconfig.json", "oxlint-plugins/tsconfig.json",
+    "node_modules/@effect/tsgo/schema.json", ...SCOPE],
 });
 ```
 
 It walks real files on disk, not glob against glob, so an `exclude`, a later override or a package
 block that turns a level down is seen the way the checker sees it. Each `.agents/` file it reads
-is one `.agents/tsconfig.json` includes.
+is one `.agents/tsconfig.json` includes. `filesMatching` omits the accepted scope exclusions for
+the check before the law checks each remaining file's effective level.
+
+The sketch uses `it` and `expect` from `@kalfa/vitest`. Each law declares its `plant` and any
+label as options, never a title prefix (0580). A law that reads files declares its `reads:`
+patterns, including inherited configs and files it reaches, so changes select it (0591).
 
 - New words: none. "Slice" and "lock" are plain words here, not glossary terms.
 - Settings: each level and `allowedUnstableApis` is a setting of the checker, kept in its own
@@ -278,7 +308,8 @@ is one `.agents/tsconfig.json` includes.
 
 ## One slice end to end: E8, `unnecessaryArrowBlock`
 
-30 hits, all in files the quotas branch does not touch, so one slice locks the whole scope.
+30 historical hits, all in files the quotas branch does not touch, so one slice locks its whole
+scope, with the four exact CI-script exclusions above.
 
 1. **The brief** names the row: E8, mechanical, Sonnet, the 30 hits by file.
 2. **The tests step** adds the E8 entry above to `tsconfig.base.json` and the `LOCKED` row. It runs
@@ -314,13 +345,14 @@ is one `.agents/tsconfig.json` includes.
 | Law | Lint, type or test | Generator | Plant |
 |---|---|---|---|
 | L1. In each folder a slice locked, a hit of its check fails the typecheck | type | type | Add one line the check flags to a file in a locked folder: `pnpm typecheck` is red with `effect(<check>)`. Each slice's tests step keeps that red output for the review, then removes the line |
-| L2. Every folder once locked still ends at `error` for its check, merged as the checker merges | test | pinned: the `LOCKED` table, one row per landed slice | Delete one glob from an entry, set one level to `warning`, or add a later override that turns it `off`: each turns the law red |
+| L2. Every folder once locked still ends at `error` for its check within the accepted scope, merged as the checker merges | test | format: Effect checker configuration for the `LOCKED` table, one row per landed slice | Delete one glob from an entry, set one level to `warning`, or add a later override that turns it `off`: each turns the law red |
 | L3. An `@effect-diagnostics` comment is the next-line form, names its check and level, and gives ` -- <reason>` | lint | lint | The three refused lines in "The shape": each fails `pnpm lint` |
 | L4. The checker reads the ` -- <reason>` tail as no part of the directive, so a reasoned line still silences the line after it | type | type | E0 writes one reasoned ignore line on a planted hit: the typecheck passes; without the comment it fails. Proves what 0565 read but did not run |
 | L5. In the folders E1 locks, no `@stability` tag of ours is left and no Effect part outside `allowedUnstableApis` is used | type | type | Put `@stability unstable` back on one export a locked folder uses: `unstableApiUsage` fails there |
 
 - L1, L4 and L5 are `type`: only the compiler, with the checker inside it, sees them. L3 is `lint`,
   in an existing rule. L2 is a test, as the law it replaces is: it reads config, not code shape.
+  L2's format reason, plant and file reads are declaration options, as in the sketch above.
 - Every rule of ours that a check replaces goes in the slice that turns the check on where ours
   ran, never before ([0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md)):
   `service-id` with the last `deterministicKeys` slice (E93, 0575). ~~`no-secret-env` with the last
@@ -370,7 +402,7 @@ per folder. Steps: "tests, review" means no product file has a hit.
 | E27 | now | `preferEffectString` | lib:node 304, app:exam 290, app:e2e 121, lib:client 58, lib:packs 19, lib:tasks 7, lib:presence 1 | 800 | judgment | Opus | tests, build, review |
 | E28 | now | `preferEffectArray` | app:exam 562, tuval 93, prog:tezgah 77, prog:checklist 66 | 798 | judgment | Opus | tests, build, review |
 | E29 | now | `preferEffectArray` | lib:node 452, app:e2e 281, prog:chaos 58, app:top 7 | 798 | judgment | Opus | tests, build, review |
-| E30 | now | `strictEffectProvide` | lib:node 215, lib:processes 153, lib:ledger 91, lib:telemetry 76, lib:access 74, app:e2e 37, app:exam 33, lib:client 23, lib:top 15, lib:presence 15, prog:counter 10, prog:pipeline 10, app:top 6, lib:packs 6, lib:desktop 4, lib:permissions 4, lib:tasks 2, app:entry 1 | 775 | judgment | Opus | tests, build, review |
+| E30 | now | `strictEffectProvide` | Historical: lib:node 215, lib:processes 153, lib:ledger 91, lib:telemetry 76, lib:access 74, app:e2e 37, app:exam 33, lib:client 23, lib:top 15, lib:presence 15, prog:counter 10, prog:pipeline 10, app:top 6, lib:packs 6, lib:desktop 4, lib:permissions 4, lib:tasks 2, app:entry 1. Recount source only; test files are out of the lock (0565) | 775 historical | judgment | Opus | tests, build, review |
 | E31 | now | `preferEffectArray` | oxlint-plugins 739 | 739 | judgment | Opus | tests, review |
 | E32 | now | `asyncFunction` | lib:node 216, oxlint-plugins 104, .github/ci 93, lib:settings 51, app:e2e 40, lib:transport 37, lib:gateway 27, app:exam 22, lib:ledger 14, lib:top 13, prog:checklist 13, prog:counter 11, lib:packs 10, prog:tezgah 10, lib:telemetry 8, lib:access 7, lib:client 2, tuval 2, lib:processes 1 | 681 | judgment | Opus | tests, review |
 | E33 | now | `preferEffectString` | oxlint-plugins 340, .github/ci 336 | 676 | judgment | Opus | tests, review |
@@ -390,7 +422,7 @@ per folder. Steps: "tests, review" means no product file has a hit.
 | E47 | now | `globalConsoleInEffect`, `globalConsole` | .agents 41, oxlint-plugins 30, .github/ci 20, app:src 6, app:exam 2 | 99 | judgment | Opus | tests, build, review |
 | E48 | now | `globalDateInEffect`, `globalDate` | .agents 50, lib:node 12, app:e2e 11, .github/ci 4, lib:processes 4, lib:telemetry 2, lib:client 1, lib:runtime 1, lib:tasks 1, prog:tezgah 1 | 87 | judgment | Opus | tests, build, review |
 | E49 | now | `processEnvInEffect`, `processEnv` | app:e2e 24, .github/ci 20, .agents 9, lib:node 9, app:top 8, lib:runtime 2, vitest 2 | 74 | judgment | Opus | tests, build, review |
-| E50 | now | `strictEffectProvide` | .agents 68 | 68 | judgment | Opus | one agent (lead tooling) |
+| E50 | now | `strictEffectProvide` | .agents 68 historical; recount within 0565's source-only lock, excluding test files | 68 historical | judgment | Opus | one agent (lead tooling) |
 | E51 | now | `globalErrorInEffectCatch`, `globalErrorInEffectFailure` | app:src 33, lib:transport 6, lib:cloudflare 5, app:exam 4, lib:node 4, lib:gateway 2, lib:telemetry 1 | 55 | judgment | Opus | tests, review |
 | E52 | now | `multipleEffectProvide` | lib:node 14, app:e2e 5, lib:access 2, lib:telemetry 2, lib:top 1, lib:processes 1 | 25 | judgment | Opus | tests, review |
 | E53 | now | `missedPipeableOpportunity` | lib:access 13, app:src 2, lib:codehost 2, lib:node 2, lib:settings 2, lib:ci 1 | 22 | judgment | Opus | tests, build, review |
@@ -398,7 +430,7 @@ per folder. Steps: "tests, review" means no product file has a hit.
 | E55 | now | `deterministicKeys` | .agents 5, app:src 3, lib:top 1, lib:access 1, lib:ci 1, lib:codehost 1, lib:ledger 1, lib:processes 1 | 14 | judgment | Opus | tests, build, review |
 | E56 | now | `extendsNativeError` | lib:cloudflare 2, app:src 1, lib:ledger 1, lib:node 1, lib:telemetry 1 | 6 | judgment | Opus | tests, review |
 | E57 | now | `globalFetchInEffect`, `globalFetch` | .github/ci 1, app:e2e 1, lib:node 1 | 3 | judgment | Opus | tests, review |
-| E58 | now | `strictEffectProvide` | oxlint-plugins 2 | 2 | judgment | Opus | tests, review |
+| E58 | now | `strictEffectProvide` | oxlint-plugins 2 historical; recount within 0565's source-only lock, excluding test files | 2 historical | judgment | Opus | tests, review |
 | E59 | now | `globalTimers` | app:e2e 1, lib:cloudflare 1 | 2 | judgment | Opus | tests, review |
 | E60 | after 1366 | `unstableApiUsage` | the tags left in PR 1366's 16 files, and every folder not yet locked | 3964 | mechanical | Sonnet | tests, build, review |
 | E61 | after 1366 | `preferNamespaceImport` | lib:runtime 403, lib:cloudflare 250, lib:processes 174, lib:settings 127, lib:ledger 115, lib:gateway 74, lib:telemetry 72 | 1215 | mechanical | Sonnet | tests, build, review |
@@ -420,7 +452,7 @@ per folder. Steps: "tests, review" means no product file has a hit.
 | E77 | after 1366 | `preferEffectArray` | app:src 547, lib:telemetry 142, lib:gateway 94 | 783 | judgment | Opus | tests, build, review |
 | E78 | after 1366 | `asyncFunction` | app:src 424, lib:runtime 209, lib:cloudflare 149 | 782 | judgment | Opus | tests, review |
 | E79 | after 1366 | `preferEffectString` | app:src 209, lib:runtime 167, lib:settings 109, lib:telemetry 94, lib:cloudflare 65, lib:processes 54, lib:ledger 33, lib:gateway 25 | 756 | judgment | Opus | tests, build, review |
-| E80 | after 1366 | `strictEffectProvide` | lib:runtime 358, app:src 210, lib:cloudflare 67, lib:gateway 35, lib:settings 33 | 703 | judgment | Opus | tests, build, review |
+| E80 | after 1366 | `strictEffectProvide` | Historical: lib:runtime 358, app:src 210, lib:cloudflare 67, lib:gateway 35, lib:settings 33. Recount source only; test files are out of the lock (0565) | 703 historical | judgment | Opus | tests, build, review |
 | E81 | after 1366 | `schemaSync`, `schemaSyncInEffect` | lib:runtime 168, app:src 126, lib:cloudflare 50, lib:processes 26, lib:gateway 25, lib:telemetry 17, lib:ledger 11 | 423 | judgment | Opus | tests, build, review |
 | E82 | after 1366 | `anyUnknownInErrorContext` | lib:cloudflare 153, app:src 112, lib:runtime 100, lib:settings 10 | 375 | judgment | Opus | tests, build, review |
 | E83 | after 1366 | `preferEffectRecord` | lib:runtime 97, lib:settings 92, app:src 69, lib:cloudflare 35, lib:processes 29, lib:telemetry 11, lib:gateway 3 | 336 | judgment | Opus | tests, build, review |
@@ -572,14 +604,19 @@ is plain: it runs on in-memory stand-ins and starts nothing.
 | Law | Lint, type or test | Generator | Plant |
 |---|---|---|---|
 | B1. Each Durable Object RPC method stays a call: `ProjectBinding.clientConnect` answers `() => Promise<ConnectionId>`, held by `Project implements ProjectBinding` in the app's `src/brain.ts` | type | type | Leave `bindings.ts:230` as `RemoteCall<DoorService["connect"]>`: it reads as `never` and `brain.ts` fails the typecheck |
-| B2. Running `Gateway.connect` n times answers n distinct, non-empty ids, each of which takes a challenge (new, in `next/apps/fabrika/src/door-reruns.laws.test.ts`) | test | fc.integer: n from 2 to 8, 50 runs | `Gateway.ts:1914` as `connect: Effect.succeed(<one id minted at layer build>)`: the second run answers the first id, red |
-| B3. A door start whose first k drawn process ids are taken draws again each time and starts on id k+1 (new, in the same file) | test | fc.integer: k from 0 to 4, 50 runs | `allocateStart` at `Gateway.ts:800` reads `options.nextProcess` once, before its loop: the start never gets a free id, red |
-| B4. The Process object's `alarm` delivers the wake saved when it runs: a wake changed between two alarms reaches `due` with the new time (new, in `next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts`) | test | fc.array: of fc.integer wake times, 2 to 6, 50 runs | `alarm` built from a wake read once when the layer is built: the second alarm delivers the first time, red |
+| B2. Running `Gateway.connect` n times, n from 2 to 8 over 50 runs, answers n distinct, non-empty ids, each of which takes a challenge (new, in `next/apps/fabrika/src/door-reruns.laws.test.ts`) | test | Effect Arbitrary: Schema.Int | `Gateway.ts:1914` as `connect: Effect.succeed(<one id minted at layer build>)`: the second run answers the first id, red |
+| B3. A door start whose first k drawn process ids are taken, k from 0 to 4 over 50 runs, draws again each time and starts on id k+1 (new, in the same file) | test | Effect Arbitrary: Schema.Int | `allocateStart` at `Gateway.ts:800` reads `options.nextProcess` once, before its loop: the start never gets a free id, red |
+| B4. The Process object's `alarm` delivers the wake saved when it runs: each array of 2 to 6 integer wake times, over 50 runs, reaches `due` in order (new, in `next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts`) | test | Effect Arbitrary: WakeTimes | `alarm` built from a wake read once when the layer is built: the second alarm delivers the first time, red |
 | B5. `recover` answers the activity marker saved when it runs (new, in the same file) | test | Effect Arbitrary: Activity | `recover` built from one `readActivity` result taken at layer build: a later marker is not seen, red |
 | B6. Every `activity` call on the Cloudflare process runtime puts the marker and then calls the object's `storage.sync`, before it answers (new, in the same file; finding 2026-11-16-cloudflare-process-sync-has-no-law) | test | Effect Arbitrary: Activity | `runtime.ts:2299` as `sync: () => Effect.void`: the storage fake records no sync, red. Also `ProcessStore.ts:288` and `:289` swapped, sync before put: red |
 | B7. With a saved reserve fault, `QuotaRunner.guard`'s `init` runs no turn and fails as its `msg` does (new, in `next/packages/libfabrika/src/runtime/QuotaRunnerTest.ts`) | test | scenario: a name stopped under its reserve, then init | `QuotaRunner.ts:74` as `init: runner.init`, unguarded: the turn runs, red |
 | B8. `recover` asked through the app's Process stub stand-in answers the saved marker, never `undefined` (new, in `next/apps/fabrika/src/runtime-quotas.laws.test.ts`) | test | Effect Arbitrary: Activity | The stub at `:370` keeps its `Effect.void` fallback for a member that is not a function: `recover` answers `undefined`, red |
 
+- B2 to B6 and B8 use `it.prop` or `it.effect.prop` from `@kalfa/vitest`, with Schema inputs
+  (0579). B2 and B3 check `Schema.Int` to the stated ranges. `WakeTimes` is a local test schema,
+  `Schema.Array(Schema.Int).check(Schema.isMinLength(2), Schema.isMaxLength(6))`. All keep the
+  plants above in a `plant` option. B7 keeps its scenario reason in a `scenario` option; no law
+  puts a label in its title (0580). A law that reads file text also declares `reads:` (0591).
 - **B6 is the law the finding asks for.** Lint or type cannot see it: both shapes typecheck, and the
   difference is whether a call reaches the platform. It is a test, plain by 0584: its storage is a
   recording fake and its SQL the in-memory fake `alarm.laws.test.ts` already has. Its storage fake
@@ -590,7 +627,9 @@ is plain: it runs on in-memory stand-ins and starts nothing.
 - **`.integration.` laws the change reaches,** run in the box under PR 1508's guard as the step
   rules say: the door, door-recovery, runtime, runtime-recovery, start-member, start-child and
   checklist-instance laws in the app, and GatewayRevocation, IsolateUsage and RunnerAdmission in
-  libfabrika. None is host-only.
+  libfabrika. Laws or cleanup that send real process signals run only in eligible disposable CI
+  under [0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md), before review. A local box
+  or a plain filename does not permit those laws on the owner's laptop.
 
 | File | Owner | Product lines expected | What changes |
 |---|---|---|---|
@@ -674,10 +713,11 @@ these files before 1366 lands. The list, by folder:
 - libfabrika `src/telemetry`: `QuotaRefusalTest.ts`, `Sink.ts`.
 
 A "now" slice may lock a folder that holds one of these files when that file has no hit of its
-check. If 1366 then adds such a hit, its own rebase fixes it: that is the lock working.
+check. If 1366 then adds such a hit, its lead merge of main fixes it: that is the lock working.
 
-**Clashes with other open pull requests.** None waits; the one that lands second rebases. A
-mechanical slice redoes its fix on the new base, and the lead may fix what CI names in a test file
+**Clashes with other open pull requests.** None waits; the one that lands second merges main in
+as a lead commit. Only a native stacked child uses 0004's `gh stack` commands. A mechanical slice
+redoes its fix on the new base, and the lead may fix what CI names in a test file
 ([0144](../../../.decisions/0144-the-lead-fixes-what-ci-names-in-a-test-file.md)).
 
 | Pull request | With hits | Hits | Slices it meets most |
@@ -695,9 +735,12 @@ mechanical slice redoes its fix on the new base, and the lead may fix what CI na
 
 1. **E0 first, alone:** it adds the law file, the ignore rule and the entry the other slices sit
    beside. Config only, so it is quick.
-2. **Then the mechanical "now" slices, E1 to E25, biggest first,** up to the 12-agent cap: E1, E2
-   and E3 alone take out 14,230 hits. Each touches its own entry and law row, so they run side by
-   side; the merge queue serializes the shared files.
+2. **Then the mechanical "now" slices, E1 to E25, biggest first.** Independent slices run in
+   parallel under the owner's current staffing instruction and the machine caps in `AGENTS.md`.
+   Keep one typecheck, one Electron app and one Docker box, with the existing nice and test-worker
+   limits. E1, E2 and E3 alone take out 14,230 historical hits.
+   Each touches its own entry and law row, so they run side by side; the merge queue serializes
+   the shared files.
 3. **Then the judgment "now" slices, E26 to E59, biggest first.**
 4. **When 1366 lands:** E60 (the last tags), E61 (the last imports), the other mechanical ones,
    then the judgment ones, E60 to E99.
@@ -728,7 +771,8 @@ This one plan covers every slice; the lead approves it once, and each slice's br
     (call 5).
   - No owner read before a merge: 0168's fast track and
     [0166](../../../.decisions/0166-owed-work-needs-no-owner-read.md).
-  - A red typecheck or lint in a test file after rebase: the lead fixes it under 0144.
+  - A red typecheck or lint in a test file after a lead merge of main: the lead fixes it under
+    0144. A native stacked child follows 0004 instead.
 - **Field rows:** one per step, the same day, as every hand-run step.
 
 ## Files
@@ -741,9 +785,11 @@ This one plan covers every slice; the lead approves it once, and each slice's br
 | `next/packages/vitest/tsconfig.json` | tests | tests | E0: the namespace block, at zero |
 | `next/programs/counter/tsconfig.json` | tests | tests | E0: the barrel block; the other five programs the same |
 | `next/apps/fabrika/tsconfig.json` | tests | tests | E13: the barrel block |
+| `next/*/*/tsconfig.json` | tests | tests | L2 declares each package config it reads, including future packages |
 | `.agents/tsconfig.json` | tests | tests | E0: the barrel block (call 2) |
 | `.github/ci/tsconfig.json` | tests | tests | E0: the barrel block (call 2) |
 | `.github/ci`, `.github/ci/`, `.github/ci/**/*.ts`, `.github/ci/**/*.mjs` | tests | tests | Every hit in its scripts, in each slice that lists it; the scope globs name them |
+| `.github/ci/changes.mjs`, `.github/ci/gate.mjs`, `.github/ci/required.mjs`, `.github/ci/scheduled.mjs` | tests | tests | Kept outside every check's lock by exact-path exclusions (0565); no source edit |
 | `oxlint-plugins/tsconfig.json` | tests | tests | E0: the barrel block (call 2) |
 | `oxlint-plugins/namespace-imports.test.ts` | tests | tests | E0: `git mv` to the next row |
 | `oxlint-plugins/effect-checks.test.ts` | tests | tests | E0: law L2, general for any check; each slice adds its `LOCKED` row |
@@ -775,9 +821,9 @@ This one plan covers every slice; the lead approves it once, and each slice's br
 5. **`.agents/`-only slices use the lead tooling fast track** (75%). See "Doubts first".
 6. **Each check gets its own `overrides` entry** (85%), not one entry per folder, so two slices of
    different checks touch different lines and the merge queue rarely conflicts.
-7. **The lock law walks real files** (80%), not glob against glob as today's import law does. It
-   is slower but sees what the checker sees. If it is too slow for one test, it reads one file per
-   locked glob.
+7. **The lock law walks every real file in its accepted scope** (80%), not glob against glob as
+   today's import law does. It checks each file's effective level, including later overrides.
+   If this is slow, improve or split the scan while keeping every file covered by L2.
 
 ## Records
 
