@@ -69,8 +69,8 @@ neither the later package move nor the CLI.
 `kalfa/config/` as private `@kalfa/config`, used by `next/`. Source at
 `85919fe41730cdc48ba3fbe4bfa53e93e1ba9fbf` passed its independent source recheck.
 The existing tests moved unchanged. The package consumer law is authored, but has not run.
-Seven approved CI discovery and archive-delivery edits wait for the active CI repair to land.
-The approved ordinary-test routing is prepared privately and has not run.
+The independent cache entry is applied. CI discovery and archive delivery remain private
+while the shared CI repair finishes. The approved ordinary-test routing has not run.
 [The extraction draft](https://github.com/kamp-us/tea-fabrika/pull/1583) keeps merge automation off.
 Ordinary draft checks supply no consumer or archive proof.
 No tested archive is available yet. Its
