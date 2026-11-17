@@ -4,7 +4,6 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import * as A from "@kampus/libfabrika";
@@ -29,69 +28,64 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
-import * as RateLimiter from "effect/persistence/RateLimiter";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import { Effect, Layer, Schema, Scope, Stream } from "effect";
+import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Gateway } from "./door.ts";
 
 const P1 = "process_0000000000e008000000000000";
+
 const P2 = "process_0000000000e008000000000001";
+
 const P3 = "process_0000000000e008000000000002";
+
 const START = "process_0000000000e008000000000003";
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const NAME = "counter:1";
+
 const URL = "https://fabrika.test/entry/project-socket";
 
-// A test's databases live in one temp folder. The scope that opens them closes every connection, then
+// A test's databases live in one temp folder. A disk opens and reopens its file with plain calls, so
+// each connection is acquired into the scope that asked for the disks, which closes every one, then
 // removes the folder (0061).
-const disks = Effect.acquireRelease(
-  Effect.sync(() => {
-    const top = mkdtempSync(join(tmpdir(), "p34-door-"));
-    const opened: DatabaseSync[] = [];
-    let file = 0;
+const disks = Effect.gen(function* () {
+  const scope = yield* Effect.scope;
+  const top = yield* Effect.acquireRelease(
+    Effect.sync(() => mkdtempSync(join(tmpdir(), "p34-door-"))),
+    (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+  );
+  let file = 0;
 
-    const open = (path: string) => {
-      const db = new DatabaseSync(path);
-      // A test process never loses power, so it skips the sync and keeps the rollback journal in memory.
-      // Every byte a law reads stays in the file and survives reopen (ticket 585, decision 0052).
-      db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
-      opened.push(db);
-      return db;
+  // A test process never loses power, so `TestDatabase.make` skips the sync and keeps the rollback
+  // journal in memory. Every byte a law reads stays in the file and survives reopen (ticket 585,
+  // decision 0052).
+  const open = (path: string) => Effect.runSync(Scope.provide(scope)(TestDatabase.make(path)));
+
+  const disk = () => {
+    const path = join(top, `${++file}.db`);
+    let db = open(path);
+    let inner = nodeSql(db);
+    const sql: Sql = {
+      exec: (q, ...args) => inner.exec(q, ...args),
+      transaction: (f) => inner.transaction(f),
+      size: () => inner.size(),
     };
-
-    const disk = () => {
-      const path = join(top, `${++file}.db`);
-      let db = open(path);
-      let inner = nodeSql(db);
-      const sql: Sql = {
-        exec: (q, ...args) => inner.exec(q, ...args),
-        transaction: (f) => inner.transaction(f),
-        size: () => inner.size(),
-      };
-      return {
-        sql,
-        reopen: () => {
-          db.close();
-          db = open(path);
-          inner = nodeSql(db);
-        },
-      };
+    return {
+      sql,
+      reopen: () => {
+        db.close();
+        db = open(path);
+        inner = nodeSql(db);
+      },
     };
+  };
 
-    return { top, opened, disk };
-  }),
-  ({ top, opened }) =>
-    Effect.sync(() => {
-      for (const db of opened) {
-        if (db.isOpen) {
-          db.close();
-        }
-      }
-
-      rmSync(top, { recursive: true, force: true });
-    }),
-);
+  return { top, disk };
+});
 
 type Disks = Effect.Success<typeof disks>;
 
@@ -99,6 +93,7 @@ const field = (value: string | Uint8Array) => {
   const b = typeof value === "string" ? Buffer.from(value) : Buffer.from(value);
   const size = Buffer.alloc(4);
   size.writeUInt32BE(b.length);
+
   return Buffer.concat([size, b]);
 };
 
@@ -106,8 +101,10 @@ const key = () => {
   const pair = generateKeyPairSync("ed25519");
   const bytes = pair.publicKey.export({ format: "der", type: "spki" }).subarray(-32);
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   const fingerprint = (value: Uint8Array) =>
     `SHA256:${createHash("sha256").update(value).digest("base64").replace(/=+$/, "")}`;
+
   return {
     raw: bytes.toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -121,8 +118,10 @@ const key = () => {
         field("sha512"),
         field(createHash("sha512").update(text).digest()),
       ]);
+
       const version = Buffer.alloc(4);
       version.writeUInt32BE(1);
+
       const packed = Buffer.concat([
         Buffer.from("SSHSIG"),
         version,
@@ -132,6 +131,7 @@ const key = () => {
         field("sha512"),
         field(Buffer.concat([field("ssh-ed25519"), field(sign(null, signed, pair.privateKey))])),
       ]);
+
       return `-----BEGIN SSH SIGNATURE-----\n${packed.toString("base64")}\n-----END SSH SIGNATURE-----\n`;
     },
   };
@@ -148,7 +148,9 @@ const from = () => ({
 });
 
 const Input = Schema.TaggedUnion({ press: { poison: Schema.Boolean } });
+
 type DoorOptions = Parameters<typeof Gateway.layer<typeof Input.Type, never, never, never>>[0];
+
 type Delivery = { process: string; parent: string; letter: string | undefined };
 
 const policy = {
@@ -161,9 +163,11 @@ const policy = {
 const world = ({ disk }: Disks) => {
   const project = disk(),
     process = disk();
+
   const partFiles = new Map<string, ReturnType<Disks["disk"]>>();
   const window = key();
   const other = key();
+
   const founder = {
     name: "Recovery test",
     person: PERSON,
@@ -172,12 +176,14 @@ const world = ({ disk }: Disks) => {
     by: window.sshFingerprint,
     build: "build-a",
   };
+
   const owner = Writer.cases.person.make({ key: window.fingerprint, for: PERSON });
   const deliveries: Delivery[] = [];
   const alarms: Array<number | null> = [];
   let ids = 0;
   const processIds = Effect.runSync(A.Id.Generator.pipe(Effect.provide(A.Id.Generator.layer)));
   let steps = 0;
+
   const controls = {
     throws: true,
     cutRetryable: false,
@@ -187,10 +193,14 @@ const world = ({ disk }: Disks) => {
     cuts: 0,
     failDelivery: false,
   };
+
   const Model = Schema.Struct({ count: Schema.Int });
+
   type Model = typeof Model.Type;
+
   // Wire inputs use _tag, tea uses type. The program's Msg keeps tea's own tag.
   const TeaMsg = Schema.Struct({ type: Schema.Literal("press"), poison: Schema.Boolean });
+
   const tea = Machine.make({
     model: Model,
     msg: TeaMsg,
@@ -208,6 +218,7 @@ const world = ({ disk }: Disks) => {
       },
     },
   });
+
   const program = {
     name: "counter",
     machine: tea,
@@ -222,12 +233,15 @@ const world = ({ disk }: Disks) => {
     writes: {},
     wake: () => null,
   };
+
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
+
   const data = () =>
     Layer.mergeAll(
       LedgerSql.layer(project.sql, { reader: "recovery-test" }),
       LedgerTransactionSql.layer(project.sql),
     ).pipe(Layer.provide(quiet));
+
   const records = RecordManager.sql((name) => {
     let p = partFiles.get(name);
 
@@ -238,6 +252,7 @@ const world = ({ disk }: Disks) => {
 
     return p.sql;
   }, 1024 ** 3);
+
   const manager = () =>
     ProcessManager.layer(
       {
@@ -255,6 +270,7 @@ const world = ({ disk }: Disks) => {
         return next;
       }),
     ).pipe(Layer.provideMerge(data()));
+
   const env = () =>
     Layer.mergeAll(
       data(),
@@ -277,6 +293,7 @@ const world = ({ disk }: Disks) => {
         SpanSink,
         Effect.gen(function* () {
           const real = yield* SpanSink;
+
           return {
             ...real,
             flush: Effect.suspend(() => {
@@ -286,6 +303,7 @@ const world = ({ disk }: Disks) => {
 
               controls.cutFlush = false;
               controls.cuts++;
+
               return Effect.fail(new SinkError({ reason: "storage", held: 0 }));
             }),
           };
@@ -293,6 +311,7 @@ const world = ({ disk }: Disks) => {
       ).pipe(Layer.provideMerge(SpanSink.layer(project.sql, { object: START }))),
       manager(),
     );
+
   const runner = (pid: string) => {
     const layer: (
       p: Parameters<typeof A.ProgramRunner.layer>[0],
@@ -302,6 +321,7 @@ const world = ({ disk }: Disks) => {
         chunk: typeof mailChunk.default;
       },
     ) => ReturnType<typeof A.ProgramRunner.layer> = A.ProgramRunner.layer;
+
     return layer(
       { id: pid, name: NAME, program: "counter", build: "build-a", owner },
       { policy, recovery: { sql: process.sql, name: NAME, capacity: 1024 ** 3 }, chunk: mailChunk.default },
@@ -315,6 +335,7 @@ const world = ({ disk }: Disks) => {
             A.CheckedWriter,
             Effect.gen(function* () {
               const m = yield* Mailbox;
+
               return {
                 append: (i: A.Incoming) => m.send(NAME, i.id, i.envelope.input, { ...from(), parent: i.envelope.id }),
                 commit: () => Effect.die("no writes"),
@@ -334,6 +355,7 @@ const world = ({ disk }: Disks) => {
       ),
     );
   };
+
   // Lose the retryable save after the real runner fails, keeping the prior delivered row.
   const doorSql: Sql = {
     ...project.sql,
@@ -361,6 +383,7 @@ const world = ({ disk }: Disks) => {
       return project.sql.exec(query, ...args);
     },
   };
+
   const settings = (): DoorOptions => ({
     sql: doorSql,
     founder,
@@ -402,6 +425,7 @@ const world = ({ disk }: Disks) => {
       ).pipe(Effect.provide(runner(pid)));
     },
   });
+
   const layer = () =>
     Gateway.layer(settings()).pipe(
       Layer.provideMerge(
@@ -413,11 +437,13 @@ const world = ({ disk }: Disks) => {
         ),
       ),
     );
+
   const online = Effect.fnUntraced(function* (signer = window) {
     const d = yield* Gateway;
     const client = yield* d.connect();
     const nonce = yield* d.challenge(client);
     const tab = "recovery-tab";
+
     const result = yield* d.initialize(
       client,
       {
@@ -434,9 +460,12 @@ const world = ({ disk }: Disks) => {
       },
       { url: URL, tab, name: signer.fingerprint },
     );
+
     expect(result._tag, "the test must pass real admission before delivery").toBe("online");
+
     return client;
   });
+
   return {
     project,
     process,
@@ -503,11 +532,13 @@ describe("P34 door recovery", () => {
                   Effect.gen(function* () {
                     const w = world(yield* disks);
                     const queued = request(false, letter);
+
                     const binding = () => {
                       const [row] = w.project.sql.exec(
                         "SELECT value FROM gateway_bindings WHERE letter=?",
                         `${P1}/${letter}`,
                       );
+
                       return Schema.decodeUnknownSync(
                         Schema.fromJsonString(
                           Schema.Struct({
@@ -518,8 +549,10 @@ describe("P34 door recovery", () => {
                         ),
                       )(row?.value);
                     };
+
                     const inbox = Ledger.use((l) => Stream.runCollect(l.read(`${NAME}/inbox`, 0)));
                     yield* w.boot;
+
                     const old = yield* Effect.gen(function* () {
                       const client = yield* w.online();
                       // Fail the next boundary, leaving exactly this durable state.
@@ -536,8 +569,10 @@ describe("P34 door recovery", () => {
                       expect(binding()).toMatchObject({ process: P1, state: { _tag: state } });
                       expect(w.controls.cuts + w.controls.retryableCuts).toBe(state === "retryable" ? 0 : 1);
                       expect(yield* inbox).toEqual([]);
+
                       return binding().id;
                     }).pipe(Effect.provide(w.layer()));
+
                     w.reopen();
                     w.controls.failDelivery = false;
 
@@ -548,7 +583,7 @@ describe("P34 door recovery", () => {
                         r.msg({
                           id: letter,
                           envelope: {
-                            id: Schema.decodeUnknownSync(A.Id.InputId)(old),
+                            id: Schema.decodeSync(A.Id.InputId)(old),
                             by: Writer.cases.person.make({ key: w.window.fingerprint, for: PERSON }),
                             arrivedAt: 0,
                             input: { type: "press", poison: false },
@@ -615,11 +650,13 @@ describe("P34 door recovery", () => {
                         expect(binding()).toMatchObject({ id: old, process: P1, state: { _tag: "settled" } });
                       } else {
                         const delivery = w.deliveries.at(-1)!;
+
                         const signed = yield* Effect.result(
                           d
                             .signer(delivery.parent, P2, "saved")
                             .pipe(Effect.provideService(SignRequest, { id: `write-${letter}` })),
                         );
+
                         expect({ delivery, signed }).toMatchObject({
                           delivery: { process: P2, letter },
                           signed: {
@@ -669,14 +706,17 @@ describe("P34 door recovery", () => {
               const w = world(yield* disks);
               const queued = request(false, letter);
               yield* w.boot;
+
               const old = yield* Effect.gen(function* () {
                 const client = yield* w.online();
                 const d = yield* Gateway;
                 expect(yield* Effect.exit(d.route(client, "process.send", request()))).toMatchObject({
                   _tag: "Failure",
                 });
+
                 return w.deliveries[0]!.parent;
               }).pipe(Effect.provide(w.layer()));
+
               w.reopen();
               yield* recover(w);
               w.controls.throws = false;
@@ -698,14 +738,17 @@ describe("P34 door recovery", () => {
                 const view = yield* A.ProgramRunner.use((r) => r.open(client)).pipe(Effect.provide(w.runner(P2)));
                 expect(view).toMatchObject({ view: { count: 1 } });
                 const delivery = w.deliveries.at(-1)!;
+
                 const oldWrite = yield* Effect.result(
                   d.signer(old, P2, "saved").pipe(Effect.provideService(SignRequest, { id: `old-${letter}` })),
                 );
+
                 const freshWrite = yield* Effect.result(
                   d
                     .signer(delivery.parent, P2, "saved")
                     .pipe(Effect.provideService(SignRequest, { id: `fresh-${letter}` })),
                 );
+
                 expect({ delivery, oldWrite, freshWrite }).toMatchObject({
                   delivery: { process: P2, letter },
                   oldWrite: { _tag: "Failure", failure: { reason: "not_delivered" } },
@@ -757,6 +800,7 @@ describe("P34 door recovery", () => {
               const w = world(yield* disks);
               yield* w.boot;
               w.controls.cutRetryable = true;
+
               const old = yield* Effect.gen(function* () {
                 const client = yield* w.online();
                 const d = yield* Gateway;
@@ -764,15 +808,19 @@ describe("P34 door recovery", () => {
                   _tag: "Failure",
                 });
                 expect(w.controls.retryableCuts).toBe(1);
+
                 const [binding] = w.project.sql.exec(
                   "SELECT json_extract(value, '$.state._tag') AS state FROM gateway_bindings WHERE letter=?",
                   `${P1}/${letter}`,
                 );
+
                 expect(binding?.state).toBe("delivered");
                 expect(yield* ProcessManager.use((p) => p.isLive(P1))).toBe(false);
                 expect(yield* Ledger.use((l) => Stream.runCollect(l.read(`${NAME}/inbox`, 0)))).toEqual([]);
+
                 return w.deliveries[0]!.parent;
               }).pipe(Effect.provide(w.layer()));
+
               w.reopen();
               yield* recover(w);
               w.controls.throws = false;
@@ -786,14 +834,17 @@ describe("P34 door recovery", () => {
                   result: { _tag: "accepted" },
                 });
                 const delivery = w.deliveries.at(-1)!;
+
                 const oldWrite = yield* Effect.result(
                   d.signer(old, P2, "saved").pipe(Effect.provideService(SignRequest, { id: `old-${letter}` })),
                 );
+
                 const freshWrite = yield* Effect.result(
                   d
                     .signer(delivery.parent, P2, "saved")
                     .pipe(Effect.provideService(SignRequest, { id: `fresh-${letter}` })),
                 );
+
                 expect({ delivery, oldWrite, freshWrite }).toMatchObject({
                   delivery: { process: P2, letter, parent: expect.not.stringContaining(old) },
                   oldWrite: { _tag: "Failure", failure: { reason: "not_delivered" } },
@@ -870,6 +921,7 @@ describe("P34 door recovery", () => {
                 _tag: "refused",
                 reason: "id_reused",
               });
+
               const grant = Grant.make({
                 id: "other-caller",
                 key: w.other.raw,
@@ -886,6 +938,7 @@ describe("P34 door recovery", () => {
                 },
                 sentAt: from().sentAt,
               });
+
               const text = grantText(grant);
               expect(yield* d.grant({ text, armored: w.window.sign(text) })).toMatchObject({
                 _tag: "applied",

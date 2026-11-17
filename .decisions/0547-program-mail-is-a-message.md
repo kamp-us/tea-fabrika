@@ -1,7 +1,7 @@
 ---
 id: 0547
 title: One piece of mail in a name's inbox is called a message, never a letter, and message keeps its inbox meaning beside it
-status: accepted
+status: amended-in-part by [0582](0582-mail-as-a-noun-goes-it-is-a-mailbox-and-messages.md)
 date: 2026-11-15
 tags: [names, mail, message, letter, glossary]
 ---

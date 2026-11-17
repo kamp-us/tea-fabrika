@@ -100,3 +100,8 @@ return total;
   applies one fix per overlapping range a pass. The first sweep took 8 runs; new code rarely needs two.
 - Blank lines between other statements inside a function body are not decided here.
 - Long reasoning: [oxlint and oxfmt](../docs/direction/oxlint-and-oxfmt.md).
+
+## Amendments
+
+- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) replaces `fabrika/padding-line-between-statements` with anti-slop's `require-readable-spacing`, only once that rule is on and a check on main shows it flags every line ours does. The places a blank line goes stay as written here until then.
+- 2026-11-16: anti-slop's `require-readable-spacing` is on, as [0563](0563-anti-slop-plugin-as-it-ships.md) took it, in each folder its block in `.oxlintrc.json` lists (ticket 1057). Where it is on, the list of places a blank line goes gains **before a `return`** and **around a multi-line binding in any block**, inside functions too. As the rule ships it also asks for a blank line between every two top-level statements other than imports, so the exception for two one-line statements no longer holds at the top level there; overloads stay a group. Its fix runs in `pnpm format`, as ours does. The line above that Effect "does not enforce blank lines around blocks" gains 0563's measure: on the source of `effect` 4.1.2, 9.2% of the 6,306 `return` lines that are not first in their block have a blank line above, and about 30% of multi-line bindings inside a block have one above or below; their dprint and oxlint config ask for neither. So this, too, is a named difference from Effect's style, taken by the owner's taste.

@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1062-tests1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1381",
+  "started": "2026-11-15T17:13:27-08:00",
+  "ended": "2026-11-15T17:21:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for ticket 1062 slice 1 (decision 0568, docs/plan/quests/error-cause-PLAN.md), in next/: the cold folders permissions, settings, transport/internal and codehost. Laws: L4 for SendersError in permissions/ErrorCause.test.ts and for SettingsError and SnapshotError in settings/ErrorCause.test.ts, each a fast-check property at seed 119120, 50 runs, that draws the error, its reason from its own literals and its cause absent, written undefined or a JSON value, and fails when a case is never reached. Both are red now: the written-undefined cause does not decode (counterexample cause: undefined). With the build's one-line edits applied for one run and restored, both are green. L3 for RelationsError in permissions/Rebac.types.test.ts and for WebCryptoError in the new transport/ErrorCause.types.test.ts, each a @ts-expect-error on a maker call with no cause in a function that is never called. One pnpm typecheck: both red with TS2578 unused @ts-expect-error (Rebac.types.test.ts:81, ErrorCause.types.test.ts:12), and no other error. CodeHostTest.ts's two Refused fakes now pass a real Error in place of cause: undefined. The plan's step to run the rule once on main before slice 1's edits: a scratch copy of fabrika/error-cause, written from the plan's sketch and not committed (slice 4 owns the file), ran over next/, .agents/, oxlint-plugins/ and .github/ci/ at main 1b9fa513f.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Rule count on main 1b9fa513f, oxlint 1.90.0: 16 lines, the plan's 16, and none of the six non-error cause lines. It is 20 reports, because the audit line (runtime/Audit.ts:12, a shared const) is reported once for each of its five classes. The 16 lines: apps/fabrika/dev.ts:22, apps/fabrika/e2e/node/P19Launchd.test-support.ts:46, and under packages/libfabrika/src client/Journal.ts:58, node/dev/dev-secrets.laws.integration.test.ts:35, permissions/Relations.ts:27, permissions/Senders.ts:43, processes/Children.ts:135, processes/ProgramMail.ts:74, runtime/Audit.ts:12, runtime/Execution.ts:292, runtime/HandsTasks.ts:58, runtime/MailDelivery.ts:29, runtime/MailWakeups.ts:19, runtime/Program.ts:553, settings/Files.ts:29, settings/Snapshot.ts:47. That is 13 optionalKey(Defect()) lines (12 product, 1 test support), the audit line, ProgramDown and the test's CallError; the plan's false-alarm paragraph says 12 optionalKey lines, where its own table says 12 product and 1 test, so the total holds and only that one word is off.",
+  "plants": [
+    {
+      "law": "L4 settings",
+      "plant": "with the build's edit on Files.ts:29, Snapshot.ts:47 put back to Schema.optionalKey(Schema.Defect()): SnapshotError with cause: undefined fails to decode",
+      "result": "red"
+    },
+    {
+      "law": "L4 settings",
+      "plant": "both lines at Schema.optionalKey(Schema.Defect()), as on main: SettingsError with cause: undefined fails to decode",
+      "result": "red"
+    },
+    {
+      "law": "L4 senders",
+      "plant": "Senders.ts:43 at Schema.optionalKey(Schema.Defect()), as on main: SendersError with cause: undefined fails to decode",
+      "result": "red"
+    },
+    {
+      "law": "L3 RelationsError",
+      "plant": "Relations.ts:27 left optional, as on main: pnpm typecheck fails with TS2578 at Rebac.types.test.ts:81",
+      "result": "red"
+    },
+    {
+      "law": "L3 WebCryptoError",
+      "plant": "internal/binary.ts:68 left optional, as on main: pnpm typecheck fails with TS2578 at ErrorCause.types.test.ts:12",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

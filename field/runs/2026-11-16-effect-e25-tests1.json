@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e25-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T04:00:00-08:00",
+  "ended": "2026-11-16T04:30:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Mechanical slice E25 of the Effect-check sweep (runOfExitToRunExit), in next/ and our tooling. Recount with only this check at error over the 13 tsconfigs in scope: 1 hit, in next/apps/fabrika/src/runtime.laws.integration.test.ts (not a file of pull request 1366), fixed by hand: Effect.runPromise of a pipe to Effect.exit became Effect.runPromiseExit. The check is locked at error in all 13 package tsconfigs through an overrides entry over **/*.ts and **/*.tsx, so nothing waits on 1366. Recount after: 0 in all 13. The runtime.laws.integration test file passes (29 tests). pnpm lint passed every part except lint:dead, which the Node runtime aborts (SIGABRT, exit 134) in this box on its own; the change adds and removes no export.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 30,
+  "note": "Counts from effect-tsgo diagnostics per tsconfig under each project's own config, filtered by check name.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "one line Effect.runPromise(Effect.exit(Effect.void)) in next/programs/chaos/src/planted-l1.ts: the chaos typecheck reports 1 runOfExitToRunExit error; file removed, recount 0",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

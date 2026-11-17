@@ -43,6 +43,14 @@ export const isStop = (step: Record<string, unknown>) =>
   step["run"] === STOP.run &&
   Object.keys(step).length === Object.keys(STOP).length;
 
+// The CLI's `gh run cancel`, and the REST API's `cancel` and `force-cancel` calls on a run.
+const CANCEL = /\brun\s+cancel\b|\/(?:force-)?cancel\b/;
+
+/** A step that cancels a workflow run: by the CLI, by the REST API, or with an action named for it. */
+export const cancels = (step: Record<string, unknown>) =>
+  (typeof step["run"] === "string" && CANCEL.test(step["run"])) ||
+  (typeof step["uses"] === "string" && /cancel/i.test(step["uses"]));
+
 /** A job's own work: its steps less the stop step, which the fail-fast law judges alone. */
 export const steps = (job: Record<string, unknown>): Record<string, unknown>[] =>
   allSteps(job).filter((step) => !isStop(step));
@@ -59,6 +67,7 @@ export const compact = (value: unknown) => {
 
   const trimmed = value.trim();
   const expression = trimmed.startsWith("${{") && trimmed.endsWith("}}") ? trimmed.slice(3, -2).trim() : trimmed;
+
   // Keep quoted strings and names intact. Only operator spacing cannot change meaning.
   return expression.replace(
     /'(?:[^']|'')*'|\s*(==|!=|&&|\|\|)\s*/g,
@@ -102,13 +111,16 @@ export const chromium =
 export const E2E_PREFIX = "e2e-";
 
 export const ON_E2E = `startsWith(matrix.shard, '${E2E_PREFIX}')`;
+
 // Chromium is fetched only once a visual file exists.
 export const VISUAL_FILES = "hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''";
+
 const FALLBACKS = /^fromJSON\(needs\.changes\.outputs\.shards\|\|\((.*)&&'(.*)'\|\|'(.*)'\)\)$/s;
 
 const parsed = (text: string | undefined): unknown[] => {
   try {
     const value: unknown = JSON.parse(text ?? "");
+
     return Array.isArray(value) ? value : [];
   } catch {
     return [];
@@ -121,6 +133,7 @@ const parsed = (text: string | undefined): unknown[] => {
  */
 export const fallbacks = (job: Record<string, unknown>) => {
   const found = FALLBACKS.exec(compact(map(map(job["strategy"])["matrix"])["shard"]));
+
   return { when: found?.[1] ?? "", full: parsed(found?.[2]), plain: parsed(found?.[3]) };
 };
 

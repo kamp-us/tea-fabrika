@@ -27,6 +27,7 @@ type Failure<Member> = Member extends (...args: ReadonlyArray<never>) => infer A
 type FromLedger<Errors> = Extract<Errors, { readonly _tag: "LedgerError" }>;
 
 type Own = { readonly _tag: "Own" };
+
 type Ledgers = { readonly _tag: "LedgerError" };
 
 it("type: the gateway's store and nonce fail with GatewayError, never an error tagged LedgerError", () => {
@@ -37,13 +38,17 @@ it("type: the gateway's store and nonce fail with GatewayError, never an error t
 
   // GatewayStore: the one call that fails is `atomic`.
   type Atomic = Failure<ReturnType<ReturnType<typeof gatewayStore>["atomic"]>>;
+
   expectTypeOf<Atomic["_tag"]>().toEqualTypeOf<"GatewayError">();
   expectTypeOf<FromLedger<Atomic>>().toBeNever();
 
   // GatewayNonce: making the tools, and then `issue`, `check` and `spend`.
   type Made = Failure<typeof gatewayNonce>;
+
   type Tools = Effect.Success<ReturnType<typeof gatewayNonce>>;
+
   type Used = Failure<Tools["issue"]> | Failure<Tools["check"]> | Failure<Tools["spend"]>;
+
   expectTypeOf<(Made | Used)["_tag"]>().toEqualTypeOf<"GatewayError">();
   expectTypeOf<FromLedger<Made | Used>>().toBeNever();
 });

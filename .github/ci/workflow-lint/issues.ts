@@ -5,7 +5,7 @@ import { isMap, map } from "./shared.ts";
 
 /**
  * The two jobs that may hold the `issues` permission, each by its workflow file and its job name
- * (0534, 0541): the 3-hour run's report and the daily speed measure, both under the `ci-scheduled`
+ * (0534, 0541): the full run's report and the daily speed measure, both under the `ci-scheduled`
  * label. lintScheduled and lintCiSpeed hold what each grants.
  */
 const ISSUE_JOBS: Readonly<Record<string, string>> = {
@@ -34,11 +34,14 @@ export const lintIssues = (workflows: Readonly<Record<string, string>>): string[
     }
 
     const top = touchesIssues(workflow["permissions"]) ? [`${path}: the workflow's token: ${ISSUES_RULE}`] : [];
+
     const jobs = Object.entries(map(workflow["jobs"]))
       .filter(([name, job]) => {
         const grant = map(job)["permissions"];
+
         return touchesIssues(grant) && (ISSUE_JOBS[path] !== name || grant === "write-all");
       })
       .map(([name]) => `${path}: job ${name}: ${ISSUES_RULE}`);
+
     return [...top, ...jobs];
   });

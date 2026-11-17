@@ -21,10 +21,13 @@ import {
 // only, since 0099 removed 0087's cap. The pure laws read
 // paths, numstat text and plan text; one scenario runs the command on a disposable git repository.
 const options = { seed: 119120, numRuns: 200 };
+
 const script = join(import.meta.dirname, "sizecap.ts");
 
 const word = fc.stringMatching(/^[a-z][a-z0-9-]{0,7}$/);
+
 const folders = fc.array(word, { minLength: 0, maxLength: 3 });
+
 const code = fc.tuple(folders, word, fc.constantFrom(".ts", ".tsx", ".css", ".json"));
 
 describe("classify", () => {
@@ -55,6 +58,7 @@ describe("classify", () => {
             mark === "fixtures" || mark === "e2e"
               ? [root, ...inner, mark, `${name}${ext}`].join("/")
               : [root, ...inner, `${name}.${mark}${ext}`].join("/");
+
           expect(classify(path, false)).toBe("test");
         },
       ),
@@ -92,6 +96,7 @@ describe("classify", () => {
             ...inner.filter((part) => !["e2e", "fixtures", "docs"].includes(part)),
             `${subject}Test${ext}`,
           ];
+
           expect(classify([root, ...below].join("/"), false)).toBe("product");
           expect(classify([other, ...below].join("/"), false)).toBe("other");
         },
@@ -108,6 +113,7 @@ describe("classify", () => {
         fc.constantFrom("lower", "bare", "folder", "style", "data"),
         (inner, subject, shape) => {
           const kept = inner.filter((part) => !["e2e", "fixtures", "docs"].includes(part));
+
           const below = {
             lower: [...kept, `${subject}test.ts`],
             bare: [...kept, "Test.ts"],
@@ -115,6 +121,7 @@ describe("classify", () => {
             style: [...kept, `${subject}Test.css`],
             data: [...kept, `${subject}Test.json`],
           }[shape];
+
           const path = ["next", ...(below ?? [])].join("/");
           expect(isSharedSuite(path)).toBe(false);
           expect(classify(path, false)).toBe("product");
@@ -187,6 +194,7 @@ describe("parseNumstat", () => {
                 : `${entry.added}\t${entry.deleted}\t${entry.path}\0`,
           )
           .join("");
+
         const rows = parseNumstat(out);
         expect(rows.map((row) => row.path)).toEqual(entries.map((entry) => entry.path));
         rows.forEach((row, at) => {
@@ -212,13 +220,17 @@ describe("countLines and diffLine", () => {
         (files, advice) => {
           const rows: Array<Row> = files.map(([[inner, name, ext], lines, binary], at) => {
             const path = [at % 2 === 0 ? "next" : ".agents", ...inner, `${name}${at}${ext}`].join("/");
+
             return binary ? Row.cases.binary.make({ path }) : Row.cases.text.make({ path, lines });
           });
+
           const tally = countLines(rows, new Set());
+
           const product = rows.reduce(
             (sum, row) => sum + (row._tag === "text" && classify(row.path, false) === "product" ? row.lines : 0),
             0,
           );
+
           expect(tally.product).toBe(product);
           expect(tally.binary).toBe(rows.filter((row) => row._tag === "binary").length);
           const line = diffLine(tally, advice);
@@ -275,6 +287,7 @@ describe("readPlan and advise", () => {
             "",
             "1. not a slice: 9000 lines",
           ].join("\n");
+
           const size = readPlan(plan);
           expect(size.table).toBe(cells.reduce((sum, c) => sum + c.lines, 0));
           expect(size.slices.map((slice) => slice.lines)).toEqual(slices);
@@ -313,6 +326,7 @@ describe("readPlan and advise", () => {
       "|---|---|",
       "| a \\| b | 700 |",
     ].join("\n");
+
     expect(readPlan(fenced)).toEqual({ table: 700, slices: [] });
     expect(advise(readPlan("## Files\n\n| File | Owner |\n|---|---|\n| a | build |")).map((a) => a._tag)).toEqual([
       "unknown",
@@ -347,6 +361,7 @@ describe("the command", () => {
         GIT_CONFIG_GLOBAL: "/dev/null",
         TYPESAFE_API_KEY: undefined,
       };
+
       const git = (...args: string[]) => {
         const got = spawnSync(
           "git",
@@ -357,15 +372,20 @@ describe("the command", () => {
             timeout: 10_000,
           },
         );
+
         expect(got.status, got.stderr).toBe(0);
+
         return got.stdout.trim();
       };
+
       const write = (path: string, text: string) => {
         mkdirSync(join(dir, path, ".."), { recursive: true });
         writeFileSync(join(dir, path), text);
       };
+
       const lines = (n: number, tag: string) =>
         `${Array.from({ length: n }, (_, at) => `line ${tag} ${at}`).join("\n")}\n`;
+
       git("init", "-q", "-b", "main");
       write(".fabrika/fabrika.toml", "[review]\nlines = 50\n");
       write("next/src/old name.ts", lines(40, "kept"));
@@ -381,6 +401,7 @@ describe("the command", () => {
       write(".fabrika/fabrika.toml", "[review]\nlines = 900\n");
       git("add", "-A");
       git("commit", "-q", "-m", "head");
+
       const run = (...args: string[]) =>
         spawnSync("node", [script, ...args], { cwd: dir, encoding: "utf8", env, timeout: 20_000 });
 

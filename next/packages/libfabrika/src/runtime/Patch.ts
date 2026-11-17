@@ -1,8 +1,6 @@
 /**
  * View patches: the RFC 6902 operations that turn one JSON view into the next. A watcher gets the
  * whole view once, then a patch per step. Pure, and it never changes its inputs.
- *
- * @stability unstable
  */
 import { Result, Schema } from "effect";
 
@@ -10,7 +8,6 @@ import { Result, Schema } from "effect";
  * Schema for one RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs, and
  * a value is JSON.
  *
- * @stability unstable
  * @category schemas
  */
 export const Patch = Schema.Union([
@@ -21,7 +18,6 @@ export const Patch = Schema.Union([
 /**
  * One RFC 6902 operation, as `Patch` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Patch = typeof Patch.Type;
@@ -107,18 +103,20 @@ const walk = (path: string, before: Schema.Json, after: Schema.Json, out: Array<
 /**
  * Returns the patches that turn `before` into `after`, in the order to apply them. None when equal.
  *
- * @stability unstable
  * @category combinators
  */
 export const diff = (before: Schema.Json, after: Schema.Json): ReadonlyArray<Patch> => {
   const out: Array<Patch> = [];
   walk("", before, after, out);
+
   return out;
 };
 
 const decodeOps = Schema.decodeUnknownResult(Schema.Array(Patch));
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
+
 const unsafe = new Set(["__proto__", "constructor", "prototype"]);
+
 const invalid = () => Result.fail("bad_patch" as const);
 
 /**
@@ -130,7 +128,6 @@ const invalid = () => Result.fail("bad_patch" as const);
  * and `remove`, a path is malformed or names a missing place, or a path holds `__proto__`,
  * `constructor` or `prototype`.
  *
- * @stability unstable
  * @category combinators
  */
 export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json, "bad_patch"> => {

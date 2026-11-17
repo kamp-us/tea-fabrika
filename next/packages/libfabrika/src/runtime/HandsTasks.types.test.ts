@@ -23,8 +23,10 @@ it("type: T1 HandsTasks speaks its own error and shared names only, never TasksE
   expectTypeOf<(typeof Reply.Type)["_tag"]>().toEqualTypeOf<"waiting" | "finished" | "refused">();
   // A refusal is for good, and an answer: no hands key, or a task under the id that is not this process's.
   expectTypeOf<Extract<typeof Reply.Type, { _tag: "refused" }>["reason"]>().toEqualTypeOf<"no_hands" | "id_reused">();
+
   // The layer serves HandsTasks over the tasks service, and fails with nothing of its own while built.
   type Live = ReturnType<typeof HandsTasksLive.layer>;
+
   expectTypeOf<Layer.Success<Live>>().toEqualTypeOf<HandsTasks>();
   expectTypeOf<Layer.Error<Live>>().toEqualTypeOf<never>();
   expectTypeOf<Layer.Services<Live>>().toEqualTypeOf<Tasks>();
@@ -32,5 +34,5 @@ it("type: T1 HandsTasks speaks its own error and shared names only, never TasksE
   expectTypeOf<"layer" extends keyof typeof HandsTasks ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<"layer" extends keyof typeof HandsTasksFront ? true : false>().toEqualTypeOf<false>();
   // The error is a schema value of its own, so it crosses the Project RPC as the module wrote it.
-  expectTypeOf<typeof HandsTasksError.Type>().toEqualTypeOf<HandsTasksError>();
+  expectTypeOf<HandsTasksError>().toEqualTypeOf<HandsTasksError>();
 });

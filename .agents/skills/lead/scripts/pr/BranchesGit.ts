@@ -7,16 +7,19 @@ import { type Branch, Branches, BranchesError } from "./Branches.ts";
 import { lastLine, run } from "./command.ts";
 
 const LOCAL = "refs/heads/";
+
 const ORIGIN = "refs/remotes/origin/";
 
 /** One `for-each-ref` line, `<ref> <oid>`, as a branch; `null` for main, origin's HEAD or another ref. */
 export const fromRefLine = (line: string): Branch | null => {
   const [ref = "", tip = ""] = line.split(" ");
+
   const [location, name] = ref.startsWith(LOCAL)
     ? (["local", ref.slice(LOCAL.length)] as const)
     : ref.startsWith(ORIGIN)
       ? (["origin", ref.slice(ORIGIN.length)] as const)
       : [null, ""];
+
   return location === null || name === "" || name === "main" || name === "HEAD" || tip === ""
     ? null
     : { name, location, tip };
@@ -34,7 +37,10 @@ export const layer = (dir: string): Layer.Layer<Branches, never, ChildProcessSpa
           const ran = yield* run("git", ["-C", dir, ...args], dir);
 
           if (!ok.includes(ran.code)) {
-            return yield* new BranchesError({ command: args[0] ?? "", reason: `exited ${ran.code}: ${lastLine(ran)}` });
+            return yield* BranchesError.make({
+              command: args[0] ?? "",
+              reason: `exited ${ran.code}: ${lastLine(ran)}`,
+            });
           }
 
           return ran;
@@ -42,9 +48,10 @@ export const layer = (dir: string): Layer.Layer<Branches, never, ChildProcessSpa
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         (effect, args) =>
           Effect.catchTag(effect, "PlatformError", (e) =>
-            Effect.fail(new BranchesError({ command: args[0] ?? "", reason: e.message })),
+            Effect.fail(BranchesError.make({ command: args[0] ?? "", reason: e.message })),
           ),
       );
+
       const git = (args: ReadonlyArray<string>, ok: ReadonlyArray<number> = [0]) => call(args, ok);
 
       const list = Effect.map(git(["for-each-ref", "--format=%(refname) %(objectname)", LOCAL, ORIGIN]), (ran) =>
@@ -57,10 +64,17 @@ export const layer = (dir: string): Layer.Layer<Branches, never, ChildProcessSpa
       const behind = (tip: string) =>
         Effect.map(git(["rev-list", "--count", `${tip}..origin/main`]), (ran) => Number(ran.out.trim()));
 
-      // merge-tree exits 0 with the merged tree's oid on its first line, 1 on a conflict.
+      // No common ancestor means retained work, even when the trees happen to match.
       const landsEmpty = Effect.fn("BranchesGit.landsEmpty")(function* (tip: string) {
+        const base = yield* git(["merge-base", "origin/main", tip], [0, 1]);
+
+        if (base.code === 1) {
+          return false;
+        }
+
         const merged = yield* git(["merge-tree", "--write-tree", "origin/main", tip], [0, 1]);
         const main = yield* git(["rev-parse", "origin/main^{tree}"]);
+
         return merged.code === 0 && merged.out.split("\n")[0]?.trim() === main.out.trim();
       });
 

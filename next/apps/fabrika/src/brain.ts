@@ -1,8 +1,6 @@
 /**
  * The app's brain Worker: its Durable Object classes, the private control entrypoint and the default
  * `fetch`, each a thin handoff into libfabrika's Cloudflare runtime.
- *
- * @stability unstable
  */
 import { makeDurableObjectBridge, makeWorkerBridge } from "@alchemy.run/cloudflare/Bridge";
 import type { SettingsStart } from "@kampus/libfabrika";
@@ -10,9 +8,11 @@ import { type Incoming } from "@kampus/libfabrika";
 import type { Child, ChildStop } from "@kampus/libfabrika/processes/Children";
 import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import type { Unwatch, Watch } from "@kampus/libfabrika/processes/Monitors";
 import type { Start } from "@kampus/libfabrika/processes/Process";
 import type { Published } from "@kampus/libfabrika/runtime/News";
 import { fetch } from "@kampus/libfabrika/workers";
+import type { ProjectBinding } from "@kampus/libfabrika/workers/bindings";
 import { control } from "@kampus/libfabrika/workers/control";
 import { ProjectService, signingReply, commitReply, settingsWire } from "@kampus/libfabrika/workers/runtime";
 import { DurableObject, WorkerEntrypoint, env } from "cloudflare:workers";
@@ -26,10 +26,14 @@ import { projectRuntime, type Env } from "./runtime.ts";
  * Durable Object for the Project: each RPC method runs the matching `ProjectService` call, and
  * `settingsStart` and `settingsRead` run on the runtime's settings calls.
  *
- * @stability unstable
+ * **Details**
+ *
+ * It implements `ProjectBinding`, the type every caller's stub has, so a call the binding names and
+ * this class does not forward is a type error here, never a rejected call at run time.
+ *
  * @category objects
  */
-export class Project extends DurableObject<Env> {
+export class Project extends DurableObject<Env> implements ProjectBinding {
   readonly owner = projectRuntime(this.ctx, this.env);
   readonly runtime = settingsWire(this.owner.contextEffect);
 
@@ -212,6 +216,18 @@ export class Project extends DurableObject<Env> {
     return this.runtime.runPromise(ProjectService.use((p) => p.processStop(stop, from)));
   }
 
+  /** A program's watch by name, in the Project's write turn; a refusal is reply data. */
+  programMonitor(watch: Watch, from: From) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.programMonitor(watch, from)));
+  }
+
+  /** Ends a program's own watch under its ref, in the Project's write turn. */
+  programDemonitor(unwatch: Unwatch, from: From) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.programDemonitor(unwatch, from)));
+  }
+
   processExit(pid: string, reason: ExitReason, from: From) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.processExit(pid, reason, from)));
@@ -282,7 +298,6 @@ const Bridge = makeDurableObjectBridge(DurableObject, meta);
 /**
  * Durable Object for the Record, bridged to Alchemy's object of that name.
  *
- * @stability unstable
  * @category objects
  */
 export class RecordPart extends Bridge("RecordPart") {}
@@ -290,7 +305,6 @@ export class RecordPart extends Bridge("RecordPart") {}
 /**
  * Durable Object for one connection at the door, bridged to Alchemy's object of that name.
  *
- * @stability unstable
  * @category objects
  */
 export class Connection extends Bridge("Connection") {}
@@ -298,7 +312,6 @@ export class Connection extends Bridge("Connection") {}
 /**
  * Durable Object for one registered name's processes, bridged to Alchemy's object of that name.
  *
- * @stability unstable
  * @category objects
  */
 export class Process extends Bridge("Process") {}
@@ -306,7 +319,6 @@ export class Process extends Bridge("Process") {}
 /**
  * Worker entrypoint that receives the program isolates' tail events, bridged to Alchemy's Worker.
  *
- * @stability unstable
  * @category objects
  */
 export class IsolateTail extends makeWorkerBridge(WorkerEntrypoint, meta) {}
@@ -315,7 +327,6 @@ export class IsolateTail extends makeWorkerBridge(WorkerEntrypoint, meta) {}
  * Worker entrypoint for the private local control socket: each request runs `control` with the
  * token from its props.
  *
- * @stability unstable
  * @category objects
  */
 export class Control extends WorkerEntrypoint<Env, { token: string }> {

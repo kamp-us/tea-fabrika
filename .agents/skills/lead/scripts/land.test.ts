@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 // botpush and gh are stubs that say what they were asked. The stub signer adds a real
 // note to HEAD, so a rollback can be seen in refs/notes/fabrika.
 const script = join(import.meta.dirname, "land.ts");
+
 const planted = "plantedleakword652";
 
 const node = `#!/bin/sh
@@ -97,17 +98,22 @@ const land = (world: World) => {
       LAND_REQUIRED: world.red ? "failure" : "success",
       TYPESAFE_API_KEY: undefined,
     };
+
     const git = (at: string, ...args: string[]) => {
       const got = spawnSync(
         "/usr/bin/git",
         ["-C", at, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", ...args],
         { encoding: "utf8", env, timeout: 10_000 },
       );
+
       expect(got.status, got.stderr).toBe(0);
+
       return got.stdout.trim();
     };
+
     const script_ = (...args: string[]) =>
       spawnSync(process.execPath, [script, ...args], { cwd: quest, encoding: "utf8", env, timeout: 60_000 });
+
     const origin = join(dir, "origin");
     const quest = join(dir, "quest");
 
@@ -158,6 +164,7 @@ const land = (world: World) => {
       join(dir, "plan.md"),
       ...lead,
     );
+
     expect(said.status, said.stderr).toBe(0);
     const record = join(dir, "boxes/state/t652f.land.json");
     const { quest: named, ...rest } = JSON.parse(readFileSync(record, "utf8")) as Record<string, unknown>;
@@ -189,6 +196,7 @@ const land = (world: World) => {
     expect(ran.error).toBeUndefined();
     const calls = existsSync(env.LAND_CALLS) ? readFileSync(env.LAND_CALLS, "utf8").trim().split("\n") : [];
     const head = git(quest, "rev-parse", "HEAD");
+
     return {
       code: ran.status,
       err: ran.stderr,
@@ -263,6 +271,8 @@ describe("land.ts, today's tooling", () => {
         /^gh pr create -R owner\/repo --head fabrikalfa\/t652-fixture --title T652 fixture: one quest --body-file /,
       ),
       "gh pr view 77 -R owner/repo --json number,headRefName,headRefOid,state,isDraft,baseRefName,title,body,mergeCommit",
+      // The names check (0587) reads the diff after the leak grep and before `ci-required`.
+      "gh api --paginate repos/owner/repo/pulls/77/files --jq .[] | {path: .filename, patch: (.patch // null)}",
       expect.stringMatching(
         /^gh api -i repos\/owner\/repo\/commits\/[0-9a-f]{40}\/check-runs .*check_name=ci-required/,
       ),

@@ -123,6 +123,7 @@ export const packageImports: CreateRule = {
 
     const listed = (names: Iterable<string>) => [...names].map((name) => `"${name}"`).join(", ");
     const none = `imports none of ${table.scope}*`;
+
     const { who, takes, allowed } =
       tests !== null
         ? {

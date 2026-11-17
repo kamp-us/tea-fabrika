@@ -10,9 +10,13 @@ import * as Beat from "./flow/Beat.ts";
 import * as Quests from "./quests.ts";
 
 const options = { seed: 119120, numRuns: 300 };
+
 const T0 = Date.parse("2026-11-12T14:00:00.000Z");
+
 const MIN = 60_000;
+
 const iso = (offset: number) => new Date(T0 + offset).toISOString();
+
 const at = (offset: number) => new Date(T0 + offset);
 
 const beat = (phase: Beat.Phase, sinceMs: number, atMs: number, agentMs: number | null = null): Beat.Beat => ({
@@ -43,6 +47,7 @@ const seen = (over: Partial<Quests.Seen> & { readonly record?: Quests.Record } =
 });
 
 const phase = fc.constantFrom(...Beat.PHASES);
+
 const span = fc.integer({ min: 0, max: 6 * 60 * MIN });
 
 describe("Quests.verdict", () => {
@@ -66,6 +71,7 @@ describe("Quests.verdict", () => {
             }),
             at(later),
           );
+
           expect(line.state).toBe("waits");
           expect(line.since).toBe(iso(0));
           expect(line.text).toBe(`${outcome}: ${reason}`);
@@ -87,6 +93,7 @@ describe("Quests.verdict", () => {
         fc.option(fc.constantFrom("ask" as const, "stuck" as const, "done" as const), { nil: null }),
         (p, since, quiet, agent, old) => {
           const b = beat(p, -since - Math.max(0, quiet), -quiet, agent === null ? null : -agent);
+
           const line = Quests.verdict(
             seen({
               held: true,
@@ -96,6 +103,7 @@ describe("Quests.verdict", () => {
             }),
             at(0),
           );
+
           const said = Beat.says(b, at(0));
           expect(line.state).toBe(said.stuck ? "stuck" : "running");
           expect(line.text).toBe(said.text);
@@ -116,6 +124,7 @@ describe("Quests.verdict", () => {
       }),
       at(0),
     );
+
     expect(line).toMatchObject({ state: "stuck", phase: "cleanup", quietSeconds: 720, step: "build" });
     expect(line.text).toBe("cleanup for 1h50m, no beat for 12m: stuck");
   });
@@ -125,6 +134,7 @@ describe("Quests.verdict", () => {
       seen({ held: true, record: record({ steps: [opened("tests", 0)], beat: beat("box", 5 * MIN, 5 * MIN) }) }),
       at(0),
     );
+
     expect(line).toMatchObject({ state: "running", quietSeconds: 0, phase: "box" });
   });
 
@@ -155,6 +165,7 @@ describe("Quests.verdict", () => {
       }),
       at(0),
     );
+
     expect(line).toMatchObject({ state: "landed", since: iso(-3 * MIN), step: "review", box: "t1-review2" });
   });
 
@@ -166,6 +177,7 @@ describe("Quests.verdict", () => {
       }),
       at(0),
     );
+
     expect(line).toMatchObject({ state: "landed", since: iso(-MIN), text: "PR 7 landed", box: null });
   });
 
@@ -213,6 +225,7 @@ describe("Quests.verdict", () => {
       }),
       at(0),
     );
+
     expect(line.box).toBe("t1-tests10");
   });
 });
@@ -229,6 +242,7 @@ describe("Quests.lastOutcome", () => {
       '{"reason":"no outcome"}',
       "42",
     );
+
     fc.assert(
       fc.property(
         fc.array(line),
@@ -260,13 +274,16 @@ const boxesWith = (files: Files) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+
     const dir = yield* Effect.acquireRelease(fs.makeTempDirectory({ prefix: "quests-" }), (made) =>
       fs.remove(made, { recursive: true, force: true }).pipe(Effect.ignore),
     );
+
     yield* fs.makeDirectory(path.join(dir, "state"), { recursive: true });
     yield* Effect.forEach(Object.entries(files), ([name, text]) => fs.writeFileString(path.join(dir, name), text), {
       concurrency: 1,
     });
+
     return dir;
   });
 
@@ -289,6 +306,7 @@ const linesAt = (
       { concurrency: 1 },
     );
     yield* TestClock.setTime(T0);
+
     return yield* Quests.read(boxes, { named: ask.named ?? [], all: ask.all ?? false });
   });
 
@@ -297,6 +315,7 @@ const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Scope.Sc
   Effect.runPromise(law.pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, TestClock.layer()))));
 
 const chain = (r: Quests.Record) => JSON.stringify({ quest: "made-up", pr: null, ...r }, null, "\t");
+
 const ended = (outcome: string, reason: string) => `${JSON.stringify({ outcome, reason, exit: 20 })}\n`;
 
 describe("Quests.read", () => {
@@ -333,6 +352,7 @@ describe("Quests.read", () => {
       Effect.gen(function* () {
         const quiet = beat("agent", -20 * MIN, -15 * MIN, -15 * MIN);
         const fresh = beat("agent", -2 * MIN, -10_000, -4_000);
+
         const lines = yield* linesAt({
           "state/t2-chain.json": chain(record({ steps: [opened("build", -30 * MIN)], beat: quiet })),
           "state/t2.lock": "4242\n",
@@ -341,6 +361,7 @@ describe("Quests.read", () => {
           "state/t1.lock": "4141\n",
           "state/t1-tests1.box": "quest: t1\n",
         });
+
         expect(lines).toEqual([
           {
             quest: "t1",
@@ -370,12 +391,14 @@ describe("Quests.read", () => {
     ran(
       Effect.gen(function* () {
         const whole = chain(record({ steps: [opened("tests", -MIN)], beat: beat("box", -MIN, -1000) }));
+
         const lines = yield* linesAt({
           "state/half-chain.json": whole.slice(0, whole.length / 2),
           "state/other-chain.json": '{"quest":"other","steps":"not a list"}',
           "state/t1-chain.json": whole,
           "state/t1.lock": "1\n",
         });
+
         expect(lines.map((l) => [l.quest, l.state, l.text])).toEqual([
           ["half", "unknown", "the chain record does not read"],
           ["other", "unknown", "the chain record does not read"],
@@ -389,6 +412,7 @@ describe("Quests.read", () => {
       Effect.gen(function* () {
         // The chain died after its last line: an open step and an old beat stay in the record.
         const left = record({ steps: [opened("review", -300 * MIN)], beat: beat("judge", -290 * MIN, -280 * MIN) });
+
         const lines = yield* linesAt(
           {
             "state/t1-chain.json": chain(left),
@@ -396,6 +420,7 @@ describe("Quests.read", () => {
           },
           { outAt: { "t1-chain.out": -45 * MIN } },
         );
+
         expect(lines).toEqual([
           {
             quest: "t1",
@@ -418,11 +443,13 @@ describe("Quests.read", () => {
           steps: [closed("tests", "t1-tests1"), opened("build", -MIN)],
           beat: beat("wait", -MIN, -2000),
         });
+
         const lines = yield* linesAt({
           "state/t1-chain.json": chain(again),
           "state/t1.lock": "77\n",
           "t1-chain.out": ended("ask", "answered since"),
         });
+
         expect(lines.map((l) => [l.state, l.step, l.phase, l.quietSeconds])).toEqual([["running", "build", "wait", 2]]);
       }),
     ));
@@ -439,6 +466,7 @@ describe("Quests.read", () => {
           },
           { outAt: { "a-chain.out": -MIN } },
         );
+
         expect(lines.map((l) => [l.quest, l.state, l.box, l.text])).toEqual([
           ["a", "waits", "a-mutation2", "stuck: 3 stucks in a row"],
           ["b", "stuck", null, "build open for 1h50m, no beat in the record: stuck"],
@@ -456,6 +484,7 @@ describe("Quests.read", () => {
           "state/t2-chain.json": chain(record({ steps: [closed("review", "t2-review1")] })),
           "t2-chain.out": ended("done", "PR 10 landed"),
         };
+
         const states = (lines: ReadonlyArray<Quests.Line>) => lines.map((l) => [l.quest, l.state]);
         expect(states(yield* linesAt(files))).toEqual([]);
         expect(states(yield* linesAt(files, { all: true }))).toEqual([
@@ -463,10 +492,12 @@ describe("Quests.read", () => {
           ["t2", "landed"],
         ]);
         expect(states(yield* linesAt(files, { named: ["t2"] }))).toEqual([["t2", "landed"]]);
+
         const queued = {
           "state/t3-chain.json": chain(record({ queued: iso(-MIN) })),
           "t3-chain.out": ended("done", "PR 11 queued"),
         };
+
         expect(states(yield* linesAt(queued))).toEqual([]);
         expect(states(yield* linesAt(queued, { all: true }))).toEqual([["t3", "queued"]]);
       }),

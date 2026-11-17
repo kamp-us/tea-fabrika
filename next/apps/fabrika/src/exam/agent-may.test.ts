@@ -24,9 +24,10 @@ import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
-import * as RateLimiter from "effect/persistence/RateLimiter";
+import { RateLimiter } from "effect/persistence";
 
 const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }), size: 4096, concurrency: 1 } };
+
 const bounded = (min: number, max: number) => Schema.String.check(Schema.isMinLength(min), Schema.isMaxLength(max));
 
 const GatewayCalls = Arbitrary.schema(
@@ -49,8 +50,9 @@ const key = Effect.fnUntraced(function* () {
   blob.set(new TextEncoder().encode("ssh-ed25519"), 4);
   new DataView(blob.buffer).setUint32(15, 32);
   blob.set(raw, 19);
-  const line = Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
+  const line = Schema.decodeSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
   const fingerprint = `SHA256:${Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))).replace(/=+$/, "")}`;
+
   return {
     raw: Base64Url.encode(raw),
     line,
@@ -80,10 +82,12 @@ const world = Effect.fnUntraced(function* () {
   const root = yield* key(),
     window = yield* key(),
     agent = yield* key();
+
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
     (db) => Effect.sync(() => db.close()),
   );
+
   const sql = nodeSql(db),
     founder = {
       name: "P8",
@@ -93,8 +97,10 @@ const world = Effect.fnUntraced(function* () {
       by: root.fingerprint,
       build: "p8",
     };
+
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
   const ledger = LedgerSql.layer(sql, { reader: "p8-agent" }).pipe(Layer.provide(quiet));
+
   const env = Layer.mergeAll(
     ledger,
     LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet)),
@@ -119,7 +125,9 @@ const world = Effect.fnUntraced(function* () {
       Layer.provide(RateLimiterSql.layer(sql, { build: "p8", policy: { limit: 100_000, window: 60_000 } })),
     ),
   );
+
   const delivered: Incoming[] = [];
+
   const layer = Gateway.layer({
     sql,
     founder,
@@ -143,12 +151,15 @@ const world = Effect.fnUntraced(function* () {
     inputs: { schema: Input, personOnly: [], raw: [] },
     events: { personOnly: [] },
   }).pipe(Layer.provide(env));
+
   const door = yield* Gateway.pipe(Effect.provide(layer));
   const log = yield* Ledger.pipe(Effect.provide(ledger));
+
   const hello = Effect.fnUntraced(function* (k: typeof agent, name: string, as: string) {
     const client = yield* door.connect(),
       nonce = yield* door.challenge(client),
       tab = `tab-${name}`;
+
     const params = {
       versions: [1],
       has: [],
@@ -162,12 +173,15 @@ const world = Effect.fnUntraced(function* () {
       as,
       signed: yield* k.sign(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
     };
+
     return {
       client,
       result: yield* door.initialize(client, params, { url, tab, name: k.fingerprint }),
     };
   });
+
   expect((yield* hello(window, "founder", "window")).result._tag).toBe("online");
+
   const grant = grantText({
     id: "grant_0000000000e008000000000001",
     key: agent.raw,
@@ -184,7 +198,9 @@ const world = Effect.fnUntraced(function* () {
       has: [],
     },
   });
+
   expect((yield* door.grant({ text: grant, armored: yield* root.sign(grant) }))._tag).toBe("applied");
+
   return { door, log, agent, root, hello, delivered };
 });
 
@@ -192,7 +208,7 @@ type World = Effect.Success<ReturnType<typeof world>>;
 
 const identity = (input: Incoming, fingerprint: string) => {
   expect(input.envelope.by).toEqual({ _tag: "agent", key: fingerprint, for: person });
-  Schema.decodeUnknownSync(Id.InputId)(input.envelope.id);
+  Schema.decodeSync(Id.InputId)(input.envelope.id);
 };
 
 const failure = (exit: Exit.Exit<unknown, unknown>) => {
@@ -243,10 +259,12 @@ it.effect.prop(
       for (const role of ["person", "window", "agent"]) {
         const { client, result } = yield* w.hello(w.agent, `${role}-${c.name}`, role);
         expect(result).toMatchObject({ _tag: "online", identity: { as: "agent" } });
+
         const req = {
           ...request(c.body),
           letter: `letter_0000000000e00800000000000${role === "person" ? 1 : role === "window" ? 2 : 3}`,
         };
+
         expect(yield* w.door.route(client, "process.send", req)).toMatchObject({ _tag: "ok" });
         const input = w.delivered.at(-1);
 
@@ -267,6 +285,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const w = yield* world(),
         { client } = yield* w.hello(w.agent, c.name, "person");
+
       yield* w.door.route(client, "process.send", request(c.body));
       const input = w.delivered.at(-1);
 
@@ -301,6 +320,7 @@ it.effect.prop(
 const changes = Effect.fnUntraced(function* (w: World, c: DoorCall) {
   const joining = yield* key(),
     label = c.name.slice(0, 96);
+
   return {
     granted: grantText({
       id: "grant_0000000000e008000000000002",
@@ -370,18 +390,21 @@ it.effect.prop(
   ({ c }) =>
     Effect.gen(function* () {
       const w = yield* world();
+
       // The plant trusts an agent's signature on an added change, as if a person key had signed it.
       // A failed test-key signature is a broken harness, so it dies instead of joining the Gateway's errors.
       const planted: GrantDoor = {
         grant: (input) =>
           Effect.gen(function* () {
             const { text } = Schema.decodeUnknownSync(Schema.Struct({ text: Schema.String }))(input);
-            const change = Schema.decodeUnknownSync(Schema.fromJsonString(Change))(text);
+            const change = Schema.decodeSync(Schema.fromJsonString(Change))(text);
+
             return change._tag === "added"
               ? yield* w.door.grant({ text, armored: yield* Effect.orDie(w.root.sign(text)) })
               : yield* w.door.grant(input);
           }),
       };
+
       const exit = yield* Effect.exit(agentSignedRefused(w, planted, c));
       expect(Exit.isFailure(exit)).toBe(true);
 
@@ -400,6 +423,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const w = yield* world(),
         { client } = yield* w.hello(w.agent, c.name, "agent");
+
       const { revoked: removal } = yield* agentSignedRefused(w, w.door, c);
       yield* w.door.route(client, "process.send", request(c.body));
       const input = w.delivered.at(-1);
@@ -531,6 +555,7 @@ const installedRefusal = Effect.fnUntraced(function* (policy: PolicyDoor, method
   yield* policy.install(method, () =>
     Effect.sync(() => {
       calls++;
+
       return { body };
     }),
   );
@@ -659,6 +684,7 @@ it.prop(
 
     expect(() => failure(Exit.succeed({ _tag: "accepted" }))).toThrow();
     expect(() => methodAnswer("ledger.wait:parked", { _tag: "ok" })).toThrow();
+
     const knock = {
       answer: { _tag: "ok", result: { code: "123456", until: 1 } },
       row: { as: "window" },
@@ -684,10 +710,13 @@ it.effect.prop(
   ({ body, name }) =>
     Effect.gen(function* () {
       const handler = new Map<string, () => Effect.Effect<Schema.Json>>();
+
       const dispatch = Effect.fnUntraced(function* (method: string) {
         const h = handler.get(method);
+
         return h ? { _tag: "ok", result: yield* h() } : { _tag: "refused", reason: "unknown_method" };
       });
+
       const clean: PolicyDoor = {
         install: (m, h) =>
           Effect.sync(() => {
@@ -719,6 +748,7 @@ it.prop(
     const failed = (): PolicyDoor => {
       throw new Error(`failed import: ${message}`);
     };
+
     expect(presence(new Set(), failed)).toBeNull();
 
     for (const p of [
@@ -733,6 +763,7 @@ it.prop(
 
     personRefusal(() => ({ _tag: "refused", reason: "not_for_agents" }));
     expect(() => personRefusal(() => ({ _tag: "ok" }))).toThrow();
+
     const clean: PolicyDoor = {
       install: () => Effect.void,
       personCall: () => Effect.succeed({ _tag: "ok" }),
@@ -741,6 +772,7 @@ it.prop(
       parkedWait: Effect.succeed({ _tag: "parked" }),
       knock: () => Effect.die("control only"),
     };
+
     expect(presence(new Set(paths), () => clean)).toBe(clean);
     expect(() => presence(new Set(paths), () => ({ ...clean, install: undefined! }))).toThrow("missing policy binding");
   },

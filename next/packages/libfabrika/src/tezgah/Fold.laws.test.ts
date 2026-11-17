@@ -30,21 +30,25 @@
 // decide the law, and so is a run whose strips and gaps alone overflow a container (an open point the
 // amendment does not settle; the law counts them).
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { drawn, fold, STRIP } from "./Fold.ts";
 import * as Layout from "./Layout.ts";
 import { type TileId, Workspace } from "./Workspace.ts";
 
 const SEED = 119120;
+
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 
 /** The readability floor from fold, not tabs: a drawn tile under it is a strip (not a setting). */
 const SMALLEST = { width: 220, height: 120 } as const;
+
 /** A strip's size along its container, written here from amendment 13. */
 const ACROSS = { row: 22, column: 20 } as const;
+
 /** How close to the floor a drawn edge may sit before float rounding could decide the law. */
 const EDGE = 0.5;
+
 /** How far a product box may sit from the rule's, in CSS pixels: float rounding only. */
 const SAME = 0.01;
 
@@ -62,9 +66,11 @@ const typeId = (prefix: string, n: number): string => {
 };
 
 type Box = { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+
 type Node = Workspace["layout"];
 
 const under = (r: Box) => r.width < SMALLEST.width || r.height < SMALLEST.height;
+
 const near = (r: Box) => Math.abs(r.width - SMALLEST.width) <= EDGE || Math.abs(r.height - SMALLEST.height) <= EDGE;
 
 const tilesIn = (node: Node): ReadonlyArray<string> =>
@@ -85,9 +91,11 @@ const rule = (w: Workspace, size: { readonly width: number; readonly height: num
   const bands: Array<{ box: Box; tiles: ReadonlyArray<string> }> = [];
   const held: Array<{ dir: "row" | "column"; at: number }> = [];
   let overflow = false;
+
   const walk = (node: Node, box: Box): void => {
     if (typeof node === "string") {
       boxes.set(node, box);
+
       return;
     }
 
@@ -129,7 +137,9 @@ const rule = (w: Workspace, size: { readonly width: number; readonly height: num
       at += shares[i]! + Layout.GAP;
     }
   };
+
   walk(w.layout, { x: 0, y: 0, width: size.width, height: size.height });
+
   return { boxes, bands, held, overflow } satisfies Rule;
 };
 
@@ -176,12 +186,14 @@ const apart = (a: Box, b: Box) =>
   b.y + b.height <= a.y + SAME;
 
 const Cut = fc.record({ at: fc.nat(), down: fc.boolean(), close: fc.boolean() });
+
 type Cut = typeof Cut extends fc.Arbitrary<infer C> ? C : never;
 
 /** A workspace walked from one tile by `cuts`, focus on the live tile `focus` picks. */
 const walked = (cuts: ReadonlyArray<Cut>, focus: number) => {
   const first = typeId("tile", 1) as TileId;
-  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
+
+  let w: Workspace = Schema.decodeSync(Workspace)({
     id: typeId("workspace", 1),
     n: 1,
     layout: first,
@@ -200,6 +212,7 @@ const walked = (cuts: ReadonlyArray<Cut>, focus: number) => {
 
   const live = Layout.order(w.layout);
   const on = live[focus % live.length]!;
+
   return Layout.focus(w, on);
 };
 
@@ -246,6 +259,7 @@ describe("Desk S4 L31: one drawn geometry; a window folds a tile under 220x120 i
         if (close || want.overflow) {
           seen.close += close ? 1 : 0;
           seen.overflow += want.overflow ? 1 : 0;
+
           return;
         }
 
@@ -296,6 +310,7 @@ describe("Desk S4 L31: one drawn geometry; a window folds a tile under 220x120 i
         const first = rule(w, size, new Set()).boxes;
         seen.thin += [...strips].some((t) => {
           const r = first.get(t)!;
+
           return r.width < ACROSS.row || r.height < ACROSS.column;
         })
           ? 1
@@ -317,6 +332,7 @@ describe("Desk S4 L31: one drawn geometry; a window folds a tile under 220x120 i
 
   it("scenario: a 2x2 at 400x300 with t1 focused folds the bottom row whole: one band 20px tall across the area, its two strips lying along it apart, and t1 holds the rest beside c's 22px strip (amendment 13, point 3)", () => {
     const [t1, c, a, b] = [1, 2, 3, 4].map((n) => typeId("tile", n) as TileId);
+
     let w: Workspace = Schema.decodeUnknownSync(Workspace)({
       id: typeId("workspace", 1),
       n: 1,
@@ -324,6 +340,7 @@ describe("Desk S4 L31: one drawn geometry; a window folds a tile under 220x120 i
       focus: t1,
       recent: [t1],
     });
+
     w = Layout.split(w, t1!, "column", a!);
     w = Layout.split(w, a!, "row", b!);
     w = Layout.split(w, t1!, "row", c!);

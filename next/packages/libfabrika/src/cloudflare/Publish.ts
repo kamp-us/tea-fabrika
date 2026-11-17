@@ -1,8 +1,6 @@
 /**
  * How the Project reaches one client's Connection object: through the client's route row, with
  * what the client is told as `News`.
- *
- * @stability unstable
  */
 import { Effect } from "effect";
 import { News, type Published } from "../runtime/News.ts";
@@ -18,7 +16,6 @@ import type { Sql } from "../Sql.ts";
  * Only the Project's route is checked: no route answers `gone` and sends nothing, and
  * Connection.notify keeps its void result.
  *
- * @stability unstable
  * @category constructors
  */
 export const make = <E>(sql: Sql, send: (connection: string, client: string, news: News) => Effect.Effect<void, E>) => {

@@ -85,6 +85,7 @@ const codeFiles = (dir: string): ReadonlyArray<string> =>
         }
 
         const skip = ["node_modules", "dist"].includes(entry.name) || entry.name.startsWith(".");
+
         return skip ? [] : codeFiles(path);
       });
 
@@ -106,6 +107,7 @@ const packageAt = (spec: string): { readonly name: string; readonly subpath: str
   const parts = spec.split("/");
   const size = spec.startsWith("@") ? 2 : 1;
   const rest = parts.slice(size);
+
   return {
     name: parts.slice(0, size).join("/"),
     subpath: rest.length === 0 ? "." : `./${rest.join("/")}`,
@@ -116,6 +118,7 @@ const packageAt = (spec: string): { readonly name: string; readonly subpath: str
 const pointsAt = (from: string, spec: string): string => {
   const base = join(dirname(from), spec);
   const tries = [base, `${base}.ts`, `${base}.tsx`, join(base, "index.ts"), base.replace(/\.js$/, ".ts")];
+
   return tries.find((path) => existsSync(path) && statSync(path).isFile()) ?? base;
 };
 
@@ -131,8 +134,10 @@ const exportMap = (pkg: Package): ReadonlyMap<string, string | undefined> => {
     }
 
     const conditions = new Map(Object.entries(value));
+
     return target(conditions.get("import") ?? conditions.get("default"));
   };
+
   const exports = pkg.manifest.exports;
 
   if (typeof exports !== "object" || exports === null) {
@@ -163,6 +168,7 @@ type Reached =
 const exportAt = (map: ReadonlyMap<string, string | undefined>, subpath: string): Reached => {
   if (map.has(subpath) && !subpath.includes("*")) {
     const file = map.get(subpath);
+
     return file === undefined ? { kind: "refused" } : { kind: "file", file };
   }
 
@@ -183,6 +189,7 @@ const exportAt = (map: ReadonlyMap<string, string | undefined>, subpath: string)
 
   const file = map.get(best.key);
   const matched = subpath.slice((best.parts[0] ?? "").length, subpath.length - (best.parts[1] ?? "").length);
+
   return file === undefined ? { kind: "refused" } : { kind: "file", file: file.split("*").join(matched) };
 };
 
@@ -236,15 +243,18 @@ const listed = (m: Package["manifest"]): ReadonlyMap<string, string> =>
 /** p65's one outside package (docs/direction/fabrika-design-package.md): the design package, shared by
  *  both versions, which the window (`@kampus/tuval`) and the app import. No other `next/` package may. */
 const DESIGN = "@kampus/fabrika-design";
+
 const DESIGN_TAKERS: ReadonlySet<string> = new Set(["@kampus/tuval", "@kampus/fabrika"]);
 
 /** Each package's `package.json`: private at 0.0.0, no side effects, a typecheck, nothing of today's. */
 const manifestFaults = (next: string): ReadonlyArray<string> => {
   const packages = packagesIn(next);
   const ours = new Set(packages.map((pkg) => pkg.manifest.name));
+
   return packages.flatMap((pkg) => {
     const location = shown(next, `${pkg.dir}${sep}package.json`);
     const m = pkg.manifest;
+
     return [
       ...(m.private === true ? [] : [`${location}: not private`]),
       ...(m.version === "0.0.0" ? [] : [`${location}: version is not 0.0.0`]),
@@ -267,6 +277,7 @@ const EXAM = /^apps\/fabrika\/(?:e2e\.ts$|e2e\/|src\/exam\/)/;
 const importFaults = (next: string): ReadonlyArray<string> => {
   const packages = packagesIn(next);
   const byName = new Map(packages.map((pkg) => [pkg.manifest.name, pkg]));
+
   return codeFiles(next).flatMap((file) => {
     const location = shown(next, file);
     const pkg = ownerAt(packages, file);
@@ -276,6 +287,7 @@ const importFaults = (next: string): ReadonlyArray<string> => {
     }
 
     const names = listed(pkg.manifest);
+
     return importsInFile(file).flatMap((spec) => {
       const found: Array<string> = [];
 
@@ -393,8 +405,10 @@ const browserEntries = (
   packages.flatMap((pkg) => {
     const name = pkg.manifest.name;
     const keys = [...(BROWSER[name] ?? []), ...(pkg.group === "programs" ? ["./window"] : [])];
+
     return keys.flatMap((key) => {
       const reached = exportAt(exportMap(pkg), key);
+
       return reached.kind === "file" && existsSync(reached.file)
         ? [{ label: key === "." ? name : `${name}${key.slice(1)}`, file: reached.file }]
         : [];
@@ -404,6 +418,7 @@ const browserEntries = (
 /** Bundles `file` for a browser with no Node shims and lists each forbidden module it reaches. */
 const reach = async (next: string, label: string, file: string): Promise<ReadonlyArray<string>> => {
   const hits: Array<string> = [];
+
   const watch: Plugin = {
     name: "forbidden",
     resolveId(source, importer) {
@@ -414,9 +429,11 @@ const reach = async (next: string, label: string, file: string): Promise<Readonl
       }
 
       hits.push(`${label} reaches ${rule.name}: "${source}" from ${shown(next, importer ?? file)}`);
+
       return { id: source, external: true };
     },
   };
+
   let bundle: Awaited<ReturnType<typeof rolldown>> | undefined;
 
   try {
@@ -427,6 +444,7 @@ const reach = async (next: string, label: string, file: string): Promise<Readonl
       plugins: [watch],
     });
     await bundle.generate({ format: "esm" });
+
     return hits;
   } catch (error) {
     return [...hits, `${label} does not bundle: ${String(error)}`];
@@ -437,6 +455,7 @@ const reach = async (next: string, label: string, file: string): Promise<Readonl
 
 const bundleFaults = async (next: string): Promise<ReadonlyArray<string>> => {
   const all = await Promise.all(browserEntries(packagesIn(next)).map(({ label, file }) => reach(next, label, file)));
+
   return all.flat();
 };
 
@@ -447,18 +466,22 @@ const bundleContents = async (
   file: string,
 ): Promise<{ readonly loaded: ReadonlyArray<string>; readonly output: ReadonlyArray<string> }> => {
   const loaded: Array<string> = [];
+
   const watch: Plugin = {
     name: "loaded",
     load(id) {
       loaded.push(shown(next, id));
+
       return null;
     },
   };
+
   const bundle = await rolldown({ input: file, platform: "browser", logLevel: "silent", plugins: [watch] });
 
   try {
     const { output } = await bundle.generate({ format: "esm" });
     const kept = output.flatMap((chunk) => (chunk.type === "chunk" ? chunk.moduleIds : []));
+
     return { loaded, output: kept.map((id) => shown(next, id)) };
   } finally {
     await bundle.close();
@@ -496,10 +519,13 @@ describe("the real next/", () => {
   it("P11: every front file the browser check lists is exported and exists, so none is silently skipped", () => {
     const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
     expect(library).toBeDefined();
+
     const missing = (BROWSER["@kampus/libfabrika"] ?? []).filter((key) => {
       const reached = exportAt(exportMap(library!), key);
+
       return !(reached.kind === "file" && existsSync(reached.file));
     });
+
     expect(missing).toEqual([]);
   });
   // pinned: one named public contract (0095, ticket 702). Bundled alone for a browser, the Ledger
@@ -535,6 +561,7 @@ describe("the real next/", () => {
 describe("reading imports", () => {
   it("finds static, type, re-export, bare, multi-line and dynamic imports, and skips comments", () => {
     const dynamic = `const m = ${"import"}("@pierre/highlights");`; // built from two strings, so no scan reads it as this file's own import
+
     const text = lines(
       'import {Effect} from "effect";',
       'import type {Wire} from "./wire.ts";',
@@ -548,6 +575,7 @@ describe("reading imports", () => {
       '// import {x} from "not-this";',
       ' * import {y} from "nor-this";',
     );
+
     expect([...importsIn(text)].sort()).toEqual(
       ["effect", "./wire.ts", "./fold.ts", "./style.css", "@kampus/libfabrika", "@pierre/highlights"].sort(),
     );
@@ -563,6 +591,7 @@ describe("planted breaks", () => {
         }),
         "packages/libfabrika/src/gateway/Gateway.ts": lines('export {readFileSync} from "node:fs";'),
       });
+
       expect(
         (yield* Effect.promise(() => bundleFaults(tree))).some(
           (fault) => fault.includes("@kampus/libfabrika/gateway/Gateway") && fault.includes("node:fs"),
@@ -570,10 +599,12 @@ describe("planted breaks", () => {
       ).toBe(true);
     }),
   );
+
   const library = manifest("@kampus/libfabrika", {
     exports: { ".": "./src/index.ts", "./transport/*": "./src/transport/*.ts", "./transport/internal/*": null },
     dependencies: { effect: "catalog:" },
   });
+
   const tree = plant({
     "packages/libfabrika/package.json": library,
     "packages/libfabrika/src/index.ts": lines(
@@ -654,6 +685,7 @@ describe("planted breaks", () => {
         "apps/fabrika/src/exam/deps.test.ts": lines('import {it} from "vitest";'),
         "apps/fabrika/src/brain.ts": lines('import {Effect} from "effect";'),
       });
+
       expect(importFaults(early)).toEqual(["apps/fabrika/src/brain.ts: sits in no package"]);
     }),
   );
@@ -688,6 +720,7 @@ describe("planted breaks", () => {
         "programs/chaos/src/index.ts": lines('import {app} from "electron";', "export const a = app;"),
         "programs/chaos/src/window.ts": lines('export {a} from "./index.ts";'),
       });
+
       expect([...(yield* Effect.promise(() => bundleFaults(bundles)))].sort()).toEqual(
         [
           '@kampus/libfabrika reaches node:*: "node:fs" from packages/libfabrika/src/index.ts',
@@ -708,6 +741,7 @@ describe("planted breaks", () => {
 describe("a module's front files and its internal/ in the exports map", () => {
   const options = { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) };
   const LIBRARY = "@kampus/libfabrika";
+
   const MODULES = [
     "telemetry",
     "ledger",
@@ -720,11 +754,14 @@ describe("a module's front files and its internal/ in the exports map", () => {
     "desktop",
     "client",
   ] as const;
+
   const module = fc.constantFrom(...MODULES);
   const name = fc.stringMatching(/^[A-Za-z][A-Za-z0-9]{0,8}$/);
+
   const real = () => {
     const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === LIBRARY);
     expect(library, "the library is a package of next/").toBeDefined();
+
     return library!;
   };
 
@@ -748,11 +785,13 @@ describe("a module's front files and its internal/ in the exports map", () => {
       name,
       fc.shuffledSubarray(["pattern", "null"], { minLength: 2 }),
     );
+
     fc.assert(
       fc.property(sub, ([each, kind, stem, order]) => {
         const entries = order.map((key): [string, string | undefined] =>
           key === "pattern" ? [`./${each}/*`, `/pkg/src/${each}/*.ts`] : [`./${each}/internal/*`, undefined],
         );
+
         const at = kind === "front" ? `./${each}/${stem}` : `./${each}/internal/${stem}`;
         expect(exportAt(new Map(entries), at)).toEqual(
           kind === "front" ? { kind: "file", file: `/pkg/src/${each}/${stem}.ts` } : { kind: "refused" },
@@ -767,7 +806,9 @@ describe("a module's front files and its internal/ in the exports map", () => {
   // front file is reached. An internal file is refused even though it exists, and a name no file has
   // reaches nothing. Plant: `ledger/internal/ledgerStore` imported from the app, which must fail.
   const stemName = Schema.String.check(Schema.isPattern(/^[A-Za-z][A-Za-z0-9]{0,8}$/));
+
   type Case = readonly [(typeof MODULES)[number], "front" | "internal" | "missing", string];
+
   // pinned: the plan's plant (ticket 477), the ledger's store imported from the app, runs first.
   const pinned: ReadonlyArray<Case> = [["ledger", "internal", "ledgerStore"]];
   it.effect.prop(
@@ -779,6 +820,7 @@ describe("a module's front files and its internal/ in the exports map", () => {
         ([each, kind, stem]) =>
           Effect.gen(function* () {
             const subpath = kind === "internal" ? `${each}/internal/${stem}` : `${each}/${stem}`;
+
             const tree = yield* plant({
               "packages/libfabrika/package.json": manifest(LIBRARY, { exports: real().manifest.exports }),
               [`packages/libfabrika/src/${each}/internal/${stem}.ts`]: lines("export const inside = 1;"),
@@ -788,6 +830,7 @@ describe("a module's front files and its internal/ in the exports map", () => {
               "apps/fabrika/package.json": manifest("@kampus/fabrika", { dependencies: { [LIBRARY]: "workspace:*" } }),
               "apps/fabrika/src/use.ts": lines(`import {x} from "${LIBRARY}/${subpath}";`),
             });
+
             const faults = importFaults(tree).map((fault) => fault.replace(/^.*: /, ""));
 
             expect(faults).toEqual(
@@ -810,6 +853,7 @@ it("format: L12 desktop contracts bundle for a browser without their implementat
   // platform imports were tree-shaken from the emitted bytes.
   const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
   expect(library).toBeDefined();
+
   const implementation =
     /packages\/libfabrika\/src\/(?:desktop\/(?:BrainServiceManaged|internal\/)|node\/launchd\/|cloudflare\/)/;
 

@@ -1,0 +1,25 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-local-signal-guard-followup",
+  "parent": "2026-11-16-local-signal-guard-lead",
+  "role": "hand",
+  "step": "lead",
+  "ticket": "tea-fabrika#1130",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "note": "Today's tooling: fresh review found stale caps expectations for the guard's guidance and its own signal-bearing file. The shared refusal checks now require eligible CI guidance and reject owner-bypass advice. A pure hostRun test file is the success control; caps and box keep explicit refusal checks, including an owner marker. Exit, path, stdout, project, changed-file and CI checks remain. Eleven safe guard tests passed. Caps source was only parsed as text; the whole caps suite and its real signals still need eligible remote proof. No compiler ran in this follow-up.",
+  "why": "Reconcile existing caps tests with the stronger selected-source guard without weakening its protection.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "the caps file stays protected while its pure control remains eligible",
+      "plant": "Exempt scripts/caps.test.ts from source checks.",
+      "result": "red"
+    }
+  ]
+}

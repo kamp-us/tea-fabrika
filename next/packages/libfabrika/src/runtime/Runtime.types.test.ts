@@ -33,6 +33,7 @@ it("type: no service of runtime/ fails with an error tagged LedgerError", () => 
 
   // RecoveryStore: `load`, `save`, `input` and `receipt` fail with its own error and nothing else.
   type Recovery = (typeof RecoveryStore)["Service"];
+
   expectTypeOf<Failures<Recovery>["_tag"]>().toEqualTypeOf<"RecoveryStoreError">();
   expectTypeOf<FromLedger<Recovery>>().toBeNever();
 });

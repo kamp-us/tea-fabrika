@@ -75,10 +75,12 @@ type Files = Partial<Record<"apt-mirrors.txt" | "sources.list.d/ubuntu.sources" 
 const box = (files: Files, release = "noble") => {
   const root = mkdtempSync(join(tmpdir(), "apt-"));
   onTestFinished(() => rmSync(root, { recursive: true, force: true }));
+
   const etc = join(root, "etc"),
     bin = join(root, "bin"),
     lists = join(root, "lists"),
     osRelease = join(root, "os-release");
+
   mkdirSync(join(etc, "sources.list.d"), { recursive: true });
   mkdirSync(bin);
   mkdirSync(lists);
@@ -98,6 +100,7 @@ const box = (files: Files, release = "noble") => {
 
   const log = join(root, "log");
   writeFileSync(log, "");
+
   const run = (args: string[], dead: string[] = [], down: string[] = [azure]) =>
     spawnSync("sh", [script, ...args], {
       encoding: "utf8",
@@ -112,14 +115,17 @@ const box = (files: Files, release = "noble") => {
         DOWN: down.join(" "),
       },
     });
+
   const read = (name: keyof Files) => readFileSync(join(etc, name), "utf8");
   const has = (name: keyof Files) => existsSync(join(etc, name));
   const calls = () => readFileSync(log, "utf8").split("\n").filter(Boolean);
   const list = `mirror+file:${join(etc, "apt-mirrors.txt")}`;
+
   return { run, read, has, calls, list };
 };
 
 const azure = "azure.archive.ubuntu.com";
+
 const canonical = [azure, "archive.ubuntu.com", "security.ubuntu.com"];
 
 // The image's list once the first fallback ran: Azure gone, the three outside mirrors at its end.
@@ -132,8 +138,11 @@ const chain =
 
 // The image points its main stanza at the mirror list and leaves security as it is.
 const imageSources = deb822.replace("http://azure.archive.ubuntu.com/ubuntu/", "mirror+file:/etc/apt/apt-mirrors.txt");
+
 const image = { "apt-mirrors.txt": mirrors, "sources.list.d/ubuntu.sources": imageSources };
+
 const install = ["install", "expect", "zsh"];
+
 const installCall = "install -y --no-install-recommends expect zsh";
 
 it("scenario: mirror fine, one try and no file changes", () => {

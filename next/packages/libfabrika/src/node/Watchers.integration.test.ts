@@ -1,8 +1,12 @@
 // Ticket 893 slice 1, next/. Runs runtime's watcher laws on real SQLite files (0062). Each walk gets a fresh
 // temporary folder; each open is a new connection to the same files, closed with its scope.
-import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for the referee's transactions
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Layer, Path, type Scope } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import type * as Scope from "effect/Scope";
 import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -18,22 +22,22 @@ import type { Sql } from "../Sql.ts";
 
 // The brain's own session, a process id it never starts.
 const SESSION = "process_0000000000e008000000000003";
+
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 /** One connection to a database file, closed with its scope. */
 const connection = (file: string): Effect.Effect<Sql, never, Scope.Scope> =>
-  Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(file)),
-    (db) => Effect.sync(() => db.close()),
-  ).pipe(Effect.map(nodeSql));
+  TestDatabase.make(file).pipe(Effect.map(nodeSql));
 
 /** A fresh folder; each run of the result opens the named database in it again. */
 const files = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+
   const folder = yield* Effect.acquireRelease(fs.makeTempDirectory({ prefix: "watchers-" }), (path) =>
     fs.remove(path, { recursive: true }).pipe(Effect.orDie),
   );
+
   return (name: string) => connection(path.join(folder, `${name}.sqlite`));
 }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
@@ -53,4 +57,5 @@ const services = (inbox: Sql, manager: Sql) =>
   );
 
 WatchersTest.suite(Effect.map(files, (open) => open("watchers")));
+
 RunnerWatchersTest.suite({ files, services });

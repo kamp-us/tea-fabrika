@@ -11,6 +11,7 @@ export const Write = Schema.TaggedUnion({
   comment: { number: Schema.Number, body: Schema.String },
   close: { number: Schema.Number },
 });
+
 export type Write = typeof Write.Type;
 
 export type Facts = {

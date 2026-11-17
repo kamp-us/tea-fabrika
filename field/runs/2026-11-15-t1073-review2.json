@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1073-review2",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1420",
+  "started": "2026-11-15T20:42:00-08:00",
+  "ended": "2026-11-15T20:52:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Recheck of ticket 1073 slice 1 (decision 0584, next/ and our lint tooling) at 1311809c1, after the tests fix round: merge-ready pending the full run, findings 2. Class 1 is closed: in a RuleTester probe, http and https request and get, tls connect, dgram createSocket, new net.Server, a remote WebSocket, fs.promises.mkdtemp in three spellings and execFileSync each fire in a plain next/ file, and K1 now runs each of its starters on its own. Class 2 is closed: K1 asserts the DRIVES words and the .integration. name, and K2 has the fake spawnSync, readFileSync and chromium.name cases back. My three wrong fires are silent. New escapes, none in next/ today: a FileSystem service reached through an alias or a let, a vi.stubGlobal fetch in one test that silences a real fetch in another test of the same file, new net.Socket().connect, and a write into tmpdir() with no mkdtemp. Dropping tmpdir is not a loosening against main or against a law in the plan's table; it departs from one line of the plan's shape section, so it is a finding row, with the file-level rule I would want. No full run at this head yet (0178).",
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "Run here on Node 26.13.0, one file at a time: integration-test-name.test.ts (4 green), test-kind.test.ts (2 green). test-kind.ts on the real tree: exit 0, 18 advice lines. rg finds no stubGlobal fetch in next/, and every tmpdir() in next/ is inside a mkdtemp call. The probe ran from the scratch folder, outside the repo. Not run: any .integration. file.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "review"
+}

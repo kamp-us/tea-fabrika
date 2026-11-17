@@ -46,6 +46,7 @@ import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { type Appended, type Entry, fromHere, Line, lineFor, valueFor, type Waited } from "../ledger/Log.ts";
 import { Referee } from "../ledger/Referee.ts";
 import * as RefereeSql from "../ledger/RefereeSql.ts";
+import { WritePolicy } from "../ledger/WritePolicy.ts";
 import { Model } from "../permissions/Model.ts";
 import * as Relation from "../permissions/Relation.ts";
 import { Relations } from "../permissions/Relations.ts";
@@ -63,6 +64,8 @@ import {
 import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
 import { decodeExitReason, type ExitReason } from "../processes/ExitReason.ts";
 import { Mailbox, type From, type Letter } from "../processes/Mailbox.ts";
+import { Monitors, MonitorsError, type Unwatch, type Watch, type Watched } from "../processes/Monitors.ts";
+import * as MonitorsLedger from "../processes/MonitorsLedger.ts";
 import {
   type Activity,
   type DeadInput,
@@ -80,6 +83,7 @@ import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessManager, remoteProcessManager, type ProcessCalls } from "../processes/ProcessManager.ts";
 import { ProgramMail, type ProgramMailError, type Delivery, type Grants } from "../processes/ProgramMail.ts";
 import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
+import { Quotas, type QuotasError } from "../processes/Quotas.ts";
 import * as Audit from "../runtime/Audit.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { BuiltProgram } from "../runtime/Built.ts";
@@ -96,6 +100,7 @@ import { MailWakeups } from "../runtime/MailWakeups.ts";
 import { type News, Published } from "../runtime/News.ts";
 import { Checkpoint, ProcessStore, RuntimeRecord } from "../runtime/ProcessStore.ts";
 import { ProgramDown } from "../runtime/Program.ts";
+import * as QuotaRunner from "../runtime/QuotaRunner.ts";
 import type { RecoveryStoreError } from "../runtime/RecoveryStore.ts";
 import type { RepliesError } from "../runtime/Replies.ts";
 import type { Descriptor, Opened, RunnerError, Swapped } from "../runtime/Runner.ts";
@@ -116,6 +121,7 @@ import { Answer, RateCountFailure } from "../transport/Wire.ts";
 import {
   ChildReplies,
   StopReplies,
+  MonitorReplies,
   CommitReply,
   MailReplies,
   type MailReply,
@@ -136,6 +142,7 @@ import { mailLayer, wakeups } from "./mail.ts";
 import type { RecordShape } from "./objects.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
 import * as Publish from "./Publish.ts";
+import * as ProjectQuotas from "./quotas.ts";
 import * as SettingsInput from "./SettingsInput.ts";
 import * as SettingsRecorded from "./SettingsRecorded.ts";
 import * as SettingsRuntime from "./SettingsRuntime.ts";
@@ -341,6 +348,12 @@ export interface ProjectDoorOptions {
   readonly nextProcess: () => Effect.Effect<string>;
   readonly notify: (client: string, news: News) => Effect.Effect<void, LedgerError>;
   readonly deliver: (process: string, input: Incoming) => Effect.Effect<Sent, LedgerError>;
+  /**
+   * Whether the program behind `process` has room for this input, asked before it is saved (0147).
+   * `before` counts the entries the door writes ahead of the message, so the trial measures the
+   * message at the place it will land.
+   */
+  readonly admit: (process: string, input: Incoming, before: number) => Effect.Effect<boolean, LedgerError>;
   readonly open: (process: string, client: string) => Effect.Effect<Schema.Json, LedgerError>;
   /** Watches `pid` for one window session, `to`, in the Project's turn. */
   readonly monitor: (
@@ -532,6 +545,19 @@ const stopReply = (work: Effect.Effect<void, unknown>): Effect.Effect<typeof Sto
     ),
   );
 
+/** A watch's checked refusals are replies, as a start's are; storage remains a retryable rejection. */
+const monitorReply = (
+  work: Effect.Effect<typeof Watched.Type, unknown>,
+): Effect.Effect<typeof MonitorReplies.Type, LedgerError> =>
+  work.pipe(
+    Effect.map((value) => MonitorReplies.cases.ok.make({ value })),
+    Effect.catch((error): Effect.Effect<typeof MonitorReplies.Type, LedgerError> =>
+      error instanceof MonitorsError && error.reason !== "storage"
+        ? Effect.succeed(MonitorReplies.cases.MonitorsError.make({ reason: error.reason }))
+        : Effect.fail(new LedgerError({ reason: "storage" })),
+    ),
+  );
+
 const processValue = Effect.fnUntraced(function* <A>(reply: ProcessReply<A>) {
   if (reply._tag === "ok") {
     return reply.value;
@@ -713,7 +739,7 @@ const flushed = SpanSink.use((sink) => sink.flush);
  * **Details**
  *
  * The flush is skipped when the call failed with a `RateCountFailure`, when `counted` is true of its
- * value, or when it answered a `reserved` or `rate_limited` refusal. A failed flush fails a call that
+ * value, or when it answered a `reserved`, `rate_limited` or `quota` refusal. A failed flush fails a call that
  * succeeded; a call that failed keeps its own failure.
  *
  * @stability unstable
@@ -734,7 +760,8 @@ export const complete = Effect.fn(function* <A, E, R>(
       if (
         Exit.isSuccess(exit) &&
         (counted(exit.value) ||
-          (Schema.is(Answer.cases.refused)(exit.value) && ["reserved", "rate_limited"].includes(exit.value.reason)))
+          (Schema.is(Answer.cases.refused)(exit.value) &&
+            ["reserved", "rate_limited", "quota"].includes(exit.value.reason)))
       ) {
         return exit;
       }
@@ -795,7 +822,12 @@ const fingerprint = Effect.fnUntraced(function* (value: string) {
   return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
 });
 
-const projectLedger = (ctx: DurableObjectState, env: Env, name: string) => {
+const projectLedger = (
+  ctx: DurableObjectState,
+  env: Env,
+  name: string,
+  input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError>,
+) => {
   const sql = cloudflareSql(ctx.storage);
   const turn = Semaphore.makeUnsafe(1);
   const notifications = Context.Reference<Array<Effect.Effect<void, LedgerError>> | null>(
@@ -836,7 +868,7 @@ const projectLedger = (ctx: DurableObjectState, env: Env, name: string) => {
     LedgerTransactionSql.layer(sql),
     RefereeSql.layer(sql),
     LedgerStreamsSql.layer(sql),
-  ).pipe(Layer.provide(bell));
+  ).pipe(Layer.provideMerge(ProjectQuotas.project(sql, `brain:${name}`, input)), Layer.provide(bell));
   const starts = SettingsStartsLedger.fromLedger().pipe(Layer.provide(ledgerLayer));
   return { sql, turn, write, ledgerLayer, starts };
 };
@@ -1201,6 +1233,8 @@ const projectLogic = Effect.fn("project.init")(function* (
       }),
       nextProcess: () => ids.next,
       notify: clients.notify,
+      admit: (pid, incoming, before) =>
+        ProjectQuotas.admitsInput(Context.get(services, Quotas), processes, pid, incoming, config.build, before),
       deliver: (pid, incoming) =>
         processObject(pid).pipe(
           Effect.flatMap((owner) => rpc(ProcessClient.make(processStub(env, name, owner)).msg(incoming))),
@@ -1228,6 +1262,21 @@ const projectLogic = Effect.fn("project.init")(function* (
         grants: options.starts ?? checked.input.starts ?? [],
         fabrika: Model.ref("fabrika", name),
       }).pipe(
+        Layer.provide(
+          Layer.succeed(
+            Senders,
+            SessionSenders.make((parent, process) => door.sender(process, parent)),
+          ),
+        ),
+        Layer.provide(Layer.succeedContext(services)),
+      ),
+    ),
+  );
+  // A program's watch decides in the same manager's turns, checked against the same member (0170,
+  // 0531), and writes as the watcher through the trusted argument only this side holds.
+  const monitors = yield* Monitors.pipe(
+    Effect.provide(
+      MonitorsLedger.layer({ fabrika: Model.ref("fabrika", name) }).pipe(
         Layer.provide(
           Layer.succeed(
             Senders,
@@ -1460,6 +1509,24 @@ const projectLogic = Effect.fn("project.init")(function* (
 
     return answer;
   });
+  /** Wakes each process that watches `pid`, after the turn that ended it: the exit wrote a `DOWN`
+   *  into each watcher's inbox, and a name's object reads its inbox only once woken, as for mail. A
+   *  watch stays live after its `DOWN`, so a repeated exit wakes again, and a wake that failed fails
+   *  the exit, which may be asked again. A watcher that ended holds no watch, and a window needs no
+   *  wake: the append itself rings its parked wait. */
+  const wakeWatchers = Effect.fnUntraced(function* (pid: string) {
+    const names = yield* Context.get(services, LedgerTransaction).transact((turn) => {
+      const table = processes.table(turn);
+      return table
+        .inbound(pid)
+        .flatMap(({ to }) => (to._tag === "process" ? Option.toArray(table.life(to.process)) : []))
+        .map((life) => life.name);
+    });
+    const wakeups = Context.get(services, MailWakeups);
+    yield* Effect.forEach(new Set(names), (name) => wakeups.wake(name), { concurrency: 1, discard: true }).pipe(
+      Effect.mapError((cause) => new LedgerError({ reason: "unreachable", cause })),
+    );
+  });
   // Project RPC input is untrusted: the reason is decoded before the turn or the retirement.
   const exit = Effect.fnUntraced(function* (pid: string, input: ExitReason, origin: From) {
     const reason = yield* Effect.fromResult(decodeExitReason(input)).pipe(
@@ -1469,18 +1536,25 @@ const projectLogic = Effect.fn("project.init")(function* (
       yield* processes.exit(pid, reason, origin);
       yield* door.retire(pid);
     }).pipe(write);
+    yield* wakeWatchers(pid);
   });
   /** A child stop, OTP's terminate_child: one write turn ends the requester's own child with
    *  `shutdown`, and its session can no longer sign, as an exit's cannot. */
   const stopChild = Effect.fnUntraced(function* (input: ChildStop, origin: From) {
-    yield* Effect.gen(function* () {
+    const child = yield* Effect.gen(function* () {
       const child = (yield* processes.info).find((row) => row.name === input.name);
       yield* children.stop(input, origin);
 
       if (child !== undefined) {
         yield* door.retire(child.process);
       }
+
+      return child;
     }).pipe(write);
+
+    if (child !== undefined) {
+      yield* wakeWatchers(child.process);
+    }
   });
   const failed = Effect.fn("code.failed")(function* (raw: unknown, id?: string) {
     const fields = yield* Schema.decodeUnknownEffect(
@@ -1806,7 +1880,8 @@ const projectLogic = Effect.fn("project.init")(function* (
     },
     hands: (ask: typeof Ask.Type, origin: From, trace?: { traceId: string; spanId: string }) => {
       // Under the shared write turn, as every task call is: a read and its request or collect are one step.
-      const work = write(hands.ask(ask, origin));
+      // The request, its pointer and the collect are the asking program's own writes, charged to it.
+      const work = write(ProjectQuotas.own(ask.process, hands.ask(ask, origin)));
       return wrapped(trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace))));
     },
     target: door.target,
@@ -1870,10 +1945,11 @@ const projectLogic = Effect.fn("project.init")(function* (
     exit: (pid: string, reason: ExitReason, origin: From) => wrapped(exit(pid, reason, origin)),
     read: (stream: string, after: number, reader: string) => wrapped(referee.read(stream, after, reader)),
     wait: referee.wait,
-    append: (stream: string, id: string, input: unknown) => wrapped(write(append(stream, id, input))),
+    append: (stream: string, id: string, input: unknown) =>
+      wrapped(write(ProjectQuotas.runtimeAppend(stream, processes.resolve(stream), append(stream, id, input)))),
     sign: (pid: string, id: string, parent: string, kind: string) => wrapped(door.sign(pid, id, parent, kind)),
     commit: (pid: string, input: Omit<Parameters<typeof door.append>[0], "process">) =>
-      wrapped(door.append({ ...input, process: pid })),
+      wrapped(ProjectQuotas.ownWrite(pid, door.append({ ...input, process: pid }))),
     inbox: (pid: string, input: Incoming) =>
       wrapped(
         Effect.gen(function* () {
@@ -1891,27 +1967,12 @@ const projectLogic = Effect.fn("project.init")(function* (
           return yield* ledger.append(
             `${row.name}/inbox`,
             input.id,
-            lineFor(
-              {
-                by: input.envelope.by.key,
-                for: input.envelope.by.for,
-                sentAt: input.sentAt,
-                seen: input.seen,
-                parent: input.envelope.id,
-                traceId: input.span.traceId,
-                build: config.build,
-              },
-              Schema.TaggedStruct("send", { m: Schema.Json }).make({
-                m: yield* Schema.decodeUnknownEffect(Schema.Json)(input.envelope.input).pipe(
-                  Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-                ),
-              }),
-            ),
+            yield* ProjectQuotas.inboxLine(input, config.build),
           );
         }).pipe(write),
       ),
     own: (pid: string, id: string, stream: string, event: unknown, trace?: { traceId: string; spanId: string }) => {
-      const work = own(pid, id, stream, event);
+      const work = ProjectQuotas.ownWrite(pid, own(pid, id, stream, event));
       return wrapped(write(trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace)))));
     },
     brain: (event: typeof BrainEvent.Type) => wrapped(brain(event)),
@@ -1936,6 +1997,13 @@ const projectLogic = Effect.fn("project.init")(function* (
       wrapped(processReply(Stream.runCollect(processes.receive(pid, after)))),
     processChild: (input: Child, origin: From) => wrapped(childReply(child(input, origin))),
     processStop: (input: ChildStop, origin: From) => wrapped(stopReply(stopChild(input, origin))),
+    // A program's watch, as the Process object's runner asks it: the turn holds the call, and its
+    // rings go after it, so a noproc DOWN wakes a parked wait.
+    programMonitor: (watch: Watch, origin: From) => wrapped(monitorReply(write(monitors.monitor(watch, origin)))),
+    programDemonitor: (unwatch: Unwatch, origin: From) =>
+      wrapped(
+        write(monitors.demonitor(unwatch, origin)).pipe(Effect.mapError(() => new LedgerError({ reason: "storage" }))),
+      ),
     boot,
   };
 }, projectStorage);
@@ -2084,6 +2152,10 @@ export class ProjectService extends Context.Service<
     readonly processReceive: (pid: string, after: number) => Effect.Effect<ProcessReply<Array<Letter>>, ProjectFailure>;
     readonly processChild: (input: Child, origin: From) => Effect.Effect<typeof ChildReplies.Type, ProjectFailure>;
     readonly processStop: (input: ChildStop, origin: From) => Effect.Effect<typeof StopReplies.Type, ProjectFailure>;
+    /** A program's watch by name, in the Project's write turn; a refusal is reply data. */
+    readonly programMonitor: (watch: Watch, origin: From) => Effect.Effect<typeof MonitorReplies.Type, ProjectFailure>;
+    /** Ends a program's own watch under its ref, in the Project's write turn. */
+    readonly programDemonitor: (unwatch: Unwatch, origin: From) => Effect.Effect<void, ProjectFailure>;
     /** The bootstrap process and the rev of its start. */
     readonly boot: StartAnswer;
   }
@@ -2100,7 +2172,12 @@ export const projectLayer = (
   ctx: DurableObjectState,
   env: Env,
   options: ProjectOptions,
-  local = projectLedger(ctx, env, ctx.id.name ?? options.config?.name ?? "project"),
+  local = projectLedger(
+    ctx,
+    env,
+    ctx.id.name ?? options.config?.name ?? "project",
+    options.input ?? checkedSettings(env),
+  ),
 ) => {
   const input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError> = options.input ?? checkedSettings(env);
   return Layer.unwrap(
@@ -2133,7 +2210,12 @@ export const projectLayer = (
  * @category constructors
  */
 export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) => {
-  const local = projectLedger(ctx, env, ctx.id.name ?? options.config?.name ?? "project");
+  const local = projectLedger(
+    ctx,
+    env,
+    ctx.id.name ?? options.config?.name ?? "project",
+    options.input ?? checkedSettings(env),
+  );
   const minimal = SettingsRuntime.runtime(local.starts.pipe(Layer.provideMerge(local.ledgerLayer)));
   const ready = Layer.unwrap(
     minimal.contextEffect.pipe(
@@ -2145,6 +2227,9 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env, options: Proje
             Layer.succeed(LedgerTransaction, Context.get(services, LedgerTransaction)),
             Layer.succeed(Referee, Context.get(services, Referee)),
             Layer.succeed(LedgerStreams, Context.get(services, LedgerStreams)),
+            // The same accounts the ledger admits with, so a manager's trusted call charges them.
+            Layer.succeed(Quotas, Context.get(services, Quotas)),
+            Layer.succeed(WritePolicy, Context.get(services, WritePolicy)),
           ),
           starts: Layer.succeed(Starts.Starts, Context.get(services, Starts.Starts)),
         }),
@@ -2208,9 +2293,11 @@ const processLogic = Effect.fnUntraced(function* (
     sql = cloudflareSql(ctx.storage),
     loader = workerLoader(env.LOADER, programs, (hash) => rpc(p.code(hash)));
   const saved = yield* processDescriptor(ctx);
+  // The name's own accounts and fault slot, kept beside its data in this object's SQLite (0147).
+  const accounting = yield* ProjectQuotas.process(sql, saved.name, checked.values);
   const ledger = LedgerRemote.layer(stub, { reader: saved.id });
   const base = Layer.mergeAll(ledger, recordingLayer(sql, env, project, saved.id));
-  const all = Layer.mergeAll(ProcessStore.layer(sql, { process: saved.id, storage }), Mailbox.layer).pipe(
+  const all = Layer.mergeAll(ProcessStore.layer(sql, { process: saved.id, storage, accounting }), Mailbox.layer).pipe(
     Layer.provideMerge(base),
   );
   const services = yield* Layer.build(all).pipe(Effect.provideService(RecordedStart, checked));
@@ -2275,6 +2362,21 @@ const processLogic = Effect.fnUntraced(function* (
         ),
       ),
   });
+  // A watch is decided in the project too, whose manager writes it as this object's process.
+  const monitors = Monitors.of({
+    monitor: (watch, from) =>
+      asked(rpc(p.programMonitor(watch, from))).pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(MonitorReplies)),
+        Effect.mapError((cause) => new MonitorsError({ reason: "storage", cause })),
+        Effect.flatMap((reply) =>
+          reply._tag === "ok" ? Effect.succeed(reply.value) : Effect.fail(new MonitorsError({ reason: reply.reason })),
+        ),
+      ),
+    demonitor: (unwatch, from) =>
+      asked(rpc(p.programDemonitor(unwatch, from))).pipe(
+        Effect.mapError((cause) => new MonitorsError({ reason: "storage", cause })),
+      ),
+  });
   const dependencies = Layer.mergeAll(
     mailLayer(env, project),
     handsLayer(env, project),
@@ -2313,6 +2415,7 @@ const processLogic = Effect.fnUntraced(function* (
     // The project's brain writes as `brain:<project>`, the one writer its process table trusts.
     remoteProcessManager(manager, `brain:${project}`),
     Layer.succeed(Children, children),
+    Layer.succeed(Monitors, monitors),
   );
   // P34 on the Worker: receipts and pending recovery live in this object's own SQLite, beside
   // ProcessStore, under the registered name every successor shares.
@@ -2330,12 +2433,13 @@ const processLogic = Effect.fnUntraced(function* (
     },
     {
       policy: defaultPolicy,
-      recovery: { sql, name: saved.name, capacity: 1024 ** 3 },
+      recovery: { sql, name: saved.name, capacity: 1024 ** 3, accounting },
       // `mail.chunk`, read at the brain's edge with the start's other settings (0086).
       chunk: checked.values.mailChunk,
     },
   ).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));
-  const runner = yield* ProgramRunner.pipe(Effect.provide(runnerLayer));
+  // A name stopped under its reserve does no work until a person restarts it.
+  const runner = QuotaRunner.guard(yield* ProgramRunner.pipe(Effect.provide(runnerLayer)), accounting);
   yield* sink.flush.pipe(Effect.provideContext(services));
   const attributed = <A, E, R>(work: Effect.Effect<A, E, R>) =>
     Effect.suspend(() => work.pipe(Effect.annotateSpans({ "fab.process": active }), Effect.provideContext(services)));
@@ -2366,7 +2470,10 @@ const processLogic = Effect.fnUntraced(function* (
     restart: (request: unknown) =>
       Schema.decodeUnknownEffect(RestartRequest)(request).pipe(
         Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-        Effect.flatMap((checked) => attributed(runner.restart(checked))),
+        // The control door is the person's gate: only the instance's own token reaches this call,
+        // and it carries no checked requester. So a restart here is the person's, and it may clear
+        // the name's saved reserve fault.
+        Effect.flatMap((checked) => attributed(QuotaRunner.personRestart(runner, accounting, checked))),
       ),
     // A platform alarm delivers the saved due time, so a repeated alarm is the same letter.
     alarm: () =>
@@ -2374,8 +2481,8 @@ const processLogic = Effect.fnUntraced(function* (
         Effect.flatMap((at) => (at === undefined ? Effect.void : attributed(runner.due(at)))),
       ),
     activity: store.activity,
-    recover: () =>
-      rpc(storage.get("activity")).pipe(Effect.flatMap((value) => Effect.fromResult(recoverActivity(value)))),
+    // The marker the store keeps in this object's own storage, where the wake rule reads it.
+    recover: () => store.readActivity.pipe(Effect.flatMap((value) => Effect.fromResult(recoverActivity(value)))),
   };
 });
 
@@ -2390,6 +2497,7 @@ type RunnerFailure =
   | ProcessError
   | NotGranted
   | RepliesError
+  | QuotasError
   | WatchersError;
 
 /**
@@ -2415,7 +2523,7 @@ export class ProcessService extends Context.Service<
     readonly init: () => Effect.Effect<void, RunnerFailure>;
     readonly restart: (request: unknown) => Effect.Effect<void, RunnerFailure>;
     readonly alarm: () => Effect.Effect<void, RunnerFailure>;
-    readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError>;
+    readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError | QuotasError>;
     /** The saved activity marker after a wake: `idle`, or `interrupted` with the step that was cut short. */
     readonly recover: () => Effect.Effect<typeof Recovered.Type, LedgerError>;
   }

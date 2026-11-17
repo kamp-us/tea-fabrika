@@ -63,3 +63,7 @@ test decisions need. `next/` and `infra/` import it.**
 - Not decided here: whether the package is published outside this repository. It is not, for now.
 - [0554](0554-no-reflect-get-set-has.md) puts the fakes of Cloudflare objects in this package too.
   Everything above still holds.
+
+## Amendments
+
+- 2026-11-15: [0579](0579-property-laws-use-it-prop.md) removes the shared `property` runner in libfabrika's `Testing.test-support.ts` and the `fc.assert(property, { numRuns })` shape in the sketch above. A property law is `it.prop` or `it.effect.prop`, with the seed set once in the package setup.

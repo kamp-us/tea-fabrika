@@ -54,10 +54,16 @@ this skill for the law. The reviewer reads that law on its recheck.
      and the plan's reason beside the check. `fabrika/law-shape` in `pnpm lint` flags a `next/` or
      `.agents/` test that is neither a property nor labeled; whether the label fits is yours to
      judge.
-   - A test on a real resource (a real SQLite file, a real process, a real socket) is a
-     `*.integration.test.ts` file ([0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md));
-     `fabrika/integration-test-name` holds the name. Open a real SQLite file only through
-     `TestDatabase` in `@kampus/vitest`.
+   - A test's kind follows what it uses, never its name
+     ([0584](../../../.decisions/0584-a-tests-kind-follows-what-it-uses.md)). A law that starts or
+     reaches a real thing (a real instance, workerd, Electron or a browser, a child process, a real
+     signal, a port, the network) or writes to local disk (a SQLite file, a temp folder) is a
+     `*.integration.test.ts` file and runs only in the full run. A law that reads the repository's
+     files or runs on in-memory stand-ins is plain, in next/ and in tooling alike, and runs on every
+     pull request its change reaches. `fabrika/integration-test-name` holds the name. Open a real SQLite file only through
+     `TestDatabase` in `@kampus/vitest`. A law that can run on a stand-in runs on every pull
+     request, and the plan names why a new `.integration.` law has no stand-in
+     ([0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md)).
    - **A plant is run once, not kept.** Break the product code to prove each new law fails, run the
      law, record the plant and its result, then undo the plant. Commit no plant test. A plant
      may break any product file its law covers, whoever owns that file in the plan: it is never

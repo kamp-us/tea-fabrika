@@ -8,8 +8,6 @@
  * member writes only under that check's proof, and its write turn checks the proof again on the
  * rows of that turn. Whatever that turn answers, the start reads again once. A stop is checked in
  * one turn and ended in `ProcessManager.exit`'s own.
- *
- * @stability unstable
  */
 import { Cause, Data, Effect, Equal, Exit, Layer, Option, Result, Schema, Tracer } from "effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
@@ -22,19 +20,30 @@ import { type Sender, Senders, type SendersError } from "../permissions/Senders.
 import { short } from "../telemetry/Trace.ts";
 import { Child, Children, ChildrenError, type ChildStop, INPUT_BYTES, type StartGrant, Started } from "./Children.ts";
 import { ExitReason } from "./ExitReason.ts";
+import { pick, recorded } from "./internal/member.ts";
 import { type From, inbox, letterLine } from "./Mailbox.ts";
 import { ProcessError, ProcessName, type ProcessTable, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 
 const tag = (word: string): string => `fab.children.${word}`;
+
 const permissions = (word: string): string => `fab.permissions.${word}`;
 
 const decodeChild = Schema.decodeUnknownResult(Child);
+
 const isName = Schema.is(ProcessName);
+
 const decodeLetter = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Json }));
 
 const refuse = (reason: Exclude<ChildrenError["reason"], "storage">) => new ChildrenError({ reason });
+
 const storage = (cause: LedgerError | RelationsError | SendersError) => new ChildrenError({ reason: "storage", cause });
+
+type Asked = Result.Result<Option.Option<Sender>, SendersError>;
+
+/** A storage failure fails the start; any other answer, a refusal included, is kept as it came. */
+const unlessStorage = (asked: Asked): Result.Result<Asked, SendersError> =>
+  Result.isFailure(asked) && asked.failure.reason === "storage" ? Result.fail(asked.failure) : Result.succeed(asked);
 
 /** The proof a start's write needs. */
 type Proof = (typeof StartProgram)["Service"];
@@ -73,6 +82,7 @@ const encoder = new TextEncoder();
 const fits = (child: Child, from: From, m: Schema.Json): boolean => {
   const line = letterLine(from, m);
   const texts = [inbox(child.name), letterId(child.id), line.by, line.for, line.sentAt, line.parent];
+
   return (
     [...texts, line.traceId, line.build, line._tag, JSON.stringify(line.body)].reduce(
       (n, text) => n + (text === null ? 0 : encoder.encode(text).length),
@@ -90,9 +100,10 @@ type Rules = {
 
 /**
  * The permission step (0170, with the owner's answer (c) to its open question). The member checked
- * is the sender of the input that caused the start, else the requester's recorded member, its
- * process owner (0172). A member is checked with `StartProgram` on this fabrika, and `StartGrant` is
- * not read. With no member behind the start, the host's `StartGrant` rule judges it, as before.
+ * is `pick`'s, shared with a watch: the sender of the input that caused the start, else the
+ * requester's recorded member, its process owner (0172). A member is checked with `StartProgram` on
+ * this fabrika, and `StartGrant` is not read. With no member behind the start, the host's
+ * `StartGrant` rule judges it, as before.
  */
 const judge = (
   rules: Rules,
@@ -101,8 +112,10 @@ const judge = (
   child: Child,
   sender: Result.Result<Option.Option<Sender>, SendersError>,
 ): Result.Result<Judged, Found> => {
-  if (Result.isFailure(sender)) {
-    return sender.failure.reason === "ended"
+  const picked = pick(sender, requester.member);
+
+  if (Result.isFailure(picked)) {
+    return picked.failure.reason === "ended"
       ? Result.fail(Found.answered({ answer: Result.fail(refuse("stale_sender")), judged: Option.none() }))
       : Result.fail(
           Found.answered({
@@ -112,7 +125,7 @@ const judge = (
         );
   }
 
-  const member = Option.getOrElse(sender.success, () => requester.member);
+  const member = Option.getOrUndefined(picked.success);
 
   if (member === undefined) {
     return rules.granted(requester.program, child.code.program)
@@ -129,6 +142,7 @@ const judge = (
   }
 
   const checked = StartProgram.within(tuples.success, member, rules.fabrika);
+
   return Result.isSuccess(checked)
     ? Result.succeed(Judged.allowed({ proof: checked.success }))
     : Result.fail(
@@ -155,6 +169,7 @@ const answer = (
   if (saved !== undefined) {
     const letter = [...turn.read(inbox(saved.name), 0)].find((e) => e.id === letterId(child.id));
     const m = letter === undefined ? Option.none() : Option.map(decodeLetter(letter.body), (body) => body.m);
+
     // The caller fields: name, program, requester and input, never the hash, so a rebuild retries alike.
     const same =
       saved.request._tag === "first" &&
@@ -163,6 +178,7 @@ const answer = (
       saved.request.requester?._tag === "process" &&
       saved.request.requester.process === child.requester.process &&
       (child.input === undefined ? Option.isNone(m) : Option.exists(m, (value) => Equal.equals(value, child.input)));
+
     return Found.answered({
       answer: same
         ? Result.succeed(Started.cases.started.make({ process: saved.state.process, name: saved.name, rev: saved.rev }))
@@ -181,10 +197,7 @@ const answer = (
   const judged = judge(
     rules,
     turn,
-    {
-      program: requester.state.code.program,
-      member: requester.request._tag === "first" ? requester.request.member : undefined,
-    },
+    { program: requester.state.code.program, member: recorded(requester) },
     child,
     sender,
   );
@@ -197,6 +210,7 @@ const answer = (
     onNone: () => Found.free({ judged: judged.success }),
     onSome: ({ program, state }) => {
       const life = { process: state.process, name: child.name };
+
       return Found.answered({
         answer:
           program !== child.code.program
@@ -241,10 +255,12 @@ const shown = (judged: Judged): Record<string, string> =>
  */
 const stopped = (table: ProcessTable, stop: ChildStop): Result.Result<string, ChildrenError> => {
   const requester = Option.getOrUndefined(table.life(stop.requester.process));
+
   const own =
     isName(stop.name) &&
     requester !== undefined &&
     Option.exists(table.starter(stop.name), (name) => name === requester.name);
+
   const current = own ? Option.getOrUndefined(table.whereis(stop.name)) : undefined;
 
   if (current === undefined) {
@@ -259,6 +275,7 @@ const stopped = (table: ProcessTable, stop: ChildStop): Result.Result<string, Ch
 const guarded = <A>(work: Effect.Effect<A, ChildrenError>, defect: string) =>
   Effect.gen(function* () {
     const tracer = yield* Tracer.Tracer;
+
     const safe = Tracer.make({
       context: tracer.context,
       span(options) {
@@ -269,6 +286,7 @@ const guarded = <A>(work: Effect.Effect<A, ChildrenError>, defect: string) =>
             attribute(key, key === "error.type" ? "ChildrenError" : value);
           }
         };
+
         const end = span.end.bind(span);
         span.end = (time, exit) => {
           const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
@@ -284,12 +302,14 @@ const guarded = <A>(work: Effect.Effect<A, ChildrenError>, defect: string) =>
                 ),
           );
         };
+
         return span;
       },
     });
+
     return yield* work.pipe(
       Effect.withTracer(safe),
-      Effect.catchCause((cause) => (Cause.hasDies(cause) ? Effect.die(new Error(defect)) : Effect.failCause(cause))),
+      Effect.catchCauseIf(Cause.hasDies, () => Effect.die(new Error(defect))),
     );
   });
 
@@ -320,7 +340,6 @@ const guarded = <A>(work: Effect.Effect<A, ChildrenError>, defect: string) =>
  * the permission step's ids, never the cause, and a defect inside a start is replaced by a plain
  * one with no detail. A key removed after `Senders` answered is not seen by that start.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (config: {
@@ -334,18 +353,22 @@ export const layer = (config: {
       const manager = yield* ProcessManager;
       const relations = yield* Relations;
       const senders = yield* Senders;
+
       const rules: Rules = {
         granted: (source, to) => config.grants.some((g) => g.source === source && g.to === to),
         tuples: relations.within,
         fabrika: config.fabrika,
       };
+
       const look = (child: Child, sender: Result.Result<Option.Option<Sender>, SendersError>) =>
         tx.transact((turn) => answer(manager.table(turn), turn, child, rules, sender)).pipe(Effect.mapError(storage));
+
       const first = (child: Child) => (child.input === undefined ? undefined : { m: child.input });
 
       /** A member's start: its write needs the proof, names the member, and checks the proof again in its turn. */
       const place = Effect.fnUntraced(function* (child: Child, from: From) {
         const proof = yield* StartProgram;
+
         return yield* manager.start(
           Start.cases.first.make({
             id: child.id,
@@ -398,15 +421,11 @@ export const layer = (config: {
               [tag("hash")]: child.code.hash,
             }),
           );
+
           // Outside any turn, and kept as it came: it decides nothing before the saved-id check.
-          const sender = yield* senders.sender(from.parent, child.requester.process).pipe(
-            Effect.result,
-            Effect.flatMap((asked) =>
-              Result.isFailure(asked) && asked.failure.reason === "storage"
-                ? Effect.fail(storage(asked.failure))
-                : Effect.succeed(asked),
-            ),
-          );
+          const sender = yield* senders
+            .sender(from.parent, child.requester.process)
+            .pipe(Effect.result, Effect.filterMapOrFail(unlessStorage, storage));
 
           // Two passes at most: after the write turn the id is saved, the name is taken, or the
           // requester has ended, so the second pass always answers.
@@ -440,6 +459,7 @@ export const layer = (config: {
 
             if (refused) {
               yield* Effect.annotateCurrentSpan({ [permissions("outcome")]: "denied" });
+
               return yield* refuse("forbidden");
             }
           }
@@ -451,12 +471,15 @@ export const layer = (config: {
           Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: error.reason }),
         ),
       );
+
       const stop = Effect.fn("children.stop")(
         function* (asked: ChildStop, from: From) {
           yield* Effect.annotateCurrentSpan(short({ [tag("name")]: asked.name }));
+
           const child = yield* tx
             .transact((turn) => stopped(manager.table(turn), asked))
             .pipe(Effect.mapError(storage), Effect.flatMap(Effect.fromResult));
+
           yield* manager
             .exit(child, ExitReason.cases.shutdown.make({}), from)
             .pipe(
@@ -473,6 +496,7 @@ export const layer = (config: {
           Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: error.reason }),
         ),
       );
+
       return Children.of({
         start: (input, from) => guarded(start(input, from), "children.start failed"),
         stop: (asked, from) => guarded(stop(asked, from), "children.stop failed"),

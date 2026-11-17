@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-17-t1133-reporter-metadata-type",
+  "date": "2026-11-17",
+  "quests": ["tea-fabrika#1133"],
+  "stage": "harness",
+  "kind": "failure",
+  "what": "Today's runner's first reserved whole compiler stopped because the installed Vitest TaskMeta type did not declare the reporter's custom plant property. The compiler returned TS2339 and exited 1 before completing the workspace.",
+  "cause": "The reporter assigned a custom field directly through Vitest's closed TaskMeta interface. Earlier runtime checks did not typecheck that assignment.",
+  "person": false,
+  "primitive": null,
+  "fix": "Extend the actual metadata object with Object.assign and the same schema-validated closed plant value. This preserves the runtime field without a cast or global type augmentation. No test or compiler rerun was made without its required reservation.",
+  "test": ".github/ci/plant-reporter.ts. The failed compiler ran on d40d34f9bd9469d6563980c95e377134a6a6fd90 with the shared lock and pinned runtime. Post-check found no compiler child, a released lock with the same inode, and unchanged source, index and ref. The source fix still needs the next reserved whole compiler.",
+  "links": ["https://vitest.dev/api/advanced/test-case#meta"]
+}

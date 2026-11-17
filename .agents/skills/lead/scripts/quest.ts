@@ -15,6 +15,7 @@ export const questKeyed = (saved: unknown): unknown => {
   }
 
   const { lane, ...rest } = saved;
+
   return "quest" in rest ? rest : { quest: lane, ...rest };
 };
 
@@ -62,6 +63,7 @@ export const startHead = (
   isAncestor: (a: string, b: string) => boolean,
 ): string | undefined => {
   const newest = pushed.find((p) => pushed.every((q) => isAncestor(q, p))) ?? pushed[0];
+
   return newest && !(saved && isAncestor(newest, saved)) ? newest : saved;
 };
 
@@ -91,6 +93,7 @@ export const stepOf = (note: string): string[] => {
   }
 
   const step = n !== null && typeof n === "object" ? (n as { step?: unknown }).step : undefined;
+
   return typeof step === "string" ? [step] : [];
 };
 
@@ -109,6 +112,7 @@ const stuckIn = (out: string) =>
     }
 
     const { reason, step } = a as { reason?: unknown; step?: unknown };
+
     return [{ line, reason, step }];
   });
 
@@ -139,7 +143,9 @@ export const heldRules = (out: string, questSteps: ReadonlySet<string>): string[
       step?: unknown;
       paths?: unknown;
     };
+
     const paths = Array.isArray(a.paths) ? a.paths.slice(0, 3).map(String) : [];
+
     return [
       typeof a.reason === "string" ? a.reason : "stuck",
       typeof a.sha === "string" ? a.sha.slice(0, 8) : "",
@@ -272,6 +278,7 @@ export const lockfileBehind = (
 
           const was = lockedPart(before);
           const is = lockedPart(after);
+
           return was === null || is === null || was !== is;
         })
         .map((m) => m.path);

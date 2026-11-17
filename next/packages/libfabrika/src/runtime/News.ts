@@ -2,8 +2,6 @@
  * What a client's sockets are told: a view update from a watched process, a grant, or a close. The
  * runner makes the update, the gateway makes the grant and the close, and the cloud objects carry
  * all three to the Connection object, which decodes them once and sends each one to the socket.
- *
- * @stability unstable
  */
 import { Schema } from "effect";
 import { Patch } from "./Patch.ts";
@@ -12,14 +10,12 @@ import { Patch } from "./Patch.ts";
  * Schema for a view as JSON. One runner serves every program, so the shape stays open: each
  * program's own client decodes its view.
  *
- * @stability unstable
  * @category schemas
  */
 export const View = Schema.Json;
 /**
  * A view as JSON, as `View` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type View = typeof View.Type;
@@ -32,14 +28,12 @@ const patch = { type: Schema.Literal("patch"), base: Schema.Number, rev: Schema.
  * is the inbox position of the last installed letter, so other streams leave no gaps. Its cases are
  * told apart by `type`, the key every client reads on the wire today.
  *
- * @stability unstable
  * @category schemas
  */
 export const Update = Schema.Union([Schema.Struct(whole), Schema.Struct(patch)]);
 /**
  * One view update, as `Update` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Update = typeof Update.Type;
@@ -48,7 +42,6 @@ export type Update = typeof Update.Type;
  * Schema for a view update on its way to one client: an `Update` with the pid of the process it
  * came from, so the client finds the tile it belongs to.
  *
- * @stability unstable
  * @category schemas
  */
 export const Published = Schema.Union([
@@ -58,7 +51,6 @@ export const Published = Schema.Union([
 /**
  * One view update with its pid, as `Published` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Published = typeof Published.Type;
@@ -68,7 +60,6 @@ export type Published = typeof Published.Type;
  * (RFC 6455, 7.4.2), 4003 when the client's key was removed. `granted` hands a waiting client the
  * nonce to sign. `view` carries one view update.
  *
- * @stability unstable
  * @category schemas
  */
 export const News = Schema.TaggedUnion({
@@ -79,7 +70,6 @@ export const News = Schema.TaggedUnion({
 /**
  * One piece of news for a client, as `News` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type News = typeof News.Type;

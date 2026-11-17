@@ -5,6 +5,7 @@
 import type { Context, ESTree, Visitor } from "@oxlint/plugins";
 
 type Source = Context["sourceCode"];
+
 export type Node = ESTree.Node;
 
 /** `Context.Tag` for that plain member, `process.env.X` for a longer one. `null` for any other shape. */
@@ -15,11 +16,13 @@ export const dotted = (node: Node): string | null => {
 
   if (node.type === "TSQualifiedName") {
     const left = dotted(node.left);
+
     return left === null ? null : `${left}.${node.right.name}`;
   }
 
   if (node.type === "JSXMemberExpression") {
     const object = dotted(node.object);
+
     return object === null ? null : `${object}.${node.property.name}`;
   }
 
@@ -32,6 +35,7 @@ export const dotted = (node: Node): string | null => {
   }
 
   const object = dotted(node.object);
+
   return object === null ? null : `${object}.${node.property.name}`;
 };
 
@@ -94,6 +98,7 @@ export const grouped = (source: Source, node: Node): number => {
  */
 export const pathIn = (context: Context): string => {
   const from = context.cwd.endsWith("/") ? context.cwd : `${context.cwd}/`;
+
   return context.filename.startsWith(from) ? context.filename.slice(from.length) : context.filename;
 };
 
@@ -173,6 +178,7 @@ export const banNames =
         context.report({ node, message });
       }
     };
+
     return {
       MemberExpression: check,
       TSQualifiedName: check,

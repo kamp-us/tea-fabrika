@@ -132,3 +132,7 @@ These are the lead's reading of what follows from the ruling. They are not the o
 ## Records
 
 - No glossary row: this coins no word. `kalfa` gets its row with 0556.
+
+## Amendments
+
+- 2026-11-15: [0579](0579-property-laws-use-it-prop.md) rules that a property law is `it.prop` or `it.effect.prop` with Schemas as inputs. `@kalfa/vitest` exports no raw `fc.assert`, so a hand runner cannot come back.

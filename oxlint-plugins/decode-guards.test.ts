@@ -10,8 +10,11 @@ import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 
 const CODE = "eslint(no-restricted-properties)";
+
 const ID = "fabrika(service-id)";
+
 const root = resolve(import.meta.dirname, "..");
+
 const word = fc.stringMatching(/^[a-z]{2,6}$/);
 
 /** A file of numbered lines, and the lines the rule must fire on. */
@@ -41,12 +44,14 @@ describe("T737 G1 a bare JSON.parse in next/ is reported", () => {
             [`const J = JSON;`, false],
             [`export const aliased = J.parse(${JSON.stringify(text)});`, false],
           ]);
+
         const shadow = (inside: boolean) =>
           file([
             // A documented false alarm: oxlint's rule does not read scope, so a local JSON fires too.
             ["const JSON = { parse: (s: string) => s };", false],
             ['export const local = JSON.parse("x");', inside],
           ]);
+
         const files = {
           "next/packages/libfabrika/src/transport/Probe.ts": body(true),
           "next/apps/fabrika/src/probe.test.ts": body(true),
@@ -55,6 +60,7 @@ describe("T737 G1 a bare JSON.parse in next/ is reported", () => {
           // Not under `oxlint-plugins/`: the planted folder links that one to the real folder.
           "scripts/probe.ts": body(false),
         };
+
         const linted = await plant(Object.fromEntries(Object.entries(files).map(([path, f]) => [path, f.text])));
 
         for (const [path, f] of Object.entries(files)) {
@@ -72,14 +78,17 @@ describe("T737 G1 a bare JSON.parse in next/ is reported", () => {
       "next/packages/libfabrika/src/runtime/Program.ts",
       "next/apps/fabrika/src/runtime.ts",
     ];
+
     const ran = spawnSync(
       join(root, "node_modules/.bin/oxlint"),
       [`--config=${join(root, ".oxlintrc.json")}`, "--disable-nested-config", "--no-ignore", "--format=json", ...sites],
       { cwd: root, encoding: "utf8", maxBuffer: 2 ** 30, timeout: 120_000 },
     );
+
     const report: {
       readonly diagnostics: ReadonlyArray<{ readonly code?: string; readonly filename: string }>;
     } = JSON.parse(ran.stdout);
+
     expect(report.diagnostics.filter((d) => d.code === CODE).map((d) => d.filename)).toEqual([]);
   });
 });
@@ -99,7 +108,9 @@ const lint = (files: Readonly<Record<string, string>>, args: ReadonlyArray<strin
       encoding: "utf8",
       timeout: 60_000,
     });
+
     expect(ran.error).toBeUndefined();
+
     return ran;
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -139,6 +150,7 @@ describe("T737 G3, T909 and T930 L9: a bare JSON.parse in a clean folder and a w
           const ran = lint({ [PROBE]: probe({ parse, id: id ? `fabrika/${name}` : null, blocking }) }, [
             "--warn=no-debugger",
           ]);
+
           const blocks = Number(parse) + Number(blocking) + Number(id);
           expect(ran.stdout).toContain(`oxlint: ${blocks} blocking, 0 advice`);
           expect(ran.stdout.includes(CODE)).toBe(parse);

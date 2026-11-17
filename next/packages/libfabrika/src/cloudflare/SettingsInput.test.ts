@@ -5,6 +5,7 @@ import { describe, expect } from "@effect/vitest";
 import { ByteSize, Effect, Exit, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
+import * as Declarations from "../settings/Declarations.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import * as SettingsInput from "./SettingsInput.ts";
 
@@ -36,7 +37,7 @@ describe("shared Worker settings reader, next/", () => {
         }
       }).pipe(Effect.provide(Digest.layerWebCrypto)),
     // vector: the port protocol's inclusive endpoints and their immediate neighbours.
-    [[1], [65535], [0], [65536]],
+    { examples: [[1], [65535], [0], [65536]] },
   );
 
   StartsTest.law(
@@ -93,6 +94,13 @@ describe("shared Worker settings reader, next/", () => {
               mailChunk: ByteSize.bytes(BigInt(String(current.settings.values["mail.chunk"]))),
               // P39 slice 3: the recipe sets no hands key, so the start reads the default, none.
               handsTarget: null,
+              // P34c: the three quota settings. A byte size inside them is saved as its text and
+              // read back with its declaration's schema.
+              writes: current.settings.values["limits.writes"],
+              storage: Schema.decodeUnknownSync(Declarations.storage.schema)(current.settings.values["limits.storage"]),
+              recovery: Schema.decodeUnknownSync(Declarations.recovery.schema)(
+                current.settings.values["limits.recovery"],
+              ),
             });
             StartsTest.exclude(exit.value, secret);
           }

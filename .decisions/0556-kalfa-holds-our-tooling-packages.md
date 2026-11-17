@@ -1,7 +1,7 @@
 ---
 id: 0556
 title: "@kalfa is our npm namespace for tooling and infra, and the top-level folder 0537 called infra/ is named kalfa/ and holds every @kalfa package, all private for now"
-status: accepted
+status: amended-in-part by [0585](0585-kalfa-is-six-domain-packages.md)
 date: 2026-11-15
 tags: [kalfa, infra, namespace, npm, packages, tooling, folder]
 ---

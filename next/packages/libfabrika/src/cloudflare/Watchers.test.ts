@@ -21,6 +21,7 @@ const Step = Arbitrary.all({
 });
 
 const Walk = Arbitrary.array(Step, { minLength: 6, maxLength: 30 });
+
 const patch = { type: "patch", base: 4, rev: 5, patch: [] } as const;
 /** The same update as the Project is handed it: with the pid of the process it came from. */
 const PID = "process_01m6v5270hetdrt4r8h9vvjwjs";
@@ -48,6 +49,7 @@ describe("watcher delivery evidence, next/", () => {
           const routes = new Map<string, string>();
           const delivered: Array<{ connection: string; client: string; news: News }> = [];
           let failSend = false;
+
           // Typed synchronous route port. No platform or Connection implementation is replaced here.
           const { publish } = Publish.make(routed(routes), (connection: string, client: string, news: News) =>
             Effect.suspend(() => {
@@ -56,11 +58,14 @@ describe("watcher delivery evidence, next/", () => {
               }
 
               delivered.push({ connection, client, news });
+
               // Deliberately no socket: Connection.notify's unchanged normal return is still sent.
               return Effect.void;
             }),
           );
+
           let rpc: "ok" | "throw" | "malformed" = "ok";
+
           const context = yield* Layer.build(
             WatcherManagerRemote.layer((client, update) =>
               Effect.suspend((): Effect.Effect<unknown, Error> => {
@@ -77,7 +82,9 @@ describe("watcher delivery evidence, next/", () => {
               }),
             ),
           );
+
           const remote = Context.get(context, WatcherManager);
+
           const reason = Effect.fnUntraced(function* (client: string) {
             const exit = yield* Effect.exit(remote.publish(client, patch));
             expect(Exit.isFailure(exit)).toBe(true);
@@ -90,6 +97,7 @@ describe("watcher delivery evidence, next/", () => {
             const error = Schema.decodeUnknownSync(Schema.toType(WatcherManagerError))(Cause.squash(exit.cause));
             expect(error._tag).toBe("WatcherManagerError");
             expect(error.reason.cause).toBeDefined();
+
             return error.reason._tag;
           });
 

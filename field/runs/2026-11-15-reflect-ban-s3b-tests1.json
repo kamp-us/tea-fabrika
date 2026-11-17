@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-ban-s3b-tests1",
+  "ticket": "1056",
+  "pr": null,
+  "started": "2026-11-15T18:38:00-08:00",
+  "ended": "2026-11-15T18:52:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 3 of the Reflect ban (decision 0554), next/ only: CodeHostTest.ts reads the answer's head, tree, main or commit with Predicate.hasProperty and a plain read, in place of Reflect.get (kind 2, 1 fire, the count on main matches the plan). The folder next/packages/libfabrika/src/codehost/** joins the second Reflect block of .oxlintrc.json, at error. Law L5 (the folder has no fire and no disable line) is lint. CodeHost.test.ts, which runs the suite, passes (3 tests); typecheck passes.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Replaces PR 1407 (branch fabrikalfa/reflect-s3), whose first commit 77b021684 is unsigned. Same two edits on a fresh branch, no new law: the ban is a lint rule (L5 of the plan). The plant was run once with oxlint and undone.",
+  "plants": [
+    {
+      "law": "L5",
+      "plant": "Reflect.get(answer, key) put back in CodeHostTest.ts:301: oxlint exits with eslint(no-restricted-properties) Reflect.get is restricted",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

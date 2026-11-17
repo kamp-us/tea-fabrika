@@ -100,12 +100,14 @@ export const split = (files: readonly string[], count: number, table = measured)
     [],
     median(Object.values(table)),
   );
+
   return Array.from({ length: count }, (_, leg) => files.filter((_, i) => placed[i] === leg));
 };
 
 /** The seconds of a leg's files, a file with no row at the table's median. */
-const seconds = (files: readonly string[], table: Readonly<Record<string, number>>) => {
+export const seconds = (files: readonly string[], table: Readonly<Record<string, number>>) => {
   const unmeasured = median(Object.values(table));
+
   return files.reduce((sum, path) => sum + (rowOf(table, path) ?? unmeasured), 0);
 };
 
@@ -116,12 +118,15 @@ const seconds = (files: readonly string[], table: Readonly<Record<string, number
 export const fewest = (files: readonly string[], most: number, limit: number, table = measured): number => {
   const tried = Array.from({ length: Math.min(most, files.length) }, (_, i) => {
     const count = i + 1;
+
     return { count, longest: Math.max(...split(files, count, table).map((leg) => seconds(leg, table))) };
   });
+
   const shortest = tried.reduce<(typeof tried)[number] | undefined>(
     (best, next) => (best === undefined || next.longest < best.longest ? next : best),
     undefined,
   );
+
   return (tried.find((next) => next.longest <= limit) ?? shortest)?.count ?? 0;
 };
 
@@ -148,6 +153,7 @@ const visual = (run: Run) => run.event === "pull_request" && run.visual;
  */
 export const size = (run: Run, selected: Selected, full: Legs, limit: Limits, table = measured): Legs => {
   const e2e = visual(run) ? full.e2e : 0;
+
   return sizes(run)
     ? {
         vitest: fewest(selected.vitest, full.vitest, limit.vitest, table),
@@ -200,8 +206,9 @@ export const outputs = (run: Run, legs: Legs, selected: Selected): string[] => {
 };
 
 /** The test files `vitest list` picks with `args`, as a run with them would, from the repo root. */
-const list = (root: string, args: readonly string[]): string[] => {
+export const list = (root: string, args: readonly string[]): string[] => {
   const out = join(mkdtempSync(join(tmpdir(), "legs-")), "list.json");
+
   // CI=true, as on a runner: the config's local guard refuses a broad list without it.
   const done = spawnSync(
     "pnpm",
@@ -214,6 +221,7 @@ const list = (root: string, args: readonly string[]): string[] => {
   }
 
   const files: unknown = JSON.parse(readFileSync(out, "utf8"));
+
   return (Array.isArray(files) ? files : [])
     .flatMap((entry: unknown) =>
       typeof entry === "object" && entry !== null && "file" in entry && typeof entry.file === "string"
@@ -228,12 +236,14 @@ if (import.meta.main) {
   const root = fileURLToPath(new URL("../../", import.meta.url));
   const workflow = readFileSync(join(root, ".github/workflows/check.yaml"), "utf8");
   const full = { vitest: vitestLegs(workflow).length, e2e: e2eLegs(workflow).length };
+
   const run: Run = {
     event: process.env["EVENT"] ?? "",
     scope: (process.env["FILTER"] ?? "next/") === "next/" ? "all" : "readers",
     base: process.env["BASE"] ?? "",
     visual: process.env["VISUAL"] === "true",
   };
+
   const limit = limits(nextMinutes(workflow), budgetOf(process.env["BUDGET"]));
   // `--changed` from the base on a run of all of next/; none on a run of the reader tests alone.
   const changed = run.scope === "all" ? [`--changed=${run.base}`] : [];
@@ -243,22 +253,27 @@ if (import.meta.main) {
   // the `next-visual` one, only when it asked (0536).
   const picked = sized && run.scope === "all" ? list(root, ["--project", "next", "next/", ...changed]) : [];
   const readerFiles = sized ? list(root, ["--project", "next", ...readers]) : [];
+
   const selected: Selected = sized
     ? {
         vitest: withReaders(picked, readerFiles),
         e2e: visual(run) ? list(root, ["--project", "next-visual", ...changed]) : [],
       }
     : { vitest: [], e2e: [] };
+
   const legs = size(run, selected, full, limit);
   const lines = outputs(run, legs, selected);
   const missed = selected.vitest.length - picked.length;
+
   const vitestNote =
     run.scope === "all"
       ? `${selected.vitest.length} vitest files (${seconds(selected.vitest, measured).toFixed(1)} s, ${missed} of them reader tests \`--changed\` missed)`
       : `${selected.vitest.length} reader test files (${seconds(selected.vitest, measured).toFixed(1)} s)`;
+
   const note = sized
     ? `legs: ${vitestNote} on ${legs.vitest} legs of at most ${limit.vitest} s, ${selected.e2e.length} end-to-end files (${seconds(selected.e2e, measured).toFixed(1)} s) on ${legs.e2e} legs`
     : `legs: the full matrix, on ${run.event || "an unknown event"} with all of next/${validSha(run.base) ? "" : " and no base commit"}`;
+
   console.log(note);
   console.log(lines.join("\n"));
   const output = process.env["GITHUB_OUTPUT"];

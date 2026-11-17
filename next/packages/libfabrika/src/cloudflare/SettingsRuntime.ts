@@ -1,7 +1,5 @@
 /**
  * A runtime for one layer whose build can be tried again after it fails.
- *
- * @stability unstable
  */
 import { Context, Duration, Effect, Exit, Layer, ManagedRuntime, Scope, ScopedCache } from "effect";
 
@@ -14,7 +12,6 @@ import { Context, Duration, Effect, Exit, Layer, ManagedRuntime, Scope, ScopedCa
  * its scope is closed, and the next read builds the layer again. What the layer itself needs is
  * taken once, when the cache is made.
  *
- * @stability unstable
  * @category constructors
  */
 export const make = <ROut, E, RIn>(ready: Layer.Layer<ROut, E, RIn>) =>
@@ -25,6 +22,7 @@ export const make = <ROut, E, RIn>(ready: Layer.Layer<ROut, E, RIn>) =>
       Effect.gen(function* () {
         const memoMap = yield* Layer.makeMemoMap;
         const scope = yield* Scope.fork(yield* Effect.scope);
+
         return yield* Layer.buildWithMemoMap(ready, memoMap, scope).pipe(
           Effect.onExit((exit: Exit.Exit<Context.Context<ROut>, E>) =>
             Exit.isFailure(exit) ? Scope.close(scope, exit) : Effect.void,
@@ -49,25 +47,24 @@ export const make = <ROut, E, RIn>(ready: Layer.Layer<ROut, E, RIn>) =>
  * uses. A failed build is not kept, so the next use builds again. `dispose` closes the cache and
  * the build with it.
  *
- * @stability unstable
  * @category constructors
  */
 export const runtime = <ROut, E>(ready: Layer.Layer<ROut, E>) => {
   class Holder extends Context.Service<Holder, { readonly get: Effect.Effect<Context.Context<ROut>, E> }>()(
     "@kampus/libfabrika/cloudflare/SettingsRuntime.Holder",
   ) {}
+
   const owner = ManagedRuntime.make(
     Layer.effectContext(
-      make(ready).pipe(
-        Effect.map((holder) => {
-          return Holder.context({ get: ScopedCache.get(holder, undefined) });
-        }),
-      ),
+      make(ready).pipe(Effect.map((holder) => Holder.context({ get: ScopedCache.get(holder, undefined) }))),
     ),
   );
+
   const context = owner.contextEffect.pipe(Effect.flatMap((services) => Context.get(services, Holder).get));
+
   const provide = <A, E2>(work: Effect.Effect<A, E2, ROut>) =>
     context.pipe(Effect.flatMap((services) => Effect.provideContext(work, services)));
+
   return {
     provide,
     context,

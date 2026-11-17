@@ -9,6 +9,7 @@ import { classifier, compact, env, FLAGS, map, ROW_INSTALL, type Rule, steps, VI
 const SIZED = "(steps.same.outputs.next||steps.diff.outputs.next)!='false'";
 
 const PROBE = "steps.diff.outputs.probe=='true'";
+
 const SETUP = `${PROBE}||steps.diff.outputs.next!='false'`;
 
 // changes' outputs from its size step, each beside the name legs.ts prints it under. `next` joins
@@ -34,6 +35,7 @@ const SIZE_ENV = {
 export const changesJob: Rule = ({ jobs }, require) => {
   const changes = map(jobs["changes"]),
     outputs = map(changes["outputs"]);
+
   require(!("if" in changes) && !("needs" in changes), "changes starts on every event");
 
   for (const name of FLAGS) {

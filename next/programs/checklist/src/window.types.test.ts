@@ -17,7 +17,9 @@ import { tile } from "./tile.ts";
 import { checklistWindow } from "./window.tsx";
 
 type Msg = typeof checklistMachine.msg.Type;
+
 type Props = Parameters<typeof checklistWindow.View>[0];
+
 type TileMsg = typeof tile.msg.Type;
 
 /** A tile machine whose press carries a Msg the checklist does not have. */
@@ -50,6 +52,7 @@ describe("L20: the checklist window's contract", () => {
     expectTypeOf<unknown>().not.toMatchTypeOf<Parameters<Props["send"]>[0]>();
     expectTypeOf<NonNullable<typeof checklistWindow.refused>>().parameter(0).toEqualTypeOf<Msg>();
     expectTypeOf<unknown>().not.toMatchTypeOf<Parameters<NonNullable<typeof checklistWindow.refused>>[0]>();
+
     const use = (props: Props) => {
       props.press({ type: "check", name: "milk" });
       props.send({ type: "submit" });
@@ -60,6 +63,7 @@ describe("L20: the checklist window's contract", () => {
       // @ts-expect-error `send` takes the tile's Msgs, not the program's
       props.send({ type: "check", name: "milk" });
     };
+
     expect(use).toBeTypeOf("function");
   });
 

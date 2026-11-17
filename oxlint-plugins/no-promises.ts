@@ -42,13 +42,16 @@ const WHY = "next/ is Effect all the way (docs/direction/no-promises.md)";
 export const noPromises: CreateRule = {
   create(context) {
     const effect = effectNames(context.sourceCode.ast);
+
     const refuse = (node: Node, what: string) =>
       context.report({ node, message: `${what}: ${WHY}. Write it as an Effect.` });
+
     const asyncFn = (node: ESTree.Function | ESTree.ArrowFunctionExpression) => {
       if (node.async) {
         refuse(node, "An `async` function makes a Promise");
       }
     };
+
     return {
       FunctionDeclaration: asyncFn,
       FunctionExpression: asyncFn,

@@ -1,6 +1,6 @@
 // One of the shared names of 0043, on layer 0 (0091): a value every module may import, with no service
 // and no error.
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as Id from "./Id.ts";
 
 /** A process's id: `process_` and a TypeID suffix. A restart is a new process (P33). */

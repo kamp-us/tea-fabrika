@@ -15,11 +15,10 @@
  * `overridden` when tezgah refused it or when dropping it moves the drawn focus, a jump back the
  * window records and never announces; `kept` otherwise, so an earlier move its own next move
  * superseded is kept. Moves dropped together are taken one at a time, oldest first.
- *
- * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { apply } from "../runtime/Patch.ts";
 import { focus } from "../tezgah/Layout.ts";
 import { CursorKey, TezgahView, TileId } from "../tezgah/Workspace.ts";
@@ -30,7 +29,6 @@ const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(
  * Schema for how far a pending move has gone: waiting for press slot `n` to be given its letter id,
  * sent as `letter`, or answered by tezgah at inbox position `pos`, `ms` after it was written.
  *
- * @stability unstable
  * @category schemas
  */
 export const MoveState = Schema.TaggedUnion({
@@ -43,7 +41,6 @@ export const MoveState = Schema.TaggedUnion({
  * Schema for one focus move this window made and the server has not answered: the tile it left and
  * the tile it moved to, the cursor it left behind on `from`, and how far it has gone.
  *
- * @stability unstable
  * @category schemas
  */
 export const PendingMutation = Schema.Struct({
@@ -57,7 +54,6 @@ export const PendingMutation = Schema.Struct({
  * Schema for the window's tezgah child: the workspace it shows, tezgah's last view and its
  * revision, and the moves still pending.
  *
- * @stability unstable
  * @category schemas
  */
 export const TezgahClient = Schema.Struct({
@@ -70,7 +66,6 @@ export const TezgahClient = Schema.Struct({
 /**
  * The window's tezgah child, as `TezgahClient` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type TezgahClient = typeof TezgahClient.Type;
@@ -100,7 +95,6 @@ const Msg = Schema.Union([
 /**
  * The type of a Msg the window's tezgah child takes: a whole view, or a patch.
  *
- * @stability unstable
  * @category models
  */
 export type TezgahMsg = typeof Msg.Type;
@@ -119,7 +113,6 @@ const settled = Cmd.make("settled", {
 /**
  * The type of a Cmd the window's tezgah child asks of its window: a whole view, or a move's row.
  *
- * @stability unstable
  * @category models
  */
 export type TezgahCmd = ReturnType<typeof ask> | ReturnType<typeof settled>;
@@ -158,12 +151,12 @@ const confirmed = (s: TezgahClient): Step => {
 };
 
 const decodeView = Schema.decodeUnknownResult(TezgahView);
+
 const encodeView = Schema.encodeUnknownResult(TezgahView);
 
 /**
  * The window's tezgah child as one tea machine. Its ctx names the workspace the window shows.
  *
- * @stability unstable
  * @category machines
  */
 export const tezgahMachine = Machine.make({
@@ -178,6 +171,7 @@ export const tezgahMachine = Machine.make({
   update: {
     server: (s, m): Step => {
       const view = decodeView(m.view);
+
       return Result.isSuccess(view) ? confirmed({ ...s, serverState: view.success, rev: m.rev }) : [s, []];
     },
     patch: (s, m): Step => {
@@ -190,6 +184,7 @@ export const tezgahMachine = Machine.make({
       }
 
       const view = s.serverState;
+
       const next: Result.Result<TezgahView, unknown> =
         m.base === s.rev && m.rev === s.rev + 1
           ? Result.flatMap(
@@ -197,6 +192,7 @@ export const tezgahMachine = Machine.make({
               decodeView,
             )
           : Result.fail("gap");
+
       return Result.isSuccess(next) ? confirmed({ ...s, serverState: next.success, rev: m.rev }) : [s, [ask({})]];
     },
     move: (s, m): Step => [
@@ -236,6 +232,7 @@ export const tezgahMachine = Machine.make({
     // tezgah's state did not change, so the move is dropped now: the drawn focus goes back to the server's.
     refused: (s, m): Step => {
       const gone = s.pendingMutations.filter((p) => sentAs(p) === m.letter);
+
       return [
         { ...s, pendingMutations: s.pendingMutations.filter((p) => sentAs(p) !== m.letter) },
         gone.map(() => settled({ letter: m.letter, result: "overridden", ms: m.ms })),
@@ -262,7 +259,6 @@ const applyFocus = (view: TezgahView | null, mutation: Mutation): TezgahView | n
  * Returns the state a window draws: the server state with every pending move applied on top. It
  * is derived on each read and never stored (0167); with nothing pending it is the server state.
  *
- * @stability unstable
  * @category getters
  */
 export const optimisticState = (m: TezgahClient): TezgahView | null =>
