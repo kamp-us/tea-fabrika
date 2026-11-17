@@ -887,7 +887,7 @@ export type Env = {
 };
 
 /** Read the role profile env.sh resolved; the old coordination profile is never a role fallback. */
-export const codexProfile = (env: Env, step: StepName) => {
+const codexProfile = (env: Env, step: StepName) => {
   const model =
     step === "plan" ? env.CODEX_PLAN_MODEL : step === "review" ? env.CODEX_REVIEW_MODEL : env.CODEX_BUILD_MODEL;
   const effort =
