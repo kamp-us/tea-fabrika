@@ -486,7 +486,7 @@ const lintFailure = (out: ReturnType<typeof spawnSync>): string => {
 
   const location = (file: string | undefined) =>
     typeof file === "string" &&
-    /^(?:next|\.agents)\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_.-]+\.[cm]?[jt]sx?$/.test(file) &&
+    /^(?:next|\.agents)\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-][a-zA-Z0-9_.-]*\.[cm]?[jt]sx?$/.test(file) &&
     !/(?:^|\/)[^/]*(?:tmp|temp|plant|scratch)[^/]*(?:\/|$)/i.test(file)
       ? file.slice(0, 160)
       : "[redacted path]";
@@ -543,6 +543,61 @@ const lintFailure = (out: ReturnType<typeof spawnSync>): string => {
     stderr: text(stderr),
   });
 };
+
+it("property: L5 child diagnostics redact hidden leaf names and retain ordinary source locations", () => {
+  // Plant: letting the final path component start with a dot exposes the generated hidden name.
+  fc.assert(
+    fc.property(
+      fc.record({
+        root: fc.constantFrom("next", ".agents"),
+        folders: fc.array(fc.nat({ max: 999 }), { maxLength: 3 }),
+        name: fc.nat({ max: 999 }).map((n) => `probe${n}`),
+        extension: fc.constantFrom("ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"),
+      }),
+      ({ root, folders, name, extension }) => {
+        const folder = [root, ...folders.map((n) => `module${n}`)].join("/");
+        const ordinary = `${folder}/${name}.${extension}`;
+        const hidden = `${folder}/.${name}.${extension}`;
+
+        const diagnostics = [hidden, ordinary].map((filename) => ({
+          code: CODE,
+          filename,
+          severity: "error",
+          labels: [{ span: { line: 7, column: 3 } }],
+        }));
+
+        const stdout = JSON.stringify({ number_of_files: 2, diagnostics });
+
+        const message = lintFailure({
+          pid: 0,
+          output: [null, stdout, ""],
+          stdout,
+          stderr: "",
+          status: 1,
+          signal: null,
+        });
+
+        const report = JSON.parse(message);
+
+        expect(message).not.toContain(hidden);
+        expect(report).toMatchObject({
+          status: 1,
+          signal: null,
+          error: null,
+          json: {
+            files: 2,
+            count: 2,
+            diagnostics: [
+              { code: CODE, file: "[redacted path]", line: 7, column: 3, severity: "error" },
+              { code: CODE, file: ordinary, line: 7, column: 3, severity: "error" },
+            ],
+          },
+        });
+      },
+    ),
+    { ...RUNS, examples: [[{ root: "next", folders: [], name: "probe", extension: "ts" }]] },
+  );
+});
 
 it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", () => {
   // L4 checks the real config's scope. This count runs only this rule, with the same fixture exemptions.
