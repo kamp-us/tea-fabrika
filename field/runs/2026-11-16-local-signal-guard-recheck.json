@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-local-signal-guard-recheck",
+  "ticket": "tea-fabrika#1130",
+  "pr": null,
+  "started": "2026-11-16T21:11:35-08:00",
+  "ended": "2026-11-16T21:12:01-08:00",
+  "parent": "2026-11-16-local-signal-guard-review",
+  "role": "hand",
+  "step": "review",
+  "model": null,
+  "effort": null,
+  "outcome": "fail",
+  "why": "Both original caps faults are resolved by source. One expressly requested class remains: three new typed tag branches in hostFiles do not use the Match form required by decision 0567.",
+  "note": "Today's tooling. Bounded read of the three-file follow-up, its callers and actual 11-safe-pass and caps-exemption-red logs. No tests, compiler, signals, CI actions or public writes by this reviewer. Exact remote caps proof and final-head checks remain the merger's work.",
+  "head": "080dbb566399cd45d1ab71fbcc424b0b759b1f40",
+  "base": "658c251ede350ee744b3551487b7586abf036553",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null
+}

@@ -12,6 +12,10 @@ request: it runs hourly against main and files tickets
 ([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)). The lead writes no step's
 work. It starts each step, reads what comes back, and lands the result.
 
+When staffing work, follow [0597](../../../.decisions/0597-eight-workers-before-twelve.md) for
+actual productive worker counts, fresh verification and immediate replacements. The brief names
+the bounded task and the ticket it serves.
+
 ```text
 plan (read-only) -> lead approves -> box -> tests -> build -> review
   -> fetch, read the diff, e2e -> push as the bot -> pull request -> merge rule -> merge queue
@@ -289,7 +293,7 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
   agent instead. A Codex box can start neither, so a Codex build there would come back half checked.
   Still one agent per step.
 - **Check execution:** ordinary safe checks run directly in parallel under the existing resource
-  caps. Launchd, real Electron and process-signal laws use disposable macOS CI. Read
+  caps. Launchd, real Electron and process-signal laws use eligible disposable CI off the owner's laptop. Read
   [0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md) for the split; checks that still need
   network isolation keep [0045](../../../.decisions/0045-test-steps-run-in-containers.md)'s fence.
   Inspect the actual selected tests and cleanup before a direct run. A plain filename is not
@@ -441,7 +445,7 @@ Every commit leaves the laptop when it is made
 ([0134](../../../.decisions/0134-no-code-stays-only-on-a-local-branch.md)). `stepcommit.sh` (signed)
 runs `publish.ts` itself, and a quest's box commit is pushed by drive's pushing phase, so neither
 step nor lead pushes by hand. A commit step that cannot push exits 6 and names the command to run
-where the push can. Run `node scripts/unlisted.ts` in the main checkout every round and fix each
+where the push can. Run `node .agents/skills/lead/scripts/unlisted.ts` in the main checkout every round and fix each
 line the same turn.
 
 Keep the bot's explicit atomic push of notes plus branch. On a person's branch, notes-only as the
@@ -492,7 +496,7 @@ visible, and never weaken the rules to hide this message.
    (above). No builder starts before tests that exist. Each brief names its skill.
    Never start a review while a host-only law the plan names has not passed on a real machine
    ([0178](../../../.decisions/0178-host-only-laws-run-first.md)). The build runs it, or you run it right after
-   the build (step 7). Launchd, real Electron and process-signal laws run on disposable macOS CI,
+   the build (step 7). Launchd, real Electron and process-signal laws run on eligible disposable CI,
    never on the owner's laptop ([0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md)).
    box.sh run --step checks order and slots, and saves the run row.
 6. **After each step:** read drive's last line, the report and the diff, and log the run the same day:
@@ -507,7 +511,7 @@ visible, and never weaken the rules to hide this message.
    Each correction the owner makes, and each slip of the lead's own, gets a note too, with the code
    that would have caught it. Running the steps by hand is how `next/`'s pipeline learns.
 7. **Obtain proof the box cannot supply** before the first review (0178). Use eligible CI for each
-   law. Launchd, real Electron and process-signal laws use disposable macOS CI, never the owner's
+   law. Launchd, real Electron and process-signal laws use eligible disposable CI, never the owner's
    laptop ([0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md)). A workflow's green result
    proves only the laws it actually ran. Keep the test's own temp home, label, files and processes;
    one Electron app at a time, each with its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`.

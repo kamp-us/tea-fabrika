@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-host-runtime-cases-selector",
+  "ticket": "kamp-us/tea-fabrika#1132",
+  "pr": null,
+  "started": "2026-11-16T23:34:42-08:00",
+  "ended": "2026-11-16T23:47:01-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling adds the two fixed host cases and corrects all four CLI selectors after a follow-up found Vitest uses suite > leaf while its JSON reporter uses spaces. Safe plant laws now pass 13/13. Four nested CLI fixture invocations each selected one passing target with unchanged JSON title; the old PID selector selected zero tests despite exit zero. Restoring the old selector failed all four nested properties, then identical source hashes were restored. Earlier safe checks and four fault results still hold. Narrow lint and format passed. Reporter integration, full lint, compiler, changed selection and actual remote host fault proof remain with the lead.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 12.32,
+  "note": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "each case derives exactly one fixed byte edit and refuses ambiguous layouts",
+      "plant": "Force host cases onto next-integration instead of tooling.",
+      "result": "red"
+    },
+    {
+      "law": "host diagnostics keep assertion positions and refuse unrelated failures",
+      "plant": "Accept a host mismatch without its assertion position.",
+      "result": "red"
+    },
+    {
+      "law": "public observations copy no generated private diagnostic content",
+      "plant": "Return raw host failure messages as the public diagnostic.",
+      "result": "red"
+    },
+    {
+      "law": "valid YAML forms pass and changed execution policy is refused",
+      "plant": "Accept a shortened workflow case list by ignoring its length.",
+      "result": "red"
+    },
+    {
+      "law": "each mapped nested test is selected by its actual Vitest CLI task name",
+      "plant": "Use the JSON reporter's space-joined title as the anchored CLI selector.",
+      "result": "red"
+    }
+  ],
+  "corrects": "2026-11-16-host-runtime-cases-build"
+}

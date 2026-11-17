@@ -20,7 +20,8 @@
 //   3. an open PR on the branch, or on its quest (`x` and its backup `x-wip` are one quest): listed
 //      in the open PRs already
 //   4. a MERGED PR on the same name, at this very tip: landed, safe to delete
-//   5. a trial merge into origin/main that changes nothing: landed, whatever road it took
+//   5. a trial merge into origin/main that changes nothing: landed, whatever road it took;
+//      a branch with no common ancestor stays unlisted, even if its tree matches main
 //   6. else no pull request; a MERGED PR on the name at an older tip, or a CLOSED one, is named, but
 //      the commits after it are still not on main
 //   7. local and origin are two lines: either can hold what the other lacks
