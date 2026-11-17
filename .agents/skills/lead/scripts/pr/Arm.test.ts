@@ -627,6 +627,26 @@ describe("automatic ready CI as the current-head resource proof", () => {
       }),
   );
 
+  // Plant owed on CI: let a failed completed run reach the markerless legacy fallback.
+  it.effect.prop(
+    "property: a completed failed automatic run refuses with empty or markerless jobs despite absent or green older scheduled history",
+    { head: Head, conclusion: Schema.NullOr(Schema.Literals(["failure", "cancelled", "timed_out"])) },
+    ({ head, conclusion }) =>
+      Effect.gen(function* () {
+        const run = { ...automaticRun(head), conclusion };
+
+        for (const stands of ["none", "older"] as const) {
+          for (const automaticJobs of [[], [job(1, "ci-required", "success")]]) {
+            const m = memory({ head, stands, jobs: shaped("full"), automatic: [run], automaticJobs }, automaticFixture);
+            const refused = yield* Effect.flip(arm(m));
+            expect(refused.reason).toContain(`/actions/runs/${run.id}`);
+            expect(m.github.calls).toEqual([]);
+            expect(m.actions.asked).not.toContain(`jobs ${RED}`);
+          }
+        }
+      }),
+  );
+
   // Plant owed on CI: choose the newest successful run instead of the newest exact-head run.
   it.effect.prop(
     "property: a newer red or unfinished ready run refuses explicitly instead of falling back to an older green run",

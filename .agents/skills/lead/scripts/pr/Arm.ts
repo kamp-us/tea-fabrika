@@ -159,6 +159,16 @@ const automaticAt = Effect.fn("Arm.automaticAt")(function* (branch: string, head
     return Option.some(Verdict.cases.unfinished.make({ run: run.id, status: run.status }));
   }
 
+  if (run.conclusion !== "success") {
+    return Option.some(
+      Verdict.cases.red.make({
+        run: run.id,
+        jobs,
+        reason: `automatic check ended ${run.conclusion ?? "without a conclusion"}; completed success required`,
+      }),
+    );
+  }
+
   const related = jobs.filter((job) => job.name.startsWith("related"));
 
   // A legacy or draft run never stands in for ready CI's new resource coverage.
@@ -186,7 +196,7 @@ const automaticAt = Effect.fn("Arm.automaticAt")(function* (branch: string, head
     related.every((job) => job.status === "completed") &&
     (skipped || legs);
 
-  return run.conclusion === "success" && succeeded("ci-required") && succeeded("select") && covered
+  return succeeded("ci-required") && succeeded("select") && covered
     ? Option.some(Verdict.cases.green.make({ run: run.id, kind: "automatic" }))
     : Option.some(
         Verdict.cases.red.make({
