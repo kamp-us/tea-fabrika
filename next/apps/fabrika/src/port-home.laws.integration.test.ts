@@ -40,13 +40,13 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { Activity } from "@kampus/libfabrika/processes/Process";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Clock, Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
-import { personKeyFrom } from "./person-key.test-support.ts";
 import { machinePaths } from "./port-home.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import { startupFixture } from "./record-wire.test-support.ts";
@@ -96,7 +96,7 @@ const Saved = Schema.fromJsonString(Schema.Struct({ founding: Founding, key: Tes
 
 /** A client identity from the test key: an Ed25519 JWK's private half `d` is the key's seed. */
 const identity = (key: typeof TestKey.Type) =>
-  Effect.fromResult(Base64Url.decode(key.jwk.d)).pipe(Effect.orDie, Effect.flatMap(personKeyFrom));
+  Effect.fromResult(Base64Url.decode(key.jwk.d)).pipe(Effect.orDie, Effect.flatMap(SshsigTest.identityFrom));
 
 const Frame = Schema.Struct({
   id: Schema.optionalKey(Schema.Finite),
@@ -400,7 +400,7 @@ const written = Effect.gen(function* () {
   // only this saved home and is never read from or written to anyone's machine.
   // An Ed25519 JWK's `d` is the key's 32-byte seed and `x` its public half (RFC 8037).
   const seed = yield* SecureRandom.SecureRandom.use((random) => random.randomBytes(32));
-  const made = yield* personKeyFrom(seed);
+  const made = yield* SshsigTest.identityFrom(seed);
 
   const key = yield* Schema.decodeEffect(TestKey)({
     note: "test key: made fresh for this fixture by its writer in port-home.laws.test.ts; it guards nothing",

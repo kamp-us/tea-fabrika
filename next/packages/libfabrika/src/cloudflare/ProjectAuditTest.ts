@@ -1,8 +1,10 @@
 // P13 slice 2, next/. Project audit laws take scoped storage and RPC handles from their driver (0062).
 import { Machine } from "@demlik/tea/effect";
 import { Effect, Layer, Schema, type Scope, Stream } from "effect";
-import { Digest, SecureRandom, Signature } from "effect/crypto";
-import { Base64, Base64Url } from "effect/encoding";
+import * as Digest from "effect/crypto/Digest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Signature from "effect/crypto/Signature";
+import * as Base64Url from "effect/encoding/Base64Url";
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
 import { InputId } from "../Id.ts";
@@ -15,7 +17,8 @@ import { Input } from "../runtime/Program.ts";
 import { nth } from "../runtime/RepliesTest.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import type { Sql } from "../Sql.ts";
-import { KeyLine, writeSshsig } from "../transport/Sshsig.ts";
+import * as PublicKey from "../transport/PublicKey.ts";
+import { writeSshsig } from "../transport/Sshsig.ts";
 import { programBox } from "./box.ts";
 import { ProjectService, projectLayer, type ProjectOptions } from "./runtime.ts";
 import { Props, receive } from "./tail.ts";
@@ -101,18 +104,8 @@ const projectWalk = Effect.fnUntraced(function* (
   const pair = yield* signature.generateKeyPair(Signature.ed25519);
   const raw = yield* Signature.toBytes(pair.publicKey);
 
-  const field = (bytes: Uint8Array) => {
-    const n = Buffer.alloc(4);
-    n.writeUInt32BE(bytes.length);
-
-    return Buffer.concat([n, bytes]);
-  };
-
-  const line = Schema.decodeUnknownSync(KeyLine)(
-    `ssh-ed25519 ${Buffer.concat([field(Buffer.from("ssh-ed25519")), field(raw)]).toString("base64")}`,
-  );
-
-  const fingerprint = `SHA256:${Base64.encode(yield* digest.digest(Digest.sha256, raw)).replace(/=+$/, "")}`;
+  const line = yield* PublicKey.line(raw);
+  const fingerprint = yield* PublicKey.fingerprint(raw);
   const message = selector === "plain" ? Msg : StampedMsg;
 
   const program = {

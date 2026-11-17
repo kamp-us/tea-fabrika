@@ -43,27 +43,7 @@ export const tree = Effect.fn("workerd.tree")(function* (parent: number) {
 
 /** The pid of the one `workerd` among `parent`'s descendants. More or fewer than one fails the test. */
 const workerd = Effect.fn("workerd.find")(function* (parent: number) {
-  const rows = (yield* processes).split("\n");
-  const found = new Set([parent]);
-  let grew = true;
-
-  while (grew) {
-    grew = false;
-
-    for (const row of rows) {
-      const m = /^\s*(\d+)\s+(\d+)\s+/.exec(row);
-
-      if (m !== null && found.has(Number(m[2])) && !found.has(Number(m[1]))) {
-        found.add(Number(m[1]));
-        grew = true;
-      }
-    }
-  }
-
-  const pids = rows
-    .filter((row) => /\/workerd(?:\s|$)/.test(row))
-    .map((row) => Number(row.trim().split(/\s+/)[0]))
-    .filter((pid) => found.has(pid));
+  const pids = (yield* tree(parent)).filter((row) => /\/workerd(?:\s|$)/.test(row.command)).map((row) => row.pid);
 
   const [only] = pids;
 

@@ -14,6 +14,7 @@ import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { stopOnAbort } from "@kampus/libfabrika/Testing.test-support";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
@@ -22,7 +23,6 @@ import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, 
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
-import { personKey } from "./person-key.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings, type Env } from "./runtime.ts";
 import { Settings } from "./settings.ts";
@@ -175,7 +175,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
   // Desk S2a: the founder's tezgah boots from the boot list, so the table holds its program too.
   table.programs["fabrika/tezgah"] = tezgahCode;
   table.programs["p12/approvals"] = approvalCode;
-  const key = await Effect.runPromise(personKey);
+  const key = await Effect.runPromise(SshsigTest.identity);
   // The ledger is in memory: a file would sync every commit to disk, which took half of L4's time
   // on a laptop, and no law reads the file. A reopen keeps this same handle.
   const db = new DatabaseSync(":memory:");

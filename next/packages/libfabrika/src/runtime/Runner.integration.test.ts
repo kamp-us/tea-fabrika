@@ -7,7 +7,7 @@
 // own(id, stream, event) are the checked door edges. The runner, not these adapters, signs.
 import { applyCell, Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { NodeServices } from "@effect/platform-node";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
@@ -19,15 +19,15 @@ import {
   Effect,
   Exit,
   Fiber,
-  FileSystem,
   Layer,
   Option,
-  Path,
   Result,
   Schema,
   Scope,
   Stream,
 } from "effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { SessionManagerError, Storage } from "../access/SessionManager.ts";

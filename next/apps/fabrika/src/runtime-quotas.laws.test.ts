@@ -23,6 +23,7 @@ import { send } from "@kampus/libfabrika/runtime/Send";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Command } from "@kampus/libfabrika/tasks/Task";
 import { targetStream } from "@kampus/libfabrika/tasks/Tasks";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import {
   commitReply,
   configureProcess,
@@ -38,7 +39,6 @@ import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import { programs } from "virtual:fabrika-built";
 import { vi } from "vitest";
-import { personKey } from "./person-key.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
@@ -209,9 +209,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
   table.programs["fabrika/tezgah"] = tezgahCode;
   table.programs["quota/alpha"] = alphaCode;
   table.programs["quota/beta"] = betaCode;
-  const key = yield* personKey;
+  const key = yield* SshsigTest.identity;
   // A hands key the person named, which never connects: a hands Cmd's task stays waiting.
-  const handsKey = yield* personKey;
+  const handsKey = yield* SshsigTest.identity;
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
     (held) => Effect.sync(() => held.close()),

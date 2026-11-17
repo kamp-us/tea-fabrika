@@ -1,11 +1,13 @@
 // P11 SQL adapter contract. One object stores {saved, turn, cmds}; load is null before its first save.
 // layer(sql, {process}) needs Ledger only for record(id, RuntimeRecord, From).
 import type { DatabaseSync } from "node:sqlite";
-import { NodeServices } from "@effect/platform-node";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Arbitrary, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
+import { Arbitrary, Effect, Layer, Schema, Stream } from "effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";

@@ -12,9 +12,14 @@
 // p44, which runs the real `ssh-keygen`, is in Sshsig.integration.test.ts: it drives a process, so
 // it runs on the schedule (0536). These laws run on the saved vectors and WebCrypto keys alone.
 import { describe, expect, it } from "@effect/vitest";
+import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
+import * as Base64 from "effect/encoding/Base64";
+import * as Base64Url from "effect/encoding/Base64Url";
 import * as Exit from "effect/Exit";
 import * as fc from "fast-check";
+import * as PublicKey from "./PublicKey.ts";
+import * as SshsigTest from "./Sshsig.test-support.ts";
 import {
   SPACE,
   refused,
@@ -48,6 +53,7 @@ import {
   write,
   signedByHand,
 } from "./Sshsig.test-support.ts";
+import { checkSshsig } from "./Sshsig.ts";
 import type { writeSshsig } from "./Sshsig.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -244,9 +250,9 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
           Effect.gen(function* () {
             const key = yield* freshKey(comment);
             const bytes = utf8(body);
-            const sha512 = yield* signedByHand(key, "sha512", yield* digest("SHA-512", bytes));
-            const sha256 = yield* signedByHand(key, "sha256", yield* digest("SHA-256", bytes));
-            const sha384 = yield* signedByHand(key, "sha384", yield* digest("SHA-384", bytes));
+            const sha512 = yield* signedByHand(key.publicKey, signWith(key), "sha512", yield* digest("SHA-512", bytes));
+            const sha256 = yield* signedByHand(key.publicKey, signWith(key), "sha256", yield* digest("SHA-256", bytes));
+            const sha384 = yield* signedByHand(key.publicKey, signWith(key), "sha384", yield* digest("SHA-384", bytes));
             expect(yield* check(sha512, [key.line], body)).toStrictEqual({ signer: key.line });
             expect(yield* check(sha256, [key.line], body)).toStrictEqual({ signer: key.line });
             expect(yield* check(sha384, [key.line], body)).toStrictEqual(refused);
@@ -724,4 +730,58 @@ describe("properties", () => {
       { ...runs, numRuns: 300 },
     );
   });
+});
+
+// Plants: changed text, blob fingerprint, namespace, version and signature wrapper.
+it("a proof passes the door's SSHSIG check for its text and key only, and the fingerprint is the door's", async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.string(), fc.string(), fc.uint8Array({ minLength: 32, maxLength: 32 }), (text, other, seed) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const key = yield* SshsigTest.identity;
+          const stranger = yield* SshsigTest.identity;
+          const armored = yield* key.proof(text);
+
+          expect(yield* checkSshsig({ text, armored, space: SPACE, signers: [key.line] })).toEqual({
+            signer: key.line,
+          });
+          expect(yield* checkSshsig({ text, armored, space: SPACE, signers: [stranger.line] })).toEqual({
+            reason: "bad_signature",
+          });
+
+          if (other !== text) {
+            expect(yield* checkSshsig({ text: other, armored, space: SPACE, signers: [key.line] })).toEqual({
+              reason: "bad_signature",
+            });
+          }
+
+          const raw = Base64Url.decode(key.raw);
+          expect(raw._tag).toBe("Success");
+
+          if (raw._tag === "Success") {
+            expect(key.fingerprint).toBe(yield* PublicKey.fingerprint(raw.success));
+            expect(key.line).toBe(yield* PublicKey.line(raw.success));
+          }
+
+          // ssh-keygen's fingerprint is over the whole blob the key line carries, not the 32 raw bytes.
+          const blob = yield* Effect.fromResult(Base64.decode(key.line.slice("ssh-ed25519 ".length)));
+          const hashed = yield* Digest.Digest.use((digest) => digest.digest(Digest.sha256, blob));
+          expect(key.sshFingerprint).toBe(`SHA256:${Base64.encode(hashed).replace(/=+$/, "")}`);
+          expect(key.sshFingerprint).not.toBe(key.fingerprint);
+
+          // A known seed gives the same identity each time, so a saved key keeps its name.
+          const bytes = seed;
+          const once = yield* SshsigTest.identityFrom(bytes);
+          const again = yield* SshsigTest.identityFrom(bytes);
+          expect([again.raw, again.line, again.fingerprint, again.sshFingerprint]).toEqual([
+            once.raw,
+            once.line,
+            once.fingerprint,
+            once.sshFingerprint,
+          ]);
+        }).pipe(Effect.provide(Digest.layerWebCrypto)),
+      ),
+    ),
+    { seed: SEED, numRuns: 100 },
+  );
 });

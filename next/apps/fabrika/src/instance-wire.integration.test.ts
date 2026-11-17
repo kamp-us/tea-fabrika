@@ -8,6 +8,7 @@ import { checklistView } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
 import { Clock, Deferred, Effect, FileSystem, Fiber, Path, Schema } from "effect";
 import { Digest } from "effect/crypto";
@@ -17,7 +18,6 @@ import { afterEach, describe, expect } from "vitest";
 import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
 import { type Child, start } from "./dev-child.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
-import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
 
@@ -166,7 +166,7 @@ const unusedPort = async (held: Held) => {
   return port.port;
 };
 
-type Saved = { key: PersonKey; home: string; port: number };
+type Saved = { key: SshsigTest.Identity; home: string; port: number };
 
 const launch = async (
   held: Held,
@@ -174,7 +174,7 @@ const launch = async (
   rateLimit = { limit: 100_000, window: 60_000 },
   source: "flags" | "env" | "file" = "flags",
 ) => {
-  const key = saved?.key ?? (await Effect.runPromise(personKey));
+  const key = saved?.key ?? (await Effect.runPromise(SshsigTest.identity));
   const home = saved?.home ?? (await disk((fs) => fs.makeTempDirectory({ prefix: "p12-w-" })));
   held.homes.push(home);
   const port = saved?.port ?? (await unusedPort(held));
@@ -305,10 +305,10 @@ class Client {
   private readonly waiting: Array<() => void> = [];
   private readonly ws: WebSocket;
   private readonly base: string;
-  private readonly key: PersonKey;
+  private readonly key: SshsigTest.Identity;
   private readonly tab: string;
 
-  constructor(base: string, key: PersonKey, tab: string) {
+  constructor(base: string, key: SshsigTest.Identity, tab: string) {
     this.base = base;
     this.key = key;
     this.tab = tab;
@@ -768,7 +768,7 @@ describe("P12 real dev.ts wire", () => {
     expect(rows[0]).toMatchObject({ id: "once", rev: first.rev, pos: first.pos });
     expect((await view(c, pid)).view).toEqual({ count: 1 });
 
-    const otherKey = await Effect.runPromise(personKey),
+    const otherKey = await Effect.runPromise(SshsigTest.identity),
       other = new Client(s.url, otherKey, "other-key");
 
     expect((await Effect.runPromise(other.hello())).error?.data?.reason).toBe("not_granted");
@@ -904,9 +904,9 @@ describe("P12 real dev.ts wire", () => {
     const before = await read(c, "gateway/inputs");
     const traces = await c.call("spans.read", { chain: { _tag: "spans" }, after: 0 });
 
-    const strangerKey = await Effect.runPromise(personKey),
-      unknownKey = await Effect.runPromise(personKey),
-      badKey = await Effect.runPromise(personKey);
+    const strangerKey = await Effect.runPromise(SshsigTest.identity),
+      unknownKey = await Effect.runPromise(SshsigTest.identity),
+      badKey = await Effect.runPromise(SshsigTest.identity);
 
     const stranger = new Client(s.url, strangerKey, "pre-hello");
     await stranger.challenge();
@@ -1036,7 +1036,7 @@ describe("P12 real dev.ts wire", () => {
     expect(await posted.text()).toBe("fabrika");
     const home = await disk((fs) => fs.makeTempDirectory({ prefix: "p12-w-" }));
     homes.push(home);
-    const key = await Effect.runPromise(personKey);
+    const key = await Effect.runPromise(SshsigTest.identity);
 
     // Port 0 is outside the settings range, so the instance child fails before it builds.
     const code = await Effect.runPromise(

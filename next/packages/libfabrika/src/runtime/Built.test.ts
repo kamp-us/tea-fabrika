@@ -5,7 +5,7 @@
 // its qualified identity, `pack/program`, and a table with any other key fails whole: no entry is
 // dropped to make it pass.
 import { Effect, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as Digest from "effect/crypto/Digest";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 

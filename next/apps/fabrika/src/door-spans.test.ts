@@ -18,6 +18,7 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Layer, Option, Result, Schema, Stream, Tracer } from "effect";
 import { RateLimiter } from "effect/persistence";
@@ -25,7 +26,6 @@ import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Gateway } from "./door.ts";
-import { type PersonKey, personKeyFrom } from "./person-key.test-support.ts";
 
 const CHECK = { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }), endOnFailure: true };
 
@@ -92,7 +92,7 @@ type Sample = typeof sample extends fc.Arbitrary<infer A> ? A : never;
 
 // Generated Ed25519 seeds stay in memory. No key file is read or written. Each salt gives a
 // different key from the sample's one seed.
-const key = (seed: Uint8Array, salt: number) => personKeyFrom(seed.map((b) => b ^ salt));
+const key = (seed: Uint8Array, salt: number) => SshsigTest.identityFrom(seed.map((b) => b ^ salt));
 
 const fixture = Effect.fnUntraced(function* (a: Sample) {
   const databases: Array<DatabaseSync> = [];
@@ -451,7 +451,7 @@ const checkSpan = (span: Tracer.Span, a: Sample, ok: boolean, attributes: Record
   }
 };
 
-const hello = Effect.fnUntraced(function* (d: typeof Gateway.Service, k: PersonKey, tab: string) {
+const hello = Effect.fnUntraced(function* (d: typeof Gateway.Service, k: SshsigTest.Identity, tab: string) {
   const client = yield* d.connect(),
     nonce = yield* d.challenge(client);
 

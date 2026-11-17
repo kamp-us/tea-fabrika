@@ -15,12 +15,12 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { programs } from "virtual:fabrika-built";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
-import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
@@ -33,7 +33,7 @@ const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 export const PROJECT = "p42-children";
 
-export type Key = PersonKey;
+export type Key = SshsigTest.Identity;
 
 /** Asks the host for a child on `start`, and keeps every answer it was told. */
 const starterSource = [
@@ -103,7 +103,7 @@ export const childHome = Effect.fnUntraced(
       child: built.programs["p42/child"]?.hash ?? "",
     };
 
-    const key = yield* personKey;
+    const key = yield* SshsigTest.identity;
 
     const boot = Effect.gen(function* () {
       // Held until the scope closes, after the instance that binds it (finalizers run in reverse). Each
@@ -182,8 +182,8 @@ export const childProject = Effect.fnUntraced(function* () {
   );
 
   const sql = nodeSql(db);
-  const key = yield* personKey;
-  const agent = yield* personKey;
+  const key = yield* SshsigTest.identity;
+  const agent = yield* SshsigTest.identity;
   const delivered: Array<unknown> = [];
   const configured: Array<{ descriptor: Descriptor; wake: boolean }> = [];
   const descriptors = new Map<string, Descriptor>();

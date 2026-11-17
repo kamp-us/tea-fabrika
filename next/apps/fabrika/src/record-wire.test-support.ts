@@ -2,11 +2,11 @@
 import { NodeServices } from "@effect/platform-node";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { SinkError } from "@kampus/libfabrika/telemetry/Sink";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
-import { personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 
 const Failure = Schema.Struct({ reason: Schema.String });
@@ -46,7 +46,7 @@ export const recordWire = Effect.fnUntraced(
     const path = yield* Path.Path;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "t502-r-" });
     const port = yield* Effect.acquireRelease(heldPort(), (p) => p.release);
-    const key = yield* personKey;
+    const key = yield* SshsigTest.identity;
     const built = yield* build({ out: path.join(home, "dist") });
     const old = process.env.ALCHEMY_HOME;
     yield* Effect.addFinalizer(() =>

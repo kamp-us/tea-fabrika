@@ -7,10 +7,10 @@ import { it, expect } from "@effect/vitest";
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
 import { Task, Result } from "@kampus/libfabrika/tasks/Task";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Effect, FileSystem, Path, Queue, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { localInstance } from "./local-instance.ts";
-import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { programs } from "./table.ts";
@@ -34,7 +34,7 @@ type Frame = typeof Frame.Type;
 
 class Closed extends Schema.TaggedError<Closed>()("Closed", { code: Schema.Int }) {}
 
-const socket = Effect.fnUntraced(function* (url: string, key: PersonKey, tab: string, authorized = true) {
+const socket = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity, tab: string, authorized = true) {
   const inbox = yield* Queue.unbounded<Frame | Closed>();
   const frames: Array<Frame> = [];
   let closed: Closed | undefined;
@@ -133,9 +133,9 @@ it.live(
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "tasks-wire-" });
       const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
 
-      const root = yield* personKey,
-        hands = yield* personKey,
-        other = yield* personKey;
+      const root = yield* SshsigTest.identity,
+        hands = yield* SshsigTest.identity,
+        other = yield* SshsigTest.identity;
 
       const selected: typeof SeededProject.selected = hands.fingerprint;
       const app = path.resolve(import.meta.dirname, "..");
@@ -214,7 +214,7 @@ it.live(
 
       expect(requester).toMatchObject({ process: expect.any(String) });
 
-      const grant = Effect.fnUntraced(function* (key: PersonKey, id: string) {
+      const grant = Effect.fnUntraced(function* (key: SshsigTest.Identity, id: string) {
         const value = grantText({
           id,
           key: key.raw,

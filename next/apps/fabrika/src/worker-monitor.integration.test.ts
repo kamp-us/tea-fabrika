@@ -11,10 +11,10 @@ import { NodeServices } from "@effect/platform-node";
 import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Effect, FileSystem, Path, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
-import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -30,7 +30,7 @@ const PROJECT = "m13-watch";
 const WAIT = 25_000;
 
 /** The founder's key, and its signature over the door's hello. */
-type Key = PersonKey;
+type Key = SshsigTest.Identity;
 
 // The two programs, as source the real app build bundles. The reader watches the name it is told,
 // ends the watch it is told to forget, and keeps every answer and DOWN it folds, in order; the writer
@@ -221,7 +221,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "m13w-" });
 
-      const key = yield* personKey;
+      const key = yield* SshsigTest.identity;
       yield* Effect.acquireRelease(
         Effect.sync(() => {
           const previous = process.env.FABRIKA_HOME;

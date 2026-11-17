@@ -3,8 +3,13 @@
 // real `ssh-keygen` and so runs on the schedule (0536).
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Signature from "effect/crypto/Signature";
 import * as Effect from "effect/Effect";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import type * as ClientKey from "./ClientKey.ts";
 import { checkSshsig, KeyLine, writeSshsig } from "./Sshsig.ts";
 
 export const SPACE = "fabrika-client";
@@ -195,13 +200,18 @@ export const write = (key: Key, body: string) =>
   Effect.flatMap(decodeLine(key.line), (line) => writeSshsig({ text: body, space: SPACE, line, sign: signWith(key) }));
 
 /** A blob signed by hand, with any hash name: what `ssh-keygen` would write if it used one. */
-export const signedByHand = (key: Key, hash: string, digested: Uint8Array) =>
-  Effect.map(signWith(key)(toSign(SPACE, hash, digested)), (raw) =>
+export const signedByHand = (
+  publicKey: Uint8Array,
+  sign: (bytes: Uint8Array) => Effect.Effect<Uint8Array>,
+  hash: string,
+  digested: Uint8Array,
+) =>
+  Effect.map(sign(toSign(SPACE, hash, digested)), (raw) =>
     armor(
       build({
         magic: utf8("SSHSIG"),
         version: 1,
-        key: keyBlob(key.publicKey),
+        key: keyBlob(publicKey),
         space: utf8(SPACE),
         reserved: new Uint8Array(),
         hash: utf8(hash),
@@ -209,3 +219,47 @@ export const signedByHand = (key: Key, hash: string, digested: Uint8Array) =>
       }),
     ),
   );
+
+/** A test identity can sign raw bytes and a door hello without claiming a membership rank. */
+export type Identity = Pick<ClientKey.Identity, "raw" | "line" | "fingerprint"> & {
+  readonly sshFingerprint: string;
+  readonly sign: (bytes: Uint8Array) => Effect.Effect<Uint8Array>;
+  readonly proof: (text: string) => Effect.Effect<string>;
+};
+
+const fromSigner = Effect.fnUntraced(function* (
+  publicKey: Uint8Array,
+  sign: (bytes: Uint8Array) => Effect.Effect<Uint8Array>,
+): Effect.fn.Return<Identity> {
+  const blob = keyBlob(publicKey);
+  const fingerprint = (bytes: Uint8Array) =>
+    digest("SHA-256", bytes).pipe(Effect.map((hashed) => `SHA256:${base64(hashed).replace(/=+$/, "")}`));
+
+  return {
+    raw: Base64Url.encode(publicKey),
+    line: yield* decodeLine(lineFor(blob)).pipe(Effect.orDie),
+    fingerprint: yield* fingerprint(publicKey),
+    sshFingerprint: yield* fingerprint(blob),
+    sign,
+    proof: Effect.fnUntraced(function* (text: string) {
+      return yield* signedByHand(publicKey, sign, "sha512", yield* digest("SHA-512", utf8(text)));
+    }),
+  };
+});
+
+export const identity: Effect.Effect<Identity> = freshKey().pipe(
+  Effect.flatMap((key) => fromSigner(key.publicKey, signWith(key))),
+);
+
+/** Derive the same identity from a saved 32-byte Ed25519 seed. */
+export const identityFrom = Effect.fnUntraced(
+  function* (seed: Uint8Array) {
+    const signature = yield* Signature.Signature;
+    const key = yield* Signature.privateKey(Signature.ed25519, seed);
+    const publicKey = yield* Signature.toBytes(yield* signature.publicKeyOf(key));
+
+    return yield* fromSigner(publicKey, (bytes) => signature.sign(key, bytes).pipe(Effect.orDie));
+  },
+  Effect.provide(Signature.layerWebCrypto.pipe(Layer.provide(SecureRandom.layerWebCrypto))),
+  Effect.orDie,
+);

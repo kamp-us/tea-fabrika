@@ -4,10 +4,10 @@
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect } from "vitest";
-import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
@@ -28,7 +28,7 @@ const LIMIT = 2;
 // Bounded waits tied to observable facts. Backoff is 100 to 800 ms, so this is generous.
 const WAIT = 25_000;
 
-type Key = PersonKey;
+type Key = SshsigTest.Identity;
 
 // A small program that throws a TypeError on "throw" and counts on "inc". It declares
 // maxDeliveries, so the box's declaration must carry the program's own limit.
@@ -65,7 +65,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
         // A short home: a socket path has a 103-byte limit. It is acquired first, so it goes last:
         // localInstance closes with its scope before its durable files go.
         const home = yield* fs.makeTempDirectoryScoped({ prefix: "p34w-" });
-        const key = yield* personKey;
+        const key = yield* SshsigTest.identity;
         process.env.FABRIKA_HOME = home;
         yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
         const poison = path.join(home, "poison.ts");
@@ -290,7 +290,7 @@ const worldScoped = Effect.gen(function* () {
   const { localState } = yield* Effect.promise(() => import("alchemy/State/LocalState"));
   const { build } = yield* Effect.promise(() => import("./build.ts"));
   const { localInstance } = yield* Effect.promise(() => import("./local-instance.ts"));
-  const key = yield* personKey;
+  const key = yield* SshsigTest.identity;
   // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
   const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
   yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));

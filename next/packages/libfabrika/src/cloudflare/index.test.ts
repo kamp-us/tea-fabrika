@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { Digest } from "effect/crypto";
+import * as Digest from "effect/crypto/Digest";
 import * as fc from "fast-check";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { fetch, serveAsset, workerLoader } from "./index.ts";

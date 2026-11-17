@@ -5,13 +5,13 @@
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Context, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect } from "vitest";
 import { build } from "./build.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { localInstance } from "./local-instance.ts";
-import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -53,7 +53,7 @@ const until = <A, E, R>(look: Effect.Effect<A, E, R>, done: (value: A) => boolea
   });
 
 // A real client signs the challenge and sends through the door, which creates the inbox envelope.
-const wire = Effect.fnUntraced(function* (url: string, key: PersonKey) {
+const wire = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity) {
   const tab = "usage";
   const frames: Array<typeof Frame.Type> = [];
 
@@ -167,7 +167,7 @@ const world = Effect.gen(function* () {
     programs: { "usage/spin": file, "fabrika/checklist": checklist },
   });
 
-  const key = yield* personKey;
+  const key = yield* SshsigTest.identity;
   const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
 
   const instance = yield* localInstance(

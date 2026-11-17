@@ -6,13 +6,13 @@ import { it } from "@effect/vitest";
 import { Quotas } from "@kampus/libfabrika/processes/Quotas";
 import * as QuotasSql from "@kampus/libfabrika/processes/QuotasSql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { ByteSize, Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect } from "vitest";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
-import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -64,7 +64,7 @@ const until = <A, E, R>(look: Effect.Effect<A, E, R>, done: (value: A) => boolea
   });
 
 // A real client signs the challenge and sends through the door, which creates the inbox envelope.
-const wire = Effect.fnUntraced(function* (url: string, key: PersonKey) {
+const wire = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity) {
   const tab = "quotas";
   const frames: Array<typeof Frame.Type> = [];
   const socket = yield* Effect.acquireRelease(
@@ -181,7 +181,7 @@ const world = Effect.fnUntraced(function* (mode: "writes" | "storage" | "reserve
   }
 
   const built = yield* build({ out: path.join(home, "dist"), programs: files });
-  const key = yield* personKey;
+  const key = yield* SshsigTest.identity;
   const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
   // The quota settings ride in the start's settings snapshot; the fixture names the ones it tightens.
   const limits = {

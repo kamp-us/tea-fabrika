@@ -20,6 +20,7 @@ import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import {
@@ -38,7 +39,6 @@ import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { personKey } from "./person-key.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
@@ -445,7 +445,7 @@ const world = async (
   // The quota settings ride in the start's settings snapshot; a law names only the values it changes.
   values: StartsTest.Values = {},
 ) => {
-  const key = await Effect.runPromise(personKey);
+  const key = await Effect.runPromise(SshsigTest.identity);
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = counterCode;
   table.programs["fabrika/checklist"] = checklistCode;

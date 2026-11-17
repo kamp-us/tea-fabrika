@@ -15,6 +15,7 @@ import * as Snapshot from "@kampus/libfabrika/settings/Snapshot";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, FileSystem, Layer, Path, Ref, Schedule, Schema, Stream } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
@@ -24,7 +25,6 @@ import * as fc from "fast-check";
 import { rolldown } from "rolldown";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
-import { personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import { killWorkerd } from "./workerd.test-support.ts";
 
@@ -284,7 +284,7 @@ const instrumented = Effect.fnUntraced(function* (
   const path = yield* Path.Path;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t753-worker-" });
   const port = yield* held;
-  const key = yield* personKey;
+  const key = yield* SshsigTest.identity;
   const built = yield* build({ out: path.join(home, "dist") });
 
   const input = {
@@ -499,7 +499,7 @@ const dev = Effect.fnUntraced(function* (port: number, extra: Readonly<Record<st
 
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "t664-dev-" });
   const app = path.resolve(import.meta.dirname, "..");
-  const key = yield* personKey;
+  const key = yield* SshsigTest.identity;
 
   const child = yield* ChildProcess.make(
     process.execPath,

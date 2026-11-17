@@ -24,6 +24,7 @@ import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, FileSystem, Layer, Path, Schema, Scope, Stream } from "effect";
@@ -31,7 +32,6 @@ import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Gateway } from "./door.ts";
-import { type PersonKey, personKey } from "./person-key.test-support.ts";
 
 const P1 = "process_0000000000e008000000000000";
 
@@ -109,7 +109,7 @@ const policy = {
 };
 
 /** The founder's window key and another person's key, fresh for one world. */
-const people = Effect.all({ window: personKey, other: personKey }, { concurrency: "unbounded" });
+const people = Effect.all({ window: SshsigTest.identity, other: SshsigTest.identity }, { concurrency: "unbounded" });
 
 const world = ({ disk }: Disks, { window, other }: Effect.Success<typeof people>) => {
   const project = disk(),
@@ -387,7 +387,7 @@ const world = ({ disk }: Disks, { window, other }: Effect.Success<typeof people>
       ),
     );
 
-  const online = Effect.fnUntraced(function* (signer: PersonKey = window) {
+  const online = Effect.fnUntraced(function* (signer: SshsigTest.Identity = window) {
     const d = yield* Gateway;
     const client = yield* d.connect();
     const nonce = yield* d.challenge(client);

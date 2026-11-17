@@ -10,13 +10,14 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { CommitReply, SigningReply } from "@kampus/libfabrika/workers/bindings";
 import { Context, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { HttpServer, HttpServerResponse } from "effect/http";
+import { NetAddress } from "effect/net";
 import { rolldown } from "rolldown";
 import { describe, expect, it } from "vitest";
-import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { tree } from "./workerd.test-support.ts";
@@ -62,7 +63,7 @@ const span = (n: number) =>
 const world = async (
   test: (
     instance: any,
-    key: PersonKey,
+    key: SshsigTest.Identity,
     probe: {
       hits: () => number;
       start: (name: string, program: string) => Promise<{ process: string }>;
@@ -84,7 +85,7 @@ const world = async (
       const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
       // localInstance closes with the scope before its durable files go.
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "p12-o-" });
-      const key = yield* personKey;
+      const key = yield* SshsigTest.identity;
 
       yield* Effect.acquireRelease(
         Effect.sync(() => {
@@ -119,6 +120,9 @@ const world = async (
       if (!("port" in server.address)) {
         return yield* Effect.die("the probe server has no port");
       }
+
+      expect(NetAddress.formatIp(server.address.address)).toBe("127.0.0.1");
+      expect(server.address.port).toBeGreaterThan(0);
 
       const destination = server.address;
       yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
@@ -368,7 +372,7 @@ const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) 
   throw new Error(`${label}: timed out; last observed ${JSON.stringify(last)}`);
 };
 
-const wire = async (instance: any, key: PersonKey, tab: string) => {
+const wire = async (instance: any, key: SshsigTest.Identity, tab: string) => {
   const name = `/client/${encodeURIComponent(key.fingerprint)}/${tab}`;
   const socket = new WebSocket(instance.url.replace("http", "ws") + name);
   const frames: any[] = [];
@@ -440,7 +444,7 @@ const workerdPid = async () => {
   return matches[0]?.pid ?? 0;
 };
 
-const admitted = async (instance: any, key: PersonKey, project = "p12-records") => {
+const admitted = async (instance: any, key: SshsigTest.Identity, project = "p12-records") => {
   const p = instance.project(project);
 
   const client = await p.connect(),

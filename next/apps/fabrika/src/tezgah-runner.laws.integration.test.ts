@@ -26,13 +26,13 @@ import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
 import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey";
 import { ClientRows } from "@kampus/libfabrika/transport/ClientRows";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import * as RunnerTest from "@kampus/tezgah/RunnerTest";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect, it } from "vitest";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
-import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -62,7 +62,7 @@ const typeId = (prefix: string, n: number): string => {
 };
 
 /** A fresh SSH identity: its public line and raw key, its fingerprint, its door proof and its signer. */
-type Key = PersonKey;
+type Key = SshsigTest.Identity;
 
 // The instance's private local capability, read call by call as ticket 402's test reads it.
 type Instance = Record<string, any>;
@@ -174,7 +174,7 @@ const startInstance = Effect.fnUntraced(
     yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
     const built = yield* build({ out: path.join(home, "dist") });
     const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
-    const key = yield* personKey;
+    const key = yield* SshsigTest.identity;
 
     const instance: Instance = yield* localInstance(
       built,

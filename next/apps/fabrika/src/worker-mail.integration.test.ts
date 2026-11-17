@@ -3,11 +3,11 @@
 // No directly constructed runner and no raw Miniflare stands in for the instance.
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Effect, FileSystem, Path, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
-import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -22,7 +22,7 @@ const PROJECT = "p41-workers";
 // Bounded waits tied to observable facts. Backoff is 100 to 800 ms, so this is generous.
 const WAIT = 25_000;
 
-type Key = PersonKey;
+type Key = SshsigTest.Identity;
 
 // The fixtures use the same Send/ref exchange as slice 1. Source is bundled by the real app build.
 const source = (role: "requester" | "responder", pair: number, braked = false) => `
@@ -217,7 +217,7 @@ const world = async (
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "p41w-" });
 
-      const key = yield* personKey;
+      const key = yield* SshsigTest.identity;
       yield* Effect.acquireRelease(
         Effect.sync(() => {
           const previous = process.env.FABRIKA_HOME;
@@ -697,7 +697,7 @@ const checklistWorld = async (
         `export { checklist as program } from ${JSON.stringify(path.resolve(import.meta.dirname, "../../../programs/checklist/src/program.ts"))};\n`,
       );
       const built = yield* build({ out: path.join(home, "dist"), programs: { "fabrika/checklist": wrapper } });
-      const key = yield* personKey;
+      const key = yield* SshsigTest.identity;
       const held = yield* Effect.acquireRelease(heldPort(), (port) => port.release);
 
       const instance = yield* localInstance(
@@ -889,7 +889,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
       }
 
       const built = yield* build({ out: path.join(home, "dist"), programs: selections });
-      const key = yield* personKey;
+      const key = yield* SshsigTest.identity;
       const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
 
       // The repo's own file, `[mail] unread = 2`, as its parse gives it (only the settings module

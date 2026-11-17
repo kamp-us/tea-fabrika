@@ -8,8 +8,10 @@ import {
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Context, Effect, Exit, Layer, Option, Schema, Scope, Tracer } from "effect";
-import { Digest, SecureRandom, Signature } from "effect/crypto";
-import { Base64Url } from "effect/encoding";
+import * as Digest from "effect/crypto/Digest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Signature from "effect/crypto/Signature";
+import * as Base64Url from "effect/encoding/Base64Url";
 import { vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";

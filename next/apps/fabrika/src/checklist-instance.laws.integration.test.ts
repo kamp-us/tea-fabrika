@@ -25,6 +25,7 @@ import { fcExitReason } from "@kampus/libfabrika/processes/Process.test-support"
 import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import {
   configureProcess,
   processDescriptor,
@@ -40,7 +41,6 @@ import { Cause, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import { personKey } from "./person-key.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
@@ -187,7 +187,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
         delete table.programs[options.lacks];
       }
 
-      const key = yield* personKey,
+      const key = yield* SshsigTest.identity,
         db = new DatabaseSync(":memory:");
 
       const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };

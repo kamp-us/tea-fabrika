@@ -2,10 +2,10 @@
 // The founder's key comes from person-key.test-support.ts, on Effect's Signature.
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Clock, Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
-import { personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -95,7 +95,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
       const { localState } = yield* Effect.promise(() => import("alchemy/State/LocalState"));
       const { build } = yield* Effect.promise(() => import("./build.ts"));
       const { localInstance } = yield* Effect.promise(() => import("./local-instance.ts"));
-      const { raw, line: founder, fingerprint } = yield* personKey;
+      const { raw, line: founder, fingerprint } = yield* SshsigTest.identity;
       yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
       const module = path.join(home, "beat.ts");
       const fixture = path.resolve(import.meta.dirname, "../../../../fixtures/next/packs/schedules/beat.ts");

@@ -5,17 +5,18 @@
 import assert from "node:assert/strict";
 import { NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { Id } from "@kampus/libfabrika";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { workerLoader } from "@kampus/libfabrika/workers";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
 import { Context, Effect, Exit, FileSystem, Layer, Path, Schema, Scope } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { HttpServer, HttpServerResponse } from "effect/http";
+import { NetAddress } from "effect/net";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -100,6 +101,9 @@ const probeServer = (scope: Scope.Scope, hit: () => void) =>
     if (!("port" in server.address)) {
       return yield* Effect.die("the probe server has no port");
     }
+
+    expect(NetAddress.formatIp(server.address.address)).toBe("127.0.0.1");
+    expect(server.address.port).toBeGreaterThan(0);
 
     return server.address.port;
   }).pipe(Effect.provideService(Scope.Scope, scope));
@@ -537,11 +541,11 @@ class Client {
   readonly frames: any[] = [];
   readonly ws: WebSocket;
   readonly url: string;
-  readonly key: PersonKey;
+  readonly key: SshsigTest.Identity;
   readonly tab: string;
   serial = 0;
 
-  constructor(url: string, key: PersonKey, tab: string) {
+  constructor(url: string, key: SshsigTest.Identity, tab: string) {
     this.url = url;
     this.key = key;
     this.tab = tab;
@@ -663,7 +667,7 @@ describe("P16 copied-file real instance, serial", () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: 1, max: 9999 }), async (n) => {
         const h = await home(),
-          key = await Effect.runPromise(personKey);
+          key = await Effect.runPromise(SshsigTest.identity);
 
         let hits = 0;
 
@@ -824,7 +828,7 @@ describe("P16 copied-file real instance, serial", () => {
         fc.array(fc.constantFrom("inc", "dec", "reset"), { minLength: 1, maxLength: 4 }),
         async (messages) => {
           const h = await home(),
-            key = await Effect.runPromise(personKey);
+            key = await Effect.runPromise(SshsigTest.identity);
 
           const { build } = await import("./build.ts"),
             { localInstance } = await import("./local-instance.ts");

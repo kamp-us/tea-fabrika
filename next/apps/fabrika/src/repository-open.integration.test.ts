@@ -5,10 +5,10 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Row } from "@kampus/libfabrika/ledger/Log";
 import type { Entry } from "@kampus/libfabrika/ledger/Log";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Effect, FileSystem, Path, Queue, Ref, Result, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { instanceDatabase } from "./instance-database.test-support.ts";
-import { personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 
 const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
@@ -106,7 +106,7 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
       const commit = yield* git(repo, ["rev-parse", "HEAD"]);
       yield* git(repo, ["checkout", "-b", "feature"]);
       yield* fs.writeFileString(path.join(repo, ".fabrika/fabrika.toml"), '[pack.trap]\nfrom = "./packs/trap"\n');
-      const founder = yield* personKey;
+      const founder = yield* SshsigTest.identity;
 
       const operator = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 

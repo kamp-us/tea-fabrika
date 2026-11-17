@@ -8,11 +8,11 @@
 // step's container, never on the owner's Mac.
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Effect, FileSystem, Layer, Path, Predicate, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import { describe, expect } from "vitest";
-import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { rssStandIn } from "./rss.fixture.ts";
@@ -39,7 +39,7 @@ const START = 30_000;
 const POLL = 50;
 
 // The founder's key, as an SSH public key line and a signer for the door's hello.
-type Key = PersonKey;
+type Key = SshsigTest.Identity;
 
 type Instance = any;
 
@@ -204,7 +204,7 @@ const world = (kib: (pid: number) => number | null) =>
     const { localState } = yield* Effect.promise(() => import("alchemy/State/LocalState"));
     const { build } = yield* Effect.promise(() => import("./build.ts"));
     const { localInstance } = yield* Effect.promise(() => import("./local-instance.ts"));
-    const key = yield* personKey;
+    const key = yield* SshsigTest.identity;
     // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
     const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
     yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));

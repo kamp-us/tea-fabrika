@@ -2,6 +2,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { runsFor } from "@kampus/vitest";
 import { localState } from "alchemy/State/LocalState";
 import { Effect, FileSystem, Path, Schema } from "effect";
@@ -11,7 +12,6 @@ import { expect, it } from "vitest";
 import { build } from "./build.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { localInstance } from "./local-instance.ts";
-import { personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -132,7 +132,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
   yield* fs.writeFileString(file, program);
   const built = yield* build({ out: path.join(home, "dist"), files: [], ledger: [], programs: { [PROGRAM]: file } });
   const held = yield* Effect.acquireRelease(heldPort(), (p) => p.release);
-  const key = yield* personKey;
+  const key = yield* SshsigTest.identity;
   const line = Schema.decodeSync(KeyLine)(key.line);
 
   yield* Effect.acquireRelease(
