@@ -28,7 +28,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.workflow_sha }}
-          path: runner
           persist-credentials: false
           submodules: false
           lfs: false
@@ -39,9 +38,8 @@ jobs:
           persist-credentials: false
           submodules: false
           lfs: false
-      - uses: ./runner/.github/actions/pnpm
+      - uses: ./.github/actions/pnpm
       - name: install trusted tooling
-        working-directory: runner
         shell: bash
         run: |
           if ! pnpm install --frozen-lockfile > "$RUNNER_TEMP/plant-install.out" 2>&1; then
@@ -49,7 +47,6 @@ jobs:
             exit 1
           fi
       - name: exercise
-        working-directory: runner
         timeout-minutes: 17
         run: nice -n 19 node .github/ci/plant.ts
       - name: sanitized observations

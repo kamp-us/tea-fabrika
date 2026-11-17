@@ -25,18 +25,16 @@ const expected = {
       "timeout-minutes": 20,
       steps: [
         { name: "trusted main", run: 'test "$GITHUB_REF" = refs/heads/main' },
-        { uses: "actions/checkout@v7", with: { ref: `\${{ github.workflow_sha }}`, path: "runner", ...checkout } },
+        { uses: "actions/checkout@v7", with: { ref: `\${{ github.workflow_sha }}`, ...checkout } },
         { uses: "actions/checkout@v7", with: { ref: `\${{ inputs.sha }}`, path: "source", ...checkout } },
-        { uses: "./runner/.github/actions/pnpm" },
+        { uses: "./.github/actions/pnpm" },
         {
           name: "install trusted tooling",
-          "working-directory": "runner",
           shell: "bash",
           run: "if ! pnpm install --frozen-lockfile > \"$RUNNER_TEMP/plant-install.out\" 2>&1; then\n  echo 'plant-exercise: trusted install failed'\n  exit 1\nfi\n",
         },
         {
           name: "exercise",
-          "working-directory": "runner",
           "timeout-minutes": 17,
           run: "nice -n 19 node .github/ci/plant.ts",
         },

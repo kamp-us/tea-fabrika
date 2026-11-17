@@ -42,6 +42,10 @@ it.prop(
       },
       (w: Record<string, unknown>) => {
         const steps = allSteps(map(map(w["jobs"])["exercise"]));
+        map(steps[1]!["with"])["path"] = "runner";
+      },
+      (w: Record<string, unknown>) => {
+        const steps = allSteps(map(map(w["jobs"])["exercise"]));
         map(steps[2]!["with"])["ref"] = "main";
       },
       (w: Record<string, unknown>) => {

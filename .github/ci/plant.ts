@@ -361,7 +361,7 @@ const main = Effect.gen(function* () {
 
   const request = yield* decodeRequest(event.inputs).pipe(Effect.mapError(() => fail("request_invalid")));
   const runner = path.resolve(".");
-  const source = path.resolve("../source");
+  const source = path.resolve("source");
   const selected = cases[request.case];
   const scratch = yield* fs.makeTempDirectoryScoped({ directory: environment.RUNNER_TEMP, prefix: "plant-private-" });
 
