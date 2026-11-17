@@ -65,7 +65,7 @@ const step = (w: Workflow, job: string, name: string): Step => {
 
 // What may change without changing what the full run does: the catch-up's minute (0581 fixes the
 // cron hourly, and its minute stays a choice), the gap (a setting, 0069, an hour at least), the
-// concurrency group's name, how many legs run at once within the cap, and the spacing in an `if`,
+// workflow group's case and spacing, how many legs run at once within the cap, and the spacing in an `if`,
 // a job's or a step's. Each is varied only where the real workflow has it, so a part it lacks stays
 // missing.
 const spaced = (value: unknown, gap: string) =>
@@ -75,14 +75,13 @@ const scheduled = fc
   .tuple(
     fc.integer({ min: 1, max: 59 }),
     fc.integer({ min: 60, max: 1440 }),
-    fc.stringMatching(/^[a-z][a-z0-9-]{0,15}$/).filter((group) => !/^scheduled-(?:control|test-[1-9])$/i.test(group)),
     fc.integer({ min: 1, max: 9 }),
     fc.constantFrom("", " ", "  "),
     fc.shuffledSubarray(["1", "2", "3", "4", "5", "6", "7", "8", "9"], { minLength: 9, maxLength: 9 }),
     fc.boolean(),
     fc.boolean(),
   )
-  .map(([minute, minutes, group, most, gap, slots, numeric, upper]) => {
+  .map(([minute, minutes, most, gap, slots, numeric, upper]) => {
     const w = real();
     const crons = Array.isArray(w.on["schedule"]) ? (w.on["schedule"] as { cron?: unknown }[]) : [];
 
@@ -96,7 +95,7 @@ const scheduled = fc
       w.env["GAP_MINUTES"] = minutes;
     }
 
-    w.concurrency["group"] = group;
+    w.concurrency["group"] = `${upper ? "SCHEDULED" : "scheduled"}-\${{${gap}github.ref${gap}}}`;
     w.jobs["tests"]!.strategy!["max-parallel"] = most;
     // The most changed legs at once is one setting, MOST, the matrix's alias of it (0590).
     w.jobs["changed"]!.strategy!["max-parallel"] = most;
@@ -162,12 +161,13 @@ it("property: a schedule varied only where its meaning holds passes", () => {
       const group = String(w.jobs["tests"]!.concurrency?.["group"]);
       reached.add(group.startsWith("SCHEDULED-") ? "upper" : "lower");
       reached.add(/:"[1-9]"/.test(group) ? "text" : "number");
+      reached.add(String(w.concurrency["group"]).includes(`\${{github.ref}}`) ? "compact" : "spaced");
       expect(lint(w)).toEqual([]);
     }),
     options,
   );
   expect(
-    ["upper", "lower", "text", "number"].every((kind) => reached.has(kind)),
+    ["upper", "lower", "text", "number", "compact", "spaced"].every((kind) => reached.has(kind)),
     [...reached].join(", "),
   ).toBe(true);
 });
@@ -300,10 +300,21 @@ const plants: [string, (w: Workflow) => void][] = [
     (w) => (w.jobs["tests"]!["if"] = "needs.gate.outputs.start != 'false'"),
   ],
   ["SC15: the tests wait on nothing", (w) => Reflect.deleteProperty(w.jobs["tests"]!, "needs")],
-  // SC2: one run at a time, never cut short.
+  // SC2: one run per ref at a time, never cut short. Plants run once: the old literal-group
+  // guard rejects valid refs; dropping SC2 admits each break below. Restored after each run.
   ["SC2: a newer run cancels the running one", (w) => (w.concurrency["cancel-in-progress"] = true)],
-  ["SC2: one group per commit, so runs overlap", (w) => (w.concurrency["group"] = `scheduled-\${{ github.sha }}`)],
-  // SC12: a newer run never cancels a waiting one.
+  ["SC2: no group", (w) => Reflect.deleteProperty(w.concurrency, "group")],
+  ["SC2: no explicit cancellation policy", (w) => Reflect.deleteProperty(w.concurrency, "cancel-in-progress")],
+  ["SC2: one global group delays unrelated refs", (w) => (w.concurrency["group"] = "scheduled")],
+  ["SC2: one group per commit overlaps main runs", (w) => (w.concurrency["group"] = `scheduled-\${{ github.sha }}`)],
+  ["SC2: one group per run overlaps main runs", (w) => (w.concurrency["group"] = `scheduled-\${{ github.run_id }}`)],
+  ["SC2: a short ref can mix a branch and tag", (w) => (w.concurrency["group"] = `scheduled-\${{ github.ref_name }}`)],
+  [
+    "SC2: an event suffix separates main's triggers",
+    (w) => (w.concurrency["group"] = `scheduled-\${{ github.ref }}-\${{ github.event_name }}`),
+  ],
+  ["SC2: another prefix separates participating runs", (w) => (w.concurrency["group"] = `proof-\${{ github.ref }}`)],
+  // SC12: a newer run never cancels a waiting run on the same ref.
   ["SC12: no queue, so a newer run cancels the waiting one", (w) => Reflect.deleteProperty(w.concurrency, "queue")],
   ["SC12: one waiting run at most", (w) => (w.concurrency["queue"] = "single")],
   // SC19: the same nine test groups and one control group across participating workflows.
