@@ -1,13 +1,13 @@
 // P34c slice 4, next/. Calibration is copied from A-Numbers, never read from product defaults.
 import { describe, expect, it } from "@effect/vitest";
+import * as Snapshot from "@kalfa/config/Snapshot";
+import { Toml } from "@kalfa/config/Toml";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import { ByteSize, Effect, Option, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Fabrika.ts";
 import * as Sources from "./Fabrika.ts";
-import * as Snapshot from "./Snapshot.ts";
-import { Toml } from "./Toml.ts";
-import * as TomlParser from "./TomlParser.ts";
 
 const declaration = (path: string) => {
   const found = Declarations.all.declarations.filter((d) => d.path === path);

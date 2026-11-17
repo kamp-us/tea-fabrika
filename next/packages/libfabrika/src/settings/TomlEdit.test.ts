@@ -2,15 +2,15 @@
 // values come from Effect Schema. The model never reads the adapter's edit index.
 // L9 is the Reflect ban's (ticket 1056, slice 5): hostile keys and a scalar in the middle of a path.
 import { describe, expect, it } from "@effect/vitest";
+import * as Codec from "@kalfa/config/Codec";
+import * as Files from "@kalfa/config/Files";
+import { Toml, TomlError } from "@kalfa/config/Toml";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import { runsFor } from "@kampus/vitest";
 import { ByteSize, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
-import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Fabrika.ts";
-import * as Files from "./Files.ts";
-import { Toml, TomlError } from "./Toml.ts";
-import * as TomlParser from "./TomlParser.ts";
 
 const check = { arbitrary: { seed: 119120, runs: 100 }, timeout: 30000 };
 

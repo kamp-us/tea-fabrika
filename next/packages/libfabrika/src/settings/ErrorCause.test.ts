@@ -8,11 +8,11 @@
 // the written-undefined case of that error fails to decode; set either line to
 // `Schema.optional(Schema.Unknown)`, and that error's encoded Error cause stays a plain object.
 import { describe, expect, it } from "@effect/vitest";
+import { SettingsError } from "@kalfa/config/Files";
+import { SnapshotError } from "@kalfa/config/Snapshot";
 import { runsFor } from "@kampus/vitest";
 import { Exit, Schema } from "effect";
 import * as fc from "fast-check";
-import { SettingsError } from "./Files.ts";
-import { SnapshotError } from "./Snapshot.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 

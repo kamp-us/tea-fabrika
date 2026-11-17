@@ -73,7 +73,9 @@ describe("instance start envelope, next/", () => {
 
   it("type: transport has one snapshot and explicit repo presence, as the approved wire table specifies", () => {
     // The schema field names are the serialized Worker protocol.
-    expectTypeOf<typeof Start.Input.Type.settings>().toEqualTypeOf<typeof import("./Snapshot.ts").Snapshot.Type>();
+    expectTypeOf<typeof Start.Input.Type.settings>().toEqualTypeOf<
+      typeof import("@kalfa/config/Snapshot").Snapshot.Type
+    >();
     expectTypeOf<typeof Start.Input.Type.repo>().toEqualTypeOf<{ readonly revision: string } | null>();
   });
 

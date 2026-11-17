@@ -36,16 +36,22 @@ const TOOLING = [
 // beside the module it tests. Every other `next/` test runs on our interfaces' in-memory layers.
 // The lint rule `fabrika/integration-test-name` holds the names (oxlint-plugins/README.md).
 const NEXT = [
+  "kalfa/*/src/**/*.test.{ts,tsx}",
   "next/packages/*/src/**/*.test.{ts,tsx}",
   "next/programs/*/src/**/*.test.{ts,tsx}",
   "next/apps/*/src/**/*.test.{ts,tsx}",
 ];
 
-const INTEGRATION = ["next/**/*.integration.test.{ts,tsx}"];
+const INTEGRATION = ["next/**/*.integration.test.{ts,tsx}", "kalfa/**/*.integration.test.{ts,tsx}"];
 const VISUAL = ["next/**/*.visual.test.{ts,tsx}"];
 
 // A toy repo's tests under a skill's scripts are its subject, as with `fixtures/` above.
-const EXCLUDE = [...configDefaults.exclude, ".agents/skills/*/scripts/**/fixtures/**", "next/**/dist/**"];
+const EXCLUDE = [
+  ...configDefaults.exclude,
+  ".agents/skills/*/scripts/**/fixtures/**",
+  "next/**/dist/**",
+  "kalfa/**/dist/**",
+];
 
 // What every project shares. Importing it never runs the local CLI guard.
 const shared = {

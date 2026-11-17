@@ -16,6 +16,9 @@
 // The home is `/t730`, a made-up folder that exists only in the counted FileSystem below.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import * as Print from "@kalfa/config/Print";
+import * as Reference from "@kalfa/config/Reference";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import { Recorder } from "@kampus/vitest";
 import * as Cause from "effect/Cause";
 import * as Cli from "effect/cli/Command";
@@ -33,9 +36,6 @@ import * as TestConsole from "effect/testing/TestConsole";
 import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
-import * as Print from "../../settings/Print.ts";
-import * as Reference from "../../settings/Reference.ts";
-import * as TomlParser from "../../settings/TomlParser.ts";
 import * as Command from "./Command.ts";
 import * as Load from "./Load.ts";
 

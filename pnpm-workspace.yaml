@@ -6,6 +6,7 @@
 packages:
   - apps/*
   - packages/*
+  - kalfa/*
   - programs/*
   - docs/tutorials/*
   - oxlint-plugins

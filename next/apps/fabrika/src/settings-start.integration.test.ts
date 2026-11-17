@@ -11,10 +11,10 @@
 import { generateKeyPairSync } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import * as Snapshot from "@kalfa/config/Snapshot";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import * as Load from "@kampus/libfabrika/node/settings/Load";
-import * as Snapshot from "@kampus/libfabrika/settings/Snapshot";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
-import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, FileSystem, Layer, Path, Ref, Schedule, Schema, Stream } from "effect";

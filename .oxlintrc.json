@@ -443,7 +443,7 @@
       // 0559: no reduce callback or loop spreads its running result back into itself. An error, with
       // no warn line and no inline ignore: a hit is rewritten, or it goes to the owner. Today's app
       // keeps its hits and is not in `files`.
-      "files": ["next/**", ".agents/**", "oxlint-plugins/**", ".github/ci/**"],
+      "files": ["next/**", "kalfa/**", ".agents/**", "oxlint-plugins/**", ".github/ci/**"],
       "rules": { "oxc/no-accumulating-spread": "error" }
     },
     {
@@ -627,7 +627,7 @@
     {
       // Our own source exports by name, never by default (0058). A default the platform loads, a
       // Cloudflare Worker's, is an inline edge on its one line, never an override here.
-      "files": ["next/**", "packages/**", "programs/**", "apps/**"],
+      "files": ["next/**", "kalfa/**", "packages/**", "programs/**", "apps/**"],
       "rules": { "import/no-default-export": "error" }
     },
     {
@@ -655,7 +655,7 @@
       // window chooses the TOML adapter. An override replaces a rule's options, so the Radix entry
       // of the base rule is repeated here. next/apps and libfabrika's own overrides below replace
       // this rule there.
-      "files": ["next/**"],
+      "files": ["next/**", "kalfa/config/src/**", "kalfa/config/*.ts"],
       "rules": {
         "fabrika/no-promises": "error",
         "fabrika/no-ledger-sql": "error",
@@ -727,7 +727,10 @@
                 "group": [
                   "**/settings/TomlParser.ts",
                   "**/settings/TomlParser",
-                  "@kampus/libfabrika/settings/TomlParser"
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
                 ],
                 "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
@@ -958,7 +961,10 @@
                 "group": [
                   "**/settings/TomlParser.ts",
                   "**/settings/TomlParser",
-                  "@kampus/libfabrika/settings/TomlParser"
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
                 ],
                 "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
@@ -1045,7 +1051,10 @@
                 "group": [
                   "**/settings/TomlParser.ts",
                   "**/settings/TomlParser",
-                  "@kampus/libfabrika/settings/TomlParser"
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
                 ],
                 "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
@@ -1063,7 +1072,7 @@
       // `next/**/*`, the same files as `next/**`: that exact key names the exam block above, which
       // `.agents/` repeats (0033), and this rule holds next/ alone (`terminology.test.ts`). A later
       // override replaces a rule's whole list, so this one repeats the five question words (0081).
-      "files": ["next/**/*"],
+      "files": ["next/**/*", "kalfa/**/*"],
       "rules": {
         "fabrika/isolate-boundary": "error",
         "eslint/id-denylist": [
@@ -1096,7 +1105,7 @@
     {
       // React's own rules, blocking as the owner set them (docs/direction/react-compiler.md). The
       // skip check, `pnpm lint:compiler`, holds the rest of the Compiler's rules.
-      "files": ["next/**/*.tsx"],
+      "files": ["next/**/*.tsx", "kalfa/**/*.tsx"],
       "rules": {
         "react/refs": "error",
         "react/immutability": "error",
@@ -1110,23 +1119,32 @@
     {
       // Product code reads the time through Effect's `Clock` or `DateTime`, so a test sets it with
       // `TestClock`. A `.tsx` file has `no-clock-in-view`, which refuses more. Tests are left out below.
-      "files": ["next/**/*.ts"],
+      "files": ["next/**/*.ts", "kalfa/**/*.ts"],
       "rules": { "fabrika/no-wall-clock": "error" }
     },
     {
       // A test helper is test code: it may read the clock as a test does.
-      "files": ["next/**/*.test-support.ts"],
+      "files": ["next/**/*.test-support.ts", "kalfa/**/*.test-support.ts"],
       "rules": { "fabrika/no-wall-clock": "off" }
     },
     {
       // Shared law suites and helpers contain fixture machines, not exported product machines.
-      "files": ["next/**/*Test.ts", "next/**/*.test-support.ts"],
+      "files": ["next/**/*Test.ts", "kalfa/**/*Test.ts", "next/**/*.test-support.ts", "kalfa/**/*.test-support.ts"],
       "rules": { "fabrika/one-machine-per-file": "off" }
     },
     {
       // A test's stand-in service is not a contract file, so its type may be inferred from a local
       // value. Product code writes a service's type out (0095).
-      "files": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*Test.ts", "next/**/*.test-support.ts"],
+      "files": [
+        "next/**/*.test.ts",
+        "kalfa/**/*.test.ts",
+        "next/**/*.test.tsx",
+        "kalfa/**/*.test.tsx",
+        "next/**/*Test.ts",
+        "kalfa/**/*Test.ts",
+        "next/**/*.test-support.ts",
+        "kalfa/**/*.test-support.ts"
+      ],
       "rules": { "fabrika/written-service-type": "off" }
     },
     {
@@ -1134,9 +1152,13 @@
       // support may squash a cause. Product code may not: the `next/**` block above holds it.
       "files": [
         "next/**/*.test.ts",
+        "kalfa/**/*.test.ts",
         "next/**/*.test.tsx",
+        "kalfa/**/*.test.tsx",
         "next/**/*Test.ts",
+        "kalfa/**/*Test.ts",
         "next/**/*.test-support.ts",
+        "kalfa/**/*.test-support.ts",
         ".agents/**/*.test.ts"
       ],
       "rules": { "fabrika/no-cause-squash": "off" }
@@ -1145,7 +1167,7 @@
       // 0536: a test file whose own code drives a real resource is named `*.integration.test.ts`, or
       // `*.visual.test.ts` for a browser or Electron, so Vitest keeps it off pull requests. Measured
       // on experiment 292's classified tree: 73 files fired, 72 drive a resource (oxlint-plugins/README.md).
-      "files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
+      "files": ["next/**/*.test.ts", "kalfa/**/*.test.ts", "next/**/*.test.tsx", "kalfa/**/*.test.tsx"],
       "rules": { "fabrika/integration-test-name": "error" }
     },
     {
@@ -1153,20 +1175,29 @@
       // `@kampus/vitest/TestDatabase`, `make` for a file it owns and `open` for one another party
       // owns; only `":memory:"` keeps `new DatabaseSync`. Measured on `86a7668d6`: 62 calls in 53
       // files, none right as it was once `open` exists, so it blocks (oxlint-plugins/README.md).
-      "files": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*Test.ts", "next/**/*.test-support.ts"],
+      "files": [
+        "next/**/*.test.ts",
+        "kalfa/**/*.test.ts",
+        "next/**/*.test.tsx",
+        "kalfa/**/*.test.tsx",
+        "next/**/*Test.ts",
+        "kalfa/**/*Test.ts",
+        "next/**/*.test-support.ts",
+        "kalfa/**/*.test-support.ts"
+      ],
       "rules": { "fabrika/test-database": "error" }
     },
     {
       // A resource is released by the scope that acquired it, never by an after-hook that a thrown
       // error or a killed test can skip (0061). Setup hooks stay.
-      "files": ["next/**/*.ts", "next/**/*.tsx"],
+      "files": ["next/**/*.ts", "kalfa/**/*.ts", "next/**/*.tsx", "kalfa/**/*.tsx"],
       "rules": { "vitest/no-hooks": ["error", { "allow": ["beforeAll", "beforeEach"] }] }
     },
     {
       // Tests are left out: they await vitest, feed raw frames and may plant a broken view.
       // `no-of` and the question-word rules stay on, since tests follow the same naming rules.
       // Tests also manufacture spans as input for the sink. Tracing plants use product paths.
-      "files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
+      "files": ["next/**/*.test.ts", "kalfa/**/*.test.ts", "next/**/*.test.tsx", "kalfa/**/*.test.tsx"],
       "rules": {
         "fabrika/prefer-schema-arbitrary": "error",
         "fabrika/no-promises": "off",
@@ -1291,9 +1322,19 @@
         "next/packages/libfabrika/src/repositories/**",
         "next/packages/libfabrika/src/schedules/**",
         "next/packages/libfabrika/src/settings/**",
+        "kalfa/config/src/**",
         "next/packages/libfabrika/src/transport/**"
       ],
-      "excludeFiles": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*Test.ts", "next/**/*.test-support.ts"],
+      "excludeFiles": [
+        "next/**/*.test.ts",
+        "kalfa/**/*.test.ts",
+        "next/**/*.test.tsx",
+        "kalfa/**/*.test.tsx",
+        "next/**/*Test.ts",
+        "kalfa/**/*Test.ts",
+        "next/**/*.test-support.ts",
+        "kalfa/**/*.test-support.ts"
+      ],
       "rules": { "fabrika/no-static-layer": "error" }
     },
     {
@@ -1301,7 +1342,15 @@
       // advises where the warn override at the end still names the folder (0523). A shared suite
       // (`SinkTest.ts`, 0062) holds laws too. Today's version's tests are left out: 0093 covers
       // next/, and .agents/ follows next/'s rules (0033).
-      "files": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*Test.ts", ".agents/**/*.test.ts"],
+      "files": [
+        "next/**/*.test.ts",
+        "kalfa/**/*.test.ts",
+        "next/**/*.test.tsx",
+        "kalfa/**/*.test.tsx",
+        "next/**/*Test.ts",
+        "kalfa/**/*Test.ts",
+        ".agents/**/*.test.ts"
+      ],
       "rules": {
         "fabrika/law-shape": "error"
       }
@@ -1415,7 +1464,10 @@
                 "group": [
                   "**/settings/TomlParser.ts",
                   "**/settings/TomlParser",
-                  "@kampus/libfabrika/settings/TomlParser"
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
                 ],
                 "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
@@ -1427,7 +1479,11 @@
     {
       // T664, L15: the settings module and its Node loader take the TOML adapter. It comes after the
       // libfabrika modules override, so it replaces that rule's options here, and repeats the rest.
-      "files": ["next/packages/libfabrika/src/settings/**", "next/packages/libfabrika/src/node/settings/**"],
+      "files": [
+        "next/packages/libfabrika/src/settings/**",
+        "kalfa/config/src/**",
+        "next/packages/libfabrika/src/node/settings/**"
+      ],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
@@ -1495,7 +1551,7 @@
     },
     {
       // T664, L15: the adapter itself is the one file that imports the parser.
-      "files": ["next/packages/libfabrika/src/settings/TomlParser.ts"],
+      "files": ["next/packages/libfabrika/src/settings/TomlParser.ts", "kalfa/config/src/TomlParser.ts"],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
@@ -1607,7 +1663,10 @@
                 "group": [
                   "**/settings/TomlParser.ts",
                   "**/settings/TomlParser",
-                  "@kampus/libfabrika/settings/TomlParser"
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
                 ],
                 "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
@@ -1634,6 +1693,7 @@
         "next/packages/libfabrika/src/transport/**",
         "next/packages/libfabrika/src/gateway/**",
         "next/packages/libfabrika/src/settings/**",
+        "kalfa/config/src/**",
         "next/packages/libfabrika/src/schedules/**",
         "next/packages/libfabrika/src/repositories/**",
         "next/packages/libfabrika/src/desktop/**"
@@ -1656,6 +1716,7 @@
         "next/packages/libfabrika/src/transport/internal/**",
         "next/packages/libfabrika/src/gateway/internal/**",
         "next/packages/libfabrika/src/settings/internal/**",
+        "kalfa/config/src/internal/**",
         "next/packages/libfabrika/src/schedules/internal/**",
         "next/packages/libfabrika/src/repositories/internal/**",
         "next/packages/libfabrika/src/desktop/internal/**"
@@ -1764,7 +1825,7 @@
       // blocks since ticket 909 (decision 0168). It reads only libfabrika's source folder, so its glob
       // can stay wide. Its glob is `next/**/*`, the same files as `next/**`: that exact key names the
       // exam block above, which `.agents/` repeats (0033), and this block holds next/ alone.
-      "files": ["next/**/*"],
+      "files": ["next/**/*", "kalfa/**/*"],
       "rules": {
         "eslint/no-restricted-properties": [
           "error",
@@ -1873,7 +1934,10 @@
                 "group": [
                   "**/settings/TomlParser.ts",
                   "**/settings/TomlParser",
-                  "@kampus/libfabrika/settings/TomlParser"
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
                 ],
                 "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
@@ -1910,7 +1974,9 @@
       // T753 L15: service contracts hold no Layer and no mutable readiness field.
       "files": [
         "next/packages/libfabrika/src/settings/Starts.ts",
-        "next/packages/libfabrika/src/settings/RecordedStart.ts"
+        "kalfa/config/src/Starts.ts",
+        "next/packages/libfabrika/src/settings/RecordedStart.ts",
+        "kalfa/config/src/RecordedStart.ts"
       ],
       "rules": {
         "eslint/no-restricted-imports": [
@@ -2032,7 +2098,10 @@
                 "group": [
                   "**/settings/TomlParser.ts",
                   "**/settings/TomlParser",
-                  "@kampus/libfabrika/settings/TomlParser"
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
                 ],
                 "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               },
@@ -2153,7 +2222,10 @@
                 "group": [
                   "**/settings/TomlParser.ts",
                   "**/settings/TomlParser",
-                  "@kampus/libfabrika/settings/TomlParser"
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
                 ],
                 "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               },
@@ -2258,7 +2330,10 @@
                 "group": [
                   "**/settings/TomlParser.ts",
                   "**/settings/TomlParser",
-                  "@kampus/libfabrika/settings/TomlParser"
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
                 ],
                 "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
@@ -2339,6 +2414,7 @@
         "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/settings/**",
+        "kalfa/config/src/**",
         "next/packages/libfabrika/src/telemetry/**",
         "next/packages/libfabrika/src/transport/**"
       ],
@@ -2452,6 +2528,7 @@
         "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/settings/**",
+        "kalfa/config/src/**",
         "next/packages/libfabrika/src/telemetry/**",
         "next/packages/libfabrika/src/transport/**"
       ],
@@ -2506,6 +2583,7 @@
         "next/packages/libfabrika/src/node/**/*{.test.ts,.test.tsx}",
         "next/packages/libfabrika/src/runtime/**/*{.test.ts,.test.tsx}",
         "next/packages/libfabrika/src/settings/**/*{.test.ts,.test.tsx}",
+        "kalfa/config/src/**/*{.test.ts,.test.tsx}",
         "next/packages/libfabrika/src/transport/**/*{.test.ts,.test.tsx}",
         "next/programs/chaos/src/*{.test.ts,.test.tsx}",
         "next/programs/pipeline/src/*{.test.ts,.test.tsx}"
@@ -2515,7 +2593,7 @@
     {
       // E1 of the Effect-check sweep (0574): no doc block carries `@stability` until libfabrika's
       // first release, and `pnpm format` deletes the line (`oxlint-plugins/no-stability-tag.ts`).
-      "files": ["next/**", ".agents/**", ".github/ci/**", "oxlint-plugins/**"],
+      "files": ["next/**", "kalfa/**", ".agents/**", ".github/ci/**", "oxlint-plugins/**"],
       "rules": { "fabrika/no-stability-tag": "error" }
     },
     {
@@ -2536,7 +2614,9 @@
         "next/packages/libfabrika/src/runtime/RepliesSql.ts",
         "next/packages/libfabrika/src/runtime/Runner.ts",
         "next/packages/libfabrika/src/settings/Declarations.ts",
+        "kalfa/config/src/Declarations.ts",
         "next/packages/libfabrika/src/settings/JsonSchema.ts",
+        "kalfa/config/src/JsonSchema.ts",
         "next/packages/libfabrika/src/telemetry/Sink.ts"
       ],
       "rules": { "fabrika/no-stability-tag": "off" }
@@ -2570,7 +2650,7 @@
       // its file a module block (`oxlint-plugins/jsdocs.ts`). It blocks in every folder at zero, so a
       // new folder blocks from its first file (0523, ticket 948). `since` stays `absent` until
       // libfabrika's first release (0118).
-      "files": ["next/packages/*/src/**"],
+      "files": ["next/packages/*/src/**", "kalfa/*/src/**"],
       "rules": { "fabrika/jsdocs": ["error", { "since": "absent" }] }
     },
     {
@@ -2595,12 +2675,19 @@
       // tests, test support, shared suites (`*Test.ts`), fixtures and declaration files.
       "files": [
         "next/**/internal/**",
+        "kalfa/**/internal/**",
         "next/**/*.test.ts",
+        "kalfa/**/*.test.ts",
         "next/**/*.test.tsx",
+        "kalfa/**/*.test.tsx",
         "next/**/*.test-support.ts",
+        "kalfa/**/*.test-support.ts",
         "next/**/*Test.ts",
+        "kalfa/**/*Test.ts",
         "next/**/fixtures/**",
-        "next/**/*.d.ts"
+        "kalfa/**/fixtures/**",
+        "next/**/*.d.ts",
+        "kalfa/**/*.d.ts"
       ],
       "rules": { "fabrika/jsdocs": "off" }
     },
@@ -2667,7 +2754,10 @@
                 "group": [
                   "**/settings/TomlParser.ts",
                   "**/settings/TomlParser",
-                  "@kampus/libfabrika/settings/TomlParser"
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
                 ],
                 "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
@@ -2739,7 +2829,10 @@
                 "group": [
                   "**/settings/TomlParser.ts",
                   "**/settings/TomlParser",
-                  "@kampus/libfabrika/settings/TomlParser"
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
                 ],
                 "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
@@ -2880,6 +2973,7 @@
         "next/packages/libfabrika/src/repositories/**",
         "next/packages/libfabrika/src/schedules/**",
         "next/packages/libfabrika/src/settings/**",
+        "kalfa/config/src/**",
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/tezgah/**",
         "next/packages/vitest/**",
@@ -2921,8 +3015,239 @@
     {
       // 0563, 0021: a blank line before a `return` and every control statement, around a multi-line
       // binding, and between top-level statements, as the rule ships.
-      "files": [".agents/**", ".github/ci/**", "oxlint-plugins/**", "next/**"],
+      "files": [".agents/**", ".github/ci/**", "oxlint-plugins/**", "next/**", "kalfa/**"],
       "rules": { "anti-slop/require-readable-spacing": "error" }
+    },
+    {
+      "files": ["kalfa/config/src/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "./*/internal/**",
+                  "../*/internal/**",
+                  "./../*/internal/**",
+                  "../../*/internal/**",
+                  "./../../*/internal/**"
+                ],
+                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+              },
+              {
+                "group": [
+                  "@kampus/*",
+                  "@kampus/**",
+                  "@tea-fabrika/*",
+                  "@tea-fabrika/**",
+                  "@kalfa/*",
+                  "@kalfa/**",
+                  "**/next/**"
+                ],
+                "message": "The config engine imports no workspace package at runtime; tests keep only their test toolbox."
+              }
+            ]
+          }
+        ]
+      },
+      "excludeFiles": ["kalfa/config/src/**/*.test.ts", "kalfa/config/src/TomlParser.ts"]
+    },
+    {
+      "files": ["kalfa/config/src/**/*.test.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "./*/internal/**",
+                  "../*/internal/**",
+                  "./../*/internal/**",
+                  "../../*/internal/**",
+                  "./../../*/internal/**"
+                ],
+                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+              },
+              {
+                "group": [
+                  "@kampus/*",
+                  "@kampus/**",
+                  "!@kampus/vitest",
+                  "!@kampus/vitest/**",
+                  "@tea-fabrika/*",
+                  "@tea-fabrika/**",
+                  "@kalfa/*",
+                  "@kalfa/**",
+                  "**/next/**"
+                ],
+                "message": "The config engine imports no workspace package at runtime; tests keep only their test toolbox."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["kalfa/config/src/TomlParser.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "./*/internal/**",
+                  "../*/internal/**",
+                  "./../*/internal/**",
+                  "../../*/internal/**",
+                  "./../../*/internal/**"
+                ],
+                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+              },
+              {
+                "group": [
+                  "@kampus/*",
+                  "@kampus/**",
+                  "@tea-fabrika/*",
+                  "@tea-fabrika/**",
+                  "@kalfa/*",
+                  "@kalfa/**",
+                  "**/next/**"
+                ],
+                "message": "The parser adapter imports no workspace package."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["kalfa/config/src/*.ts"],
+      "excludeFiles": ["kalfa/config/src/**/*.test.ts"],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "pascalCase"
+          }
+        ]
+      }
     }
   ]
 }

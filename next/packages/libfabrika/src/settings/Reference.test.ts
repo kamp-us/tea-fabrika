@@ -15,14 +15,14 @@
 //   environment name, flag (`--` and the path), reload, since, default and doc, in Markdown that
 //   keeps the doc's meaning whatever punctuation it holds.
 import { describe, expect, it } from "@effect/vitest";
+import * as Print from "@kalfa/config/Print";
+import * as Reference from "@kalfa/config/Reference";
+import * as Snapshot from "@kalfa/config/Snapshot";
 import { ByteSize, Effect, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Setting from "./Fabrika.ts";
 import * as Sources from "./Fabrika.ts";
-import * as Print from "./Print.ts";
-import * as Reference from "./Reference.ts";
-import * as Snapshot from "./Snapshot.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 

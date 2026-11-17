@@ -14,11 +14,11 @@
 //   `settings/TomlParser.ts` imports the parser. oxlint's own `no-restricted-imports` says so.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import * as Files from "@kalfa/config/Files";
+import * as JsonSchema from "@kalfa/config/JsonSchema";
+import * as Reference from "@kalfa/config/Reference";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as Setting from "@kampus/libfabrika/settings/Fabrika";
-import * as Files from "@kampus/libfabrika/settings/Files";
-import * as JsonSchema from "@kampus/libfabrika/settings/JsonSchema";
-import * as Reference from "@kampus/libfabrika/settings/Reference";
 import { Effect, FileSystem, Path, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { plant } from "./exam/plant.ts";
@@ -165,7 +165,7 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
 });
 
 // L9's callers: where an import sits, and whether it may take the TOML adapter or the parser.
-const ADAPTER = "next/packages/libfabrika/src/settings/TomlParser.ts";
+const ADAPTER = "kalfa/config/src/TomlParser.ts";
 
 const RULE = "eslint(no-restricted-imports)";
 
@@ -245,7 +245,7 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
             .map(([c, t]) => {
               const spec =
                 t === "package"
-                  ? "@kampus/libfabrika/settings/TomlParser"
+                  ? "@kalfa/config/TomlParser"
                   : t === "relative"
                     ? relative(c.file, ADAPTER)
                     : t === "relative-bare"

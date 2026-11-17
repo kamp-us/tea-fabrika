@@ -1,6 +1,7 @@
 import { createRequire } from "node:module"; // edge: Electron exports its executable through Node's require resolution
 // P19 next/. Host-only. The guard is a separate process, so worker SIGKILL cannot skip cleanup.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import * as Snapshot from "@kalfa/config/Snapshot";
 import { BrainControl } from "@kampus/libfabrika/desktop/BrainControl";
 import {
   BrainProbe,
@@ -18,7 +19,6 @@ import * as LaunchdStatus from "@kampus/libfabrika/node/launchd/LaunchdStatus";
 import * as ProcessGroups from "@kampus/libfabrika/node/launchd/ProcessGroups.test-support";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as Sources from "@kampus/libfabrika/settings/Fabrika";
-import * as Snapshot from "@kampus/libfabrika/settings/Snapshot";
 import { Written } from "@kampus/libfabrika/telemetry/Records";
 import {
   Clock,

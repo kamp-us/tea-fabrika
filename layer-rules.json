@@ -69,7 +69,8 @@
         "next-settings",
         "next-telemetry",
         "next-shared",
-        "next-vitest"
+        "next-vitest",
+        "kalfa-config"
       ]
     },
     {
@@ -92,7 +93,8 @@
         "next-settings",
         "next-telemetry",
         "next-transport",
-        "next-shared"
+        "next-shared",
+        "kalfa-config"
       ]
     },
     {
@@ -119,7 +121,8 @@
         "next-settings",
         "next-telemetry",
         "next-transport",
-        "next-shared"
+        "next-shared",
+        "kalfa-config"
       ]
     },
     {
@@ -147,7 +150,8 @@
         "next-settings",
         "next-telemetry",
         "next-shared",
-        "next-vitest"
+        "next-vitest",
+        "kalfa-config"
       ]
     },
     {
@@ -170,7 +174,8 @@
         "next-settings",
         "next-telemetry",
         "next-transport",
-        "next-shared"
+        "next-shared",
+        "kalfa-config"
       ]
     },
     {
@@ -200,7 +205,8 @@
         "next-telemetry",
         "next-transport",
         "next-shared",
-        "next-vitest"
+        "next-vitest",
+        "kalfa-config"
       ]
     },
     {
@@ -242,7 +248,8 @@
         "next-settings",
         "next-telemetry",
         "next-shared",
-        "next-vitest"
+        "next-vitest",
+        "kalfa-config"
       ]
     },
     {
@@ -261,7 +268,8 @@
         "next-repositories",
         "next-settings",
         "next-telemetry",
-        "next-shared"
+        "next-shared",
+        "kalfa-config"
       ]
     },
     {
@@ -283,7 +291,8 @@
         "next-settings",
         "next-telemetry",
         "next-shared",
-        "next-vitest"
+        "next-vitest",
+        "kalfa-config"
       ]
     },
     {
@@ -297,7 +306,8 @@
         "next-repositories",
         "next-settings",
         "next-telemetry",
-        "next-shared"
+        "next-shared",
+        "kalfa-config"
       ]
     },
     {
@@ -312,7 +322,8 @@
         "next-settings",
         "next-telemetry",
         "next-shared",
-        "next-vitest"
+        "next-vitest",
+        "kalfa-config"
       ]
     },
     {
@@ -327,7 +338,8 @@
         "next-settings",
         "next-telemetry",
         "next-shared",
-        "next-vitest"
+        "next-vitest",
+        "kalfa-config"
       ]
     },
     {
@@ -341,7 +353,8 @@
         "next-repositories",
         "next-settings",
         "next-telemetry",
-        "next-shared"
+        "next-shared",
+        "kalfa-config"
       ]
     },
     {
@@ -453,9 +466,15 @@
     {
       "name": "fabrika-program",
       "paths": ["packages/fabrika/src/program"]
+    },
+    {
+      "name": "kalfa-config",
+      "layer": 1,
+      "paths": ["kalfa/config/src"],
+      "imports": ["next-vitest"]
     }
   ],
-  "roots": ["next/packages/libfabrika/src", "next/packages/tuval/src", "next/packages/vitest/src"],
+  "roots": ["next/packages/libfabrika/src", "next/packages/tuval/src", "next/packages/vitest/src", "kalfa/config/src"],
   "testFiles": ["**/*.test.ts", "**/*.test.tsx"],
   "allowed": [
     {

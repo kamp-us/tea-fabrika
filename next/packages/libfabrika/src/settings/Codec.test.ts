@@ -1,9 +1,9 @@
 // T753, next/: L1–L4. File input and recorded JSON share one declaration.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
+import * as Codec from "@kalfa/config/Codec";
 import type { Config } from "effect";
 import { ByteSize, Exit, Schema } from "effect";
 import * as fc from "fast-check";
-import * as Codec from "./Codec.ts";
 import * as Setting from "./Fabrika.ts";
 
 const check = { seed: 119120, numRuns: 100 };
