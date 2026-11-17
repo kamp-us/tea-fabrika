@@ -71,6 +71,13 @@ Each accepted exercise passed before the deliberate break, failed at its intende
 The watcher case and six other checklist fault or probe groups still need their own evidence.
 These exercises supply neither whole-product review nor branch proof; the affected product tickets remain open.
 
+[Checklist L13's fixture repair](https://github.com/kamp-us/tea-fabrika/pull/1543), ticket 1126,
+replaces fixed waits in `next/` with completion of the real Process alarm call, publication and
+notification. It includes newly due work, leaves future alarms pending and waits for started calls
+before cleanup. The existing cases, seed, generator limits and test deadline stay the same.
+It changes test support, not product behavior. The PR records source-bound CI, fault checks and
+independent review; a passing ordinary run does not stand in for those separate checks.
+
 *2026-11-13:* the order of work changed ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)). The next thing built in `next/` is `fabsh`,
 pipes, `summon` and `join`, working for real, with whatever they need (the window, a second tile and its
 keys, the link to the agent harnesses, rooms), so fabrika is built inside
