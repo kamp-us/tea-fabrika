@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0538, 0536, 0581, 0557, 0541; body f1c92b52ba0b
+Approved by the lead agent, builds 0538, 0536, 0581, 0557, 0541, 0584, 0590 and corrected 0595; body 329ebc74c049
 Plancheck-Version: 3
 
 # Plan: a shared suite runs on SQLite in memory on every pull request and on a SQLite file on the schedule, through one `lawsOn` call
@@ -13,8 +13,9 @@ runs twice: memory on the merge line, the real driver on the schedule),
 package), [0579](../../../.decisions/0579-property-laws-use-it-prop.md) ("`lawsOn` and `depth` cover"
 `skipIf` and `runIf`) and [0580](../../../.decisions/0580-law-options-carry-plant-and-label.md)
 (how a law states its plant). It builds on the test database of
-[pull request 1301](https://github.com/kamp-us/tea-fabrika/pull/1301) (ticket 1029) and waits for it
-to merge (see "What waits").
+[pull request 1301](https://github.com/kamp-us/tea-fabrika/pull/1301) (ticket 1029), merged as
+`1566fd4eef67c5cd1762cfdf7be56d097ea6fafb` on 2026-11-16. The dependency is satisfied
+(see "What waits").
 
 ```ts
 // The whole idea, in one real file of ours: next/packages/libfabrika/src/node/Watchers.contract.test.ts.
@@ -25,7 +26,7 @@ on("watcher laws", (databases) => WatchersTest.suite(Effect.map(databases, (open
 on("runner watcher laws", (databases) => RunnerWatchersTest.suite({ files: Effect.map(databases, sql), services }));
 
 // The `next` project (pull requests, the merge queue, the schedule):   "watcher laws on memory"
-// The `next-integration` project (the 3-hour schedule only):          "watcher laws on real"
+// The `next-integration` project (main's full run only):          "watcher laws on real"
 ```
 
 The package is `@kampus/vitest` on main today. 0557 renames it `@kalfa/vitest`; this plan writes
@@ -44,8 +45,8 @@ The lead approves this plan; each lean is taken with its confidence. Three are a
   change reaches all of them, and much less for most changes, which reach few. Pull request 1301
   also made the file runs faster, which narrows the gap. What settles it: slice 1's four files, read
   from the `next` job's `shard-times` step. If the numbers threaten the merge line's time goal
-  ([0541](../../../.decisions/0541-ci-speed-goals.md)), that is a new call for the owner, and it is
-  not decided here.
+  ([0541](../../../.decisions/0541-ci-speed-has-a-goal-and-a-daily-check.md)), that is a new call
+  for the owner, and it is not decided here.
 - **A reopen on memory keeps the connection (80%).** On the memory side every open of one name in a
   law's scope gets the same `:memory:` connection, so a reopen builds the whole host again over the
   same data, as a restarted brain would. That is what `RunnerHands.test.ts` already does (ticket
@@ -101,7 +102,16 @@ shared suites.
 - **Elm and OTP** have no answer here: this is test tooling, not a machine. The shape follows
   `@effect/vitest`'s `layer(L)(name, (it) => ...)`: a value first, then a name and a suite.
 
-## Searched first
+## Existing tools
+
+- `next/packages/vitest/src/Laws.ts` (`lawsAt`, `lawsOn`): searched the repository's test
+  package and the installed `@effect/vitest` for both names. Neither has a paired memory/real
+  runner. Reuse Vitest's `describe`, `provide` and `inject`, and Effect's shared-suite pattern
+  described above; this module only binds the pair to the project's layer.
+- `next/packages/vitest/src/TestDatabase.ts` (`memory`, `folder`): searched the test package for
+  both openers and read its existing `make` and `open`. Reuse `make` for the file side and the
+  existing memory-reopen pattern in `RunnerHands.test.ts`; neither existing opener provides a
+  scoped collection of named databases.
 
 - `records.ts find` for "lawsOn", "shared suite", "contract test", "in-memory SQLite" and "memory
   layer real layer". Read: 0062, 0535, 0536, 0538, 0557, 0579, 0580, and
@@ -179,6 +189,10 @@ How the count was made: `git ls-files` of every integration test under `next/`, 
 `\.[a-zA-Z]*[sS]uite\(` and has no line matching `^\s*(it|test|describe)(\.[a-z]+)*\(`. "Reopen" is
 a case-free match of `\breopen` in the suite module or the kit the file imports. `Monitor` and
 `Monitors` are new since pull request 1341 and have no rows yet.
+
+Main's full run starts after a push when its one-hour limiter permits it; an hourly catch-up
+starts one for an untested main head ([0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md)).
+References to the schedule below mean that full run.
 
 ## The shape
 
@@ -325,7 +339,7 @@ that.
 
 ### What runs where, after
 
-| A law in a contract file | Pull request and merge queue | The 3-hour schedule |
+| A law in a contract file | Pull request and merge queue | Main's full run |
 |---|---|---|
 | `on(name, suite)` | memory side, `fast` cases | memory side and real side, `full` cases |
 | `on.real(name, suite, { reason })` | nothing | real side, `full` cases |
@@ -344,7 +358,7 @@ that.
 4. A law W3 runs in `it.effect`: its scope opens `TestDatabase.memory`, `open("watchers")` makes one
    `:memory:` connection, and every later open in the law returns it. The law's scope closes the
    connection. The law runs `runsFor({ fast, full })` cases, so `fast` here.
-5. Three hours later the schedule runs `--project next --project next-integration`. The file runs
+5. Main's next full run executes `--project next --project next-integration`. The file runs
    twice. The `next` run is step 2 again, at `full`. The `next-integration` run reads `"real"`, so
    the same suite gets `TestDatabase.folder`: a temp folder, `<folder>/watchers.sqlite` opened through
    `TestDatabase.make`, a new connection per open, the folder removed at the scope's close.
@@ -373,7 +387,7 @@ kept (0093).
 | L11. `fabrika/integration-test-name` does not fire on a `*.contract.test.ts` that builds a real side | lint | lint | take `contract` out of the rule's `NAMED` name test: a contract fixture that names `TestDatabase.folder` fires | oxlint-plugins/integration-test-name.test.ts |
 | L12. (slice 4) A `next/` `*.integration.test.ts` whose only top-level calls are shared-suite calls is refused, with a message that names `<base>.contract.test.ts` and `lawsOn` | lint | lint | put back a five-line runner like today's `StartChild.integration.test.ts` in a fixture: fires | oxlint-plugins/contract-test.test.ts |
 | L13. The repo's `.oxlintrc.json` wires `fabrika/contract-test` for `next/`'s tests, suites and kits, and `next/`'s tree is at zero, so the rule blocks from the start ([0523](../../../.decisions/0523-advice-rules-block-where-clean.md)) | test | scenario: the real config and tree, the two things this law is about | leave the wiring out of `.oxlintrc.json`: L13 red | oxlint-plugins/contract-test.test.ts |
-| L14. Each moved suite's laws run on both sides: for each contract file, `vitest list --project next` and `--project next-integration` name the same laws, less the `on.real` ones on the memory side, and every `on.real` call carries a non-empty reason | test | scenario: the moved files themselves, listed by Vitest | turn one `on` call of a moved file into `on.real` with an empty reason: L14 red | .github/ci/legs.test.ts |
+| L14. Each moved suite's laws run on both sides: for each contract file, `vitest list --project next` and `--project next-integration` name the same laws, less the `on.real` ones on the memory side, and every `on.real` call carries a non-empty reason | test | scenario: the moved files themselves, listed by Vitest | turn one `on` call of a moved file into `on.real` with an empty reason: L14 red | .github/ci/legs.integration.test.ts |
 
 - **L4, L6, L7 and L8 live in one contract file,** `TestDatabase.contract.test.ts`, run through
   `lawsOn(TestDatabase.memory, TestDatabase.folder)`. The package's own openers are the first
@@ -381,9 +395,11 @@ kept (0093).
   replaces the plain `TestDatabase.integration.test.ts` of pull request 1301 only if the tests step
   finds every one of its laws (D1 to D3) fits as a contract law; else both stay.
 - **L14 reads Vitest's own list.** It runs `vitest list --filesOnly=false --project <p> <file>` the
-  way `legs.ts` runs `vitest list`, so it is a reader test in the tooling project, not a `next/`
-  test. It lives beside the legs script's own laws in the CI scripts' folder (75%), since that
-  script already starts `vitest list`.
+  way `legs.ts` runs `vitest list`. It lives in `.github/ci/legs.integration.test.ts` because
+  it starts a real child process ([0584](../../../.decisions/0584-a-tests-kind-follows-what-it-uses.md)).
+  A stand-in cannot prove which laws the actual Vitest projects collect. Main's full run or the
+  supported source-proof run proves L14; it never runs on the pull request or merge line.
+  Existing pure checks stay in their current files.
 - **No host-only law.** Nothing here needs launchd, Electron, a real signal or the owner's Mac. The
   real side opens SQLite files in a temp folder, which the schedule runs on `ubuntu-latest` today.
   Every real-side run is in a contract file's `next-integration` run or an `*.integration.test.ts`,
@@ -410,14 +426,14 @@ kept (0093).
 
 Why the driver stays proven: the memory side and the real side run the same SQLite engine and the
 same SQL, so what memory cannot show is exactly what a file adds: durability across a close, the
-journal, locks between connections. Those are the real side's job, and it runs every 3 hours, as
-before. What this does not prove, before or after: the Durable Object's SQLite, which differs from
-Node's (0062's note on `transactionSync`). That stays the Cloudflare runner's job.
+journal, locks between connections. Those are the real side's job, proven by main's full run
+under 0581's push trigger, one-hour limiter and hourly catch-up. What this does not prove, before
+or after: the Durable Object's SQLite, which differs from Node's (0062's note on `transactionSync`). That stays the Cloudflare runner's job.
 
 What is lost (0536 already accepts it): a bug that only the file shows, such as a law that leans on
-an uncommitted row across a reopen, passes on memory and is found by the schedule within about 3
-hours. What is gained: every law in these 34 files now runs before a merge, on any change that
-reaches it.
+an uncommitted row across a reopen, passes on memory and is found by a later full run
+on main. The trigger and hourly catch-up do not promise a fixed completion time. What is gained:
+every law in these 34 files now runs before a merge, on any change that reaches it.
 
 ## Files
 
@@ -449,7 +465,7 @@ reaches it.
 | next/packages/libfabrika/src/node/StartChildExit.contract.test.ts | tests | tests | `git mv` from `StartChildExit.integration.test.ts` |
 | next/packages/libfabrika/src/node/StartChildBoundary.contract.test.ts | tests | tests | `git mv` from `StartChildBoundary.integration.test.ts` |
 | next/packages/libfabrika/src/node/StartChild.test-support.ts | tests | tests | `databases` takes `TestDatabase.Databases` |
-| .github/ci/legs.test.ts | tests | tests | L14, beside the code that already starts `vitest list` |
+| .github/ci/legs.integration.test.ts | tests | tests | L14, the real-process listing check |
 | .glossary/TERMS.md | build | docs | rows for `contract test` and `lawsOn` |
 | .github/workflows/check.yaml | tests | docs | the comment at "Which tests (0536)" names contract files' memory side; no command changes |
 
@@ -511,10 +527,10 @@ reaches it.
 
 ## The order, and what waits
 
-1. **Pull request 1301 merges first.** Slice 1 adds to its `TestDatabase.ts`, builds on its
+1. **Pull request 1301 has merged.** Slice 1 adds to its `TestDatabase.ts`, builds on its
    `@effect/platform-node` dependency, and moves files 1301 changes (`Watchers.integration.test.ts`,
-   `StartChild.test-support.ts` and most of the 34). Nothing in this plan starts before it is on
-   main. Its open follow-up, one `Sql` across reopens copied in twelve files
+   `StartChild.test-support.ts` and most of the 34). Its merge satisfies the prerequisite for
+   slice 1. Its follow-up, one `Sql` across reopens copied in twelve files
    (`field/findings/2026-11-14-one-sql-across-reopens-copied-in-twelve-files.json` on its branch), is
    partly answered by `folder`, which removes the copied folder code; the per-part `Sql` wrapper
    stays a kit's.
@@ -556,19 +572,24 @@ by whichever lands second.
 For the box's steps, narrow paths only, under the machine caps:
 
 ```sh
-nice -n 15 volta run --node 26.13.0 pnpm exec vitest run --maxWorkers=1 --project next next/packages/vitest/src/TestDatabase.contract.test.ts
-nice -n 15 volta run --node 26.13.0 pnpm exec vitest run --maxWorkers=1 --project next-integration next/packages/vitest/src/TestDatabase.contract.test.ts
-nice -n 15 volta run --node 26.13.0 pnpm exec vitest run --maxWorkers=1 --project next next/packages/libfabrika/src/node/Watchers.contract.test.ts
-nice -n 15 volta run --node 26.13.0 pnpm exec vitest run --maxWorkers=1 --project next-integration next/packages/libfabrika/src/node/Watchers.contract.test.ts
-nice -n 15 volta run --node 26.13.0 pnpm exec vitest run --maxWorkers=1 oxlint-plugins/contract-test.test.ts
+nice -n 19 volta run --node 26.13.0 pnpm exec vitest run --maxWorkers=1 --project next next/packages/vitest/src/TestDatabase.contract.test.ts
+nice -n 19 volta run --node 26.13.0 pnpm exec vitest run --maxWorkers=1 --project next-integration next/packages/vitest/src/TestDatabase.contract.test.ts
+nice -n 19 volta run --node 26.13.0 pnpm exec vitest run --maxWorkers=1 --project next next/packages/libfabrika/src/node/Watchers.contract.test.ts
+nice -n 19 volta run --node 26.13.0 pnpm exec vitest run --maxWorkers=1 --project next-integration next/packages/libfabrika/src/node/Watchers.contract.test.ts
+nice -n 19 volta run --node 26.13.0 pnpm exec vitest run --maxWorkers=1 oxlint-plugins/contract-test.test.ts
 pnpm lint
 ```
 
 - Each moved file runs once per project, at the default depth, and its wall time on each side goes
   into the pull request, so the doubt on cost has numbers from slice 1 on.
 - The lead runs `--changed origin/main` and the one `pnpm typecheck`. CI runs the merge line; the
-  real sides are proven by the first scheduled run after each merge, or by a hand-started scheduled
-  run on the branch before it.
+  real sides and L14 are proven by main's first full run after each merge, or by a supported
+  source-proof run before it. Source proof follows
+  [0590](../../../.decisions/0590-a-branch-proof-run-runs-only-what-its-change-reaches.md) and
+  [0595](../../../.decisions/0595-scheduled-runs-share-slots.md): supported starts check the exact
+  branch HEAD for shared job locks. The existing run-head and checkout-HEAD checks identify the
+  tested source. Existing historical proof keeps its acceptance rules; it is not a supported new
+  start through an unlocked workflow.
 
 ## Size
 
