@@ -83,6 +83,8 @@ const Stands = Schema.Literals([
 type Stands = typeof Stands.Type;
 
 type World = {
+  readonly branch?: string;
+  readonly head?: string;
   readonly stands?: Stands;
   readonly state?: "OPEN" | "CLOSED" | "MERGED";
   readonly draft?: boolean;
@@ -96,8 +98,11 @@ type World = {
 };
 
 const memory = (w: World, red: { readonly jobs: ReadonlyArray<Job>; readonly log: string }) => {
+  const name = w.branch ?? branch;
+  const head = w.head ?? oid;
+
   const github = PullRequestsTest.world([
-    { number: 1092, head: branch, oid, state: w.state ?? "OPEN", draft: w.draft ?? false },
+    { number: 1092, head: name, oid: head, state: w.state ?? "OPEN", draft: w.draft ?? false },
   ]);
 
   github.more.set(1092, {
@@ -111,17 +116,17 @@ const memory = (w: World, red: { readonly jobs: ReadonlyArray<Job>; readonly log
   const run = (head: string, status: string, conclusion: string | null): Run => ({ id: RED, head, status, conclusion });
 
   const runs: Record<Stands, ReadonlyArray<Run>> = {
-    green: [run(oid, "completed", "success")],
-    red: [run(oid, "completed", "cancelled")],
-    in_progress: [run(oid, "in_progress", null)],
-    queued: [run(oid, "queued", null)],
+    green: [run(head, "completed", "success")],
+    red: [run(head, "completed", "cancelled")],
+    in_progress: [run(head, "in_progress", null)],
+    queued: [run(head, "queued", null)],
     none: [],
     older: [run(older, "completed", "success")],
     older_red: [run(older, "completed", "cancelled")],
     older_running: [run(older, "in_progress", null)],
   };
 
-  actions.runs.set(branch, runs[stands]);
+  actions.runs.set(name, runs[stands]);
   const isRed = stands === "red" || stands === "older_red";
   actions.jobs.set(RED, w.jobs ?? (isRed ? red.jobs : allGreen(red.jobs)));
   const remote = PushesTest.remote();
@@ -243,32 +248,39 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
       }),
   );
 
-  it.effect(
-    "scenario: new-proof guidance refuses an old branch workflow, while existing head evidence keeps its meaning",
-    () =>
+  // Plant: preflight the old fixed branch instead of the PR branch; generated requests must expose it.
+  it.effect.prop(
+    "property: new-proof guidance refuses an old workflow while existing head evidence keeps its meaning",
+    {
+      branch: Schema.String.check(Schema.isPattern(/^fabrikalfa\/[a-z][a-z0-9_-]{0,24}$/)),
+      head: Schema.String.check(
+        Schema.isPattern(/^[0-9a-f]{40}$/),
+        Schema.makeFilter((head) => head !== older),
+      ),
+      reason: Schema.NonEmptyString,
+    },
+    ({ branch, head, reason }) =>
       Effect.gen(function* () {
         const red = yield* fixture;
-        const missing = memory({ stands: "none" }, red);
-        missing.actions.preflight = "scheduled job groups are missing";
+        const missing = memory({ stands: "none", branch, head }, red);
+        missing.actions.preflight = reason;
         const line = Arm.line(yield* arm(missing));
-        expect(line).toContain("new proof unavailable: scheduled job groups are missing");
-        expect(line).not.toContain("workflow run");
-        expect(missing.actions.asked).toEqual([`runs scheduled.yaml ${branch}`, `preflight ${branch} ${oid}`]);
-        expect(missing.github.calls).toEqual(armedAt);
+        expect(line).toContain(`new proof unavailable: ${reason}`);
+        expect(line.replace(`new proof unavailable: ${reason}`, "")).not.toContain("workflow run");
+        expect(missing.actions.asked).toEqual([`runs scheduled.yaml ${branch}`, `preflight ${branch} ${head}`]);
+        expect(missing.github.calls).toEqual([{ _tag: "arm", number: 1092, oid: head }]);
 
-        const existing = memory({ stands: "green", jobs: shaped("changed") }, red);
-        existing.actions.preflight = "scheduled job groups are missing";
+        const existing = memory({ stands: "green", jobs: shaped("changed"), branch, head }, red);
+        existing.actions.preflight = reason;
         expect(Arm.line(yield* arm(existing))).toContain(
-          `changed-set run ${RED} green on every job at ${oid.slice(0, 12)}`,
+          `changed-set run ${RED} green on every job at ${head.slice(0, 12)}`,
         );
         expect(existing.actions.asked).toEqual([`runs scheduled.yaml ${branch}`, `jobs ${RED}`]);
-        expect(existing.github.calls).toEqual(armedAt);
+        expect(existing.github.calls).toEqual([{ _tag: "arm", number: 1092, oid: head }]);
 
-        const stale = memory({ stands: "older", jobs: shaped("changed") }, red);
-        stale.actions.preflight = "scheduled job groups are missing";
-        expect((yield* Effect.flip(arm(stale))).reason).toContain(
-          "new proof unavailable: scheduled job groups are missing",
-        );
+        const stale = memory({ stands: "older", jobs: shaped("changed"), branch, head }, red);
+        stale.actions.preflight = reason;
+        expect((yield* Effect.flip(arm(stale))).reason).toContain(`new proof unavailable: ${reason}`);
         expect(stale.github.calls).toEqual([]);
       }),
   );
