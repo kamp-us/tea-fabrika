@@ -8,9 +8,9 @@ import { Arbitrary, Effect, FileSystem, Match, Path, Schema } from "effect";
 import * as fc from "fast-check";
 import { Ghostty } from "ghostty-web";
 import { spot } from "./cells.ts";
-import { editor, Msg } from "./editor.ts";
+import { editor } from "./editor.ts";
 
-const decode = Schema.decodeUnknownSync(Msg);
+const decode = Schema.decodeUnknownSync(editor.msg);
 
 type Model = ReturnType<typeof editor.init>[0];
 

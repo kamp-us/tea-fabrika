@@ -3,11 +3,11 @@ import { applyCell, replay } from "@demlik/tea";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Match, Schema } from "effect";
-import { editor, Msg } from "./editor.ts";
+import { editor } from "./editor.ts";
 
 type EditorCmd = ReturnType<typeof editor.init>[1][number];
 
-const decode = Schema.decodeUnknownSync(Msg);
+const decode = Schema.decodeUnknownSync(editor.msg);
 
 const Paste = Arbitrary.schema(Schema.String).pipe(
   Arbitrary.map((text) => text.replaceAll(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, "")),
