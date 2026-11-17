@@ -5,8 +5,9 @@ import { type Run, WorkflowRuns, WorkflowRunsError } from "./WorkflowRuns.ts";
 
 /** One write the layer took, as the caller made it. */
 export const Call = Schema.TaggedUnion({
-  cancel: { id: Schema.Number },
+  cancel: { id: Schema.Finite },
 });
+
 export type Call = typeof Call.Type;
 
 /** The calls that fail with a reason, by name. */
@@ -20,7 +21,8 @@ export const world = (runs: ReadonlyArray<Run> = []): World => ({ runs: [...runs
 export const layer = (w: World, failing: Failing = {}): Layer.Layer<WorkflowRuns> => {
   const fails = (name: keyof Failing) => {
     const reason = failing[name];
-    return reason === undefined ? Effect.void : Effect.fail(new WorkflowRunsError({ reason }));
+
+    return reason === undefined ? Effect.void : Effect.fail(WorkflowRunsError.make({ reason }));
   };
 
   /** Puts `to` on run `id`, as GitHub would; a run it does not hold fails as GitHub's 404. */
@@ -29,10 +31,11 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<WorkflowRuns
     const found = w.runs[at];
 
     if (found === undefined) {
-      return Effect.fail(new WorkflowRunsError({ reason: `no run ${id}` }));
+      return Effect.fail(WorkflowRunsError.make({ reason: `no run ${id}` }));
     }
 
     w.runs[at] = { ...found, ...to };
+
     return Effect.void;
   };
 

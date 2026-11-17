@@ -13,9 +13,13 @@ import * as fc from "fast-check";
 import * as Chunk from "./Chunk.ts";
 
 const SEED = 119120;
+
 const encoder = new TextEncoder();
+
 const bytes = (value: unknown): number => encoder.encode(JSON.stringify(value)).length;
+
 const decodeJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
+
 /** A value as JSON text carries it, so -0 and other values JSON cannot keep are normalized. */
 const copied = (value: unknown): Schema.Json => decodeJson(JSON.stringify(value));
 
@@ -157,11 +161,13 @@ describe("T1041: a large output is cut into chunk letters", () => {
             list = chunks.filter((_, k) => k !== drop);
             break;
           }
+
           case "repeat": {
             const k = at(a);
             list = [...chunks.slice(0, k + 1), chunks[k] as (typeof chunks)[number], ...chunks.slice(k + 1)];
             break;
           }
+
           case "swap": {
             if (n < 2) {
               return;
@@ -175,6 +181,7 @@ describe("T1041: a large output is cut into chunk letters", () => {
             list = swapped;
             break;
           }
+
           case "mix": {
             // A second send of the same items under another id of the same length cuts the same
             // chunks. Its chunk k takes this send's chunk k: same seq, same last, same items, so

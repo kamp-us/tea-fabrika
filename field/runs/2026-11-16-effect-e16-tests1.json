@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e16-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": null,
+  "ended": null,
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E16 of the Effect-check sweep (preferUnsafeConstructor), in next/. Recount on origin/main: 6 hits, all in exam paths (5 in libfabrika's src/node/build/build-assets.integration.test.ts, 1 in the app's e2e/one-file.visual.test.ts), none in pull request 1366's files, none in product files. Wrote the lock for the whole of libfabrika and of the app in their own tsconfigs, then fixed all 6 by hand with the editor tool (Effect.runSync(X.make()) became X.makeUnsafe(), as the check's message names): 0 by quick fix, 6 hand edits. Both packages report 0 preferUnsafeConstructor errors afterward. No build step is needed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Per-check report: preferUnsafeConstructor, hits met 6, fixed by quick fix 0, hand edits 6 (Edit tool), left 0, waiting on 1366 0. Files: next/packages/libfabrika/src/node/build/build-assets.integration.test.ts (5), next/apps/fabrika/e2e/one-file.visual.test.ts (1). Counts from effect-tsgo diagnostics per tsconfig. checkerfix.mjs was never run (the owner's rule: no script edits files). Lint and narrow tests recorded in the pull request.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "added `export const plantE16 = Effect.runSync(Deferred.make<void>());` to the locked build-assets test file: libfabrika diagnostics show 1 preferUnsafeConstructor error; line removed",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "libfabrika's glob changed to a folder that matches nothing, with the 5 original hits restored: the 5 hits drop from error to message, so the glob is what holds them; glob and edits put back",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

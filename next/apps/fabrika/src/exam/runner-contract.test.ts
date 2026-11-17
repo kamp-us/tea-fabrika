@@ -72,6 +72,7 @@ it.prop(
 // Every runner bad_msg path (app/runner.ts accept and receive): no type or an undeclared one, a read port, a
 // person-only port from an agent, an input that carries its own parent, and a declared port whose schema fails.
 const BAD = ["untyped", "unknown", "read", "person_only", "parent", "admit_wrong", "admit_missing"] as const;
+
 type Bad = (typeof BAD)[number];
 
 const Wrong = Schema.Union([
@@ -143,6 +144,7 @@ const badInput = (c: BadMsgCase, kind: Bad): unknown => {
   }
 
   const { [c.field]: _gone, ...missing } = save;
+
   return missing;
 };
 
@@ -152,7 +154,9 @@ const fresh = (n: number, input: unknown, by: Incoming["envelope"]["by"] = write
 });
 
 type World = Effect.Success<ReturnType<typeof world>>;
+
 type Runner = typeof ProgramRunner.Service;
+
 const patches = (w: World) => w.updates.filter((u) => u.type === "patch");
 
 // p22: a bad fresh shape returns bad_msg, writes no accepted input, changes no view, publishes no patch, runs no Cmd.
@@ -205,6 +209,7 @@ it.effect.prop(
       const runner = yield* w.runner();
       yield* runner.open("watcher-1");
       w.updates.length = 0;
+
       const planted = (i: Incoming) =>
         c.plant === "append"
           ? w.append(i).pipe(Effect.andThen(runner.msg(i)))
@@ -215,6 +220,7 @@ it.effect.prop(
                 w.calls.push("cmd");
               }
             }).pipe(Effect.andThen(runner.msg(i)));
+
       const exit = yield* Effect.exit(freshBadMsg(w, runner, planted, fresh(1, badInput(c, c.on))));
       expect(Exit.isFailure(exit)).toBe(true);
 
@@ -232,12 +238,15 @@ it.effect.prop(
   ({ c }) =>
     Effect.gen(function* () {
       const spy = { calls: 0 };
+
       const w = yield* world(
         makeProgram(() => {
           spy.calls++;
+
           return null;
         }),
       );
+
       const runner = yield* w.runner();
       const before = (yield* runner.open("watcher-1")).view;
       w.updates.length = 0;
@@ -274,6 +283,7 @@ it.effect.prop(
       for (const kind of ["admit_wrong", "admit_missing"] as const) {
         const spy = { calls: 0 };
         const w = yield* world(makeProgram(() => replayRefuse(spy)));
+
         const m = fresh(1, badInput(c, kind)),
           placed = yield* w.append(m);
 
@@ -284,8 +294,10 @@ it.effect.prop(
         yield* w.store.save({ saved: { v: 1, build, model: empty, after: 0 }, turn: null, cmds: [] }, [
           { id: m.id, rev: placed.rev, pos: placed.pos },
         ]);
+
         const before = yield* w.rows(),
           runner = yield* w.runner();
+
         failedAs(yield* Effect.exit(runner.open("watcher")), "saved_letter");
         unchanged(before, yield* w.rows());
         expect(w.updates).toEqual([]);
@@ -303,8 +315,10 @@ it.effect.prop(
   ({ body }) =>
     Effect.gen(function* () {
       const w = yield* world(makeProgram(() => null));
+
       const runner = yield* w.runner(),
         before = yield* runner.open("watcher");
+
       w.updates.length = 0;
       w.block();
       refusal(yield* runner.msg(incoming(1, body, 0, true)), { reason: "seen_ahead" });
@@ -337,10 +351,10 @@ it.prop(
   "p25: a ProgramDown names its saved error class, else the thrown class",
   { name: Arbitrary.schema(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(96))) },
   ({ name }) => {
-    expect(new ProgramDown({ reason: "step", error: name, cause: new RangeError("x") }).errorClass).toBe(name);
-    expect(new ProgramDown({ reason: "step", cause: new RangeError("x") }).errorClass).toBe("RangeError");
-    expect(new ProgramDown({ reason: "step", cause: null }).errorClass).toBe("null");
-    expect(new ProgramDown({ reason: "step" }).errorClass).toBe("ProgramDown");
+    expect(ProgramDown.make({ reason: "step", error: name, cause: new RangeError("x") }).errorClass).toBe(name);
+    expect(ProgramDown.make({ reason: "step", cause: new RangeError("x") }).errorClass).toBe("RangeError");
+    expect(ProgramDown.make({ reason: "step", cause: null }).errorClass).toBe("null");
+    expect(ProgramDown.make({ reason: "step" }).errorClass).toBe("ProgramDown");
   },
   opts,
 );

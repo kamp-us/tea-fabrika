@@ -150,8 +150,9 @@ For every agent, whatever its step. A step's skill adds its own rules and its ow
   flows and `chain.ts`, never a quest agent ([0064](./.decisions/0064-the-lead-drives-with-flows.md),
   [the lead skill](./.agents/skills/lead/SKILL.md#run-a-whole-quest-with-chaints)); a fix round is one agent, and the same
   reviewer rechecks ([0177](./.decisions/0177-fix-round-is-one-agent.md)); a law that needs the real
-  machine runs before the first review, and on the owner's Mac only after the lead's read and the
-  owner's yes ([0178](./.decisions/0178-host-only-laws-run-first.md)); a quest stops at its second
+  machine runs before the first review ([0178](./.decisions/0178-host-only-laws-run-first.md)), with
+  launchd, real Electron and process-signal laws on disposable macOS CI
+  ([0594](./.decisions/0594-safe-checks-direct-mac-ci.md)); a quest stops at its second
   sent-back review ([0176](./.decisions/0176-second-send-back-stops-lane.md)), unless its faults are
   named, located and inside the plan, when the lead decides one more fix round itself
   ([0564](./.decisions/0564-lead-decides-further-fix-rounds.md)); no number caps a pull
@@ -360,8 +361,12 @@ these caps. Each one came from a laptop that became unusable.
   keeps it out of the person's way: its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`,
   never `focus()` or `show()`. Shots come only from `page.screenshot`.
 - A wait or poll loop runs in the background.
-- A step that needs ports, sockets or its own processes runs in a container, never behind a hole in
-  the laptop sandbox ([0045](./.decisions/0045-test-steps-run-in-containers.md)).
+- Ordinary safe checks run directly in parallel, under the caps above. For launchd, real Electron
+  or real process signals, use disposable macOS CI, never the owner's laptop. Read
+  [0594](./.decisions/0594-safe-checks-direct-mac-ci.md) for the split and what remains of
+  [0045](./.decisions/0045-test-steps-run-in-containers.md). Read the selected tests and cleanup
+  before a direct run: a plain filename is not clearance. When `--changed` reaches these laws,
+  run explicit verified-safe paths locally and obtain their remote proof separately.
 
 ### Tool facts that cost us time
 
@@ -405,7 +410,6 @@ Write-ups are read by busy people, some of them not native English speakers.
 
 ## Changing files
 
-- Change code with an editor-style edit, not with a find-and-replace script run over the tree.
 - Move files with `git mv`, so history follows.
 - Stage your own paths by name. Another session may have work in the same checkout.
 - Push every commit when you make it, and give its branch a draft pull request at the first commit

@@ -5,7 +5,9 @@ import * as fc from "fast-check";
 import * as StartsTest from "../settings/StartsTest.ts";
 
 export const paths = ["HTTP", "Connection", "Process", "RecordPart", "Project"] as const;
+
 export type Path = (typeof paths)[number];
+
 export type Fault = "none" | "storage" | "refused" | "unreachable" | "malformed" | "lost";
 
 export const channels = [
@@ -25,6 +27,7 @@ export const channels = [
 ] as const;
 
 export type Channel = (typeof channels)[number];
+
 export type Outputs = Record<Channel, ReadonlyArray<unknown>>;
 
 export interface Counts {
@@ -96,6 +99,7 @@ export const suite = (open: Open) =>
               );
               const before = driver.counts();
               const total = move === "concurrent" ? 2 + (choice % 5) : 1;
+
               const exits = yield* Effect.forEach(
                 Array.from({ length: total }),
                 (_, n) => Effect.exit(entry.enter(choice + n)),
@@ -162,11 +166,13 @@ export const suite = (open: Open) =>
 
           for (const choice of choices) {
             const path = pick(paths, choice);
+
             const moves = owners.has(path)
               ? ready.has(path)
                 ? ["enter", "reopen", "reject"]
                 : ["enter", "fail", "reject", "lost"]
               : ["open", "reject"];
+
             const move = pick(moves, Math.floor(choice / paths.length));
 
             if (move === "reopen") {
@@ -178,6 +184,7 @@ export const suite = (open: Open) =>
               owners.set(path, yield* driver.open(path));
             } else {
               driver.fault(move === "fail" ? "storage" : move === "lost" && path !== "Project" ? "lost" : "none");
+
               const entry =
                 move === "reject"
                   ? yield* driver.open(path, Math.floor(choice / (paths.length * moves.length)))

@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-ban-s6-tests1",
+  "ticket": "1056",
+  "pr": null,
+  "started": "2026-11-15T18:19:00-08:00",
+  "ended": "2026-11-15T18:40:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Slice 6 of the Reflect ban (0554), next/programs/pipeline: 3 fires in 2 files, as the plan counted on main at 82296f5cf. QueueRunnerTest.ts (kind 2) reads the land letter with Predicate.hasProperty; Settings.test.ts (kind 8) narrows each step of the path with Predicate.hasProperty and reads the decoded value through a Record view. The folder joins the ban block of next/ where JSON.parse blocks. L5: an old line back in the folder fails lint.",
+  "plants": [
+    {
+      "law": "L5",
+      "plant": "Reflect.get(l.m, \"type\") === \"land\" put back in QueueRunnerTest.ts",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 21,
+  "note": "Settings.test.ts and node/queue.laws.integration.test.ts (the suite that loads QueueRunnerTest) passed alone. pnpm lint and pnpm typecheck passed. Plant restored by copy.",
+  "step": "tests",
+  "costUsd": null,
+  "billed": null
+}

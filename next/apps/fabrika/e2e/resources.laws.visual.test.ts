@@ -20,19 +20,24 @@ import { describe, expect, it, type TestContext } from "vitest";
 import { suite as scopedSuite } from "./p14.test-support.ts";
 
 const APP = resolve(import.meta.dirname, "..");
+
 const VITEST = join(APP, "node_modules/vitest/vitest.mjs");
 
 const Row = Schema.Struct({
   acquired: Schema.optionalKey(Schema.String),
   released: Schema.optionalKey(Schema.String),
   holding: Schema.optionalKey(Schema.String),
-  pid: Schema.optionalKey(Schema.Number),
-  port: Schema.optionalKey(Schema.Number),
+  pid: Schema.optionalKey(Schema.Finite),
+  port: Schema.optionalKey(Schema.Finite),
   home: Schema.optionalKey(Schema.String),
 });
+
 type Row = typeof Row.Type;
+
 type Fault = { readonly at: string; readonly kind: "setup" | "test" | "hold" | "timeout" | "trace" };
+
 const KINDS = ["setup", "test", "hold", "timeout", "trace"] as const;
+
 type Ended = { readonly code: number | null; readonly signal: NodeJS.Signals | null; readonly ms: number };
 
 const rows = (file: string): ReadonlyArray<Row> =>
@@ -40,7 +45,7 @@ const rows = (file: string): ReadonlyArray<Row> =>
     ? readFileSync(file, "utf8")
         .split("\n")
         .filter((line) => line !== "")
-        .map((line) => Schema.decodeUnknownSync(Schema.fromJsonString(Row))(line))
+        .map((line) => Schema.decodeSync(Schema.fromJsonString(Row))(line))
     : [];
 
 /** A folder for one child's trace, given back by the scope. */
@@ -53,13 +58,16 @@ const traceFolder = Effect.acquireRelease(
  *  child's natural exit before it ever runs. */
 /** A child suite: its file, the test it runs, and what a plain run of it must acquire. */
 type Target = { readonly file: string; readonly test: string; readonly label: string };
+
 const ONE_FILE: Target = { file: "one-file.visual.test.ts", test: "S1.5", label: "P14 slice 1" };
+
 const FIRST_WINDOW: Target = { file: "first-window.visual.test.ts", test: "L11", label: "P14 slice 2" };
 
 const suite = (trace: string, fault: Fault | undefined, target: Target) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const started = Date.now();
+
       const child = spawn(
         process.execPath,
         [
@@ -85,9 +93,11 @@ const suite = (trace: string, fault: Fault | undefined, target: Target) =>
           detached: true,
         },
       );
+
       const ended = Effect.callback<Ended>((resume) => {
         child.once("exit", (code, signal) => resume(Effect.succeed({ code, signal, ms: Date.now() - started })));
       });
+
       return { child, ended };
     }),
     ({ child }) =>
@@ -118,6 +128,7 @@ const suite = (trace: string, fault: Fault | undefined, target: Target) =>
 const alive = (pid: number) => {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === "EPERM";
@@ -131,6 +142,7 @@ const listening = (port: number) =>
         Effect.sync(() => connect({ host: "127.0.0.1", port })),
         (socket) => Effect.sync(() => socket.destroy()),
       );
+
       return yield* Effect.callback<boolean>((resume) => {
         socket.once("connect", () => resume(Effect.succeed(true)));
         socket.once("error", () => resume(Effect.succeed(false)));
@@ -144,6 +156,7 @@ const leftBehind = (trace: ReadonlyArray<Row>) =>
     const pids = trace.flatMap((r) => (r.pid === undefined ? [] : [r.pid]));
     const ports = trace.flatMap((r) => (r.port === undefined ? [] : [r.port]));
     const homes = trace.flatMap((r) => (r.home === undefined ? [] : [r.home]));
+
     const look = Effect.gen(function* () {
       const open: Array<number> = [];
 
@@ -159,8 +172,10 @@ const leftBehind = (trace: ReadonlyArray<Row>) =>
         homes: homes.filter((home) => existsSync(home)),
       };
     });
+
     const gone = (left: Effect.Success<typeof look>) =>
       left.pids.length === 0 && left.ports.length === 0 && left.homes.length === 0;
+
     const deadline = Date.now() + 10_000;
     let left = yield* look;
 
@@ -172,11 +187,14 @@ const leftBehind = (trace: ReadonlyArray<Row>) =>
     return left;
   });
 
-/** Wait for the child to note that it holds `at`, then signal it. */
+/** Wait for the child to note that it holds `at`, then signal it. The look is every 10 ms, so the
+ *  signal can land in the first 100 ms of a test, while Vitest still owes its worker a batched task
+ *  update: the worker then exits at that send, in the middle of its releases (scheduled run
+ *  43798557082, a `fw.` home left behind). The fixture undoes what an exit leaves on that exit. */
 const interrupt = (child: ChildProcess, trace: string, signal: NodeJS.Signals) =>
   Effect.gen(function* () {
     while (!rows(trace).some((r) => r.holding !== undefined)) {
-      yield* Effect.sleep("200 millis");
+      yield* Effect.sleep("10 millis");
     }
 
     child.kill(signal);
@@ -232,6 +250,7 @@ const run = (fault: Fault | undefined, signal: NodeJS.Signals, target: Target = 
         ports: [],
         homes: [],
       });
+
       return acquired;
     }),
   );
@@ -273,8 +292,10 @@ const walk = async (target: Target, context: TestContext) => {
         for (const { pick, kind: pickKind, signal } of steps) {
           // A kind the walks have not reached yet comes first, so a short walk still meets all three.
           const pending = available.filter((k) => !kinds.has(k));
+
           const kind =
             pending.length > 0 ? pending[pickKind % pending.length]! : available[pickKind % available.length]!;
+
           // Only an acquisition the real run reached is a fault point; a test failure comes after all.
           const at = kind === "test" ? reached[reached.length - 1]! : reached[pick % reached.length]!;
           kinds.add(kind);
@@ -302,6 +323,9 @@ describe("P14 slice 2, L16: the first-window suite's resources close and its chi
 
   it("pinned: an acquisition trace failure releases the home whose release used to be registered after logging", (context) =>
     scopedSuite(run({ at: "home", kind: "trace" }, "SIGTERM", FIRST_WINDOW), context));
+
+  it("pinned: an interruption just after the port is held leaves no home, though the worker exits mid-release", (context) =>
+    scopedSuite(run({ at: "port", kind: "hold" }, "SIGINT", FIRST_WINDOW), context));
 
   it(
     "generated fault walks over the first-window suite: success, setup failure, test failure and interruption after each reached acquisition",

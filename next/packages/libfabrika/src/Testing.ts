@@ -4,7 +4,7 @@
 // the parents the program returned. Both throw a diagnostic on a difference. Remove `syncTest`
 // when tea ships the matching helper.
 import { applyCell, type Cmd, type Machine, type Sub } from "@demlik/tea";
-import { Result } from "effect";
+import * as Result from "effect/Result";
 
 type Options<S, M> = {
   readonly msgs: ReadonlyArray<M>;
@@ -33,6 +33,7 @@ export const syncTest = <S, M extends { readonly type: string }, C extends Cmd, 
   const fail = (cut: number, message: string): never => {
     throw new Error(`syncTest (seed ${seed}): after a save at cut ${cut}, ${message}`);
   };
+
   /** Boots from the model saved at `cut` and replays the rest against the unbroken run. */
   const resume = (cut: number, model: S, loaded: S): void => {
     let [state] = machine.init(loaded, ctx);
@@ -100,6 +101,7 @@ export const senderTest = ({ inputs, expected, writes, owner, seed }: SenderOpti
   const fail = (message: string): never => {
     throw new Error(`senderTest (seed ${seed}): ${message}`);
   };
+
   const senders = new Map(inputs.map((input) => [input.parent, input.by]));
   const ids = new Set(expected.map((e) => e.id));
 

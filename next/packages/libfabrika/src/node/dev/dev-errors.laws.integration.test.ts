@@ -5,10 +5,20 @@ import { join } from "node:path";
 import { RuntimeLifecycle } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, PlatformError, Sink, Stream, Tracer } from "effect";
-import { SecureRandom } from "effect/crypto";
-import { ChildProcessSpawner } from "effect/process";
-import { TestClock } from "effect/testing";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as PlatformError from "effect/PlatformError";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
@@ -34,6 +44,7 @@ const deploy = (port: number) => (local: Context.Context<never>) =>
     const plugin = [...local.mapUnsafe.values()].find(
       (value) => typeof value === "object" && value !== null && "sockets" in value,
     ) as { start: (ports: Record<string, number>) => Effect.Effect<unknown> };
+
     Context.get(local, RuntimeLifecycle)({ type: "start", worker: "errors", pid: 27001 });
     yield* plugin.start({ "fabrika-control": port });
   });
@@ -45,6 +56,7 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
         const home = mkdtempSync(join(tmpdir(), "p12-err-"));
         vi.stubEnv("FABRIKA_HOME", home);
         const reason = mode === "json" || mode === "schema" ? "bad_row" : mode === "remote" ? `remote-${id}` : mode;
+
         const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
           if (mode === "unreachable") {
             throw new Error(id);
@@ -76,6 +88,7 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
               Effect.provide(NodeServices.layer),
             ),
           );
+
           failure(exit, reason);
           expect(fetch.mock.calls.length === 0).toBe(mode === "offline");
         } finally {
@@ -100,6 +113,7 @@ it("instance reports start_timeout when deployment never opens the control liste
           Effect.scoped(
             Effect.gen(function* () {
               const deployed = yield* Deferred.make<void>();
+
               const running = yield* Effect.forkChild(
                 Effect.scoped(
                   startDev({ name: "errors", port: 18787, build, home, ...BRAIN }, () =>
@@ -107,8 +121,10 @@ it("instance reports start_timeout when deployment never opens the control liste
                   ),
                 ),
               );
+
               yield* Deferred.await(deployed);
               yield* TestClock.adjust("30 seconds");
+
               return yield* Fiber.await(running);
             }),
           ).pipe(
@@ -120,6 +136,7 @@ it("instance reports start_timeout when deployment never opens the control liste
             Effect.provide(TestClock.layer()),
           ),
         );
+
         failure(exit, "start_timeout");
       } finally {
         vi.unstubAllEnvs();
@@ -137,6 +154,7 @@ for (const mode of ["exit", "spawn"] as const) {
         const home = mkdtempSync(join(tmpdir(), "p12-rss-"));
         vi.stubEnv("FABRIKA_HOME", home);
         const samples: Array<Exit.Exit<unknown, unknown>> = [];
+
         const tracer = Tracer.make({
           span: (...args) => {
             const span = Tracer.nativeTracer.span(...args);
@@ -148,14 +166,19 @@ for (const mode of ["exit", "spawn"] as const) {
 
               end(time, exit);
             };
+
             return span;
           },
         });
+
         const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
           const call = JSON.parse(bodyText(options));
+
           return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
         });
+
         const kill = vi.spyOn(process, "kill").mockReturnValue(true);
+
         const spawner = Layer.succeed(
           ChildProcessSpawner.ChildProcessSpawner,
           ChildProcessSpawner.make(() => {
@@ -204,6 +227,7 @@ for (const mode of ["exit", "spawn"] as const) {
               Effect.withTracer(tracer),
             ),
           );
+
           expect(Exit.isSuccess(exit)).toBe(true);
           expect(kill).not.toHaveBeenCalled();
           expect(samples).toHaveLength(1);

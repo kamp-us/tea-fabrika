@@ -14,6 +14,7 @@ export const rssStandIn = (kib: (pid: number) => number | null) =>
     ChildProcessSpawner.ChildProcessSpawner,
     Effect.gen(function* () {
       const real = yield* ChildProcessSpawner.ChildProcessSpawner;
+
       return ChildProcessSpawner.make((command) => {
         const sample =
           command._tag === "StandardCommand" &&
@@ -22,6 +23,7 @@ export const rssStandIn = (kib: (pid: number) => number | null) =>
           command.args[0] === "-o" &&
           command.args[1] === "rss=" &&
           command.args[2] === "-p";
+
         const answer = sample ? kib(Number(command.args[3])) : null;
 
         if (answer === null) {
@@ -29,6 +31,7 @@ export const rssStandIn = (kib: (pid: number) => number | null) =>
         }
 
         const stdout = Stream.make(new TextEncoder().encode(`${answer}\n`));
+
         return Effect.succeed(
           ChildProcessSpawner.makeHandle({
             pid: ChildProcessSpawner.ProcessId(0),

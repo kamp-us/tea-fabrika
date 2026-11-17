@@ -9,6 +9,7 @@ it.effect.prop(
   ({ module }) =>
     Effect.gen(function* () {
       const file = "next/packages/libfabrika/src/cloudflare/objects.ts";
+
       const fires = yield* Effect.promise(() =>
         plant({
           [file]: [
@@ -22,6 +23,7 @@ it.effect.prop(
           ].join("\n"),
         }),
       );
+
       expect([...new Set(fires("eslint(no-restricted-imports)", file))]).toEqual([1, 6]);
     }),
   { arbitrary: { seed: 119120, runs: 4 } },

@@ -60,6 +60,7 @@ export const lintWorkflow = (text: string): string[] => {
 
   const workflow = map(source);
   const errors: string[] = [];
+
   const require: Require = (holds, reason) => {
     if (!holds) {
       errors.push(`check.yaml: ${reason}`);
@@ -78,6 +79,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
     const check = read(".github/workflows/check.yaml");
     const files = cacheFiles(read);
+
     const errors = [
       ...lintWorkflow(check),
       ...lintScheduled(read(".github/workflows/scheduled.yaml"), check),

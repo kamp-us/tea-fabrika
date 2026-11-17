@@ -26,8 +26,11 @@ import { Activity, Down, Owner, ProcessEvent, ProcessTable, Recipient, signalId,
 import { processTableFor } from "./processTable.ts";
 
 const RUNS = { seed: 119120, numRuns: 100 };
+
 const NAMES = ["counter:1", "counter:2", "echo:1"];
+
 const REFS = ["watch-a", "watch-b"];
+
 const REASONS = ["crashed", "normal", "shutdown"] as const;
 
 /** Each text reason as the exit it names; restarts and downs keep the text. */
@@ -38,17 +41,26 @@ const EXITS: Record<(typeof REASONS)[number], ExitReason> = {
 };
 
 const sameExit = Schema.toEquivalence(ExitReason);
+
 const BRAIN_OWNER = Owner.cases.brain.make({});
+
 const OWNERS = [BRAIN_OWNER, Owner.cases.process.make({ process: A })];
+
 const CLIENT_TO = Recipient.cases.client.make({ client: "window-a", session: X });
+
 /** The sessions `held` is asked about: the walk's one client session, and one that holds nothing. */
 const SESSIONS = [X, "session-none"];
+
 const T0 = 1_762_500_000_000;
 
 type Machine = ReturnType<typeof processTableFor>;
+
 type Model = Machine["model"]["Type"];
+
 type Registered = typeof ProcessEvent.cases.registered.Type;
+
 type To = typeof Recipient.Type;
+
 type Owned = typeof Owner.Type;
 
 type Life = {
@@ -108,6 +120,7 @@ const Choice = fc.record({
   crashes: fc.integer({ min: 1, max: 9 }),
   until: fc.nat(),
 });
+
 type Choice = typeof Choice extends fc.Arbitrary<infer T> ? T : never;
 
 /** A walk with replay cuts: the cuts index into the walk's accepted entries. */
@@ -148,6 +161,7 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
   ): Entry => {
     rev++;
     const line = lineFor(from({ by }), value);
+
     return {
       ...line,
       body: body ?? line.body,
@@ -173,11 +187,13 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
 
     if (move < 10) {
       const owner = at(OWNERS, c.other) ?? BRAIN_OWNER;
+
       const event = ProcessEvent.cases.registered.make({
         name,
         program: c.other % 3 === 0 ? "echo" : "counter",
         owner,
       });
+
       const entry = entryFor(event);
       names = put(names, name, event);
       steps.push({ effect: "applied", entry, after: reached() });
@@ -186,6 +202,7 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
       const process = c.other % 3 === 0 && life !== undefined ? target : (unused[fresh++ % unused.length] ?? absent);
       const code = { program: c.other % 2 === 0 ? CODE.program : "echo", hash: `build-${c.pick % 3}` };
       const entry = entryFor(ProcessEvent.cases.started.make({ process, name, ...code }));
+
       const started: Life = {
         name,
         state: State.cases.live.make({ process, code }),
@@ -193,11 +210,13 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
         from: entry,
         rev: entry.rev,
       };
+
       lives = put(lives, process, started);
       current = put(current, name, process);
       steps.push({ effect: "applied", entry, after: reached() });
     } else if (move < 55) {
       const restartName = c.other % 4 === 0 ? name : (life?.name ?? name);
+
       const event =
         move < 35
           ? ProcessEvent.cases.restarted.make({
@@ -210,6 +229,7 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
           : move < 45
             ? ProcessEvent.cases.exited.make({ process: target, reason: EXITS[c.reason] })
             : ProcessEvent.cases.down.make({ process: target, reason: c.reason, crashes: c.crashes, until: c.until });
+
       const entry = entryFor(event);
 
       if (life === undefined) {
@@ -225,6 +245,7 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
           after: event.after,
           reason: event.reason,
         });
+
         lives = put(lives, target, { ...life, request });
         restarts = put(restarts, event.name, [...(restarts.get(event.name) ?? []), entry.arrivedAt]);
       } else {
@@ -256,8 +277,10 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
       // A repeat of a watch the fold holds, live or canceled, else a new recipient and ref.
       const old = c.other % 2 === 0 ? at(watching, c.pick) : undefined;
       const watched = old !== undefined && c.other % 4 !== 0 ? old.process : target;
+
       const to =
         old?.to ?? (c.pick % 3 === 0 ? CLIENT_TO : Recipient.cases.process.make({ process: at(known, c.other) ?? B }));
+
       const ref = old?.ref ?? at(REFS, c.other) ?? "watch-a";
       const entry = entryFor(ProcessEvent.cases.monitored.make({ ref, process: watched, to }));
       const key = keyFor(to, ref);
@@ -325,6 +348,7 @@ const record = (machine: Machine, model: Model, entry: Entry): Model =>
 
 const thrown = (run: () => unknown): unknown => {
   const result = Result.try(run);
+
   return Result.isFailure(result) ? result.failure : undefined;
 };
 
@@ -337,6 +361,7 @@ const shown = (w: Watch) => ({
 
 const parent = (s: Folded, process: string, owner: Owned) => {
   const life = s.lives.get(process);
+
   return life === undefined ? "ended" : sameOwner(s.names.get(life.name)?.owner, owner) ? life : "not_parent";
 };
 
@@ -353,6 +378,7 @@ const pids = (s: Folded): ReadonlyArray<string> => [...s.lives.keys(), PIDS.find
 /** Every query answer, for one reached state, through the public table. */
 const answers = (table: ProcessTable, s: Folded) => {
   const caller = (owner: Owned) => ({ owner, recipient: CLIENT_TO });
+
   const lifecycle = pids(s).map((p) => ({
     life: Option.getOrUndefined(table.life(p)),
     live: table.isLive(p),
@@ -363,11 +389,14 @@ const answers = (table: ProcessTable, s: Folded) => {
     inbound: table.inbound(p),
     outbound: table.outbound(p),
   }));
+
   const statuses = NAMES.map((name) => OWNERS.map((owner) => answer(table.status(name, owner))));
+
   const starts = [...s.lives.values()].flatMap((life) => [
     started(table.start(life.request, caller(s.names.get(life.name)?.owner ?? BRAIN_OWNER), life.from)),
     started(table.start({ ...life.request, name: "renamed:1" }, caller(BRAIN_OWNER), life.from)),
   ]);
+
   const fresh = NAMES.flatMap((name) => [
     started(
       table.start(Start.cases.first.make({ id: `fresh:${name}`, name, code: CODE }), caller(BRAIN_OWNER), from()),
@@ -388,6 +417,7 @@ const answers = (table: ProcessTable, s: Folded) => {
       ),
     ),
   ]);
+
   const watches = [
     ...s.watches.values(),
     { tag: "live", ref: "watch-none", process: A, to: CLIENT_TO, round: 0 } as const,
@@ -395,11 +425,14 @@ const answers = (table: ProcessTable, s: Folded) => {
     demonitor: Option.getOrUndefined(table.demonitor(w.ref, w.to)),
     monitor: [w.process, B].map((process) => {
       const result = table.monitor(w.ref, process, w.to);
+
       return Result.isFailure(result) ? result.failure.reason : Option.getOrUndefined(result.success);
     }),
     deliver: deliveries(w).map(({ entry, m, receiver }) => table.deliver(entry, m, receiver)),
   }));
+
   const held = SESSIONS.map((session) => table.held(session));
+
   return { lifecycle, statuses, starts, fresh, watches, held, info: table.info };
 };
 
@@ -433,8 +466,10 @@ const deliveries = (w: Watch) =>
 const expected = (s: Folded) => {
   const live = (p: string) => s.lives.get(p)?.state._tag === "live";
   const liveWatches = [...s.watches.values()].filter((w) => w.tag === "live");
+
   const lifecycle = pids(s).map((p) => {
     const owned = parent(s, p, BRAIN_OWNER);
+
     return {
       life: s.lives.get(p),
       live: live(p),
@@ -452,26 +487,34 @@ const expected = (s: Folded) => {
       outbound: liveWatches.filter((w) => w.to._tag === "process" && w.to.process === p).map(shown),
     };
   });
+
   const statuses = NAMES.map((name) =>
     OWNERS.map((owner) => {
       const process = s.current.get(name);
       const owned = process === undefined ? "ended" : parent(s, process, owner);
+
       return typeof owned === "string" ? owned : { name, state: owned.state, restarts: s.restarts.get(name) ?? [] };
     }),
   );
+
   const lives = [...s.lives.values()];
+
   // A retry of a saved request answers with its process once the caller owns its name; the same
   // id with another request is reused.
   const starts = lives.flatMap((life) => {
     const retry = parent(s, life.state.process, s.names.get(life.name)?.owner ?? BRAIN_OWNER);
+
     return [typeof retry === "string" ? retry : { process: life.state.process, rev: life.rev }, "id_reused"];
   });
+
   const fresh = NAMES.flatMap((name) => {
     const reserved = s.names.get(name);
+
     return [
       reserved === undefined ? undefined : "name_taken",
       ...OWNERS.map((owner) => {
         const after = s.current.get(name) ?? A;
+
         return reserved === undefined || !sameOwner(reserved.owner, owner)
           ? "not_parent"
           : reserved.program !== CODE.program
@@ -484,11 +527,13 @@ const expected = (s: Folded) => {
       }),
     ];
   });
+
   const watches = [
     ...s.watches.values(),
     { tag: "live", ref: "watch-none", process: A, to: CLIENT_TO, round: 0 } as const,
   ].map((w) => {
     const held = s.watches.get(keyFor(w.to, w.ref));
+
     return {
       demonitor: held?.tag === "live" ? shown(held) : undefined,
       monitor: [w.process, B].map((process) =>
@@ -509,6 +554,7 @@ const expected = (s: Folded) => {
       ),
     };
   });
+
   const info = lives
     .filter((life) => life.state._tag === "live")
     .map((life) => ({
@@ -518,11 +564,13 @@ const expected = (s: Folded) => {
       build: life.state.code.hash,
       restarts: s.restarts.get(life.name)?.length ?? 0,
     }));
+
   // A session holds its live watches on processes that still run. A watch on a process that exited,
   // or is down, already sent its DOWN, and as in OTP a monitor that fired is gone (ticket 979).
   const held = SESSIONS.map((session) =>
     liveWatches.filter((w) => w.to._tag === "client" && w.to.session === session && live(w.process)).map(shown),
   );
+
   return { lifecycle, statuses, starts, fresh, watches, held, info };
 };
 
@@ -561,6 +609,7 @@ describe("ticket 704: the process table's fold is one tea machine", () => {
             expect(fromMachine).not.toBeInstanceOf(LedgerError);
             expect(fromTable).toBeDefined();
             expect(fromTable).not.toBeInstanceOf(LedgerError);
+
             return before;
           }
 
@@ -617,6 +666,7 @@ describe("ticket 704: the process table's fold is one tea machine", () => {
           expect(got.lifecycle.map((p) => p.life)).toEqual(want.lifecycle.map((p) => p.life));
           expect(got.statuses).toEqual(want.statuses);
           expect(got.info).toEqual(want.info);
+
           return after;
         });
       }),
@@ -635,6 +685,7 @@ describe("ticket 704: the process table's fold is one tea machine", () => {
             expect(fromMachine).toMatchObject({ reason: "bad_row" });
             expect(fromTable).toBeInstanceOf(LedgerError);
             expect(fromTable).toMatchObject({ reason: "bad_row" });
+
             return before;
           }
 
@@ -646,6 +697,7 @@ describe("ticket 704: the process table's fold is one tea machine", () => {
           expect(folded(after)).toEqual(step.after);
           const table = new ProcessTable([...log, step.entry], BRAIN);
           expect(answers(table, step.after)).toEqual(expected(step.after));
+
           return after;
         });
       }),
@@ -669,6 +721,7 @@ describe("ticket 704: the process table's fold is one tea machine", () => {
           const got = answers(table, step.after).watches;
           const want = expected(step.after).watches;
           expect(got.map((w) => [w.demonitor, w.monitor])).toEqual(want.map((w) => [w.demonitor, w.monitor]));
+
           return after;
         });
       }),
@@ -686,6 +739,7 @@ describe("ticket 704: the process table's fold is one tea machine", () => {
 
           const table = new ProcessTable([...log, step.entry], BRAIN);
           expect(answers(table, step.after)).toEqual(expected(step.after));
+
           return record(machine, before, step.entry);
         });
       }),
@@ -697,12 +751,14 @@ describe("ticket 704: the process table's fold is one tea machine", () => {
       fc.property(Walk, ({ choices, cuts }) => {
         const steps = walk(choices);
         const kept: Array<{ readonly model: Model; readonly copy: Model }> = [];
+
         const models = replay(steps, (step, _log, before, machine) => {
           if (!("after" in step)) {
             return before;
           }
 
           kept.push({ model: before, copy: structuredClone(before) });
+
           return record(machine, before, step.entry);
         });
 
@@ -713,14 +769,17 @@ describe("ticket 704: the process table's fold is one tea machine", () => {
         const log = steps.flatMap((step) =>
           step.effect === "applied" || step.effect === "ignored" ? [step.entry] : [],
         );
+
         const last = models.at(-1);
         const machine = processTableFor(BRAIN);
 
         for (const cut of cuts) {
           const n = cut % (log.length + 1);
+
           const resumed = log
             .slice(n)
             .reduce((model, entry) => record(machine, model, entry), models[n] ?? init(machine));
+
           expect(resumed, `resumed after ${n} entries`).toEqual(last);
         }
 
@@ -738,16 +797,28 @@ describe("ticket 704: the process table's fold is one tea machine", () => {
 
 // Type laws: a Model's collections expose no update operation, and a watch has no canceled flag.
 type Held = Model["watches"] extends ReadonlyMap<string, infer W> ? W : never;
+
 type Times = Model["restarts"] extends ReadonlyMap<string, infer T> ? T : never;
+
 expectTypeOf<Model>().toEqualTypeOf<Readonly<Model>>();
+
 expectTypeOf<Model["names"]>().not.toHaveProperty("set");
+
 expectTypeOf<Model["lives"]>().not.toHaveProperty("set");
+
 expectTypeOf<Model["watches"]>().not.toHaveProperty("set");
+
 expectTypeOf<Model["watches"]>().not.toHaveProperty("delete");
+
 expectTypeOf<Model["current"]>().not.toHaveProperty("set");
+
 expectTypeOf<Model["restarts"]>().not.toHaveProperty("set");
+
 expectTypeOf<Times>().not.toHaveProperty("push");
+
 // Each case on its own: `keyof` of a union keeps only the keys every case shares.
 type Fields<T> = T extends unknown ? keyof T : never;
+
 expectTypeOf<"canceled" extends Fields<Held> ? true : false>().toEqualTypeOf<false>();
+
 expectTypeOf<Held["_tag"]>().toEqualTypeOf<"live" | "canceled">();

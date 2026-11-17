@@ -1,5 +1,5 @@
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as Id from "../../Id.ts";
 import { Branch, Hash, ObjectId } from "../../repositories/Repositories.ts";
 import { Snapshot } from "../../settings/Snapshot.ts";
@@ -20,11 +20,15 @@ export const CheckedSelection = Schema.Struct({
   settings: Snapshot,
   person: Id.Person,
 });
+
 /** @internal */
 export type CheckedSelection = typeof CheckedSelection.Type;
+
 /** @internal */
 export const Refusal = Schema.Literals(["denied", "storage", "invalid_document", "read_failed", "invalid_history"]);
+
 const checking = { selection: Id.InputId, snapshot: Schema.NullOr(CheckedSelection) };
+
 const selected = { selection: Id.InputId, snapshot: CheckedSelection };
 
 const State = Schema.TaggedUnion({
@@ -74,7 +78,7 @@ export const machine = Machine.make({
       }
 
       const snapshot = s.snapshot;
-      let decision: typeof TrustDecision.Type | undefined;
+      let decision: TrustDecision | undefined;
       const selections = new Map<Id.InputId, typeof Event.cases.selected.Type>();
 
       for (const event of m.events) {

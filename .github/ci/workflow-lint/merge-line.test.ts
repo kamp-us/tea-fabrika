@@ -288,8 +288,11 @@ it("T1 (0536): the tooling project, the schedule's tooling job's one project, ho
 // T1 (0539) holds every workflow a pull request or the merge queue starts, host.yaml among them: its
 // one vitest call runs inside next/ with no `--project`, which only `working-directory` makes safe.
 const hostPath = ".github/workflows/host.yaml";
+
 const hostYaml = () => parse(readFileSync(new URL("../../workflows/host.yaml", import.meta.url), "utf8"));
+
 const l13 = (w: Parsed) => step(w, "launchd", "L13");
+
 const hostError = `${hostPath}: T1: launchd runs no tooling test (0539)`;
 
 it("scenario: the checked-in host.yaml runs no tooling test", () => {

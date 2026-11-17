@@ -20,6 +20,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { programPackageLayout } from "./program-package-layout.ts";
 
 const ROOT = resolve(import.meta.dirname, "..");
+
 const runs = { seed: 119120, numRuns: 8 };
 
 // fast-check 4.10.2 counts `examples` inside `numRuns`: they run first, and the run stops at
@@ -58,7 +59,9 @@ const CODE = "fabrika(program-package-layout)";
 
 // RuleTester runs each file at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester();
 
 // Every plant gets a scratch home of its own, `<scratch>/<i>`. A home holds only its own plant, so
@@ -149,7 +152,10 @@ const cli = (plants: readonly Plant[]): Finding[][] => {
   try {
     copyFileSync(join(ROOT, ".oxlintrc.json"), join(scratch, ".oxlintrc.json"));
     symlinkSync(join(ROOT, "oxlint-plugins"), join(scratch, "oxlint-plugins"));
+    // The config loads the vendored anti-slop plugins from here (0563).
+    symlinkSync(join(ROOT, "vendor"), join(scratch, "vendor"));
     const linted = write(scratch, plants).flat();
+
     const result = spawnSync(
       join(ROOT, "node_modules/.bin/oxlint"),
       [
@@ -162,6 +168,7 @@ const cli = (plants: readonly Plant[]): Finding[][] => {
       ],
       { cwd: scratch, encoding: "utf8" },
     );
+
     expect(result.stdout, result.stderr).not.toBe("");
     const report: { number_of_files: number; diagnostics: Finding[] } = JSON.parse(result.stdout);
     // oxlint lints each path it is given once and nothing else, so the total says every plant's
@@ -170,6 +177,7 @@ const cli = (plants: readonly Plant[]): Finding[][] => {
     const findings = report.diagnostics.filter((d) => d.code === CODE);
     // Every finding sits in one plant's home; the rest of the scratch folder holds no source.
     expect(findings.filter((d) => !/^\d+\//.test(d.filename))).toEqual([]);
+
     return plants.map((_, i) => findings.filter((d) => d.filename.startsWith(`${i}/`)));
   } finally {
     rmSync(scratch, { recursive: true, force: true });
@@ -182,6 +190,7 @@ let seen: { readonly plant: Plant; readonly found: readonly Finding[] }[] = [];
 const lint = (plants: readonly Plant[]): Finding[][] => {
   const found = inProcess(plants);
   seen.push(...plants.map((plant, i) => ({ plant, found: found[i]! })));
+
   return found;
 };
 
@@ -211,6 +220,7 @@ describe("fabrika/program-package-layout", () => {
   // Review 7 of P16b: the platform packages the laws draw are declared, as a program would declare
   // them, so a link to one resolves to nothing and passes unless the rule knows it by name.
   const declared = { dependencies: { "@cloudflare/containers": "1.0.0", wrangler: "1.0.0" } };
+
   // Review 6 of P16b: a link that resolves to nothing is unjudged, save these. A Node builtin has no
   // file to resolve to, and a package the manifest depends on is outside code not installed in the
   // scratch package; a `#` alias is fine when every target its entry names is one of them.
@@ -237,6 +247,7 @@ describe("fabrika/program-package-layout", () => {
       },
     },
   ];
+
   it("accepts a pure entry, conditional exports and a real ./window; no window needs no stub", () => {
     fc.assert(
       fc.property(name, fc.boolean(), (name, window) => {
@@ -244,6 +255,7 @@ describe("fabrika/program-package-layout", () => {
           "src/program.ts": 'export {helper} from "./helper.ts";',
           "src/helper.ts": "export const helper = 1;",
         };
+
         const exports: Record<string, unknown> = {
           ".": { import: "./src/program.ts", default: "./src/program.ts" },
         };
@@ -263,6 +275,7 @@ describe("fabrika/program-package-layout", () => {
             package: { manifest: (fields: Readonly<Record<string, unknown>>) => ({ ...fields, ...manifest }) },
           })),
         ]);
+
         expect(plain).toEqual([]);
 
         fine.forEach(({ line }, i) => {
@@ -317,6 +330,7 @@ describe("fabrika/program-package-layout", () => {
               ...files,
               [`src/${condition}.ts`]: statement,
             });
+
             expect(findings).toHaveLength(1);
             expect(findings[0]?.message).toBe("Pure program code cannot import Worker runtime APIs.");
           }
@@ -532,20 +546,25 @@ describe("fabrika/program-package-layout", () => {
   });
   // Review 1 of P16b: the rule knew Worker entries and windows only by a fixed list of names.
   const segment = fc.stringMatching(/^[a-z][a-z0-9-]{0,7}$/);
+
   const key = fc
     .array(segment, { minLength: 1, maxLength: 2 })
     .map((parts) => `./${parts.join("/")}`)
     // Keep libfabrika's own entry names out, so only what an export loads can catch it.
     .filter((key) => key !== "./window" && !/\/(?:worker|workers|workerd|box|brain)(?:\/|$)/.test(key));
+
   const path = fc
     .array(segment, { minLength: 1, maxLength: 2 })
     .map((parts) => `src/${parts.join("/")}`)
     .filter((path) => path !== "src/program");
+
   const three = (values: fc.Arbitrary<string>) =>
     fc
       .uniqueArray(values, { minLength: 3, maxLength: 3 })
       .map((all): [string, string, string] => [all[0] ?? "", all[1] ?? "", all[2] ?? ""]);
+
   const imports = "Pure program code cannot import Worker runtime APIs.";
+
   // Each Worker shape: whether it defines a Worker (a class or a handler), and what the per-line
   // check says of it when '.' loads it as pure code.
   const shapes: readonly {
@@ -663,6 +682,7 @@ describe("fabrika/program-package-layout", () => {
       pure: [imports],
     },
   ];
+
   // How the Worker file is reached from its export: itself, a `.ts` link, a link written without
   // an extension, which TypeScript resolves, a symlink to a file outside the package, or a link
   // out of the package, relative or (review 7 of P16b) absolute. Review 6 of P16b: the Worker file itself, with its Worker runtime import
@@ -680,9 +700,11 @@ describe("fabrika/program-package-layout", () => {
     "imports condition",
     "imports pattern",
   ] as const;
+
   // The Worker runtime name a shape links, if any.
   const runtimeName =
     /"(cloudflare:workers|@kampus\/libfabrika\/box|workerd|miniflare|@cloudflare\/containers|wrangler)"/;
+
   // How the package exports the Worker file: its own key, a pattern key, or a runtime condition
   // of '.' beside the pure program. Review 3 of P16b: a fallback array on a key, inside a
   // condition, or under a runtime condition of '.'; a pattern whose target has no `*`; and a
@@ -701,6 +723,7 @@ describe("fabrika/program-package-layout", () => {
     "window",
     "window tsx",
   ] as const;
+
   // Review 5 of P16b: the manifest's name, which a pattern asks the package's own exports by. With
   // none, or one that is not a string, every subpath a pattern matches counts as offered.
   const manifests = {
@@ -708,6 +731,7 @@ describe("fabrika/program-package-layout", () => {
     "no name": ({ name: _, ...fields }: Readonly<Record<string, unknown>>) => fields,
     "number name": (fields: Readonly<Record<string, unknown>>) => ({ ...fields, name: 7 }),
   } as const;
+
   const box = /\/(?:worker|workers|workerd|box|brain)(?:\/|$)/;
   it("plants: a Worker entry or a window behind any other export key is refused, by what it loads", () => {
     fc.assert(
@@ -870,6 +894,7 @@ describe("fabrika/program-package-layout", () => {
                 },
               })),
             ).map((findings) => findings.map((d) => d.message).sort());
+
           // A pure extra export and a window at './window' are fine; an unexported .ts is not judged.
           expect(atBase).toEqual(stray);
           // At './window' the Worker takes the real window's place, which nobody exports then.
@@ -1185,6 +1210,7 @@ describe("fabrika/program-package-layout", () => {
               run(name, exports, files, { manifest: (fields) => ({ ...fields, ...declared }) })
                 .map((d) => d.message)
                 .sort();
+
           expect(messages(as("./src/program.ts"))).toEqual([]);
           expect(messages(as("./src/worker.ts"))).toEqual(
             [
@@ -1258,6 +1284,7 @@ describe("fabrika/program-package-layout", () => {
             "src/helper.ts": 'export const load = async () => { return import("./nested/runtime.ts"); };',
             "src/nested/runtime.ts": 'export const load = () => import("../helper.ts"); export const pure = 1;',
           };
+
           expect(run(name, { ".": "./src/program.ts" }, files)).toEqual([]);
 
           for (const statement of [
@@ -1269,6 +1296,7 @@ describe("fabrika/program-package-layout", () => {
               ...files,
               "src/nested/runtime.ts": `${files["src/nested/runtime.ts"]}\n${statement}`,
             };
+
             expect(
               run(name, { ".": "./src/program.ts" }, planted, {
                 manifest: (fields) => ({ ...fields, ...declared }),
@@ -1292,7 +1320,9 @@ describe("fabrika/program-package-layout", () => {
                 ? `import type {${binding}} from "cloudflare:workers";`
                 : `import {type ${binding}} from "cloudflare:workers";`,
             files = { "src/program.ts": `${statement} export type {${alias}};` };
+
           expect(run(name, { ".": "./src/program.ts" }, files)).toEqual([]);
+
           // Plant a runtime import of the same name in the same pure entry.
           const findings = run(
             name,
@@ -1301,6 +1331,7 @@ describe("fabrika/program-package-layout", () => {
               "src/program.ts": `import {${binding}} from "cloudflare:workers"; export {${alias}};`,
             },
           );
+
           expect(findings).toHaveLength(1);
           expect(findings[0]?.message).toBe("Pure program code cannot import Worker runtime APIs.");
         }),
@@ -1318,7 +1349,9 @@ describe("fabrika/program-package-layout", () => {
               form === "declaration"
                 ? `export type {${binding}} from "cloudflare:workers";`
                 : `export {type ${binding}} from "cloudflare:workers";`;
+
           expect(run(name, { ".": "./src/program.ts" }, { "src/program.ts": statement })).toEqual([]);
+
           // Plant a runtime re-export of the same name in the same pure entry.
           const findings = run(
             name,
@@ -1327,6 +1360,7 @@ describe("fabrika/program-package-layout", () => {
               "src/program.ts": `export {${binding}} from "cloudflare:workers";`,
             },
           );
+
           expect(findings).toHaveLength(1);
           expect(findings[0]?.message).toBe("Pure program code cannot export Worker runtime APIs.");
           // A type-only specifier must not hide a value specifier in the same declaration.
@@ -1393,10 +1427,12 @@ describe("fabrika/program-package-layout", () => {
       ],
       { cwd: ROOT, encoding: "utf8" },
     );
+
     const report: {
       number_of_files: number;
       diagnostics: Array<{ code?: string; filename: string; message: string }>;
     } = JSON.parse(result.stdout);
+
     expect(report.number_of_files).toBeGreaterThan(0);
     const findings = report.diagnostics.filter((d) => d.code === "fabrika(program-package-layout)");
     console.log(

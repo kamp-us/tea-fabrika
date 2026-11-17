@@ -22,6 +22,7 @@ import {
 // GitHub's jobs API and Vitest's JSON reporter write them; every other input is broken. Each plant
 // was run once on time-table.ts and restored, and turned its law red.
 const options = { seed: 119120, numRuns: 100 };
+
 const root = resolve("time-table-fixture");
 
 // A jobs API answer read while the time table step runs: the steps before it ended, the upload and
@@ -95,6 +96,7 @@ const rowsUnder = (text: string, heading: string): string[] => {
   const after = text.slice(text.indexOf(heading));
   const lines = after.split("\n").filter((line) => line.startsWith("| "));
   const end = lines.findIndex((line, i) => i > 1 && line === "| File | Seconds | Tests | Result |");
+
   return lines.slice(2, end < 0 ? undefined : end);
 };
 
@@ -149,6 +151,7 @@ it("TT1: a jobs API answer gives each step's result, start and end, a table of t
             s.completed_at === null
               ? "-"
               : String(Math.round((Date.parse(s.completed_at) - Date.parse(s.started_at!)) / 1000));
+
           return `| ${s.name} | ${s.conclusion ?? s.status} | ${took} |`;
         }),
       );
@@ -183,21 +186,25 @@ it("TT2: a Vitest report gives every file to the artifact and the slowest ten, s
   fc.assert(
     fc.property(vitestReport, (given) => {
       const files = readFiles(given, root);
+
       const rows = given.testResults.map((file) => ({
         path: relative(root, file.name),
         seconds: (file.endTime - file.startTime) / 1000,
         tests: file.assertionResults.length,
         result: file.status,
       }));
+
       expect(files).toEqual({ _tag: "read", rows });
       const text = markdown({ ...leg, steps: { _tag: "read", rows: [] }, files });
       const total = rows.reduce((sum, file) => sum + file.seconds, 0);
       const count = Math.min(rows.length, SLOWEST);
       expect(text).toContain(`${rows.length} files, ${total.toFixed(1)} s in all. The ${count} slowest:`);
       const byPath = new Map(rows.map((file) => [file.path, file]));
+
       const listed = rowsUnder(text, "### Slowest test files").map((line) =>
         byPath.get(line.split(" | ")[0]!.slice(2))!,
       );
+
       expect(listed).toHaveLength(count);
 
       for (const [i, file] of listed.entries()) {
@@ -217,6 +224,7 @@ it("TT2: a Vitest report gives every file to the artifact and the slowest ten, s
 it("format: TT3: a leg's artifact holds the run, the event, the head, the leg, every step and every file, and no test output", async () => {
   // Plant: take the sha from GITHUB_SHA, a pull request's merge commit, instead of HEAD.
   const report = { testResults: [testFile("next/a.test.ts", 5000, 2500, 3), testFile("next/b.test.ts", 5000, 500, 1)] };
+
   const timings = await timingsOf(
     { ...env, GITHUB_SHA: "m".repeat(40) },
     io(
@@ -224,6 +232,7 @@ it("format: TT3: a leg's artifact holds the run, the event, the head, the leg, e
       () => JSON.stringify(report),
     ),
   );
+
   expect(timings).toEqual({
     run: "43633120187",
     attempt: "1",
@@ -264,11 +273,13 @@ it("TT4: any input that is not a job or not a report gives an unavailable sectio
       fc.pre(!isJob || readSteps(steps)._tag === "unavailable");
       fc.pre(!isReport || readFiles(files, root)._tag === "unavailable");
       const read = readSteps(job);
+
       const timings: Timings = {
         ...{ run: "", attempt: "", workflow: "", event: "", sha: "", job: "", leg: "" },
         steps: readSteps(steps),
         files: readFiles(files, root),
       };
+
       expect(timings.steps._tag).toBe("unavailable");
       expect(timings.files._tag).toBe("unavailable");
       const text = markdown(timings);
@@ -292,12 +303,16 @@ it("TT5: whatever the environment holds and whatever GitHub or the report file a
       fc.boolean(),
       async (dropped, answer, apiThrows, report, readThrows) => {
         const partial = Object.fromEntries(Object.entries(env).filter(([name]) => !dropped.includes(name)));
+
         const timings = await timingsOf(partial, {
           job: () =>
-            apiThrows ? Effect.fail(new Unread({ cause: new Error("socket hang up") })) : Effect.succeed(answer),
+            apiThrows ? Effect.fail(Unread.make({ cause: new Error("socket hang up") })) : Effect.succeed(answer),
           read: () =>
-            readThrows ? Effect.fail(new Unread({ cause: new Error("ENOENT: no such file") })) : Effect.succeed(report),
+            readThrows
+              ? Effect.fail(Unread.make({ cause: new Error("ENOENT: no such file") }))
+              : Effect.succeed(report),
         });
+
         expect(["read", "unavailable"]).toContain(timings.steps._tag);
         expect(["read", "unavailable"]).toContain(timings.files._tag);
         expect(timings.job).toBe(partial["GITHUB_JOB"] ?? "");
@@ -329,17 +344,20 @@ it("TT6: the jobs API is asked again, a pause apart, until the steps before this
   await fc.assert(
     fc.asyncProperty(fc.integer({ min: 0, max: TRIES + 3 }), async (late) => {
       const asked: number[] = [];
+
       const timings = await timingsOf(
         env,
         io(
           () => {
             asked.push(performance.now());
+
             return asked.length > late ? job : running;
           },
           () => "{}",
         ),
         pause,
       );
+
       expect(asked).toHaveLength(Math.min(late + 1, TRIES));
 
       // A timer never fires early, so each ask after the first waited at least the pause; the
@@ -364,14 +382,17 @@ it("TT7: a step or file name with a pipe or a line break stays in its own cell",
         start: "2026-11-14T10:00:00Z",
         end: "2026-11-14T10:00:01Z",
       }));
+
       const text = markdown({
         ...{ run: "", attempt: "", workflow: "", event: "", sha: "", job: "a|b", leg: "1\n2" },
         steps: { _tag: "read", rows },
         files: { _tag: "read", rows: names.map((path) => ({ path, seconds: 1, tests: 1, result: "passed" })) },
       });
+
       const lines = text
         .split("\n")
         .filter((line) => line.startsWith("| ") && !/^\| ---:?(?: \| ---:?)* \|$/.test(line));
+
       expect(lines).toHaveLength(2 + names.length + Math.min(names.length, SLOWEST));
 
       for (const line of lines) {

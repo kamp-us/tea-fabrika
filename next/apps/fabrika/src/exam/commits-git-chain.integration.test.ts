@@ -106,10 +106,12 @@ describe("ask exam_read (p85)", () => {
         r.commit();
         r.sign("tests");
         const summary = join(r.dir, ".summary");
+
         const out = r.run(["check", "--base", r.base, "--head", "HEAD"], {
           ...ENV,
           GITHUB_STEP_SUMMARY: summary,
         });
+
         expect(out.answers).toEqual([ask(name)]);
         const lines = out.out.split("\n");
         expect(lines.some((l) => l.startsWith("::add-mask::"))).toBe(false);
@@ -263,11 +265,13 @@ describe("chain after the merge (p86 and p89)", () => {
     expect(r.run(["chain", "--squash", squash])).toMatchObject({ code: 0, answers: [DONE] });
     // A cause of null or a string is what an old link held, so it comes up often.
     const cause = fc.oneof(fc.constant(null), fc.string(), fc.jsonValue());
+
     const change = fc.oneof(
       cause.map((cause) => ({ _tag: "cause" as const, cause, keepParent: true })),
       cause.map((cause) => ({ _tag: "cause" as const, cause, keepParent: false })),
       fc.constantFrom({ _tag: "drop" as const, field: "parent" }, { _tag: "drop" as const, field: "traceId" }),
     );
+
     fc.assert(
       fc.property(fc.nat(rows.length - 1), change, (at, mutation) => {
         const bad = structuredClone(rows);
@@ -307,11 +311,13 @@ describe("chain after the merge (p86 and p89)", () => {
     const n2 = r.sign("lead");
     const c3 = r.change("b.ts");
     const n3 = r.sign("build");
+
     const { squash, rows } = squashed(r, [
       { note: n1, commit: c1 },
       { note: n2, commit: c2 },
       { note: n3, commit: c3 },
     ]);
+
     log(r, rows);
     const out = r.run(["chain", "--squash", squash]);
     expect(out.answers).toEqual([DONE]);
@@ -364,10 +370,12 @@ describe("chain after the merge (p86 and p89)", () => {
     r.git("add", "-A");
     r.git("commit", "-q", "--amend", "-m", "squash");
     const squash = r.head();
+
     const moved = rows.map((row) => ({
       ...row,
       attested: row.attested.map((l) => ({ ...l, squash })),
     }));
+
     log(r, moved);
     expect(r.run(["chain", "--squash", squash]).answers).toEqual([stuck("broken_chain", squash)]);
   });
@@ -387,6 +395,7 @@ describe("chain after the merge (p86 and p89)", () => {
     const n2 = r.sign("lead");
     const c3 = r.change("b.ts");
     const n3 = r.sign("build");
+
     const { squash, rows } = squashed(
       r,
       [
@@ -396,6 +405,7 @@ describe("chain after the merge (p86 and p89)", () => {
       ],
       true,
     );
+
     log(r, rows);
     expect(r.run(["chain", "--squash", squash])).toMatchObject({ code: 0, answers: [DONE] });
   });
@@ -420,6 +430,7 @@ describe("chain after the merge (p86 and p89)", () => {
     r.write("f.txt", "vuln\n");
     const squash = r.commit("squash that reverts the fix");
     const forged = r.git("commit-tree", tree, "-p", fix, "-m", "forged").trim();
+
     const rows = steps.map(({ note, commit }, i) => ({
       date: "2026-11-11",
       run: `r${i}`,
@@ -438,6 +449,7 @@ describe("chain after the merge (p86 and p89)", () => {
         },
       ],
     }));
+
     log(r, rows);
     expect(r.run(["chain", "--squash", squash]).answers).toEqual([stuck("broken_chain", squash)]);
   });
@@ -453,10 +465,12 @@ describe("chain after the merge (p86 and p89)", () => {
     r.write("allowed_signers", stepKeys("stranger"));
     const rotated = r.commit("rotate");
     r.git("checkout", "-q", "pr");
+
     const { squash, rows } = squashed(r, [
       { note: n1, commit: c1 },
       { note: n2, commit: c2 },
     ]);
+
     log(r, rows);
     expect(r.run(["chain", "--squash", squash]).answers).toEqual([stuck("broken_chain", squash)]);
     // A keys commit on a side branch, never on main: it holds the key, and still counts for nothing.
@@ -477,10 +491,12 @@ describe("chain after the merge (p86 and p89)", () => {
     const n1 = r.sign("lead");
     const c2 = r.change("b.ts");
     const n2 = r.sign("stranger");
+
     const { squash, rows } = squashed(r, [
       { note: n1, commit: c1 },
       { note: n2, commit: c2 },
     ]);
+
     rows[1]!.attested[0] = { ...rows[1]!.attested[0]!, keys: rotated };
     log(r, rows);
     expect(r.run(["chain", "--squash", squash]).answers).toEqual([DONE]);
@@ -493,10 +509,12 @@ describe("chain after the merge (p86 and p89)", () => {
     const n1 = r.sign("tests");
     const c2 = r.change("b.ts");
     const n2 = r.sign("stranger");
+
     const { squash, rows } = squashed(r, [
       { note: n1, commit: c1 },
       { note: n2, commit: c2 },
     ]);
+
     const main = r.head();
     r.git("checkout", "-q", "-b", "log", main);
     r.write("allowed_signers", stepKeys("stranger"));
@@ -518,10 +536,12 @@ describe("chain after the merge (p86 and p89)", () => {
     const { rows } = squashed(r, steps);
     const main = r.head();
     r.git("checkout", "-q", "-b", "log", main);
+
     const moved = rows.map((row) => ({
       ...row,
       attested: row.attested.map((l) => ({ ...l, squash: fake })),
     }));
+
     log(r, moved);
     expect(r.run(["chain", "--base", main, "--head", "HEAD"]).answers).toEqual([stuck("broken_chain", fake)]);
   });
@@ -532,10 +552,12 @@ describe("chain after the merge (p86 and p89)", () => {
     const steps = twoSteps(r);
     const { squash, rows } = squashed(r, steps);
     const twin = r.git("commit-tree", "-p", r.base, "-m", "twin", r.head(`${r.base}^{tree}`)).trim();
+
     const moved = rows.map((row) => ({
       ...row,
       attested: row.attested.map((l) => ({ ...l, base: twin })),
     }));
+
     log(r, moved);
     expect(r.run(["chain", "--squash", squash]).answers).toEqual([stuck("broken_chain", squash)]);
   });
@@ -563,10 +585,12 @@ describe("chain after the merge (p86 and p89)", () => {
     const newer = r.sign("tests", { version: 2 });
     r.git("checkout", "-q", "pr");
     const { squash, rows } = squashed(r, steps);
+
     const extra = {
       ...rows[0]!,
       attested: [{ ...rows[0]!.attested[0]!, ...newer, commit: c, squash: c }],
     };
+
     log(r, [...rows, extra]);
     expect(r.run(["chain", "--squash", squash]).answers).toEqual([stuck("stale_link", squash, { step: "tests" })]);
   });

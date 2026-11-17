@@ -3,8 +3,6 @@
  * step, for every caller, and for stopping one, OTP's `terminate_child`. Only a fresh start saves
  * anything: the child's `started` line and its first letter. This file holds the contract only
  * (0095); `ChildrenLedger.layer(...)` starts on the ledger.
- *
- * @stability unstable
  */
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
@@ -18,7 +16,6 @@ import { ProcessName } from "./Process.ts";
 /**
  * The most bytes a first letter's row may hold: the ledger's row limit.
  *
- * @stability unstable
  * @category constants
  */
 export const INPUT_BYTES = ROW_BYTES;
@@ -27,7 +24,6 @@ export const INPUT_BYTES = ROW_BYTES;
  * Schema for a host right, by program: a process of `source` may start a process of `to`. Read as
  * a set.
  *
- * @stability unstable
  * @category schemas
  */
 export const StartGrant = Schema.Struct({ source: Text, to: Text });
@@ -36,7 +32,6 @@ export const StartGrant = Schema.Struct({ source: Text, to: Text });
  * Schema for one request to start a child under a registered name. A retry of a saved `id`
  * answers that start's `started`, whatever happened since.
  *
- * @stability unstable
  * @category schemas
  */
 export const Child = Schema.Struct({
@@ -50,10 +45,10 @@ export const Child = Schema.Struct({
   /** The child's first letter, written in the start's own turn. */
   input: Schema.optionalKey(Schema.Json),
 });
+
 /**
  * One request to start a child, as `Child` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Child = typeof Child.Type;
@@ -62,7 +57,6 @@ export type Child = typeof Child.Type;
  * Schema for the answer to a start, in OTP's three answers: `{ok, Pid}`,
  * `{error, {already_started, Pid}}` and `{error, already_present}`.
  *
- * @stability unstable
  * @category schemas
  */
 export const Started = Schema.TaggedUnion({
@@ -71,11 +65,11 @@ export const Started = Schema.TaggedUnion({
   /** Known, not running: its current, newest life ended or went down. */
   already_present: { process: ProcessId, name: Text },
 });
+
 /**
  * The answer to one start, as `Started` decodes it: a fresh start, a name whose process is already
  * live, or a name that is known but not running.
  *
- * @stability unstable
  * @category models
  */
 export type Started = typeof Started.Type;
@@ -84,7 +78,6 @@ export type Started = typeof Started.Type;
  * One request to stop a child: its registered `name`, and the process that asks, which the host
  * binds, never the program.
  *
- * @stability unstable
  * @category models
  */
 export type ChildStop = {
@@ -115,7 +108,6 @@ export type ChildStop = {
  * `storage` means the ledger failed. The caller cannot tell whether the start was saved, and may
  * ask again with the same `id`: a saved start answers its `started`.
  *
- * @stability unstable
  * @category errors
  */
 export class ChildrenError extends Schema.TaggedError<ChildrenError>()("ChildrenError", {
@@ -154,7 +146,6 @@ export class ChildrenError extends Schema.TaggedError<ChildrenError>()("Children
  *
  * A child is not linked to its requester: it keeps running when the requester ends.
  *
- * @stability unstable
  * @category services
  */
 export class Children extends Context.Service<

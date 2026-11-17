@@ -43,7 +43,9 @@ for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as co
       fc.asyncProperty(fc.string(), async (text) => {
         const db = new DatabaseSync(":memory:"),
           real = nodeSql(db);
+
         let corrupt = false;
+
         // SQLite's rowid is always an integer. Plant a bad adapter answer for its seq decoder.
         const sql: Sql = {
           ...real,

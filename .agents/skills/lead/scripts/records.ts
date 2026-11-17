@@ -6,6 +6,7 @@
 //   node records.ts list <folder>      one line per record, then `next NNNN` for a numbered folder
 //   node records.ts next <folder>      only the next free number
 //   node records.ts find <words>...    the records these words are about, best first
+//   node records.ts find --read-only <words>...    use origin/main as already fetched, with no writes
 //   node records.ts resolve <id>...    each decision's status, and the live one a superseded one names
 //
 // <folder> is `.decisions`, `experiments`, `.patterns`, `docs/direction` or `.runbooks`, with or
@@ -22,9 +23,11 @@
 // `--all` shows each record as itself. A shortlist is never a clearance: a record that says the same
 // thing in other words is not found.
 //
-// It fetches origin's main first, then reads `origin/main` through git (`ls-tree`, `cat-file`),
-// never the working tree, so a file that is only local or only on an unmerged branch never takes a
-// number or a line. The next number is the highest on main plus one, never a gap below it: a gap
+// It fetches origin's main first, unless `find --read-only` was asked, then reads `origin/main`
+// through git (`ls-tree`, `cat-file`). Read-only discovery needs origin/main fetched beforehand,
+// and can miss newer records. Neither route reads the working tree, so a file that is only local
+// or only on an unmerged branch never takes a number or a line. The next number is the highest on
+// main plus one, never a gap below it: a gap
 // is a number some pull request held and never merged, as phoenix's `fabrika adr next` says. An
 // open pull request can still hold the same number; the adr skill's check of open pull requests
 // covers that.
@@ -122,6 +125,7 @@ const specs: Record<Folder, Spec> = {
 
 const recordNumber = (name: string): number | undefined => {
   const digits = /^(\d+)[a-z]?-/.exec(name)?.[1];
+
   return digits === undefined ? undefined : Number(digits);
 };
 
@@ -149,7 +153,7 @@ type Top = { readonly fields: ReadonlyMap<string, string>; readonly heading: str
 const JsonString = Schema.fromJsonString(Schema.String);
 
 const unquoted = (raw: string): string =>
-  raw.startsWith('"') ? Option.getOrElse(Schema.decodeUnknownOption(JsonString)(raw), () => raw) : raw;
+  raw.startsWith('"') ? Option.getOrElse(Schema.decodeOption(JsonString)(raw), () => raw) : raw;
 
 /** Reads a record's top: a frontmatter block when the text opens with one, then the first heading. */
 export const readTop = (text: string): Top => {
@@ -177,6 +181,7 @@ export const readTop = (text: string): Top => {
     .find((line) => line.startsWith("# "))
     ?.slice(2)
     .trim();
+
   return { fields, heading };
 };
 
@@ -199,11 +204,15 @@ export const recordLine = (folder: Folder, path: string, text: string): string =
   const top = readTop(text);
   const name = path.slice(folder.length + 1).replace(/\.md$/, "");
   const id = spec.width === undefined ? name : (/^\d+[a-z]?(?=-)/.exec(name)?.[0] ?? name);
+
   const field = (key: string) => {
     const value = top.fields.get(key);
+
     return value === undefined ? `(no ${key})` : oneLine(value);
   };
+
   const title = recordTitle(folder, top);
+
   return [
     id,
     ...spec.before.map(field),
@@ -229,6 +238,7 @@ export const nextNumber = (folder: Folder, paths: ReadonlyArray<string>): string
     .filter((path) => isRecord(folder, path))
     .map((path) => recordNumber(path.slice(folder.length + 1)))
     .filter((n) => n !== undefined);
+
   return String(Math.max(0, ...numbers) + 1).padStart(width, "0");
 };
 
@@ -247,6 +257,7 @@ export const inOrder = (folder: Folder, paths: ReadonlyArray<string>): ReadonlyA
 
 /** The folders `find` searches, and the one file whose table rows it searches too. */
 const searched: ReadonlyArray<Folder> = [".decisions", ".runbooks", ".patterns", "docs/direction", "experiments"];
+
 const GLOSSARY = ".glossary/TERMS.md";
 
 /** Below this many live records, every word looks common, so a ranking says nothing (phoenix's floor). */
@@ -283,6 +294,7 @@ export const Status = Schema.TaggedUnion({
   superseded: { by: Schema.Array(Schema.String) },
   other: { status: Schema.String },
 });
+
 export type Status = typeof Status.Type;
 
 /** Reads `accepted`, `amended-in-part by [0525](...), [0530](...)` or `superseded by [0043](...)`. */
@@ -313,6 +325,7 @@ const decidingText = (text: string): string => {
   const gloss = /^\*\*What this decides:\*\*([^\n]*(?:\n(?!\n)[^\n]*)*)/m.exec(body)?.[1] ?? "";
   // A decision with no Decision section gives its whole body, so it is still found.
   const decision = body.split(/^##\s+/m).find((section) => /^Decision\b/.test(section)) ?? body;
+
   return `${gloss}\n${decision}`;
 };
 
@@ -320,12 +333,14 @@ const decidingText = (text: string): string => {
 const glossaryEntries = (path: string, text: string): ReadonlyArray<Entry> => {
   const lines = text.split("\n");
   const separator = (line: string | undefined) => line !== undefined && /^\|\s*:?-{3}/.test(line);
+
   return lines.flatMap((line, i) => {
     if (!line.startsWith("|") || separator(line) || separator(lines[i + 1])) {
       return [];
     }
 
     const term = (line.split(/(?<!\\)\|/)[1] ?? "").trim();
+
     return term === "" ? [] : [{ path, title: term, words: wordsIn(line), decision: undefined }];
   });
 };
@@ -346,11 +361,14 @@ export const readEntries = (path: string, text: string): ReadonlyArray<Entry> =>
   const title = oneLine(recordTitle(folder, top) ?? "(no title)");
   const keys = specs[folder].words.map((key) => top.fields.get(key) ?? "");
   const id = recordNumber(path.slice(folder.length + 1));
+
   const decision =
     folder === ".decisions" && id !== undefined
       ? { id: String(id).padStart(4, "0"), status: readStatus(top.fields.get("status")) }
       : undefined;
+
   const body = decision === undefined ? "" : decidingText(text);
+
   return [{ path, title, words: wordsIn([title, ...keys, body].join("\n")), decision }];
 };
 
@@ -362,6 +380,7 @@ export const Resolution = Schema.TaggedUnion({
   absent: { id: Schema.String },
   broken: { id: Schema.String, reason: Schema.String },
 });
+
 export type Resolution = typeof Resolution.Type;
 
 /**
@@ -377,6 +396,7 @@ export const resolve = (id: string, statuses: ReadonlyMap<string, Status>): Reso
   }
 
   const landed = new Set<string>();
+
   // `trail` is the chain walked to `from`, so two links that meet again are not a loop.
   const follow = (from: string, by: ReadonlyArray<string>, trail: ReadonlySet<string>): string | undefined => {
     if (by.length === 0) {
@@ -389,12 +409,14 @@ export const resolve = (id: string, statuses: ReadonlyMap<string, Status>): Reso
       }
 
       const status = statuses.get(next);
+
       const broken =
         status === undefined
           ? `${from} is superseded by ${next}, which is not on main`
           : Status.match(status, {
               accepted: () => {
                 landed.add(next);
+
                 return undefined;
               },
               superseded: (s) => follow(next, s.by, new Set([...trail, next])),
@@ -414,6 +436,7 @@ export const resolve = (id: string, statuses: ReadonlyMap<string, Status>): Reso
     other: (s) => Resolution.cases.other.make({ id, status: s.status }),
     superseded: (s) => {
       const reason = follow(id, s.by, new Set([id]));
+
       return reason === undefined
         ? Resolution.cases.superseded.make({ id, by: [...landed].sort() })
         : Resolution.cases.broken.make({ id, reason });
@@ -425,10 +448,11 @@ export const resolve = (id: string, statuses: ReadonlyMap<string, Status>): Reso
 export const Hit = Schema.Struct({
   path: Schema.String,
   title: Schema.String,
-  score: Schema.Number,
+  score: Schema.Finite,
   words: Schema.Array(Schema.String),
   notes: Schema.Array(Schema.String),
 });
+
 export type Hit = typeof Hit.Type;
 
 /**
@@ -436,10 +460,11 @@ export type Hit = typeof Hit.Type;
  * a rare word, or the corpus or the query is too thin for a ranking to mean anything.
  */
 export const Found = Schema.TaggedUnion({
-  shortlist: { hits: Schema.Array(Hit), ranked: Schema.Number },
-  noOverlap: { ranked: Schema.Number },
+  shortlist: { hits: Schema.Array(Hit), ranked: Schema.Finite },
+  noOverlap: { ranked: Schema.Finite },
   indeterminate: { reason: Schema.String },
 });
+
 export type Found = typeof Found.Type;
 
 const byScore = (a: Hit, b: Hit) => b.score - a.score || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
@@ -483,13 +508,17 @@ export const find = (
   const statuses = new Map(
     entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e.decision.status] as const])),
   );
+
   const decisions = new Map(entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e] as const])));
   const byPath = new Map([...decisions.values()].map((e) => [e.path, e.decision] as const));
+
   // A proposed or unknown decision is in force nowhere, so only `all` ranks it.
   const ranked = options.all
     ? entries
     : entries.filter((e) => e.decision === undefined || !Status.isAnyOf(["other"])(e.decision.status));
+
   const hits = new Map<string, Hit>();
+
   const add = (entry: Entry, score: number, words: ReadonlyArray<string>, note?: string) => {
     const key = `${entry.path}\0${entry.title}`;
     const was = hits.get(key);
@@ -539,6 +568,7 @@ export const find = (
 
   const shown = [...hits.values()].map((hit) => {
     const decision = byPath.get(hit.path);
+
     const status =
       decision === undefined
         ? []
@@ -547,6 +577,7 @@ export const find = (
             superseded: (s) => [`superseded by: ${s.by.join(", ")}`],
             other: (s) => [`status: ${s.status}`],
           });
+
     return { ...hit, notes: [...status, ...hit.notes] };
   });
 
@@ -594,10 +625,14 @@ export const resolutionLine = (resolution: Resolution, paths: ReadonlyMap<string
 // ---------------------------------------------------------------- the world
 
 /** origin/main could not be fetched or read, so the list and the next number are unknown. */
-class Unknown extends Schema.TaggedError<Unknown>()("Unknown", { reason: Schema.String }) {}
+class Unknown extends Schema.TaggedError<Unknown, { readonly brand: unique symbol }>()("Unknown", {
+  reason: Schema.String,
+}) {}
 
 /** `next` was asked of a folder whose records have no numbers. */
-class NoNumbers extends Schema.TaggedError<NoNumbers>()("NoNumbers", { folder: Schema.String }) {}
+class NoNumbers extends Schema.TaggedError<NoNumbers, { readonly brand: unique symbol }>()("NoNumbers", {
+  folder: Schema.String,
+}) {}
 
 const collected = (chunks: ReadonlyArray<Uint8Array>) => {
   const bytes = new Uint8Array(chunks.reduce((n, chunk) => n + chunk.length, 0));
@@ -616,14 +651,16 @@ const git = Effect.fnUntraced(
     const handle = yield* ChildProcess.make("git", ["-C", repo, ...args], {
       stdin: stdin === undefined ? "ignore" : Stream.make(new TextEncoder().encode(stdin)),
     });
+
     const [out, err, code] = yield* Effect.all(
       [Stream.runCollect(handle.stdout), Stream.mkString(Stream.decodeText(handle.stderr)), handle.exitCode],
       { concurrency: 3 },
     );
+
     return { out: collected(out), err: err.trim(), code: Number(code) };
   },
   Effect.scoped,
-  (effect) => Effect.mapError(effect, (e) => new Unknown({ reason: `git could not run: ${e.message}` })),
+  (effect) => Effect.mapError(effect, (e) => Unknown.make({ reason: `git could not run: ${e.message}` })),
 );
 
 /** Splits `git cat-file --batch` output into each object's text, in the order asked. */
@@ -651,7 +688,7 @@ export const batchTexts = (bytes: Uint8Array): ReadonlyArray<string | undefined>
 };
 
 /**
- * The files under `roots` on origin/main that `keep` takes, after a fetch: each path with its text,
+ * The files under `roots` on origin/main that `keep` takes: each path with its text,
  * in the order `keep` gives. A root that main does not hold, as `.runbooks/` before its first
  * runbook, reads as no files.
  */
@@ -659,17 +696,20 @@ const filesAt = Effect.fn("records.filesAt")(function* (
   repo: string,
   roots: ReadonlyArray<string>,
   keep: (paths: ReadonlyArray<string>) => ReadonlyArray<string>,
+  readOnly = false,
 ) {
-  const fetched = yield* git(repo, ["fetch", "-q", "origin", "main"]);
+  if (!readOnly) {
+    const fetched = yield* git(repo, ["fetch", "-q", "origin", "main"]);
 
-  if (fetched.code !== 0) {
-    return yield* new Unknown({ reason: `cannot fetch origin main: ${fetched.err}` });
+    if (fetched.code !== 0) {
+      return yield* Unknown.make({ reason: `cannot fetch origin main: ${fetched.err}` });
+    }
   }
 
   const listed = yield* git(repo, ["ls-tree", "-r", "-z", "--name-only", BASE, "--", ...roots]);
 
   if (listed.code !== 0) {
-    return yield* new Unknown({ reason: `cannot read ${roots.join(", ")} at ${BASE}: ${listed.err}` });
+    return yield* Unknown.make({ reason: `cannot read ${roots.join(", ")} at ${BASE}: ${listed.err}` });
   }
 
   const paths = keep(new TextDecoder().decode(listed.out).split("\0"));
@@ -677,7 +717,7 @@ const filesAt = Effect.fn("records.filesAt")(function* (
   const texts = batchTexts(read.out);
 
   if (read.code !== 0 || texts.length !== paths.length || texts.includes(undefined)) {
-    return yield* new Unknown({ reason: `cannot read the records of ${roots.join(", ")} at ${BASE}: ${read.err}` });
+    return yield* Unknown.make({ reason: `cannot read the records of ${roots.join(", ")} at ${BASE}: ${read.err}` });
   }
 
   return paths.map((path, i) => ({ path, text: texts[i] ?? "" }));
@@ -687,9 +727,12 @@ const filesAt = Effect.fn("records.filesAt")(function* (
 const recordsAt = (repo: string, folder: Folder) => filesAt(repo, [`${folder}/`], (paths) => inOrder(folder, paths));
 
 /** Every entry `find` ranks, from origin/main: the searched folders' records and the glossary's rows. */
-const entriesAt = (repo: string) =>
-  filesAt(repo, [...searched.map((folder) => `${folder}/`), GLOSSARY], (paths) =>
-    paths.filter((path) => path === GLOSSARY || searched.some((folder) => isRecord(folder, path))),
+const entriesAt = (repo: string, readOnly: boolean) =>
+  filesAt(
+    repo,
+    [...searched.map((folder) => `${folder}/`), GLOSSARY],
+    (paths) => paths.filter((path) => path === GLOSSARY || searched.some((folder) => isRecord(folder, path))),
+    readOnly,
   ).pipe(Effect.map((files) => files.flatMap((file) => readEntries(file.path, file.text))));
 
 const FolderArgument = Argument.ChoiceWithValue("folder", [
@@ -711,6 +754,7 @@ const list = Command.make(
   Effect.fn("records.list")(function* ({ folder }) {
     const records = yield* recordsAt(process.cwd(), folder);
     yield* Console.log(records.map((r) => recordLine(folder, r.path, r.text)).join("\n"));
+
     const next = nextNumber(
       folder,
       records.map((r) => r.path),
@@ -727,13 +771,14 @@ const next = Command.make(
   { folder: FolderArgument },
   Effect.fn("records.next")(function* ({ folder }) {
     const records = yield* recordsAt(process.cwd(), folder);
+
     const number = nextNumber(
       folder,
       records.map((r) => r.path),
     );
 
     if (number === undefined) {
-      return yield* new NoNumbers({ folder });
+      return yield* NoNumbers.make({ folder });
     }
 
     yield* Console.log(number);
@@ -746,9 +791,15 @@ const findCommand = Command.make(
     words: Argument.String("words").pipe(Argument.atLeast(1)),
     limit: Flag.Int("limit").pipe(Flag.withDefault(8)),
     all: Flag.Boolean("all").pipe(Flag.withDefault(false)),
+    readOnly: Flag.Boolean("read-only").pipe(
+      Flag.withDefault(false),
+      Flag.withDescription(
+        "Read already-fetched origin/main without fetching or writing; newer records may be missing",
+      ),
+    ),
   },
-  Effect.fn("records.find")(function* ({ words, limit, all }) {
-    const entries = yield* entriesAt(process.cwd());
+  Effect.fn("records.find")(function* ({ words, limit, all, readOnly }) {
+    const entries = yield* entriesAt(process.cwd(), readOnly);
     yield* Console.log(foundLines(find(words.join(" "), entries, { limit, all })).join("\n"));
   }),
 );
@@ -759,9 +810,11 @@ const resolveCommand = Command.make(
   Effect.fn("records.resolve")(function* ({ ids }) {
     const decisions = yield* recordsAt(process.cwd(), ".decisions");
     const entries = decisions.flatMap((file) => readEntries(file.path, file.text));
+
     const statuses = new Map(
       entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e.decision.status] as const])),
     );
+
     const paths = new Map(entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e.path] as const])));
     // `34`, `0034` and `0034-slug` all name decision 0034.
     const decisionId = (arg: string) => /^\d+/.exec(arg)?.[0].padStart(4, "0") ?? arg;
@@ -775,15 +828,13 @@ if (import.meta.main) {
   NodeRuntime.runMain(
     Command.run({ version: "0.0.0" })(records).pipe(
       Effect.as(0),
-      Effect.catchTag("Unknown", (e) =>
-        Console.error(`records: unknown, never 0 records: ${e.reason}`).pipe(Effect.as(1)),
-      ),
-      Effect.catchTag("NoNumbers", (e) =>
-        Console.error(`records: ${e.folder} has no numbers; use list`).pipe(Effect.as(2)),
-      ),
-      // `--help` alone is a clean exit; a command line effect/cli could not read is printed by it.
-      Effect.catchTag("ShowHelp", (help) => Effect.succeed(help.errors.length === 0 ? 0 : 2)),
-      Effect.catch(() => Effect.succeed(2)),
+      Effect.catchTags({
+        Unknown: (e) => Console.error(`records: unknown, never 0 records: ${e.reason}`).pipe(Effect.as(1)),
+        NoNumbers: (e) => Console.error(`records: ${e.folder} has no numbers; use list`).pipe(Effect.as(2)),
+        // `--help` alone is a clean exit; a command line effect/cli could not read is printed by it.
+        ShowHelp: (help) => Effect.succeed(help.errors.length === 0 ? 0 : 2),
+      }),
+      Effect.orElseSucceed(() => 2),
       Effect.provide(NodeServices.layer),
     ),
     {

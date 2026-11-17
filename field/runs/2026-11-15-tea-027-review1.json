@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-tea-027-review1",
+  "ticket": "1061",
+  "pr": "1391",
+  "started": "2026-11-15T18:09:18-08:00",
+  "ended": "2026-11-15T18:17:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The one review of slice 1 of docs/plan/quests/tea-msg-tag-PLAN.md at c773cbe04, merge-ready with two findings. Every next/ package and the root resolve tea 0.27.0 with no patch; all 11 of today's importers resolve 0.25.0 with main's patch hash, and the patch row is keyed to the exact version 0.25.0. No lead script hands a tea Machine, Cmd, Msg or Sub between tea 0.27.0 and today's agent runner. tea's runtime changes from 0.25.0 to 0.27.0 (a third observer argument, Cmds in recorded steps, the same Machine.make object) reach no next/ or tooling caller. The lockfile moves only tea. One pnpm typecheck exited 0; six narrow test files passed. Six E3 plants in a scratch copy: four red, two passed (a second checker entry, and a .agents/../ glob), written as a finding. The other finding is a wrong version in a pnpm-workspace.yaml comment.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 7.7,
+  "note": null,
+  "costUsd": null,
+  "step": "review"
+}

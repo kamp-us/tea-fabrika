@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-runner-decodes-an-answer-with-a-sync-throw",
+  "date": "2026-11-15",
+  "by": "lead",
+  "model": "claude-fable-5-2",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Runner.ts",
+    "line": 2111
+  },
+  "says": "In next/, the runner decodes a command's answer with Schema.decodeUnknownSync inside an Effect generator with nothing around it to catch the throw, so an answer that is not JSON crashes the fiber as a defect and skips the typed error.",
+  "proof": "Runner.ts:2111 reads `m: Schema.decodeUnknownSync(Schema.Json)(m)` inside `Effect.gen`, as an argument to `originStore.record`; no `Effect.try` wraps it. Effect's own checker flags it as schemaSyncInEffect when that check is turned on (a count run of 2026-11-15 with every check on).",
+  "cost": "A bad answer takes the turn down as an uncatchable defect, where the code around it handles typed errors.",
+  "head": "98bcdfa226f92fb702ae4a42ea19aa1a0592ad01",
+  "ticket": null,
+  "pr": null
+}

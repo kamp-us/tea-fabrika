@@ -1,8 +1,6 @@
 /**
  * Signed, single-use challenge nonces for the gateway. SYN cookies keep an unproved connection out
  * of storage (RFC 4987, section 3.6).
- *
- * @stability unstable
  */
 import { Effect, Result, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
@@ -22,7 +20,6 @@ import type { gatewayStore } from "./GatewayStore.ts";
  * `GatewayError` with reason `Storage` when `cap` live receipts are held. A WebCrypto failure is
  * reason `Crypto`.
  *
- * @stability unstable
  * @category constructors
  */
 export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
@@ -39,8 +36,10 @@ export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
 
     const fresh = Base64Url.encode(crypto.getRandomValues(new Uint8Array(32)));
     store.set("challengeKey", Schema.String, fresh);
+
     return fresh;
   });
+
   const bytes = Base64Url.decode(secret);
 
   if (Result.isFailure(bytes)) {
@@ -53,6 +52,7 @@ export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
   }
 
   const fail = (cause: unknown) => new GatewayError({ reason: new Crypto({ cause }) });
+
   const args: Parameters<SubtleCrypto["importKey"]> = [
     "raw",
     new Uint8Array(bytes.success),
@@ -60,12 +60,15 @@ export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
     false,
     ["sign", "verify"],
   ];
+
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto imports keys through a Promise
   const imported = Effect.tryPromise({ try: () => crypto.subtle.importKey(...args), catch: fail });
   const key = yield* imported;
   const clock = Effect.clockWith((c) => c.currentTimeMillis);
+
   const text = (client: string, issuedAt: number, salt: string) =>
     new TextEncoder().encode(JSON.stringify([client, issuedAt, salt]));
+
   const issue = Effect.fnUntraced(function* (client: string) {
     const issuedAt = yield* clock;
     const salt = Base64Url.encode(crypto.getRandomValues(new Uint8Array(24)));
@@ -73,8 +76,10 @@ export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
     // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto signs through a Promise
     const work = Effect.tryPromise({ try: () => crypto.subtle.sign("HMAC", key, data), catch: fail });
     const mac = yield* work;
+
     return `${issuedAt}.${salt}.${Base64Url.encode(new Uint8Array(mac))}`;
   });
+
   const check = Effect.fnUntraced(function* (client: string, nonce: string) {
     const parts = /^(0|[1-9]\d*)\.([A-Za-z0-9_-]{32})\.([A-Za-z0-9_-]{43})$/.exec(nonce);
 
@@ -85,6 +90,7 @@ export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
     const issuedAt = Number(parts[1]),
       salt = parts[2] ?? "",
       mac = Base64Url.decode(parts[3] ?? "");
+
     const at = yield* clock;
 
     if (!Number.isSafeInteger(issuedAt) || issuedAt > at || issuedAt + ttl <= at || Result.isFailure(mac)) {
@@ -97,11 +103,14 @@ export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
       new Uint8Array(mac.success),
       text(client, issuedAt, salt),
     ];
+
     // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto verifies through a Promise
     const checked = Effect.tryPromise({ try: () => crypto.subtle.verify(...args), catch: fail });
     const valid = yield* checked;
+
     return valid ? issuedAt + ttl : null;
   });
+
   // Called in the signature-checked transaction. Never evict a still-live receipt.
   const spend = (nonce: string, until: number, at: number) => {
     if (until <= at || store.sql.exec("SELECT nonce FROM gateway_spent WHERE nonce=?", nonce).length > 0) {
@@ -114,7 +123,9 @@ export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
 
     store.sql.exec("DELETE FROM gateway_spent WHERE until<=?", at);
     store.sql.exec("INSERT INTO gateway_spent (nonce,until) VALUES (?,?)", nonce, until);
+
     return Result.succeed(true);
   };
+
   return { issue, check, spend };
 });

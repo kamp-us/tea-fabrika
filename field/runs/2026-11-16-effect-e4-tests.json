@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e4-tests",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T08:00:00-08:00",
+  "ended": "2026-11-16T09:00:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Slice E4 of the Effect-check sweep (schemaNumber), in next/ and our tooling. Recount on main at 15bc733: 295 hits in 87 files; 55 sit in lib runtime, cloudflare and gateway (E65, after 1366; 9 of those in 3 files of pull request 1366: gateway/Gateway.ts 5, cloudflare/connection.ts 1, runtime/Runner.integration.test.ts 3), 240 are E4's, matching the plan. Lock: an overrides entry in each package tsconfig with hits (.agents, .github/ci, libfabrika's 20 globs without runtime, cloudflare and gateway, pipeline, the app) and a whole-package entry for the packages at zero (oxlint-plugins, tuval, vitest, chaos, checklist, counter, inbox, tezgah). Fixes, all 240 hits, Schema.Number to Schema.Finite, none by the quick-fix client or a script: 240 by hand with the Edit tool (61 in exam paths in the first commit, 179 in product files in the second). Typecheck of all six tsconfigs with hits: 0 errors. Left: 0. Waiting on 1366: 9 hits in the 3 files above, outside the lock; 46 more in the same three folders wait for E65.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 60,
+  "note": "Counts from effect-tsgo diagnostics per tsconfig, joined by file. Narrow vitest at the final head: Merger, Queue, Handshake, Connection, ScheduledJob, Incident laws pass, plus the 9 exam-side unit files earlier. pnpm lint passed every part except lint:dead (SIGABRT in this sandbox). Integration and visual tests not run.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "export const planted = Schema.Number appended to next/programs/inbox/src/program.laws.test.ts, then removed: the inbox typecheck reports effect(schemaNumber) as an error on it",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "src/transport/**/*.ts dropped from libfabrika's override: schemaNumber errors fall from 52 to 38, the 14 transport hits gone, so the glob is what holds that folder",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

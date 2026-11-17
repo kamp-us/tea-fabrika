@@ -1,5 +1,5 @@
 diff --git a/dist/index.js b/dist/index.js
-index b81bf353943b40291ef6810324da31fb49234092..14250dbe315e974b1c554321d4a23196f6993f2b 100755
+index b81bf353943b40291ef6810324da31fb49234092..da2f246181efe125d7a54f43e33a4ec3150b9884 100755
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -728,6 +728,35 @@ function inRepoFile(realRoot, resolved) {
@@ -117,7 +117,30 @@ index b81bf353943b40291ef6810324da31fb49234092..14250dbe315e974b1c554321d4a23196
    const locals = localExportNames(syntax);
    const isTest = isTestFile(file);
    return withOrdinals(file, found).map(({ found: f, id, joinKey: joinKey2 }) => ({
-@@ -11035,7 +11100,24 @@ function compile(layer, pattern) {
+@@ -8448,7 +8513,10 @@ function withholdCalledByWithheld(verdict, calledByWithheld) {
+   return { withheld: { id, reason: "called-by-withheld" } };
+ }
+ function judge(fn, refs, surface, isTestLike, usesUnknownFiles) {
+-  if (isTestLike(fn.file)) {
++  // Patched: a test-support file's export is withheld only when another file names it (a helper
++  // the tests use), or when the file is a test file. One that nothing names is judged like any
++  // other export, so it can be dead.
++  if (isTestLike(fn.file) && (isTestFile(fn.file) || (refs.identifierFiles.get(fn.name) ?? []).some((f) => f !== fn.file))) {
+     return { withheld: { id: fn.id, reason: "test-support-surface" } };
+   }
+   if (surface.has(fn.file)) {
+@@ -8551,7 +8619,9 @@ function usedElsewhere(symbol, evidence) {
+   return (evidence.wholeModuleUsers.get(symbol.file)?.size ?? 0) > 0;
+ }
+ function isCandidate(symbol, scope) {
+-  return !symbol.isEntry && !scope.reported.has(symbol.id) && !scope.surface.has(symbol.file) && !scope.isTestLike(symbol.file);
++  // Patched: only a test file is skipped. A test-support file's symbol goes on to `usedElsewhere`,
++  // which skips one the tests use and reports one that nothing uses.
++  return !symbol.isEntry && !scope.reported.has(symbol.id) && !scope.surface.has(symbol.file) && !isTestFile(symbol.file);
+ }
+ function findUnusedExports(symbols, evidence, scope) {
+   const out = [];
+@@ -11035,7 +11105,24 @@ function compile(layer, pattern) {
  }
  function compileMatchers(layers) {
    const matchers = [];
@@ -143,7 +166,7 @@ index b81bf353943b40291ef6810324da31fb49234092..14250dbe315e974b1c554321d4a23196
      const imports = layer.imports === void 0 ? null : new Set(layer.imports);
      for (const pattern of layer.paths) {
        matchers.push(compile({ name: layer.name, rank, imports }, pattern));
-@@ -11052,7 +11134,7 @@ function layerOf(repoRelPath, matchers) {
+@@ -11052,7 +11139,7 @@ function layerOf(repoRelPath, matchers) {
    if (winner === void 0) return null;
    for (const rival of matchers.slice(at + 1)) {
      if (compareSpecificity(winner.specificity, rival.specificity) !== 0) break;
@@ -152,7 +175,7 @@ index b81bf353943b40291ef6810324da31fb49234092..14250dbe315e974b1c554321d4a23196
        throw new LayerTieError(repoRelPath, [winner.pattern, rival.pattern]);
      }
    }
-@@ -11065,6 +11147,7 @@ function directionOf(from, to) {
+@@ -11065,6 +11152,7 @@ function directionOf(from, to) {
  }
  function ruleBroken(from, to) {
    if (from.rank > to.rank) return "upward";
@@ -160,7 +183,7 @@ index b81bf353943b40291ef6810324da31fb49234092..14250dbe315e974b1c554321d4a23196
    if (from.rank === to.rank || from.imports === null || from.imports.has(to.name)) return null;
    return "outside-imports";
  }
-@@ -11106,9 +11189,17 @@ function analyzeLayers(loaded, repoRoot, rules) {
+@@ -11106,9 +11194,17 @@ function analyzeLayers(loaded, repoRoot, rules) {
    const census = emptyCensus();
    const violations = [];
    const unresolved = [];
@@ -178,7 +201,7 @@ index b81bf353943b40291ef6810324da31fb49234092..14250dbe315e974b1c554321d4a23196
      for (const spec of specifiersOf(unit)) {
        const target = resolveTarget2(from, spec.value);
        if (target.kind === "external") {
-@@ -11127,7 +11218,7 @@ function analyzeLayers(loaded, repoRoot, rules) {
+@@ -11127,7 +11223,7 @@ function analyzeLayers(loaded, repoRoot, rules) {
        census[direction]++;
        if (fromLayer === null || toLayer === null) continue;
        const rule = ruleBroken(fromLayer, toLayer);
@@ -187,7 +210,7 @@ index b81bf353943b40291ef6810324da31fb49234092..14250dbe315e974b1c554321d4a23196
        violations.push({
          from,
          fromLine: spec.line,
-@@ -11143,11 +11234,12 @@ function analyzeLayers(loaded, repoRoot, rules) {
+@@ -11143,11 +11239,12 @@ function analyzeLayers(loaded, repoRoot, rules) {
    }
    return {
      layers: rules.layers.map((l) => l.name),
@@ -202,7 +225,7 @@ index b81bf353943b40291ef6810324da31fb49234092..14250dbe315e974b1c554321d4a23196
    };
  }
  
-@@ -11260,9 +11352,20 @@ function verdictLines(result, importsDeclared) {
+@@ -11260,9 +11357,20 @@ function verdictLines(result, importsDeclared) {
    }
    return lines;
  }
@@ -224,7 +247,7 @@ index b81bf353943b40291ef6810324da31fb49234092..14250dbe315e974b1c554321d4a23196
    if (json) {
      const wire = (edges) => report.importsDeclared ? edges : edges.map(({ rule: _rule, ...edge }) => edge);
      return {
-@@ -11276,7 +11379,8 @@ function renderLayers(report, allowed, json, pretty) {
+@@ -11276,7 +11384,8 @@ function renderLayers(report, allowed, json, pretty) {
            passed: result.passed,
            undeclared: wire(result.undeclared),
            stale: result.stale,
@@ -234,7 +257,7 @@ index b81bf353943b40291ef6810324da31fb49234092..14250dbe315e974b1c554321d4a23196
          },
          pretty
        ),
-@@ -11286,7 +11390,8 @@ function renderLayers(report, allowed, json, pretty) {
+@@ -11286,7 +11395,8 @@ function renderLayers(report, allowed, json, pretty) {
    const lines = [
      ...headerLines(report),
      ...report.violations.map((edge) => edgeLine(edge, report.importsDeclared)),

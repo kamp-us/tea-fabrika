@@ -16,6 +16,7 @@ import {
 import type { ProcessCalls, ProcessManager } from "./ProcessManager.ts";
 
 const decode = Schema.decodeUnknownResult(ExitReason);
+
 const fixture = Schema.is(Fixture);
 
 describe("P34c slice 1: the exit reason schema", () => {
@@ -90,6 +91,7 @@ function exitTypeErrors(
     { _tag: "crashed", phase: "step", error: "TypeError" },
     from,
   );
+
   // @ts-expect-error An exit reason is the closed union, not text.
   const crashText = manager.exit("process_0000000000e008000000000000", "crashed", from);
   const shutdown = calls.exit("process_0000000000e008000000000000", { _tag: "shutdown" }, from);
@@ -99,9 +101,10 @@ function exitTypeErrors(
   const noPhase = manager.exit("process_0000000000e008000000000000", { _tag: "crashed" }, from);
   // @ts-expect-error noproc is a monitor result, not an exit reason.
   const noproc = manager.exit("process_0000000000e008000000000000", { _tag: "noproc" }, from);
-  const reason: typeof ExitReason.Type = { _tag: "normal" };
+  const reason: ExitReason = { _tag: "normal" };
   // @ts-expect-error The exported type is the union too.
-  const text: typeof ExitReason.Type = "normal";
+  const text: ExitReason = "normal";
+
   return [crash, crashText, shutdown, shutdownText, noPhase, noproc, reason, text];
 }
 

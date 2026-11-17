@@ -45,8 +45,10 @@ const read = (file: string): Manifest => {
 
   const deps = FIELDS.flatMap((field) => {
     const map = manifest[field];
+
     return isMap(map) ? Object.keys(map) : [];
   });
+
   return { name: typeof manifest["name"] === "string" ? manifest["name"] : null, deps };
 };
 
@@ -70,11 +72,13 @@ const run = (): { readonly unreached: readonly string[]; readonly total: number 
   const globs = isMap(workspace) && Array.isArray(workspace["packages"]) ? workspace["packages"] : [];
   const members = globs.filter((g): g is string => typeof g === "string").map(matcher);
   const starts = STARTS.map(matcher);
+
   const folders = tracked.stdout
     .split("\0")
     .filter((file) => file !== "" && file !== "package.json")
     .map((file) => dirname(file))
     .filter((folder) => !LEFT_OUT.test(folder) && members.some((m) => m.test(folder)));
+
   const byName = new Map<string, { readonly folder: string; readonly manifest: Manifest }>();
 
   for (const folder of folders) {
@@ -86,6 +90,7 @@ const run = (): { readonly unreached: readonly string[]; readonly total: number 
   }
 
   const reached = new Set<string>();
+
   const queue = [
     ...read("package.json").deps,
     ...[...byName.values()]
@@ -108,6 +113,7 @@ const run = (): { readonly unreached: readonly string[]; readonly total: number 
     .filter(([name]) => !reached.has(name))
     .map(([name, { folder }]) => `${folder} (${name})`)
     .sort();
+
   return { unreached, total: byName.size };
 };
 

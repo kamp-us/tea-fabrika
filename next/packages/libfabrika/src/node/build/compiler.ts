@@ -16,10 +16,8 @@
  *
  * The one way out of a finding is `"use no memo"` in the function plus a row the owner adds, in a
  * change of its own. The ledger starts empty and only shrinks. There is no setting to loosen it.
- *
- * @stability unstable
  */
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { parseSync } from "oxc-parser";
 import { type OxcError, transformSync } from "oxc-transform-react";
 
@@ -27,14 +25,13 @@ import { type OxcError, transformSync } from "oxc-transform-react";
  * Schema for a row of `compiler-ledger.json`: a function left out of the Compiler on purpose, and
  * why.
  *
- * @stability unstable
  * @category schemas
  */
 export const Row = Schema.Struct({ file: Schema.String, fn: Schema.String, reason: Schema.String });
+
 /**
  * A row of `compiler-ledger.json`.
  *
- * @stability unstable
  * @category models
  */
 export type Row = typeof Row.Type;
@@ -43,7 +40,6 @@ export type Row = typeof Row.Type;
  * One thing the check refuses, at a function in a file, with the reason in words. `line` is 0 for
  * a stale ledger row, which has no place in the source.
  *
- * @stability unstable
  * @category models
  */
 export interface Finding {
@@ -62,7 +58,6 @@ export interface Finding {
  * It does not throw on a function it cannot compile: it leaves that function as it was and reports
  * why. It reports impure calls in render too. `check` turns the reports into findings.
  *
- * @stability unstable
  * @category constructors
  */
 export const compile = (file: string, code: string) =>
@@ -90,6 +85,7 @@ interface Fn {
 type Tree = any;
 
 const FUNCTIONS = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
+
 const lineAt = (text: string, at: number) => text.slice(0, at).split("\n").length;
 
 /** Whether a function body opens with `"use no memo"`, among its other directives. */
@@ -115,6 +111,7 @@ const saysNoMemo = (body: Tree): boolean => {
 const opensWithCache = (body: Tree): boolean => {
   const first = body?.type === "BlockStatement" ? body.body[0] : null;
   const init = first?.type === "VariableDeclaration" ? first.declarations[0]?.init : null;
+
   return init?.type === "CallExpression" && init.callee?.name === "_c";
 };
 
@@ -124,6 +121,7 @@ const opensWithCache = (body: Tree): boolean => {
  */
 const functions = (file: string, text: string): readonly Fn[] => {
   const found: Fn[] = [];
+
   const walk = (node: Tree, bound: string | null, depth: number, inJsx: { on: boolean }) => {
     if (node === null || typeof node !== "object") {
       return;
@@ -160,6 +158,7 @@ const functions = (file: string, text: string): readonly Fn[] => {
         top: depth === 0,
         cache: opensWithCache(node.body),
       });
+
       return;
     }
 
@@ -185,7 +184,9 @@ const functions = (file: string, text: string): readonly Fn[] => {
       walk(child, name, depth, inJsx);
     }
   };
+
   walk(parseSync(file, text, {}).program, null, 0, { on: false });
+
   return found;
 };
 
@@ -201,13 +202,16 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
   const findings: Finding[] = [];
   const out = compile(file, text);
   const source = functions(file, text);
+
   const compiled = new Set(
     functions(file.replace(/\.tsx$/, ".js"), out.code)
       .filter((f) => f.cache)
       .map((f) => f.name),
   );
+
   const named = (fn: string) => rows.some((r) => r.fn === fn);
   const said = new Set<string>();
+
   const diagnose = (e: OxcError) => {
     const label = e.labels[0];
     const at = label === undefined ? 0 : utf16(text, label.start);
@@ -268,7 +272,6 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
  * as its path from the top of the repo and its text. A ledger row whose file is not among them is
  * stale too, and is a finding.
  *
- * @stability unstable
  * @category checking
  */
 export const check = (files: ReadonlyMap<string, string>, ledger: readonly Row[]): readonly Finding[] => [

@@ -23,6 +23,7 @@ const script = join(import.meta.dirname, "box.sh");
 
 export const storageFiles = (root: string) => {
   const files: Record<string, string> = {};
+
   const visit = (path: string, name: string) => {
     const info = lstatSync(path);
     files[name] = info.isSymbolicLink()
@@ -37,7 +38,9 @@ export const storageFiles = (root: string) => {
       }
     }
   };
+
   visit(root, ".");
+
   return files;
 };
 
@@ -52,6 +55,7 @@ export const input = fc.record({
 });
 
 type Input = { name: string; value: string; space: boolean; depth: number; descendant: boolean; old: boolean };
+
 type Remote = { branches: string[]; local: number };
 
 export const fixture = (v: Input, body: (f: ReturnType<typeof setup>) => void, clone = false, remote?: Remote) => {
@@ -67,7 +71,9 @@ export const fixture = (v: Input, body: (f: ReturnType<typeof setup>) => void, c
 const setup = (v: Input, clone: boolean, dir: string, remote?: Remote) => {
   const main = join(dir, "main"),
     boxes = join(dir, "boxes");
+
   const name = `${v.name}${v.space ? " with space" : ""}`;
+
   const work = v.old ? oldBoxTree(boxes, name) : boxTree(boxes, name),
     data = join(boxes, `${name}-gitdata`),
     home = join(dir, "home");
@@ -89,16 +95,20 @@ const setup = (v: Input, clone: boolean, dir: string, remote?: Remote) => {
     FABRIKA_COAUTHOR: "Fixture <fixture@example.test>",
     TYPESAFE_API_KEY: undefined,
   };
+
   const git = (at: string, ...args: string[]) => {
     const ran = spawnSync("/usr/bin/git", ["-C", at, ...args], {
       encoding: "utf8",
       env,
       timeout: 15_000,
     });
+
     expect(ran.error).toBeUndefined();
     expect(ran.status, ran.stderr).toBe(0);
+
     return ran.stdout.trim();
   };
+
   git(main, "init", "-q", "--initial-branch=main");
   git(main, "config", "user.name", "Fixture");
   git(main, "config", "user.email", "fixture@example.test");
@@ -147,6 +157,7 @@ const setup = (v: Input, clone: boolean, dir: string, remote?: Remote) => {
   git(work, "config", "user.email", "fixture@example.test");
   expect(git(main, "remote")).toBe(remote ? "origin" : "");
   expect(git(work, "remote")).toBe("origin");
+
   const run = (chosen = name, extra: Record<string, string> = {}, _entry: "direct" = "direct") => {
     const command = [script, "rm", chosen];
 
@@ -156,16 +167,22 @@ const setup = (v: Input, clone: boolean, dir: string, remote?: Remote) => {
       env: { ...env, ...extra },
       timeout: 15_000,
     });
+
     expect(ran.error).toBeUndefined();
     expect(ran.signal).toBeNull();
+
     return { code: ran.status, text: (ran.stdout + ran.stderr).trim() };
   };
+
   const commit = () => {
     git(work, "add", ".");
     git(work, "commit", "-qm", v.value);
+
     return git(work, "rev-parse", "HEAD");
   };
+
   const retained = (ref: string) => git(main, "fetch", "-q", data, `${ref}:refs/keep/${v.name}`);
+
   return { dir, main, boxes, name, work, data, git, run, commit, retained, env };
 };
 

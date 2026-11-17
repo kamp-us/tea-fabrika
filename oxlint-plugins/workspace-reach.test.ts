@@ -7,7 +7,9 @@ import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 const SCRIPT = join(import.meta.dirname, "workspace-reach.ts");
+
 const home = mkdtempSync(join(tmpdir(), "workspace-reach-"));
+
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
 let trees = 0;
@@ -26,6 +28,7 @@ const run = (files: Readonly<Record<string, string>>) => {
   }
 
   const ran = spawnSync("node", [SCRIPT, tree], { encoding: "utf8" });
+
   return { status: ran.status, said: ran.stdout + ran.stderr };
 };
 
@@ -43,6 +46,7 @@ describe("a workspace package", () => {
       "packages/lib/package.json": pkg("lib", ["core"]),
       "packages/core/package.json": pkg("core"),
     });
+
     expect(said).toContain("3 packages, every one reached");
     expect(status).toBe(0);
   });
@@ -54,6 +58,7 @@ describe("a workspace package", () => {
       "apps/app/package.json": pkg("app"),
       "programs/old/package.json": pkg("old"),
     });
+
     expect(status).toBe(1);
     expect(said).toContain("programs/old (old): no app, tool or root reaches it");
   });
@@ -65,6 +70,7 @@ describe("a workspace package", () => {
       "packages/dead/package.json": pkg("dead", ["deeper"]),
       "packages/deeper/package.json": pkg("deeper"),
     });
+
     expect(status).toBe(1);
     expect(said).toContain("packages/dead (dead)");
     expect(said).toContain("packages/deeper (deeper)");
@@ -76,6 +82,7 @@ describe("a workspace package", () => {
       "package.json": pkg("root", ["tool"]),
       "packages/tool/package.json": pkg("tool"),
     });
+
     expect(status).toBe(0);
   });
 
@@ -85,6 +92,7 @@ describe("a workspace package", () => {
       "package.json": pkg("root"),
       "next/packages/early/package.json": pkg("early"),
     });
+
     expect(status).toBe(0);
   });
 
@@ -94,6 +102,7 @@ describe("a workspace package", () => {
       "package.json": pkg("root"),
       "fixtures/toy/package.json": pkg("toy"),
     });
+
     expect(status).toBe(0);
   });
 

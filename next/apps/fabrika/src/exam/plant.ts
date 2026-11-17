@@ -15,13 +15,13 @@ interface Fire {
 }
 
 const Report = Schema.Struct({
-  number_of_files: Schema.Number,
+  number_of_files: Schema.Finite,
   diagnostics: Schema.Array(
     Schema.Struct({
       code: Schema.optional(Schema.String),
       filename: Schema.String,
       message: Schema.String,
-      labels: Schema.optional(Schema.Array(Schema.Struct({ span: Schema.Struct({ line: Schema.Number }) }))),
+      labels: Schema.optional(Schema.Array(Schema.Struct({ span: Schema.Struct({ line: Schema.Finite }) }))),
     }),
   ),
 });
@@ -29,6 +29,7 @@ const Report = Schema.Struct({
 const readReport = Schema.decodeUnknownSync(Schema.fromJsonString(Report));
 
 type Files = Readonly<Record<string, string>>;
+
 type Fires<A> = (code: string, file: string) => readonly A[];
 
 /**
@@ -62,6 +63,8 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
   const at = yield* fs.realPath(yield* fs.makeTempDirectoryScoped({ prefix: "exam-" }));
   yield* fs.copyFile(path.join(ROOT, ".oxlintrc.json"), path.join(at, ".oxlintrc.json"));
   yield* fs.symlink(path.join(ROOT, "oxlint-plugins"), path.join(at, "oxlint-plugins"));
+  // The config loads the vendored anti-slop plugins from here (0563).
+  yield* fs.symlink(path.join(ROOT, "vendor"), path.join(at, "vendor"));
 
   for (const [file, text] of Object.entries(files)) {
     const full = path.join(at, file);
@@ -80,6 +83,7 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
     ],
     { cwd: at },
   );
+
   const [out, err] = yield* Effect.all(
     [
       ran.stdout.pipe(Stream.decodeText(), Stream.mkString),
@@ -88,6 +92,7 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
     ],
     { concurrency: 3 },
   );
+
   const report = readReport(out);
 
   if (report.number_of_files !== Object.keys(files).length) {
