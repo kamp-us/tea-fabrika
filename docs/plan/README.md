@@ -65,11 +65,47 @@ agreed rule scopes while keeping program code, comments and literal contents. Th
 uses its native stack. The PRs link their independent reviews and CI evidence. This slice supplies
 neither the later package move nor the CLI.
 
+In `next/`, ticket 1153 reuses the Node quota fixture's admission services within one World
+and one limits generation. Every input still sends; each limits setter creates a fresh cache key,
+and failed setup remains retryable. Existing laws, workloads, SQL operations, seeds and timeouts
+stay in place. Temporary proof passed 82 cases with three caught faults, scoped lint and the
+narrow libfabrika compiler passed, and an independent build read passed without changes.
+The whole unchanged quota suite on eligible Linux and final review remain due. The proof uses
+no real SQL, and no speedup is claimed.
+
+In `next/`, ticket 1151 changes Q18's final entry check to collect stepped IDs once per entries
+snapshot, then check every expected message against that set. Its exact existence rule, all
+40 generated histories, seed, calls, limits and timeout stay unchanged. Temporary proof from the
+actual source passed 40 generated inputs, 11 fixed cases and three deliberate faults. A separate
+build check verified the actual source and proof. Initial Linux Q18 passed; the final review then
+required the existing Effect tag guard under decision 0567. That correction preserves the same
+predicate and workload. Corrected-head Linux proof and the same review remain due. Earlier timing
+observations remain tied to their original source; no controlled speedup is claimed.
+
+Today's scheduled CI, serving both versions, swaps the shared groups of full-run browser leg 2
+and core leg 4. A [branch proof's second leg waited 705 seconds](../../field/notes/2026-11-17-shared-test-slot-wait.json),
+with another group empty for the last 286 seconds. This changes which full leg a small proof waits
+behind, within the same nine test groups and one control group. Fixed groups can still leave other
+groups unused. Actual CI comparison remains due; this change has no measured speedup yet.
+
+Today's changed-proof selector [rotates its shared groups by workflow run number](../../field/notes/2026-11-17-changed-proof-slot-rotation.json).
+Logical leg names and test files stay put; retries keep their assignment. The
+[guard-first slice](../../field/notes/2026-11-17-rotation-guard-rollout.json) checks the closed
+nine-group form and its input/output wiring. Invalid run numbers stop selection before any output
+or record write. An unknown map value falls back to group 1 and serializes conservatively;
+malformed JSON may fail evaluation. Runs can still collide. Live matrix proof and the actual
+after-landing wait comparison remain due; no speedup is claimed.
+
 Today's lead tooling adds a separate manual [L11 exercise](../../.github/workflows/l11-exercise.yaml), ticket 1135,
 for `next/` ticket 1129. It fixes one source pair, compares ordinary whole-file runs and private generated inputs,
 and declares ten serial clean jobs. Fixed output faults restore every edited file and publish only decoded facts.
 The actual adapters remain unexercised until the workflow runs on disposable CI after landing. Row, initialization,
-Runner and CPU-profile gaps stay open. These measurements supply no branch proof or reliability claim.
+Runner and the original L11 product-workload CPU-profile gaps stay open.
+A [local CPU profile of the pure equality test](../../field/notes/2026-11-17-l11-equality-runtime.json)
+found repeated strict line decoding dominated its time. Reusing successful decodes within one comparison reduced the
+unchanged 100-run test from 19.0 s to 7.0 s locally. It does not attribute CPU time in the Runner or L11 product workload.
+CI's CPU cause remains unproved. These measurements supply no
+branch proof or reliability claim.
 
 Today's lead tooling has a manual [plant exercise](../../.github/workflows/plant.yaml), ticket 1133.
 It accepts seven fixed cases and an exact source commit, then records baseline, broken and restored observations.
@@ -126,6 +162,18 @@ between 0279 and 0274 before the desk is built, then S1 of the
 before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `alchemy plan` before
 the first cloud deploy. The other open calls are listed in
 [the section](./tier-1.md#the-owners-walks-and-decisions-by-step), each tied to its step.
+
+*2026-11-17:* P25 slice 1's library code half in `next/` is proved at code head
+`0e2bd3a9708a8f2e9746f9933646fcb865262c88` in [PR1099](https://github.com/kamp-us/tea-fabrika/pull/1099).
+[Ordinary CI](https://github.com/kamp-us/tea-fabrika/actions/runs/44154987776) passed compiler,
+lint and selected tests. [Full GitHub proof](https://github.com/kamp-us/tea-fabrika/actions/runs/44155042561)
+matched all 544 source files: 6,014 ordinary passes, one expected failure and nine documented skips.
+All 19 layer checks passed; the actual T5 import faults and restoration are recorded. Fresh
+independent review returned merge-ready for this code half, with two nonblocking findings.
+The lead records those findings and updates these docs without changing code. Normal CI and the
+same reviewer's documentation recheck govern this follow-up. The existing gateway audit decoder
+needs follow-through before later gateway integration. Ticket 905's schema gaps, the real agent
+experiment and slices 2 to 4 remain open. Tickets 888 and 328 stay open; no Tier 1 row is finished.
 
 *2026-11-15:* P39's slice 4a, the hands client, is built in `next/` as draft
 [PR 1315](https://github.com/kamp-us/tea-fabrika/pull/1315), waiting for the owner's look: the

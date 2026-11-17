@@ -1,0 +1,18 @@
+{
+  "id": "2026-11-17-changed-proof-slot-rotation",
+  "date": "2026-11-17",
+  "quests": ["tea-fabrika#1149"],
+  "stage": "harness",
+  "kind": "success",
+  "what": "Today's scheduled CI, serving both versions, assigns changed-proof legs to the existing nine shared groups using the workflow run number modulo 9. The selector emits a complete nine-key permutation and records it beside the source head, base and selected files. Logical leg names, ordered test lists and the full matrix's assignment stay unchanged.",
+  "cause": "A small proof previously kept the same group assignment across runs. The guard-first rollout in PR 1575 prepares trusted admission before the producer uses a different expression. No candidate checker admits its own new group form.",
+  "person": false,
+  "primitive": null,
+  "fix": "Each workflow run shifts the first shared group in a nine-run cycle. A retry retains its run number and assignment. Missing, nonpositive, fractional, nonfinite or unsafe run numbers fail before Git, test listing or output writes. The closed identity lookup can emit only groups 1 to 9; an unknown value falls back to group 1 for conservative serialization, while malformed JSON may fail evaluation.",
+  "test": "Generated laws cover all nine offsets and all nine logical leg counts, unchanged files and identities, repeat stability and invalid run numbers. Deliberately fixing the offset, duplicating a slot or accepting invalid input made the laws fail, followed by exact restoration. Live matrix proof and the actual after-landing wait comparison remain due. Different runs can still collide; this is not idle-group selection or a measured speedup.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1575",
+    "https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0595-scheduled-runs-share-slots.md",
+    "https://docs.github.com/en/actions/reference/workflows-and-actions/contexts"
+  ]
+}

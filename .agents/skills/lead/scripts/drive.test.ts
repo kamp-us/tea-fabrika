@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -27,6 +29,7 @@ import {
   caseRenames,
   changedFiles,
   commitSubject,
+  collect,
   type MutboxRun,
   mutationDraft,
   mutboxAnswer,
@@ -1178,6 +1181,96 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
   });
 });
 
+it("property: changed-step collection installs its formatter, rejects bad bytes and makes an unsigned owned commit", () => {
+  fc.assert(
+    fc.property(fc.integer({ min: 0, max: 1000 }), (number) => {
+      const dir = mkdtempSync(join(tmpdir(), "drive-collect-"));
+      const main = join(dir, "main");
+      const boxes = join(dir, "boxes");
+      const box = "collect-tests1";
+      const path = "next/collected.test.ts";
+      const previousPath = process.env.PATH;
+      const git = (...args: string[]) => spawnSync("git", ["-C", main, ...args], { encoding: "utf8" });
+
+      try {
+        const bin = join(dir, "bin");
+        mkdirSync(bin);
+        const formatter = join(import.meta.dirname, "../../../../node_modules/.bin/oxfmt");
+        const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+        const installer = `#!/usr/bin/env node\nconst fs = require('node:fs');\nfs.appendFileSync(${JSON.stringify(join(dir, "installs.jsonl"))}, JSON.stringify(process.argv.slice(2))+'\\n');\nfs.mkdirSync('node_modules/.bin', {recursive: true});\nfs.writeFileSync('node_modules/.bin/oxfmt', ${JSON.stringify(`#!/bin/sh\nexec ${quote(formatter)} "$@"\n`)}, {mode: 0o755});\n`;
+        writeFileSync(join(bin, "pnpm"), installer);
+        chmodSync(join(bin, "pnpm"), 0o755);
+        process.env.PATH = `${bin}:${previousPath ?? ""}`;
+        const cloned = spawnSync("git", ["clone", "--shared", "-q", join(import.meta.dirname, "../../../.."), main]);
+        expect(cloned.status).toBe(0);
+        const base = git("rev-parse", "HEAD").stdout.trim();
+        const plan = join(dir, "plan.md");
+        const body = `# Collection fixture\n\n## Files\n| File | Owner step |\n| --- | --- |\n| ${path} | tests |\n`;
+        const hash = createHash("sha256").update(body).digest("hex");
+        writeFileSync(
+          plan,
+          `Approved by the lead agent, builds the decided note; body ${hash.slice(0, 12)}\nPlancheck-Version: 2\n${body}`,
+        );
+        mkdirSync(join(boxes, "state"), { recursive: true });
+        writeFileSync(
+          join(boxes, "state", `${box}.box`),
+          `ticket: 1154\nbranch: fabrikalfa/collected\nbase: ${base}\nplan: ${plan}\nplan-sha256: ${hash}\n`,
+        );
+        const tree = boxTree(boxes, box);
+        mkdirSync(join(tree, "next"), { recursive: true });
+        const report = join(dir, "report.md");
+        writeFileSync(report, "Collection fixture passed.\n");
+        const env = { MAIN: main, BOXES: boxes, GH_REPO: "", CODEX_MODEL: "", CODEX_EFFORT: "" };
+
+        const asked = {
+          ...ask,
+          step: "tests" as const,
+          ticket: "1154",
+          branch: "fabrikalfa/collected",
+          base,
+          box,
+          plan,
+          report,
+        };
+
+        writeFileSync(join(tree, path), `export const value={n:${number}}`);
+        const rejected = collect(env, asked, [{ xy: "??", path }]);
+        expect(rejected.code).not.toBe(0);
+        expect(rejected.err).toContain("not_formatted");
+        expect(git("rev-parse", "--verify", asked.branch).status).not.toBe(0);
+        expect(existsSync(join(boxes, `${box}-sign`))).toBe(false);
+
+        writeFileSync(join(tree, path), `export const value = ${number};\n`);
+        const collected = collect(env, asked, [{ xy: "??", path }]);
+        expect(collected.code, collected.err).toBe(0);
+        expect(git("diff", "--name-only", `${base}..${asked.branch}`).stdout.trim()).toBe(path);
+        expect(git("show", `${asked.branch}:${path}`).stdout).toBe(`export const value = ${number};\n`);
+        expect(git("log", "-1", "--format=%an", asked.branch).stdout.trim()).toBe("fabrikalfa[bot]");
+        expect(git("notes", "--ref=fabrika", "show", asked.branch).status).not.toBe(0);
+        expect(existsSync(join(boxes, `${box}-sign`))).toBe(false);
+
+        writeFileSync(join(tree, "next/not-owned.ts"), "export const forbidden = true;\n");
+        const refused = collect(env, asked, [{ xy: "??", path: "next/not-owned.ts" }]);
+        expect(refused.code).not.toBe(0);
+        expect(refused.err).toContain("not_owner");
+
+        const installs = readFileSync(join(dir, "installs.jsonl"), "utf8")
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line));
+
+        expect(installs).toEqual(
+          Array.from({ length: 3 }, () => ["install", "--offline", "--frozen-lockfile", "--ignore-scripts"]),
+        );
+      } finally {
+        process.env.PATH = previousPath;
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }),
+    { seed: 119120, numRuns: 1 },
+  );
+});
+
 describe("T341 a step's agent runs in its own box, on the row its step allows, today's tooling", () => {
   const dir = mkdtempSync(join(tmpdir(), "drive-row-"));
 
@@ -1538,6 +1631,39 @@ describe("drive holds the Electron lock outside the box, today's tooling", () =>
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("--electron is for --agent claude");
   });
+});
+
+it("property: the full-access flag reaches every step only on codex-exec before a quest starts", () => {
+  const dir = mkdtempSync(join(tmpdir(), "drive-sandbox-"));
+  const brief = join(dir, "brief.md");
+  writeFileSync(brief, "brief");
+
+  try {
+    fc.assert(
+      fc.property(fc.constantFrom(...STEPS), fc.constantFrom("codex", "claude"), (step, other) => {
+        for (const [agent, sandbox, accepted] of [
+          ["codex-exec", "danger-full-access", true],
+          [other, "danger-full-access", false],
+          ["codex-exec", "workspace-write", false],
+        ] as const) {
+          const result = spawnSync(
+            process.execPath,
+            [join(import.meta.dirname, "drive.ts"), "!", step, brief, "--agent", agent, "--sandbox", sandbox],
+            { encoding: "utf8", env: { ...process.env, BOXES: join(dir, "boxes") } },
+          );
+
+          expect(result.status).toBe(2);
+          expect(result.stderr).toContain(
+            accepted ? "a quest name and a brief file are required" : "usage: node drive.ts",
+          );
+          expect(existsSync(join(dir, "boxes", "state", "!.lock"))).toBe(false);
+        }
+      }),
+      { seed: 119120, numRuns: 5 },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 describe("one live process drives a quest, today's tooling", () => {

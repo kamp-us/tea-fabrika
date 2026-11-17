@@ -20,6 +20,7 @@ type Step = Record<string, unknown> & { env?: Record<string, unknown>; with?: Re
 
 type Job = Record<string, unknown> & {
   steps: Step[];
+  outputs?: Record<string, unknown>;
   concurrency?: Record<string, unknown>;
   strategy?: { "fail-fast"?: unknown; "max-parallel"?: unknown; matrix: { shard: unknown } };
   permissions?: unknown;
@@ -133,6 +134,32 @@ const scheduled = fc
 
 const lint = (w: Workflow) => lintScheduled(JSON.stringify(w), check);
 
+const rotationSlots = () =>
+  Object.fromEntries(Array.from({ length: 9 }, (_, index) => [String(index + 1), String(index + 1)]));
+
+const changedRotation = (w: Workflow, slots: unknown = rotationSlots()) => {
+  step(w, "select", "set").env!["RUN_NUMBER"] = `\${{ github.run_number }}`;
+  w.jobs["select"]!.outputs!["slots"] = `\${{ steps.set.outputs.slots }}`;
+  w.jobs["changed"]!.concurrency!["group"] =
+    `scheduled-test-\${{ fromJSON('${JSON.stringify(slots)}')[fromJSON(needs.select.outputs.slots)[matrix.shard]] || '1' }}`;
+
+  return w;
+};
+
+// Plant: keep the old direct-slot-only guard, so the bounded rotation cannot pass preflight.
+it("property: SC19 accepts the run-number rotation through a closed nine-slot lookup", () => {
+  fc.assert(
+    fc.property(scheduled, (w) => {
+      expect(lint(changedRotation(w))).toEqual([]);
+      w.jobs["changed"]!.concurrency!["group"] = `scheduled-test-\${{ matrix.shard }}`;
+      Reflect.deleteProperty(step(w, "select", "set").env!, "RUN_NUMBER");
+      Reflect.deleteProperty(w.jobs["select"]!.outputs!, "slots");
+      expect(lint(w)).toEqual([]);
+    }),
+    options,
+  );
+});
+
 /** Rebuilds the full matrix's closed slot map, then applies one isolated input mutation. */
 const remap = (w: Workflow, change: (slots: Record<string, string>) => void) => {
   const shards = w.jobs["tests"]!.strategy!.matrix.shard;
@@ -191,6 +218,73 @@ const gate = (w: Workflow): Job => {
 
   return job;
 };
+
+// Each fault starts from a valid rotation, including while main still uses direct slots.
+const rotationPlants: [string, (w: Workflow) => void][] = [
+  ["SC19: rotation has no run number", (w) => Reflect.deleteProperty(step(w, "select", "set").env!, "RUN_NUMBER")],
+  [
+    "SC19: rotation changes on retry",
+    (w) => (step(w, "select", "set").env!["RUN_NUMBER"] = `\${{ github.run_attempt }}`),
+  ],
+  [
+    "SC19: rotation reads a private run source",
+    (w) => (step(w, "select", "set").env!["RUN_NUMBER"] = `\${{ vars.RUN_NUMBER }}`),
+  ],
+  ["SC19: rotation has no slot output", (w) => Reflect.deleteProperty(w.jobs["select"]!.outputs!, "slots")],
+  [
+    "SC19: rotation reads another step's output",
+    (w) => (w.jobs["select"]!.outputs!["slots"] = `\${{ steps.other.outputs.slots }}`),
+  ],
+  ["SC19: rotation reaches a tenth slot", (w) => void changedRotation(w, { ...rotationSlots(), "1": "10" })],
+  ["SC19: rotation reuses a slot", (w) => void changedRotation(w, { ...rotationSlots(), "2": "1" })],
+  [
+    "SC19: rotation hides the recorded physical slots",
+    (w) => void changedRotation(w, { ...rotationSlots(), "1": "2", "2": "1" }),
+  ],
+  ["SC19: rotation adds another key", (w) => void changedRotation(w, { ...rotationSlots(), "10": "1" })],
+  [
+    "SC19: rotation loses a key",
+    (w) => {
+      const slots = rotationSlots();
+      Reflect.deleteProperty(slots, "1");
+      changedRotation(w, slots);
+    },
+  ],
+  ["SC19: rotation has a JSON list", (w) => void changedRotation(w, ["1", "2", "3", "4", "5", "6", "7", "8", "9"])],
+  [
+    "SC19: rotation has malformed JSON",
+    (w) => {
+      w.jobs["changed"]!.concurrency!["group"] = String(w.jobs["changed"]!.concurrency!["group"]).replace(
+        '"1":"1"',
+        '"1":',
+      );
+    },
+  ],
+  [
+    "SC19: rotation takes a private suffix",
+    (w) => {
+      w.jobs["changed"]!.concurrency!["group"] = `${String(w.jobs["changed"]!.concurrency!["group"])}-private`;
+    },
+  ],
+  [
+    "SC19: rotation reads arbitrary runtime slots",
+    (w) => {
+      w.jobs["changed"]!.concurrency!["group"] = String(w.jobs["changed"]!.concurrency!["group"]).replace(
+        "needs.select.outputs.slots",
+        "vars.slots",
+      );
+    },
+  ],
+  [
+    "SC19: rotation falls back outside the shared slots",
+    (w) => {
+      w.jobs["changed"]!.concurrency!["group"] = String(w.jobs["changed"]!.concurrency!["group"]).replace(
+        "|| '1'",
+        "|| '10'",
+      );
+    },
+  ],
+];
 
 const plants: [string, (w: Workflow) => void][] = [
   // SC1: a push to main, the hourly catch-up and a hand start, nothing else (0581); no merge line
@@ -319,6 +413,13 @@ const plants: [string, (w: Workflow) => void][] = [
   ["SC12: one waiting run at most", (w) => (w.concurrency["queue"] = "single")],
   // SC19: the same nine test groups and one control group across participating workflows.
   // Plants, each run once with its new guard dropped and restored, must fail their own rule.
+  ...rotationPlants.map(([name, mutate]): [string, (w: Workflow) => void] => [
+    name,
+    (w) => {
+      changedRotation(w);
+      mutate(w);
+    },
+  ]),
   ["SC19: an extra job has no shared slot", (w) => (w.jobs["extra"] = { "runs-on": "ubuntu-latest", steps: [] })],
   [
     "SC19: changed adds another matrix axis",

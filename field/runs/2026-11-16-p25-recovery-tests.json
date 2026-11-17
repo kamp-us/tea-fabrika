@@ -1,0 +1,109 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-p25-recovery-tests",
+  "ticket": "tracker:888",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1099",
+  "started": null,
+  "ended": "2026-11-16T21:12:15-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "next/ P25 slice 1 recovery tests. Preserve main and A-Wire laws, correct policy applicability to gateway/Methods.ts presence, and add generated fail-closed binding controls. Exact step start and usage are not available.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "head": "4af9d5b0760bc4b64e5b0ba8c196a44ace5a97b5",
+  "checks": [
+    {
+      "check": "frozen dependency install",
+      "result": "pass"
+    },
+    {
+      "check": "next/packages/libfabrika/src/mcp/Tools.test.ts",
+      "result": "pass",
+      "passed": 47
+    },
+    {
+      "check": "next/packages/libfabrika/src/mcp/Tools.types.test.ts",
+      "result": "pass",
+      "passed": 1,
+      "note": "Runtime only. No compiler or type-plant proof."
+    },
+    {
+      "check": "next/packages/libfabrika/src/runtime/Program.test.ts",
+      "result": "pass",
+      "passed": 46
+    },
+    {
+      "check": "next/apps/fabrika/src/exam/agents.test.ts",
+      "result": "pass",
+      "passed": 7,
+      "pending": 4,
+      "note": "Later slices absent."
+    },
+    {
+      "check": "next/apps/fabrika/src/exam/agent-may.test.ts",
+      "result": "pass",
+      "passed": 10,
+      "pending": 1,
+      "note": "Slice 2 policy source absent. Final restored Schema control passed."
+    },
+    {
+      "check": "owned test file format and narrow lint",
+      "result": "pass"
+    },
+    {
+      "check": "post-merge pnpm format",
+      "result": "pass"
+    },
+    {
+      "check": "post-merge ratchet against dac18a5ad407e26509acd4bd8d3ebe178aab8954",
+      "result": "pass"
+    },
+    {
+      "check": "post-merge pnpm lint",
+      "result": "pass",
+      "note": "18 of 18 parts passed in 40.7 seconds."
+    }
+  ],
+  "faults": [
+    "The first presence-only test collected zero while Execution.ts still had merge markers. The builder resolved that conflict before safe tests ran.",
+    "The first new control passed a fast-check arbitrary to it.prop, which expects Schema or Effect Arbitrary in the installed version. Collection failed with an undefined SchemaAST encoding field. A short raw-runner replacement was removed. The final control uses Schema.Record of literal path keys to Boolean with the existing it.prop options.",
+    "Before the merge, full lint failed on nine obsolete source stability tags, missing MCP enforcement registration, and the vendor tree absent at the old committed HEAD. The assigned builder removed the tags and tests registered the clean module without changing severity.",
+    "An early ratchet command read the old committed HEAD during the pending merge, so it did not validate the outgoing tree. The post-merge ratchet passed all three lists."
+  ],
+  "plants": [
+    {
+      "law": "next/apps/fabrika/src/exam/agent-may.test.ts: presence controls",
+      "plant": "Add the MCP directory to policy prerequisites. Unrelated presence invokes the failing binding.",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/agent-may.test.ts: presence controls",
+      "plant": "Catch a failed binding load and return null. Expected failed-import throw is lost.",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/agent-may.test.ts: presence controls",
+      "plant": "Omit install from the binding operation checks. A partial binding returns instead of failing.",
+      "result": "red"
+    }
+  ],
+  "missing": [
+    "T5 layers.integration.test.ts and its rule/import plants require eligible remote proof.",
+    "T4 compile-time assertions and type plants were not run. No compiler was started.",
+    "The full required final-head proof and fresh whole-diff review remain required."
+  ],
+  "limits": "All test commands used nice 19, one worker and the pinned Node 26.13.0 runtime with the paid-call key unset. No broad changed suite, guarded integration, signal, workerd, Electron, launchd or CI wait. No test process remained. No own commit or push; the lead ordinary merge contains the named changes."
+}
