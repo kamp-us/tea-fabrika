@@ -3,7 +3,7 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Path } from "effect";
 import { Ghostty } from "ghostty-web";
-import { factsOf, spot } from "./cells.ts";
+import { facts, spot } from "./cells.ts";
 
 const probes = [
   "width",
@@ -216,7 +216,7 @@ it.effect("vector: L14 every code point's cell facts and hard-character spot mat
         }
       }
 
-      expect(factsOf(cp), `cell facts for U+${cp.toString(16)}`).toEqual({
+      expect(facts(cp), `cell facts for U+${cp.toString(16)}`).toEqual({
         width: control(cp) ? 1 : width,
         class: category,
         vs: !control(cp) && width > 0 && answer("variation") !== width,
