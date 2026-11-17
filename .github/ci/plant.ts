@@ -7,7 +7,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import vitestPackage from "vitest/package.json" with { type: "json" };
 import { parse } from "yaml";
 import { argv, cases, decodeRequest, derive, prepare, Request } from "./plant-cases.ts";
-import { Failure } from "./plant-errors.ts";
+import { Failure, Issue } from "./plant-errors.ts";
 import { machine, Model, Observation, type Phase } from "./plant-machine.ts";
 
 export class ExerciseError extends Schema.TaggedError<ExerciseError, { readonly brand: unique symbol }>()(
@@ -163,6 +163,87 @@ export const observation = (key: Request["case"], root: string, raw: string, exi
   }
 
   return missing("unclear");
+};
+
+const Status = Schema.Literals(["passed", "failed", "skipped", "pending", "todo"]);
+
+const Diagnostics = Schema.Struct({
+  testResults: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      assertionResults: Schema.Array(
+        Schema.Struct({
+          fullName: Schema.String,
+          meta: Schema.optionalKey(
+            Schema.Struct({
+              plantErrors: Schema.optionalKey(Schema.Array(Issue)),
+              plantUnhandled: Schema.optionalKey(Schema.Array(Issue)),
+            }),
+          ),
+        }),
+      ),
+    }),
+  ),
+});
+
+/** The receipt explains an incomplete verdict without changing the observation's acceptance rules. */
+export const report = (key: Request["case"], root: string, raw: string) => {
+  const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Reporter))(raw);
+
+  if (Option.isNone(decoded)) {
+    return { state: raw === "" ? "missing" : "malformed" };
+  }
+
+  const report = decoded.value;
+
+  const diagnostics = Schema.decodeUnknownOption(Schema.fromJsonString(Diagnostics))(raw).pipe(
+    Option.map((value) =>
+      value.testResults
+        .filter((suite) => suite.name === `${root}/${cases[key].test}`)
+        .flatMap((suite) => suite.assertionResults.filter((target) => target.fullName === cases[key].title)),
+    ),
+    Option.getOrElse(() => []),
+  );
+
+  const status = (value: string) => Option.getOrElse(Schema.decodeUnknownOption(Status)(value), () => "unknown");
+
+  return {
+    state: "decoded",
+    success: report.success,
+    counts: {
+      total: report.numTotalTests,
+      passed: report.numPassedTests,
+      failed: report.numFailedTests,
+      pending: report.numPendingTests,
+      todo: report.numTodoTests,
+    },
+    suites: {
+      total: report.numTotalTestSuites,
+      passed: report.numPassedTestSuites,
+      failed: report.numFailedTestSuites,
+      pending: report.numPendingTestSuites,
+      results: report.testResults.length,
+    },
+    targets: report.testResults
+      .filter((suite) => suite.name === `${root}/${cases[key].test}`)
+      .map((suite) => ({
+        status: suite.status,
+        message: suite.message !== "",
+        assertions: suite.assertionResults.length,
+        active: suite.assertionResults.filter((target) => target.status === "passed" || target.status === "failed")
+          .length,
+        results: suite.assertionResults
+          .filter((target) => target.fullName === cases[key].title)
+          .map((target) => ({
+            status: status(target.status),
+            duration: target.duration ?? null,
+            failures: target.failureMessages?.length ?? 0,
+            plant: target.meta?.plant != null,
+            errors: diagnostics.flatMap((target) => target.meta?.plantErrors ?? []),
+            unhandled: diagnostics.flatMap((target) => target.meta?.plantUnhandled ?? []),
+          })),
+      })),
+  };
 };
 
 export interface Snapshot {
@@ -743,6 +824,13 @@ export const execute = Effect.fn("plant.execute")(function* (
     return { bytes, mode: info.mode, head, index, status, summary };
   }).pipe(Effect.mapError(() => fail("inspect_failed")));
 
+  const reports: {
+    readonly phase: Phase;
+    readonly exit: number;
+    readonly ms: number;
+    readonly report: ReturnType<typeof report>;
+  }[] = [];
+
   const workspace = Workspace.of({
     inspect,
     write: (bytes, mode) =>
@@ -756,15 +844,17 @@ export const execute = Effect.fn("plant.execute")(function* (
     diff: git(source, [...diffOptions, "--", selected.file]).pipe(Effect.map((text) => new TextEncoder().encode(text))),
     test: (phase) =>
       Effect.gen(function* () {
-        const report = path.join(scratch, `${phase}.json`);
+        const output = path.join(scratch, `${phase}.json`);
 
-        const args = argv(request.case, report).map((arg) =>
+        const args = argv(request.case, output).map((arg) =>
           arg === "--reporter=json" ? `--reporter=${path.join(runner, ".github/ci/plant-reporter.ts")}` : arg,
         );
 
         const result = yield* child(source, "nice", args, phase);
 
-        const raw = yield* fs.readFileString(report).pipe(Effect.orElseSucceed(() => ""));
+        const raw = yield* fs.readFileString(output).pipe(Effect.orElseSucceed(() => ""));
+
+        reports.push({ phase, ...result, report: report(request.case, source, raw) });
 
         return observation(request.case, source, raw, result.exit, result.ms);
       }).pipe(Effect.mapError(() => fail("test_io"))),
@@ -778,7 +868,7 @@ export const execute = Effect.fn("plant.execute")(function* (
 
   const result = yield* perform(request, checkout.head).pipe(Effect.provideService(Workspace, workspace));
 
-  return { ...result, gitVersion, diffOptions };
+  return { ...result, gitVersion, diffOptions, reports };
 }, Effect.scoped);
 
 const main = attempt(process.env, (environment, request) =>
