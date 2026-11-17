@@ -33,10 +33,10 @@ const RECEIPT = `${EVENTS}.redacted`;
  * fieldrow.py's price table, dollars per million tokens (in, cached, out). The test's own copy, so
  * a plant in the product's table cannot move the oracle with it.
  */
-const LIST: Readonly<Record<string, readonly [number, number, number]>> = {
-  "gpt-6.1-sol": [2, 0.1, 10],
-  "gpt-6-astra": [10, 1, 50],
-};
+const LIST = new Map<string, readonly [number, number, number]>([
+  ["gpt-6.1-sol", [2, 0.1, 10]],
+  ["gpt-6-astra", [10, 1, 50]],
+]);
 
 interface Usage {
   readonly input: number;
@@ -141,7 +141,7 @@ const expected = (c: Case): Record<string, unknown> => {
       : { ms: Date.parse(c.ended), iso: c.ended };
 
   const u = summed(c.lines);
-  const rate = LIST[model];
+  const rate = LIST.get(model);
 
   const usd =
     rate === undefined || u === null
@@ -248,7 +248,14 @@ const word = fc.stringMatching(/^[a-zé0-9][a-zé0-9.]{0,7}$/);
 
 const sha = fc.stringMatching(/^[0-9a-f]{7,12}$/);
 
-const named = fc.constantFrom("gpt-6.1-sol", "gpt-6-astra", "gpt-made-up-1");
+const named = fc.oneof(
+  { weight: 3, arbitrary: fc.constantFrom("gpt-6.1-sol", "gpt-6-astra", "gpt-made-up-1") },
+  { weight: 1, arbitrary: fc.constantFrom(...Object.getOwnPropertyNames(Object.prototype)) },
+  {
+    weight: 1,
+    arbitrary: fc.stringMatching(/^[a-zA-Z_][a-zA-Z0-9_.-]{0,30}$/).filter((model) => !LIST.has(model)),
+  },
+);
 
 const cases: fc.Arbitrary<Case> = fc
   .record({
@@ -397,7 +404,7 @@ const check = (c: Case) =>
     expect(fields).toEqual(wanted);
     expect(Object.keys(row)).toEqual(Object.keys(want).map((key) => (key === "reason" ? "why" : key)));
     expect(written.startsWith(String(words))).toBe(true);
-    expect(written === words).toBe(LIST[String(want.model)] === undefined);
+    expect(written === words).toBe(!LIST.has(String(want.model)));
   });
 
 /** The cases of the plan's law that a case reaches. */
@@ -409,7 +416,13 @@ const reaches = (c: Case): ReadonlyArray<string> => {
     ["no events file", c.lines === null],
     ["no usage", c.lines !== null && u === null],
     ["usage", u !== null],
-    ["priced cache", u !== null && u.cached > 0 && LIST[model] !== undefined],
+    ["priced cache", u !== null && u.cached > 0 && LIST.has(model)],
+    ["known sol price", model === "gpt-6.1-sol" && u !== null],
+    ["known astra price", model === "gpt-6-astra" && u !== null],
+    ["prototype model with usage", Object.hasOwn(Object.prototype, model) && u !== null],
+    ["prototype model without usage", Object.hasOwn(Object.prototype, model) && u === null],
+    ["unknown model with usage", !LIST.has(model) && !Object.hasOwn(Object.prototype, model) && u !== null],
+    ["unknown model without usage", !LIST.has(model) && !Object.hasOwn(Object.prototype, model) && u === null],
     ["skipped lines", u !== null && c.lines?.some((line) => line._tag === "skipped") === true],
     ["turns", (c.lines ?? []).filter((line) => line._tag === "turn").length > 1],
     ["file times", c.lines !== null && c.started === null],
@@ -434,16 +447,22 @@ const REQUIRED = [
   "empty model with usage",
   "file times",
   "given times",
+  "known astra price",
+  "known sol price",
   "model default",
   "model from env",
   "no events file",
   "no usage",
   "priced cache",
+  "prototype model with usage",
+  "prototype model without usage",
   "receipt",
   "skipped lines",
   "step bounds",
   "turns",
   "usage",
+  "unknown model with usage",
+  "unknown model without usage",
 ];
 
 const options = { seed: 119120, numRuns: runsFor({ fast: 100, full: 100 }), endOnFailure: true };
