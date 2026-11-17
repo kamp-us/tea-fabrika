@@ -400,6 +400,12 @@
       "imports": ["next-shared"]
     },
     {
+      "name": "kalfa-config",
+      "layer": 1,
+      "paths": ["kalfa/config/src"],
+      "imports": ["next-vitest"]
+    },
+    {
       "name": "next-id-test-support",
       "paths": ["next/packages/libfabrika/src/Id.test-support.ts"],
       "imports": ["next-shared"]
@@ -466,12 +472,6 @@
     {
       "name": "fabrika-program",
       "paths": ["packages/fabrika/src/program"]
-    },
-    {
-      "name": "kalfa-config",
-      "layer": 1,
-      "paths": ["kalfa/config/src"],
-      "imports": ["next-vitest"]
     }
   ],
   "roots": ["next/packages/libfabrika/src", "next/packages/tuval/src", "next/packages/vitest/src", "kalfa/config/src"],

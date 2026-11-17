@@ -55,6 +55,6 @@ const checked: Effect.Effect<number, Files.SettingsError | Snapshot.SnapshotErro
   ),
 );
 
-void [checked, Sources, Toml, Codec, JsonSchema];
+const refusals: [typeof Private, typeof Test] | null = null;
 
-export type Refusals = [typeof Private, typeof Test];
+void [checked, Sources, Toml, Codec, JsonSchema, refusals];
