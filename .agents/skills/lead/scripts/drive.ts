@@ -12,7 +12,7 @@
 // the user's own Codex config and Codex's own sandbox (./codexexec.ts). The box's git data sits outside the box, where the harness lets no
 // command write it, so the agent commits nothing: it reads git through a view (`gitView`), leaves
 // its changes in the tree, and drive copies them into a fresh worktree of the main checkout and
-// commits them as one signed step commit through stepcommit, with main's own signer. A mutation
+// commits them as one unsigned step commit through stepcommit (0161, 0164). A mutation
 // step's Stryker run happens before its agent starts, in a container with its own network
 // (mutbox.ts, decision 0045): drive runs it on the step's start head with the tests a `RELATED=`
 // line of the brief names, and the agent only reads the report, which rides in its prompt. A run
@@ -30,7 +30,7 @@
 //                      phase's time goes on the step's entry in state/<quest>.json as `phases`
 //   starting   Act     box.sh new, at the quest's head
 //   drafting   Sub     one turn of the agent in the box (`runTurn`), waited on; its typed answer
-//   reading    Gather  collect the tree and sign it, then the commits, the commits check's held
+//   reading    Gather  collect the tree, then the commits, the commits check's held
 //                      rules, exam paths, leaks and the report
 //   (update)   Check   pure: what the step answered and what the reads found make one outcome
 //                      (a manifest the lockfile must follow, changed with the lockfile left alone,
@@ -1130,10 +1130,10 @@ export const commitSubject = (ask: Pick<Ask, "ticket" | "step">, report: string)
 /**
  * The agent holds no key and cannot reach the box's git data, so it commits nothing. Its changes
  * are read from the tree and copied into a fresh worktree of the main checkout at the base;
- * stepcommit commits them as the bot and signs them as the step, with main's own signer. The
- * branch then points at that one signed commit, or stays at the base when nothing changed.
+ * stepcommit checks ownership and formatting, then makes the bot's unsigned hand-run commit
+ * (0161, 0164). The branch points at that commit, or stays at the base when nothing changed.
  */
-const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
+export const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
   const git = (...args: string[]) => {
     const r = spawnSync("git", ["-C", env.MAIN, ...args], { encoding: "utf8", env: SAFE_GIT });
 
@@ -1153,6 +1153,17 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
   }
 
   try {
+    // Install the base before copying edits, so a manifest change still reaches the lockfile check.
+    const installed = spawnSync("pnpm", ["install", "--offline", "--frozen-lockfile", "--ignore-scripts"], {
+      cwd: wt,
+      encoding: "utf8",
+      env: { ...SAFE_GIT, PATH: process.env.PATH },
+    });
+
+    if (installed.status !== 0) {
+      return { code: installed.status ?? -1, out: "", err: `collect install: ${installed.stdout}${installed.stderr}` };
+    }
+
     const box = boxTree(env.BOXES, ask.box);
 
     for (const { xy, path, from: old } of changes) {
@@ -1185,6 +1196,7 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
       "sh",
       [
         join(HERE, "../../step-commit/scripts/stepcommit.sh"),
+        "--commit-only",
         ask.step,
         ask.ticket,
         subject,
@@ -1195,10 +1207,8 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
         encoding: "utf8",
         env: {
           ...SAFE_GIT,
-          // The fresh worktree has no node_modules, so stepcommit's format check finds
-          // oxfmt in the main checkout's, where the signer comes from too.
-          PATH: `${join(env.MAIN, "node_modules/.bin")}:${process.env.PATH ?? ""}`,
-          STEPCOMMIT_SIGNER: `node ${join(env.MAIN, "next/apps/fabrika/src/exam/commits.ts")}`,
+          PATH: `${join(wt, "node_modules/.bin")}:${process.env.PATH ?? ""}`,
+          BOXES: env.BOXES,
           // The sign worktree is not the box: name the box whose facts stepcommit checks.
           STEPCOMMIT_BOX: ask.box,
         },
