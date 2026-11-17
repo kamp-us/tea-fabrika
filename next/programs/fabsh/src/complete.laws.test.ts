@@ -74,12 +74,14 @@ it.prop(
     expect(complete("tell %", programs, jobs, talk).candidates).toContain(`%${n}`);
     expect(complete("@agent", programs, jobs, talk).candidates).toEqual(talk.names.map((name) => `@${name}`));
     expect(complete(`${head} `, programs, jobs, talk).candidates).toContain("--help");
+
     for (const table of [false, true]) {
       const catalog = new Map(programs);
       catalog.set(head, { ...programs.get(head)!, table });
       expect(complete(`${head} --a`, catalog, jobs, talk).candidates.includes("--all")).toBe(table);
       expect(complete(`${head} --all --a`, catalog, jobs, talk).candidates).not.toContain("--all");
     }
+
     const harness = `harness${input.word}`;
     const model = `model${input.word}`;
     const effort = `effort${input.word}`;
@@ -103,11 +105,13 @@ it.prop(
         },
       ],
     ]);
+
     for (const name of ["tell", "close", "stop", "attach"]) {
       expect(complete(`${name} `, programs, staged, talk).candidates).toEqual(
         expect.arrayContaining([`%${n}`, first, second]),
       );
     }
+
     expect(complete(`tell ${first} `, programs, staged, talk).candidates).toContain("value");
     expect(complete(`tell ${second} `, programs, staged, talk).candidates).toEqual(["other"]);
     expect(complete(`close ${second} `, programs, staged, talk).candidates).toEqual(["other"]);

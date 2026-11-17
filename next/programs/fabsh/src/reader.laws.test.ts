@@ -89,6 +89,7 @@ describe("fabsh S1 reader", () => {
       expect(tag(roles(`${missing} `, programs)[0]!.role)).toBe("error");
       expect(tag(roles("help ", programs)[0]!.role)).toBe("builtin");
       expect(check(parse(`${missing} `), programs)).toMatchObject({ _tag: "refused", status: 127 });
+
       for (const name of known.filter((candidate) => candidate !== missing)) {
         const required: ProgramList = new Map([
           [
@@ -167,6 +168,7 @@ describe("fabsh S1 reader", () => {
         ]),
       );
       const piped = stages.join(" | ");
+
       for (const line of [piped + " ", `unknown ; ${piped} `, `wrapper value=$(${piped}) `, `${piped} ; ${piped} `]) {
         const bars = roles(line, chain).filter((span) => line.slice(span.start, span.end) === "|");
         expect(bars).toHaveLength((line.match(/\|/g) ?? []).length);
@@ -235,6 +237,7 @@ describe("fabsh S1 reader", () => {
       // Faults: reject repeated inputs; accept --all without a table; erase help namespaces.
       const field = `v${Math.abs(cut)}`;
       const n = Math.abs(cut % 100000);
+
       for (const table of [false, true]) {
         const declaration = { name: "known", flags: {}, inputs: { n: Schema.Int }, outputs: {}, table };
         const list: ProgramList = new Map([["known", declaration]]);
@@ -247,6 +250,7 @@ describe("fabsh S1 reader", () => {
           ),
         ).toBe(table);
       }
+
       for (const namespace of ["flag", "input", "output"]) {
         const declaration = {
           name: "known",
@@ -255,6 +259,7 @@ describe("fabsh S1 reader", () => {
           outputs: namespace === "output" ? { [field]: Schema.String } : {},
         };
         const list: ProgramList = new Map([["known", declaration]]);
+
         for (const [part, accepts] of [
           [`--${field}`, namespace === "flag"],
           [`<${field}`, namespace === "input"],
@@ -270,10 +275,12 @@ describe("fabsh S1 reader", () => {
               Match.orElse(() => true),
             ),
           ).toBe(accepts);
+
           if (!accepts) {
             expect(checked).toMatchObject({ _tag: "refused", at: source.indexOf(part, "known --help ".length) });
           }
         }
+
         for (const help of ["--help", "-h"]) {
           expect(check(parse(`known --help ${help}`), list)).not.toMatchObject({ _tag: "refused" });
         }

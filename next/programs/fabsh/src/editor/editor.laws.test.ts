@@ -180,6 +180,7 @@ it.effect.prop(
       if (sized !== "") {
         terminal.write(sized);
       }
+
       const references: ReturnType<typeof ghostty.createTerminal>[] = [];
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
@@ -272,6 +273,7 @@ it.effect.prop(
       }
 
       // Aliases must perform the same edit and feedback, even when frames split after Esc.
+
       for (const [alias, canonical] of [
         ["\x1b[H", "\x01"],
         ["\x1bOH", "\x01"],
@@ -288,10 +290,12 @@ it.effect.prop(
       ]) {
         const expected = boot(["older", "newer"]);
         const actual = boot(["older", "newer"]);
+
         for (const machine of [expected, actual]) {
           key(machine, "a" + text.replaceAll(/[\x00-\x1f\x7f-\x9f]/g, ""));
           key(machine, "\x01\x06");
         }
+
         key(expected, canonical!);
         key(actual, alias!, Math.abs(seed) % (alias!.length + 1));
         expect(prompt(actual)).toEqual(prompt(expected));
@@ -537,6 +541,7 @@ it.prop(
                 state.back = op === "last" ? 0 : state.back - 1;
                 state.text = state.back === 0 ? state.typed : state.lines[state.lines.length - state.back]!;
               }
+
               key(machine, op === "last" ? "\x1b>" : "\x1b[B");
             }
 
@@ -693,6 +698,7 @@ it.prop(
     }
 
     // Fault: deciding standalone Esc from an input frame destroys a split arrow or meta key.
+
     for (const ending of ["\x1b", "\x1b[D", "\x1bb", "\x1b[1;5D"]) {
       const batch = "\x12" + text + ending;
       const expected = boot(history);
@@ -801,6 +807,7 @@ it.prop(
     expect(observedBusy).toBeGreaterThan(0);
 
     // Fault: parsing beyond Enter moves an incomplete suffix before earlier queued text.
+
     for (const ending of ["\x1b[D", "\x1bOD", "\x1bf", `\x1b[200~${text}\nlast\x1b[201~`]) {
       const suffix = text + ending + text;
       const expected = boot();
@@ -854,6 +861,7 @@ it.prop(
               : model.phase === "asking",
       run: (model, machine) => {
         questionSeen.add(op);
+
         if (op === "start") {
           key(machine, "\x01\x0bstart\r");
           model.phase = "busy";
@@ -893,6 +901,7 @@ it.prop(
               .trim(),
           ).not.toBe("");
         }
+
         if (model.phase === "busy" || model.phase === "asking") {
           Match.value(machine.model.mode).pipe(
             Match.tag("busy", ({ ahead }) => {
@@ -941,6 +950,7 @@ it.prop(
       "finish",
     ].map((op) => choices.find((command) => command.toString() === op)!);
     walk(seed, choices, state, asking, required);
+
     for (const op of operations) {
       expect(questionSeen.has(op), `L12 never reached question ${op}`).toBe(true);
     }
