@@ -49,8 +49,9 @@ const details = (key: Request["case"]) => ({
 // Vitest 5.0.5's JSON reporter serializes e.stack || e.message, never err.diff.
 // Use the installed matcher to produce that input instead of inventing its display diff.
 const matcher = (key: Request["case"], content = "", syntax = false) => {
-  const tmp = `/private/${content}`;
-  const kept = { keep: "fixture child", home: `${tmp}/home`, tmp, foreground: true, paid: true };
+  const tmp = `/private/plant-private-${content.replaceAll("/", "_").replaceAll("\0", "_")}`;
+  const kept = { keep: "fixture child", foreground: true, paid: true };
+  const homeRoot = new TextEncoder().encode(`${tmp}/fh-XXXXXX/host/sock`).length < 103 ? tmp : "/tmp";
 
   const matchers = {
     "checklist-pid": () => expect(undefined, "a notice names its process").toBe("process-id"),
@@ -63,7 +64,9 @@ const matcher = (key: Request["case"], content = "", syntax = false) => {
     "host-requested-pin": () => expect("0.0.0\n").toBe("26.13.0\n"),
     "host-pnpm-path": () => expect(["v26.13.0", "v0.0.0", "v0.0.0"]).toEqual(Array(3).fill("v26.13.0")),
     "host-env-order": () =>
-      expect(JSON.stringify({ ...kept, removed: false })).toBe(JSON.stringify({ ...kept, removed: true })),
+      expect(JSON.stringify({ ...kept, removed: false, tmp, home: `${homeRoot}/fh-unit` })).toBe(
+        JSON.stringify({ ...kept, removed: true, tmp: `${tmp}/host-unit`, home: `${tmp}/host-unit/home` }),
+      ),
   };
 
   return Result.match(Result.try(matchers[key]), {
@@ -430,6 +433,67 @@ it.prop(
     const unreported = report(key, "failed", [stack]);
     unreported.testResults[0]!.assertionResults[0]!.meta.plant = null;
     expect(observation(key, root, JSON.stringify(unreported), 1, 1)._tag).toBe("incomplete");
+  },
+  options,
+);
+
+// Plant: assume inherited setup paths equal the host fixture's own paths.
+it.prop(
+  "env-order follows the adapter temp and exact testHomes root",
+  { content: Schema.String },
+  ({ content }) => {
+    const component = `generated-${content.replaceAll("/", "_").replaceAll("\0", "_")}`;
+
+    for (const budget of [102, 103]) {
+      const padding = budget - new TextEncoder().encode("/tmp//fh-XXXXXX/host/sock").length;
+      const tmp = `/tmp/${"é".repeat(Math.floor(padding / 2))}${"a".repeat(padding % 2)}`;
+      const homeRoot = budget === 102 ? tmp : "/tmp";
+      const kept = { keep: "fixture child", foreground: true, paid: true };
+      const actual = { ...kept, removed: false, tmp, home: `${homeRoot}/fh-${component}` };
+
+      const expected = {
+        ...kept,
+        removed: true,
+        tmp: `${tmp}/host-${component}`,
+        home: `${tmp}/host-${component}/home`,
+      };
+
+      const error = {
+        ...matcher("host-env-order"),
+        actual: JSON.stringify(actual),
+        expected: JSON.stringify(expected),
+        stack: `at matcher (/private/${cases["host-env-order"].test}:197:24)`,
+      };
+
+      expect(new TextEncoder().encode(`${tmp}/fh-XXXXXX/host/sock`).length).toBe(budget);
+      expect(failure("host-env-order", [error])).toMatchObject({
+        diagnostic: "AssertionError: pinned host environment retained a removed parent value",
+        assertion: { line: 197, column: 24 },
+      });
+
+      for (const changed of [
+        { ...actual, home: `${homeRoot}/nested/fh-${component}` },
+        { ...actual, home: `${homeRoot}/hh-${component}` },
+        { ...actual, home: `${homeRoot}/fh-` },
+        { ...actual, home: `${budget === 102 ? "/tmp" : tmp}/fh-${component}` },
+        { ...actual, home: expected.home, tmp: expected.tmp },
+        { ...actual, removed: true },
+        { ...actual, extra: component },
+      ]) {
+        expect(failure("host-env-order", [{ ...error, actual: JSON.stringify(changed) }])).toBeNull();
+      }
+
+      for (const changed of [
+        { ...expected, tmp: `${tmp}/nested/host-${component}`, home: `${tmp}/nested/host-${component}/home` },
+        { ...expected, tmp: `${tmp}/other-${component}`, home: `${tmp}/other-${component}/home` },
+        { ...expected, tmp: `${tmp}/host-`, home: `${tmp}/host-/home` },
+        { ...expected, home: actual.home },
+        { ...expected, removed: false },
+        { ...expected, extra: component },
+      ]) {
+        expect(failure("host-env-order", [{ ...error, expected: JSON.stringify(changed) }])).toBeNull();
+      }
+    }
   },
   options,
 );

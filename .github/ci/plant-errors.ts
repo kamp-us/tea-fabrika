@@ -32,11 +32,13 @@ const ErrorDetails = Schema.Struct({
   operator: Schema.optionalKey(Schema.String),
 });
 
+const Directory = Schema.String.check(Schema.isPattern(/^\/(?:[^/]+\/)*[^/]+$/));
+
 const Fixture = Schema.Struct({
   keep: Schema.Literal("fixture child"),
   removed: Schema.Boolean,
   home: Schema.String,
-  tmp: Schema.String,
+  tmp: Directory,
   foreground: Schema.Literal(true),
   paid: Schema.Literal(true),
 });
@@ -90,11 +92,19 @@ const diagnostic = (key: Request["case"], error: typeof ErrorDetails.Type) => {
       Option.isSome(expected) &&
       !actual.value.removed &&
       expected.value.removed &&
-      actual.value.home === expected.value.home &&
-      actual.value.tmp === expected.value.tmp &&
-      actual.value.home === `${actual.value.tmp}/home`
+      !actual.value.tmp.split("/").some((part) => part === "." || part === "..") &&
+      expected.value.home === `${expected.value.tmp}/home`
     ) {
-      return "AssertionError: pinned host environment retained a removed parent value";
+      // Matches immutable testHomes' socket-length rule before its mkdtemp calls.
+      const root =
+        new TextEncoder().encode(`${actual.value.tmp}/fh-XXXXXX/host/sock`).length < 103 ? actual.value.tmp : "/tmp";
+
+      const host = new RegExp(`^${Regex.escape(actual.value.tmp)}/host-[^/]+$`);
+      const home = new RegExp(`^${Regex.escape(root)}/fh-[^/]+$`);
+
+      if (host.test(expected.value.tmp) && home.test(actual.value.home)) {
+        return "AssertionError: pinned host environment retained a removed parent value";
+      }
     }
   }
 
