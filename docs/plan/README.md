@@ -65,7 +65,12 @@ Today's lead tooling adds a separate manual [L11 exercise](../../.github/workflo
 for `next/` ticket 1129. It fixes one source pair, compares ordinary whole-file runs and private generated inputs,
 and declares ten serial clean jobs. Fixed output faults restore every edited file and publish only decoded facts.
 The actual adapters remain unexercised until the workflow runs on disposable CI after landing. Row, initialization,
-Runner and CPU-profile gaps stay open. These measurements supply no branch proof or reliability claim.
+Runner and the original L11 product-workload CPU-profile gaps stay open.
+A [local CPU profile of the pure equality test](../../field/notes/2026-11-17-l11-equality-runtime.json)
+found repeated strict line decoding dominated its time. Reusing successful decodes within one comparison reduced the
+unchanged 100-run test from 19.0 s to 7.0 s locally. It does not attribute CPU time in the Runner or L11 product workload.
+CI's CPU cause remains unproved. These measurements supply no
+branch proof or reliability claim.
 
 Today's lead tooling has a manual [plant exercise](../../.github/workflows/plant.yaml), ticket 1133.
 It accepts seven fixed cases and an exact source commit, then records baseline, broken and restored observations.
