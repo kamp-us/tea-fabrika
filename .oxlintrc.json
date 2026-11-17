@@ -2794,6 +2794,7 @@
         "next/packages/vitest/**",
         "next/programs/chaos/**",
         "next/programs/checklist/**",
+        "next/programs/fabsh/**",
         "next/programs/inbox/**"
       ],
       "rules": { "anti-slop/require-safety-comment-for-type-assertion": ["error", { "markers": ["SAFETY"] }] }
@@ -2831,6 +2832,7 @@
         "next/packages/tuval/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
+        "next/programs/fabsh/**",
         "next/programs/inbox/**",
         "next/programs/tezgah/**"
       ],
@@ -2900,6 +2902,7 @@
         "next/packages/libfabrika/src/repositories/**",
         "next/packages/vitest/**",
         "next/programs/counter/**",
+        "next/programs/fabsh/**",
         "next/programs/inbox/**"
       ],
       "rules": { "anti-slop-effect/no-manual-tag-comparison": "error" }
