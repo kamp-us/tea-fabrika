@@ -144,7 +144,9 @@ const set = fc
   );
 
 const sharedSlots = Array.from({ length: 9 }, (_, index) => String(index + 1));
+
 const propertyOptions = { arbitrary: { seed: 119120, runs: runsFor({ fast: 100, full: 100 }), size: 100 } };
+
 const identitySlots = `slots=${JSON.stringify(Object.fromEntries(sharedSlots.map((slot) => [slot, slot])))}`;
 
 // Plant: accept a missing, nonpositive, fractional, infinite or unsafe run number.
@@ -159,7 +161,7 @@ it.prop(
     ];
 
     for (const proof of proofs) {
-      for (const run of [0, -number, number + 0.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+      for (const run of [0, -number, number + 0.5, Number.NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1]) {
         expect(() => outputs(proof, run), String(run)).toThrow(/RUN_NUMBER/);
       }
 
@@ -187,16 +189,19 @@ it.prop(
     for (let offset = 0; offset < 9; offset++) {
       for (let most = 1; most <= 9; most++) {
         const selected = files.slice(0, most);
+
         const proof = choose(seen(["next/a.ts"]), [], selected, {
           most,
           limit: 1,
           table: Object.fromEntries(files.map((file) => [file, 1])),
         });
+
         const before = structuredClone(proof);
         const emitted = outputs(proof, run + offset);
         expect(emitted).toHaveLength(4);
         expect(emitted[0]).toBe("scope=changed");
         expect(emitted[3]).toMatch(/^slots=/);
+
         const names: string[] = JSON.parse(emitted[1]!.slice("legs=".length));
         const words: Record<string, string> = JSON.parse(emitted[2]!.slice("files=".length));
         const slots: Record<string, string> = JSON.parse(emitted[3]!.slice("slots=".length));
