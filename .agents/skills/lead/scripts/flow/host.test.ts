@@ -288,6 +288,52 @@ exec "$@"
         expect(outcome?.reason).toContain("begun");
       }),
     ));
+
+  it("scenario: stalled runtime discovery shares the first command's deadline and is reaped before returning", () =>
+    ran(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* temp;
+        yield* fs.writeFileString(`${dir}/volta`, '#!/bin/sh\nprintf "%s\\n" "$$" > discovery-pid\nexec sleep 30\n');
+        yield* fs.chmod(`${dir}/volta`, 0o755);
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            const before = process.env.PATH;
+            process.env.PATH = `${dir}:${before ?? ""}`;
+
+            return before;
+          }),
+          (before) =>
+            Effect.sync(() => {
+              if (before === undefined) {
+                delete process.env.PATH;
+              } else {
+                process.env.PATH = before;
+              }
+            }),
+        );
+        const started = Date.now();
+
+        // Same 120 ms command budget, 30 s stand-in and cleanup bound as the timeout law above.
+        const outcome = yield* runCommands(
+          dir,
+          ["touch ran", "touch later"],
+          {},
+          `${dir}/log`,
+          0.002,
+          process.versions.node,
+        );
+
+        expect(Date.now() - started).toBeLessThan(10_000);
+        expect(outcome).toMatchObject({ _tag: "send", to: "build" });
+        expect(outcome?.reason).toContain("0.002-minute limit");
+        expect(yield* fs.exists(`${dir}/ran`)).toBe(false);
+        expect(yield* fs.exists(`${dir}/later`)).toBe(false);
+        const pid = Number((yield* fs.readFileString(`${dir}/discovery-pid`)).trim());
+        expect(Number.isInteger(pid) && pid > 0).toBe(true);
+        expect(() => process.kill(pid, 0)).toThrow(/ESRCH/);
+      }),
+    ));
 });
 
 describe("one Electron app at a time", () => {

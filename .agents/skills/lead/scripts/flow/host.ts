@@ -243,10 +243,15 @@ export const runCommands = Effect.fn("host.runCommands")(function* (
     return null;
   }
 
-  const childEnv = node === null ? env : yield* boxEnv(dir, { ...process.env, ...env }, node);
+  const childEnv = yield* Effect.cached(
+    node === null ? Effect.succeed(env) : boxEnv(dir, { ...process.env, ...env }, node),
+  );
 
   for (const line of lines) {
-    const ended = yield* runLine(dir, line, childEnv, log).pipe(Effect.timeoutOption(Duration.minutes(minutes)));
+    const ended = yield* childEnv.pipe(
+      Effect.flatMap((prepared) => runLine(dir, line, prepared, log)),
+      Effect.timeoutOption(Duration.minutes(minutes)),
+    );
 
     if (Option.isNone(ended)) {
       const tail = yield* logTail(log);

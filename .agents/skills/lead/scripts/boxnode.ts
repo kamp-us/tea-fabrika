@@ -98,7 +98,9 @@ const said = (cwd: string, command: string, args: readonly string[]) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
-    return yield* spawner.string(ChildProcess.make(command, args, { cwd, extendEnv: true, stdin: "ignore" }));
+    return yield* spawner.string(
+      ChildProcess.make(command, args, { cwd, extendEnv: true, stdin: "ignore", forceKillAfter: "10 seconds" }),
+    );
   }).pipe(Effect.orElseSucceed(() => ""));
 
 /** `parent` with the requested Node's and pnpm's bins first; defaults to the root manifest's pin. */
