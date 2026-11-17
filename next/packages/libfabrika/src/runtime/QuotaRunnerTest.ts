@@ -462,8 +462,10 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               const stepped = new Set<unknown>();
 
               for (const entry of after) {
+                const id = entry.id;
+
                 if (Predicate.isTagged(entry, "stepped")) {
-                  stepped.add(entry.id);
+                  stepped.add(id);
                 }
               }
 
