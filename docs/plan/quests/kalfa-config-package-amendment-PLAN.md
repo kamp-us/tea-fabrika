@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0585, 0556, 0086, 0032, 0579 and 0594; body ceb38b67c415
+Approved by the lead agent, builds 0585, 0556, 0086, 0032, 0579 and 0594; body cb6da618dad1
 Plancheck-Version: 3
 
 # Plan amendment: make slice 2 installable as a private config tarball
@@ -262,7 +262,7 @@ or clarify import followers. Old tests change module specifiers only; preserve t
 | next/apps/fabrika/settings-generate.ts | build | 3 | Imports only, generated output unchanged. |
 | next/apps/fabrika/e2e/node/P19Launchd.test-support.ts | tests | tests | Imports only. |
 | next/apps/fabrika/src/exam/layers.integration.test.ts | tests | tests | Imports only if its settings reference is a module specifier; retain graph assertions. |
-| next/apps/fabrika/src/settings-generated.integration.test.ts | tests | tests | Imports only. |
+| next/apps/fabrika/src/settings-generated.integration.test.ts | tests | tests | Translate imports, the ADAPTER module-location literal to kalfa/config/src/TomlParser.ts and the generated public specifier to @kalfa/config/TomlParser only; preserve every assertion, generator, count and parser restriction. |
 | next/apps/fabrika/src/settings-start.integration.test.ts | tests | tests | Imports only. |
 | next/apps/fabrika/src/worker-mail.integration.test.ts | tests | tests | Imports only. |
 | .github/ci/changes.mjs | tests | tests | Deferred until CI owner's repair lands: recognize package paths without narrowing current selection. |
