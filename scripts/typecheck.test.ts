@@ -328,24 +328,28 @@ const NO_PID = 2 ** 22 + 7;
 
 describe("T766 ProcessesPs reads pgrep and ps as they print, today's tooling", () => {
   // N6. Vectors: pgrep -x and ps -o as procps-ng 4.0.4 printed them on Linux, 2026-11-16 (a pid per
-  // line; ps right-aligns etime as [[dd-]hh:]mm:ss). macOS's ps(1) documents the same etime form;
-  // no macOS output was captured for these vectors. Plant: read pgrep's exit 2 as listed, so
-  // refused is lost.
+  // line; ps right-aligns etime as [[dd-]hh:]mm:ss), plus Darwin output captured on 2026-11-17
+  // from one bounded Node child that exited naturally: pgrep exits 0/1/2, args and 00:01 etime.
+  // The spawner replays saved output, not the real Mac adapter. Plant: read pgrep's exit 2 as
+  // listed, so refused is lost.
   it.effect("vector: pgrep's exit 0 lists its pids, exit 1 lists none, and 2 or more, or no pgrep, is refused", () =>
     Effect.forEach(
       [
-        [{ out: "4101\n4102\n", code: 0 }, Listing.cases.listed.make({ pids: [4101, 4102] })],
-        [{ out: "", code: 1 }, Listing.cases.listed.make({ pids: [] })],
-        [{ out: "", code: 2 }, Listing.cases.refused.make({})],
-        [{ out: "", code: 3 }, Listing.cases.refused.make({})],
-        ["missing", Listing.cases.refused.make({})],
+        [{ out: "4101\n4102\n", code: 0 }, Listing.cases.listed.make({ pids: [4101, 4102] }), "tsgo"],
+        [{ out: "", code: 1 }, Listing.cases.listed.make({ pids: [] }), "tsgo"],
+        [{ out: "", code: 2 }, Listing.cases.refused.make({}), "tsgo"],
+        [{ out: "", code: 3 }, Listing.cases.refused.make({}), "tsgo"],
+        ["missing", Listing.cases.refused.make({}), "tsgo"],
+        [{ out: "12334\n", code: 0 }, Listing.cases.listed.make({ pids: [12334] }), "tc_n6_capture"],
+        [{ out: "", code: 1 }, Listing.cases.listed.make({ pids: [] }), "tc_n6_absent"],
+        [{ out: "", code: 2 }, Listing.cases.refused.make({}), "["],
       ] as const,
-      ([ran, want]) =>
+      ([ran, want, name]) =>
         Effect.map(
           onPs(
             (cmd, args) =>
-              cmd === "pgrep" && args.includes("-x") && args.at(-1) === "tsgo" ? ran : { out: "", code: 99 },
-            (p) => p.named("tsgo"),
+              cmd === "pgrep" && args.includes("-x") && args.at(-1) === name ? ran : { out: "", code: 99 },
+            (p) => p.named(name),
           ),
           ({ value }) => expect(value).toEqual(want),
         ),
@@ -353,11 +357,13 @@ describe("T766 ProcessesPs reads pgrep and ps as they print, today's tooling", (
     ),
   );
 
+  // Plant: remove only the newline, leaving the captured Mac command's two trailing spaces.
   it.effect("vector: ps -o args= gives the command line trimmed, and an empty one where ps cannot read it", () =>
     Effect.forEach(
       [
         [{ out: "node -e setTimeout(()=>{},3000)\n", code: 0 }, "node -e setTimeout(()=>{},3000)"],
         [{ out: "tsgo --lsp --stdio\n", code: 0 }, "tsgo --lsp --stdio"],
+        [{ out: "tc_n6_capture  \n", code: 0 }, "tc_n6_capture"],
         [{ out: "", code: 1 }, ""],
         ["missing", ""],
       ] as const,
@@ -374,6 +380,7 @@ describe("T766 ProcessesPs reads pgrep and ps as they print, today's tooling", (
     ),
   );
 
+  // Plant: reject etime's zero-minute form, losing the captured Mac child's start time.
   it.effect(
     "vector: a running pid's start is now less ps's etime, none where ps cannot read it, and a gone pid asks ps nothing",
     () => {
@@ -390,6 +397,7 @@ describe("T766 ProcessesPs reads pgrep and ps as they print, today's tooling", (
           ["      18:16\n", 18 * 60 + 16],
           ["   02:03:04\n", 2 * 3600 + 3 * 60 + 4],
           [" 1-02:03:04\n", 86_400 + 2 * 3600 + 3 * 60 + 4],
+          ["00:01\n", 1],
         ] as const) {
           const { value } = yield* onPs(etime(out), (p) => p.liveness(self), now);
           expect(value).toEqual(Liveness.cases.running.make({ startedAt: now - seconds * 1000 }));
