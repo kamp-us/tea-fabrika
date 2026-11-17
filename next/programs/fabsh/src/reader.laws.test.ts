@@ -89,6 +89,21 @@ describe("fabsh S1 reader", () => {
       expect(tag(roles(`${missing} `, programs)[0]!.role)).toBe("error");
       expect(tag(roles("help ", programs)[0]!.role)).toBe("builtin");
       expect(check(parse(`${missing} `), programs)).toMatchObject({ _tag: "refused", status: 127 });
+      for (const name of known.filter((candidate) => candidate !== missing)) {
+        const required: ProgramList = new Map([
+          [
+            name,
+            {
+              name,
+              flags: { n: { schema: Schema.Int, required: true } },
+              inputs: {},
+              outputs: {},
+            },
+          ],
+        ]);
+        expect(tag(roles(`${name} `, required)[0]!.role)).not.toBe("error");
+        expect(check(parse(`${name} `), required)).toMatchObject({ _tag: "refused", status: 2 });
+      }
     },
     options(300),
   );
@@ -97,7 +112,12 @@ describe("fabsh S1 reader", () => {
   it.prop(
     "L4 pipe roles and check use needed fields and accept extra writer fields",
     {
-      fields: Schema.Struct({ needed: Name, extra: Name, absent: Name }),
+      fields: Schema.Struct({
+        needed: Name,
+        extra: Name,
+        absent: Name,
+        length: Schema.Int.check(Schema.isBetween({ minimum: 3, maximum: 8 })),
+      }),
     },
     ({ fields }) => {
       const needed = `n${fields.needed}`;
@@ -132,6 +152,25 @@ describe("fabsh S1 reader", () => {
             Match.orElse(() => true),
           ),
         ).toBe(fits);
+      }
+
+      const stages = Array.from({ length: fields.length }, (_, n) => `stage${n}`);
+      const chain: ProgramList = new Map(
+        stages.map((name) => [
+          name,
+          {
+            name,
+            flags: {},
+            inputs: { take: Schema.Struct({ [needed]: Schema.String }) },
+            outputs: { out: Schema.Struct({ [needed]: Schema.Int }) },
+          },
+        ]),
+      );
+      const piped = stages.join(" | ");
+      for (const line of [piped + " ", `unknown ; ${piped} `, `wrapper value=$(${piped}) `, `${piped} ; ${piped} `]) {
+        const bars = roles(line, chain).filter((span) => line.slice(span.start, span.end) === "|");
+        expect(bars).toHaveLength((line.match(/\|/g) ?? []).length);
+        expect(bars.every((span) => tag(span.role) === "error")).toBe(true);
       }
     },
     options(300),
@@ -182,6 +221,63 @@ describe("fabsh S1 reader", () => {
       expect(quoted).toMatchObject({ _tag: "word", start: 0, end: literal.length + 2, text: literal });
       const escaped = words(`"${literal.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}" `).tokens[0]!;
       expect(escaped).toMatchObject({ _tag: "word", text: literal });
+
+      const tail = `absent${Math.abs(cut)} --bad value `;
+      const position = Math.abs(cut) % (tail.indexOf(" ") + 1);
+      expect(tag(roles(tail, programs, position)[0]!.role)).not.toBe("error");
+      expect(tag(roles(tail, programs, tail.length)[0]!.role)).toBe("error");
+      const flagLine = "known --bad value ";
+      const flag = roles(flagLine, programs, flagLine.indexOf("bad") + 1).find(
+        (span) => flagLine.slice(span.start, span.end) === "--bad",
+      );
+      expect(tag(flag!.role)).not.toBe("error");
+
+      // Faults: reject repeated inputs; accept --all without a table; erase help namespaces.
+      const field = `v${Math.abs(cut)}`;
+      const n = Math.abs(cut % 100000);
+      for (const table of [false, true]) {
+        const declaration = { name: "known", flags: {}, inputs: { n: Schema.Int }, outputs: {}, table };
+        const list: ProgramList = new Map([["known", declaration]]);
+        expect(check(parse(`known n=${n} n=${n + 1}`), list)).not.toMatchObject({ _tag: "refused" });
+        const all = check(parse("known --all"), list);
+        expect(
+          Match.value(all).pipe(
+            Match.tag("refused", () => false),
+            Match.orElse(() => true),
+          ),
+        ).toBe(table);
+      }
+      for (const namespace of ["flag", "input", "output"]) {
+        const declaration = {
+          name: "known",
+          flags: namespace === "flag" ? { [field]: { schema: Schema.String, required: false } } : {},
+          inputs: namespace === "input" ? { [field]: Schema.String } : {},
+          outputs: namespace === "output" ? { [field]: Schema.String } : {},
+        };
+        const list: ProgramList = new Map([["known", declaration]]);
+        for (const [part, accepts] of [
+          [`--${field}`, namespace === "flag"],
+          [`<${field}`, namespace === "input"],
+          [`${field}=`, namespace === "input"],
+          [`>${field}`, namespace === "output"],
+          [field, true],
+        ] as const) {
+          const source = `known --help ${part}`;
+          const checked = check(parse(source), list);
+          expect(
+            Match.value(checked).pipe(
+              Match.tag("refused", () => false),
+              Match.orElse(() => true),
+            ),
+          ).toBe(accepts);
+          if (!accepts) {
+            expect(checked).toMatchObject({ _tag: "refused", at: source.indexOf(part, "known --help ".length) });
+          }
+        }
+        for (const help of ["--help", "-h"]) {
+          expect(check(parse(`known --help ${help}`), list)).not.toMatchObject({ _tag: "refused" });
+        }
+      }
     },
     options(300),
   );

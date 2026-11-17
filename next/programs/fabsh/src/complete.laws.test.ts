@@ -73,6 +73,46 @@ it.prop(
     expect(complete(`${head} v`, programs, jobs, talk).candidates).toContain("value=");
     expect(complete("tell %", programs, jobs, talk).candidates).toContain(`%${n}`);
     expect(complete("@agent", programs, jobs, talk).candidates).toEqual(talk.names.map((name) => `@${name}`));
+    expect(complete(`${head} `, programs, jobs, talk).candidates).toContain("--help");
+    for (const table of [false, true]) {
+      const catalog = new Map(programs);
+      catalog.set(head, { ...programs.get(head)!, table });
+      expect(complete(`${head} --a`, catalog, jobs, talk).candidates.includes("--all")).toBe(table);
+      expect(complete(`${head} --all --a`, catalog, jobs, talk).candidates).not.toContain("--all");
+    }
+    const harness = `harness${input.word}`;
+    const model = `model${input.word}`;
+    const effort = `effort${input.word}`;
+    const spare = `spare${input.word}`;
+    const offered = { names: talk.names, harnesses: [harness], offers: { [harness]: [model, effort, spare] } };
+    expect(complete(`summon ${harness} `, programs, jobs, offered).candidates).toEqual(["as", model, effort, spare]);
+    expect(complete(`summon ${harness} ${model} `, programs, jobs, offered).candidates).toEqual(["as", effort, spare]);
+    expect(complete(`summon ${harness} ${model} ${effort} `, programs, jobs, offered).candidates).toEqual(["as"]);
+    expect(complete(`summon ${harness} as `, programs, jobs, offered).candidates).toEqual([]);
+    const first = `process${input.word}a`;
+    const second = `process${input.word}b`;
+    const staged = new Map([
+      [
+        n,
+        {
+          ...jobs.get(n)!,
+          stages: [
+            { process: first, program: head, inputs: programs.get(head)!.inputs },
+            { process: second, program: "second", inputs: { other: Schema.Literals(["yes", "no"]) } },
+          ],
+        },
+      ],
+    ]);
+    for (const name of ["tell", "close", "stop", "attach"]) {
+      expect(complete(`${name} `, programs, staged, talk).candidates).toEqual(
+        expect.arrayContaining([`%${n}`, first, second]),
+      );
+    }
+    expect(complete(`tell ${first} `, programs, staged, talk).candidates).toContain("value");
+    expect(complete(`tell ${second} `, programs, staged, talk).candidates).toEqual(["other"]);
+    expect(complete(`close ${second} `, programs, staged, talk).candidates).toEqual(["other"]);
+    expect(complete(`tell ${second} other y`, programs, staged, talk).candidates).toEqual(["yes"]);
+
     const piped = complete("source | ", programs, jobs, talk).candidates;
     expect(piped).toEqual(expect.arrayContaining(names));
     expect(piped).not.toContain("wrong");

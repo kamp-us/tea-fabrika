@@ -38,7 +38,18 @@ const send = (real: Real, raw: unknown) => {
   real.cmds = cmds;
 };
 
-const key = (real: Real, data: string) => send(real, { type: "keys", data });
+// A logical key boundary is explicit. Transport frames alone do not disambiguate Esc.
+const key = (real: Real, data: string, split?: number) => {
+  const outputs: Output[] = [];
+
+  for (const chunk of split === undefined ? [data] : [data.slice(0, split), data.slice(split)]) {
+    send(real, { type: "keys", data: chunk });
+    outputs.push(...real.cmds);
+  }
+
+  send(real, { type: "flush" });
+  real.cmds = [...outputs, ...real.cmds];
+};
 
 const prompt = (real: Real) =>
   Match.value(real.model.mode).pipe(
@@ -81,6 +92,18 @@ const Text = Arbitrary.schema(Schema.String).pipe(
 );
 
 const Edits = Schema.Literals([
+  "\x1b[H",
+  "\x1bOH",
+  "\x1b[1~",
+  "\x1b[F",
+  "\x1bOF",
+  "\x1b[4~",
+  "\x1bOD",
+  "\x1bOC",
+  "\x1bOA",
+  "\x1bOB",
+  "\x1b",
+  "\x07",
   "\x01",
   "\x05",
   "\x02",
@@ -170,75 +193,122 @@ it.effect.prop(
         ...keys,
         [...text].map((c) => ["a", "b", " ", "漢", "😀", "é", "©️"][(c.codePointAt(0) ?? 0) % 7] ?? "a").join(""),
         "漢😀é©️",
-      ].map((data): fc.Command<{ prompt: boolean }, Real> => ({
-        check: (state) => state.prompt,
-        run: (model, state) => {
-          reached.add(data);
-          key(state, data);
-          const out = bytes(state.cmds);
+      ]
+        .flatMap((data) => [
+          { data, split: undefined },
+          { data, split: Math.abs(seed) % (data.length + 1) },
+        ])
+        .map(({ data, split }): fc.Command<{ prompt: boolean }, Real> => ({
+          check: (state) => state.prompt,
+          run: (model, state) => {
+            reached.add(data);
+            key(state, data, split);
+            const out = bytes(state.cmds);
 
-          if (out !== "") {
-            terminal.write(out);
-          }
+            if (out !== "") {
+              terminal.write(out);
+            }
 
-          Match.value(state.model.mode).pipe(
-            Match.tag("busy", () => {
-              send(state, { type: "ready" });
-              const ready = bytes(state.cmds);
+            Match.value(state.model.mode).pipe(
+              Match.tag("busy", () => {
+                send(state, { type: "ready" });
+                const ready = bytes(state.cmds);
 
-              if (ready !== "") {
-                terminal.write(ready);
-              }
-            }),
-            Match.tag("search", () => {
-              key(state, "\x07");
-              const cancel = bytes(state.cmds);
+                if (ready !== "") {
+                  terminal.write(ready);
+                }
+              }),
+              Match.tag("search", () => {
+                key(state, "\x07");
+                const cancel = bytes(state.cmds);
 
-              if (cancel !== "") {
-                terminal.write(cancel);
-              }
-            }),
-            Match.tag("ended", () => {
-              const restarted = boot();
-              state.model = restarted.model;
-              state.cmds = restarted.cmds;
-              send(state, { type: "size", cols: width });
-              terminal.write(`${bytes(restarted.cmds)}${bytes(state.cmds)}`);
-            }),
-            Match.orElse(() => {}),
-          );
-          model.prompt = Match.value(state.model.mode).pipe(
-            Match.tag("prompt", () => true),
-            Match.orElse(() => false),
-          );
-          const line = prompt(state);
-          const expected = `fabsh$ ${line.left}${line.right}`;
-          const cursor = terminal.getCursor();
-          const rows = Math.ceil((spot(expected, width) + 1) / width);
-          const start = cursor.y - Math.floor(spot(`fabsh$ ${line.left}`, width) / width);
-          const reference = ghostty.createTerminal(width, rows + 1);
-          references.push(reference);
-          reference.write(expected + " ");
-          const cells = (row: ReturnType<typeof terminal.getLine>) =>
-            (row ?? []).map((cell) => ({
-              codepoint: cell.codepoint,
-              width: cell.width,
-              marks: cell.grapheme_len,
-            }));
+                if (cancel !== "") {
+                  terminal.write(cancel);
+                }
+              }),
+              Match.tag("ended", () => {
+                const restarted = boot();
+                state.model = restarted.model;
+                state.cmds = restarted.cmds;
+                send(state, { type: "size", cols: width });
+                terminal.write(`${bytes(restarted.cmds)}${bytes(state.cmds)}`);
+              }),
+              Match.orElse(() => {}),
+            );
+            model.prompt = Match.value(state.model.mode).pipe(
+              Match.tag("prompt", () => true),
+              Match.orElse(() => false),
+            );
+            const line = prompt(state);
+            const expected = `fabsh$ ${line.left}${line.right}`;
+            const cursor = terminal.getCursor();
+            const rows = Math.ceil((spot(expected, width) + 1) / width);
+            const start = cursor.y - Math.floor(spot(`fabsh$ ${line.left}`, width) / width);
+            const reference = ghostty.createTerminal(width, rows + 1);
+            references.push(reference);
+            reference.write(expected + " ");
+            const cells = (row: ReturnType<typeof terminal.getLine>) =>
+              (row ?? []).map((cell) => ({
+                codepoint: cell.codepoint,
+                width: cell.width,
+                marks: cell.grapheme_len,
+              }));
 
-          for (let row = 0; row < rows; row += 1) {
-            expect(cells(terminal.getLine(start + row))).toEqual(cells(reference.getLine(row)));
-          }
+            for (let row = 0; row < rows; row += 1) {
+              expect(cells(terminal.getLine(start + row))).toEqual(cells(reference.getLine(row)));
+            }
 
-          expect(cursor.x).toBe(spot(`fabsh$ ${line.left}`, width) % width);
-        },
-        toString: () => JSON.stringify(data),
-      }));
-      walk(seed, choices, { prompt: true }, real, [...choices.slice(0, Edits.literals.length), ...choices.slice(-2)]);
+            expect(cursor.x).toBe(spot(`fabsh$ ${line.left}`, width) % width);
+          },
+          toString: () => JSON.stringify(data),
+        }));
+      walk(seed, choices, { prompt: true }, real, [
+        ...choices.slice(0, Edits.literals.length * 2),
+        ...choices.slice(-4),
+      ]);
 
       for (const data of Edits.literals) {
         expect(reached.has(data), `L8 never reached bound key ${JSON.stringify(data)}`).toBe(true);
       }
+
+      // Aliases must perform the same edit and feedback, even when frames split after Esc.
+      for (const [alias, canonical] of [
+        ["\x1b[H", "\x01"],
+        ["\x1bOH", "\x01"],
+        ["\x1b[1~", "\x01"],
+        ["\x1b[F", "\x05"],
+        ["\x1bOF", "\x05"],
+        ["\x1b[4~", "\x05"],
+        ["\x1bOD", "\x02"],
+        ["\x1bOC", "\x06"],
+        ["\x1bOA", "\x10"],
+        ["\x1bOB", "\x0e"],
+        ["\x1b", "\x07"],
+        ["\x07", "\x07"],
+      ]) {
+        const expected = boot(["older", "newer"]);
+        const actual = boot(["older", "newer"]);
+        for (const machine of [expected, actual]) {
+          key(machine, "a" + text.replaceAll(/[\x00-\x1f\x7f-\x9f]/g, ""));
+          key(machine, "\x01\x06");
+        }
+        key(expected, canonical!);
+        key(actual, alias!, Math.abs(seed) % (alias!.length + 1));
+        expect(prompt(actual)).toEqual(prompt(expected));
+        expect(bytes(actual.cmds)).toBe(bytes(expected.cmds));
+      }
+
+      // Fault: paint judges the last word instead of the word at the real cursor.
+      const edited = boot();
+      const missing = `absent${Math.abs(seed)}`;
+      const underlined = (outputs: ReadonlyArray<Output>) =>
+        [...bytes(outputs).matchAll(/\x1b\[([0-9;]*)m/g)].some((match) => match[1]!.split(";").includes("4"));
+      key(edited, missing + " ");
+      expect(underlined(edited.cmds)).toBe(true);
+      key(edited, "\x01");
+      expect(underlined(edited.cmds)).toBe(false);
+      key(edited, "z");
+      expect(underlined(edited.cmds)).toBe(false);
     }).pipe(Effect.provide(NodeServices.layer)),
   options(),
 );
@@ -416,6 +486,13 @@ it.prop(
   ({ seed, text, limit }) => {
     for (const cap of [1, limit, 1000]) {
       const historySeen = new Set<string>();
+      const empty = boot([], cap);
+      key(empty, "\x1b[A");
+      expect(bytes(empty.cmds)).toContain("\x07");
+      expect(prompt(empty)).toEqual({ left: "", right: "" });
+      key(empty, "\x1b[B");
+      expect(bytes(empty.cmds)).toContain("\x07");
+      expect(prompt(empty)).toEqual({ left: "", right: "" });
       const history = Array.from({ length: cap + 2 }, (_, n) => `entry ${n}`);
       const real = boot(history, cap);
       const model: Recall = { lines: history.slice(-cap), text: "", typed: "", back: 0 };
@@ -425,6 +502,7 @@ it.prop(
           check: (state) => (op !== "type" || state.back === 0) && (op !== "repeat" || state.lines.length > 0),
           run: (state, machine) => {
             historySeen.add(op);
+            const boundary = op === "up" ? state.back === state.lines.length : op === "down" && state.back === 0;
 
             if (op === "type") {
               state.text += text;
@@ -460,6 +538,10 @@ it.prop(
                 state.text = state.back === 0 ? state.typed : state.lines[state.lines.length - state.back]!;
               }
               key(machine, op === "last" ? "\x1b>" : "\x1b[B");
+            }
+
+            if (op === "up" || op === "down") {
+              expect(bytes(machine.cmds).includes("\x07"), `${op} boundary feedback`).toBe(boundary);
             }
 
             const line = prompt(machine);
@@ -609,6 +691,23 @@ it.prop(
     for (const op of ["start", "query", "backspace", "older", "newer", "escape", "cancel", "interrupt", "accept"]) {
       expect(searchSeen.has(op), `L11 never reached ${op}`).toBe(true);
     }
+
+    // Fault: deciding standalone Esc from an input frame destroys a split arrow or meta key.
+    for (const ending of ["\x1b", "\x1b[D", "\x1bb", "\x1b[1;5D"]) {
+      const batch = "\x12" + text + ending;
+      const expected = boot(history);
+      key(expected, text);
+      key(expected, batch);
+
+      for (const cut of new Set([1, batch.length - ending.length + 1, Math.abs(seed) % (batch.length + 1)])) {
+        const actual = boot(history);
+        key(actual, text);
+        send(actual, { type: "keys", data: batch.slice(0, cut) });
+        send(actual, { type: "keys", data: batch.slice(cut) });
+        send(actual, { type: "flush" });
+        expect(prompt(actual)).toEqual(prompt(expected));
+      }
+    }
   },
   options(),
 );
@@ -700,5 +799,137 @@ it.prop(
     }
 
     expect(observedBusy).toBeGreaterThan(0);
+
+    // Fault: parsing beyond Enter moves an incomplete suffix before earlier queued text.
+    for (const ending of ["\x1b[D", "\x1bOD", "\x1bf", `\x1b[200~${text}\nlast\x1b[201~`]) {
+      const suffix = text + ending + text;
+      const expected = boot();
+      key(expected, "go\r");
+      send(expected, { type: "ready" });
+      key(expected, suffix);
+      const prefix = "go\r";
+      const split = text.length + Math.max(1, Math.abs(seed) % ending.length);
+      const cuts = new Set([text.length + 1, split, text.length + ending.length - 1]);
+
+      for (const at of cuts) {
+        const actual = boot();
+        send(actual, { type: "keys", data: prefix + suffix.slice(0, at) });
+        send(actual, { type: "keys", data: suffix.slice(at) });
+        send(actual, { type: "ready" });
+        send(actual, { type: "flush" });
+        expect(prompt(actual)).toEqual(prompt(expected));
+        expect(actual.model.history).toEqual(expected.model.history);
+        const once = prompt(actual);
+        send(actual, { type: "ready" });
+        expect(prompt(actual), "ready must not replay type-ahead twice").toEqual(once);
+      }
+    }
+
+    // Fault: asking drops the busy queue, cannot be withdrawn, or never releases on ready.
+    const questionSeen = new Set<string>();
+    const asking = boot();
+    const state = { phase: "idle", pending: "" };
+    const operations = ["start", "queue", "ask", "yes", "no", "enter", "withdraw", "finish", "interrupt"];
+    const choices = operations.map((op): fc.Command<typeof state, Real> => ({
+      check: (model) =>
+        op === "start"
+          ? model.phase === "idle"
+          : op === "queue" || op === "ask"
+            ? model.phase === "busy"
+            : op === "finish" || op === "interrupt"
+              ? model.phase !== "idle"
+              : model.phase === "asking",
+      run: (model, machine) => {
+        questionSeen.add(op);
+        if (op === "start") {
+          key(machine, "\x01\x0bstart\r");
+          model.phase = "busy";
+          model.pending = "";
+        } else if (op === "queue") {
+          send(machine, { type: "keys", data: text });
+          model.pending += text;
+        } else if (op === "ask") {
+          send(machine, { type: "asked", job: 1, text: "Allow?" });
+          model.phase = "asking";
+        } else if (op === "withdraw") {
+          send(machine, { type: "asked", job: 1, text: null });
+          model.phase = "busy";
+          expect(machine.cmds.some((cmd) => cmd.type === "answer")).toBe(false);
+        } else if (op === "finish") {
+          send(machine, { type: "ready" });
+          model.phase = "idle";
+          expect(prompt(machine).left + prompt(machine).right).toBe(model.pending);
+        } else if (op === "interrupt") {
+          key(machine, "\x03");
+          model.phase = "busy";
+          model.pending = "";
+          expect(machine.cmds.some((cmd) => cmd.type === "interrupt")).toBe(true);
+        } else {
+          key(machine, op === "yes" ? "y" : op === "no" ? "n" : "\r");
+          model.phase = "busy";
+          const answers = machine.cmds.flatMap((cmd) =>
+            Match.value(cmd).pipe(
+              Match.when({ type: "answer" }, (value) => [{ job: value.job, allow: value.allow }]),
+              Match.orElse(() => []),
+            ),
+          );
+          expect(answers).toEqual([{ job: 1, allow: op === "yes" }]);
+          expect(
+            bytes(machine.cmds)
+              .replaceAll(/\x1b\[[0-9;]*[A-Za-z]/g, "")
+              .trim(),
+          ).not.toBe("");
+        }
+        if (model.phase === "busy" || model.phase === "asking") {
+          Match.value(machine.model.mode).pipe(
+            Match.tag("busy", ({ ahead }) => {
+              expect(model.phase).toBe("busy");
+              expect(ahead.join("")).toBe(model.pending);
+            }),
+            Match.tag("asking", ({ ahead }) => {
+              expect(model.phase).toBe("asking");
+              expect(ahead.join("")).toBe(model.pending);
+            }),
+            Match.orElse(() => expect.fail("a live question or busy line lost its mode")),
+          );
+        }
+      },
+      toString: () => op,
+    }));
+    const required = [
+      "start",
+      "queue",
+      "ask",
+      "yes",
+      "finish",
+      "start",
+      "queue",
+      "ask",
+      "no",
+      "finish",
+      "start",
+      "queue",
+      "ask",
+      "enter",
+      "finish",
+      "start",
+      "queue",
+      "ask",
+      "withdraw",
+      "finish",
+      "start",
+      "queue",
+      "ask",
+      "finish",
+      "start",
+      "queue",
+      "ask",
+      "interrupt",
+      "finish",
+    ].map((op) => choices.find((command) => command.toString() === op)!);
+    walk(seed, choices, state, asking, required);
+    for (const op of operations) {
+      expect(questionSeen.has(op), `L12 never reached question ${op}`).toBe(true);
+    }
   },
 );
