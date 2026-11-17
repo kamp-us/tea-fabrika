@@ -129,5 +129,13 @@ export const lintHost = (text: string): string[] => {
       }),
     ), "H7: box saves its exact head and JSON results after a failed law too");
 
+  const concurrency = map(workflow["concurrency"]);
+  const group = /^host-\$\{\{(.+)\}\}-\$\{\{(.+)\}\}$/.exec(String(concurrency["group"]));
+  require(group !== null &&
+    compact(group[1]) === "github.event.pull_request.number||github.sha" &&
+    compact(group[2]) === "inputs.suite||'l13'" &&
+    concurrency["cancel-in-progress"] ===
+      true, "H8: separate suites keep independent runners while a newer push replaces its own suite");
+
   return errors;
 };

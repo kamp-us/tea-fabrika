@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { lintHost } from "./host.ts";
-import { allSteps, map } from "./shared.ts";
+import { allSteps, compact, map } from "./shared.ts";
 
 const hostFile = (): Record<string, unknown> =>
   map(parse(readFileSync(new URL("../../workflows/host.yaml", import.meta.url), "utf8")));
@@ -34,6 +34,33 @@ it("scenario: path and mapping order do not change the host workflow's meaning",
   const proof = allSteps(job(workflow, "e88-r6")).find((step) => step["name"] === "E88 R6 proof")!;
   proof["with"] = Object.fromEntries(Object.entries(map(proof["with"])).toReversed());
   expect(lintHost(JSON.stringify(workflow))).toEqual([]);
+});
+
+it("scenario: different suites keep separate groups and newer pushes retain their own PR group", () => {
+  const configured = String(map(hostFile()["concurrency"])["group"]);
+
+  const group = (sha: string, suite?: string, pr?: number) =>
+    configured.replace(/\$\{\{(.+?)\}\}/g, (_, expression: string) => {
+      switch (compact(expression)) {
+        case "github.event.pull_request.number||github.sha":
+          return String(pr ?? sha);
+        case "inputs.suite||'l13'":
+          return suite || "l13";
+        default:
+          throw new Error("host concurrency uses an unverified expression");
+      }
+    });
+
+  expect(new Set(["l13", "e88-r6", "box"].map((suite) => group("same-head", suite))).size).toBe(3);
+
+  for (const suite of ["l13", "e88-r6", "box"]) {
+    expect(group("old-head", suite, 1128)).toBe(group("new-head", suite, 1128));
+  }
+
+  expect(group("old-head", undefined, 1128)).toBe(group("new-head", "l13", 1128));
+  expect(group("old-head", "", 1128)).toBe(group("new-head", "l13", 1128));
+  expect(group("same-head")).toBe(group("same-head", "l13"));
+  expect(group("same-head", "box")).not.toBe(group("new-head", "box"));
 });
 
 for (const [name, plant, rule] of [
@@ -197,6 +224,35 @@ for (const [name, plant, rule] of [
       delete allSteps(job(w, "box")).find((step) => step["name"] === "Box proof")!["if"];
     },
     "H7",
+  ],
+  [
+    "different suites share one concurrency group",
+    (w) => {
+      map(w["concurrency"])["group"] = `host-\${{ github.event.pull_request.number || github.sha }}`;
+    },
+    "H8",
+  ],
+  [
+    "legacy dispatch loses its L13 group",
+    (w) => {
+      map(w["concurrency"])["group"] =
+        `host-\${{ github.event.pull_request.number || github.sha }}-\${{ inputs.suite }}`;
+    },
+    "H8",
+  ],
+  [
+    "newer pushes lose cancellation within their suite",
+    (w) => {
+      map(w["concurrency"])["cancel-in-progress"] = false;
+    },
+    "H8",
+  ],
+  [
+    "newer pushes to the same PR get different groups",
+    (w) => {
+      map(w["concurrency"])["group"] = `host-\${{ github.sha }}-\${{ inputs.suite || 'l13' }}`;
+    },
+    "H8",
   ],
 ] satisfies ReadonlyArray<readonly [string, (workflow: Record<string, unknown>) => void, string]>) {
   it(`scenario: host workflow refuses ${name}`, () => {

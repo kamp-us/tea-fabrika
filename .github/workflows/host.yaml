@@ -30,9 +30,9 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same pull request stops the run it replaces.
+# A newer push replaces its own suite; different fixed suites keep independent runners.
 concurrency:
-  group: host-${{ github.event.pull_request.number || github.sha }}
+  group: host-${{ github.event.pull_request.number || github.sha }}-${{ inputs.suite || 'l13' }}
   cancel-in-progress: true
 
 jobs:
