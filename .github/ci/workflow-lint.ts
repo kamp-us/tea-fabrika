@@ -16,6 +16,7 @@ import { lintIssues } from "./workflow-lint/issues.ts";
 import { jobLaws } from "./workflow-lint/jobs.ts";
 import { lintNoTooling, mergeLine } from "./workflow-lint/merge-line.ts";
 import { nextLaws } from "./workflow-lint/next-job.ts";
+import { lintPlant } from "./workflow-lint/plant.ts";
 import { record } from "./workflow-lint/record.ts";
 import { lintScheduled } from "./workflow-lint/scheduled.ts";
 import { ends, legs, map, nextJob, numbered, type Require, type Rule } from "./workflow-lint/shared.ts";
@@ -92,6 +93,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       ...lintCaches(files),
       ...lintCiSpeed(read(".github/workflows/ci-speed.yaml")),
       ...lintHost(read(".github/workflows/host.yaml")),
+      ...lintPlant(read(".github/workflows/plant.yaml")),
     ];
 
     const manifest: unknown = JSON.parse(read("package.json"));
