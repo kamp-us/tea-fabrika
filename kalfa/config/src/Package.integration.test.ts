@@ -289,7 +289,7 @@ it.effect(
 
       yield* refusal(
         appPath,
-        (original) => fs.writeFileString(appPath, 'import "@kampus/libfabrika";\n' + original),
+        (original) => fs.writeFileString(appPath, `import "@kampus/libfabrika";\n${original}`),
         ["consumer.mjs"],
         /Cannot find package ['"]@kampus\/libfabrika['"]/,
       ).pipe(Effect.scoped);
@@ -319,7 +319,7 @@ it.effect(
 
       yield* fs.writeFileString(
         path.join(delivery, "receipt.json"),
-        JSON.stringify(
+        `${JSON.stringify(
           {
             source,
             requested,
@@ -332,7 +332,7 @@ it.effect(
           },
           null,
           2,
-        ) + "\n",
+        )}\n`,
       );
     }).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
 );

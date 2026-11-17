@@ -1994,7 +1994,14 @@
             ],
             "patterns": [
               {
-                "group": ["**", "!effect", "!./Start.ts", "!./Starts.ts", "!./Snapshot.ts", "!./Declarations.ts"],
+                "group": [
+                  "**",
+                  "!effect",
+                  "!./Start.ts",
+                  "!./Starts.ts",
+                  "!@kalfa/config/Snapshot",
+                  "!./Declarations.ts"
+                ],
                 "message": "Settings contracts use Effect and settings-owned types only."
               }
             ]

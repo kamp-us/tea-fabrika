@@ -415,13 +415,21 @@ effectIt.effect.prop(
       const gone = `kalfa/${input.name}/absent/**`;
       expect(lock(scope, [gone], new Map()).refused).toEqual([gone]);
       // The actual fold used by count must account for every overlapping scope.
+
       for (const mode of ["source", "package", "mixed"]) {
         const hits = new Map<string, number>();
         const source = mode !== "package" ? input.hits : 0;
         const other = mode !== "source" ? input.hits : 0;
         const containing = [scope[1]!, scope[0]!, scope[2]!];
-        for (let hit = 0; hit < source; hit++) countFile(containing, hits, `kalfa/${input.name}/src/value.ts`);
-        for (let hit = 0; hit < other; hit++) countFile(containing, hits, `kalfa/${input.name}/Pnpm.ts`);
+
+        for (let hit = 0; hit < source; hit++) {
+          countFile(containing, hits, `kalfa/${input.name}/src/value.ts`);
+        }
+
+        for (let hit = 0; hit < other; hit++) {
+          countFile(containing, hits, `kalfa/${input.name}/Pnpm.ts`);
+        }
+
         expect(hits.get(scope[0]!)).toBe(source + other);
         expect(hits.get(scope[1]!) ?? 0).toBe(source);
         expect(hits.has(scope[2]!)).toBe(false);
