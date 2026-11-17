@@ -365,7 +365,18 @@ it.prop(
 
     const before = trace(secret);
     const after = structuredClone(before);
-    expect(Result.isSuccess(Exercise.equality(stdout(before), stdout(after)))).toBe(true);
+    const input = stdout(before);
+    expect(Result.isSuccess(Exercise.equality(input, stdout(after)))).toBe(true);
+    // Plant: accept identical text before validation. Equal inputs may both be invalid or incomplete.
+
+    for (const invalid of [
+      Cases.tracePrefix + JSON.stringify({ ...before[0], extra: secret }),
+      Cases.tracePrefix + JSON.stringify(secret),
+      stdout(before.slice(0, 1)),
+    ]) {
+      expect(Exercise.equality(invalid, invalid)).toEqual(Result.fail("trace_incomplete"));
+    }
+
     const at = after.findIndex((event) => event._tag === "pick");
     const pick = after[at];
 
@@ -394,8 +405,8 @@ it.prop(
         break;
     }
 
-    expect(Result.isFailure(Exercise.equality(stdout(before), stdout(after)))).toBe(true);
-    expect(Result.isFailure(Exercise.equality(stdout(before), ""))).toBe(true);
+    expect(Result.isFailure(Exercise.equality(input, stdout(after)))).toBe(true);
+    expect(Result.isFailure(Exercise.equality(input, ""))).toBe(true);
   },
   options,
 );
