@@ -16,10 +16,7 @@ export const layer: Layer.Layer<NodeModules, never, FileSystem.FileSystem> = Lay
       Effect.map((info): Shape =>
         info.type === "Directory" ? "folder" : info.type === "SymbolicLink" ? "link" : "other",
       ),
-      Effect.catchIf(
-        (e) => e.reason._tag === "NotFound",
-        () => Effect.succeed<Shape>("missing"),
-      ),
+      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed<Shape>("missing")),
       Effect.mapError((cause) => new NodeModulesError({ reason: `${FOLDER} does not read: ${cause.message}`, cause })),
     );
 

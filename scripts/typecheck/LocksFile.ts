@@ -9,17 +9,13 @@
 // `_testlock` takes `.break` as a lock of its own with `timeout=0`. While a
 // command runs, its pid is in `<lock>.child`, so a compiler that outlives a killed wrapper keeps the
 // lock. Today's tooling (0113, 0410 as amended on 2026-11-15), following next/'s rules (0033).
-import { Console, Effect, FileSystem, Layer, Option, type PlatformError, Predicate } from "effect";
+import { Console, Effect, FileSystem, Layer, Option, type PlatformError } from "effect";
 import { type Held, LockError, Locks } from "./Locks.ts";
 import { judge, Liveness, type Look, pidIn, type Read, Seen } from "./Look.ts";
 import { Processes } from "./Processes.ts";
 
 // How long a waiter sleeps between looks at a held lock.
 const POLL = "250 millis";
-
-/** Whether a file operation failed because its name is taken, or because there is no such file. */
-const failedWith = (tag: "AlreadyExists" | "NotFound") => (e: PlatformError.PlatformError) =>
-  Predicate.isTagged(e.reason, tag);
 
 export const layer: Layer.Layer<Locks, never, FileSystem.FileSystem | Processes> = Layer.effect(
   Locks,
@@ -38,7 +34,7 @@ export const layer: Layer.Layer<Locks, never, FileSystem.FileSystem | Processes>
       yield* fs.writeFileString(temp, label).pipe(Effect.mapError(lockError(temp, "the temp label does not write")));
       const linked = yield* fs.link(temp, target).pipe(
         Effect.as(true),
-        Effect.catchIf(failedWith("AlreadyExists"), () => Effect.succeed(false)),
+        Effect.catchReason("PlatformError", "AlreadyExists", () => Effect.succeed(false)),
         Effect.mapError(lockError(target, "the label does not link")),
         Effect.ensuring(fs.remove(temp, { force: true }).pipe(Effect.ignore)),
       );
@@ -49,7 +45,7 @@ export const layer: Layer.Layer<Locks, never, FileSystem.FileSystem | Processes>
     const read = Effect.fnUntraced(function* (path: string) {
       const info = yield* fs.stat(path).pipe(
         Effect.asSome,
-        Effect.catchIf(failedWith("NotFound"), () => Effect.succeedNone),
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
         Effect.mapError(lockError(path, "the lock file does not stat")),
       );
 
@@ -63,7 +59,7 @@ export const layer: Layer.Layer<Locks, never, FileSystem.FileSystem | Processes>
       );
       return yield* fs.readFileString(path).pipe(
         Effect.map((text): Option.Option<Read> => Option.some({ text, at })),
-        Effect.catchIf(failedWith("NotFound"), () => Effect.succeed(Option.none<Read>())),
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(Option.none<Read>())),
         Effect.mapError(lockError(path, "the lock file does not read")),
       );
     });
