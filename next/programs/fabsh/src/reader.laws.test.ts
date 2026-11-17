@@ -3,7 +3,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Match, Schema } from "effect";
 import { check, type ProgramList } from "./check.ts";
-import { parse } from "./grammar.ts";
+import { BUILTINS, parse } from "./grammar.ts";
 import { roles } from "./roles.ts";
 import { words } from "./words.ts";
 
@@ -90,7 +90,7 @@ describe("fabsh S1 reader", () => {
       expect(tag(roles("help ", programs)[0]!.role)).toBe("builtin");
       expect(check(parse(`${missing} `), programs)).toMatchObject({ _tag: "refused", status: 127 });
 
-      for (const name of known.filter((candidate) => candidate !== missing)) {
+      for (const name of new Set([...known.filter((candidate) => candidate !== missing), ...BUILTINS])) {
         const required: ProgramList = new Map([
           [
             name,
@@ -103,7 +103,14 @@ describe("fabsh S1 reader", () => {
           ],
         ]);
         expect(tag(roles(`${name} `, required)[0]!.role)).not.toBe("error");
-        expect(check(parse(`${name} `), required)).toMatchObject({ _tag: "refused", status: 2 });
+        const checked = check(parse(`${name} `), required);
+
+        if (BUILTINS.includes(name)) {
+          expect(tag(roles(`${name} `, required)[0]!.role)).toBe("builtin");
+          expect(checked).not.toMatchObject({ _tag: "refused" });
+        } else {
+          expect(checked).toMatchObject({ _tag: "refused", status: 2 });
+        }
       }
     },
     options(300),
@@ -173,6 +180,37 @@ describe("fabsh S1 reader", () => {
         const bars = roles(line, chain).filter((span) => line.slice(span.start, span.end) === "|");
         expect(bars).toHaveLength((line.match(/\|/g) ?? []).length);
         expect(bars.every((span) => tag(span.role) === "error")).toBe(true);
+      }
+
+      // Fault: a later syntax refusal erases already readable pipe errors.
+      const later = {
+        name: "later",
+        flags: { [needed]: { schema: Schema.Int, required: false } },
+        inputs: { [needed]: Schema.Int },
+        outputs: {},
+      };
+      const extended: ProgramList = new Map([...chain, ["later", later]]);
+      const suffixes = [
+        ` ; later --${needed} `,
+        ` ; later ${needed}=`,
+        " && ",
+        " || ",
+        ` ; later --${needed} '${fields.extra}`,
+        ` ; later --${needed} "${fields.extra}`,
+        ` | later --${needed} `,
+        ` | later ${needed}=`,
+      ];
+
+      for (const prefix of [piped, `wrapper value=$(${piped})`, `wrapper value=$(${piped}`]) {
+        for (const suffix of suffixes) {
+          const source = prefix + suffix;
+          const bars = roles(source, extended).filter(
+            (span) => span.start < prefix.length && source.slice(span.start, span.end) === "|",
+          );
+          expect(bars).toHaveLength((prefix.match(/\|/g) ?? []).length);
+          expect(bars.every((span) => tag(span.role) === "error")).toBe(true);
+          expect(check(parse(source), extended)).toMatchObject({ _tag: "refused", status: 2 });
+        }
       }
     },
     options(300),
