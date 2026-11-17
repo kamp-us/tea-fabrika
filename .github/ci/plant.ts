@@ -1,4 +1,4 @@
-// Today's manual lead tooling for two next/ laws. Raw child output stays in the scoped scratch directory.
+// Today's manual lead tooling. Raw child output stays in the scoped scratch directory.
 import { run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Cause, Clock, Context, DateTime, Effect, FileSystem, Option, Path, Ref, Schema, Stream } from "effect";
@@ -150,6 +150,10 @@ export const observation = (key: Request["case"], root: string, raw: string, exi
     report.numFailedTestSuites > 0 &&
     safe !== null
   ) {
+    if (selected.project === "tooling" && safe.assertion === null) {
+      return missing("unclear");
+    }
+
     return Observation.cases.failed.make({ ...details, category: "assertion", ...safe });
   }
 

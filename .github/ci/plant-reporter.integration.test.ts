@@ -1,9 +1,9 @@
 import { NodeServices } from "@effect/platform-node";
 // Today's tooling. This fixture runs only fast-check and Vitest's matcher, with no product runtime.
 import { it, expect } from "@effect/vitest";
-import { Effect, FileSystem, Path, RegExp as Regex, Stream } from "effect";
+import { Effect, FileSystem, Path, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { cases } from "./plant-cases.ts";
+import { argv, cases } from "./plant-cases.ts";
 import { observation } from "./plant.ts";
 
 // Plant: use JSON failureMessages alone, dropping the actual fast-check cause.
@@ -64,7 +64,7 @@ describe(${JSON.stringify(suite)}, () => { test(${JSON.stringify(selected.title.
             `--outputFile.json=${report}`,
             test,
             "-t",
-            `^${Regex.escape(`${suite} > ${selected.title.slice(suite.length + 1)}`)}$`,
+            argv("checklist-pid", report).at(-1) ?? "(?!)",
           ],
           { cwd: root, stdin: "ignore" },
         ),

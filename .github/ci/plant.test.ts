@@ -3,6 +3,7 @@ import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Option, Path, RegExp as Regex, Result, Schema } from "effect";
 import { Digest } from "effect/crypto";
+import { describe } from "vitest";
 import { argv, cases, decodeRequest, derive, Request } from "./plant-cases.ts";
 import { failure } from "./plant-errors.ts";
 import { Model, Observation } from "./plant-machine.ts";
@@ -44,6 +45,8 @@ const message = (key: Request["case"], content = "", syntax = false) => {
       expect({ _tag: "same", program: content, hash: content }).toMatchObject(
         syntax ? { _tag: "failed", reason: "bundle" } : { _tag: "loaded" },
       ),
+    "host-pin": () => expect(["v26.13.0", "v0.0.0", "v0.0.0"]).toEqual(Array(3).fill("v26.13.0")),
+    "host-discovery-timeout": () => expect(30_001).toBeLessThan(10_000),
   };
 
   return Result.match(Result.try(matchers[key]), {
@@ -53,7 +56,9 @@ const message = (key: Request["case"], content = "", syntax = false) => {
         Schema.Struct({ message: Schema.String, stack: Schema.optionalKey(Schema.String) }),
       )(error);
 
-      return serialized.stack || serialized.message;
+      const stack = serialized.stack || serialized.message;
+
+      return cases[key].project === "tooling" ? `${stack}\n    at fixture (${root}/${cases[key].test}:194:12)` : stack;
     },
   });
 };
@@ -162,19 +167,67 @@ it.effect.prop(
       }
 
       const args = argv(key, "/private/result.json");
-      expect(args).toContain(`^${Regex.escape(selected.title)}$`);
+      expect(args).toContain(`^${Regex.escape(selected.selector)}$`);
       expect(args).toContain(selected.test);
+      expect(args[args.indexOf("--project") + 1]).toBe(key.startsWith("host-") ? "tooling" : "next-integration");
       const selection = new RegExp(args.at(-1) ?? "(?!)");
-      expect(selection.test(selected.title)).toBe(true);
-      expect(selection.test(`prefix ${selected.title}`)).toBe(false);
-      expect(selection.test(`${selected.title} suffix`)).toBe(false);
-      const changedTitle = selected.title.includes(".") ? selected.title.replaceAll(".", "#") : `${selected.title}.`;
+      expect(selection.test(selected.selector)).toBe(true);
+      expect(selection.test(`prefix ${selected.selector}`)).toBe(false);
+      expect(selection.test(`${selected.selector} suffix`)).toBe(false);
+
+      const changedTitle = selected.selector.includes(".")
+        ? selected.selector.replaceAll(".", "#")
+        : `${selected.selector}.`;
+
       expect(selection.test(changedTitle)).toBe(false);
       expect(args).not.toContain("--passWithNoTests");
       expect(args.some((arg) => /Timeout|retry|seed|numRuns/.test(arg))).toBe(false);
     }),
   options,
 );
+
+// Plant: anchor the JSON reporter's space-joined name instead of Vitest's actual CLI task name.
+// The suite/leaf pairs were read from each mapped source law. These bodies start no real resource.
+const nested = [
+  {
+    key: "checklist-pid",
+    suite: "L13: notices name their process",
+    leaf: "each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
+  },
+  {
+    key: "watcher-r1",
+    suite: "P15 slice 1: the watcher",
+    leaf: "scenario: R1 a held same reply from boot or a preceding save cannot complete a good or broken save",
+  },
+  {
+    key: "host-pin",
+    suite: "the host step's outcomes",
+    leaf: "scenario: an explicit pin keeps direct and nested pnpm on that Node, even when the manifest differs",
+  },
+  {
+    key: "host-discovery-timeout",
+    suite: "the host step's outcomes",
+    leaf: "scenario: stalled runtime discovery shares the first command's deadline and is reaped before returning",
+  },
+] as const;
+
+for (const { key, suite, leaf } of nested) {
+  describe(suite, () => {
+    it.prop(
+      leaf,
+      { extra: Schema.String },
+      ({ extra }, context) => {
+        const pattern = new RegExp(argv(key, "/private/result.json").at(-1) ?? "(?!)");
+        expect(pattern.test(context.task.fullTestName)).toBe(true);
+        expect(pattern.test(`${context.task.fullTestName}${extra}!`)).toBe(false);
+        expect(pattern.test(`!${extra}${context.task.fullTestName}`)).toBe(false);
+        expect(cases[key].title).toBe(`${context.task.suite?.name} ${context.task.name}`);
+        expect(pattern.test(cases[key].title)).toBe(false);
+      },
+      options,
+    );
+  });
+}
 
 // Plant: check allowed paths but ignore bytes or index
 it.prop(
@@ -299,7 +352,7 @@ it.prop(
     const assertion = {
       name: "AssertionError",
       message: stack.replace(/^AssertionError: /, "").split("\n    at ")[0],
-      stack: `${stack}\n    at matcher (/private/${cases[key].test}:17:23)`,
+      stack: `${stack.split(/\n\s+at /)[0]}\n    at matcher (/private/${cases[key].test}:17:23)`,
     };
 
     let error: unknown = assertion;
@@ -346,11 +399,44 @@ it.prop(
     expect(output).not.toContain(marker);
     expect(output).not.toContain(encodeURIComponent(marker));
     expect(output).not.toContain("/private/temp");
-    expect(JSON.parse(output).diagnostic).toBe(
-      key === "checklist-pid"
-        ? "AssertionError: a notice names its process"
-        : "AssertionError: expected _tag loaded; received _tag same",
-    );
+
+    const diagnostics = {
+      "checklist-pid": "AssertionError: a notice names its process",
+      "watcher-r1": "AssertionError: expected _tag loaded; received _tag same",
+      "host-pin": "AssertionError: direct and nested pnpm versions differ from the explicit Node pin",
+      "host-discovery-timeout": "AssertionError: runtime discovery exceeded the existing command cleanup bound",
+    };
+
+    expect(JSON.parse(output).diagnostic).toBe(diagnostics[key]);
+  },
+  options,
+);
+
+// Plant: accept a host mismatch without the actual assertion position, or accept a setup failure.
+it.prop(
+  "host diagnostics keep assertion positions and refuse unrelated failures",
+  {
+    key: Schema.Literals(["host-pin", "host-discovery-timeout"]),
+    line: Schema.Int.check(Schema.isGreaterThan(0)),
+    column: Schema.Int.check(Schema.isGreaterThan(0)),
+    content: Schema.String,
+  },
+  ({ key, line, column, content }) => {
+    const header = message(key).split(/\n\s+at /)[0] ?? "";
+    const positioned = `${header}\n    at fixture (/private/runner/${cases[key].test}:${line}:${column})`;
+    const result = observation(key, root, JSON.stringify(report(key, "failed", [positioned])), 1, 12);
+    expect(result).toMatchObject({ _tag: "failed", assertion: { line, column } });
+    expect(JSON.stringify(result)).not.toContain("/private/runner");
+
+    for (const unknown of [
+      header,
+      `Error: Test timed out\n    at fixture (${cases[key].test}:${line}:${column})`,
+      `AssertionError: expected 1 to be 2\n    at fixture (${cases[key].test}:${line}:${column})`,
+      `AssertionError: expected 30000 to be less than 20000\n    at fixture (${cases[key].test}:${line}:${column})`,
+      content,
+    ]) {
+      expect(observation(key, root, JSON.stringify(report(key, "failed", [unknown])), 1, 12)._tag).toBe("incomplete");
+    }
   },
   options,
 );

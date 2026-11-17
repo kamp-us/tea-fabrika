@@ -5,6 +5,8 @@ import { cases, type Request } from "./plant-cases.ts";
 export const Failure = Schema.Struct({
   diagnostic: Schema.Literals([
     "AssertionError: a notice names its process",
+    "AssertionError: direct and nested pnpm versions differ from the explicit Node pin",
+    "AssertionError: runtime discovery exceeded the existing command cleanup bound",
     "AssertionError: expected _tag loaded; received _tag same",
     "AssertionError: expected _tag loaded; received _tag unknown",
     "AssertionError: expected _tag failed; received _tag same",
@@ -44,6 +46,14 @@ const diagnostic = (key: Request["case"], message: string) => {
     if (received !== null && expected !== undefined) {
       return `AssertionError: expected _tag ${expected}; received _tag ${received}`;
     }
+  }
+
+  if (key === "host-pin" && /^expected \[.*\] to deeply equal \[/s.test(message)) {
+    return "AssertionError: direct and nested pnpm versions differ from the explicit Node pin";
+  }
+
+  if (key === "host-discovery-timeout" && /^expected [0-9]+(?:\.[0-9]+)? to be less than 10000\s*$/.test(message)) {
+    return "AssertionError: runtime discovery exceeded the existing command cleanup bound";
   }
 
   return null;
