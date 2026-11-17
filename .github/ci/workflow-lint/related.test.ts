@@ -60,6 +60,7 @@ it.prop(
         workflow.jobs.related.steps.splice(before, 0, faults);
         break;
       }
+
       case "fault_slot":
         faults.if = "true";
         break;

@@ -536,6 +536,7 @@ describe("automatic ready CI as the current-head resource proof", () => {
     ({ head, count, stands }) =>
       Effect.gen(function* () {
         const run = automaticRun(head);
+
         const m = memory(
           {
             head,
@@ -546,6 +547,7 @@ describe("automatic ready CI as the current-head resource proof", () => {
           },
           automaticFixture,
         );
+
         const answer = yield* arm(m);
         expect(answer._tag).toBe("armed");
         expect(m.github.calls).toEqual([{ _tag: "arm", number: 1092, oid: head }]);
@@ -564,15 +566,19 @@ describe("automatic ready CI as the current-head resource proof", () => {
     ({ head, repository }) =>
       Effect.gen(function* () {
         const run = automaticRun(head);
+
         const source = {
           event: "pull_request",
           path: ".github/workflows/check.yaml",
           repository,
           headRepository: repository,
         };
+
         const good = automaticJobs(2);
+
         const replace = (name: string, conclusion: string) =>
           good.map((j) => (j.name === name ? { ...j, conclusion } : j));
+
         const candidates: ReadonlyArray<{ readonly run: Run; readonly jobs: ReadonlyArray<Job> }> = [
           { run: { id: run.id, head, status: "completed", conclusion: "success" }, jobs: good },
           ...[
@@ -608,6 +614,7 @@ describe("automatic ready CI as the current-head resource proof", () => {
             { head, stands: "older", automatic: [candidate.run], automaticJobs: candidate.jobs },
             automaticFixture,
           );
+
           expect((yield* Effect.result(arm(m)))._tag).toBe("Failure");
           expect(m.github.calls).toEqual([]);
         }
@@ -621,10 +628,12 @@ describe("automatic ready CI as the current-head resource proof", () => {
     ({ head, missing }) =>
       Effect.gen(function* () {
         const run = automaticRun(head);
+
         const m = memory(
           { head, stands: "none", automatic: [run], automaticJobs: automaticJobs(1).filter((j) => j.name !== missing) },
           automaticFixture,
         );
+
         const refused = yield* Effect.flip(arm(m));
         expect(refused.reason).toContain(`/actions/runs/${run.id}`);
         expect(m.github.calls).toEqual([]);
@@ -662,6 +671,7 @@ describe("automatic ready CI as the current-head resource proof", () => {
           status,
           conclusion: status === "completed" ? "failure" : null,
         };
+
         const m = memory(
           {
             head,
@@ -671,6 +681,7 @@ describe("automatic ready CI as the current-head resource proof", () => {
           },
           automaticFixture,
         );
+
         const refused = yield* Effect.flip(arm(m));
         expect(refused.reason).toContain(`/actions/runs/${newest.id}`);
         expect(m.github.calls).toEqual([]);
@@ -694,6 +705,7 @@ describe("automatic ready CI as the current-head resource proof", () => {
           },
           automaticFixture,
         );
+
         yield* Effect.flip(arm(m));
         expect(m.github.calls).toEqual([]);
         expect(m.actions.asked).not.toContain(`runs check.yaml ${branch}`);
@@ -759,18 +771,21 @@ describe("RunsGh: the shapes GitHub answers", () => {
     ({ head, repository }) =>
       Effect.gen(function* () {
         const base = { id: 1, head_sha: head, status: "completed", conclusion: "success" };
+
         const metadata = {
           event: "pull_request",
           path: ".github/workflows/check.yaml",
           repository: { id: repository },
           head_repository: { id: repository },
         };
+
         const bodies = [
           { ...base, ...metadata },
           { ...base, event: metadata.event, path: metadata.path, repository: metadata.repository },
           { ...base, ...metadata, head_repository: null },
           base,
         ];
+
         const decoded = yield* RunsGh.runsIn(JSON.stringify({ workflow_runs: bodies }));
         expect(decoded[0]?.source).toEqual({
           event: metadata.event,

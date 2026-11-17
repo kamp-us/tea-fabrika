@@ -184,12 +184,15 @@ const automaticAt = Effect.fn("Arm.automaticAt")(function* (branch: string, head
 
     return found.length === 1 && found.every((job) => job.status === "completed" && job.conclusion === "success");
   };
+
   const skipped = related.length === 1 && related[0]?.name === "related" && related[0]?.conclusion === "skipped";
+
   const legs =
     related.length <= 9 &&
     related
       .toSorted((a, b) => a.name.localeCompare(b.name))
       .every((job, i) => job.name === `related (${i + 1})` && job.conclusion === "success");
+
   const covered =
     related.length > 0 &&
     new Set(related.map((job) => job.name)).size === related.length &&

@@ -6,7 +6,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import vitest from "vitest/package.json" with { type: "json" };
 import { parse } from "yaml";
 import { cases, derive, prepare, Request } from "./plant-cases.ts";
-import { Model } from "./plant-machine.ts";
+import type { Model } from "./plant-machine.ts";
 import { execute, ExerciseError } from "./plant.ts";
 
 export const fixture = "next/apps/fabrika/src/checklist-instance.laws.integration.test.ts";
@@ -402,6 +402,7 @@ const automatic = Effect.fn("plant.related")(function* (input: unknown) {
         head: environment.GITHUB_SHA,
         install: false,
       });
+
       observations.push(result);
 
       yield* write("incomplete", "attempt_unfinished");
@@ -441,7 +442,9 @@ if (import.meta.main) {
     automatic(process.env).pipe(
       Effect.tap((complete) =>
         Effect.sync(() => {
-          if (!complete) process.exitCode = 1;
+          if (!complete) {
+            process.exitCode = 1;
+          }
         }),
       ),
       Effect.catchCause(() =>
