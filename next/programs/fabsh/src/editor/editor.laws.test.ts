@@ -825,6 +825,19 @@ it.prop(
       }
     }
 
+    // A standalone-Esc boundary typed ahead must not turn the following text into Meta.
+    const separated = boot();
+    key(separated, "go\r");
+    key(separated, text + "\x1b");
+    key(separated, text);
+    send(separated, { type: "ready" });
+    const direct = boot();
+    key(direct, "go\r");
+    send(direct, { type: "ready" });
+    key(direct, text + "\x1b");
+    key(direct, text);
+    expect(prompt(separated)).toEqual(prompt(direct));
+
     // Fault: asking drops the busy queue, cannot be withdrawn, or never releases on ready.
     const questionSeen = new Set<string>();
     const asking = boot();
