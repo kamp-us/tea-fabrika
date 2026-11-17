@@ -4,7 +4,7 @@ import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Option, Path, RegExp as Regex, Result, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { describe } from "vitest";
-import { argv, cases, decodeRequest, derive, Request } from "./plant-cases.ts";
+import { argv, cases, decodeRequest, derive, prepare, Request } from "./plant-cases.ts";
 import { failure } from "./plant-errors.ts";
 import { Model, Observation } from "./plant-machine.ts";
 import PlantReporter from "./plant-reporter.ts";
@@ -53,7 +53,21 @@ const matcher = (key: Request["case"], content = "", syntax = false) => {
   const kept = { keep: "fixture child", foreground: true, paid: true };
   const homeRoot = new TextEncoder().encode(`${tmp}/fh-XXXXXX/host/sock`).length < 103 ? tmp : "/tmp";
 
-  const matchers = {
+  const selected = cases[key];
+
+  if ("failures" in selected) {
+    return Result.match(
+      Result.try(() =>
+        expect(undefined, selected.failures[0].diagnostic.slice("AssertionError: ".length)).toBe(content),
+      ),
+      {
+        onSuccess: () => Matcher.make({ name: "Error", message: "" }),
+        onFailure: (error) => Schema.decodeUnknownSync(Matcher)(error),
+      },
+    );
+  }
+
+  const matchers: Partial<Record<Request["case"], () => unknown>> = {
     "checklist-pid": () => expect(undefined, "a notice names its process").toBe("process-id"),
     "watcher-r1": () =>
       expect({ _tag: "same", program: content, hash: content }).toMatchObject(
@@ -69,7 +83,13 @@ const matcher = (key: Request["case"], content = "", syntax = false) => {
       ),
   };
 
-  return Result.match(Result.try(matchers[key]), {
+  const compare = matchers[key];
+
+  if (compare === undefined) {
+    throw new Error("missing fixed matcher");
+  }
+
+  return Result.match(Result.try(compare), {
     onSuccess: () => Matcher.make({ name: "Error", message: "" }),
     onFailure: (error) => {
       const serialized = Schema.decodeUnknownSync(Matcher)(error);
@@ -79,21 +99,30 @@ const matcher = (key: Request["case"], content = "", syntax = false) => {
   });
 };
 
-const position = (key: Request["case"], line = 17, column = 23) =>
-  key === "host-requested-pin"
+const position = (key: Request["case"], line = 17, column = 23) => {
+  const selected = cases[key];
+
+  if ("failures" in selected) {
+    const { line, column } = selected.failures[0];
+
+    return { line, column };
+  }
+
+  return key === "host-requested-pin"
     ? { line: 195, column: 62 }
     : key === "host-pnpm-path"
       ? { line: 194, column: 70 }
       : key === "host-env-order"
         ? { line: 197, column: 24 }
         : { line, column };
+};
 
 const message = (key: Request["case"], content = "", syntax = false) => {
   const error = matcher(key, content, syntax);
   const stack = error.stack || error.message;
   const frame = position(key, 194, 12);
 
-  return cases[key].project === "tooling"
+  return cases[key].project === "tooling" || "failures" in cases[key]
     ? `${stack}\n    at fixture (${root}/${cases[key].test}:${frame.line}:${frame.column})`
     : stack;
 };
@@ -137,6 +166,27 @@ const report = (key: Request["case"], status: string, messages: string[] = []) =
   ],
 });
 
+const images = <Key extends Request["case"]>(key: Key, content: string) => {
+  const selected = cases[key];
+  const edits = "preparation" in selected ? selected.preparation : [];
+  let source = edits.map((edit) => edit.before).join("\n");
+
+  if (!source.includes(selected.before) && !edits.some((edit) => edit.after.includes(selected.before))) {
+    source += `\n${selected.before}`;
+  }
+
+  const original = bytes(`${JSON.stringify(content)}\n${source}\n`);
+
+  const prepared = bytes(
+    edits.reduce((text, edit) => text.replace(edit.before, edit.after), new TextDecoder().decode(original)),
+  );
+
+  const edited = bytes(new TextDecoder().decode(prepared).replace(selected.before, selected.after));
+  const head = "source" in selected ? selected.source : sha;
+
+  return { selected, original, prepared, edited, head };
+};
+
 // Plant: accept unknown fields and cases
 it.effect.prop(
   "only exact case and SHA requests decode",
@@ -144,6 +194,18 @@ it.effect.prop(
   ({ request, junk }) =>
     Effect.gen(function* () {
       expect(yield* decodeRequest(request)).toEqual(request);
+
+      for (const key of Request.fields.case.literals) {
+        const selected = cases[key];
+
+        if ("source" in selected) {
+          expect(yield* decodeRequest({ case: key, sha: selected.source })).toEqual({
+            case: key,
+            sha: selected.source,
+          });
+          expect(Option.isNone(yield* decodeRequest({ case: key, sha }).pipe(Effect.option))).toBe(true);
+        }
+      }
 
       for (const invalid of [
         { ...request, patch: junk },
@@ -231,6 +293,11 @@ const nested = [
     leaf: "each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
   },
   {
+    key: "checklist-early-complete",
+    suite: "L13: notices name their process",
+    leaf: "successive sends land and a client joining after the first send opens the current checklist",
+  },
+  {
     key: "watcher-r1",
     suite: "P15 slice 1: the watcher",
     leaf: "scenario: R1 a held same reply from boot or a preceding save cannot complete a good or broken save",
@@ -255,7 +322,19 @@ for (const { key, suite, leaf } of nested) {
       ({ extra }, context) => {
         for (const selected of key === "host-pin"
           ? ([key, "host-requested-pin", "host-pnpm-path", "host-env-order"] as const)
-          : [key]) {
+          : key === "checklist-pid"
+            ? ([key, "checklist-body", "checklist-drop-notify"] as const)
+            : key === "checklist-early-complete"
+              ? ([
+                  key,
+                  "checklist-held-call",
+                  "checklist-due-reschedule",
+                  "checklist-running-replace",
+                  "checklist-running-delete",
+                  "checklist-alarm-failure",
+                  "checklist-late-failure",
+                ] as const)
+              : [key]) {
           const pattern = new RegExp(argv(selected, "/private/result.json").at(-1) ?? "(?!)");
           expect(pattern.test(context.task.fullTestName)).toBe(true);
           expect(pattern.test(`${context.task.fullTestName}${extra}!`)).toBe(false);
@@ -430,6 +509,55 @@ it.prop(
       expect(failure(key, errors)).toBeNull();
     }
 
+    const selected = cases[key];
+
+    if ("failures" in selected) {
+      for (const fixed of selected.failures) {
+        const count = fixed.diagnostic === "AssertionError: checklist notice count differs";
+        const comparison = Result.try(() => expect(0).toBe(1));
+
+        if (Result.isSuccess(comparison)) {
+          throw new Error("missing numeric mismatch control");
+        }
+
+        const positive = {
+          ...(count ? Schema.decodeUnknownSync(Matcher)(comparison.failure) : assertion),
+          message: count
+            ? Schema.decodeUnknownSync(Matcher)(comparison.failure).message
+            : fixed.diagnostic.slice("AssertionError: ".length),
+          stack: `at matcher (/private/${selected.test}:${fixed.line}:${fixed.column})`,
+        };
+
+        expect(failure(key, [positive])).toEqual({
+          diagnostic: fixed.diagnostic,
+          assertion: { line: fixed.line, column: fixed.column },
+        });
+
+        for (const changed of [
+          { ...positive, stack: `at matcher (${selected.test}:${fixed.line + 1}:${fixed.column})` },
+          { ...positive, stack: `at matcher (${selected.test}:${fixed.line}:${fixed.column + 1})` },
+          { ...positive, stack: "no source frame" },
+          { ...positive, message: `unrelated ${positive.message}` },
+          { ...positive, name: "Error" },
+        ]) {
+          expect(failure(key, [changed])).toBeNull();
+        }
+
+        if (count) {
+          for (const changed of [
+            { ...positive, actual: positive.expected },
+            { ...positive, operator: "deepStrictEqual" },
+            { ...positive, actual: "NaN" },
+            { ...positive, expected: -1 },
+            { ...positive, actual: [] },
+            { ...positive, actual: undefined },
+          ]) {
+            expect(failure(key, [changed])).toBeNull();
+          }
+        }
+      }
+    }
+
     const unreported = report(key, "failed", [stack]);
     unreported.testResults[0]!.assertionResults[0]!.meta.plant = null;
     expect(observation(key, root, JSON.stringify(unreported), 1, 1)._tag).toBe("incomplete");
@@ -561,8 +689,24 @@ it.prop(
 
 // Plant: copy raw actual/expected JSON or a stack into the new closed diagnostic metadata.
 it.prop(
-  "new host diagnostics discard generated matcher values and paths",
-  { key: Schema.Literals(["host-requested-pin", "host-pnpm-path", "host-env-order"]), content: Schema.String },
+  "strict diagnostics discard generated matcher values and paths",
+  {
+    key: Schema.Literals([
+      "host-requested-pin",
+      "host-pnpm-path",
+      "host-env-order",
+      "checklist-body",
+      "checklist-drop-notify",
+      "checklist-early-complete",
+      "checklist-held-call",
+      "checklist-due-reschedule",
+      "checklist-running-replace",
+      "checklist-running-delete",
+      "checklist-alarm-failure",
+      "checklist-late-failure",
+    ]),
+    content: Schema.String,
+  },
   ({ key, content }) => {
     const marker = `private-value-${JSON.stringify(content)}-end`;
     const location = position(key);
@@ -652,7 +796,10 @@ it.prop(
       "host-env-order": "AssertionError: pinned host environment retained a removed parent value",
     };
 
-    expect(JSON.parse(output).diagnostic).toBe(diagnostics[key]);
+    const selected = cases[key];
+    expect(JSON.parse(output).diagnostic).toBe(
+      "failures" in selected ? selected.failures[0].diagnostic : new Map(Object.entries(diagnostics)).get(key),
+    );
   },
   options,
 );
@@ -696,78 +843,206 @@ it.effect.prop(
   },
   ({ key, content, fault }) =>
     Effect.gen(function* () {
-      const original = bytes(`${JSON.stringify(content)}\n${cases[key].before}\n`);
-      let current = original;
-      let calls = 0;
-      const tested: string[] = [];
+      const { selected, original, prepared, edited, head } = images(key, content);
+      expect(yield* prepare(key, original)).toEqual(prepared);
+      const real = yield* Digest.Digest;
 
-      const io = <A>(body: () => A) =>
-        Effect.suspend(() =>
-          calls++ === fault ? Effect.fail(ExerciseError.make({ reason: "injected-private-value" })) : Effect.sync(body),
-        );
+      const digest = Digest.Digest.of({
+        ...real,
+        digestHex: (algorithm, data) => {
+          if ("hashes" in selected) {
+            for (const [image, hash] of [
+              [original, selected.hashes.source],
+              [prepared, selected.hashes.prepared],
+              [edited, selected.hashes.edited],
+            ] as const) {
+              if (data.length === image.length && data.every((value, index) => value === image[index])) {
+                return Effect.succeed(hash);
+              }
+            }
+          }
 
-      const workspace = Workspace.of({
-        inspect: io(() => ({
-          bytes: current,
-          mode: 0o100644,
-          head: sha,
-          index: sha,
-          status: current === original ? "" : ` M ${cases[key].file}\0`,
-          summary: "",
-        })),
-        write: (data) =>
-          io(() => {
-            current = data;
-          }),
-        diff: io(() => (current === original ? new Uint8Array() : bytes(`generated-diff-${JSON.stringify(content)}`))),
-        test: (phase) =>
-          io(() => {
-            tested.push(phase);
-
-            return phase === "broken"
-              ? Observation.cases.failed.make({
-                  ...details(key),
-                  exit: 1,
-                  category: "assertion",
-                  assertion: null,
-                  diagnostic: "assertion mismatch",
-                })
-              : Observation.cases.passed.make(details(key));
-          }),
+          return real.digestHex(algorithm, data);
+        },
       });
 
-      const answer = yield* exercise({ case: key, sha }).pipe(
-        Effect.provideService(Workspace, workspace),
-        Effect.option,
-      );
+      for (const brokenAt of [fault, 35]) {
+        let current = original;
+        let calls = 0;
+        const tested: string[] = [];
 
-      if (Option.isSome(answer)) {
-        const result = answer.value;
-
-        if (result.cleanup.restored) {
-          expect(current).toEqual(original);
-        } else {
-          expect(Model.isAnyOf(["recorded", "incomplete"])(result.model)).toBe(true);
-        }
-
-        if (Model.isAnyOf(["recorded"])(result.model)) {
-          expect(tested).toEqual(["baseline", "broken", "restored"]);
-        }
-
-        const hash = yield* Digest.Digest;
-
-        if (result.diffHash !== null) {
-          expect(result.diffHash).toBe(
-            yield* hash.digestHex(Digest.sha256, bytes(`generated-diff-${JSON.stringify(content)}`)),
+        const io = <A>(body: () => A) =>
+          Effect.suspend(() =>
+            calls++ === brokenAt
+              ? Effect.fail(ExerciseError.make({ reason: "injected-private-value" }))
+              : Effect.sync(body),
           );
+
+        const workspace = Workspace.of({
+          inspect: io(() => ({
+            bytes: current,
+            mode: 0o100644,
+            head,
+            index: sha,
+            status: current === original ? "" : ` M ${cases[key].file}\0`,
+            summary: "",
+          })),
+          write: (data) =>
+            io(() => {
+              current = data;
+            }),
+          diff: io(() =>
+            current === original ? new Uint8Array() : bytes(`generated-diff-${JSON.stringify(content)}`),
+          ),
+          test: (phase) =>
+            io(() => {
+              expect(current).toEqual(phase === "broken" ? edited : prepared);
+              tested.push(phase);
+
+              return phase === "broken"
+                ? Observation.cases.failed.make({
+                    ...details(key),
+                    exit: 1,
+                    category: "assertion",
+                    assertion: null,
+                    diagnostic: "assertion mismatch",
+                  })
+                : Observation.cases.passed.make(details(key));
+            }),
+        });
+
+        const answer = yield* exercise({ case: key, sha: head }).pipe(
+          Effect.provideService(Workspace, workspace),
+          Effect.provideService(Digest.Digest, digest),
+          Effect.option,
+        );
+
+        if (brokenAt === 35) {
+          expect(Option.isSome(answer)).toBe(true);
+
+          if (Option.isSome(answer)) {
+            expect(Model.isAnyOf(["recorded"])(answer.value.model)).toBe(true);
+            expect(answer.value.preparedHash).toBe(yield* digest.digestHex(Digest.sha256, prepared));
+            expect(answer.value.observedHashes).toEqual({
+              baseline: yield* digest.digestHex(Digest.sha256, prepared),
+              broken: yield* digest.digestHex(Digest.sha256, edited),
+              restored: yield* digest.digestHex(Digest.sha256, prepared),
+            });
+            expect(answer.value.cleanup.hash).toBe(yield* digest.digestHex(Digest.sha256, original));
+            expect(current).toEqual(original);
+          }
         }
 
-        expect(JSON.stringify(result)).not.toContain("injected-private-value");
-      } else {
-        expect(tested).toEqual([]);
-      }
+        if (Option.isSome(answer)) {
+          const result = answer.value;
 
-      expect(tested).toEqual(["baseline", "broken", "restored"].slice(0, tested.length));
+          if (result.cleanup.restored) {
+            expect(current).toEqual(original);
+          } else {
+            expect(Model.isAnyOf(["recorded", "incomplete"])(result.model)).toBe(true);
+          }
+
+          if (Model.isAnyOf(["recorded"])(result.model)) {
+            expect(tested).toEqual(["baseline", "broken", "restored"]);
+          }
+
+          const hash = yield* Digest.Digest;
+
+          if (result.diffHash !== null) {
+            expect(result.diffHash).toBe(
+              yield* hash.digestHex(Digest.sha256, bytes(`generated-diff-${JSON.stringify(content)}`)),
+            );
+          }
+
+          expect(JSON.stringify(result)).not.toContain("injected-private-value");
+        } else {
+          expect(tested).toEqual([]);
+        }
+
+        expect(tested).toEqual(["baseline", "broken", "restored"].slice(0, tested.length));
+      }
+    }).pipe(Effect.provide(Digest.layerWebCrypto)),
+  options,
+);
+
+// Plant: ignore a fixed source, prepared or edited hash and write anyway.
+it.effect.prop(
+  "fixed checklist hashes reject unsupported bytes before any write or child",
+  {
+    key: Schema.Literals([
+      "checklist-body",
+      "checklist-drop-notify",
+      "checklist-early-complete",
+      "checklist-held-call",
+      "checklist-due-reschedule",
+      "checklist-running-replace",
+      "checklist-running-delete",
+      "checklist-alarm-failure",
+      "checklist-late-failure",
+    ]),
+    content: Schema.String,
+  },
+  ({ key, content }) =>
+    Effect.gen(function* () {
+      const { selected, original, prepared, edited, head } = images(key, content);
+
+      const faults =
+        selected.preparation.length === 0
+          ? (["mode", "source", "edited"] as const)
+          : (["mode", "source", "prepared", "edited"] as const);
+
+      for (const fault of faults) {
+        let touched = false;
+        const real = yield* Digest.Digest;
+
+        const digest = Digest.Digest.of({
+          ...real,
+          digestHex: (algorithm, data) => {
+            for (const [image, name] of [
+              [original, "source"],
+              [prepared, "prepared"],
+              [edited, "edited"],
+            ] as const) {
+              if (data.length === image.length && data.every((value, index) => value === image[index])) {
+                return Effect.succeed(name === fault ? "0".repeat(64) : selected.hashes[name]);
+              }
+            }
+
+            return real.digestHex(algorithm, data);
+          },
+        });
+
+        const workspace = Workspace.of({
+          inspect: Effect.succeed({
+            bytes: original,
+            mode: fault === "mode" ? 0o100755 : 0o100644,
+            head,
+            index: sha,
+            status: "",
+            summary: "",
+          }),
+          write: () =>
+            Effect.sync(() => {
+              touched = true;
+            }),
+          diff: Effect.succeed(bytes("private-diff")),
+          test: () =>
+            Effect.sync(() => {
+              touched = true;
+
+              return Observation.cases.incomplete.make({ reason: "must_not_run" });
+            }),
+        });
+
+        const result = yield* exercise({ case: key, sha: head }).pipe(
+          Effect.provideService(Workspace, workspace),
+          Effect.provideService(Digest.Digest, digest),
+          Effect.option,
+        );
+
+        expect(Option.isNone(result)).toBe(true);
+        expect(touched).toBe(false);
+      }
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
   options,
 );
@@ -791,6 +1066,8 @@ it.effect.prop(
   },
   ({ request, caller, reason, content }) =>
     Effect.gen(function* () {
+      const account = `private-account-${caller}`;
+
       const environment = {
         GITHUB_REF: "refs/heads/main",
         GITHUB_EVENT_NAME: "workflow_dispatch",
@@ -811,7 +1088,7 @@ it.effect.prop(
       const layer = FileSystem.layerNoop({
         makeDirectory: () => Effect.void,
         readFileString: () =>
-          Effect.succeed(JSON.stringify({ sender: { login: caller }, inputs: request, ignored: content })),
+          Effect.succeed(JSON.stringify({ sender: { login: account }, inputs: request, ignored: content })),
         writeFileString: (_file, value) =>
           Effect.sync(() => {
             saved.push(value);
@@ -826,11 +1103,11 @@ it.effect.prop(
 
           const before = Schema.decodeUnknownSync(
             Schema.fromJsonString(
-              Schema.Struct({ caller: Schema.String, source: Request.fields.sha, startedAt: Schema.String }),
+              Schema.Struct({ caller: Schema.Null, source: Request.fields.sha, startedAt: Schema.String }),
             ),
           )(saved.at(-1));
 
-          expect(before.caller).toBe(caller);
+          expect(before.caller).toBeNull();
           expect(before.source).toBe(request.sha);
           expect(before.startedAt).not.toBe("");
 
@@ -842,7 +1119,7 @@ it.effect.prop(
       expect(entered).toBe(true);
 
       const Record = Schema.Struct({
-        caller: Schema.NullOr(Schema.String),
+        caller: Schema.Null,
         source: Schema.NullOr(Request.fields.sha),
         request: Schema.NullOr(Request),
         startedAt: Schema.String,
@@ -855,7 +1132,7 @@ it.effect.prop(
 
       const recorded = Schema.decodeUnknownSync(Schema.fromJsonString(Record))(saved.at(-1));
       expect(recorded).toMatchObject({
-        caller,
+        caller: null,
         source: request.sha,
         request,
         runner: sha,
@@ -880,7 +1157,7 @@ it.effect.prop(
       );
       expect(Schema.decodeUnknownSync(Schema.fromJsonString(Record))(saved.at(-1))).toMatchObject({
         source: request.sha,
-        caller,
+        caller: null,
         reason: "setup_or_io",
       });
       expect(saved.at(-1)).not.toContain(encodeURIComponent(unknown));
@@ -909,7 +1186,7 @@ it.effect.prop(
 
       const interruptedWrite = FileSystem.layerNoop({
         makeDirectory: () => Effect.void,
-        readFileString: () => Effect.succeed(JSON.stringify({ sender: { login: caller }, inputs: request })),
+        readFileString: () => Effect.succeed(JSON.stringify({ sender: { login: account }, inputs: request })),
         writeFileString: (_file, value) =>
           Effect.suspend(() =>
             ++writes === 4
@@ -934,7 +1211,9 @@ it.effect.prop(
         Effect.succeed({
           request,
           originalHash: sha,
+          preparedHash: sha,
           editedHash: sha,
+          observedHashes: { baseline: sha, broken: sha, restored: sha },
           originalMode: 0o100644,
           head: request.sha,
           index: sha,
@@ -958,7 +1237,7 @@ it.effect.prop(
 
       expect(afterWriteFailure).toMatchObject({
         source: request.sha,
-        caller,
+        caller: null,
         state: "incomplete",
         reason: "setup_or_io",
         model: { _tag: "recorded" },
@@ -968,7 +1247,7 @@ it.effect.prop(
       const invalid = FileSystem.layerNoop({
         makeDirectory: () => Effect.void,
         readFileString: () =>
-          Effect.succeed(JSON.stringify({ sender: { login: caller }, inputs: { ...request, patch: content } })),
+          Effect.succeed(JSON.stringify({ sender: { login: account }, inputs: { ...request, patch: content } })),
         writeFileString: (_file, value) =>
           Effect.sync(() => {
             saved.push(value);
@@ -980,12 +1259,19 @@ it.effect.prop(
         Effect.provide(Path.layer),
       );
       expect(Schema.decodeUnknownSync(Schema.fromJsonString(Record))(saved.at(-1))).toMatchObject({
-        caller,
+        caller: null,
         source: null,
         request: null,
         state: "incomplete",
         reason: "request_invalid",
       });
+
+      for (const raw of saved) {
+        expect(raw).not.toContain(account);
+        expect(raw).not.toContain(unknown);
+        expect(raw).not.toContain(JSON.stringify(unknown).slice(1, -1));
+        expect(raw).not.toContain(encodeURIComponent(unknown));
+      }
     }),
   options,
 );
