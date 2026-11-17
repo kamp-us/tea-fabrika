@@ -527,11 +527,11 @@ export const equality = (left: string, right: string): Result.Result<{ cuts: num
   const after = readTrace(right);
 
   if (Result.isFailure(before)) {
-    return before;
+    return Result.fail(before.failure);
   }
 
   if (Result.isFailure(after)) {
-    return after;
+    return Result.fail(after.failure);
   }
 
   const reason = complete(before.success) ?? complete(after.success);
@@ -952,8 +952,12 @@ export class Executor extends Context.Service<
 
 export const internal = (
   request: Cases.Request,
-  values: { readonly mode?: string; readonly variant?: string; readonly slot?: string },
-) => {
+  values: {
+    readonly mode?: string | undefined;
+    readonly variant?: string | undefined;
+    readonly slot?: string | undefined;
+  },
+): Result.Result<Internal, Reason> => {
   switch (values.mode) {
     case "manifest":
       return request.case === "l11-batch"
@@ -978,13 +982,15 @@ export const internal = (
     case "batch": {
       const slot = Schema.decodeUnknownResult(Schema.Literals(Cases.Slot.literals.map(String)))(values.slot);
 
-      const selected = Result.isSuccess(slot)
-        ? Schema.decodeUnknownResult(Cases.Slot)(Number(slot.success))
-        : Result.fail("invalid");
+      if (Result.isFailure(slot)) {
+        return Result.fail("request_invalid");
+      }
+
+      const selected = Schema.decodeUnknownResult(Cases.Slot)(Number(slot.success));
 
       return request.case === "l11-batch" && Result.isSuccess(selected)
         ? Result.succeed(Internal.cases.batch.make({ slot: selected.success }))
-        : Result.fail<Reason>("request_invalid");
+        : Result.fail("request_invalid");
     }
 
     case "collect":
@@ -1010,7 +1016,7 @@ const variants = (mode: Internal): readonly Cases.Variant[] =>
     mode,
     {
       compare: ({ variant }) => [variant],
-      inputs: () => ["uncached", "cached"],
+      inputs: () => ["uncached", "cached"] as const,
     },
     () => ["cached"],
   );
@@ -1637,11 +1643,11 @@ const issue = (fallback: Reason) => (error: unknown) => (Schema.is(WorkspaceErro
 
 const jobKey = (mode: Internal): typeof Job.Type =>
   Internal.match(mode, {
-    manifest: () => "manifest",
-    compare: () => "compare",
-    inputs: () => "inputs",
-    output: () => "output",
-    collect: () => "collect",
+    manifest: (): typeof Job.Type => "manifest",
+    compare: (): typeof Job.Type => "compare",
+    inputs: (): typeof Job.Type => "inputs",
+    output: (): typeof Job.Type => "output",
+    collect: (): typeof Job.Type => "collect",
     batch: ({ slot }) => Schema.decodeUnknownSync(Job)(`slot-${slot}`),
   });
 

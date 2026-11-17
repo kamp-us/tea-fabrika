@@ -302,28 +302,28 @@ it("private input equality compares complete ordered values and every changed po
       const before = trace(secret);
       const after = structuredClone(before);
       expect(Result.isSuccess(Exercise.equality(stdout(before), stdout(after)))).toBe(true);
-      const pick = after.find((event) => event._tag === "pick")!;
+      const at = after.findIndex((event) => event._tag === "pick");
+      const pick = after[at];
 
-      if (pick._tag !== "pick") {
+      if (pick?._tag !== "pick") {
         throw new Error("no generated pick");
       }
 
       switch (mutation) {
         case 0:
-          pick.pick.point += Cases.storagePaths.length;
+          after[at] = { ...pick, pick: { ...pick.pick, point: pick.pick.point + Cases.storagePaths.length } };
           break;
         case 1:
-          pick.pick.encoding = 2;
-          pick.marker = encodeURIComponent(secret);
+          after[at] = { ...pick, pick: { ...pick.pick, encoding: 2 }, marker: encodeURIComponent(secret) };
           break;
         case 2:
-          pick.cut.operation++;
+          after[at] = { ...pick, cut: { ...pick.cut, operation: pick.cut.operation + 1 } };
           break;
         case 3:
-          pick.marker += "x";
+          after[at] = { ...pick, marker: `${pick.marker}x` };
           break;
         case 4:
-          pick.repeat = !pick.repeat;
+          after[at] = { ...pick, repeat: !pick.repeat };
           break;
         default:
           after.pop();
@@ -429,7 +429,7 @@ it("multiple-file restoration attempts every saved file after each injected I/O 
       fc.integer({ min: 0, max: 33 }),
       fc.constantFrom("io", "index", "extra", "symlink", "mode"),
       async (fault, kind) => {
-        const names = [Cases.file, Cases.runtime, Cases.children];
+        const names = [Cases.file, Cases.runtime, Cases.children] as const;
 
         const originals = new Map<string, Exercise.Saved>(
           names.map((path) => [path, { bytes: bytes(path), mode: 0o100644, regular: true, parents: true }]),
@@ -713,7 +713,7 @@ it("executor preserves timing failures, cleans plants and continues both diagnos
           "none",
         ];
 
-        const mock = standin(request, { timeout, fail: points[failure] });
+        const mock = standin(request, { timeout, fail: points[failure] ?? "none" });
 
         const result = await run(
           request,

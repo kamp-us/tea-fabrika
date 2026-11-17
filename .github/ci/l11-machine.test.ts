@@ -3,7 +3,7 @@ import { arbGuidedSequence, propertyTrace } from "@demlik/tea/pbt";
 import { step } from "@demlik/tea/testing";
 import fc from "fast-check";
 import { expect, it } from "vitest";
-import { cached, cases, type Request } from "./l11-cases.ts";
+import { cached, cases, Request } from "./l11-cases.ts";
 import { machine, Model, Outcome, perform, type Phase } from "./l11-machine.ts";
 
 const success = (phase: Phase): Outcome => {
@@ -110,7 +110,7 @@ it("a plant timeout cannot complete while a measurement timeout remains an obser
   // Plant: treat broken timing as leaked. Generated failure point includes every phase boundary.
   fc.assert(
     fc.property(fc.constantFrom(...cases), fc.integer({ min: 0, max: 6 }), (name, failure) => {
-      const ctx = { request: { case: name, sha: cached } };
+      const ctx = { request: Request.make({ case: name, sha: cached }) };
       let [model, commands] = machine.init(null, ctx);
       let count = 0;
 

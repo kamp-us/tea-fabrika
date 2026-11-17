@@ -39,7 +39,7 @@ export const Slot = Schema.Literals([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 export const sources = {
   uncached: { sha: uncached, law: "8c38d7ff077aa796420ac76881be179a12b3461b60e5db05897b2a20727809cb" },
   cached: { sha: cached, law: "9eae1ecb08f3db5834a8c5de8488773ddf280f8f058971725321156d15d083e0" },
-};
+} as const;
 
 export const hashes = {
   [runtime]: "175ceddc78e5bf30a68abc3c9d826175f7a8afc7611f247fa2c3bccd41aeaf05",
@@ -366,7 +366,10 @@ const utf8 = new TextDecoder("utf-8", { fatal: true });
 
 const encoder = new TextEncoder();
 
-export const derive = (saved: ReadonlyMap<string, Uint8Array>, edits: readonly Edit[]) => {
+export const derive = (
+  saved: ReadonlyMap<string, Uint8Array>,
+  edits: readonly Edit[],
+): Result.Result<Map<string, Uint8Array>, MappingError> => {
   const result = new Map<string, Uint8Array>();
 
   for (const change of edits) {
@@ -403,7 +406,11 @@ export const prepare = Effect.fnUntraced(function* (
   request: Request,
   variant: Variant,
   saved: ReadonlyMap<string, Uint8Array>,
-) {
+): Effect.fn.Return<
+  Result.Result<Map<string, Uint8Array>, MappingError | "mapping_missing" | "source_drift" | "transform_drift">,
+  never,
+  Digest.Digest
+> {
   const digest = yield* Digest.Digest;
   const allowed = transformed[`${request.case}/${variant}`];
 
