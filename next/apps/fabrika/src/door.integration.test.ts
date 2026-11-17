@@ -3332,7 +3332,7 @@ describe("P10 signed membership changes", () => {
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
+      { arbitrary: { runs: runsFor({ fast: 3, full: 12 }) } },
     );
   }
 
