@@ -344,11 +344,15 @@ these caps. Each one came from a laptop that became unusable.
   needs what CI lacks (Electron shots, a stage with workerd) still runs here.
 - **With two or more code agents running:** `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at
   the very end. `tsgo` takes about 8 cores, so small jobs add up.
-- **At most 12 code agents, one `pnpm typecheck` at a time across all of them, one Electron test app
-  and one Docker box** ([0012](./.decisions/0012-twelve-agents-at-once.md)). Wait while
+- **Count actual productive workers** under
+  [0597](./.decisions/0597-eight-workers-before-twelve.md), which holds the staffing targets,
+  fresh verification and immediate replacement rules. Keep one file owner, fresh steps,
+  independent review and required proof.
+- **Shared resources stay capped:** one `pnpm typecheck` at a time, one Electron test app and one
+  Docker box ([0012](./.decisions/0012-twelve-agents-at-once.md)). Wait while
   `pgrep -x tsgo` finds one (`pgrep -f tsgo` also matches the waiting shell, so that loop never
   ends); in a step's box, skip the wait, since `pnpm typecheck` takes its own lock. Two type checks
-  at once, not the agent count, is what froze the laptop. If it feels slow, drop back to 8 agents.
+  at once froze the laptop before; reduce demand if it feels slow.
 - Never run the sandbox runtime or a shimmed tool with `env -i` or `HOME` unset while a
   version-manager shim is on `PATH`: one run made about 7,000 processes. Set `ulimit -u` in a
   subshell first.

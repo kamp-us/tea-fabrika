@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-16-t1133-trusted-checkout-setup",
+  "date": "2026-11-16",
+  "quests": ["1133"],
+  "stage": "lead",
+  "kind": "failure",
+  "what": "Today's manual plant tooling initially put the trusted checkout in a child directory, but the reused pnpm setup reads package.json at GITHUB_WORKSPACE. The real adapter had not run and no proof was claimed.",
+  "cause": "The first implementation checked the helper's local path but missed its upstream action's default package_json_file.",
+  "fix": "Keep the trusted checkout at the workspace root and the tested checkout in source. The fixed workflow lint and its generated policy law reject moving the trusted checkout into a child directory.",
+  "person": false,
+  "primitive": null,
+  "test": ".github/ci/workflow-lint/plant.test.ts",
+  "links": ["https://github.com/pnpm/action-setup/blob/v6/action.yml"]
+}

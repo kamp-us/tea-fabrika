@@ -180,17 +180,56 @@ export const layer = (
           : Effect.succeed(prs),
       );
 
-      const draft = Effect.fn("PullRequestsGh.draft")(function* (branch: string, text: Text) {
-        const args = ["--draft", "--base", "main", "--head", branch, "--title", text.title, "--body", text.body];
-        const out = yield* gh(["pr", "create", "-R", repo, ...args]);
-        const number = Number(/\/pull\/(\d+)/.exec(out)?.[1]);
+      const draft = Effect.fn("PullRequestsGh.draft")(
+        function* (branch: string, text: Text, head: string) {
+          let out;
 
-        if (!Number.isInteger(number)) {
-          return yield* PullRequestsError.make({ reason: `gh pr create named no pull request: ${out.trim()}` });
-        }
+          if (branch.startsWith("fabrikalfa/")) {
+            const ran = yield* run(
+              "node",
+              [`${import.meta.dirname}/../botpush.mjs`, "--draft", repo, branch, head],
+              cwd,
+              {
+                stdin: JSON.stringify(text),
+              },
+            );
 
-        return number;
-      });
+            if (ran.code !== 0) {
+              return yield* PullRequestsError.make({ reason: `bot draft exited ${ran.code}: ${lastLine(ran)}` });
+            }
+
+            out = ran.out;
+          } else {
+            out = yield* gh([
+              "pr",
+              "create",
+              "-R",
+              repo,
+              "--draft",
+              "--base",
+              "main",
+              "--head",
+              branch,
+              "--title",
+              text.title,
+              "--body",
+              text.body,
+            ]);
+          }
+
+          const number = Number(/\/pull\/(\d+)/.exec(out)?.[1]);
+
+          if (!Number.isInteger(number)) {
+            return yield* PullRequestsError.make({ reason: "draft publication named no pull request" });
+          }
+
+          return number;
+        },
+        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        Effect.catchTag("PlatformError", () =>
+          Effect.fail(PullRequestsError.make({ reason: "bot draft could not start" })),
+        ),
+      );
 
       const edit = (number: number, text: Text) =>
         Effect.asVoid(

@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-formatter-ledger-fix-lead",
+  "ticket": "kamp-us/tea-fabrika#1087",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-17T05:06:12.540Z",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's tooling. The lint wrapper reads a fresh report after fixes before matching source lines to ledgers. All 27 advice and ledger tests pass, including four new real-oxlint scenarios. Scoped format and lint pass. The first fixture followed an unused vendor link; its own transient edits were restored, and the final fixture removes that link. No tracked ledger, vendor or rule setting changed. Compiler and full lint were excluded by the lane brief. Tests use local temporary files and processes, with no credential use; the authorized bot push uses the existing app authentication.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "T1087 fix reports match final source",
+      "plant": "Use the original lint wrapper with a blank-line fix before unchanged and new violations",
+      "result": "red"
+    }
+  ]
+}
