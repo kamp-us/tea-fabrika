@@ -790,6 +790,7 @@ it.prop(
     expect(
       presence(present, () => {
         loads++;
+
         return clean;
       }),
     ).toBe(clean);

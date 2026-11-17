@@ -64,8 +64,11 @@ export class ToolsError extends Schema.TaggedError<ToolsError>()("ToolsError", {
 }) {}
 
 type AnyProgram = typeof Program.Program.schema.Type;
+
 const closed = { onExcessProperty: "error" } as const;
+
 const PsArguments = Schema.Record(Schema.String, Schema.Never);
+
 type Reason = ToolsError["reason"];
 
 type Member = JsonSchema.JsonSchema & {
@@ -81,10 +84,15 @@ const MemberShape = Schema.Struct({
 });
 
 const Tag = Schema.Struct({ type: Schema.Literal("string"), enum: Schema.NonEmptyArray(Schema.String) });
+
 const MEMBER = new Set(["type", "properties", "required", "additionalProperties", "title", "description"]);
+
 const JOIN = new Set(["anyOf", "oneOf", "title", "description"]);
+
 const REF = new Set(["$ref", "title", "description"]);
+
 const prefix = "#/$defs/";
+
 const refName = (ref: string) => ref.slice(prefix.length).replaceAll("~1", "/").replaceAll("~0", "~");
 
 const alternatives = <A>(
@@ -103,6 +111,7 @@ const alternatives = <A>(
     }
 
     const name = refName(node.$ref);
+
     return !node.$ref.startsWith(prefix) || !Object.hasOwn(defs, name) || seen.has(name)
       ? Result.fail("not_tagged")
       : alternatives(defs[name], defs, leaf, new Set([...seen, name]));
@@ -133,6 +142,7 @@ const members = (node: unknown, defs: JsonSchema.Definitions) =>
 
     const tag = alternatives<string>(shape.success.properties.type, defs, (node) => {
       const decoded = Schema.decodeUnknownResult(Tag)(node);
+
       return Result.isFailure(decoded) ? Result.fail("not_tagged") : Result.succeed(decoded.success.enum);
     });
 
@@ -160,8 +170,10 @@ const value = (all: ReadonlyArray<Member>, key: string): Result.Result<JsonSchem
         tags: __,
         ...rest
       } = member;
+
       return { ...rest, properties, required: required.filter((name) => name !== "type") };
     });
+
   const [first, ...rest] = mine;
 
   if (first === undefined) {
@@ -212,7 +224,9 @@ const definitions = (schema: JsonSchema.JsonSchema, defs: JsonSchema.Definitions
 };
 
 const NAMED = ["type", "enum", "const", "anyOf", "oneOf", "$ref"];
+
 const CHILDREN = ["items", "prefixItems", "additionalProperties", "anyOf", "oneOf"];
+
 const KEYED = ["properties", "patternProperties", "$defs"];
 
 const takes = (node: { readonly [key: string]: unknown }, type: string) =>
@@ -232,8 +246,10 @@ const named = (node: unknown, member = false): boolean => {
   }
 
   const all: ReadonlyArray<unknown> = Array.isArray(node.allOf) ? node.allOf : [];
+
   const tuple =
     Array.isArray(node.prefixItems) && Predicate.isNumber(node.maxItems) && node.maxItems <= node.prefixItems.length;
+
   const rest = [node, ...all].some((part) => Predicate.isObject(part) && Object.hasOwn(part, "additionalProperties"));
 
   if (
@@ -248,9 +264,11 @@ const named = (node: unknown, member = false): boolean => {
   const children = CHILDREN.map((key) => node[key])
     .filter((held) => held !== undefined && held !== false)
     .flatMap((held): ReadonlyArray<unknown> => (Array.isArray(held) ? held : [held]));
+
   const keyed = KEYED.map((key) => node[key])
     .filter(Predicate.isObject)
     .flatMap((held) => Object.values(held));
+
   return [...children, ...keyed].every((held) => named(held)) && all.every((part) => named(part, true));
 };
 
@@ -269,6 +287,7 @@ const inputSchema = (program: AnyProgram, key: string, input: Program.Input, nam
   }
 
   const { schema, definitions: defs } = document.success;
+
   const root = Program.Input.isAnyOf(["read"])(input)
     ? Result.succeed(schema)
     : Result.map(
@@ -280,6 +299,7 @@ const inputSchema = (program: AnyProgram, key: string, input: Program.Input, nam
           additionalProperties: false,
         }),
       );
+
   return Result.mapError(
     Result.flatMap(
       Result.flatMap(root, (schema) => definitions(schema, defs)),
@@ -411,6 +431,7 @@ export const read = (programs: ReadonlyArray<AnyProgram>, name: string, args: un
 
     if (Program.Input.isAnyOf(["read"])(input)) {
       const query = Schema.encodeUnknownResult(Schema.toCodecJson(input.schema))(value.success.value);
+
       return Result.isFailure(query)
         ? refused({ reason: "bad_input" })
         : Call.cases.query.make({ program: program.name, name: key, query: query.success });
@@ -421,6 +442,7 @@ export const read = (programs: ReadonlyArray<AnyProgram>, name: string, args: un
     }
 
     const m = Schema.encodeUnknownResult(Schema.toCodecJson(program.msg))({ ...value.success.value, type: key });
+
     return Result.isFailure(m)
       ? refused({ reason: "bad_input" })
       : Call.cases.write.make({ program: program.name, m: m.success });
