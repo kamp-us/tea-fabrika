@@ -142,6 +142,7 @@ const changedRotation = (w: Workflow, slots: unknown = rotationSlots()) => {
   w.jobs["select"]!.outputs!["slots"] = `\${{ steps.set.outputs.slots }}`;
   w.jobs["changed"]!.concurrency!["group"] =
     `scheduled-test-\${{ fromJSON('${JSON.stringify(slots)}')[fromJSON(needs.select.outputs.slots)[matrix.shard]] || '1' }}`;
+
   return w;
 };
 
