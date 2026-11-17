@@ -12,8 +12,9 @@ tags: [lead, lane, build, review, plan, host, electron, launchd, fixtures, vecto
 OS process or socket) is run right after the build, before any review starts, and never at the end
 of the lane.
 
-[0594](0594-safe-checks-direct-mac-ci.md) moves launchd, real Electron and process-signal laws to
-disposable macOS CI; the requirement to obtain their proof before the first review stays.
+[0594](0594-safe-checks-direct-mac-ci.md) moves launchd, real Electron and process-signal laws off
+the owner's laptop to eligible disposable CI. Mac-specific laws use macOS; portable signal laws
+may use Linux. The requirement to obtain their proof before the first review stays.
 
 **Before:**
 
