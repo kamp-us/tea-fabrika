@@ -101,6 +101,19 @@ before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `al
 the first cloud deploy. The other open calls are listed in
 [the section](./tier-1.md#the-owners-walks-and-decisions-by-step), each tied to its step.
 
+*2026-11-16:* P25 slice 1's approved code half is locally recovered in `next/`,
+[PR 1099](https://github.com/kamp-us/tea-fabrika/pull/1099), tracker ticket 888 under 328.
+Tools lists and reads calls from program schemas; admission, step and fold use the same JSON codec.
+The recovery's five safe test files passed 111 checks with five later-slice laws pending, and all
+three deliberate Schema binding faults made the controls fail at `4af9d5b07`. After two compiler
+style fixes, the whole typecheck passed at `fd5ce441d`. Widening the port fields to unknown made
+the existing T4 assertion fail; restoring the source made the package typecheck pass.
+T5's integration check and its deliberate faults, the full remote proof and a fresh whole-diff
+review are still missing. The [approved recovery amendment](./quests/p25-recovery-PLAN.md)
+records the scope and earlier evidence; this entry adds the later compiler result. Ticket 905's
+known schema gaps stay open. The real agent experiment and slices 2 to 4 remain separate work.
+Ticket 888 and P25 stay open; no Tier 1 row is finished by this recovery.
+
 *2026-11-15:* P39's slice 4a, the hands client, is built in `next/` as draft
 [PR 1315](https://github.com/kamp-us/tea-fabrika/pull/1315), waiting for the owner's look: the
 hands list their open tasks, wait for new ones, and run each once with a journal. Slice 4b (the real
