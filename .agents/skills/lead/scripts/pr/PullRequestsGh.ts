@@ -80,13 +80,8 @@ export const repoFromUrl = (url: string): string | null =>
   )?.[1] ?? null;
 
 /** `repo` is `owner/name`; `cwd` is any folder gh may start in. */
-export const layer = (
-  repo: string,
-  cwd: string,
-): Layer.Layer<PullRequests, never, ChildProcessSpawner.ChildProcessSpawner> =>
-  Layer.effect(
-    PullRequests,
-    Effect.gen(function* () {
+export const make = (repo: string, cwd: string): Effect.Effect<PullRequests["Service"], never, ChildProcessSpawner.ChildProcessSpawner> =>
+  Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
       /** One gh call; any exit but 0 fails it with gh's own last line. */
@@ -227,5 +222,8 @@ export const layer = (
       const admin = (number: number, oid: string) => Effect.asVoid(gh(adminArgs(repo, number, oid)));
 
       return PullRequests.of({ openOn, all, draft, edit, ready, view, enqueue, files, patches, arm, admin });
-    }),
-  );
+    });
+
+/** The service as a layer. */
+export const layer = (repo: string, cwd: string): Layer.Layer<PullRequests, never, ChildProcessSpawner.ChildProcessSpawner> =>
+  Layer.effect(PullRequests, make(repo, cwd));

@@ -54,10 +54,8 @@ export const latestIn = (body: string): Effect.Effect<Option.Option<Job>, Schema
   });
 
 /** `repo` is `owner/name`. */
-export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpawner.ChildProcessSpawner> =>
-  Layer.effect(
-    Checks,
-    Effect.gen(function* () {
+export const make = (repo: string): Effect.Effect<Checks["Service"], never, ChildProcessSpawner.ChildProcessSpawner> =>
+  Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       // The last answer per head and name, with its ETag: what a 304 stands for.
       const seen = new Map<string, { readonly etag: string; readonly found: Option.Option<Job> }>();
@@ -141,5 +139,8 @@ export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpaw
       });
 
       return Checks.of({ job, log });
-    }),
-  );
+    });
+
+/** The service as a layer. */
+export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpawner.ChildProcessSpawner> =>
+  Layer.effect(Checks, make(repo));

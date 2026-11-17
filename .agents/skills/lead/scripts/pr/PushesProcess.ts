@@ -11,10 +11,8 @@ import { LeakGrepRefused, Pushes, PushRefused } from "./Pushes.ts";
 export const isBotBranch = (branch: string): boolean => branch.startsWith("fabrikalfa/");
 
 /** `scripts` is the lead's scripts folder, where the leak grep and the bot's push sit. */
-export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessSpawner.ChildProcessSpawner> =>
-  Layer.effect(
-    Pushes,
-    Effect.gen(function* () {
+export const make = (scripts: string): Effect.Effect<Pushes["Service"], never, ChildProcessSpawner.ChildProcessSpawner> =>
+  Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
       const ran = (cmd: string, args: ReadonlyArray<string>, cwd: string, stdin?: string) =>
@@ -111,5 +109,8 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
       );
 
       return Pushes.of({ leakGrep, leakChange, leakText, push });
-    }),
-  );
+    });
+
+/** The service as a layer. */
+export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessSpawner.ChildProcessSpawner> =>
+  Layer.effect(Pushes, make(scripts));

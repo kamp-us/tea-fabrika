@@ -31,8 +31,6 @@ const rm = Effect.fn("box.rm")(function* (name: string, places: { readonly boxes
   yield* setExit(Remove.exitCode(removal.verdict));
 });
 
-// A box name is read as the exact argument, never through a flag parser: a name such as "", "-h"
-// or "--x" must reach the name check, which answers it with exit 2.
 /** What `rm` calls: git from MAIN and the script that keeps a box's runs, on Node. */
 const services = (main: string) =>
   Layer.mergeAll(
@@ -40,6 +38,8 @@ const services = (main: string) =>
     RunsProcess.layer(`${import.meta.dirname}/keepruns.sh`, process.env),
   ).pipe(Layer.provideMerge(NodeServices.layer));
 
+// A box name is read as the exact argument, never through a flag parser: a name such as "", "-h"
+// or "--x" must reach the name check, which answers it with exit 2.
 const [command, ...rest] = process.argv.slice(2);
 
 const name = rest[0] ?? "";

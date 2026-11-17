@@ -2010,12 +2010,6 @@ const unpinned = (reason: string, quest?: string) => {
   process.exitCode = 30;
 };
 
-/**
- * A quest started from a checkout pins its scripts first and runs chain.ts again from the pin, with
- * the same arguments (./pin.ts, ticket 835): that pinned process drives the quest. This one waits,
- * answers its exit code, and removes the pin when it ends; a SIGINT or SIGTERM stops the pinned
- * process first.
- */
 /** Every service the quest's steps call (git and GitHub, on Node), composed once at the entry point. */
 const services = (env: Env) =>
   Layer.mergeAll(
@@ -2024,6 +2018,12 @@ const services = (env: Env) =>
     ChecksGh.layer(env.GH_REPO),
   ).pipe(Layer.provideMerge(Layer.merge(NodeServices.layer, Digest.layerWebCrypto)));
 
+/**
+ * A quest started from a checkout pins its scripts first and runs chain.ts again from the pin, with
+ * the same arguments (./pin.ts, ticket 835): that pinned process drives the quest. This one waits,
+ * answers its exit code, and removes the pin when it ends; a SIGINT or SIGTERM stops the pinned
+ * process first.
+ */
 const launch = (env: Env, quest: string, args: ReadonlyArray<string>) =>
   NodeRuntime.runMain(
     Effect.gen(function* () {
