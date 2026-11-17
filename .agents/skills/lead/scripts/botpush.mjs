@@ -5,9 +5,54 @@
 // FABRIKA_APP_ID names the GitHub App; GH_REPO (owner/name) defaults to the worktree's origin.
 import { execFileSync } from "node:child_process";
 import { createSign } from "node:crypto";
+import { readFileSync } from "node:fs"; // edge: stdin can be a socket descriptor; FileSystem reads paths only.
+import { createRequire } from "node:module"; // edge: load the optional draft module synchronously on Node, without starting a second process.
 import { fileURLToPath } from "node:url";
 
-const [dir, branch, src = "HEAD"] = process.argv.slice(2);
+const args = process.argv.slice(2);
+
+const draft = args[0] === "--draft";
+
+const [dir, branch, src = "HEAD"] = draft ? [process.cwd(), args[2], "HEAD"] : args;
+
+const leakgrep = fileURLToPath(new URL("./leakgrep.sh", import.meta.url));
+
+let text;
+
+if (draft) {
+  if (
+    args.length !== 4 ||
+    !/^[a-f0-9]{40}$/.test(args[3] ?? "") ||
+    !/^[\w.-]+\/[\w.-]+$/.test(args[1] ?? "") ||
+    !branch?.startsWith("fabrikalfa/")
+  ) {
+    throw new Error("usage: botpush.mjs --draft owner/repo fabrikalfa/<name>, expected-head, JSON title/body on stdin");
+  }
+
+  try {
+    text = JSON.parse(readFileSync(0, "utf8"));
+  } catch {
+    console.error("bot draft: unreadable title/body JSON");
+    process.exit(1);
+  }
+
+  if (typeof text?.title !== "string" || text.title.trim() === "" || typeof text.body !== "string") {
+    throw new Error("bot draft: title and body must be text");
+  }
+
+  text = { title: text.title, body: text.body };
+
+  try {
+    execFileSync("sh", [leakgrep, "--text", "-"], {
+      cwd: dir,
+      input: `${text.title}\n${text.body}`,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch {
+    console.error("bot draft: text leak check refused");
+    process.exit(1);
+  }
+}
 
 if (!dir || !(branch === "-" || branch?.startsWith("fabrikalfa/"))) {
   throw new Error("usage: botpush.mjs <worktree> fabrikalfa/<name>");
@@ -18,50 +63,53 @@ if (!dir || !(branch === "-" || branch?.startsWith("fabrikalfa/"))) {
 // wide, and a failure says which part failed instead of exiting with no word.
 let diff;
 
-try {
-  diff = execFileSync(
-    "git",
-    ["-C", dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=0", `origin/main...${src}`],
-    { maxBuffer: 256 * 1024 * 1024 },
-  );
-} catch {
-  console.error("botpush: cannot read the diff from origin/main");
-  process.exit(1);
-}
+if (!draft) {
+  try {
+    diff = execFileSync(
+      "git",
+      ["-C", dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=0", `origin/main...${src}`],
+      { maxBuffer: 256 * 1024 * 1024 },
+    );
+  } catch {
+    console.error("botpush: cannot read the diff from origin/main");
+    process.exit(1);
+  }
 
-const leakgrep = fileURLToPath(new URL("./leakgrep.sh", import.meta.url));
-
-try {
-  execFileSync("sh", [leakgrep], {
-    cwd: dir,
-    input: diff,
-    stdio: ["pipe", "inherit", "inherit"],
-  });
-  // Decision 0048: each commit this push sends is read on its own, beside the branch's net change
-  // above. A commit a ref of origin already holds is not sent, so it is not read again.
-  execFileSync("sh", [leakgrep, "--commits", src, "--not", "--remotes=origin"], {
-    cwd: dir,
-    stdio: ["ignore", "inherit", "inherit"],
-  });
-} catch {
-  process.exit(1);
+  try {
+    execFileSync("sh", [leakgrep], {
+      cwd: dir,
+      input: diff,
+      stdio: ["pipe", "inherit", "inherit"],
+    });
+    // Decision 0048: each commit this push sends is read on its own, beside the branch's net change
+    // above. A commit a ref of origin already holds is not sent, so it is not read again.
+    execFileSync("sh", [leakgrep, "--commits", src, "--not", "--remotes=origin"], {
+      cwd: dir,
+      stdio: ["ignore", "inherit", "inherit"],
+    });
+  } catch {
+    process.exit(1);
+  }
 }
 
 const APP = process.env.FABRIKA_APP_ID ?? "5640348";
 
-const REPO =
-  process.env.GH_REPO ??
-  execFileSync("git", ["-C", dir, "remote", "get-url", "origin"])
-    .toString()
-    .trim()
-    .replace(/^(https:\/\/github\.com\/|git@github\.com:)/, "")
-    .replace(/\.git$/, "");
+const REPO = draft
+  ? args[1]
+  : (process.env.GH_REPO ??
+    execFileSync("git", ["-C", dir, "remote", "get-url", "origin"])
+      .toString()
+      .trim()
+      .replace(/^(https:\/\/github\.com\/|git@github\.com:)/, "")
+      .replace(/\.git$/, ""));
 
-// The step notes must exist: a branch pushed without them fails the commits check.
-try {
-  execFileSync("git", ["-C", dir, "rev-parse", "--verify", "-q", "refs/notes/fabrika"]);
-} catch {
-  throw new Error("botpush: no refs/notes/fabrika here; sign the commits before pushing");
+// The original push gate is unchanged. Draft creation never signs or pushes.
+if (!draft) {
+  try {
+    execFileSync("git", ["-C", dir, "rev-parse", "--verify", "-q", "refs/notes/fabrika"]);
+  } catch {
+    throw new Error("botpush: no refs/notes/fabrika here; sign the commits before pushing");
+  }
 }
 
 const b64 = (s) => Buffer.from(s).toString("base64url");
@@ -101,99 +149,112 @@ const tok = await api(`/app/installations/${inst.id}/access_tokens`, {
   method: "POST",
   body: JSON.stringify({
     repositories: [REPO.split("/")[1]],
-    permissions: { contents: "write", workflows: "write" },
+    permissions: draft ? { contents: "read", pull_requests: "write" } : { contents: "write", workflows: "write" },
   }),
 });
 
-const header = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${tok.token}`).toString("base64")}`;
+if (draft) {
+  const BotDraft = createRequire(import.meta.url)("./pr/BotDraft.ts");
+  BotDraft.run({
+    repo: REPO,
+    branch,
+    head: args[3],
+    text,
+    token: tok.token,
+    jwt,
+    write: tok.permissions?.pull_requests === "write",
+  });
+} else {
+  const header = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${tok.token}`).toString("base64")}`;
 
-// No global or system git config, so no credential helper answers before the bot's token.
-const env = {
-  ...process.env,
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_NOSYSTEM: "1",
-  GIT_TERMINAL_PROMPT: "0",
-};
+  // No global or system git config, so no credential helper answers before the bot's token.
+  const env = {
+    ...process.env,
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_TERMINAL_PROMPT: "0",
+  };
 
-const git = (...a) =>
-  execFileSync("git", ["-c", `http.https://github.com/.extraheader=${header}`, ...a], {
-    cwd: dir,
-    env,
-    stdio: ["ignore", "pipe", "pipe"],
-  }).toString();
+  const git = (...a) =>
+    execFileSync("git", ["-c", `http.https://github.com/.extraheader=${header}`, ...a], {
+      cwd: dir,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    }).toString();
 
-const url = `https://github.com/${REPO}.git`;
+  const url = `https://github.com/${REPO}.git`;
 
-// One atomic push: the notes and the branch land together or not at all, so CI finds the signatures.
-const refs = ["refs/notes/fabrika:refs/notes/fabrika"];
+  // One atomic push: the notes and the branch land together or not at all, so CI finds the signatures.
+  const refs = ["refs/notes/fabrika:refs/notes/fabrika"];
 
-if (branch !== "-") {
-  refs.push(`${src}:refs/heads/${branch}`);
-}
-
-// Take the remote's notes first and merge them in, as the signer's own push does, so the push is a
-// fast-forward. A conflict (two notes on one commit) stops here, before anything is pushed.
-const takeNotes = () => {
-  if (git("ls-remote", url, "refs/notes/fabrika").trim()) {
-    git("fetch", "--no-tags", "-q", url, "+refs/notes/fabrika:refs/notes/fabrika-origin");
-    git(
-      "-c",
-      "user.name=fabrikalfa[bot]",
-      "-c",
-      "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com",
-      "notes",
-      "--ref=fabrika",
-      "merge",
-      "-q",
-      "refs/notes/fabrika-origin",
-    );
+  if (branch !== "-") {
+    refs.push(`${src}:refs/heads/${branch}`);
   }
-};
 
-/**
- * Whether the push was refused only because the remote's notes moved after we took them: another
- * session pushed refs/notes/fabrika in between (ci375 build, 2026-11-09, ticket 388). GitHub says
- * "cannot lock ref" for that race and plain git says "fetch first"; with --atomic every other ref
- * then reads "(failed)" or "(atomic push failed)". Any other refusal is real and is not retried.
- */
-const staleNotesOnly = (stderr) => {
-  const refused = stderr.split("\n").filter((l) => /^\s*!\s/.test(l));
-  const notes = refused.filter((l) => /->\s+refs\/notes\/fabrika\b/.test(l));
+  // Take the remote's notes first and merge them in, as the signer's own push does, so the push is a
+  // fast-forward. A conflict (two notes on one commit) stops here, before anything is pushed.
+  const takeNotes = () => {
+    if (git("ls-remote", url, "refs/notes/fabrika").trim()) {
+      git("fetch", "--no-tags", "-q", url, "+refs/notes/fabrika:refs/notes/fabrika-origin");
+      git(
+        "-c",
+        "user.name=fabrikalfa[bot]",
+        "-c",
+        "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com",
+        "notes",
+        "--ref=fabrika",
+        "merge",
+        "-q",
+        "refs/notes/fabrika-origin",
+      );
+    }
+  };
 
-  return (
-    notes.length > 0 &&
-    notes.every((l) => /cannot lock ref|fetch first|non-fast-forward/.test(l)) &&
-    refused.every((l) => notes.includes(l) || /\((atomic push )?failed\)\s*$/.test(l))
-  );
-};
+  /**
+   * Whether the push was refused only because the remote's notes moved after we took them: another
+   * session pushed refs/notes/fabrika in between (ci375 build, 2026-11-09, ticket 388). GitHub says
+   * "cannot lock ref" for that race and plain git says "fetch first"; with --atomic every other ref
+   * then reads "(failed)" or "(atomic push failed)". Any other refusal is real and is not retried.
+   */
+  const staleNotesOnly = (stderr) => {
+    const refused = stderr.split("\n").filter((l) => /^\s*!\s/.test(l));
+    const notes = refused.filter((l) => /->\s+refs\/notes\/fabrika\b/.test(l));
 
-try {
-  takeNotes();
-  let retried = false;
+    return (
+      notes.length > 0 &&
+      notes.every((l) => /cannot lock ref|fetch first|non-fast-forward/.test(l)) &&
+      refused.every((l) => notes.includes(l) || /\((atomic push )?failed\)\s*$/.test(l))
+    );
+  };
 
   try {
-    git("push", "--atomic", url, ...refs);
-  } catch (e) {
-    if (!staleNotesOnly(String(e.stderr ?? ""))) {
-      throw e;
+    takeNotes();
+    let retried = false;
+
+    try {
+      git("push", "--atomic", url, ...refs);
+    } catch (e) {
+      if (!staleNotesOnly(String(e.stderr ?? ""))) {
+        throw e;
+      }
+
+      // One retry, never a force: take the newer notes, merge them, push again.
+      retried = true;
+      takeNotes();
+      git("push", "--atomic", url, ...refs);
     }
 
-    // One retry, never a force: take the newer notes, merge them, push again.
-    retried = true;
-    takeNotes();
-    git("push", "--atomic", url, ...refs);
+    console.log(
+      `pushed ${branch} as fabrikalfa[bot]${retried ? " after one notes retry" : ""}; installation ${inst.id}; token expires ${tok.expires_at}`,
+    );
+  } catch (e) {
+    console.log(
+      `push refused: ${String(e.stderr ?? e.message)
+        .replaceAll(tok.token, "***")
+        .split("\n")
+        .filter((l) => /GH0|refused|rejected|error|conflict/i.test(l))
+        .join(" | ")}`,
+    );
+    process.exitCode = 1;
   }
-
-  console.log(
-    `pushed ${branch} as fabrikalfa[bot]${retried ? " after one notes retry" : ""}; installation ${inst.id}; token expires ${tok.expires_at}`,
-  );
-} catch (e) {
-  console.log(
-    `push refused: ${String(e.stderr ?? e.message)
-      .replaceAll(tok.token, "***")
-      .split("\n")
-      .filter((l) => /GH0|refused|rejected|error|conflict/i.test(l))
-      .join(" | ")}`,
-  );
-  process.exitCode = 1;
 }
