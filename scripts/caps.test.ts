@@ -1096,9 +1096,9 @@ describe("host-only laws stay off the laptop", () => {
     expect(ran.status, ran.stdout).not.toBe(0);
     expect(ran.stderr).toContain("Local host-only test run refused (decision 0178)");
     expect(ran.stderr).toContain(`  ${path}\n`);
-    expect(ran.stderr).toContain("Prove the law in a cloud box");
-    expect(ran.stderr).toContain("gh workflow run scheduled.yaml --ref <branch>");
-    expect(ran.stderr).toContain("FABRIKA_HOST_RUN_OWNER_APPROVED=1");
+    expect(ran.stderr).toContain("Use eligible disposable CI for the selected laws (0594).");
+    expect(ran.stderr).toContain("Portable signal laws may use Linux; Mac-specific laws need macOS.");
+    expect(ran.stderr).not.toContain("FABRIKA_HOST_RUN_OWNER_APPROVED=1");
     expect(ran.stdout).not.toContain(path);
   };
 
@@ -1161,9 +1161,16 @@ describe("host-only laws stay off the laptop", () => {
 
   // Plant: refuse every local run, not only one that reaches a host-only file.
   it("scenario: a local list of a plain unit file still runs", () => {
-    const ran = list(root, ["scripts/caps.test.ts"]);
+    const plain = "vitest.hostrun.test.ts";
+    const ran = list(root, [plain]);
     expect(ran.status, ran.stderr).toBe(0);
-    expect(ran.stdout).toContain("scripts/caps.test.ts");
+    expect(ran.stdout).toContain(plain);
+
+    // These plain names contain real signal calls. Listing them never executes their laws.
+    for (const path of ["scripts/caps.test.ts", ".agents/skills/lead/scripts/box.test.ts"]) {
+      refused(list(root, [path]), path);
+      refused(list(root, [path], { FABRIKA_HOST_RUN_OWNER_APPROVED: "1" }), path);
+    }
   });
 
   // Plants: refuse when CI is set; ignore the owner's named way in.

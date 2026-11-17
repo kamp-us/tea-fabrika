@@ -12,6 +12,10 @@ request: it runs hourly against main and files tickets
 ([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)). The lead writes no step's
 work. It starts each step, reads what comes back, and lands the result.
 
+When staffing work, follow [0597](../../../.decisions/0597-eight-workers-before-twelve.md) for
+actual productive worker counts, fresh verification and immediate replacements. The brief names
+the bounded task and the ticket it serves.
+
 ```text
 plan (read-only) -> lead approves -> box -> tests -> build -> review
   -> fetch, read the diff, e2e -> push as the bot -> pull request -> merge rule -> merge queue

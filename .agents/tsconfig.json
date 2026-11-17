@@ -42,6 +42,9 @@
   "include": [
     "raw.d.ts",
     "skills/lead/scripts/agents.ts",
+    "skills/lead/scripts/botdraft.test.ts",
+    "skills/lead/scripts/pr/BotDraft.ts",
+    "skills/lead/scripts/pr/PullRequestsGh.test.ts",
     "skills/lead/scripts/box.ts",
     "skills/lead/scripts/box.rm.test.ts",
     "skills/lead/scripts/box/*.ts",
