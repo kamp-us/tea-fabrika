@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0579, 0054, 0573; body 18b2fc508c10
+Approved by the lead agent, builds 0054, 0555, 0579, 0584, 0589 and 0594; body 73a7ed3a4d31
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `next/programs/pipeline` (ticket 1067, a later slice of the Recorder plan)
@@ -447,16 +447,23 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 
 ## Laws
 
+Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
+not a future runner choice. Keep every input range, size, run count, pinned case and failure
+check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
+or an edge case. Set the shared seed 119120 once in package setup, never on a law, and verify
+that moving a runner keeps the same first failing case.
+
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
 | L1. Node's M1 (amendment 2026-11-15, ruling 2): every folder the mock ban block lists refuses `vi.spyOn`, `vi.mock`, `vi.doMock`, `vi.stubEnv` and `vi.fn`, also after `import { vi as v }` and as `vi["spyOn"]`, and the record of what it misses (`V.vi.spyOn` after a namespace import, `const { spyOn } = vi`) stays exactly as the rule does today; these lines are node's shared `VI_METHODS` set | lint | scenario: the repo's own config read by `--print-config`, and one planted file per listed glob, as the Reflect ban's L1 | delete `next/programs/pipeline/**` from the block: its planted file is not refused, L1 red. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red | oxlint-plugins/plants.test.ts, oxlint-plugins/builtin-plants.ts |
 | L2. No `vi.*` mock, spy, stub or fn in `next/programs/pipeline` | lint | lint | put back `vi.spyOn(console, "log")` in `QueueRunnerTest.ts`: `vitest/no-restricted-vi-methods` red | next/programs/pipeline/src/QueueRunnerTest.ts |
-| L3. S2 keeps its bound: a secret in a scripted fault reaches no letter, saved row, model, view, span, logger line or console line, with the same run count and seed | test | Effect Arbitrary: tapes | make a pipeline handler write the fault's cause with `Console.error`: S2 red. Default runs | next/programs/pipeline/src/QueueRunnerTest.ts |
-| L4. S2's console check reads what the console got: a planted `Console.log` of the secret inside the run turns it red, as the spy did; and (amendment 2026-11-15, ruling 4) so does a planted `Console.warn`, `Console.info` or `Console.debug`, each read by its own patched reader | test | Effect Arbitrary: tapes | drop `TestConsole.layer` from the provide, so the planted line goes to the global console unseen: L4 red; drop `warnLines`, `infoLines` or `debugLines` from `printed`: that method's plant is red | next/programs/pipeline/src/QueueRunnerTest.ts |
+| L3. [secrets] S2 keeps its bound: a secret in a scripted fault reaches no letter, saved row, model, view, span, logger line or console line, with the same run count and seed | test | Effect Arbitrary: tapes | make a pipeline handler write the fault's cause with `Console.error`: S2 red. Default runs | next/programs/pipeline/src/QueueRunnerTest.ts |
+| L4. [secrets] S2's console check reads what the console got: a planted `Console.log` of the secret inside the run turns it red, as the spy did; and (amendment 2026-11-15, ruling 4) so does a planted `Console.warn`, `Console.info` or `Console.debug`, each read by its own patched reader | test | Effect Arbitrary: tapes | drop `TestConsole.layer` from the provide, so the planted line goes to the global console unseen: L4 red; drop `warnLines`, `infoLines` or `debugLines` from `printed`: that method's plant is red | next/programs/pipeline/src/QueueRunnerTest.ts |
 | L5. The runner suites keep their merge counts: R2 one merge, R3 one merge before the retry and two after, Q1 merges 1, 2, 3 in order, QR2 no merge of change 2, QR3 at least three updates of change 2 | test | scenario: the suites' own scripted walks, unchanged | hand `Recorder.layer` a host whose `merge` is put back to the raw fake after the wrap, so merges go unrecorded: R2, R3 and Q1 red | next/programs/pipeline/src/RunnerTest.ts, next/programs/pipeline/src/QueueRunnerTest.ts |
 | L6. The code host contract C1 and the handler fault law still hold on the watched fake | test | fc.commands: C1's own commands, seed 119120, 100 runs | make the fake's `failure` skip its fault queue: the handler fault law red. Default runs | next/packages/libfabrika/src/codehost/CodeHost.test.ts, next/programs/pipeline/src/handlers.test.ts |
 | L7. `h.host.calls` takes only a method of `CodeHost` and answers its own args | type | type | widen `calls`' parameter to `string`: a `@ts-expect-error` on `calls("mrege")` goes unused, red in a typecheck | next/programs/pipeline/src/RunnerTest.ts |
-| L8. S2 sees tea's own warnings: a secret in a tea warning (a run listener that throws with the secret in its message, inside the run) reaches the leak check, and with no hook set tea still writes to `console.warn` (amendment 2026-11-16) | test | Effect Arbitrary: tapes | drop the `setWarn` acquire from S2, so the planted warning goes to the global console unseen: L8 red; and a patch whose default is a no-op: the default-output half red | next/programs/pipeline/src/QueueRunnerTest.ts |
+| L8. [secrets] S2 sees tea's own warnings: a secret in a tea warning (a run listener that throws with the secret in its message, inside the run) reaches the leak check, and with no hook set tea still writes to `console.warn` (amendment 2026-11-16) | test | Effect Arbitrary: tapes | drop the `setWarn` acquire from S2, so the planted warning goes to the global console unseen: L8 red; and a patch whose default is a no-op: the default-output half red | next/programs/pipeline/src/QueueRunnerTest.ts |
 
 - L3 and L5 rewrite existing laws. Every value the old law compared is still compared: the same
   merge counts and the same secret outputs. The reviewer runs the loosening check.
@@ -503,11 +510,11 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
   path, so the tests step writes it, as the app-e2e plan does for its Effect patch
   (amendment 2026-11-16).
 - The tea patch's `pnpm-workspace.yaml` and `pnpm-lock.yaml` lines meet the app-e2e plan's Effect
-  patch lines in the same two files: a one-line rebase for whichever lands second.
+  patch lines in the same two files: a normal merge preserving both changes for whichever lands second.
 - `CodeHostTest.ts` is a libfabrika test layer beside its service (0538), and libfabrika's other
   `*Test.ts` layers already import `@kampus/vitest` (`processes/ProgramMailTest.ts`), which
   `fabrika/package-imports` allows.
-- Open pull requests on these files, each a one-line rebase for whichever lands second:
+- Open pull requests on these files, each resolved by a normal merge preserving both changes for whichever lands second:
   [1408](https://github.com/kamp-us/tea-fabrika/pull/1408) (`QueueRunnerTest.ts` and an
   `.oxlintrc.json` Reflect block), [1438](https://github.com/kamp-us/tea-fabrika/pull/1438) (both
   integration files), [1416](https://github.com/kamp-us/tea-fabrika/pull/1416) (`CodeHostTest.ts`,
@@ -534,8 +541,15 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 
 ## Validation
 
+Every local test selection first needs the lead to read its actual code, helpers and cleanup under 0594. A listed filename or an old no-host-only statement is not local clearance. Protected resource laws run only on an eligible disposable CI runner; preserve the guard and obtain their actual proof before the first review.
+
+With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
+--maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
+comments carry no `@stability` before the first release (0574); citations of Effect's own source
+tags are historical source facts.
+
 - The tests step: `pnpm format`, then `NODE_OPTIONS=--max-old-space-size=6144 pnpm lint`, then
-  `nice -n 15 pnpm exec vitest run --maxWorkers=3` on
+  `nice -n 19 pnpm exec vitest run --maxWorkers=1` on
   `next/packages/libfabrika/src/codehost/CodeHost.test.ts`,
   `next/programs/pipeline/src/handlers.test.ts`, `oxlint-plugins/plants.test.ts`, and the two
   integration files `next/programs/pipeline/src/node/runner.laws.integration.test.ts` and

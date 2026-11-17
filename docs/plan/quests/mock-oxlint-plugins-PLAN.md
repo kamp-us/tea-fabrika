@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0579, 0557, 0524, 0573; body 55a4f2bbec98
+Approved by the lead agent, builds 0054, 0555, 0579, 0584, 0589 and 0594; body 5b83e3719c18
 Plancheck-Version: 3
 
 # The mock sweep in `oxlint-plugins/`: its one `vi.fn` becomes a plain list, and the folder is locked at zero
@@ -193,6 +193,13 @@ nothing, so `reports.length` is 5.
 
 ## Laws
 
+Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
+not a future runner choice. Keep every input range, size, run count, pinned case and failure
+check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
+or an edge case. Set the shared seed 119120 once in package setup, never on a law, and verify
+that moving a runner keeps the same first failing case.
+
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
 | M1, the `format` law: the rule reports each of the five question-word keys once, in order, with the one message and no autofix, and does not report an identifier key | test | format: the one exact message, over the five fixed words; the generated laws above it in the file stay as they are | in `oxlint-plugins/no-question-word-key.ts`, add `fix: () => null` to the report object, or skip the report for `"how"`: `reports` differs from the expected list and M1 is red | `oxlint-plugins/no-question-word-key.test.ts` |
@@ -257,7 +264,14 @@ amended 2026-11-15), after these steps, one fresh agent each, in its own box.
 
 ## Validation
 
-- The tests step, under `nice -n 15 pnpm exec vitest run --maxWorkers=3`, one path at a time:
+Every local test selection first needs the lead to read its actual code, helpers and cleanup under 0594. A listed filename or an old no-host-only statement is not local clearance. Protected resource laws run only on an eligible disposable CI runner; preserve the guard and obtain their actual proof before the first review.
+
+With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
+--maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
+comments carry no `@stability` before the first release (0574); citations of Effect's own source
+tags are historical source facts.
+
+- The tests step, under `nice -n 19 pnpm exec vitest run --maxWorkers=1`, one path at a time:
   `oxlint-plugins/no-question-word-key.test.ts`, then `oxlint-plugins/plants.test.ts`.
 - `pnpm format`, then `pnpm lint` with `NODE_OPTIONS=--max-old-space-size=6144`. Lint is M4.
 - The lead, not a step, runs the changed tests once at the end and the one type check, which

@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0579, 0573; body 26fa8b8550d1
+Approved by the lead agent, builds 0054, 0555, 0579, 0584, 0589 and 0594; body 4ded6f283aa8
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `next/packages/libfabrika/src/node/repositories`, in next/
@@ -286,6 +286,13 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 
 ## Laws
 
+Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
+not a future runner choice. Keep every input range, size, run count, pinned case and failure
+check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
+or an edge case. Set the shared seed 119120 once in package setup, never on a law, and verify
+that moving a runner keeps the same first failing case.
+
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
 | L3 (rewritten). For a generated `wrong: Schema.Boolean`, `prepare` hashes the values twice over the same bytes, and it fails with `InvalidDocument` over a `SnapshotError` exactly when the second hash answers wrong | test, `it.effect.prop`, default runs, the package seed | Effect Arbitrary: Schema.Boolean | (a) `Load.ts` skips `Snapshot.read` and returns `make`'s snapshot: red on both cases; (b) `Load.ts` catches `read`'s failure and returns `make`'s snapshot: red when `wrong`; (c) `Snapshot.read` drops its hash compare (`Snapshot.ts:156`): red when `wrong` | next/packages/libfabrika/src/node/repositories/OpenRepository.test.ts |
@@ -296,8 +303,9 @@ No law here needs a real resource: `Digest.layerWebCrypto` is in-process, and th
 `FileSystem.layerNoop` stand in for git and the disk. So L3 runs on every pull request and is not
 an `.integration.` file (0536, 0581). No host-only law.
 
-The other laws in `OpenRepository.test.ts` keep their bodies. The first L3 law and L9 still use
-`fc.assert` with a hand seed; moving them to `it.effect.prop` is 0579's own sweep, not this one.
+The other laws in `OpenRepository.test.ts` keep their bodies. The source read found raw
+`fc.assert` and a hand seed in the first L3 law and L9. Those untouched laws wait for the
+separate sweep; any property rewritten here follows 0579, including its setup seed rule.
 
 ## Files
 
@@ -324,7 +332,7 @@ own. It lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, in it
 "none"; it now runs.
 
 1. **Tests:** writes L3, V1 and V2, runs each plant once and puts it back, and records the results
-   in its run row. Runs `nice -n 15 pnpm exec vitest run --maxWorkers=3` on
+   in its run row. Runs `nice -n 19 pnpm exec vitest run --maxWorkers=1` on
    `next/packages/libfabrika/src/node/repositories/OpenRepository.test.ts` and
    `oxlint-plugins/plants.test.ts`, then `pnpm lint`.
 2. **Build:** no product file changes, so the build changes nothing, says so in its run row, and
@@ -348,6 +356,13 @@ own. It lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, in it
   record each plant's result the day it runs.
 
 ## Validation
+
+Every local test selection first needs the lead to read its actual code, helpers and cleanup under 0594. A listed filename or an old no-host-only statement is not local clearance. Protected resource laws run only on an eligible disposable CI runner; preserve the guard and obtain their actual proof before the first review.
+
+With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
+--maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
+comments carry no `@stability` before the first release (0574); citations of Effect's own source
+tags are historical source facts.
 
 - `plancheck.sh --draft` on this file.
 - The tests step's narrow vitest runs and `pnpm lint`, as in Steps, at its pushed head.
