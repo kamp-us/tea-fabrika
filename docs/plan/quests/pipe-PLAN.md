@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0549, 0550, 0551, 0553, 0109; body 4852ec666687
+Approved by the lead agent, builds 0549, 0550, 0551, 0553, 0109, 0579, 0582, 0586, 0594; body c768265cd4b8
 Plancheck-Version: 3
 
 # Plan: a program can pipe one program's output to another program's input, and the reader gets the writer's whole current value, newest wins, in next/
@@ -44,15 +44,15 @@ input's shape into the program's declaration, as Effect's own `SchemaRepresentat
 brain can read them without running the code. A new built-in Cmd, `pipe`, goes from the runner to a
 new brain-side service, `Pipes`, which checks the member behind the Cmd (0551), checks that the pipe
 fits on the two declared shapes (0550), and in one ledger turn writes the `piped` row with both
-shapes, the mail right as a relation row (0526) and the Cmd's answer. In the turn that starts or
-restarts either end of a live pipe, the brain writes the watch for the reader's live life on the
+shapes, the right to send messages as a relation row (0526) and the Cmd's answer. In the turn that
+starts or restarts either end of a live pipe, the brain writes the watch for the reader's live life on the
 writer's live life, so a watch binds one life and the pipe follows the registered name. The writer's
 runner owes one `send_chunks` of the whole value, wrapped as items, each time an output with a live
 pipe changes; a newer value replaces one not yet started (0549). The reader's runner folds the chunk
 messages in its own checkpoint, and at the last one unwraps the items by the writer's declared shape
 and steps the reader's program once with the value. `exit` waits behind an owed send to a piped
 name. When the program that made a pipe stops either end with `stop_child`, the same turn writes
-`unpiped` and removes the mail right.
+`unpiped` and removes the right to send messages.
 
 ## Starts from
 
@@ -64,6 +64,14 @@ with `name` and `member`, a `DOWN` input declared as that slice's reader test pr
 (`runtime/MonitorTest.ts` there), and the member pick it moved to `processes/internal/member.ts`.
 The tests step for this plan starts once that pull request has merged. Nothing here waits on fabsh
 or tezgah.
+
+## Current names
+
+Decision [0582](../../../.decisions/0582-mail-as-a-noun-goes-it-is-a-mailbox-and-messages.md)
+names the settings `mailbox.chunk` and `mailbox.capacity`. This plan uses those names for the
+implementation, with the same values, bounds and refusal rules. The dated source readings below
+keep the keys they read then, `mail.chunk` and `mail.unread`. Source paths and type names such as
+`ProgramMailLedger` stay as read; this plan does not rename those existing types.
 
 ## Searched first
 
@@ -148,6 +156,36 @@ Searched on 2026-11-15 in `.decisions/`, `docs/direction/`, `.glossary/TERMS.md`
 The plain reading: OTP gives the order and the end, Unix the back pressure and the flush, Elm the
 typed value a program is handed, gRPC the one transport under one value and many, and structural
 subtyping when a pipe fits. Effect gives the schema form the brain reads.
+
+## Existing tools
+
+For this documentation repair, searched the repo's runtime and processes modules, today's
+`packages/fabrika/src/program/shape.ts`, the installed Effect `SchemaRepresentation` declaration,
+and npm for "effect schema assignability". The npm results named no checker for the declared
+Effect shapes this plan compares. The plan keeps its existing design and reuses the following
+code. The transport and chunk cutter stay the same.
+
+- `next/packages/libfabrika/src/processes/Fit.ts`: searched today's `shape.fit` and Effect's
+  `SchemaRepresentation`; the former requires exact JSON Schema equality, while the latter
+  persists shapes but provides no assignability check. `fits` implements 0550 on that persisted form.
+- `next/packages/libfabrika/src/processes/Pipes.ts`: searched `Children.ts` and `ProcessManager.ts`;
+  neither offers the pipe contract. This service declares `pipe` and `list`, not another transport.
+- `next/packages/libfabrika/src/processes/PipesLedger.ts`: searched `ChildrenLedger.ts` and
+  `ProcessManager.ts`; reuse their ledger-turn and member-check patterns for the pipe facts and
+  rights 0551 requires. Neither existing service records a pipe.
+- `next/packages/libfabrika/src/processes/internal/pipeTable.ts`: searched `internal/processTable.ts`;
+  reuse its tea-machine fold pattern, with the pipe stream's own events instead of process events.
+- `next/packages/libfabrika/src/runtime/Pipe.ts`: searched `StartChild.ts` and `Send.ts`; reuse
+  tea's `Cmd.make` and the existing host-command handling. Neither Cmd creates a pipe.
+- `next/packages/libfabrika/src/runtime/Piped.ts`: searched `Chunk.input` and the program's input
+  declarations; `Chunk.input` exposes items and parts, so `input` and `ports` declare only the
+  value Msg 0553 requires. Chunk delivery stays in the runner.
+- `next/packages/libfabrika/src/runtime/internal/pipeItems.ts`: searched `Chunk.cut`, `Chunk.join`
+  and Effect's schema representations; reuse the existing cutter and joiner. `listed`, `wrap`
+  and `unwrap` only map a declared shape to those existing items and back.
+- `next/packages/libfabrika/src/runtime/internal/pipeFold.ts`: searched `Chunk.join` and the
+  process table's tea machine; `join` checks a collected sequence but holds no incremental state.
+  This tea machine holds the reader runner's pending items and drops a cut send.
 
 ## The shape
 
@@ -427,8 +465,8 @@ export class Pipes extends Context.Service<Pipes, {
 loader wrote, so the row holds both declared shapes (0553) and the two runners wrap and unwrap by
 the writer's. Neither shape holds anything of the wrapping. Each row is a ledger line, so it also keeps `by` (the brain's key), `sentAt` on the writer's clock, `arrivedAt` on
 the ledger's, `parent` (the step whose message caused the Cmd, which leads to the member's own
-message and its clock) and `traceId`. In the same turn, the mail right goes on the relation stream,
-and `unpiped` removes it:
+message and its clock) and `traceId`. In the same turn, the right to send messages goes on the
+relation stream, and `unpiped` removes it:
 
 ```ts
 // permissions/relations, as 0526 shapes every permission fact.
@@ -519,12 +557,12 @@ const owe = (cmds: ReadonlyArray<Dispatched>, out: Out): ReadonlyArray<Dispatche
   runtime's own `cmd.answered` record in the writer life's stream, as it does today for a Cmd whose
   life ended, and drops the owed send.
 - **A value with an item too big gets `too_big`.** `Chunk.cut` fails with `TooBig` when one item's
-  message alone is over `mail.chunk`, and the runner answers the send `too_big`, the refusal word
+  message alone is over `mailbox.chunk`, and the runner answers the send `too_big`, the refusal word
   `send_chunks` already has (`runtime/Send.ts`). A value whose operands are over `INPUT_BYTES` gets
   the same word at dispatch. For a piped output that means: nothing is sent, the `cmd.answered`
   record says `send_chunks_err` with reason `too_big`, the reader keeps the value it had, and the
   writer's next change owes a new send. A single value is one item, so it is refused when its one
-  message is over `mail.chunk`. See "The item-size call".
+  message is over `mailbox.chunk`. See "The approved item-size call".
 
 ### The reader's runner unwraps
 
@@ -600,8 +638,8 @@ rows of about 180 bytes, about 216 KB.
 6. tracker's runner: life `process_T`'s first load, and `rows` is not `null`. The writer's shape on
    the `piped` row is a list, so `wrap` gives the 1,200 rows as the items, and the runner owes
    `send_chunks({to: "outline:1", as: "rows", items})` as `process_T/0/out/rows`. The cut gives four
-   messages under 64 KiB. Each passes the mail check through the `pipes_to` row and is saved at
-   `outline:1/inbox` pos 2 to 5.
+   messages under 64 KiB. Each passes the send permission check through the `pipes_to` row and is
+   saved at `outline:1/inbox` pos 2 to 5.
 7. outline's runner, never outline's code, folds pos 2, 3 and 4 into `arriving` in its checkpoint,
    saving and acking each. outline's program is not stepped, and its view still draws "no rows
    yet". At pos 5, `last`, the fold is `whole`. The writer declared a list, so `unwrap` gives the
@@ -655,7 +693,7 @@ above. The ticket number is `Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))`
 8. A pipe from tracker's `ticket` to a reader that needs `Schema.Array(TicketNumber)` is refused
    before any start, by the shapes alone: `{ _tag: "does_not_fit", path: [], need: "Arrays", has:
    "Number" }`.
-9. A writer whose single value encodes to about 90 KB, with `mail.chunk` at its default of 64 KiB:
+9. A writer whose single value encodes to about 90 KB, with `mailbox.chunk` at its default of 64 KiB:
    the cut fails with `TooBig`, the owed send is answered `too_big`, and the writer life's stream
    records it. No message is saved, the reader keeps the value it had, and the writer's program
    is not stepped. Its next, smaller value is sent as usual.
@@ -725,7 +763,7 @@ with no seq 0 saved), how long a writer waited on `full`, a pipe's throughput.
 | P1, a pipe is recorded: for generated members, programs and names that pass, `pipe` answers `piped` with its Cmd id and writes in one turn exactly one `piped` row with every fact (both code hashes, both declared shapes as the loader wrote them, `rule`, requester, member), one `related pipes_to` row and the answer message. 100 runs | test | fc.record: member, writer and reader programs, names | (a) drop `member` or `rule` from the row; (b) write the relation row in a second turn; (c) keep only the writer's shape: P1 red | next/packages/libfabrika/src/processes/PipesTest.ts, run by next/packages/libfabrika/src/node/Pipes.integration.test.ts | laptop, narrow path; the schedule on pull requests |
 | P2, the refusal order: a generated ask that fails more than one check gets the first of `bad_name`, `stale_sender`, `forbidden`, `no_output`, `no_input`, `name_taken`, `taken`, then `unfit`, and each writes nothing but its answer message. 100 runs | test | fc.record: bad name, stale requester, denied or missing member, missing ports, live name, piped input, unfit shapes | check that the pipe fits before the member: P2 red | next/packages/libfabrika/src/processes/PipesTest.ts, run by next/packages/libfabrika/src/node/Pipes.integration.test.ts | laptop, narrow path; the schedule on pull requests |
 | P3, a retry is one pipe: the same Cmd id asked again any number of times gives one `piped` row, one relation row and the same pipe id. 100 runs | test | fc.integer: retries 1 to 5 | mint a new id per try: P3 red | next/packages/libfabrika/src/processes/PipesTest.ts, run by next/packages/libfabrika/src/node/Pipes.integration.test.ts | laptop, narrow path; the schedule on pull requests |
-| P4, the mail right and the end: the writer's name may mail the reader's name only while the pipe is live; before `piped`, after the requester's `stop_child` of either end, and from reader to writer, a send is `forbidden`; a `stop_child` by any other process writes no `unpiped`. 100 runs | test | fc.commands: pipe, send, reverse send, stop either end, stop by another | (a) keep the right after `unpiped`; (b) grant both ways; (c) end the pipe on a crash: P4 red | next/packages/libfabrika/src/processes/ProgramMailTest.ts, run by next/packages/libfabrika/src/node/Pipes.integration.test.ts | laptop, narrow path; the schedule on pull requests |
+| P4, the right to send messages and the end: the writer's name may mail the reader's name only while the pipe is live; before `piped`, after the requester's `stop_child` of either end, and from reader to writer, a send is `forbidden`; a `stop_child` by any other process writes no `unpiped`. 100 runs | test | fc.commands: pipe, send, reverse send, stop either end, stop by another | (a) keep the right after `unpiped`; (b) grant both ways; (c) end the pipe on a crash: P4 red | next/packages/libfabrika/src/processes/ProgramMailTest.ts, run by next/packages/libfabrika/src/node/Pipes.integration.test.ts | laptop, narrow path; the schedule on pull requests |
 | W1, one DOWN per writer life: for a generated run of writer starts, crashes, restarts and chunked sends, the reader's program is handed exactly one `DOWN` per writer life, with ref `<pipe>/<process>`, that life's reason and the writer's name, after that life's last saved message; a life that crashes in the turn after its start gives `crashed`, never `noproc`. 100 runs | test | Effect Arbitrary: ExitReason | (a) write the watch in a turn after `started`; (b) reuse the pipe id as the ref: W1 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests |
 | W2, a reader restart: a new reader life gets a watch on the writer's live life in its restart turn, and gets the next `DOWN` | test | scenario: crash the reader once, then the writer | write the watch only on writer starts: W2 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests |
 | O1, newest wins: for a generated run of writer model changes against a slow reader with a small cap, for a list output and for a single value, each value the reader's program is handed equals one whole writer value, the handed values keep the writer's order, and the last one is the writer's last value. 100 runs | test | fc.commands: change, read, ack | (a) append a newer value to an owed one; (b) drop a send that already saved seq 0: O1 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests |
@@ -733,10 +771,10 @@ with no seq 0 saved), how long a writer waited on `full`, a pipe's throughput.
 | O3, exit flushes: a writer that exits with an owed send to a piped name gets its last value to the reader's program before its `DOWN normal`; one that is killed between two chunks of a list leaves the reader's program on the value it had | test | scenario: exit behind a full inbox, kill mid-send | let `exit` pass an owed send: O3 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests |
 | R1, a cut send hands nothing: for generated streams of chunks (whole sends, cut sends, interleaved ids, repeats, a `down` anywhere), the runner's fold is `whole` only right after the last chunk of a send whose every chunk came in order, and then holds exactly that send's items; a cut send, a stray chunk, a `down` and a new seq 0 each drop what was arriving and hand nothing, so the value a reader's program holds changes only to one whole sent value. 500 runs | test | fc.commands: chunk of a send, cut, stray chunk, down | (a) fold a chunk whose seq skips one; (b) keep what was arriving on `down`; (c) reach `whole` from a send with no seq 0: R1 red | next/packages/libfabrika/src/runtime/internal/pipeFold.test.ts | laptop |
 | X1, the wrapping round trip: for a generated declared shape, a generated value of it and a generated chunk size, `unwrap(shape, join(cut(wrap(shape, value))))` is that value, compared as JSON; a list goes as its items and anything else as one item. 500 runs | test | fc.letrec: declared shapes (a number, a string, a struct, a struct with a nullable field, a list, a list of lists, `Schema.Unknown`) with a value from Effect Arbitrary of each, and fc.constantFrom edges: an empty list, a list of one, a list of one `null`, a list that needs more than three chunks | (a) wrap by `Array.isArray` in place of the declared shape; (b) unwrap any list of one to its item; (c) join without the last chunk's items: X1 red | next/packages/libfabrika/src/runtime/internal/pipeItems.test.ts | laptop |
-| X2, a value arrives as it was given: through real runners, a writer and a reader test program that declare the same generated shape, with `mail.chunk` at 1 KiB; for each generated value the writer's selector gives (a number, a string, a struct, a struct with a `null` field, an empty list, a list of one, a list of lists, a list that needs several chunks), the Msg the reader's `update` is handed holds that value, compared as JSON, once, and no other Msg is handed for it. 30 runs | test | fc.letrec: X1's shapes and values, one pair of test programs built from each shape | (a) hand the reader the items (`[1041]` for `1041`); (b) step the reader at every chunk; (c) send an empty list as no message: X2 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests |
+| X2, a value arrives as it was given: through real runners, a writer and a reader test program that declare the same generated shape, with `mailbox.chunk` at 1 KiB; for each generated value the writer's selector gives (a number, a string, a struct, a struct with a `null` field, an empty list, a list of one, a list of lists, a list that needs several chunks), the Msg the reader's `update` is handed holds that value, compared as JSON, once, and no other Msg is handed for it. 30 runs | test | fc.letrec: X1's shapes and values, one pair of test programs built from each shape | (a) hand the reader the items (`[1041]` for `1041`); (b) step the reader at every chunk; (c) send an empty list as no message: X2 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests |
 | N1, nothing to send stays apart, on both ends: for a generated run of writer values drawn from `null`, `[]`, `[null]`, `[null, null]` and `[7]` (an output declared a list of nullable integers), and from `null` and `{note: null}` (an output declared a struct), against a reader that reads each one: a selector's `null` saves no message and hands the reader nothing; `[]` is handed as `[]`, `[null]` as `[null]`, and `{note: null}` as itself; the reader's log holds exactly the writer's values that are not `null`, at each change, in order. 50 runs | test | fc.constantFrom: the seven values above, drawn as a run of 1 to 12 values | (a) send a selector's `null` as an empty send; (b) hand nothing when the items are empty; (c) drop an item that is `null`: N1 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests |
 | A1, a reader of anything: for generated writer shapes, list or not, piped to a reader whose input is `Schema.Unknown`, the pipe fits, and the reader's program is handed the writer's value as the writer declared it: a single value unwrapped, a list as a list. 30 runs | test | fc.letrec: X1's shapes and values | (a) unwrap by the reader's declared shape; (b) refuse a list writer into a reader of anything: A1 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests |
-| B1, an item too big: a writer whose value holds one item whose message alone is over `mail.chunk` (a single value, or one item of a list at a generated index) saves no message, the reader's program is handed nothing and keeps the value it had, the writer life's stream holds one `cmd.answered` with `send_chunks_err` and reason `too_big`, the writer's program is not stepped with it and stays up, and its next value under the size arrives whole. 30 runs | test | fc.record: a chunk size from fc.integer 1,024 to 4,096, an item size around it, a list or a single value, the item's index | (a) step the writer's program with the answer; (b) save the chunks before the item that is too big: B1 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests |
+| B1, an item too big: a writer whose value holds one item whose message alone is over `mailbox.chunk` (a single value, or one item of a list at a generated index) saves no message, the reader's program is handed nothing and keeps the value it had, the writer life's stream holds one `cmd.answered` with `send_chunks_err` and reason `too_big`, the writer's program is not stepped with it and stays up, and its next value under the size arrives whole. 30 runs | test | fc.record: a chunk size from fc.integer 1,024 to 4,096, an item size around it, a list or a single value, the item's index | (a) step the writer's program with the answer; (b) save the chunks before the item that is too big: B1 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests |
 | G1, a piped input is a plain input: a `{type, value}` message sent straight to a reader's piped input steps its program as any write port; a chunk message for a piped input that never had a pipe is acked and hands nothing | test | scenario: one reader test program, a direct message, then a chunk message with no pipe | unwrap a chunk message with no pipe as a list: G1 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests |
 | T1, the shapes: `pipe`'s input is only `{from, to}` with those keys, an output's selector must return its schema's type or `null`, and `ProcessCalls.monitor` still takes no `as` | type | type | add `requester` to `PipeInput`, or return a number from a list output's selector: tsc red | next/packages/libfabrika/src/runtime/Pipe.types.test.ts | laptop |
 | T2, a program sees only its declared shape: `Piped.input(t, S)`'s type is exactly `{type: t, value: S["Type"]}`; the ports `Piped.ports(t, S, d)` gives are keyed `t` and `DOWN` only; neither type has an `items` or a `part` key or names `Chunk` or `Part`; and `Output.make(S, select)` takes a selector of `S["Type"]` or `null`, never a list of it | type | type | add a `part` field to `Piped.input`, or make `Output.make` take a list of `S`: tsc red | next/packages/libfabrika/src/runtime/Pipe.types.test.ts | laptop |
@@ -774,8 +812,8 @@ Each new choice was asked (0069):
   `stop_child`: no. Each is what a pipe is, decided in 0549 and 0550 or by the note's plumbing.
 - **The version of those rules** is a constant, `RULE`, recorded on each row, never a knob.
 - **How a value is wrapped:** no. 0553 decides there is one way, and a knob would be a second.
-- **The chunk size and the inbox cap** already are settings, `mail.chunk` and `mail.unread`.
-  `mail.chunk` is also the most one item may weigh today, so a person who pipes bigger single
+- **The chunk size and the inbox cap** already are settings, `mailbox.chunk` and `mailbox.capacity`.
+  `mailbox.chunk` is also the most one item may weigh today, so a person who pipes bigger single
   values raises it, up to its bound of 1 MiB. No new setting is added.
 
 ## Files
@@ -867,9 +905,11 @@ decision already says. The calls this revision added carry how sure I am.
   step nothing.
 - **A top-level `null` is never a value (95%).** 0260 says `null` is nothing to send. A `null`
   inside a value is data.
-- **An item whose message alone is over `mail.chunk` is refused `too_big`, as today (80%).** This is
-  the smallest change, and it is not the lead's lean. "The item-size call" below says why and
-  what the lean would change, and it is the one open question.
+- **An item whose message alone is over `mailbox.chunk` is refused `too_big`, as today (80%).** The
+  lead approved this choice on 2026-11-15, in
+  [the approval commit](https://github.com/kamp-us/tea-fabrika/commit/8c155da974d7e438b163fe4fa5276c65c49b414e).
+  "The approved item-size call" below records the alternative and why it is a separate change.
+  No item-size question remains for this slice.
 - **A piped value is at most `INPUT_BYTES` in all, 2,000,000 bytes (80%).** The owed send is an
   ordinary `send_chunks`, so its operands meet the cap ticket 1041 gave every `send_chunks`
   (its call 15). Lifting it means a dispatched entry that holds no items, which is its own change.
@@ -889,24 +929,26 @@ decision already says. The calls this revision added carry how sure I am.
   changed output shape while its pipe is live; telling a writer's program that its value was
   refused as too big.
 
-## The item-size call, and why the lead's lean was not taken
+## The approved item-size call
 
-0553 caps one item at the row size and says it does not decide whether `mail.chunk` goes on
+0553 caps one item at the row size and says it does not decide whether `mailbox.chunk` goes on
 refusing an item under that size. The lead gave a lean for this revision and asked that the code
-and ticket 1041's laws be read first.
+and ticket 1041's laws be read first. On 2026-11-15, the lead approved keeping the existing
+chunk-size refusal for this slice. The alternatives below record what was considered, not a
+pending question.
 
-- **The lead's lean:** an item over `mail.chunk` and under the row size travels alone in its
-  own chunk message, and only an item over the row size is refused.
+- **The earlier alternative:** an item over `mailbox.chunk` and under the row size travels alone
+  in its own chunk message, and only an item over the row size is refused.
 - **What it breaks, read in the code:** two laws from ticket 1041 that are green on main.
   - L1 (`next/packages/libfabrika/src/runtime/Chunk.test.ts`): "every chunk's encoded JSON is at
     most `size` bytes", and "an item too big alone fails `TooBig`".
   - L12 (`next/packages/libfabrika/src/runtime/ProgramMailTest.ts`): "an item too big alone ...
     answer `too_big` with no part saved". Both are quoted from the laws table of
     `docs/plan/quests/t1041-PLAN.md`.
-  - It also changes what `mail.chunk` means: its own doc says it is the most bytes in one message
-    of a chunked send, and ticket 1041's call 12 took the refusal on purpose.
-  - It leaves measured ground. `mail.chunk` stops at 1 MiB (`settings/Declarations.ts`), and ticket
-    1041's read law L7 covers a newest message up to a 1 MiB chunk
+  - It also changes what the setting means. The doc read then named it `mail.chunk`: the most
+    bytes in one message of a chunked send. Ticket 1041's call 12 took the refusal on purpose.
+  - It leaves measured ground. The setting read then was `mail.chunk`, capped at 1 MiB in
+    `settings/Declarations.ts`, and ticket 1041's read law L7 covers a newest message up to a 1 MiB chunk
     (`processes/ProgramMailReadsTest.ts`). An item alone could be about 2 MB, which no chunked send
     has carried.
 - **Why it is not this plan's to take:** making L1 and L12 pass a message over the size loosens two
@@ -914,16 +956,16 @@ and ticket 1041's laws be read first.
   used only by pipes would keep those laws green, but 0553 says the cutting from ticket 1041 is the
   only cutting.
 - **What this plan builds in its place,** the smallest honest thing: nothing in `Chunk.cut`
-  changes. An item whose message alone is over `mail.chunk` gets `too_big`, the word `send_chunks`
+  changes. An item whose message alone is over `mailbox.chunk` gets `too_big`, the word `send_chunks`
   already answers, and the value is not sent (law B1). That holds 0553 as written: its cap of the
   row size is an upper bound, and it leaves this point open.
 - **What that costs:** a single value over 64 KiB by default is refused, where the plan before this
-  revision would have sent one up to 2 MB as one plain message. A person can raise `mail.chunk` to
+  revision would have sent one up to 2 MB as one plain message. A person can raise `mailbox.chunk` to
   1 MiB. No real single value is that big today: the pairs Amendment A-Fits lists carry a ticket
   number, a string or an integer.
-- **If the lead takes the lean:** it is its own small change after this one. `Chunk.cut` lets an
+- **A later change to take the alternative:** `Chunk.cut` lets an
   item that fits no chunk go alone when its message is at most `ROW_BYTES`; L1 and L12 are
-  rewritten to say so; B1's bound moves from `mail.chunk` to the row size; and the read law L7 is
+  rewritten to say so; B1's bound moves from `mailbox.chunk` to the row size; and the read law L7 is
   run again at 2 MB. Nothing else in this plan moves.
 
 ## What comes after, not planned here
@@ -934,16 +976,17 @@ below is decided by this plan.
 1. **This plan:** the pipe in the library.
 2. **Second: fabsh pipes its own built-ins,** with the last one's output printed in fabsh.
    [0159](../../../.decisions/0159-fabsh-pipes-summon-join-first.md) says pipes work first for
-   fabsh's built-ins, and that plan follows it as written. It waits on this plan and on fabsh's pull
-   requests [1232](https://github.com/kamp-us/tea-fabrika/pull/1232) and
-   [1312](https://github.com/kamp-us/tea-fabrika/pull/1312), which are with the owner for his look.
+   fabsh's built-ins, and that plan follows it as written. It waits on this plan and on fabsh v1's
+   reader and job-control slices in [the current plan](https://github.com/kamp-us/tea-fabrika/pull/1434).
+   Decision 0586 keeps PRs 1232 and 1254 parked; this later slice builds neither branch.
    Following 0159 as written settles the question this plan's first draft asked about whether
    built-ins come first.
 3. **Third: programs with tiles in one line.** The job's scope and a `stop_job` Cmd, Ctrl-C from any
    tile stopping the whole job reader first (0548), one mark per line in tezgah (0477, 0478), and the
    six pipe hues as design tokens, written by the tests step since the design package's tokens are an
-   exam path. It waits on the second slice, on 1232 and 1312, and on fabsh's slice 2b, which puts a
-   program fabsh starts in a tile. A question for that plan: which reader program with a window comes
+   exam path. It waits on the second slice and fabsh v1's foreground-program support in S3 of
+   its current plan. The owner still chooses the look before its S2 opens. A question for the later
+   pipe plan: which reader program with a window comes
    first. It is a new screen, so it is the owner's.
 
 ## Validation
@@ -980,6 +1023,7 @@ Estimate: 7 steps, $80
 
 ## Records
 
+- Ticket 1081, in the app's tracker.
 - `field/runs/` rows for each step, by the lead.
 - Glossary rows in this pull request: `pipe (Cmd)` and `piped`; `pipe` gains the name of the rules
   for when a pipe fits. Decision 0553's own pull request already wrote that every value travels one
@@ -998,7 +1042,7 @@ Estimate: 7 steps, $80
   216 KB list in four chunks is small; nothing here measures a 2 MB one.
 - What a single value pays for its chunk message's wrapping. 0553 names the cost; nothing here
   measures it.
-- How many real single values are over 64 KiB, the default `mail.chunk`. Every one is refused
+- How many real single values are over 64 KiB, the default `mailbox.chunk`. Every one is refused
   `too_big` as this plan stands, and its writer's program is not told.
 - What happens to a live pipe when its writer is rebuilt with another output shape. Both runners
   go on reading the shape the `piped` row recorded. Not in this slice.
@@ -1018,14 +1062,12 @@ in `next/`, their `rows`, `ticket` and `any` outputs and inputs, `Row`, `Rows`, 
 
 ## Open questions
 
-1. For the lead, as plumbing under 0553: does `mail.chunk` go on refusing one item that is under
-   the row size? My lean is yes for this pull request, 80%: an item whose message alone is over
-   `mail.chunk` gets `too_big`, as today, and the lead's lean becomes its own change, since it
-   rewrites ticket 1041's laws L1 and L12. "The item-size call" above has what was read, what the
-   lean breaks, what each way costs and what taking the lean would change. The doubt is how soon a
-   real single value is over 64 KiB; none is today. Every other call in this plan builds a decided
-   note or decision, or picks how the code does it, and the first draft's two questions belong to
-   the later plans named in "What comes after, not planned here".
+None.
+
+The lead's approval on 2026-11-15 kept the existing chunk-size refusal in this slice. Changing
+that bound is separate work because it changes ticket 1041's laws L1 and L12. The first draft's
+two screen and shell questions belong to the later plans named in "What comes after, not planned
+here"; this plan settles neither.
 
 ## Findings
 
@@ -1354,3 +1396,32 @@ wrapping is in neither.
 **The size.** A-Value's plan stood at about 1,280 product lines. This one is about 1,345: the
 Files section's 1,240 and A-Fits's 105. The 65 lines more are the reader's side of the runner (the
 fold, the unwrap and the checkpoint field), less `Piped.whole` and `sent`.
+
+## Current implementation rules, 2026-11-17
+
+These instructions apply to all new laws above, including A-Fits, without changing any domain,
+range, run count, assertion or once-only fault. The table's older fast-check names describe the
+input domain, not permission for a hand-written runner.
+
+- Use `it.prop` or `it.effect.prop` and Schema inputs through the shared test package (0579).
+  Generate members, names, settings, values and shape descriptors from their domain Schemas.
+  Build each actual Effect Schema from its generated descriptor, then use Effect Arbitrary
+  for that schema's values. A recursive descriptor keeps every constructor listed by F1/F6/X1.
+- P4, O1 and R1 keep their state-aware command walks. Their next legal command depends on the
+  current model, which a Schema for one command cannot generate. Generate command data from its
+  domain Schema and keep each original walk's ranges and count (0411, 0579).
+- Fixed pure examples use `vector:` with their reason, not `scenario:`. S1, X2, H1 and the
+  scripted real-runner cases retain `scenario:` because they drive those outside resources.
+  No example replaces a generated law. Keep all original examples and counts.
+- Set the shared seed once in package setup, and compare the first failing generated case when
+  moving the older generator shape. No seed or hand `fc.assert` is added to a law.
+- Read each selected law and its cleanup before local execution (0594). The older blanket
+  statement that these files never signal is not execution clearance. Ordinary safe checks run
+  directly; real process signals, launchd and real Electron run on eligible disposable CI.
+  Keep real-resource isolation where needed and obtain required proof before first review.
+- With other code agents active, use `nice -n 19` and one Vitest worker. The lead owns one global
+  compiler and the final changed selection. Narrow any selection that reaches protected laws.
+  CI proof follows actual changed paths under 0590; H1 still requires its real workerd result.
+
+The later shell dependency is fabsh v1 under 0586, as corrected above. PRs 1232 and 1254 stay
+parked. This library slice still builds no shell or screen and keeps the item-size refusal.
