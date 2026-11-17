@@ -459,11 +459,16 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               expect(yield* w.entries).toEqual(before);
               expect(yield* w.program("sample/alpha")).toEqual(full);
               const after = yield* w.entries;
+              const stepped = new Set<unknown>();
+
+              for (const entry of after) {
+                if (entry._tag === "stepped") {
+                  stepped.add(entry.id);
+                }
+              }
 
               for (const id of messages) {
-                expect(
-                  after.filter((e) => e._tag === "stepped" && e.id === `step:${id}`).length,
-                ).toBeGreaterThanOrEqual(1);
+                expect(stepped.has(`step:${id}`)).toBe(true);
               }
 
               w.limits(defaults);
