@@ -344,10 +344,10 @@ these caps. Each one came from a laptop that became unusable.
   needs what CI lacks (Electron shots, a stage with workerd) still runs here.
 - **With two or more code agents running:** `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at
   the very end. `tsgo` takes about 8 cores, so small jobs add up.
-- **Drive at most eight active tracker tickets** ([0596](./.decisions/0596-eight-active-tracker-tickets.md)).
-  The merger keeps one ledger of their IDs, owners and blockers. Review, proof and landing count;
-  finished or explicitly parked tickets do not. Each ticket may use the bounded agents its steps
-  need, with one file owner, fresh steps and required review and proof.
+- **Count actual productive workers** under
+  [0597](./.decisions/0597-eight-workers-before-twelve.md), which holds the staffing targets,
+  fresh verification and immediate replacement rules. Keep one file owner, fresh steps,
+  independent review and required proof.
 - **Shared resources stay capped:** one `pnpm typecheck` at a time, one Electron test app and one
   Docker box ([0012](./.decisions/0012-twelve-agents-at-once.md)). Wait while
   `pgrep -x tsgo` finds one (`pgrep -f tsgo` also matches the waiting shell, so that loop never
