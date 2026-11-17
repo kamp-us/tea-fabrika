@@ -52,6 +52,19 @@ it.each(extraCommands)("pinned: T376 review extra command in real workflow: $run
 });
 
 const plants: Plant[] = [
+  [
+    "next requires full depth",
+    (w) => {
+      delete step(w, "next", "vitest").env!["FABRIKA_TEST_DEPTH"];
+    },
+  ],
+  [
+    "visual requires full depth",
+    (w) => {
+      step(w, "next", "end to end").env!["FABRIKA_TEST_DEPTH"] = "fast";
+    },
+  ],
+
   ...extraCommands.map((added): [string, (w: Workflow) => void] => [
     `review2 extra command: ${added.run}`,
     (w) => {

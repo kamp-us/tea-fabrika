@@ -105,12 +105,16 @@ export const nextLaws: Rule = ({ jobs }, require) => {
       shard,
     ), "next's vitest step passes --shard <leg>/<the count of numbered legs>");
   // The size step's list first, so a sized run runs the files it was sized with; changes' filter
-  // after, so every other run keeps it. SHARD and FILTER are its whole env: a CHANGED here would
+  // after, so every other run keeps it. Only depth, SHARD and FILTER belong here: a CHANGED would
   // narrow the list again, past the readers.
   require(compact(map(testStep?.["env"])["FILTER"]) ===
     "needs.changes.outputs.files||needs.changes.outputs.filter||'next/'", "next's vitest step takes changes' files, else filter, with the fallback next/");
   require(JSON.stringify(Object.keys(map(testStep?.["env"])).toSorted()) ===
-    JSON.stringify(["FILTER", "SHARD"]), "next's vitest step's env is SHARD and FILTER alone");
+    JSON.stringify([
+      "FABRIKA_TEST_DEPTH",
+      "FILTER",
+      "SHARD",
+    ]), "next's vitest step's env is full depth, SHARD and FILTER alone");
   // E2. The same for the end-to-end step, over the count of e2e legs.
   const e2eStep = nextSteps.find((s) => s["run"] === e2eCommand);
   require(map(e2eStep?.["env"])["FABRIKA_TEST_DEPTH"] === "full", "E11: visual laws run at full depth");
