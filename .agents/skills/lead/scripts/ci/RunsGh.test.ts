@@ -54,31 +54,47 @@ const memory = (answers: ReadonlyArray<Answer>) => {
 };
 
 describe("new branch-proof preflight", () => {
-  it.effect("scenario: only the exact branch head's YAML reaches the trusted local job-slot check", () => {
-    const m = memory([{ out: ref() }, { out: "the remote YAML" }, { out: "scheduled job slots conform\n" }]);
+  // Plant: replace the requested workflow ref with the old fixed head; generated requests must expose it.
+  it.effect.prop(
+    "property: only the exact branch head's YAML reaches the trusted local job-slot check",
+    {
+      head: Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/)),
+      branch: Schema.String.check(Schema.isPattern(/^fabrikalfa\/[a-z][a-z0-9_-]{0,24}$/)),
+      // GitHub source arrives as UTF-8 bytes, which cannot contain an unpaired UTF-16 surrogate.
+      yaml: Schema.String.check(
+        Schema.makeFilter((text) => new TextDecoder().decode(new TextEncoder().encode(text)) === text),
+      ),
+    },
+    ({ head, branch, yaml }) => {
+      const m = memory([{ out: ref(head) }, { out: yaml }, { out: "scheduled job slots conform\n" }]);
 
-    return Effect.gen(function* () {
-      yield* (yield* Runs).preflight(branch, head);
-      expect(m.calls).toEqual([
-        { cmd: "gh", args: ["api", "-X", "GET", "repos/fixture/repo/git/ref/heads/fabrikalfa%2Frepair"], stdin: "" },
-        {
-          cmd: "gh",
-          args: [
-            "api",
-            "-X",
-            "GET",
-            "repos/fixture/repo/contents/.github/workflows/scheduled.yaml",
-            "-f",
-            `ref=${head}`,
-            "-H",
-            "Accept: application/vnd.github.raw+json",
-          ],
-          stdin: "",
-        },
-        { cmd: "node", args: [".github/ci/workflow-lint/scheduled.ts", "--job-slots"], stdin: "the remote YAML" },
-      ]);
-    }).pipe(Effect.provide(m.layer));
-  });
+      return Effect.gen(function* () {
+        yield* (yield* Runs).preflight(branch, head);
+        expect(m.calls).toEqual([
+          {
+            cmd: "gh",
+            args: ["api", "-X", "GET", `repos/fixture/repo/git/ref/heads/${encodeURIComponent(branch)}`],
+            stdin: "",
+          },
+          {
+            cmd: "gh",
+            args: [
+              "api",
+              "-X",
+              "GET",
+              "repos/fixture/repo/contents/.github/workflows/scheduled.yaml",
+              "-f",
+              `ref=${head}`,
+              "-H",
+              "Accept: application/vnd.github.raw+json",
+            ],
+            stdin: "",
+          },
+          { cmd: "node", args: [".github/ci/workflow-lint/scheduled.ts", "--job-slots"], stdin: yaml },
+        ]);
+      }).pipe(Effect.provide(m.layer));
+    },
+  );
 
   it.effect.prop(
     "property: missing, moved or malformed branch heads stop before reading workflow text",
@@ -118,14 +134,30 @@ describe("new branch-proof preflight", () => {
     },
   );
 
-  it.effect("scenario: an inexact requested head is refused without asking GitHub", () => {
-    const m = memory([]);
+  // Plant: accept hexadecimal heads of any length; every case must still refuse its short and long requests.
+  it.effect.prop(
+    "property: inexact requested heads are refused without asking GitHub",
+    {
+      short: Schema.String.check(Schema.isPattern(/^[0-9a-f]{0,39}$/)),
+      long: Schema.String.check(Schema.isPattern(/^[0-9a-f]{41,80}$/)),
+      malformed: Schema.String.check(Schema.isPattern(/^[g-z][0-9a-f]{39}$/)),
+    },
+    ({ short, long, malformed }) =>
+      Effect.gen(function* () {
+        // Every generated case reaches a short, a long and an exact-length non-hex request.
+        for (const requested of [short, long, malformed]) {
+          const m = memory([]);
 
-    return Effect.gen(function* () {
-      expect((yield* Effect.flip((yield* Runs).preflight(branch, "main"))).reason).toContain("exact forty-character");
-      expect(m.calls).toEqual([]);
-    }).pipe(Effect.provide(m.layer));
-  });
+          const error = yield* Effect.flatMap(Runs, (runs) => Effect.flip(runs.preflight(branch, requested))).pipe(
+            Effect.provide(m.layer),
+          );
+
+          expect(error._tag).toBe("RunsError");
+          expect(error.reason).toContain("exact forty-character");
+          expect(m.calls).toEqual([]);
+        }
+      }),
+  );
 
   it.effect.prop(
     "property: a refused branch or workflow read stays a typed error and never runs the checker",
