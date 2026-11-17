@@ -2,7 +2,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Match, Schema } from "effect";
-import { check, type ProgramList } from "./check.ts";
+import { check, type Declaration, type ProgramList } from "./check.ts";
 import { BUILTINS, parse } from "./grammar.ts";
 import { roles } from "./roles.ts";
 import { words } from "./words.ts";
@@ -146,7 +146,7 @@ describe("fabsh S1 reader", () => {
         [false, Schema.Struct({ [needed]: Schema.Int, [absent]: Schema.String })],
         [false, Schema.Struct({ [needed]: Schema.String })],
       ] as const) {
-        const programs: ProgramList = new Map([
+        const programs: ProgramList = new Map<string, Declaration>([
           ["source", source],
           ["sink", { name: "sink", flags: {}, inputs: { take: shape }, outputs: {} }],
         ]);

@@ -7,7 +7,7 @@ import { editor } from "./editor.ts";
 
 type EditorCmd = ReturnType<typeof editor.init>[1][number];
 
-const decode = Schema.decodeUnknownSync(editor.msg);
+const decode = Schema.decodeUnknownSync(Schema.toType(editor.msg));
 
 const Paste = Arbitrary.schema(Schema.String).pipe(
   Arbitrary.map((text) => text.replaceAll(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, "")),

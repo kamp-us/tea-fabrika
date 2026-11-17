@@ -10,7 +10,7 @@ import { Ghostty } from "ghostty-web";
 import { spot } from "./cells.ts";
 import { editor } from "./editor.ts";
 
-const decode = Schema.decodeUnknownSync(editor.msg);
+const decode = Schema.decodeUnknownSync(Schema.toType(editor.msg));
 
 type Model = ReturnType<typeof editor.init>[0];
 
@@ -72,7 +72,7 @@ const options = (runs = 300) => ({ arbitrary: { runs: runsFor({ fast: runs, full
 // The installed @effect/vitest accepts Effect Arbitrary, while tea and fc.commands use fast-check.
 // A Schema-generated seed selects a command walk inside the property runner.
 // Effect shrinks the seed and command data; fast-check supplies legal-move checks for the walk.
-const walk = <M, R>(
+const walk = <M extends object, R>(
   seed: number,
   choices: ReadonlyArray<fc.Command<M, R>>,
   model: M,
