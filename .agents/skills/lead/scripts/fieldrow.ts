@@ -24,7 +24,9 @@ import { Config, Console, DateTime, Effect, FileSystem, Layer, Option, Result, S
 import { Argument, Command, Flag } from "effect/cli";
 import { rounded } from "./clauderow.ts";
 
-class Refused extends Schema.TaggedError<Refused>()("Refused", { reason: Schema.String }) {}
+class Refused extends Schema.TaggedError<Refused, { readonly brand: unique symbol }>()("Refused", {
+  reason: Schema.String,
+}) {}
 
 /**
  * Dollars per million tokens (in, cached, out), standard tier, up to 272K input, from OpenAI's
@@ -83,14 +85,13 @@ const local = (zone: DateTime.TimeZone, at: DateTime.DateTime): string => {
 
 /** A given bound, `2026-11-16T09:05:00-08:00`, printed back in its own offset. */
 const given = (flag: string, text: string): Effect.Effect<DateTime.Zoned, Refused> =>
-  Option.match(DateTime.makeZonedFromString(text), {
-    onNone: () => Effect.fail(new Refused({ reason: `--${flag} is not a time with an offset: ${text}` })),
-    onSome: Effect.succeed,
-  });
+  Effect.fromOption(DateTime.makeZonedFromString(text), () =>
+    Refused.make({ reason: `--${flag} is not a time with an offset: ${text}` }),
+  );
 
 const Text = Schema.NullOr(Schema.String);
 
-const Count = Schema.NullOr(Schema.Number);
+const Count = Schema.NullOr(Schema.Finite);
 
 /** One `field/runs.jsonl` row, in fieldrow.py's key order. Its `reason` is saved as `why`. */
 const Row = Schema.Struct({
@@ -109,7 +110,7 @@ const Row = Schema.Struct({
   reason: Schema.String,
   tokens: Schema.Null,
   tools: Schema.Null,
-  minutes: Schema.Number,
+  minutes: Schema.Finite,
   note: Schema.Null,
   costUsd: Schema.Null,
   listUsd: Count,
@@ -120,8 +121,8 @@ const Row = Schema.Struct({
   step: Schema.optionalKey(Schema.String),
   start: Schema.optionalKey(Schema.String),
   end: Schema.optionalKey(Schema.String),
-  status: Schema.optionalKey(Schema.Number),
-  redacted: Schema.optionalKey(Schema.Number),
+  status: Schema.optionalKey(Schema.Finite),
+  redacted: Schema.optionalKey(Schema.Finite),
 }).pipe(Schema.encodeKeys({ reason: "why" }));
 
 const encodeRow = Schema.encodeSync(Schema.fromJsonString(Row));
@@ -149,7 +150,7 @@ const row = Effect.fn("fieldrow.row")(function* (ask: Ask) {
   const fs = yield* FileSystem.FileSystem;
   const zone = yield* DateTime.CurrentTimeZone;
   const now = yield* DateTime.now;
-  const unreadable = (path: string) => Effect.mapError(() => new Refused({ reason: `${path} could not be read` }));
+  const unreadable = (path: string) => Effect.mapError(() => Refused.make({ reason: `${path} could not be read` }));
 
   const read = Effect.fnUntraced(function* (path: string) {
     return (yield* fs.exists(path).pipe(unreadable(path)))
@@ -200,7 +201,7 @@ const row = Effect.fn("fieldrow.row")(function* (ask: Ask) {
   const count = Option.isSome(redacted)
     ? Option.some(
         yield* Effect.fromResult(decodeCount(redacted.value.trim())).pipe(
-          Effect.mapError(() => new Refused({ reason: `${receipt} holds no whole number` })),
+          Effect.mapError(() => Refused.make({ reason: `${receipt} holds no whole number` })),
         ),
       )
     : Option.none<number>();
@@ -289,7 +290,7 @@ export const fieldrow = Command.make(
 
       return yield* Console.log(line);
     }).pipe(
-      Effect.catchTag("ConfigError", (error) => Effect.fail(new Refused({ reason: error.message }))),
+      Effect.catchTag("ConfigError", (error) => Effect.fail(Refused.make({ reason: error.message }))),
       Effect.tapError((refused) => Console.error(`fieldrow: ${refused.reason}`)),
     ),
 );

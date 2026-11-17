@@ -7,7 +7,7 @@ import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
 /** A git call failed, so the caller cannot tell; a failure is never read as an empty answer. */
-export class GitError extends Schema.TaggedError<GitError>()("GitError", {
+export class GitError extends Schema.TaggedError<GitError, { readonly brand: unique symbol }>()("GitError", {
   /** The git subcommand, such as `diff`. */
   command: Schema.String,
   reason: Schema.String,

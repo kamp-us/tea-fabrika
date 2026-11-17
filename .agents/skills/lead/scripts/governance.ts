@@ -157,9 +157,11 @@ if (import.meta.main) {
   NodeRuntime.runMain(
     Command.run({ version: "0.0.0" })(governance).pipe(
       Effect.as(0),
-      Effect.catchTag("GitError", (e) => Console.error(`governance: git ${e.command}: ${e.reason}`).pipe(Effect.as(1))),
-      // `--help` alone is a clean exit; an argument the command line got wrong is printed by effect/cli.
-      Effect.catchTag("ShowHelp", (help) => Effect.succeed(help.errors.length === 0 ? 0 : 2)),
+      Effect.catchTags({
+        GitError: (e) => Console.error(`governance: git ${e.command}: ${e.reason}`).pipe(Effect.as(1)),
+        // `--help` alone is a clean exit; an argument the command line got wrong is printed by effect/cli.
+        ShowHelp: (help) => Effect.succeed(help.errors.length === 0 ? 0 : 2),
+      }),
       Effect.catch((e) => Console.error(`governance: ${String(e)}`).pipe(Effect.as(1))),
       Effect.provide(GitProcess.layer(process.cwd())),
       Effect.provide(NodeServices.layer),
