@@ -167,7 +167,7 @@ jobs:
   # it otherwise; the gate's `start` and the select's own result still decide (SC15).
   tests:
     concurrency:
-      group: scheduled-test-${{ fromJSON('{"e2e-1":"1","e2e-2":"2","1":"3","2":"4","3":"5","4":"6","5":"7","tooling-1":"8","tooling-2":"9"}')[matrix.shard] }}
+      group: scheduled-test-${{ fromJSON('{"e2e-1":"1","e2e-2":"6","1":"3","2":"4","3":"5","4":"2","5":"7","tooling-1":"8","tooling-2":"9"}')[matrix.shard] }}
       queue: max
       cancel-in-progress: false
     needs: [gate, select]

@@ -55,6 +55,12 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+Today's scheduled CI, serving both versions, swaps the shared groups of full-run browser leg 2
+and core leg 4. A [branch proof's second leg waited 705 seconds](../../field/notes/2026-11-17-shared-test-slot-wait.json),
+with another group empty for the last 286 seconds. This changes which full leg a small proof waits
+behind, within the same nine test groups and one control group. Fixed groups can still leave other
+groups unused. Actual CI comparison remains due; this change has no measured speedup yet.
+
 Today's lead tooling adds a separate manual [L11 exercise](../../.github/workflows/l11-exercise.yaml), ticket 1135,
 for `next/` ticket 1129. It fixes one source pair, compares ordinary whole-file runs and private generated inputs,
 and declares ten serial clean jobs. Fixed output faults restore every edited file and publish only decoded facts.
