@@ -149,7 +149,7 @@ const armed = (m: ReturnType<typeof memory>) =>
 /** Which leak check refuses, by its method's name, or none. */
 const Leak = Schema.Literals(["clean", "leakChange", "leakGrep", "leakText"]);
 
-const hit = new LeakGrepRefused({ reason: "leakgrep.sh exited 1" });
+const hit = LeakGrepRefused.make({ reason: "leakgrep.sh exited 1" });
 
 /** The one leak check that refuses, with the error it refuses with. */
 const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
@@ -217,7 +217,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
 
   // vector: 0544's path, word for word: no run at the head arms, with one line and the way to start one.
   it.effect(
-    "vector: no full run arms with the 0544 line and the command that starts one; a green run at an older head arms with the same line; a docs pull request's line says it starts no full run",
+    "vector: no full run arms with the 0544 line and the preflight command; a green run at an older head arms with the same line; a docs pull request's line says it starts no full run",
     () =>
       Effect.gen(function* () {
         const red = yield* fixture;
@@ -225,11 +225,11 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         const tail = `merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`;
         const none = memory({ stands: "none" }, red);
         expect(Arm.line(yield* arm(none))).toBe(
-          `pr 1092: no full run at ${head}; arming as 0544 allows (to start one: gh workflow run scheduled.yaml --ref ${branch}); ${tail}`,
+          `pr 1092: no full run at ${head}; arming as 0544 allows (before starting one: node .agents/skills/lead/scripts/ci/preflight.ts --repo ${repo} --branch ${branch} --head ${oid}); ${tail}`,
         );
         const stale = memory({ stands: "older" }, red);
         expect(Arm.line(yield* arm(stale))).toBe(
-          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (to start one: gh workflow run scheduled.yaml --ref ${branch}); ${tail}`,
+          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (before starting one: node .agents/skills/lead/scripts/ci/preflight.ts --repo ${repo} --branch ${branch} --head ${oid}); ${tail}`,
         );
         const docs = memory({ stands: "none", files: ["docs/plan/README.md", ".glossary/TERMS.md"] }, red);
         expect(Arm.line(yield* arm(docs))).toBe(
@@ -240,6 +240,36 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
           ...armedAt,
           ...armedAt,
         ]);
+      }),
+  );
+
+  it.effect(
+    "scenario: new-proof guidance refuses an old branch workflow, while existing head evidence keeps its meaning",
+    () =>
+      Effect.gen(function* () {
+        const red = yield* fixture;
+        const missing = memory({ stands: "none" }, red);
+        missing.actions.preflight = "scheduled job groups are missing";
+        const line = Arm.line(yield* arm(missing));
+        expect(line).toContain("new proof unavailable: scheduled job groups are missing");
+        expect(line).not.toContain("workflow run");
+        expect(missing.actions.asked).toEqual([`runs scheduled.yaml ${branch}`, `preflight ${branch} ${oid}`]);
+        expect(missing.github.calls).toEqual(armedAt);
+
+        const existing = memory({ stands: "green", jobs: shaped("changed") }, red);
+        existing.actions.preflight = "scheduled job groups are missing";
+        expect(Arm.line(yield* arm(existing))).toContain(
+          `changed-set run ${RED} green on every job at ${oid.slice(0, 12)}`,
+        );
+        expect(existing.actions.asked).toEqual([`runs scheduled.yaml ${branch}`, `jobs ${RED}`]);
+        expect(existing.github.calls).toEqual(armedAt);
+
+        const stale = memory({ stands: "older", jobs: shaped("changed") }, red);
+        stale.actions.preflight = "scheduled job groups are missing";
+        expect((yield* Effect.flip(arm(stale))).reason).toContain(
+          "new proof unavailable: scheduled job groups are missing",
+        );
+        expect(stale.github.calls).toEqual([]);
       }),
   );
 
@@ -323,14 +353,14 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
           const stale = memory({ stands: "older", jobs: shaped(kind) }, red);
           const refused = yield* Effect.flip(arm(stale));
           expect(refused.reason, kind).toBe(
-            `pr 1092: no full run at this head, and at the older head ${older.slice(0, 12)}: the changed-set run ${url} tested that head's change, not this one (0590); start one at this head: gh workflow run scheduled.yaml --ref ${branch}`,
+            `pr 1092: no full run at this head, and at the older head ${older.slice(0, 12)}: the changed-set run ${url} tested that head's change, not this one (0590); before starting one: node .agents/skills/lead/scripts/ci/preflight.ts --repo ${repo} --branch ${branch} --head ${oid}`,
           );
           expect(stale.github.calls, kind).toEqual([]);
         }
 
         const full = memory({ stands: "older", jobs: shaped("full") }, red);
         expect(Arm.line(yield* arm(full))).toBe(
-          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (to start one: gh workflow run scheduled.yaml --ref ${branch}); merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
+          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (before starting one: node .agents/skills/lead/scripts/ci/preflight.ts --repo ${repo} --branch ${branch} --head ${oid}); merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
         );
         const fullAt = memory({ stands: "green", jobs: shaped("full") }, red);
         expect(Arm.line(yield* arm(fullAt))).toContain(`full run ${RED} green on every job at ${head}`);
