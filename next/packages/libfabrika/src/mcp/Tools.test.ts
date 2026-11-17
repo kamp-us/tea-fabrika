@@ -826,7 +826,7 @@ it.prop(
     const call = Tools.read([form.program], `drawn_${msg.type}`, { value });
     expect(call._tag).toBe("write");
 
-    if (call._tag === "write") {
+    if (Tools.Call.isAnyOf(["write"])(call)) {
       expect(call.program).toBe(form.program.name);
       const actual = expectedMessage(form, jsonTrip(call.m));
       const expected = expectedMessage(form, encoded(form, msg));
@@ -863,9 +863,9 @@ it.prop(
     }
 
     const call = Tools.read([form.program], `drawn_${key}`, { value });
-    expect(call._tag === "write").toBe(oracle(form, key, value));
+    expect(Tools.Call.isAnyOf(["write"])(call)).toBe(oracle(form, key, value));
 
-    if (call._tag !== "write") {
+    if (!Tools.Call.isAnyOf(["write"])(call)) {
       expect(call).toEqual({ _tag: "refused", reason: "bad_input" });
     }
   },
@@ -878,7 +878,7 @@ it.prop(
   ({ sample: { description, key, value } }) => {
     const form = makeForm(description);
     const listed = validator(toolFor(form, key).inputSchema)({ value });
-    const accepted = Tools.read([form.program], `drawn_${key}`, { value })._tag === "write";
+    const accepted = Tools.Call.isAnyOf(["write"])(Tools.read([form.program], `drawn_${key}`, { value }));
     expect(!accepted || listed).toBe(true);
 
     if (form.exact) {
@@ -1001,7 +1001,7 @@ it("vector: V1 ordered bounds, alternatives in both orders, default and shared d
           } else {
             expect(call._tag).toBe("write");
 
-            if (call._tag === "write") {
+            if (Tools.Call.isAnyOf(["write"])(call)) {
               expect(Schema.decodeUnknownSync(Schema.toCodecJson(program.msg), closed)(jsonTrip(call.m))).toEqual({
                 ...decoded.success,
                 type: key,
@@ -1100,7 +1100,7 @@ it("vector: V1 suspended wire_name codec", () => {
   });
   const call = Tools.read([program], "probe_check", { value });
 
-  if (call._tag === "write") {
+  if (Tools.Call.isAnyOf(["write"])(call)) {
     expect(Schema.decodeUnknownSync(Schema.toCodecJson(msg), closed)(jsonTrip(call.m))).toEqual({
       type: "check",
       name: "ok",
@@ -1207,7 +1207,7 @@ const throughTool = Effect.fn("throughTool")(function* (key: string, value: unkn
   const call = Tools.read([program], `wire_${key}`, { value });
   expect(call, "the call is a write").toMatchObject({ _tag: "write", program: program.name });
 
-  if (call._tag !== "write") {
+  if (!Tools.Call.isAnyOf(["write"])(call)) {
     return { m: undefined, taken };
   }
 
@@ -1217,7 +1217,7 @@ const throughTool = Effect.fn("throughTool")(function* (key: string, value: unkn
   const start = yield* execution.init(null);
   expect(start._tag).toBe("stepped");
 
-  if (start._tag === "stepped") {
+  if (Programs.Step.isAnyOf(["stepped"])(start)) {
     expect((yield* execution.step(start.model, jsonTrip(call.m)))._tag, "step").toBe("stepped");
   }
 
@@ -1248,7 +1248,7 @@ it.effect.prop(
       const call = Tools.read([program], "wire_find", { value });
       expect(call, "the call is a query").toMatchObject({ _tag: "query", program: program.name, name: "find" });
 
-      if (call._tag === "query") {
+      if (Tools.Call.isAnyOf(["query"])(call)) {
         const back = Schema.decodeUnknownResult(Schema.toCodecJson(Wire.Query), closed)(jsonTrip(call.query));
         expect(
           Result.isSuccess(back) && Schema.toEquivalence(Wire.Query)(back.success, q),
