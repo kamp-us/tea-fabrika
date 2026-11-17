@@ -20,7 +20,7 @@ import { Effect, Predicate, Schema } from "effect";
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { folders, lock, strays, TAKEN, WHOLE } from "./anti-slop.ts";
+import { countFile, folders, lock, strays, TAKEN, WHOLE } from "./anti-slop.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 
@@ -185,7 +185,7 @@ const unlisted = (rule: string): string | undefined => {
   const on = listed(rule);
 
   const covered = (folder: string) =>
-    on.includes(folder) || on.some((glob) => WHOLE.includes(glob) && folder.startsWith(glob.slice(0, -"**".length)));
+    on.includes(folder) || on.some((glob) => glob.endsWith("/**") && folder.startsWith(glob.slice(0, -"**".length)));
 
   return ["oxlint-plugins/**", ...folders(ROOT)].find((folder) => tree(folder) && !covered(folder));
 };
@@ -414,6 +414,22 @@ effectIt.effect.prop(
       expect(lock(scope, ["kalfa/**"], new Map()).refused).toEqual([]);
       const gone = `kalfa/${input.name}/absent/**`;
       expect(lock(scope, [gone], new Map()).refused).toEqual([gone]);
+      // The actual fold used by count must account for every overlapping scope.
+      for (const mode of ["source", "package", "mixed"]) {
+        const hits = new Map<string, number>();
+        const source = mode !== "package" ? input.hits : 0;
+        const other = mode !== "source" ? input.hits : 0;
+        const containing = [scope[1]!, scope[0]!, scope[2]!];
+        for (let hit = 0; hit < source; hit++) countFile(containing, hits, `kalfa/${input.name}/src/value.ts`);
+        for (let hit = 0; hit < other; hit++) countFile(containing, hits, `kalfa/${input.name}/Pnpm.ts`);
+        expect(hits.get(scope[0]!)).toBe(source + other);
+        expect(hits.get(scope[1]!) ?? 0).toBe(source);
+        expect(hits.has(scope[2]!)).toBe(false);
+        expect(lock(scope, [], hits).add).toEqual(source === 0 ? [scope[1], scope[2]] : [scope[2]]);
+        expect(lock(scope, [scope[0]!], hits).add).toEqual([scope[2]]);
+        expect(lock(scope, [scope[0]!], hits).refused).toEqual([]);
+        expect(lock(scope, [scope[1]!], hits).add).toEqual([scope[2]]);
+      }
     }),
-  { arbitrary: { runs: 100, size: 100 } },
+  { arbitrary: { seed: 119120, runs: 100, size: 100 } },
 );

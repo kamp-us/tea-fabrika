@@ -83,9 +83,9 @@ interface Lock {
   readonly refused: ReadonlyArray<string>;
 }
 
-/** A listed glob covers a folder when it names that folder, or is a whole-scope glob above it. */
+/** A listed glob covers its own folder and every folder below it. */
 const covers = (glob: string, folder: string): boolean =>
-  glob === folder || (WHOLE.includes(glob) && folder.startsWith(glob.slice(0, -"**".length)));
+  glob === folder || (glob.endsWith("/**") && folder.startsWith(glob.slice(0, -"**".length)));
 
 /** The zero lock for one rule: its list, and the rule's hits in each folder of the scope. */
 export const lock = (
@@ -132,6 +132,15 @@ const levelOf = (setting: Setting): string => (Predicate.isString(setting) ? set
 const written = (setting: Setting): string | ReadonlyArray<unknown> =>
   Predicate.isString(setting) ? setting : [setting[0], ...setting[1]];
 
+/** Count a file's hit in every containing folder, including a package and its source folder. */
+export const countFile = (scope: ReadonlyArray<string>, hits: Map<string, number>, file: string): void => {
+  for (const folder of scope) {
+    if (matchesGlob(file, folder)) {
+      hits.set(folder, (hits.get(folder) ?? 0) + 1);
+    }
+  }
+};
+
 /** `anti-slop/no-runtime-typeof` as oxlint prints its code: `anti-slop(no-runtime-typeof)`. */
 const codeOf = (rule: string): string => `${rule.replace("/", "(")})`;
 
@@ -170,11 +179,10 @@ const count = (
   for (const { code, filename } of report.value.diagnostics) {
     const file = relative(root, resolve(root, filename ?? ""));
     const rule = codes.get(code ?? "");
-    const folder = scope.find((glob) => matchesGlob(file, glob));
     const counted = rule === undefined ? undefined : hits.get(rule);
 
-    if (counted !== undefined && folder !== undefined && !ignored.some((glob) => matchesGlob(file, glob))) {
-      counted.set(folder, (counted.get(folder) ?? 0) + 1);
+    if (counted !== undefined && !ignored.some((glob) => matchesGlob(file, glob))) {
+      countFile(scope, counted, file);
     }
   }
 
