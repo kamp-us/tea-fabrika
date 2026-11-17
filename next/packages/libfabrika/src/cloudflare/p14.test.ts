@@ -19,12 +19,17 @@ import * as Route from "./fetch.ts";
 import type { Env } from "./runtime.ts";
 
 type Asset = { readonly hash: string; readonly type: string; readonly body: string };
+
 type Assets = Readonly<Record<string, Asset>>;
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+
 const HTML = "text/html; charset=utf-8";
+
 const JS = "text/javascript; charset=utf-8";
+
 const CSS = "text/css; charset=utf-8";
+
 const PAGE = "/index.html";
 
 const config = (port: number) =>
@@ -41,6 +46,7 @@ const config = (port: number) =>
 const world = (port: number) => {
   const input = config(port);
   const calls: Array<string> = [];
+
   const stub = (to: string) =>
     new Proxy(
       {},
@@ -53,10 +59,12 @@ const world = (port: number) => {
             }
 
             calls.push(`${to}.${String(method)}`);
+
             return Promise.resolve({ _tag: "ok" });
           },
       },
     );
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only the RPC members these routes call
   const env = {
     INSTANCE: JSON.stringify(input),
@@ -65,6 +73,7 @@ const world = (port: number) => {
     PROCESS: { getByName: () => stub("process") },
     RECORD: { getByName: () => stub("record") },
   } as unknown as Env;
+
   return { env, calls };
 };
 
@@ -90,11 +99,13 @@ const step = fc.record({
 });
 
 type Step = typeof step extends fc.Arbitrary<infer S> ? S : never;
+
 const METHODS = ["GET", "HEAD", "POST", "PUT", "DELETE"] as const;
 
 /** A rebuild's table, derived from the step: a page or none, the tab's script, and other files. */
 const rebuilt = (s: Step, generation: number): Assets => {
   const assets: Record<string, Asset> = {};
+
   const add = (route: string, type: string, body: string) => {
     assets[route] = { hash: sha(body), type, body };
   };
@@ -150,14 +161,18 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
             const wrongHost = s.host % 5 === 0;
             const originHeader = s.origin % 5 === 0 ? "http://evil.example" : s.origin % 5 === 1 ? origin : null;
             const target = path === "/" ? (current !== undefined && Object.hasOwn(current, PAGE) ? PAGE : null) : path;
+
             const asset =
               target !== null && current !== undefined && Object.hasOwn(current, target) ? current[target] : undefined;
+
             const validators = [
               ...(asset === undefined ? [] : [`"${asset.hash}"`]),
               ...stale.filter((h) => h !== asset?.hash).map((h) => `"${h}"`),
             ];
+
             const validator =
               validators.length > 0 && s.validator % 3 !== 0 ? validators[s.validator % validators.length]! : null;
+
             const headers: Record<string, string> = { host: wrongHost ? "evil.example" : `127.0.0.1:${port}` };
 
             if (originHeader !== null) {
@@ -182,6 +197,7 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
                 ),
               ),
             );
+
             const body = await response.text();
 
             if (wrongHost) {

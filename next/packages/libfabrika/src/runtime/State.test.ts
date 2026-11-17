@@ -3,8 +3,11 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 
 const Model = Schema.Struct({ count: Schema.Int, step: Schema.Int });
+
 const old = { v: 1, model: { n: 7 }, build: "old-build", after: 12 };
+
 const N = Schema.Struct({ n: Schema.Int });
+
 const Count = Schema.Struct({ count: Schema.Int });
 
 const state = (calls: string[] = []) => ({
@@ -16,6 +19,7 @@ const state = (calls: string[] = []) => ({
       from: 1,
       run: (raw: unknown) => {
         calls.push("n_to_count");
+
         return { count: Schema.decodeUnknownSync(N)(raw).n };
       },
     },
@@ -24,6 +28,7 @@ const state = (calls: string[] = []) => ({
       from: 2,
       run: (raw: unknown) => {
         calls.push("add_step");
+
         return { ...Schema.decodeUnknownSync(Count)(raw), step: 1 };
       },
     },
@@ -58,13 +63,16 @@ describe("S3 saved state and named upgrades", () => {
           (value) =>
             Effect.promise(async () => {
               const { Saved } = await import("./State.ts");
+
               const raw = {
                 ...old,
                 model: { n: value },
                 v: fault === "future" ? 4 : fault === "zero" ? 0 : 1,
               };
+
               const before = JSON.stringify(raw);
               const normal = state();
+
               const upgrades =
                 fault === "gap"
                   ? normal.upgrades.slice(1)
@@ -84,6 +92,7 @@ describe("S3 saved state and named upgrades", () => {
                       : fault === "decode"
                         ? [normal.upgrades[0]!, { name: "bad_model", from: 2, run: () => ({ count: "bad", step: 1 }) }]
                         : normal.upgrades;
+
               expect(() => Saved.upgrade(raw, { ...normal, upgrades }, "new-build")).toThrowError(
                 expect.objectContaining({ _tag: "ProgramDown", reason: "saved_state" }),
               );
@@ -98,6 +107,7 @@ describe("S3 saved state and named upgrades", () => {
   it("plant, upgrade in place: even a mutating failed upgrade cannot destroy saved bytes", async () => {
     const { Saved } = await import("./State.ts");
     const raw = JSON.parse(JSON.stringify(old));
+
     const upgrades = [
       {
         name: "mutating",
@@ -113,6 +123,7 @@ describe("S3 saved state and named upgrades", () => {
         },
       },
     ];
+
     expect(() => Saved.upgrade(raw, { ...state(), upgrades }, "new-build")).toThrow();
     expect(raw).toEqual(old);
   });

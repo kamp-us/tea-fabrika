@@ -65,46 +65,47 @@ describe("P39 slice 4b: the journal file after a crash", () => {
   it.live(
     "J2: a hands-like child that saves all sixteen keys, then writes in a loop and is killed with SIGKILL at a generated moment, leaves every one of the sixteen keys holding one whole entry when the file is opened again",
     () =>
-      Effect.gen(function* () {
-        yield* property(
-          fc.integer({ min: 1, max: 200 }),
-          (delay) =>
-            Effect.gen(function* () {
-              const fs = yield* FileSystem.FileSystem,
-                path = yield* Path.Path;
-              const home = yield* fs.makeTempDirectoryScoped({ prefix: "p39-j2-" });
-              const file = path.join(home, "journal.sqlite");
-              const child = path.join(import.meta.dirname, "JournalSqlite.child.test-support.ts");
-              yield* Effect.scoped(
-                Effect.gen(function* () {
-                  const handle = yield* ChildProcess.make(process.execPath, [child, file], {
-                    cwd: import.meta.dirname,
-                    killSignal: "SIGKILL",
-                  });
-                  // The kill delay counts from the first full round, so every run kills a writer
-                  // whose sixteen keys are all saved.
-                  const ready = yield* handle.stdout.pipe(
-                    Stream.decodeText(),
-                    Stream.splitLines,
-                    Stream.filter((line) => line === "ready"),
-                    Stream.runHead,
-                    Effect.timeout("30 seconds"),
-                  );
-                  expect(Option.isSome(ready), "J2: the child saved all sixteen keys").toBe(true);
-                  yield* Effect.sleep(`${delay} millis`);
-                  yield* handle.kill({ killSignal: "SIGKILL" });
-                  yield* handle.exitCode.pipe(Effect.ignore);
-                }),
-              );
-              // Opened again, as the next hands start opens it. The reads run inside the provide: the
-              // layer closes the file when its scope closes, so a read after it would fail for that.
-              yield* everyKeyWhole(`after a SIGKILL at ${delay} ms`).pipe(
-                Effect.provide(JournalStore.layer.pipe(Layer.provide(JournalSqlite.layer({ file })))),
-              );
-            }).pipe(Effect.provide(NodeServices.layer)),
-          { numRuns: runsFor({ fast: 3, full: 20 }) },
-        );
-      }),
+      property(
+        fc.integer({ min: 1, max: 200 }),
+        (delay) =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem,
+              path = yield* Path.Path;
+
+            const home = yield* fs.makeTempDirectoryScoped({ prefix: "p39-j2-" });
+            const file = path.join(home, "journal.sqlite");
+            const child = path.join(import.meta.dirname, "JournalSqlite.child.test-support.ts");
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const handle = yield* ChildProcess.make(process.execPath, [child, file], {
+                  cwd: import.meta.dirname,
+                  killSignal: "SIGKILL",
+                });
+
+                // The kill delay counts from the first full round, so every run kills a writer
+                // whose sixteen keys are all saved.
+                const ready = yield* handle.stdout.pipe(
+                  Stream.decodeText(),
+                  Stream.splitLines,
+                  Stream.filter((line) => line === "ready"),
+                  Stream.runHead,
+                  Effect.timeout("30 seconds"),
+                );
+
+                expect(Option.isSome(ready), "J2: the child saved all sixteen keys").toBe(true);
+                yield* Effect.sleep(`${delay} millis`);
+                yield* handle.kill({ killSignal: "SIGKILL" });
+                yield* handle.exitCode.pipe(Effect.ignore);
+              }),
+            );
+            // Opened again, as the next hands start opens it. The reads run inside the provide: the
+            // layer closes the file when its scope closes, so a read after it would fail for that.
+            yield* everyKeyWhole(`after a SIGKILL at ${delay} ms`).pipe(
+              Effect.provide(JournalStore.layer.pipe(Layer.provide(JournalSqlite.layer({ file })))),
+            );
+          }).pipe(Effect.provide(NodeServices.layer)),
+        { numRuns: runsFor({ fast: 3, full: 20 }) },
+      ),
     600_000,
   );
 });

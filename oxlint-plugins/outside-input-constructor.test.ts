@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 
 const code = "fabrika(outside-input-constructor)";
+
 const file = "next/packages/libfabrika/src/data/id.ts";
 
 describe("P17a, outside input has typed failures", () => {
   it("plants schema aliases and destructured decoder aliases in the door", async () => {
     const door = "next/packages/libfabrika/src/gateway/Gateway.ts";
+
     const lines = [
       'import {Schema} from "effect";',
       "declare const raw: unknown, Binding: any;",
@@ -19,6 +21,7 @@ describe("P17a, outside input has typed failures", () => {
       "const Local = Schema.Struct({value: Schema.String});",
       "function decodeLocal(value: unknown) { const Alias = Local; return Alias.make(value); }",
     ].join("\n");
+
     expect((await plant({ [door]: lines }))(code, door)).toEqual([3, 4, 5, 6, 7, 8, 10]);
   });
   it("follows destructured aliases and keeps same-named bindings in their own scope", async () => {
@@ -33,6 +36,7 @@ describe("P17a, outside input has typed failures", () => {
       "const mint = Id.make; mint(wire);",
       "Id.make(`input`);",
     ].join("\n");
+
     expect((await plant({ [file]: lines }))(code, file)).toEqual([4, 5, 7, 8]);
   });
   it("plants throwing calls, saved aliases, decoder aliases and a wire prefix", async () => {
@@ -52,6 +56,7 @@ describe("P17a, outside input has typed failures", () => {
       "function readRow(value: unknown) { return Schema.decodeSync(Row)(value); }",
       "const decodeAlias = (value: unknown) => { const alias = value; return Row.make(alias); };",
     ].join("\n");
+
     expect((await plant({ [file]: lines }))(code, file)).toEqual([4, 6, 7, 9, 10, 11, 12, 13, 14]);
   });
   it("permits code constants and Effect or Result decoders", async () => {
@@ -71,6 +76,7 @@ describe("P17a, outside input has typed failures", () => {
       "const Declaration = Program; Declaration.make({name: raw});",
       "function scope() { const Alias = Schema.decodeSync(Row); Alias({n: 0}); }",
     ].join("\n");
+
     expect((await plant({ [file]: lines }))(code, file)).toEqual([]);
   });
   it("covers each named production path and leaves other files alone", async () => {
@@ -86,13 +92,16 @@ describe("P17a, outside input has typed failures", () => {
       "runtime/Runner",
       "runtime/Entry",
     ];
+
     const files = Object.fromEntries(
       paths.map((path) => [
         `next/packages/libfabrika/src/${path}.ts`,
         "declare const raw: unknown, Row: any; Row.make(raw);",
       ]),
     );
+
     const other = "next/packages/libfabrika/src/access/Access.ts";
+
     const linted = await plant({
       ...files,
       [other]: "declare const raw: unknown, Row: any; Row.make(raw);",

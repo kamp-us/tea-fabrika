@@ -12,6 +12,7 @@ const env = (key: string, value: string) =>
     Effect.sync(() => {
       const old = process.env[key];
       process.env[key] = value;
+
       return old;
     }),
     (old) =>
@@ -58,14 +59,17 @@ it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call looku
           const { ArtifactStore, createArtifactStore } = yield* Effect.promise(() => import("alchemy/Artifacts"));
           const Interaction = yield* Effect.promise(() => import("alchemy/Interaction"));
           const { AuthProvidersLive } = yield* Effect.promise(() => import("alchemy/Auth/Registry"));
+
           const fixture: typeof import("./sibling-objects.test-support.ts") = yield* Effect.promise(
             () => import(pathToFileURL(file).href),
           );
+
           const stack = Alchemy.Stack(
             "siblings",
             { providers: Cloudflare.providers(), state: Alchemy.localState() },
             fixture.Host.pipe(Effect.asVoid, Effect.provide(fixture.default)),
           );
+
           // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
           yield* deploy({ stack, stage: "local", dev: true, scope: yield* Effect.scope }).pipe(
             Effect.asVoid,
@@ -79,9 +83,11 @@ it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call looku
               ),
             ),
           );
+
           const reply = yield* Effect.tryPromise(() => fetch(`http://127.0.0.1:${port.port}`)).pipe(
             Effect.retry({ times: 100, schedule: Schedule.spaced("100 millis") }),
           );
+
           const body = yield* Effect.promise(() => reply.text());
           expect(reply.ok).toBe(!bare);
           expect(bare ? body : JSON.parse(body)).toEqual(

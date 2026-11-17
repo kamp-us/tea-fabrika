@@ -52,6 +52,7 @@ export const layer = (options: {
     Effect.gen(function* () {
       const state = yield* ObjectState;
       const env = yield* WorkerEnvironment;
+
       const bindings: Env = {
         INSTANCE: env.INSTANCE,
         PROJECT: env.PROJECT,
@@ -61,12 +62,15 @@ export const layer = (options: {
         LOADER: env.LOADER,
         MEASUREMENTS: env.MEASUREMENTS,
       };
+
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: raw state until S5 and S6; not reported, 0042 amendment 2026-11-09
       const raw = state.raw as unknown as DurableObjectState;
+
       const service = ObjectService.make(
         ConnectionService,
         connectionLayer(raw, bindings, undefined, options.input(bindings)),
       );
+
       const event = (
         socket: Cloudflare.WebSocket,
         slot: (gateway: Service, ws: WebSocket) => Effect.Effect<void, unknown>,
@@ -76,7 +80,7 @@ export const layer = (options: {
           Effect.orDie,
         );
 
-      return Effect.succeed({
+      return {
         fetch: ObjectService.fromWebHandler((request) =>
           service.pipe(Effect.flatMap((gateway) => gateway.fetch(request))),
         ),
@@ -86,6 +90,6 @@ export const layer = (options: {
         ring: (stream, rev) => called(service.pipe(Effect.flatMap((gateway) => gateway.ring(stream, rev)))),
         notify: (client, news) => called(service.pipe(Effect.flatMap((gateway) => gateway.notify(client, news)))),
         probe: (session) => called(service.pipe(Effect.flatMap((gateway) => gateway.probe(session)))),
-      } satisfies ConnectionShape);
-    }),
+      } satisfies ConnectionShape;
+    }).pipe(Effect.map((shape) => Effect.succeed(shape))),
   );

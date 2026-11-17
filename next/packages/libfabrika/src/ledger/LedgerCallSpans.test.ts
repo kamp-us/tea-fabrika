@@ -8,6 +8,7 @@ import * as LedgerRemote from "./LedgerRemote.ts";
 import { Appended, Entry, Line, PAGE, Waited } from "./Log.ts";
 
 const CHECK = { seed: 119120, numRuns: 40 };
+
 const text = fc.string({ minLength: 1, maxLength: 260 });
 
 const hex = (bytes: number) =>
@@ -20,13 +21,16 @@ const cut = (key: string, value: string) =>
 
 const capture = () => {
   const spans: Array<Tracer.NativeSpan> = [];
+
   const tracer = Tracer.make({
     span(options) {
       const span = new Tracer.NativeSpan(options);
       spans.push(span);
+
       return span;
     },
   });
+
   return { spans, tracer };
 };
 
@@ -63,14 +67,17 @@ describe("ledger.call, next/ tracing keep-laws", () => {
         ),
         async (parent, reader, calls) => {
           const { spans, tracer } = capture();
+
           const sent: Array<{
             method: string;
             stream: string;
             active: Array<{ name: string; attributes: Record<string, unknown> }>;
           }> = [];
+
           let rows: ReadonlyArray<Entry> = [];
           let append: Appended = Appended.cases.placed.make({ rev: 1, pos: 1 });
           let wait: Waited = Waited.cases.parked.make({});
+
           const sending = (method: string, stream: string) => {
             const active = spans.filter((s) => s.status._tag === "Started");
             sent.push({
@@ -82,22 +89,27 @@ describe("ledger.call, next/ tracing keep-laws", () => {
               })),
             });
           };
+
           const stub: LedgerCalls = {
             async append(stream) {
               sending("append", stream);
+
               return append;
             },
             async read(stream, after, readerId) {
               sending("read", stream);
               expect(readerId).toBe(reader);
+
               return rows.filter((r) => r.rev > after).slice(0, PAGE);
             },
             async wait(stream, _after, readerId) {
               sending("wait", stream);
               expect(readerId).toBe(reader);
+
               return wait;
             },
           };
+
           await Effect.runPromise(
             Effect.gen(function* () {
               const ledger = yield* Ledger;
@@ -185,16 +197,20 @@ describe("ledger.call, next/ tracing keep-laws", () => {
 
               return c.bad;
             };
+
             const stub: LedgerCalls = { append: send, read: send, wait: send };
+
             const result = await Effect.runPromise(
               Effect.gen(function* () {
                 const ledger = yield* Ledger;
+
                 const operation: Effect.Effect<unknown, LedgerError> =
                   c.method === "read"
                     ? Stream.runCollect(ledger.read(stream, 0))
                     : c.method === "wait"
                       ? ledger.wait(stream, 0)
                       : ledger.append(stream, "id", line(parent.traceId, "body"));
+
                 return yield* Effect.exit(operation);
               }).pipe(
                 Effect.provide(LedgerRemote.layer(stub, { reader })),
@@ -202,6 +218,7 @@ describe("ledger.call, next/ tracing keep-laws", () => {
                 Effect.withTracer(tracer),
               ),
             );
+
             const reason = c.unreachable ? "unreachable" : "bad_row";
             expect(Exit.isFailure(result)).toBe(true);
 

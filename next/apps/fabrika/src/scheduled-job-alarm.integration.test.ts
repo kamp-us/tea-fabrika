@@ -10,16 +10,21 @@ import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
 const PROJECT = "scheduled-job-alarm";
+
 const NAME = "beat:1";
+
 // P40: a build table key is `pack/program`, the name the fixture pack declares.
 const PROGRAM = "schedules/beat";
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const WAIT = 25_000;
 
 const field = (value: Buffer | string) => {
   const body = Buffer.from(value);
   const size = Buffer.alloc(4);
   size.writeUInt32BE(body.length);
+
   return Buffer.concat([size, body]);
 };
 
@@ -41,9 +46,8 @@ const until = <A>(label: string, look: Effect.Effect<A, unknown>, done: (value: 
     return yield* Effect.die(new Error(`${label}: timed out; last observed ${JSON.stringify(last)}`));
   });
 
-const Beat = Schema.Struct({
-  _tag: Schema.Literal("beat"),
-  body: Schema.Struct({ due: Schema.Number, period: Schema.Int }),
+const Beat = Schema.TaggedStruct("beat", {
+  body: Schema.Struct({ due: Schema.Finite, period: Schema.Int }),
 });
 
 const Letter = Schema.Struct({
@@ -52,13 +56,13 @@ const Letter = Schema.Struct({
   body: Schema.Struct({ m: Schema.Unknown }),
 });
 
-const Timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number });
+const Timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite });
 
 const View = Schema.Struct({
-  rev: Schema.Number,
+  rev: Schema.Finite,
   view: Schema.Union([
-    Schema.TaggedStruct("idle", { next: Schema.Number, period: Schema.Int }),
-    Schema.TaggedStruct("running", { due: Schema.Number, period: Schema.Int }),
+    Schema.TaggedStruct("idle", { next: Schema.Finite, period: Schema.Int }),
+    Schema.TaggedStruct("running", { due: Schema.Finite, period: Schema.Int }),
   ]),
 });
 
@@ -75,8 +79,10 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
             alchemy: process.env.ALCHEMY_HOME,
             tracking: process.env.DO_NOT_TRACK,
           };
+
           process.env.FABRIKA_HOME = home;
           process.env.DO_NOT_TRACK = "1";
+
           return previous;
         }),
         (previous) =>
@@ -106,13 +112,14 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
       const module = path.join(home, "beat.ts");
       const fixture = path.resolve(import.meta.dirname, "../../../../fixtures/next/packs/schedules/beat.ts");
       // Build beside the app's dependencies; the fixture directory has no package links.
-      // The app builder selects `program`; the pack's public export is `beat`.
+      // The app builder selects `program`, so the copy exports the fixture's `beat` under that name.
       yield* fs.writeFileString(module, `${yield* fs.readFileString(fixture)}\nexport { beat as program };\n`);
       const built = yield* build({ out: path.join(home, "dist"), programs: { [PROGRAM]: module } });
       const code = built.programs[PROGRAM];
       expect(code).toBeDefined();
       yield* Effect.gen(function* () {
         const held = yield* Effect.acquireRelease(heldPort(), (port) => port.release);
+
         const options = RecordWireTest.startupFixture({
           home,
           name: PROJECT,
@@ -121,7 +128,9 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
           window: raw,
           port: held.port,
         });
+
         const instance = yield* localInstance(built, options);
+
         const from: From = {
           by: fingerprint,
           for: PERSON,
@@ -131,13 +140,16 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
           traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
           build: built.build,
         };
+
         const started = yield* Effect.promise(() =>
           Reflect.get(instance.project(PROJECT), "start")(
             { _tag: "first", id: "start-beat", name: NAME, code: { program: PROGRAM, hash: code!.hash } },
             from,
           ),
         );
+
         const pid = Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
+
         const beats = yield* until(
           "three beat facts",
           Effect.promise(() => Reflect.get(instance.project(PROJECT), "read")("beats", 0, "audit")).pipe(
@@ -145,6 +157,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
           ),
           (rows) => rows.length >= 3,
         );
+
         expect(beats.length).toBeGreaterThanOrEqual(3);
 
         for (let index = 1; index < beats.length; index++) {
@@ -158,6 +171,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
         const rows = Schema.decodeUnknownSync(Schema.Array(Letter))(
           yield* Effect.promise(() => Reflect.get(instance.project(PROJECT), "read")(`${NAME}/inbox`, 0, "audit")),
         );
+
         const timers = rows.filter((row) => Schema.is(Timer)(row.body.m));
         expect(timers.length).toBeGreaterThanOrEqual(3);
         expect(new Set(timers.map((row) => row.id)).size).toBe(timers.length);
@@ -181,14 +195,18 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
             const before = Schema.decodeUnknownSync(View)(
               yield* Effect.promise(() => Reflect.get(instance.process(pid), "open")("scheduled-job-observer")),
             );
+
             const alarm = yield* Effect.promise(() => Reflect.get(instance.process(pid), "savedAlarm")());
+
             const after = Schema.decodeUnknownSync(View)(
               yield* Effect.promise(() => Reflect.get(instance.process(pid), "open")("scheduled-job-observer")),
             );
+
             return { before, alarm, after };
           }),
           ({ before, after }) => before.view._tag === "idle" && after.view._tag === "idle" && before.rev === after.rev,
         );
+
         expect(stable.before.view._tag).toBe("idle");
 
         if (stable.before.view._tag === "idle") {

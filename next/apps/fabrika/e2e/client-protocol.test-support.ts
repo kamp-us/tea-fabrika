@@ -32,13 +32,15 @@ import { type Dev, grant, type Home, PERSON, reader, type Waiting } from "./p14.
 /** The registered name of the checklist's process: the headless tile shows it, and its streams are
  *  read by it. */
 const PROCESS = "checklist:1";
+
 /** format: the browser tile's accessible name, `tileName`'s words (Desk S2b, 0503): the program
  *  first, then `t<n>`. The tab draws workspace 1 of the founder's tezgah, whose t1 shows PROCESS. */
 export const NAME = "checklist, t1";
+
 const TILES = [{ id: "tile_1", name: PROCESS }];
 
 /** One row of the checklist as the backend shows it. */
-export type Row = { readonly name: string; readonly checked: boolean };
+type Row = { readonly name: string; readonly checked: boolean };
 
 /** What the suite asks of a client, whatever draws it. */
 export type Backend = {
@@ -75,10 +77,11 @@ export type Backend = {
  * the tag of each row it wrote, in order. A refused hello then reads as a refusal, not a timeout.
  */
 const Last = Schema.Struct({ link: Schema.String, handshake: Schema.String, rows: Schema.Array(Schema.String) });
+
 type Last = typeof Last.Type;
 
 /** The suite's own failure: a wait that ran out, named by what it waited for, and what it last saw. */
-export class SuiteError extends Schema.TaggedError<SuiteError>()("SuiteError", {
+export class SuiteError extends Schema.TaggedError<SuiteError, { readonly brand: unique symbol }>()("SuiteError", {
   waited: Schema.String,
   last: Schema.optionalKey(Last),
 }) {}
@@ -123,6 +126,7 @@ export const roundTrip = (h: Home, dev: Dev, backend: Backend) =>
     const r = yield* reader(h, dev);
     const inbox = yield* r.read(`${PROCESS}/inbox`);
     const sent = inbox.filter((e) => Reflect.get(Object(Reflect.get(Object(e.body), "m")), "name") === "milk");
+
     return { first, kept, sent: sent.length };
   });
 
@@ -130,14 +134,17 @@ export const roundTrip = (h: Home, dev: Dev, backend: Backend) =>
 export const headlessBackend = (dev: Dev, key: Identity) =>
   Effect.gen(function* () {
     const rows: Array<ClientRow> = [];
+
     const window = windowMachineFor({
       decode: () => Schema.decodeUnknownSync(checklistWindow.data),
       tile: () => undefined,
     });
+
     // The run's own scope, so E1 can close the client as a person closes a tab; the suite's scope
     // closes it too, for every other law.
     const own = yield* Scope.make();
     yield* Effect.addFinalizer(() => Scope.close(own, Exit.void));
+
     const booting = yield* Headless.start({ tiles: TILES, window, origin: dev.url, build: "p18-headless" }).pipe(
       Effect.provide(
         Layer.mergeAll(
@@ -152,9 +159,11 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
       ),
       Scope.provide(own),
     );
+
     const run = yield* booting.ready;
     let dials = 0;
     let last: number | null = null;
+
     const count = () => {
       const link = run.getState().link;
       const dial = "dial" in link && link._tag !== "retrying" ? link.dial : null;
@@ -166,15 +175,19 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
 
       return dials;
     };
+
     const state = Effect.sync(() => {
       count();
+
       return run.getState();
     });
+
     const showing = Effect.map(state, (s) => ({
       link: s.link._tag,
       handshake: s.handshake._tag,
       rows: rows.map((r) => r.record._tag),
     }));
+
     const backend: Backend = {
       name: "headless",
       waiting: until(
@@ -186,6 +199,7 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
         Effect.map((s) => {
           const link = s.link;
           const code = link._tag === "waiting_grant" ? link.code : "";
+
           return { line: "", url: dev.url, fingerprint: key.fingerprint, code };
         }),
         Effect.orDie,
@@ -201,7 +215,8 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
       shown: Effect.map(state, (s) => {
         const pid = s.tiles[0]?.last;
         const view = pid ? s.client.views[pid]?.view : undefined;
-        const data = Option.getOrUndefined(Schema.decodeUnknownOption(checklistWindow.data)(view));
+        const data = Option.getOrUndefined(Schema.decodeOption(checklistWindow.data)(view));
+
         return (data?.items ?? []).map((i) => ({ name: i.name, checked: i.state === "checked" }));
       }),
       dials: count,
@@ -211,6 +226,7 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
         const reach = s.tiles[0]?.reach;
         const tag: string = reach?._tag ?? "missing";
         const reason = Reflect.get(Object(Reflect.get(Object(reach), "reason")), "_tag");
+
         return s.link._tag !== "online"
           ? "Connecting"
           : tag === "ended"
@@ -231,21 +247,24 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
       ),
       pid: Effect.map(state, (s) => {
         const reach = s.tiles[0]?.reach;
+
         return reach !== undefined && "pid" in reach ? reach.pid : null;
       }),
       close: Scope.close(own, Exit.void),
     };
+
     return backend;
   });
 
 // --- P18 slice 2, law E1 ------------------------------------------------------------------------
 
 const PROJECT = "p18-follow";
+
 /** The test's own trace id for the control calls, as the chaos-revoke suite gives one. */
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 /** One entry of a stream as the suite reads it: its tag, its place in the whole log and its body. */
-type Fact = typeof Entry.Type;
+type Fact = Entry;
 
 const field = (body: unknown, key: string): unknown => Reflect.get(Object(body), key);
 
@@ -259,12 +278,14 @@ export const served = (h: Home) =>
     const built = yield* build({ out: join(h.dir, "build") });
     // Held in this scope before the instance, so it is given back after the instance closes.
     const { port } = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+
     // oxlint-disable-next-line fabrika/no-promises -- edge: Alchemy's module is loaded at the test's boundary, as chaos-revoke loads it
     const { localState } = yield* Effect.tryPromise({
       // oxlint-disable-next-line fabrika/no-promises -- edge: Alchemy loads only after localInstance's telemetry switch
       try: () => import("alchemy/State/LocalState"),
       catch: () => SuiteError.make({ waited: "Alchemy's local state" }),
     });
+
     const instance = yield* localInstance(
       built,
       RecordWireTest.startupFixture({
@@ -276,6 +297,7 @@ export const served = (h: Home) =>
         port,
       }),
     ).pipe(Effect.provide(localState()), Effect.provide(SecureRandom.layerWebCrypto));
+
     const control = instance.project(PROJECT);
     // The private binding already speaks the project's public ledger-call protocol.
     const { append, read, wait } = control;
@@ -286,13 +308,16 @@ export const served = (h: Home) =>
 
     const calls: LedgerCalls = { append, read, wait };
     const ledger = LedgerRemote.layer(calls, { reader: "p18-e1" });
+
     const facts = (stream: string) =>
       Ledger.use((l) => Stream.runCollect(l.read(stream, 0))).pipe(
         Effect.map((entries): ReadonlyArray<Fact> => entries),
         Effect.provide(ledger),
         Effect.orDie,
       );
+
     const blob = Buffer.from(h.publicKey.split(" ")[1] ?? "", "base64");
+
     const from = () => ({
       by: `SHA256:${createHash("sha256").update(blob).digest("base64").replace(/=+$/, "")}`,
       for: PERSON,
@@ -302,6 +327,7 @@ export const served = (h: Home) =>
       traceId: TRACE,
       build: built.build,
     });
+
     const dev: Dev = { url: instance.url, port, output: () => "", stop: Effect.void };
     const source = built.programs["fabrika/checklist"];
 
@@ -312,7 +338,7 @@ export const served = (h: Home) =>
     return { dev, control, facts, from, hash: source.hash };
   }).pipe(Effect.provide(NodeServices.layer));
 
-export type Served = Effect.Success<ReturnType<typeof served>>;
+type Served = Effect.Success<ReturnType<typeof served>>;
 
 /** A local binding's calls, as the dev command hands them out. */
 type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
@@ -370,6 +396,7 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
     );
     const ended = yield* backend.state;
     const endedBody = yield* backend.body;
+
     const started = yield* invoke(s.control, "start", [
       Start.cases.again.make({
         id: "p18-e1-again",
@@ -380,11 +407,13 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
       }),
       s.from(),
     ]);
+
     const second = String(field(started, "process"));
     yield* until(
       `${backend.name}: the tile is online on the successor`,
       Effect.gen(function* () {
         const pid = yield* backend.pid;
+
         return (yield* backend.state) === "Online" && (pid === null || pid === second);
       }),
       backend.last,
@@ -396,20 +425,27 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
       Effect.map(backend.shown, (rows) => rows.some((r) => r.name === "milk" && !r.checked)),
       backend.last,
     );
+
     const restarted = (yield* s.facts(`processes/${PROCESS}`)).find(
       (f) => f._tag === "restarted" && field(f.body, "process") === second,
     );
+
     const sent = (yield* s.facts(`${PROCESS}/inbox`)).filter((f) => field(field(f.body, "m"), "name") === "milk");
+
     const watches = (yield* s.facts("processes")).filter(
       (f) => f._tag === "monitored" && field(field(f.body, "to"), "client") === tab,
     );
+
     yield* backend.close;
+
     const ends = (stream: ReadonlyArray<Fact>) =>
       stream.filter((f) => f._tag === "demonitored" && field(field(f.body, "to"), "client") === tab);
+
     yield* until(
       `${backend.name}: its session's watch ended after the close`,
       Effect.map(s.facts("processes"), (all) => ends(all).length > 0),
     );
+
     return {
       tab,
       first,

@@ -19,6 +19,7 @@ export const Verdict = Schema.TaggedUnion({
   absent: {},
   kept: { reason: Schema.String, code: Schema.Literals([1, 2]) },
 });
+
 export type Verdict = typeof Verdict.Type;
 
 /** One rm: the name as its line shows it, what keepruns.sh said first ("" for nothing), the verdict. */
@@ -35,15 +36,23 @@ export const line = ({ shown, verdict }: Removal): string =>
 export const exitCode = (verdict: Verdict): number => (verdict._tag === "kept" ? verdict.code : 0);
 
 /** A check said no: the pair stays, for this reason. */
-class Keep extends Schema.TaggedError<Keep>()("Keep", { reason: Schema.String, code: Schema.Literals([1, 2]) }) {}
+class Keep extends Schema.TaggedError<Keep, { readonly brand: unique symbol }>()("Keep", {
+  reason: Schema.String,
+  code: Schema.Literals([1, 2]),
+}) {}
 
 /** Metadata in a shape nobody proved safe. Its words are the reason the line shows. */
-class Unsupported extends Schema.TaggedError<Unsupported>()("Unsupported", { reason: Schema.String }) {}
+class Unsupported extends Schema.TaggedError<Unsupported, { readonly brand: unique symbol }>()("Unsupported", {
+  reason: Schema.String,
+}) {}
 
 /** The disk could not be read or changed as asked. */
-class Unreadable extends Schema.TaggedError<Unreadable>()("Unreadable", { cause: Schema.optional(Schema.Defect()) }) {}
+class Unreadable extends Schema.TaggedError<Unreadable, { readonly brand: unique symbol }>()("Unreadable", {
+  cause: Schema.optional(Schema.Defect()),
+}) {}
 
 const keep = (reason: string) => Keep.make({ reason, code: 1 });
+
 const unsupported = (reason: string) => Unsupported.make({ reason });
 
 // Paths, as pathlib reads an absolute one.
@@ -54,7 +63,9 @@ const normal = (path: string) =>
     .join("/")}`;
 
 const joined = (base: string, rest: string) => normal(rest.startsWith("/") ? rest : `${base}/${rest}`);
+
 const above = (path: string) => (path === "/" ? "/" : normal(path.slice(0, path.lastIndexOf("/"))));
+
 const last = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
 const lineage = (path: string) => {
@@ -88,12 +99,14 @@ const utf8 = (bytes: Uint8Array) =>
 /** bytes.splitlines(): \n, \r and \r\n. */
 const byteLines = (text: string) => {
   const out = text.split(/\r\n|\n|\r/);
+
   return out.at(-1) === "" ? out.slice(0, -1) : out;
 };
 
 /** str.splitlines(), with every separator Python's has. */
 const textLines = (text: string) => {
   const out = text.split(SEPARATORS);
+
   return out.at(-1) === "" ? out.slice(0, -1) : out;
 };
 
@@ -102,6 +115,7 @@ const hex = (code: number, width: number) => code.toString(16).padStart(width, "
 /** A name as Python's repr() showed it: quoted, with control characters escaped. */
 const pythonRepr = (name: string) => {
   const quote = name.includes("'") && !name.includes('"') ? '"' : "'";
+
   const escapes: Record<string, string> = {
     "\\": "\\\\",
     "\t": "\\t",
@@ -109,6 +123,7 @@ const pythonRepr = (name: string) => {
     "\r": "\\r",
     [quote]: `\\${quote}`,
   };
+
   let out = "";
 
   for (const char of name) {
@@ -149,13 +164,17 @@ const ORDINARY = new Set([
 ]);
 
 const OID = "[0-9a-f]{40}";
+
 /** A byte a ref name may hold: no control byte, space or DEL. */
 const REF_CHARS = "[^\\x00-\\x20\\x7f]";
+
 /** A byte inside one line of metadata: no NUL and no line break. */
 const LINE_CHARS = "[^\\x00\\r\\n]";
+
 /** Every line break Python's str.splitlines() knows. */
 // oxlint-disable-next-line eslint/no-control-regex -- str.splitlines() breaks at these control characters too
 const SEPARATORS = /\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/;
+
 const ZERO = "0".repeat(40);
 
 /** Following links by hand ends after this many, as Python's recursion limit ended it. */
@@ -168,26 +187,32 @@ const disk = (fs: FileSystem.FileSystem) => {
       Effect.map((info) => Option.some(info.type)),
       Effect.orElseSucceed(Option.none),
     );
+
   const isDir = (path: string) => Effect.map(kind(path), (type) => Option.contains(type, "Directory"));
   const isFile = (path: string) => Effect.map(kind(path), (type) => Option.contains(type, "File"));
   const exists = (path: string) => Effect.map(kind(path), Option.isSome);
+
   const isLink = (path: string) =>
     fs.lstat(path).pipe(
       Effect.map((info) => info.type === "SymbolicLink"),
       Effect.orElseSucceed(() => false),
     );
+
   const lexists = (path: string) =>
     fs.lstat(path).pipe(
       Effect.as(true),
       Effect.orElseSucceed(() => false),
     );
+
   const identity = (path: string) =>
     fs.stat(path).pipe(
       Effect.map((info) => Option.some(`${info.dev}:${Option.getOrElse(info.ino, () => -1n)}`)),
       Effect.orElseSucceed(Option.none<string>),
     );
+
   const failed = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.mapError(effect, (cause) => Unreadable.make({ cause }));
+
   return {
     isDir,
     isFile,
@@ -220,6 +245,7 @@ const holdsAny = Effect.fnUntraced(function* (d: Disk, roots: ReadonlyArray<stri
   }
 
   const known = new Map<string, Option.Option<string>>();
+
   const identity = Effect.fnUntraced(function* (path: string) {
     const seen = known.get(path);
 
@@ -229,6 +255,7 @@ const holdsAny = Effect.fnUntraced(function* (d: Disk, roots: ReadonlyArray<stri
 
     const got = yield* d.identity(path);
     known.set(path, got);
+
     return got;
   });
 
@@ -284,8 +311,10 @@ const protectMain = Effect.fnUntraced(function* (d: Disk, main: string, roots: R
       }
 
       yield* d.stat(current);
+
       return last(path) === ".." ? above(parent) : current;
     });
+
   const resolve = (path: string) => follow(path, 0);
 
   const readPath = Effect.fnUntraced(function* (path: string) {
@@ -440,6 +469,7 @@ const reflogTips = Effect.fnUntraced(function* (d: Disk, logs: string, tips: Set
         }
       }
     });
+
   yield* visit(logs);
 });
 
@@ -489,6 +519,7 @@ const copyRefs = Effect.fnUntraced(function* (
         yield* visit([...relative, name]);
       }
     });
+
   yield* visit(["refs"]);
 });
 
@@ -519,6 +550,7 @@ const checkMetadata = Effect.fnUntraced(function* (d: Disk, work: string, data: 
   }
 
   const names = yield* d.list(data);
+
   const shared = yield* Effect.forEach(
     ["commondir", "shallow", "info/grafts"],
     (path) => d.lexists(joined(data, path)),
@@ -629,8 +661,10 @@ const inspect = Effect.fn("Remove.inspect")(function* (
   yield* d.failed(fs.writeFileString(joined(into, "objects/info/alternates"), `${objects}\n`));
 
   const at: Inspection = { gitDir: into, work };
+
   const asked = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.mapError(effect, () => unsupported("Git inspection failed"));
+
   const index = yield* asked(git.indexEntries(at));
 
   if (index.some((entry) => entry !== "" && !entry.startsWith("H "))) {
@@ -767,5 +801,6 @@ export const remove = Effect.fn("Remove.remove")(function* (name: string, folder
       Unreadable: () => Effect.succeed(Verdict.cases.kept.make({ reason: "inspection or removal failed", code: 1 })),
     }),
   );
+
   return { shown: name, runs: said, verdict };
 });

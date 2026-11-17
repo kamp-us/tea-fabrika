@@ -32,6 +32,7 @@ export const layer = <E, R>(
   Layer.unwrap(
     Effect.gen(function* () {
       const path = yield* Path.Path;
+
       const recording = yield* devRecording(path.join(spec.home, "records", "desktop"), "desktop", forward).pipe(
         Effect.mapError((cause) =>
           BrainServiceError.make({ reason: Operation.make({ action: "install", cause: Redacted.make(cause) }) }),
@@ -42,6 +43,7 @@ export const layer = <E, R>(
           ),
         ),
       );
+
       return Managed.layer(spec, settings).pipe(
         Layer.provide(Layer.mergeAll(Control.layer(spec, settings), probe, Layer.succeedContext(recording))),
       );

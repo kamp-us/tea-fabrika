@@ -48,6 +48,7 @@ export const Beat = Schema.Struct({
   /** When the step's agent last wrote to its event log; `null` before it wrote anything. */
   agentAt: Schema.NullOr(Schema.String),
 });
+
 export type Beat = typeof Beat.Type;
 
 /** How often the chain writes the beat while nothing changes. */
@@ -110,5 +111,6 @@ export const says = (beat: Beat, now: Date, quiet = QUIET): { stuck: boolean; te
 
   const last = beat.agentAt === null ? null : spoken(ago(beat.agentAt));
   const agent = last === null ? "no agent output yet" : `last agent output ${last} ago`;
+
   return { stuck: false, text: `${head}, ${agent}` };
 };

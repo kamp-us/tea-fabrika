@@ -95,6 +95,7 @@ export const lock = (
 
 /** A rule's setting as `oxlint --print-config` prints it: a level, or a level and the list of its options. */
 const Setting = Schema.Union([Schema.String, Schema.Tuple([Schema.String, Schema.Array(Schema.Unknown)])]);
+
 type Setting = typeof Setting.Type;
 
 /** The part of `oxlint --print-config`, oxlint's own reading of the config, that the lock reads. */
@@ -113,7 +114,7 @@ const Printed = Schema.fromJsonString(
 /** What the lock's oxlint run reports, as `--format=json` prints it. */
 const Report = Schema.fromJsonString(
   Schema.Struct({
-    number_of_files: Schema.Number,
+    number_of_files: Schema.Finite,
     diagnostics: Schema.Array(
       Schema.Struct({ code: Schema.optionalKey(Schema.String), filename: Schema.optionalKey(Schema.String) }),
     ),
@@ -143,11 +144,13 @@ const count = (
     config,
     JSON.stringify({ categories: { correctness: "off" }, plugins: [], jsPlugins: plugins, rules: settings }),
   );
+
   const ran = spawnSync(
     join(root, "node_modules", ".bin", "oxlint"),
     [`--config=${config}`, "--disable-nested-config", "--no-ignore", "--format=json", ...ROOTS],
     { cwd: root, encoding: "utf8", maxBuffer: 2 ** 30 },
   );
+
   rmSync(home, { recursive: true, force: true });
   const report = Schema.decodeUnknownExit(Report)(ran.stdout);
 
@@ -191,6 +194,7 @@ export const strays = (root: string, printed: string): ReadonlyArray<string> => 
   return config.value.jsPlugins.flatMap((plugin) => {
     const pinned = Predicate.isString(plugin) ? undefined : PLUGINS.find(({ name }) => name === plugin.name);
     const from = Predicate.isString(plugin) ? "" : relative(root, resolve(root, plugin.specifier));
+
     return pinned === undefined || from === pinned.specifier
       ? []
       : [
@@ -221,12 +225,15 @@ export const audit = (root: string, printed: string): ReadonlyArray<string> => {
   }
 
   const pinned = [...strays(root, printed), ...verify(root)];
+
   /** The blocks that turn a rule on: each override that names it at error. */
   const blocks = (rule: string) =>
     overrides.flatMap((block) => {
       const setting = block.rules[rule];
+
       return setting !== undefined && levelOf(setting) === "deny" ? [{ files: block.files, setting }] : [];
     });
+
   // The lock's run uses each rule's options from its own block, so it counts what the config holds.
   const settings = Object.fromEntries(TAKEN.map((rule) => [rule, written(blocks(rule)[0]?.setting ?? "deny")]));
   const hits = count(root, settings, ignorePatterns);
@@ -236,12 +243,14 @@ export const audit = (root: string, printed: string): ReadonlyArray<string> => {
   }
 
   const scope = folders(root);
+
   const unlocked = TAKEN.flatMap((rule) => {
     const { add, refused } = lock(
       scope,
       blocks(rule).flatMap((block) => block.files),
       hits.get(rule) ?? new Map(),
     );
+
     return [
       ...add.map(
         (folder) => `.oxlintrc.json: ${rule} has no hit left in ${folder}: add the folder to its block (0563)`,
@@ -249,5 +258,6 @@ export const audit = (root: string, printed: string): ReadonlyArray<string> => {
       ...refused.map((glob) => `.oxlintrc.json: ${rule}'s block names ${glob}, which is not a folder of its scope`),
     ];
   });
+
   return [...pinned, ...unlocked];
 };

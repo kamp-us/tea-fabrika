@@ -16,6 +16,7 @@ export const Model = Schema.Struct({
   /** Each Cmd answer, in order: the Cmd's type, and its `ok` value or its error's reason. */
   answers: Schema.Array(Schema.Json),
 });
+
 /** @internal */
 export type Model = typeof Model.Type;
 
@@ -118,6 +119,7 @@ export const childStarter = (config: { readonly name: string; readonly declare: 
         : {}),
     } as never,
   });
+
   return Program.make({
     name: config.name,
     machine,

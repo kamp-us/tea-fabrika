@@ -13,6 +13,7 @@ import { type Expression, parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
 
 const ROOT = join(import.meta.dirname, "..");
+
 const KEY = "allowedDuplicatedPackages";
 
 /** A JSON value from the parsed config, comments dropped. */
@@ -55,12 +56,14 @@ const checker = (text: string): Record<string, unknown> => {
   }
 
   const plugins = list(record(record(value(statement.expression)).compilerOptions).plugins);
+
   return record(plugins.map(record).find((plugin) => plugin.name === "@effect/language-service"));
 };
 
 it("format: E3, `@demlik/tea` may appear twice only in one checker override scoped to `.agents/**`, and nowhere else", () => {
   // format: the checker reads this setting by its exact key and place in tsconfig.base.json.
   const effect = checker(readFileSync(join(ROOT, "tsconfig.base.json"), "utf8"));
+
   const holders = list(effect.overrides)
     .map(record)
     .filter((override) => KEY in record(override.options))
@@ -77,6 +80,7 @@ it("format: E3, `@demlik/tea` may appear twice only in one checker override scop
     cwd: ROOT,
     encoding: "utf8",
   });
+
   const others = tracked.stdout.split("\0").filter((file) => file !== "" && file !== "tsconfig.base.json");
   expect(tracked.status).toBe(0);
   expect(others.length).toBeGreaterThan(0);

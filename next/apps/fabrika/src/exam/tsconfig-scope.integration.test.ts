@@ -27,10 +27,14 @@ const Manifest = Schema.Struct({ scripts: Schema.optional(Schema.Record(Schema.S
 
 const readManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(Manifest));
 
-class GitFailed extends Schema.TaggedError<GitFailed>()("GitFailed", { code: Schema.Number }) {}
+class GitFailed extends Schema.TaggedError<GitFailed, { readonly brand: unique symbol }>()("GitFailed", {
+  code: Schema.Finite,
+}) {}
 
 /** A property fast-check found false, with its counterexample in the cause. */
-class Falsified extends Schema.TaggedError<Falsified>()("Falsified", { cause: Schema.Defect() }) {}
+class Falsified extends Schema.TaggedError<Falsified, { readonly brand: unique symbol }>()("Falsified", {
+  cause: Schema.Defect(),
+}) {}
 
 /** Runs one fast-check `assert`; a counterexample fails the test as `Falsified`. */
 const falsified = (check: () => Promise<void>) =>
@@ -68,6 +72,7 @@ const outside = Effect.fnUntraced(function* (
     const config = configs[i];
     const project = config === undefined ? undefined : taken.getProject(config);
     const held = new Set(project?.program.getSourceFileNames().map((f) => path.relative(root, f)) ?? []);
+
     return tracked.filter((f) => f.startsWith(`${p}/`) && !held.has(f)).map((file) => ({ package: p, file }));
   });
 }, Effect.scoped);
@@ -76,6 +81,7 @@ const outside = Effect.fnUntraced(function* (
 const repoRoot = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+
   return yield* fs.realPath(path.resolve(import.meta.dirname, "../../../../.."));
 });
 
@@ -86,6 +92,7 @@ const trackedTypeScript = Effect.fnUntraced(function* (root: string) {
     ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "next/"],
     { cwd: root },
   );
+
   const [out, code] = yield* Effect.all([run.stdout.pipe(Stream.decodeText(), Stream.mkString), run.exitCode], {
     concurrency: 2,
   });
@@ -142,6 +149,7 @@ it.effect(
         packages.map((p) => p.dir),
         tracked,
       );
+
       expect(gaps.map((g) => `${g.package}: ${g.file}`)).toEqual([]);
     }).pipe(Effect.provide(NodeServices.layer)),
   60_000,
@@ -204,9 +212,11 @@ const plantTypeError = Effect.fnUntraced(function* (planted: Plant) {
 
   const { program } = project;
   const held = program.getSourceFileNames().includes(file);
+
   const diagnostics = [...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()]
     .filter((d) => d.fileName === file)
     .map((d) => ({ code: d.code, line: text.slice(0, d.pos).split("\n").length }));
+
   return { held, diagnostics };
 }, Effect.scoped);
 

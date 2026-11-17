@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { measured } from "../../vitest.shards.ts";
 
 export const LIMIT = 60;
+
 export type Row = { readonly path: string; readonly seconds: number };
 
 export const reportRows = (report: unknown, root: string): Row[] => {
@@ -32,6 +33,7 @@ export const reportRows = (report: unknown, root: string): Row[] => {
     }
 
     const seconds = (file.endTime - file.startTime) / 1000;
+
     return Number.isFinite(seconds) && seconds >= 0 ? [{ path: relative(root, file.name), seconds }] : [];
   });
 };

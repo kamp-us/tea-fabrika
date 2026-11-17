@@ -29,13 +29,16 @@ import { Console, Effect, FileSystem, Path, Result, Schema } from "effect";
 import { Argument, Command } from "effect/cli";
 
 export const Log = Schema.Literals(["notes", "runs", "findings"]);
+
 export type Log = typeof Log.Type;
 
 /** A row's id and file name: `YYYY-MM-DD-<slug>`, the slug lowercase words joined by `-`. */
 const Dated = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/));
+
 const Day = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/));
 
 const Row = Schema.Record(Schema.String, Schema.Unknown);
+
 type Row = typeof Row.Type;
 
 export class Refused extends Schema.TaggedError<Refused>()("Refused", { reason: Schema.String }) {}
@@ -46,8 +49,10 @@ export type Saved = { readonly name: string; readonly row: Row };
 /** The file a row is saved in, by its log (the rules above). A row with no good name is refused. */
 export const saved = (log: Log, row: Row): Result.Result<Saved, Refused> => {
   const refuse = (reason: string) => Result.fail(new Refused({ reason }));
+
   const named = (key: string) => {
     const id = row[key];
+
     return Schema.is(Dated)(id)
       ? Result.succeed({ name: id, row })
       : refuse(`a ${log} row's \`${key}\` must be <YYYY-MM-DD>-<slug>, got ${JSON.stringify(id)}`);
@@ -67,6 +72,7 @@ export const saved = (log: Log, row: Row): Result.Result<Saved, Refused> => {
     }
 
     const name = `${String(row["date"])}-rated-${String(row["finding"])}`;
+
     return Schema.is(Day)(row["date"]) && Schema.is(Dated)(name)
       ? Result.succeed({ name, row })
       : refuse(`a rating needs its date and the finding's id, got ${JSON.stringify(name)}`);
@@ -79,6 +85,7 @@ export const saved = (log: Log, row: Row): Result.Result<Saved, Refused> => {
   }
 
   const name = `${String(row["date"])}-${String(run)}`;
+
   return typeof run === "string" && Schema.is(Day)(row["date"]) && Schema.is(Dated)(name)
     ? Result.succeed({ name, row: { ...row, run: name } })
     : refuse(`a run row needs its date and a \`run\` of lowercase words, got ${JSON.stringify(run)}`);

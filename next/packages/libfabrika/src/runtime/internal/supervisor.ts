@@ -23,8 +23,11 @@ export const defaultPolicy: Policy = {
 };
 
 const Attempt = Schema.Struct({ ...AttemptFields, phase: Schema.Literals(["fresh", "saved"]), at: Millis });
+
 const FreshAttempt = Schema.Struct({ ...Attempt.fields, phase: Schema.Literal("fresh") });
+
 const RestartRequest = Schema.Struct({ id: Text, build: Text });
+
 const DownRecord = Schema.Struct({ process: ProcessId, reason: Text, crashes: Count, until: Millis });
 
 /** Why a process is being replaced: a captured crash, or a person's restart request. */
@@ -32,6 +35,7 @@ const Origin = Schema.TaggedUnion({
   crash: { failure: Failure, reason: ExitReason },
   manual: { request: RestartRequest },
 });
+
 type Origin = typeof Origin.Type;
 
 const StartTiming = Schema.TaggedUnion({ immediate: {}, scheduled: { until: Millis } });
@@ -147,6 +151,7 @@ export const Supervision = Schema.Struct({
     );
   }),
 );
+
 /** @internal */
 export type Supervision = typeof Supervision.Type;
 
@@ -249,10 +254,12 @@ const failed = (
   from: From,
 ): ReturnType<typeof unchanged> => {
   const { phase, at, ...fields } = attempt;
+
   const failure = (phase === "fresh" ? Failure.cases.fresh : Failure.cases.saved).make({
     ...fields,
     error,
   });
+
   const seen = { seq: attempt.seq, process: fields.process, letter: fields.letter, phase, error, at };
 
   if (failure._tag !== "fresh") {
@@ -268,6 +275,7 @@ const failed = (
   // Observation and the fresh delivery's charge change together, in one saved step.
   const errors = [...old.errors, error];
   const terminal = errors.length >= (s.maxDeliveries ?? s.policy.maxDeliveries);
+
   const receipt = {
     ...old,
     errors,
@@ -275,9 +283,11 @@ const failed = (
     process: failure.process,
     result: terminal ? DEAD : null,
   };
+
   const journal = terminal
     ? Journal.cases.writing_dead.make({ failure, reason, from })
     : exiting(failure, reason, from);
+
   return [
     {
       ...observe(s, failure, seen, journal),
@@ -323,6 +333,7 @@ export const supervisor = Machine.make({
 
       const { change } = s.journal;
       const { maxDeliveries: _limit, ...kept } = s;
+
       return [
         {
           ...kept,
@@ -357,6 +368,7 @@ export const supervisor = Machine.make({
       }
 
       const { maxDeliveries: _old, ...rest } = s;
+
       return [m.maxDeliveries === null ? rest : { ...rest, maxDeliveries: m.maxDeliveries }, []];
     },
     begin: (s, m) => {
@@ -366,10 +378,12 @@ export const supervisor = Machine.make({
 
       const { type: _type, ...fields } = m;
       const attempt = { ...fields, seq: s.seq + 1 };
+
       const journal =
         m.phase === "fresh"
           ? Journal.cases.checking.make({ attempt: FreshAttempt.make({ ...attempt, phase: "fresh" }) })
           : Journal.cases.stepping.make({ attempt });
+
       return [{ ...s, seq: attempt.seq, journal }, []];
     },
     admitted: (s, m) => {
@@ -385,10 +399,12 @@ export const supervisor = Machine.make({
       }
 
       const receipts = s.receipts.some((r) => r.letter === m.receipt.letter) ? s.receipts : [...s.receipts, m.receipt];
+
       return [{ ...s, receipts, journal: Journal.cases.stepping.make({ attempt: j.attempt }) }, []];
     },
     refused: (s, m) => {
       const j = s.journal;
+
       return j._tag === "checking" &&
         j.attempt.seq === m.seq &&
         m.reply.id === j.attempt.letter &&
@@ -402,6 +418,7 @@ export const supervisor = Machine.make({
         : unchanged(s),
     abandoned: (s, m) => {
       const j = s.journal;
+
       return (j._tag === "checking" || j._tag === "stepping") && j.attempt.seq === m.seq
         ? [{ ...s, journal: Journal.cases.clearing_attempt.make({ attempt: j.attempt }) }, []]
         : unchanged(s);
@@ -423,6 +440,7 @@ export const supervisor = Machine.make({
       }
 
       const receipts = s.receipts.some((r) => r.letter === m.receipt.letter) ? s.receipts : [...s.receipts, m.receipt];
+
       return failed({ ...s, receipts }, j.attempt, m.error, m.reason, m.from);
     },
     finished: (s, m) =>
@@ -438,6 +456,7 @@ export const supervisor = Machine.make({
     },
     interrupted: (s, m) => {
       const j = s.journal;
+
       // The saved attempt's identity wins; an activity marker alone gets the next sequence.
       const attempt =
         (j._tag === "stepping" || j._tag === "checking") && j.attempt.process === m.process
@@ -453,6 +472,7 @@ export const supervisor = Machine.make({
       const { process, letter, build, seq } = attempt;
       const failure = Failure.cases.interrupted.make({ process, letter, build, seq });
       const seen = { seq, process, letter, phase: "interrupted" as const, at: attempt.at };
+
       return [observe(s, failure, seen, exiting(failure, m.reason, m.from)), []];
     },
     dead_written: (s, m) =>
@@ -473,6 +493,7 @@ export const supervisor = Machine.make({
         const { id, build } = origin.request;
         const request = again(s, id, m.process, "restart", { program: m.program, hash: build });
         const timing = StartTiming.cases.immediate.make({});
+
         return [
           { ...s, restarts: m.restarts, journal: Journal.cases.waiting_start.make({ request, origin, timing, from }) },
           [],
@@ -490,7 +511,9 @@ export const supervisor = Machine.make({
           program: m.program,
           hash: s.build,
         });
+
         const timing = StartTiming.cases.scheduled.make({ until });
+
         return [
           { ...s, restarts: m.restarts, journal: Journal.cases.waiting_start.make({ request, origin, timing, from }) },
           [],
@@ -502,6 +525,7 @@ export const supervisor = Machine.make({
       const edge = times[times.length - s.policy.intensity];
       const held = edge === undefined ? until : Math.max(until, edge + s.policy.periodMs + 1);
       const recovery = { process: m.process, reason, crashes, until: held };
+
       return [{ ...s, restarts: m.restarts, journal: Journal.cases.writing_down.make({ recovery, origin, from }) }, []];
     },
     down_written: (s, m) =>
@@ -524,6 +548,7 @@ export const supervisor = Machine.make({
       const { process, reason, until } = j.recovery;
       const request = again(s, `recover:${process}:${s.seq}`, process, reason, { program: m.program, hash: s.build });
       const timing = StartTiming.cases.scheduled.make({ until });
+
       return [
         { ...s, journal: Journal.cases.waiting_start.make({ request, origin: j.origin, timing, from: m.from }) },
         [],
@@ -557,6 +582,7 @@ export const supervisor = Machine.make({
 
       // A person's request is completed with the restart history that records its successor.
       const manual = j.origin._tag === "manual" ? j.origin.request : null;
+
       return [
         {
           ...s,
@@ -577,6 +603,7 @@ export const supervisor = Machine.make({
       }
 
       const journal = Journal.cases.checkpointing.make({ ...waiting, process: m.process });
+
       return [{ ...s, journal, build: m.build, restarts: m.restarts }, []];
     },
     restart_requested: (s, m) => {
@@ -588,6 +615,7 @@ export const supervisor = Machine.make({
       }
 
       const origin = Origin.cases.manual.make({ request: { id: m.id, build: m.build } });
+
       const journal = m.live
         ? Journal.cases.writing_exit.make({ process: m.process, origin, from: m.from })
         : Journal.cases.waiting_start.make({
@@ -596,6 +624,7 @@ export const supervisor = Machine.make({
             timing: StartTiming.cases.immediate.make({}),
             from: m.from,
           });
+
       return [{ ...s, journal }, []];
     },
     healthy: (s, m) =>

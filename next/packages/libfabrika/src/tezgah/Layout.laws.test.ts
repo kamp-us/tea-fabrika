@@ -26,6 +26,7 @@ import * as Layout from "./Layout.ts";
 import { TileId, Workspace } from "./Workspace.ts";
 
 const SEED = 119120;
+
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 
 /** A canonical UUIDv7 TypeID for `n`, made here so the law does not lean on the generator it checks. */
@@ -53,8 +54,10 @@ type Space = {
 
 /** The workspace as the wire shows it: what every client reads. */
 const encode = (w: unknown): Space => Schema.encodeUnknownSync(Workspace)(w) as Space;
+
 const decode = (w: Space) => Schema.decodeUnknownSync(Workspace)(w);
-const tileId = (id: string) => Schema.decodeUnknownSync(TileId)(id);
+
+const tileId = (id: string) => Schema.decodeSync(TileId)(id);
 
 /** Reading order, written here: a container's parts in order, depth first. */
 const order = (node: Node): ReadonlyArray<string> =>
@@ -63,6 +66,7 @@ const order = (node: Node): ReadonlyArray<string> =>
 /** Every way a workspace is untidy, by the plan's words; empty when tidy. */
 const untidy = (w: Space): ReadonlyArray<string> => {
   const out: Array<string> = [];
+
   const walk = (node: Node, parent: string | null): void => {
     if (typeof node === "string") {
       return;
@@ -94,6 +98,7 @@ const untidy = (w: Space): ReadonlyArray<string> => {
       walk(p.inner, node.dir);
     }
   };
+
   walk(w.layout, null);
   const tiles = order(w.layout);
   const live = new Set(tiles);
@@ -120,6 +125,7 @@ const untidy = (w: Space): ReadonlyArray<string> => {
 };
 
 type Model = { live: Array<string>; next: number };
+
 type Real = { w: ReturnType<typeof decode> };
 
 const after = (m: Model, r: Real, label: string) => {
@@ -165,6 +171,7 @@ const commands = fc.commands(
 /** One workspace of one tile, as tezgah makes workspace 1. */
 const first = () => {
   const t1 = typeId("tile", 1);
+
   return decode({ id: typeId("workspace", 1), n: 1, layout: t1, focus: t1, recent: [t1] });
 };
 
@@ -201,6 +208,7 @@ const broken = (w: Space, kind: (typeof BREAKS)[number], pick: number): Space | 
     case "twice": {
       const tiles = order(root);
       const dir = typeof root === "string" ? "row" : root.dir === "row" ? "column" : "row";
+
       return {
         ...w,
         layout: {
@@ -212,6 +220,7 @@ const broken = (w: Space, kind: (typeof BREAKS)[number], pick: number): Space | 
         },
       };
     }
+
     case "focus":
       return { ...w, focus: ghost };
     case "recent":
@@ -267,6 +276,7 @@ const extent = (node: Node, at: ReadonlyMap<string, Box>): Box => {
   const boxes = order(node).map((t) => at.get(t)!);
   const x = Math.min(...boxes.map((b) => b.x));
   const y = Math.min(...boxes.map((b) => b.y));
+
   return {
     x,
     y,
@@ -329,7 +339,9 @@ const gapBreaks = (layout: Node, at: ReadonlyMap<string, Box>, size: Box, gap: n
       walk(p.inner);
     }
   };
+
   walk(layout);
+
   return out;
 };
 
@@ -341,6 +353,7 @@ const shortest = (node: Node, width: number, height: number, gap: number): numbe
   }
 
   const left = (node.dir === "row" ? width : height) - (node.parts.length - 1) * gap;
+
   return Math.min(
     ...node.parts.map((p) =>
       node.dir === "row"
@@ -390,12 +403,14 @@ describe("Desk S2b: rects measure drawn tiles, with the frame's gap between part
 // reaches, nested and uneven. The law's oracle reads each tile's box in the unit square from the
 // percents, written here and never from the product's `rects`.
 type Side = "left" | "right" | "up" | "down";
+
 const SIDES: ReadonlyArray<Side> = ["left", "right", "up", "down"];
 
 /** Each tile's box in the unit square, from the percents alone. */
 const unit = (node: Node, box: Box = { x: 0, y: 0, width: 1, height: 1 }, out = new Map<string, Box>()) => {
   if (typeof node === "string") {
     out.set(node, box);
+
     return out;
   }
 
@@ -428,10 +443,12 @@ const overlap = (from: Box, other: Box, side: Side): number => {
         : side === "up"
           ? Math.abs(other.y + other.height - from.y) < EPS
           : Math.abs(from.y + from.height - other.y) < EPS;
+
   const across =
     side === "left" || side === "right"
       ? Math.min(from.y + from.height, other.y + other.height) - Math.max(from.y, other.y)
       : Math.min(from.x + from.width, other.x + other.width) - Math.max(from.x, other.x);
+
   return touches && across > EPS ? across : 0;
 };
 
@@ -454,6 +471,7 @@ describe("Desk S3 L26: neighbor picks the tile with the most overlap on that sid
               .filter((t) => t !== from)
               .map((t) => ({ t, share: overlap(box, boxes.get(t)!, side) }))
               .filter((x) => x.share > 0);
+
             const most = Math.max(0, ...shares.map((x) => x.share));
             const got = Layout.neighbor(real.w.layout, tileId(from), side);
 

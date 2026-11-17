@@ -100,6 +100,7 @@ export const triggered = (changed: readonly string[], isTrigger: (path: string) 
 /** The changed set split into legs `"1"` to `"N"`, the fewest that fit, as `Sizing` says. */
 export const legsOf = (files: readonly string[], sizing: Sizing): Record<string, string[]> => {
   const count = fewest(files, sizing.most, sizing.limit, sizing.table);
+
   return Object.fromEntries(split(files, count, sizing.table).map((leg, i) => [`${i + 1}`, leg]));
 };
 
@@ -117,6 +118,7 @@ export const choose = (seen: Seen, triggers: readonly string[], files: readonly 
   }
 
   const legs = legsOf(files, sizing);
+
   return {
     _tag: "changed",
     base: seen.base,
@@ -138,6 +140,7 @@ export const choose = (seen: Seen, triggers: readonly string[], files: readonly 
  */
 export const outputs = (proof: Proof): string[] => {
   const legs = proof._tag === "changed" ? proof.legs : {};
+
   return [
     `scope=${proof._tag}`,
     `legs=${JSON.stringify(Object.keys(legs))}`,
@@ -200,6 +203,7 @@ export const whole = (name: string, value: string | undefined): number => {
 // Under Vitest `import.meta.main` is false, so a test that imports this file never lists or writes.
 if (import.meta.main) {
   const root = fileURLToPath(new URL("../../", import.meta.url));
+
   const git = (args: readonly string[]) => {
     const done = spawnSync("git", args, { cwd: root, encoding: "utf8" });
 
@@ -209,6 +213,7 @@ if (import.meta.main) {
 
     return done.stdout;
   };
+
   const base = git(["rev-parse", "--verify", "origin/main^{commit}"]).trim();
   const head = git(["rev-parse", "--verify", "HEAD^{commit}"]).trim();
 
@@ -219,8 +224,10 @@ if (import.meta.main) {
   const changed = git(["diff", "--name-only", "-z", `${base}...${head}`])
     .split("\0")
     .filter((path) => path !== "");
+
   const triggers = triggered(changed, isTrigger);
   const projects = PROJECTS.flatMap((project) => ["--project", project]);
+
   const files =
     triggers.length > 0
       ? []
@@ -230,17 +237,20 @@ if (import.meta.main) {
             ? list(root, ["--project", "next", "--project", "next-integration", ...readers])
             : [],
         );
+
   const sizing: Sizing = {
     most: whole("MOST", process.env["MOST"]),
     limit: room(whole("LIMIT", process.env["LIMIT"]), E2E_SETUP),
     table: rowsAt("full"),
   };
+
   const proof = choose(
     { base, head, at: new Date().toISOString(), vitest: vitestPackage.version, changed },
     triggers,
     files,
     sizing,
   );
+
   const lines = outputs(proof);
   const said = summary(proof);
   console.log(said);

@@ -69,22 +69,32 @@ export type Store = {
 };
 
 const SEED = 119120;
+
 const BUILD = "p39-build-a";
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const SETTINGS = "5e771165a5e771165";
+
 /** A call that does not answer in this long is held behind something it must never wait on. */
 const LIMIT = "5 seconds";
+
 const CHECK = "check:1";
+
 /** A process this walk never runs: the one whose task is found under another Cmd's id. */
 const FOREIGN = PIDS.at(-1) ?? "";
+
 const OTHER = "other:1";
 
 // ---------------------------------------------------------------------------------------------
 // The program: it asks the hands on `ask`, counts `poke`, and keeps every answer it folds.
 
 const Answer = Schema.Struct({ ok: Schema.optionalKey(TaskResult), err: Schema.optionalKey(Schema.String) });
+
 const Model = Schema.Struct({ asked: Schema.Int, pokes: Schema.Int, answers: Schema.Array(Answer) });
+
 type Model = typeof Model.Type;
 
 const Msg = Schema.Union([
@@ -120,7 +130,9 @@ const checkProgram = Program.make({
 const PROGRAMS: Record<string, unknown> = { [checkProgram.name]: checkProgram };
 
 const person = Writer.cases.person.make({ key: "SHA256:person", for: PERSON });
+
 const owner = Writer.cases.agent.make({ key: "SHA256:owner", for: PERSON });
+
 const decodeModel = Schema.decodeUnknownOption(Model);
 
 const HandsLetter = Schema.Struct({
@@ -131,7 +143,9 @@ const HandsLetter = Schema.Struct({
 });
 
 const decodeLetter = Schema.decodeUnknownOption(HandsLetter);
+
 const HandsCmd = Schema.Struct({ id: Schema.String, cmd: Schema.Struct({ type: Schema.Literal("hands") }) });
+
 const isHandsCmd = Schema.is(HandsCmd);
 
 const brainFrom = (): From => ({
@@ -181,7 +195,7 @@ type Dispatched = {
   /** The request as the task first saved it, once it was. */
   first?: string;
   /** The result the hands finished it with. */
-  result?: typeof TaskResult.Type;
+  result?: TaskResult;
   /** Its process ended before the answer folded: a later life may never take it. */
   orphan: boolean;
   /** Its task was already collected when its process ended. */
@@ -211,17 +225,20 @@ type World = {
 };
 
 const strings = (params: ReadonlyArray<SqlValue>) => params.filter((p): p is string => typeof p === "string");
+
 const WRITE = /^\s*(INSERT|UPDATE|REPLACE|DELETE)\b/i;
 
 /** The ledger's Sql with the letter cut: the statement after a saved hands answer letter fails. */
 const letterCut = (sql: Sql, world: World): Sql => {
   let inTurn = false;
   let placed = false;
+
   const fire = () => {
     world.fault.letterArmed = false;
     world.done.add("cut_letter:fired");
     throw new Error("SQLITE_IOERR planted after the answer letter");
   };
+
   return {
     exec: (query, ...params) => {
       if (world.fault.letterArmed) {
@@ -294,6 +311,7 @@ const host = Effect.fnUntraced(function* (
   scope: Scope.Scope,
 ) {
   const data = ledger(letterCut(store.sql("ledger"), world));
+
   const manager = ProcessManager.layer(
     {
       by: "SHA256:brain",
@@ -302,7 +320,9 @@ const host = Effect.fnUntraced(function* (
     },
     next,
   );
+
   const tasks = yield* Layer.buildWithScope(store.tasks(store.sql("tasks")), scope);
+
   const live = Context.get(
     yield* Layer.buildWithScope(
       HandsTasksLive.layer({ target: world.target, settings: SETTINGS }).pipe(
@@ -312,6 +332,7 @@ const host = Effect.fnUntraced(function* (
     ),
     HandsTasks,
   );
+
   // The test layer around the Project's hands: it fails before or after it delegates.
   const cut = Layer.succeed(HandsTasks, {
     ask: (ask, from) =>
@@ -327,6 +348,7 @@ const host = Effect.fnUntraced(function* (
         if (world.fault.before) {
           world.fault.before = false;
           world.done.add("lose_before:fired");
+
           return yield* new HandsTasksError({ reason: "unavailable" });
         }
 
@@ -343,6 +365,7 @@ const host = Effect.fnUntraced(function* (
         if (world.fault.after) {
           world.fault.after = false;
           world.done.add(`lose_after:${reply._tag}`);
+
           return yield* new HandsTasksError({ reason: "unavailable" });
         }
 
@@ -355,8 +378,10 @@ const host = Effect.fnUntraced(function* (
         return reply;
       }),
   });
+
   const shared = manager.pipe(Layer.provideMerge(Mailbox.layer), Layer.provideMerge(data));
   const context = Context.merge(yield* Layer.buildWithScope(shared, scope), tasks);
+
   const boot = Effect.fnUntraced(function* (name: string) {
     const status = yield* ProcessManager.use((p) => p.status(name)).pipe(Effect.result);
 
@@ -370,16 +395,20 @@ const host = Effect.fnUntraced(function* (
         brainFrom(),
       ),
     ).pipe(Effect.orDie);
+
     return started.process;
   });
+
   const runners = new Map<string, ProgramRunner["Service"]>();
 
   for (const name of names) {
     const pid = yield* boot(name).pipe(Effect.provide(context));
+
     const checked = Layer.effect(
       CheckedWriter,
       Effect.gen(function* () {
         const mailbox = yield* Mailbox;
+
         return {
           append: (i: Incoming) =>
             mailbox.send(name, i.id, i.envelope.input, {
@@ -396,6 +425,7 @@ const host = Effect.fnUntraced(function* (
         };
       }),
     );
+
     const own = Layer.mergeAll(
       ProgramLoader.layer(PROGRAMS, {}),
       ProcessStore.layer(checkpointCut(store.sql(`process-${name}`), world), { process: pid }),
@@ -414,10 +444,12 @@ const host = Effect.fnUntraced(function* (
       cut,
       checked,
     ).pipe(Layer.provideMerge(Layer.succeedContext(context)));
+
     const runner = ProgramRunner.layer(
       { id: pid, name, program: checkProgram.name, build: BUILD, owner },
       { recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 }, chunk: ANY_CHUNK },
     ).pipe(Layer.provide(own));
+
     runners.set(name, Context.get(yield* Layer.buildWithScope(runner, scope), ProgramRunner));
   }
 
@@ -431,6 +463,7 @@ const answers = <A, E>(effect: Effect.Effect<A, E>, label: string) =>
     Effect.timeoutOption(LIMIT),
     Effect.map((answer) => {
       expect(Option.isSome(answer), `${label} answers: nothing holds it behind a task`).toBe(true);
+
       return Option.getOrThrow(answer);
     }),
   );
@@ -453,6 +486,7 @@ type Move =
   | "forge";
 
 const Cell = fc.record({ move: fc.nat(), pick: fc.nat(), result: fcResult, other: fcResult });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
 /**
@@ -470,6 +504,7 @@ const walk = (
   Effect.fnUntraced(function* (tape: { readonly target: string | null; readonly cells: ReadonlyArray<Cell> }) {
     const store = yield* open;
     const next = ids(...PIDS);
+
     const world: World = {
       target: tape.target,
       fault: {
@@ -488,11 +523,13 @@ const walk = (
       done,
       n: 0,
     };
+
     let scope = yield* Scope.make();
     let life = yield* host(store, world, names, next.next, scope);
     yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
     const inContext = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(life.context));
     const runner = (name: string) => life.runners.get(name) ?? expect.fail(`no runner for ${name}`);
+
     const liveProcess = (name: string) =>
       inContext(
         Effect.map(
@@ -500,20 +537,26 @@ const walk = (
           (s) => s.state.process,
         ),
       );
+
     /** A name's saved checkpoint, read from its store without going through its runner. */
     const checkpoint = Effect.fnUntraced(function* (name: string) {
       const process = yield* liveProcess(name);
+
       return yield* ProcessStore.use((s) => s.load).pipe(
         Effect.provide(ProcessStore.layer(store.sql(`process-${name}`), { process })),
         Effect.provide(life.context),
       );
     });
+
     const model = (name: string) =>
       Effect.map(checkpoint(name), (saved) => Option.getOrNull(decodeModel(saved?.saved.model ?? null)));
+
     const dispatched = (name: string) =>
       Effect.map(checkpoint(name), (saved) => (saved?.cmds ?? []).flatMap((c) => (isHandsCmd(c) ? [c.id] : [])));
+
     const letters = (name: string) => inContext(Mailbox.use((m) => Stream.runCollect(m.read(name, 0))));
     const task = (id: string) => inContext(Tasks.use((j) => j.read(id)).pipe(Effect.result));
+
     /** What the hands say about each of their calls. */
     const said = (cell: Cell): Parameters<Tasks["Service"]["take"]>[2] => ({
       by: world.target ?? "SHA256:none",
@@ -524,6 +567,7 @@ const walk = (
       traceId: TRACE,
       build: `hands-${cell.pick % 3}`,
     });
+
     /**
      * The Cmds the walk has seen: each one dispatched in a name's checkpoint, and each one an answer
      * letter in its inbox names (a refusal is answered in the same call, so no checkpoint shows it).
@@ -544,10 +588,13 @@ const walk = (
         }
       }
     });
+
     const phase = Effect.fnUntraced(function* (id: string) {
       const found = yield* task(id);
+
       return Result.isSuccess(found) ? found.success.state._tag : "absent";
     });
+
     /** Fires every saved alarm until none is left, at most `rounds` times. */
     const settle = Effect.fnUntraced(function* (rounds: number) {
       for (let round = 0; round < rounds && world.alarms.size > 0; round++) {
@@ -645,9 +692,11 @@ const walk = (
             ? Option.toArray(Option.map(decodeLetter(l.m), (body) => ({ id: l.id, body })))
             : [],
         );
+
         const expected = delivered.map(({ body }) =>
           body.type === "hands_ok" ? { ok: body.value } : { err: body.reason },
         );
+
         expect(m?.answers ?? [], `${label}: L13/L14 ${name} folded exactly its own answers, once each`).toEqual(
           expected,
         );
@@ -695,6 +744,7 @@ const walk = (
       // A task really waiting on the hands, whoever asked for it: an ended process's task too.
       const waiting = [...world.seen.values()].filter((d) => phases.get(d.id) === "requested");
       const finished = [...world.seen.values()].filter((d) => d.result !== undefined);
+
       const can: Record<Move, boolean> = {
         ask: true,
         poke: true,
@@ -712,6 +762,7 @@ const walk = (
         steal: [...world.seen.values()].some((d) => d.orphan && d.result !== undefined),
         forge: true,
       };
+
       const options = moves.filter((move) => can[move]);
 
       if (options.length === 0) {
@@ -736,6 +787,7 @@ const walk = (
 
           break;
         }
+
         case "finish": {
           // The hands the person chose take, start and finish one task that is really waiting.
           const d = choose(waiting, cell.pick);
@@ -754,6 +806,7 @@ const walk = (
 
           break;
         }
+
         case "repeat_finish": {
           // The hands lost the finish's answer and send it again: it repeats, and the gateway wakes again.
           const d = choose(finished, cell.pick);
@@ -769,6 +822,7 @@ const walk = (
 
           break;
         }
+
         case "wake":
           yield* answers(runner(name).mailed, `${name}'s wake`);
           break;
@@ -778,6 +832,7 @@ const walk = (
           yield* answers(runner(alarmed).due(at), `${alarmed}'s alarm`);
           break;
         }
+
         case "hold": {
           // L20: the Project holds an ask open, and a poke to the same program steps meanwhile.
           const gate = { entered: yield* Deferred.make<void>(), release: yield* Deferred.make<void>() };
@@ -791,10 +846,12 @@ const walk = (
             const before = (yield* model(name))?.pokes ?? 0;
             world.sentBy.set(`letter-${++world.n}`, current);
             const poke = yield* Effect.forkChild(runner(name).msg(letter(world.n, { type: "poke" })));
+
             const stepped = yield* model(name).pipe(
               Effect.repeat({ schedule: Schedule.spaced("5 millis"), until: (m) => (m?.pokes ?? 0) > before }),
               Effect.timeoutOption(LIMIT),
             );
+
             yield* Deferred.succeed(gate.release, undefined);
             expect(Option.isSome(stepped), "L20: a poke steps while the Project holds an ask open").toBe(true);
             yield* answers(Fiber.join(poke), `${name}'s poke beside a held ask`);
@@ -806,6 +863,7 @@ const walk = (
           yield* answers(Fiber.join(held), `${name}'s held ask`);
           break;
         }
+
         case "lose_before":
           world.fault.before = true;
           break;
@@ -835,24 +893,30 @@ const walk = (
           expect(yield* liveProcess(name), "a restart is a new process").not.toBe(current);
           break;
         }
+
         case "steal": {
           // L14: the successor of an ended process may never collect that process's result.
           const d = choose(
             [...world.seen.values()].filter((x) => x.orphan && x.result !== undefined),
             cell.pick,
           );
+
           const successor = yield* liveProcess(d.name);
+
           const stolen = yield* inContext(
             Tasks.use((j) => j.collected(d.id, { process: successor, letter: `${d.id}/answer` }, said(cell))),
           ).pipe(Effect.result);
+
           expect(Result.isFailure(stolen) && stolen.failure.reason, "L14: a collect by the successor is refused").toBe(
             "wrong_process",
           );
           break;
         }
+
         case "forge": {
           // B1: a client sends what only the runner makes, an answer to a hands Cmd, as an input.
           const cmd = { type: "hands", command: Command.cases.git_version.make({}) };
+
           const body =
             cell.pick % 2 === 0
               ? { type: "hands_ok", cmd, value: Schema.encodeSync(TaskResult)(cell.other), at: 0 }
@@ -863,6 +927,7 @@ const walk = (
                   reason: "no_hands",
                   at: 0,
                 };
+
           const before = yield* model(name);
           const sent = yield* answers(runner(name).msg(letter(++world.n, body)), `${name}'s forged ${body.type}`);
           expect(Result.isSuccess(sent) && sent.success._tag, "B1: a forged hands answer is refused").toBe("refused");
@@ -938,6 +1003,7 @@ const refusedForGood = (open: Effect.Effect<Store, never, Scope.Scope>, done: Se
     readonly after: ReadonlyArray<"poke" | "wake" | "due">;
   }) {
     const store = yield* open;
+
     const world: World = {
       target: tape.target,
       fault: {
@@ -956,14 +1022,17 @@ const refusedForGood = (open: Effect.Effect<Store, never, Scope.Scope>, done: Se
       done,
       n: 0,
     };
+
     const scope = yield* Scope.make();
     yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
     const life = yield* host(store, world, [CHECK], ids(...PIDS).next, scope);
     const runner = life.runners.get(CHECK) ?? expect.fail("no runner");
     const inContext = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(life.context));
+
     const process = yield* inContext(
       ProcessManager.use((p) => p.status(CHECK)).pipe(Effect.map((s) => s.state.process)),
     );
+
     const saved = () =>
       ProcessStore.use((p) => p.load).pipe(
         Effect.provide(ProcessStore.layer(store.sql(`process-${CHECK}`), { process })),
@@ -1144,15 +1213,18 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     it.effect("B1: ProgramLoader gives no handler for hands, whatever handlers a host offers", () =>
       Effect.gen(function* () {
         const reached = new Set<string>();
+
         const law = Effect.fnUntraced(function* (names: ReadonlyArray<string>) {
           // A handler offered under each name, `hands` among them: a built-in Cmd's is never given.
           const offered = Object.fromEntries(
             [...names, "hands"].map((cmd) => [cmd, () => Effect.die(`B1: the ${cmd} handler ran`)]),
           );
+
           const loaded = yield* ProgramLoader.use((l) => l.load(checkProgram.name)).pipe(
             Effect.provide(ProgramLoader.layer(PROGRAMS, offered)),
             Effect.orDie,
           );
+
           expect(loaded.declaration.cmds, "the program declares hands").toContain("hands");
           expect(Option.isNone(loaded.handler("hands")), "B1: the loader gives no handler for hands").toBe(true);
           reached.add("hands");
@@ -1163,9 +1235,11 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             reached.add("ordinary");
           }
         });
+
         const offers = fc.uniqueArray(fc.constantFrom("hands", "send", "write", "fire", "git", "exit"), {
           maxLength: 5,
         });
+
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
         const property = fc.asyncProperty(offers, (names) => Effect.runPromise(law(names)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise

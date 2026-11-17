@@ -86,6 +86,7 @@ export type Routed = typeof Routed.Type;
 
 /** The prefix key, from the glossary's `prefix` row; a person's file may change it later (K2). */
 const PREFIX = "ctrl+b";
+
 const AFTER = "<prefix>";
 
 /** What a browser keeps for itself (0278: a tab cannot have Mod-W, Mod-T, Mod-N or Mod-Q). */
@@ -104,6 +105,7 @@ const resolved = (key: string, mod: Backend["mod"]): string => key.replace(/(^|\
 export const backend = (platform: Backend["platform"], os: Backend["os"]): Backend => {
   const mod = os === "macos" || os === "ios" ? "meta" : "ctrl";
   const mods = os === "unknown" ? (["ctrl", "meta"] as const) : [mod];
+
   const cannot =
     platform === "browser"
       ? [
@@ -113,6 +115,7 @@ export const backend = (platform: Backend["platform"], os: Backend["os"]): Backe
       : platform === "electron" && os === "macos"
         ? ["meta+q", "meta+h"]
         : [];
+
   return { platform, os, mod, cannot };
 };
 
@@ -178,6 +181,7 @@ export const route = (table: Table, prefix: Prefix, _mode: null, press: { readon
 
   if (prefix._tag === "armed") {
     const does = table.after.get(key);
+
     return key === table.prefix
       ? R.tile.make({ key })
       : does === undefined
@@ -186,6 +190,7 @@ export const route = (table: Table, prefix: Prefix, _mode: null, press: { readon
   }
 
   const does = table.alone.get(key);
+
   return key === table.prefix
     ? R.prefix.make({})
     : does === undefined
@@ -219,5 +224,6 @@ export const spell = (e: {
   // itself, lower case, and Shift is said.
   const shift = e.shiftKey && (named !== null || mods.length > 0) ? ["shift"] : [];
   const base = named ?? (mods.length > 0 ? e.key.toLowerCase() : e.key);
+
   return [...mods, ...shift, base].join("+");
 };

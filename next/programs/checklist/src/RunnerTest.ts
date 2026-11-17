@@ -13,9 +13,12 @@ import { TestClock } from "effect/testing";
 import { checklist } from "./program.ts";
 
 const SEED = 119120;
+
 const TRACE = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
+
 /** The plan's one day, written out here so the law does not read it from the code it checks. */
 const DAY = 86_400_000;
+
 /** The plan's longest note, written out as `DAY` is. */
 const MOST = 256;
 
@@ -76,6 +79,7 @@ const View = Schema.Struct({
 
 const shown = (view: unknown) => {
   const v = Schema.decodeUnknownSync(View)(view);
+
   return {
     items: v.items
       .map((i) => ({ name: i.name, state: i.state, note: i.note }))
@@ -88,7 +92,9 @@ const shown = (view: unknown) => {
 const sent = (letters: ReadonlyArray<Saved>) => letters.filter((l) => l.id.startsWith("checklist-"));
 
 const NAMES = ["git", "node", "pnpm", "volta"] as const;
+
 const INPUTS = ["add", "rename", "remove", "check", "uncheck"] as const;
+
 /** A wall, not a setting (plan, "Settings"): only a person may add, rename or remove. */
 const PERSON_ONLY: ReadonlySet<string> = new Set(["add", "rename", "remove"]);
 
@@ -103,7 +109,9 @@ const Step = Arbitrary.all({
   pick: Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 }))),
   note: Arbitrary.schema(Schema.Literals(["none", "one", "most", "over"])),
 });
+
 type Step = typeof Step extends Arbitrary.Arbitrary<infer A> ? A : never;
+
 const Walk = Arbitrary.array(Step, { minLength: 4, maxLength: 16 });
 
 /** An item as the record keeps it: checked or not, and the note its first `check` wrote. */
@@ -132,8 +140,10 @@ const named = (items: ReadonlyMap<string, Kept>, step: Step): Record<string, str
       return name === undefined || fresh === undefined ? null : { type: "rename", name, to: fresh };
     case "check": {
       const note = NOTES[step.note];
+
       return name === undefined ? null : note === undefined ? { type: "check", name } : { type: "check", name, note };
     }
+
     default:
       return name === undefined ? null : { type: step.input, name };
   }
@@ -150,16 +160,20 @@ const apply = (items: Map<string, Kept>, input: Record<string, string>) => {
   switch (input["type"]) {
     case "add":
       items.set(name, { done: false, note: null });
+
       return;
     case "rename":
       items.delete(name);
       items.set(input["to"] ?? "", was);
+
       return;
     case "remove":
       items.delete(name);
+
       return;
     case "check":
       items.set(name, was.done ? was : { done: true, note: input["note"] ?? null });
+
       return;
     default:
       items.set(name, { done: false, note: null });
@@ -181,6 +195,7 @@ const AnyNote = Arbitrary.flatMap(Arbitrary.schema(Schema.Literals(["any", "any"
 
 /** A writer's clock, skewed from the referee's by up to a day either way. */
 const Skew = Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: -DAY, maximum: DAY })));
+
 const BASE = Date.parse("2026-11-11T00:00:00.000Z");
 
 export const suite = (open: Open, fresh: Fresh) =>
@@ -285,10 +300,12 @@ export const suite = (open: Open, fresh: Fresh) =>
               const input = named(items, step) ?? { type: "add", name: "git" };
               const fresh = letter(++n, step.by === "agent" ? agent : person, input);
               const answer = yield* r.msg(fresh);
+
               const ok =
                 !(step.by === "agent" && PERSON_ONLY.has(input["type"] ?? "")) &&
                 !(items.has(input["name"] ?? "") && input["type"] === "add") &&
                 !malformed(input);
+
               expect(answer._tag, `${step.by} ${JSON.stringify(input)}`).toBe(ok ? "accepted" : "refused");
 
               if (ok) {
@@ -325,6 +342,7 @@ export const suite = (open: Open, fresh: Fresh) =>
             const writer = side === "agent" ? agent : person;
             const clock = DateTime.formatIso(DateTime.makeUnsafe(BASE + skew));
             const view = r.open("watch").pipe(Effect.map((o) => shown(o.view)));
+
             const one = (state: string, n: string | null) => ({
               items: [{ name: "git", state, note: n }],
               left: state === "checked" ? 0 : 1,
@@ -372,14 +390,18 @@ export const suite = (open: Open, fresh: Fresh) =>
           Effect.gen(function* () {
             const { start, person } = yield* open;
             const alarms: Array<number | null> = [];
+
             const reopen = <A, E>(f: (r: Runner) => Effect.Effect<A, E>) =>
               Effect.scoped(
                 Effect.gen(function* () {
                   const r = yield* start(yield* fresh, alarms);
+
                   return yield* f(r);
                 }),
               );
+
             const view = (r: Runner) => r.open("watch").pipe(Effect.map((o) => shown(o.view)));
+
             const both = (git: string) => ({
               items: [
                 { name: "git", state: git, note: null },

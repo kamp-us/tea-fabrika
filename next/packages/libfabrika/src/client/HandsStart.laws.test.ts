@@ -53,6 +53,7 @@ import { start } from "./HandsStart.ts";
 import * as JournalStore from "./JournalStore.ts";
 
 const ORIGIN = "http://127.0.0.1:18787";
+
 const KEY = "SHA256:hands-own-key-0000000000000000000000000000";
 
 /** A made-up Ed25519 public key line: the scripted door checks no signature, so nothing signs for real. */
@@ -60,13 +61,14 @@ const identity = (() => {
   const raw = new Uint8Array(32).fill(7);
   const field = (bytes: Uint8Array) => [...new Uint8Array(new Uint32Array([bytes.length]).buffer).reverse(), ...bytes];
   const blob = new Uint8Array([...field(new TextEncoder().encode("ssh-ed25519")), ...field(raw)]);
+
   return {
     fingerprint: KEY,
     raw: btoa(String.fromCharCode(...raw))
       .replaceAll("+", "-")
       .replaceAll("/", "_")
       .replace(/=+$/, ""),
-    line: Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
+    line: Schema.decodeSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
     found: "reused" as const,
     sign: () => Effect.succeed(new Uint8Array(64)),
   };
@@ -86,12 +88,14 @@ const pass = (ms: number) =>
   );
 
 const Cell = fc.record({ move: fc.nat(), pick: fc.nat(), ms: fc.integer({ min: 0, max: 40_000 }) });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
 const Tape = fc.record({
   processes: fc.uniqueArray(fcTypeId("process"), { minLength: 2, maxLength: 4 }),
   cells: fc.array(Cell, { minLength: 20, maxLength: 60, size: "max" }),
 });
+
 type Tape = typeof Tape extends fc.Arbitrary<infer A> ? A : never;
 
 type Focus = "H2" | "H5";
@@ -117,6 +121,7 @@ const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
     const s: Seen = seen();
     // The journal's store outlives every process, as a file would: one memory store for the walk.
     const store = yield* Layer.build(KeyValueStore.layerMemory);
+
     const layers = Layer.mergeAll(
       d.socket,
       keys,
@@ -124,22 +129,29 @@ const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
       cutJournal(s).pipe(Layer.provide(JournalStore.layer), Layer.provide(Layer.succeedContext(store))),
       Id.Generator.layer,
     );
+
     const boot = Effect.gen(function* () {
       const scope = yield* Scope.make();
+
       const booting = yield* start({ origin: ORIGIN, build: "hands-build", label: "hands" }).pipe(
         Effect.provide(layers),
         Scope.provide(scope),
       );
+
       const run = yield* booting.ready;
+
       return { scope, run };
     });
+
     let live = yield* boot;
+
     const crash = Effect.gen(function* () {
       yield* Scope.close(live.scope, Exit.void);
       crashed(s);
       done.add("restart");
       live = yield* boot;
     });
+
     const work = () => live.run.getState().work._tag;
     let n = 0;
     /** H2: the pause armed last, so a crash while it holds names the boundary it cut. */
@@ -155,6 +167,7 @@ const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
       // tasks of one process wedge `tasks.take` (finding 2026-11-15-jobs-take-ambiguous-wedges).
       const free = tape.processes.filter((p) => !open.some((j) => j.request.process === p));
       const asks = free.length === 0 ? [] : open.length === 0 ? ["request", "request"] : ["request"];
+
       const options: Array<string> =
         focus === "H2" && held
           ? ["cut", "cut", "resume"]
@@ -167,6 +180,7 @@ const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
                 ? ["pause", "pause", "pause", "fail", "call", "restart"]
                 : ["pause", "pause", "drop", "resume"]),
             ];
+
       const move = options[cell.move % options.length] ?? "time";
 
       if (move === "request") {
@@ -279,6 +293,7 @@ describe("P39 slice 4b: the host's os in the hello", () => {
               const d = door(brain(), KEY);
               const s: Seen = seen();
               const store = yield* Layer.build(KeyValueStore.layerMemory);
+
               const layers = Layer.mergeAll(
                 d.socket,
                 keys,
@@ -286,9 +301,11 @@ describe("P39 slice 4b: the host's os in the hello", () => {
                 JournalStore.layer.pipe(Layer.provide(Layer.succeedContext(store))),
                 Id.Generator.layer,
               );
+
               const booting = yield* start({ origin: ORIGIN, build: "hands-build", label: "hands", os }).pipe(
                 Effect.provide(layers),
               );
+
               yield* booting.ready;
 
               for (let i = 0; i < 50 && d.state.hellos.length === 0; i++) {

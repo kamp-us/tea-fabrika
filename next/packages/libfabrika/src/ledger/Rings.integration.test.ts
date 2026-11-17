@@ -14,8 +14,8 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Deferred, Effect, Fiber, Layer, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import type { Sql } from "../Sql.ts";
@@ -35,24 +35,14 @@ const folder = Effect.acquireRelease(
 
 const freshPath = folder.pipe(Effect.map((path) => join(path, "ledger.db")));
 
-const openDb = (path: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(path)),
-    (db) =>
-      Effect.sync(() => {
-        if (db.isOpen) {
-          db.close();
-        }
-      }),
-  );
-
-const fresh = () => freshPath.pipe(Effect.flatMap(openDb), Effect.map(nodeSql));
+const fresh = () => freshPath.pipe(Effect.flatMap(TestDatabase.make), Effect.map(nodeSql));
 
 type Rung = { readonly to: string; readonly stream: string; readonly rev: number };
 
 /** A doorbell that writes down each ring; `fails` names the waiters whose delivery fails. */
 const bell = (fails: ReadonlyArray<string> = []) => {
   const rang: Array<Rung> = [];
+
   const layer = Layer.succeed(Doorbell, {
     ring: (to, stream, rev) =>
       Effect.sync(() => {
@@ -61,6 +51,7 @@ const bell = (fails: ReadonlyArray<string> = []) => {
         Effect.andThen(fails.includes(to) ? Effect.fail(new LedgerError({ reason: "unreachable" })) : Effect.void),
       ),
   });
+
   return { rang, layer };
 };
 
@@ -87,8 +78,11 @@ const line = (over: Partial<Line> = {}): Line => ({
 });
 
 const placed = (rev: number, pos: number) => ({ _tag: "placed", rev, pos });
+
 const parked = { _tag: "parked" };
+
 const T1 = "connection:t1";
+
 const T2 = "connection:t2";
 
 const byWaiter = (rungs: ReadonlyArray<Rung>) =>
@@ -97,6 +91,7 @@ const byWaiter = (rungs: ReadonlyArray<Rung>) =>
 describe("p94, a parked wait is a row, rung once", () => {
   it.effect("a wait with news is ready with its stream's newest rev, not the log's, and leaves no ring", () => {
     const { rang, layer } = bell();
+
     return Effect.gen(function* () {
       const referee = yield* Referee;
       yield* referee.append("a", "w-1", line());
@@ -111,6 +106,7 @@ describe("p94, a parked wait is a row, rung once", () => {
 
   it.effect("the append that passes a parked wait rings it once with its rev, and the next rings nothing", () => {
     const { rang, layer } = bell();
+
     return Effect.gen(function* () {
       const referee = yield* Referee;
       yield* referee.append("a", "w-1", line());
@@ -128,17 +124,20 @@ describe("p94, a parked wait is a row, rung once", () => {
 
   it.effect("a resend and every refused line ring nothing", () => {
     const { rang, layer } = bell();
+
     return Effect.gen(function* () {
       const referee = yield* Referee;
       yield* referee.append("a", "w-1", line());
       expect(yield* referee.wait("a", 1, T1)).toEqual(parked);
       expect(yield* referee.append("a", "w-1", line({ sentAt: "later" }))).toEqual(placed(1, 1));
+
       const refusals = [
         yield* referee.append("a", "w-1", line({ body: "another" })),
         yield* referee.append("a", "w-2", line({ seen: 9 })),
         yield* referee.append("a", "w-3", { ...line(), rev: 2 }),
         yield* referee.append("a", "w-4", line({ parent: "not an input id" })),
       ];
+
       expect(refusals.map((answer) => answer._tag)).toEqual(["refused", "refused", "refused", "refused"]);
       expect(rang).toEqual([]);
       expect(yield* referee.append("a", "w-5", line())).toEqual(placed(2, 2));
@@ -151,6 +150,7 @@ describe("p94, a parked wait is a row, rung once", () => {
     ["higher after first", [4, 1]],
   ] as const)("a second wait by one reader on one stream keeps one ring, with the lower after (%s)", ([, afters]) => {
     const { rang, layer } = bell();
+
     return Effect.gen(function* () {
       const referee = yield* Referee;
       yield* referee.append("a", "w-1", line());
@@ -170,6 +170,7 @@ describe("p94, a parked wait is a row, rung once", () => {
 
   it.effect("each reader and stream has its own ring", () => {
     const { rang, layer } = bell();
+
     return Effect.gen(function* () {
       const referee = yield* Referee;
       expect(yield* referee.wait("a", 0, T1)).toEqual(parked);
@@ -190,6 +191,7 @@ describe("p94, a parked wait is a row, rung once", () => {
       const release = yield* Deferred.make<void>();
       const started = yield* Deferred.make<void>();
       const rang: Array<string> = [];
+
       const doorbell = Layer.succeed(Doorbell, {
         ring: (to) =>
           Effect.gen(function* () {
@@ -201,6 +203,7 @@ describe("p94, a parked wait is a row, rung once", () => {
             }
           }),
       });
+
       yield* Effect.gen(function* () {
         const referee = yield* Referee;
         yield* referee.wait("a", 0, T1);
@@ -217,6 +220,7 @@ describe("p94, a parked wait is a row, rung once", () => {
 
   it.effect("a ring whose delivery fails is gone all the same, the others ring, and the append is placed", () => {
     const { rang, layer } = bell([T1]);
+
     return Effect.gen(function* () {
       const referee = yield* Referee;
       yield* referee.wait("a", 0, T1);
@@ -234,7 +238,7 @@ describe("p94, a parked wait is a row, rung once", () => {
   it.effect("a ring survives the file closed and opened again, and rings once there", () =>
     Effect.gen(function* () {
       const path = yield* freshPath;
-      const first = yield* openDb(path);
+      const first = yield* TestDatabase.make(path);
       const before = bell();
       yield* Effect.gen(function* () {
         const ledger = yield* Ledger;
@@ -247,7 +251,7 @@ describe("p94, a parked wait is a row, rung once", () => {
         const ledger = yield* Ledger;
         expect(yield* ledger.append("a", "w-2", line())).toEqual(placed(2, 2));
         yield* ledger.append("a", "w-3", line());
-      }).pipe(Effect.provide(onLedger(openDb(path).pipe(Effect.map(nodeSql)), after.layer, T2)));
+      }).pipe(Effect.provide(onLedger(TestDatabase.make(path).pipe(Effect.map(nodeSql)), after.layer, T2)));
       expect(before.rang).toEqual([]);
       expect(after.rang).toEqual([{ to: T1, stream: "a", rev: 2 }]);
     }),
@@ -255,6 +259,7 @@ describe("p94, a parked wait is a row, rung once", () => {
 
   it.effect("Ledger.sql parks and rings as the reader it was built for", () => {
     const { rang, layer } = bell();
+
     return Effect.gen(function* () {
       const ledger = yield* Ledger;
       expect(yield* ledger.wait("notes:1", 0)).toEqual(parked);

@@ -9,7 +9,9 @@ import * as Outcome from "./Outcome.ts";
 import * as Step from "./Step.ts";
 
 type Verb = "done" | "skip" | "ask" | "stuck";
+
 type Machine = ReturnType<typeof FlowMachine.make>;
+
 type Cmd = ReturnType<typeof FlowMachine.stepRun>;
 
 const AT = 1_000;
@@ -64,6 +66,7 @@ const arbFlow = (lead: fc.Arbitrary<boolean> = fc.constant(false)) =>
     .map((specs) => {
       const steps = specs.map(([kind, marked], i) => (KINDS[kind] ?? Step.act)(`s${i}`, { i }, { lead: marked }));
       const [first, ...rest] = steps;
+
       return Flow.make("arb", [first ?? Step.act("s0"), ...rest]);
     });
 
@@ -81,13 +84,12 @@ const scripted = (verbs: ReadonlyArray<Verb>) => (cmd: Cmd) =>
   verbOutcome(verbs[cmd.position] ?? "done", cmd.step.name);
 
 const asLead = FlowMachine.make({ lead: true });
+
 const notLead = FlowMachine.make({ lead: false });
 
 /** The state file's trip: the Model as JSON text and back, through its schema. */
 const saved = (m: FlowMachine.Model) =>
-  Schema.decodeUnknownSync(Schema.fromJsonString(FlowMachine.Model))(
-    JSON.stringify(Schema.encodeSync(FlowMachine.Model)(m)),
-  );
+  Schema.decodeSync(Schema.fromJsonString(FlowMachine.Model))(JSON.stringify(Schema.encodeSync(FlowMachine.Model)(m)));
 
 describe("the flow machine", () => {
   it("a flow ends at its first ask or stuck, and runs no step after it", () => {
@@ -99,6 +101,7 @@ describe("the flow machine", () => {
         if (first === -1) {
           expect(model._tag).toBe("done");
           expect(ran).toEqual(flow.steps.map((_, i) => i));
+
           return;
         }
 
@@ -117,6 +120,7 @@ describe("the flow machine", () => {
         if (first.model._tag === "done") {
           // A done flow resumes to itself and runs nothing.
           expect(drive(asLead, flow, () => Outcome.done("again"), saved(first.model)).ran).toEqual([]);
+
           return;
         }
 
@@ -150,6 +154,7 @@ describe("the flow machine", () => {
 
         if (first === -1) {
           expect(model._tag).toBe("done");
+
           return;
         }
 
@@ -178,32 +183,39 @@ describe("the flow machine", () => {
   it("scenario: a send goes to the named step, and runs a done step again on purpose", () => {
     const flow = Flow.make("send", [Step.act("build"), Step.check("review"), Step.act("land")]);
     let reviews = 0;
+
     const { model, ran } = drive(asLead, flow, (cmd) => {
       if (cmd.step.name !== "review") {
         return Outcome.done("ok");
       }
 
       reviews += 1;
+
       return reviews === 1 ? Outcome.send("build", "one fix") : Outcome.done("merge-ready");
     });
+
     expect(ran).toEqual([0, 1, 0, 1, 2]);
     expect(model._tag).toBe("done");
   });
 
   it("scenario: a send to a name the flow lacks is stuck, since a typo must not end a flow done", () => {
     const flow = Flow.make("typo", [Step.act("build"), Step.check("review")]);
+
     const { model } = drive(asLead, flow, (cmd) =>
       cmd.step.name === "review" ? Outcome.send("biuld", "fix") : Outcome.done("ok"),
     );
+
     expect(model._tag).toBe("stuck");
     expect(model._tag === "stuck" ? model.reason : "").toContain("biuld");
   });
 
   it("scenario: a send loop stops stuck at the flow's attempt cap, so no flow runs forever", () => {
     const flow = Flow.make("loop", [Step.act("a"), Step.act("b")], { attempts: 5 });
+
     const { model, ran } = drive(asLead, flow, (cmd) =>
       cmd.step.name === "b" ? Outcome.send("a", "again") : Outcome.done("ok"),
     );
+
     expect(ran).toHaveLength(5);
     expect(model._tag).toBe("stuck");
   });
@@ -224,6 +236,7 @@ describe("the flow machine", () => {
       FlowMachine.stepRun.err(cmd, { _tag: "StepFailed", reason: "no gh" }, 2_000),
       ctx,
     );
+
     expect(next).toEqual([]);
     expect(model._tag === "stuck" ? model.reason : "").toBe("push failed: no gh");
     expect(model.history[0]?.outcome?._tag).toBe("stuck");
@@ -234,12 +247,14 @@ describe("the flow machine", () => {
     const ctx = { flow, at: AT };
     const [running] = asLead.init(null, ctx);
     const late = FlowMachine.stepRun({ position: 1, step: Step.act("b") });
+
     const [model, cmds] = step(
       asLead,
       running,
       FlowMachine.stepRun.ok(late, Outcome.answer(Outcome.done("x")), 2_000),
       ctx,
     );
+
     expect(model).toEqual(running);
     expect(cmds).toEqual([]);
   });

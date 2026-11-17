@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-lint-dead-test-support-tests3",
+  "ticket": "lint-dead-test-support",
+  "pr": null,
+  "started": "2026-11-16T00:22:00-08:00",
+  "ended": "2026-11-16T00:29:02-08:00",
+  "parent": "2026-11-16-lint-dead-test-support-review2",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests fix round 2 for lead tooling slice lint-dead-test-support, branch fabrikalfa/lint-dead-test-support, from 2bb92bd, allowed by the lead under 0564 for review2's one fault. The Segment schema in next/apps/fabrika/src/exam/unreachable.integration.test.ts could draw names where code-graph 0.15.0 never judges a planted file, so law 2 was false with no bug behind it and the unseeded law could flake (0036). Segment now also excludes a set NEVER_JUDGED, read from the installed source: index (isBarrel and BARREL_SUFFIXES in dist/index.js: index.ts and index.tsx are barrels, so their exports are withheld as public-entry-surface), and the union of WALK_PRUNE (.claude, .git, .next, .turbo, .wrangler, __generated__, coverage, dist, node_modules, vendor) and EXCLUDED_SEGMENTS (node_modules, vendor, dist, .next, __generated__, used by isSourceFile), both in dist/chunk-HQJ7I5LA.js. The pattern ^[a-z][a-z0-9]{0,6}$ can draw only index, dist and vendor of these; the rest guard a wider pattern. The comment names the version and the functions. Nothing else changed: node-kinds.json is untouched and the open owner question (an unused .test-support.ts export is withheld, not dead) is left alone. Other name-based paths checked and found unreachable by the draws: entryFilePatterns' (^|/)src/commands/ needs an 8-letter segment, entryNames need an exact export name while every planted export carries a prefix, entryExportConventions name only RecordPart, Connection, Process and IsolateTail, entryExportPresets is empty, and isTestFile needs a dot the segments cannot hold.",
+  "plants": [
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export nothing uses is still flagged as dead beside test support",
+      "plant": "law 2's base forced to Schema.Literal(\"index\")",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export nothing uses is still flagged as dead beside test support",
+      "plant": "law 2's folder forced to [\"dist\"]",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export nothing uses is still flagged as dead beside test support",
+      "plant": "Segment without the NEVER_JUDGED exclusion and with its pattern forced to ^(index|dist|vendor)$",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Red lines: base index: expected [] to deeply equal ArrayContaining (both index.ts files are barrels, so nothing is flagged). Folder dist: expected [ 'next/a.ts:d0a0' ] to deeply equal ArrayContaining (the top file is flagged, the one under next/dist is never read). Exclusion dropped: expected [ 'next/dist.ts:d0a0' ] to deeply equal ArrayContaining. Each plant ran once on a saved copy in the scratchpad, restored by copy and checked with cmp; git status showed only the law file before the commit. Seeds ran only in a scratch copy of the law file beside it (its runs option read a seed from the environment), deleted before the commit; the committed law carries no seed (0579). Fast depth, seeds 1, 42, 119120, 20261116 and 987654321: 3 tests passed each. FABRIKA_TEST_DEPTH=full, unseeded on the committed file: 3 passed in 17 s; full with seeds 7, 119120 and 31337: 3 passed each. nice -n 15 pnpm exec vitest run --maxWorkers=3 on unreachable.integration.test.ts and node-kinds.test.ts: 2 files, 4 tests passed. pnpm format, then NODE_OPTIONS=--max-old-space-size=6144 pnpm lint: 18 parts passed. ratchet.ts --base 701a651: exit 0. No pnpm typecheck in this step.",
+  "step": "tests"
+}

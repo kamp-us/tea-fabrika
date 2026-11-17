@@ -7,10 +7,13 @@ import * as fc from "fast-check";
 
 it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attempt advances boot to watch", async () => {
   const { watcher } = await import("./watcher.ts");
+
   type Model =
     | { readonly _tag: "booting"; readonly failedInputs?: string | null }
     | { readonly _tag: "watching"; readonly failedInputs?: string | null };
+
   type Msg = { readonly type: "attempted" } | { readonly type: "rebuilt"; readonly failedInputs: string | null };
+
   expectTypeOf<Model>().toEqualTypeOf<typeof watcher.model.Type>();
   expectTypeOf<Msg>().toEqualTypeOf<typeof watcher.msg.Type>();
   const json = Schema.fromJsonString(Schema.toType(watcher.model));
@@ -18,11 +21,14 @@ it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attemp
   // tea's guided generator accepts fast-check data, not Effect Arbitrary.
   // Successful and failed attempt results both send the same payload-free Msg.
   const attempted = fc.boolean().map((): Extract<Msg, { type: "attempted" }> => ({ type: "attempted" }));
+
   const rebuilt = fc
     .option(fc.string(), { nil: null })
     .map((failedInputs): Extract<Msg, { type: "rebuilt" }> => ({ type: "rebuilt", failedInputs }));
+
   const attempts = arbGuidedSequence(watcher, {}, { outside: { attempted, rebuilt } }, { maxLength: 60, size: "max" });
   const rebuildsSeen = new Set<string>();
+
   const run = propertyTrace(
     watcher,
     {},
@@ -54,14 +60,16 @@ it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attemp
         }
 
         expect(step.cmds).toEqual([]);
-        expect(Schema.decodeUnknownSync(json)(Schema.encodeSync(json)(step.next))).toEqual(step.next);
+        expect(Schema.decodeSync(json)(Schema.encodeSync(json)(step.next))).toEqual(step.next);
       }
 
       expect(final._tag).toBe(attemptedCount === 0 ? "booting" : "watching");
+
       return true;
     },
     { seed: 119120, numRuns: 100, failOnNeverActed: true },
   );
+
   const attemptsSeen = run.msgCounts.get("attempted");
   expect(attemptsSeen?.acted, "the walk reaches the first attempt").toBeGreaterThan(0);
   expect(attemptsSeen?.drawn, "the walk also reaches later attempts").toBeGreaterThan(attemptsSeen?.acted ?? 0);

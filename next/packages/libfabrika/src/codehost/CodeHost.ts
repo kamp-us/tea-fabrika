@@ -87,7 +87,7 @@ export const Merged = Schema.TaggedUnion({
  *
  * @category errors
  */
-export class Unavailable extends Schema.TaggedError<Unavailable>()("Unavailable", {
+export class Unavailable extends Schema.TaggedError<Unavailable, { readonly brand: unique symbol }>()("Unavailable", {
   cause: Schema.Defect(),
 }) {}
 
@@ -96,7 +96,7 @@ export class Unavailable extends Schema.TaggedError<Unavailable>()("Unavailable"
  *
  * @category errors
  */
-export class RateLimited extends Schema.TaggedError<RateLimited>()("RateLimited", {
+export class RateLimited extends Schema.TaggedError<RateLimited, { readonly brand: unique symbol }>()("RateLimited", {
   cause: Schema.Defect(),
 }) {}
 
@@ -105,7 +105,7 @@ export class RateLimited extends Schema.TaggedError<RateLimited>()("RateLimited"
  *
  * @category errors
  */
-export class Refused extends Schema.TaggedError<Refused>()("Refused", {
+export class Refused extends Schema.TaggedError<Refused, { readonly brand: unique symbol }>()("Refused", {
   cause: Schema.Defect(),
 }) {}
 
@@ -114,9 +114,12 @@ export class Refused extends Schema.TaggedError<Refused>()("Refused", {
  *
  * @category errors
  */
-export class CodeHostError extends Schema.TaggedError<CodeHostError>()("CodeHostError", {
-  reason: Schema.Union([Unavailable, RateLimited, Refused]),
-}) {}
+export class CodeHostError extends Schema.TaggedError<CodeHostError, { readonly brand: unique symbol }>()(
+  "CodeHostError",
+  {
+    reason: Schema.Union([Unavailable, RateLimited, Refused]),
+  },
+) {}
 
 /**
  * Service for pinned changes. Every id in an answer uses the asked head's hash length. A moved

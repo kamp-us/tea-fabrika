@@ -36,12 +36,15 @@ const ItemState = Schema.TaggedUnion({
   late: { since: Schema.Int },
   checked: { note: Schema.NullOr(Schema.String) },
 });
+
 type ItemState = typeof ItemState.Type;
 
 const Item = Schema.Struct({ name: Name, state: ItemState });
+
 type Item = typeof Item.Type;
 
 const Model = Schema.Struct({ items: Schema.Array(Item) });
+
 type Model = typeof Model.Type;
 
 const Msg = Schema.Union([
@@ -53,10 +56,12 @@ const Msg = Schema.Union([
   // Only the runner sends it, when the alarm `wake` asked for fires.
   Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int, arrivedAt: Schema.Int }),
 ]);
+
 type Msg = typeof Msg.Type;
 
 /** What the checklist hands on once every item is checked. */
 export const Done = Schema.Struct({ items: Schema.Array(Name) });
+
 export type Done = typeof Done.Type;
 
 const fresh: ItemState = ItemState.cases.new.make({});
@@ -120,6 +125,7 @@ const wake = (m: Model): number | null => {
   }
 
   const since = m.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since] : []));
+
   return since.length === 0 ? null : Math.min(...since) + LATE;
 };
 

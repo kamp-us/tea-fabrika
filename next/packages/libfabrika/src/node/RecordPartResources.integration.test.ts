@@ -16,6 +16,7 @@ import * as RecordPartSupport from "./RecordPart.test-support.ts";
 // R6, a type law: a store hands its body only `Sql`, never the driver's handle, and acquiring one
 // needs a Scope. `pnpm typecheck` checks these two lines.
 expectTypeOf<Parameters<Parameters<RecordPartTest.Store["use"]>[0]>[0]>().toEqualTypeOf<Sql>();
+
 expectTypeOf<Effect.Services<ReturnType<RecordPartTest.Open>>>().toEqualTypeOf<Scope.Scope>();
 
 const Mode = Schema.Literals(["file", "memory"]);
@@ -43,6 +44,7 @@ const watched = () => {
   const opened = () => events.flatMap((e) => (e.step === "opened" ? [e.db] : []));
   const closes = (db: unknown) => events.filter((e) => e.step === "closed" && e.db === db).length;
   const folders = () => events.flatMap((e) => (e.step === "folder" ? [e.path] : []));
+
   const released = Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
 
@@ -55,12 +57,14 @@ const watched = () => {
       folders().map(() => false),
     );
   });
+
   return { events, opened, closes, folders, released };
 };
 
 /** A watch that records each step and fails the `failing`-th folder or handle acquisition. */
 const failingAt = (failing: number, events: Array<RecordPartSupport.Event>) => {
   let seen = 0;
+
   const watch: RecordPartSupport.Watch = (event) => {
     events.push(event);
 
@@ -68,6 +72,7 @@ const failingAt = (failing: number, events: Array<RecordPartSupport.Event>) => {
       throw new Error("planted acquisition failure");
     }
   };
+
   return { watch, seen: () => seen };
 };
 
@@ -108,6 +113,7 @@ describe("T641 record-part stores on node:sqlite", () => {
               }
 
               const before = watch.opened().length;
+
               const body = (sql: Sql) =>
                 Effect.gen(function* () {
                   yield* write(move.row)(sql);
@@ -120,11 +126,13 @@ describe("T641 record-part stores on node:sqlite", () => {
 
               if (move.exit === "interrupt") {
                 const ready = yield* Deferred.make<void>();
+
                 const fiber = yield* Effect.forkChild(
                   store.use((sql) =>
                     body(sql).pipe(Effect.andThen(Deferred.succeed(ready, undefined)), Effect.andThen(Effect.never)),
                   ),
                 );
+
                 yield* Deferred.await(ready);
                 yield* Fiber.interrupt(fiber);
               } else {
@@ -141,6 +149,7 @@ describe("T641 record-part stores on node:sqlite", () => {
                     ),
                   ),
                 );
+
                 expect(Exit.isSuccess(exit)).toBe(move.exit === "succeed");
                 expect(Exit.hasFails(exit)).toBe(move.exit === "fail");
                 expect(Exit.hasDies(exit)).toBe(move.exit === "throw");
@@ -172,11 +181,14 @@ describe("T641 record-part stores on node:sqlite", () => {
         const watch = watched();
         const failure = failingAt(failing, watch.events);
         const open = RecordPartSupport.make(failure.watch);
+
         // Every store stays open while the next one is acquired: nested uses inside one scope.
         const nest = (stores: ReadonlyArray<RecordPartTest.Store>): Effect.Effect<void> => {
           const [first, ...rest] = stores;
+
           return first === undefined ? Effect.void : first.use(() => nest(rest));
         };
+
         const exit = yield* Effect.exit(
           Effect.scoped(
             Effect.gen(function* () {
@@ -190,6 +202,7 @@ describe("T641 record-part stores on node:sqlite", () => {
             }),
           ),
         );
+
         expect(Exit.hasDies(exit)).toBe(true);
         expect(failure.seen()).toBe(failing + 1);
         yield* watch.released;

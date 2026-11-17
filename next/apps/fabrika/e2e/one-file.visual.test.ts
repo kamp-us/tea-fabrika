@@ -52,7 +52,9 @@ type Build = {
 const field = (v: string | Buffer) => {
   const b = Buffer.from(v),
     n = Buffer.alloc(4);
+
   n.writeUInt32BE(b.length);
+
   return Buffer.concat([n, b]);
 };
 
@@ -69,9 +71,10 @@ describe("P16 real browser from a copied one-file build", () => {
         async (text) => {
           const home = mkdtempSync("/tmp/fh."),
             oldHome = process.env.FABRIKA_HOME;
+
           process.env.FABRIKA_HOME = home;
           delete process.env.TYPESAFE_API_KEY;
-          const scope = Effect.runSync(Scope.make());
+          const scope = Scope.makeUnsafe();
           let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 
           try {
@@ -108,6 +111,7 @@ describe("P16 real browser from a copied one-file build", () => {
             const file = join(ROOT, "next/packages/libfabrika/src/node/build/build.ts");
             assert(existsSync(file), "P16 not built: reusable library build absent");
             const api = (await import(pathToFileURL(file).href)) as Build;
+
             const built = await Effect.runPromise(
               api
                 .build({
@@ -126,19 +130,23 @@ describe("P16 real browser from a copied one-file build", () => {
                 })
                 .pipe(Effect.provide(NodeServices.layer)),
             );
+
             const alone = join(home, "alone");
             mkdirSync(alone);
             cpSync(built.brain, join(alone, "brain.mjs"));
             rmSync(join(home, "dist"), { recursive: true });
             rmSync(pkg, { recursive: true });
+
             // Held in the instance's own scope, opened before the instance, so it is given back after the
             // instance closes (finalizers run in reverse).
             const { port } = await Effect.runPromise(
               Effect.acquireRelease(heldPort(), (held) => held.release).pipe(Effect.provideService(Scope.Scope, scope)),
             );
+
             const raw = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x!;
             const { localInstance } = await import("../src/local-instance.ts");
             const { localState } = await import("alchemy/State/LocalState");
+
             const instance = await Effect.runPromise(
               localInstance(
                 { ...built, brain: join(alone, "brain.mjs") },
@@ -157,9 +165,11 @@ describe("P16 real browser from a copied one-file build", () => {
                 Effect.provide(NodeServices.layer),
               ),
             );
+
             const entry = Object.entries(built.assets).find(
               ([, a]) => a.type.startsWith("text/javascript") && a.body.includes("__p16Ready"),
             );
+
             assert(entry, "entry script missing");
             // P40: the window's entry route keeps its qualified program name.
             expect(entry[0]).toContain("fabrika/counter");
@@ -226,6 +236,7 @@ declare global {
 }
 
 const RESOURCES = ["home", "server", "browser", "context", "page"] as const;
+
 type Resource = (typeof RESOURCES)[number];
 
 const Fault = Schema.Struct({
@@ -236,13 +247,17 @@ const Fault = Schema.Struct({
 const fault =
   process.env.P14_E2E_FAULT === undefined
     ? undefined
-    : Schema.decodeUnknownSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
+    : Schema.decodeSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
 
 const trace = process.env.P14_E2E_TRACE;
 
-class SetupFault extends Schema.TaggedError<SetupFault>()("SetupFault", { at: Schema.String }) {}
+class SetupFault extends Schema.TaggedError<SetupFault, { readonly brand: unique symbol }>()("SetupFault", {
+  at: Schema.String,
+}) {}
 
-class Stopped extends Schema.TaggedError<Stopped>()("Stopped", { reason: Schema.String }) {}
+class Stopped extends Schema.TaggedError<Stopped, { readonly brand: unique symbol }>()("Stopped", {
+  reason: Schema.String,
+}) {}
 
 const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
 
@@ -253,8 +268,10 @@ const stopped = Effect.callback<never, Stopped>((resume) => {
   const stops = STOPS.map((reason) => {
     const stop = () => resume(Effect.fail(Stopped.make({ reason })));
     process.once(reason, stop);
+
     return () => process.off(reason, stop);
   });
+
   return Effect.sync(() => {
     for (const off of stops) {
       off();
@@ -313,6 +330,7 @@ const owned = <A, E, R>(
 
 // The counter's own package provides React and React DOM for its window; the tab links the same copies.
 const COUNTER = resolve(ROOT, "next/programs/counter/package.json");
+
 const counterDependency = (name: string) => dirname(createRequire(COUNTER).resolve(`${name}/package.json`));
 
 const TAB_ENTRY = `import { counterWindow } from "@kampus/counter/window";
@@ -344,6 +362,7 @@ const servedCounter = Effect.gen(function* () {
     (h) => ({ home: h }),
     (h) => rmSync(h, { recursive: true, force: true }),
   );
+
   mkdirSync(join(home, "node_modules"), { recursive: true });
 
   for (const name of ["@kampus", "@demlik", "effect", "@alchemy.run", "alchemy"]) {
@@ -360,6 +379,7 @@ const servedCounter = Effect.gen(function* () {
   writeFileSync(join(tab, "entry.tsx"), TAB_ENTRY);
   writeFileSync(join(tab, "tab.css"), "output { color: rgb(12, 34, 56); }\n");
   cpSync(join(APP, "src"), join(home, "src"), { recursive: true, filter: (p) => !p.endsWith(".test.ts") });
+
   const api = (yield* Effect.promise(
     () => import(pathToFileURL(join(ROOT, "next/packages/libfabrika/src/node/build/build.ts")).href),
   )) as {
@@ -367,6 +387,7 @@ const servedCounter = Effect.gen(function* () {
       options: Parameters<Build["build"]>[0] & { readonly tab: { readonly entry: string; readonly styles: string[] } },
     ) => ReturnType<Build["build"]>;
   };
+
   const built = yield* api
     .build({
       root: home,
@@ -380,12 +401,14 @@ const servedCounter = Effect.gen(function* () {
       tab: { entry: join(tab, "entry.tsx"), styles: [join(tab, "tab.css")] },
     })
     .pipe(Effect.provide(NodeServices.layer));
+
   // Held in this scope, opened before the instance, so it is given back after the instance closes
   // (finalizers run in reverse).
   const { port } = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
   const raw = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x!;
   const { localInstance } = yield* Effect.promise(() => import("../src/local-instance.ts"));
   const { localState } = yield* Effect.promise(() => import("alchemy/State/LocalState"));
+
   const instance = yield* owned(
     "server",
     localInstance(
@@ -407,6 +430,7 @@ const servedCounter = Effect.gen(function* () {
     () => Effect.void,
     (s) => ({ port: Number(new URL(s.url).port) }),
   );
+
   // Headless always: the fixture opens no visible window.
   const server = yield* owned(
     "browser",
@@ -414,20 +438,24 @@ const servedCounter = Effect.gen(function* () {
     (s) => Effect.promise(() => s.close()),
     (s) => ({ pid: s.process().pid }),
   );
+
   const browser = yield* Effect.acquireRelease(
     Effect.promise(() => chromium.connect(server.wsEndpoint())),
     (b) => Effect.promise(() => b.close()).pipe(Effect.timeout("10 seconds"), Effect.ignore),
   );
+
   const context = yield* owned(
     "context",
     Effect.promise(() => browser.newContext()),
     (c) => Effect.promise(() => c.close()),
   );
+
   const page = yield* owned(
     "page",
     Effect.promise(() => context.newPage()),
     (p) => Effect.promise(() => p.close()),
   );
+
   return { built, instance, page };
 });
 
@@ -456,10 +484,12 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
             expect(await script.text(), "/window.js is the carried script").toBe(built.assets["/window.js"]?.body);
             await page.waitForFunction(() => "__p14" in globalThis);
             const count = page.getByRole("status");
+
             const button = (input: string) =>
               page.getByRole("button", {
                 name: Object.entries(counter.inputs).find(([name]) => name === input)![1].description,
               });
+
             const pressed = () => page.evaluate(() => globalThis.__p14?.pressed ?? []);
             const render = (view: unknown) => page.evaluate((data) => globalThis.__p14?.render(data), view);
 

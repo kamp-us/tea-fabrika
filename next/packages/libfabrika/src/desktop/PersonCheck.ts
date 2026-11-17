@@ -20,7 +20,7 @@ export const Answer = Schema.TaggedUnion({
  *
  * @category errors
  */
-export class Unavailable extends Schema.TaggedError<Unavailable>()("Unavailable", {
+export class Unavailable extends Schema.TaggedError<Unavailable, { readonly brand: unique symbol }>()("Unavailable", {
   cause: Schema.Defect(),
 }) {}
 
@@ -29,9 +29,12 @@ export class Unavailable extends Schema.TaggedError<Unavailable>()("Unavailable"
  *
  * @category errors
  */
-export class PersonCheckError extends Schema.TaggedError<PersonCheckError>()("PersonCheckError", {
-  reason: Schema.Union([Unavailable]),
-}) {}
+export class PersonCheckError extends Schema.TaggedError<PersonCheckError, { readonly brand: unique symbol }>()(
+  "PersonCheckError",
+  {
+    reason: Schema.Union([Unavailable]),
+  },
+) {}
 
 /**
  * Service that asks a person to confirm the action `reason` describes, and answers `checked` or `declined`.

@@ -39,6 +39,7 @@ const Model = Schema.Struct({
   replies: Schema.Int,
   queue: Schema.NullOr(Schema.String),
 });
+
 type Model = typeof Model.Type;
 
 const Msg = Schema.Union([
@@ -69,9 +70,11 @@ const world = Effect.fnUntraced(function* () {
   const ledger = storage(),
     state = storage(),
     authority = storage();
+
   const next = ids(...PIDS);
   const gate = yield* Deferred.make<void>();
   const entered = yield* Deferred.make<void>();
+
   const controls = {
     cut: "",
     hits: [] as string[],
@@ -83,7 +86,9 @@ const world = Effect.fnUntraced(function* () {
     flush: false,
     save: false,
   };
+
   const alarms: Array<number | null> = [];
+
   const machine = Machine.make({
     model: Model,
     msg: Msg,
@@ -123,6 +128,7 @@ const world = Effect.fnUntraced(function* () {
       write_err: (s) => [{ ...s, replies: s.replies + 1 }, []],
     },
   });
+
   const p = {
     name: "counter",
     machine,
@@ -140,6 +146,7 @@ const world = Effect.fnUntraced(function* () {
     writes: { saved: { schema: Schema.TaggedStruct("saved", { count: Schema.Int }), personOnly: false } },
     wake: () => null,
   };
+
   const input = (id: string, m: unknown = { type: "poison" }): Incoming => ({
     id,
     envelope: {
@@ -152,6 +159,7 @@ const world = Effect.fnUntraced(function* () {
     seen: 0,
     span: { traceId: from().traceId, spanId: "00f067aa0ba902b7" },
   });
+
   const base = () =>
     Layer.mergeAll(
       data(ledger.sql),
@@ -160,7 +168,9 @@ const world = Effect.fnUntraced(function* () {
         event: () => false,
       }),
     );
+
   const manager = () => ProcessManager.layer(brain(), next.next).pipe(Layer.provideMerge(base()));
+
   const processSql: Sql = {
     ...state.sql,
     exec: (q, ...args) => {
@@ -171,6 +181,7 @@ const world = Effect.fnUntraced(function* () {
       return state.sql.exec(q, ...args);
     },
   };
+
   const layer = () =>
     runnerLayer(
       { id: A, name: NAME, program: p.name, build: "build-a", owner },
@@ -186,6 +197,7 @@ const world = Effect.fnUntraced(function* () {
 
             controls.hits.push(cut);
             controls.cut = "";
+
             return Effect.fail(new LedgerError({ reason: "unreachable" }));
           }),
       },
@@ -200,6 +212,7 @@ const world = Effect.fnUntraced(function* () {
                   controls.commands++;
                   yield* Deferred.succeed(entered, undefined);
                   yield* Deferred.await(gate);
+
                   return Outcome.ok(null);
                 }),
             },
@@ -212,6 +225,7 @@ const world = Effect.fnUntraced(function* () {
               const sessions = yield* SessionManager;
               const ledger = yield* Ledger;
               const p = yield* ProcessManager;
+
               return {
                 append: (i: Incoming) => m.send(NAME, i.id, i.envelope.input, from({ parent: i.envelope.id })),
                 commit: (id: string, session: Session, stream: string, event: Event) =>
@@ -219,6 +233,7 @@ const world = Effect.fnUntraced(function* () {
                     controls.commits++;
                     const current = (yield* p.info)[0]!.process;
                     const signed = yield* sessions.receipt(id, session.parent, current, event._tag);
+
                     return yield* ledger.append(
                       stream,
                       id,
@@ -249,6 +264,7 @@ const world = Effect.fnUntraced(function* () {
         ).pipe(Layer.provideMerge(base())),
       ),
     );
+
   return {
     ledger,
     state,
@@ -271,13 +287,17 @@ const world = Effect.fnUntraced(function* () {
 });
 
 const lives = read(`processes/${NAME}`);
+
 const inbox = read(`${NAME}/inbox`);
+
 const exitBody = Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }));
+
 const restartBody = Schema.decodeUnknownSync(Schema.Struct({ after: Schema.String }));
 
 const restart = (r: (typeof ProgramRunner)["Service"], id: string, build: string) =>
   Effect.gen(function* () {
     expect(r.restart, "P34 trusted Restart operation is missing").toBeTypeOf("function");
+
     return yield* r.restart({ id, build });
   });
 
@@ -395,6 +415,7 @@ describe("P34 interrupted recovery", () => {
                   const records = yield* Effect.forEach([A, B, W, X], (p) => read(`${p}/dead`), {
                     concurrency: 1,
                   });
+
                   expect(records.flat()).toMatchObject([
                     { body: { tries: 3, errors: ["TypeError", "TypeError", "TypeError"] } },
                   ]);
@@ -467,9 +488,11 @@ describe("P34 interrupted recovery", () => {
         yield* Fiber.join(pending);
         expect((yield* r.open("new")).view).toMatchObject({ replies: 0 });
         expect(w.controls.commands).toBe(1);
+
         const answers = [...(yield* read(A)), ...(yield* inbox)].filter((row) =>
           JSON.stringify(row.body).includes('"type":"wait_ok"'),
         );
+
         expect(answers).toHaveLength(1);
         expect(answers[0]!.id).toBe(`${A}/1/0/answer`);
       }).pipe(Effect.provide(w.layer()));
@@ -550,6 +573,7 @@ describe("P34 interrupted recovery", () => {
     "scenario: p80 real instance: durable poison, down resends and duplicate alarms survive object reconstruction",
     async () => {
       type Status = { process: string; state: string; until: number | null };
+
       type Instance = {
         send: (id: string, m: unknown) => Effect.Effect<{ _tag: string; reason?: string }, unknown>;
         status: Effect.Effect<Status, unknown>;
@@ -561,10 +585,13 @@ describe("P34 interrupted recovery", () => {
         executions: Effect.Effect<number, unknown>;
         close: Effect.Effect<void>;
       };
+
       const modulePath = process.env.P34_INSTANCE_DRIVER!;
+
       const driver: { open: (errors: ReadonlyArray<string>) => Effect.Effect<Instance, unknown> } = await import(
         modulePath
       );
+
       await Effect.runPromise(
         Effect.acquireUseRelease(
           driver.open(["TypeError", "RangeError", "TypeError"]),

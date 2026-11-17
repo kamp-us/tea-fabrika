@@ -11,6 +11,7 @@ import type { ExitReason } from "./ExitReason.ts";
 it("type: isAnyOf takes only the union's own tags, so a misspelled tag does not compile", () => {
   // The tags come from the union itself, never a written list, so a new exit reason keeps this green.
   type Tag = ExitReason["_tag"];
+
   type Keys = Parameters<typeof ExitReason.isAnyOf>[0];
 
   expectTypeOf<Keys>().toEqualTypeOf<ReadonlyArray<Tag>>();

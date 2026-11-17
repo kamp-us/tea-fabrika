@@ -16,7 +16,9 @@ import * as FlowMachine from "./machine.ts";
 import * as Runners from "./Runners.ts";
 
 /** The command was used wrong, or its files do not fit: exit 2. */
-export class Usage extends Schema.TaggedError<Usage>()("Usage", { reason: Schema.String }) {
+export class Usage extends Schema.TaggedError<Usage, { readonly brand: unique symbol }>()("Usage", {
+  reason: Schema.String,
+}) {
   readonly [Runtime.errorExitCode] = 2;
 }
 
@@ -74,7 +76,7 @@ export const runFlow = Effect.fn("flow.run")(function* (flow: Flow.Flow, options
 
   if (saved) {
     const text = yield* fs.readFileString(options.state).pipe(Effect.orElseSucceed(() => ""));
-    const model = Schema.decodeUnknownOption(Schema.fromJsonString(FlowMachine.Model))(text);
+    const model = Schema.decodeOption(Schema.fromJsonString(FlowMachine.Model))(text);
 
     if (Option.isNone(model)) {
       return yield* Usage.make({ reason: `${options.state} holds no flow Model` });
@@ -86,6 +88,7 @@ export const runFlow = Effect.fn("flow.run")(function* (flow: Flow.Flow, options
   }
 
   const at = yield* Clock.currentTimeMillis;
+
   const handle = yield* run(FlowMachine.make({ lead: options.lead }), {
     ctx: { flow, at },
     store: fileStore(options.state, parse, { fenced: true }),
@@ -95,6 +98,8 @@ export const runFlow = Effect.fn("flow.run")(function* (flow: Flow.Flow, options
     },
     terminal: (m) => m._tag !== "running",
   });
+
   const runtime = yield* handle.ready;
+
   return yield* runtime.done();
 }, Effect.scoped);

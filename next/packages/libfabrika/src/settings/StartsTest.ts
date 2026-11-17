@@ -11,14 +11,21 @@ import { Origin } from "./Sources.ts";
 
 export const options = { arbitrary: { seed: 119120, runs: 100 } };
 
+/** What a start law may set: fast-check examples, and its case count when it is not the in-memory 100. */
+interface LawOptions<A> {
+  readonly examples?: Array<[A]>;
+  /** A law over real IO passes `runsFor({ fast, full })` here, never a number (decision 0535). */
+  readonly runs?: number;
+}
+
 // Stateful walks use fast-check because the plan requires fc.array move recipes.
 export const law = <A>(
   name: string,
   arbitrary: fc.Arbitrary<A>,
   check: (value: A) => Effect.Effect<unknown, unknown, Scope.Scope | Digest.Digest>,
-  examples?: Array<[A]>,
+  { examples, runs = 100 }: LawOptions<A> = {},
 ) => {
-  const parameters = { numRuns: 100, ...(examples === undefined ? {} : { examples }) };
+  const parameters = { numRuns: runs, ...(examples === undefined ? {} : { examples }) };
   it.effect(name, () =>
     property(arbitrary, (value: A) => check(value).pipe(Effect.provide(Digest.layerWebCrypto)), parameters),
   );

@@ -54,11 +54,14 @@ export const spawner = (child: Child, seen: Seen) =>
 
         const killed = yield* Deferred.make<void>();
         const tail = child.endless ? Stream.never : Stream.empty;
+
         const on = (to: "out" | "err") =>
           Stream.fromIterable(child.chunks.filter((c) => c.to === to).map((c) => c.bytes)).pipe(Stream.concat(tail));
+
         return yield* Effect.acquireRelease(
           Effect.sync(() => {
             seen.spawns++;
+
             return ChildProcessSpawner.makeHandle({
               pid: ChildProcessSpawner.ProcessId(4100 + seen.spawns),
               exitCode: child.endless
@@ -92,6 +95,6 @@ const Vectors = Schema.fromJsonString(
 );
 
 /** The real git lines C4's runs saved: what git printed, and what `execute` answers for it. */
-export const gitVectors = Schema.decodeUnknownSync(Vectors)(
+export const gitVectors = Schema.decodeSync(Vectors)(
   readFileSync(resolve(import.meta.dirname, "../../../../../../fixtures/next/hands/git-version.json"), "utf8"),
 ).vectors;

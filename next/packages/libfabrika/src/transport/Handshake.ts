@@ -18,11 +18,15 @@ import * as Schema from "effect/Schema";
 import { ErrorClass } from "./ClientRows.ts";
 
 const Dial = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
 /** A time or a duration in ms, as the client's own clock read it: a measurement, never authority. */
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
+
 /** The door's reason, kept only when it is one of its words: anything else is `other`. */
 const Reason = Schema.String.check(Schema.isPattern(/^[a-z_]{1,40}$/));
+
 const doorWord = (said: string): string => (Schema.is(Reason)(said) ? said : "other");
 
 /**
@@ -48,9 +52,9 @@ export const Handshake = Schema.TaggedUnion({
   /** The door said not granted, and `gateway.knock` went out with `id`. */
   knocking: { dial: Dial, since: Ms, sent: Count, id: Schema.String },
   /** The door shows `code` until `until`; only a grant moves on. */
-  waiting: { dial: Dial, since: Ms, sent: Count, code: Schema.String, until: Schema.Number, ms: Ms },
+  waiting: { dial: Dial, since: Ms, sent: Count, code: Schema.String, until: Schema.Finite, ms: Ms },
   /** The door admitted the hello. `ping` is its interval in ms; `person` is who the door admitted. */
-  admitted: { dial: Dial, since: Ms, ping: Schema.Number, ms: Ms, person: Schema.String },
+  admitted: { dial: Dial, since: Ms, ping: Schema.Finite, ms: Ms, person: Schema.String },
   /** The key could not sign the hello. */
   failed: { dial: Dial, error: ErrorClass },
   /** The door refused the hello for `reason`, its own word or `other`, `ms` after the dial began. */
@@ -78,7 +82,7 @@ export const HandshakeMsg = Schema.Union([
     type: Schema.Literal("waiting"),
     dial: Dial,
     code: Schema.String,
-    until: Schema.Number,
+    until: Schema.Finite,
     at: Ms,
   }),
   Schema.Struct({
@@ -128,12 +132,12 @@ export const knock = Cmd.make("knock", {
 /** The door's admission, as it answers `initialize`. */
 const Admitted = Schema.Struct({
   version: Schema.Int,
-  ping: Schema.Number,
+  ping: Schema.Finite,
   identity: Schema.Struct({ key: Schema.String, person: Schema.String, as: Schema.String }),
 });
 
 /** The door's waiting code, as it answers a knock. */
-const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Number });
+const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Finite });
 
 /** The class a key error carries beside its tag, or `other`. */
 const KeyFailure = Schema.Struct({ error: ErrorClass });
@@ -141,11 +145,16 @@ const KeyFailure = Schema.Struct({ error: ErrorClass });
 type Step = readonly [Handshake, ReadonlyArray<ReturnType<typeof hello> | ReturnType<typeof knock>>];
 
 const stay = (s: Handshake): Step => [s, []];
+
 const elapsed = (at: number, since: number): number => Math.max(0, at - since);
+
 const sentOn = (s: Handshake): number => ("sent" in s ? s.sent : 0);
+
 /** When the dial opened, or `at` when its opening time never came. */
 const sinceOn = (s: Handshake, at: number): number => ("since" in s && s.since !== undefined ? s.since : at);
+
 const idOn = (s: Handshake): string | undefined => ("id" in s ? s.id : undefined);
+
 /** The dial's exchange reached an outcome: only a newer dial starts over. */
 const ended = (s: Handshake): boolean => s._tag === "admitted" || s._tag === "failed" || s._tag === "refused";
 
@@ -153,6 +162,7 @@ const ended = (s: Handshake): boolean => s._tag === "admitted" || s._tag === "fa
 const helloFor = (s: Handshake, dial: number, since: number, nonce: string): Step => {
   const sent = sentOn(s) + 1;
   const id = `h${dial}.${sent}`;
+
   return [Handshake.cases.initializing.make({ dial, since, sent, id }), [hello({ dial, id, nonce })]];
 };
 
@@ -196,6 +206,7 @@ export const handshakeMachine = Machine.make({
       }
 
       const since = s.since;
+
       return [
         Handshake.cases.waiting.make({
           dial: m.dial,
@@ -217,6 +228,7 @@ export const handshakeMachine = Machine.make({
         if (m.reason === "not_granted") {
           const sent = s.sent + 1;
           const id = `h${s.dial}.${sent}`;
+
           return [
             Handshake.cases.knocking.make({ dial: s.dial, since: s.since, sent, id }),
             [knock({ dial: s.dial, id })],
@@ -231,6 +243,7 @@ export const handshakeMachine = Machine.make({
         }
 
         const admitted = m.reason === undefined ? Schema.decodeUnknownOption(Admitted)(m.result) : Option.none();
+
         return Option.match(admitted, {
           onNone: () => stay(s),
           onSome: (a) => [

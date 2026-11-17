@@ -82,6 +82,7 @@ export const rowsAt = (rows: ReadonlyArray<Row>, path: string): ReadonlyArray<st
       .filter((pattern) => claims(pattern).test(path))
       .map((pattern) => ({ name: row.name, specificity: specificityAt(pattern) })),
   );
+
   const best = found.reduce<Specificity | null>(
     (top, claim) => (top === null || compare(claim.specificity, top) > 0 ? claim.specificity : top),
     null,

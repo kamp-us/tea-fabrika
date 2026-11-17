@@ -36,15 +36,17 @@ export const latest = (entries: ReadonlyArray<Level.Entry>): ReadonlyArray<Level
 /** The open pull requests the latest sev0 canceled a run of, each once, by number. */
 export const owed = (entries: ReadonlyArray<Level.Entry>, prs: ReadonlyArray<PullRequest>) => {
   const hit = new Set(latest(entries).flatMap((e) => (e._tag === "canceled" ? [e.run.branch] : [])));
+
   return prs.filter((pr) => pr.state === "OPEN" && hit.has(pr.head)).toSorted((a, b) => a.number - b.number);
 };
 
 /** One pull request the lead walks after a sev0, and how its branch stands to main. */
 export const Walk = Schema.TaggedUnion({
-  behind: { pr: Schema.Number, branch: Schema.String, commits: Schema.Number },
-  holds: { pr: Schema.Number, branch: Schema.String },
-  unknown: { pr: Schema.Number, branch: Schema.String, reason: Schema.String },
+  behind: { pr: Schema.Finite, branch: Schema.String, commits: Schema.Finite },
+  holds: { pr: Schema.Finite, branch: Schema.String },
+  unknown: { pr: Schema.Finite, branch: Schema.String, reason: Schema.String },
 });
+
 export type Walk = typeof Walk.Type;
 
 /** The walk in the order the lead takes it: the ones a merge of main helps first, then the rest. */

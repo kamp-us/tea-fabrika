@@ -27,7 +27,9 @@ export const nextLaws: Rule = ({ jobs }, require) => {
     strategy = map(nextJob["strategy"]),
     matrix = map(strategy["matrix"]),
     nextSteps = steps(nextJob);
+
   require(!("name" in nextJob), "next keeps the default matrix check names");
+
   // E1. The matrix is `fromJSON(needs.changes.outputs.shards || (<when> && '<full>' || '<vitest>'))`:
   // on a run that tests all of next/ from a base, changes' sized legs, else a fallback (E10). The
   // full one is the end-to-end legs
@@ -41,6 +43,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   // `matrix.shard != 'e2e'` (E3).
   const allLegs = legs(nextJob),
     e2eCount = ends(allLegs).length;
+
   const expectedLegs = [...Array.from({ length: e2eCount }, (_, i) => `${E2E_PREFIX}${i + 1}`), ...VITEST_LEGS];
   require(e2eCount >= 1 &&
     JSON.stringify(allLegs) === JSON.stringify(expectedLegs) &&
@@ -58,6 +61,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
         VITEST_LEGS,
       ), "E10: next's full fallback runs only with the visual label, else the vitest legs 1 to 5 alone");
   require(strategy["fail-fast"] === false, "next lets every shard finish");
+
   // The vitest step's paths, unquoted so each path is its own argument. On a sized run (a pull
   // request, a merge queue group or a push to main, 0534) changes' `files`: what `--changed` picked
   // and every reader test, each once (legs.ts), so the step takes no `--changed` of its own, which
@@ -65,6 +69,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   // reader tests or `next/`, and a missing filter runs all of next/.
   const nextCommand =
     'pnpm exec vitest run --project next $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+
   // E11 (0536). The vitest step tests the `next` project alone, on every event: the merge line runs
   // the in-memory layer, and the schedule runs the real-resource one. A path filter alone finds a
   // file in any project, so the flag is what keeps `next-integration` out. Plants, each run once on
@@ -75,6 +80,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   // visual file the change reaches.
   const e2eCommand = `pnpm exec vitest run --project next-visual $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
   const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
+
   // Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
   const allowed = [
     "pnpm install --frozen-lockfile",
@@ -85,6 +91,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
     'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
     TIME_TABLE,
   ];
+
   const nextRuns = nextSteps.filter((s) => "run" in s).map((s) => s["run"]);
   require(nextRuns.length === allowed.length &&
     allowed.every(

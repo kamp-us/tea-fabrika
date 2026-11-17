@@ -6,6 +6,7 @@ const scoped =
   /^next\/packages\/libfabrika\/src\/(?:data\/id|ledger\/Log|access\/Authorization|gateway\/(?:Gateway|GatewayStore|GatewayNonce)|runtime\/(?:Nemesis|ChaosState|Runner|Entry))\.ts$/;
 
 const outside = /^(?:raw|wire|saved|row|params|input|body|bytes|stored|persisted)(?:[A-Z_].*)?$/;
+
 const sync = /(?:^|\.)(?:decodeSync|decodeUnknownSync)$/;
 
 // Existing response and reducer constructors are outside this change. These are the saved/input
@@ -33,6 +34,7 @@ export const outsideInputConstructor: CreateRule = {
 
     const aliases = new Map<Variable, Node>();
     const names = new Map<Variable, string>();
+
     const binding = (node: Node): Variable | undefined => {
       if (node.type !== "Identifier") {
         return undefined;
@@ -52,6 +54,7 @@ export const outsideInputConstructor: CreateRule = {
 
       return undefined;
     };
+
     const resolve = (node: Node, seen = new Set<Variable>()): Node => {
       const variable = binding(node);
 
@@ -66,8 +69,10 @@ export const outsideInputConstructor: CreateRule = {
       }
 
       seen.add(variable);
+
       return resolve(value, seen);
     };
+
     const name = (node: Node, seen = new Set<Variable>()): string | null => {
       if (node.type === "Identifier") {
         const variable = binding(node);
@@ -89,17 +94,20 @@ export const outsideInputConstructor: CreateRule = {
         }
 
         seen.add(variable);
+
         return name(value, seen) ?? node.name;
       }
 
       if (node.type === "MemberExpression" && !node.computed && !node.optional) {
         const owner = name(node.object, seen);
         const member = dotted(node.property);
+
         return owner === null || member === null ? null : `${owner}.${member}`;
       }
 
       return dotted(node);
     };
+
     const constant = (node: Node, seen = new Set<Variable>()): boolean => {
       const value = resolve(node, seen);
 
@@ -123,6 +131,7 @@ export const outsideInputConstructor: CreateRule = {
           return false;
       }
     };
+
     const untrusted = (node: Node, seen = new Set<Variable>()): boolean => {
       if (node.type === "Identifier") {
         const variable = binding(node);
@@ -186,6 +195,7 @@ export const outsideInputConstructor: CreateRule = {
 
       return false;
     };
+
     const inDecoder = (node: Node): boolean =>
       [...ancestors(node)].some((parent) => {
         if (parent.type === "FunctionDeclaration") {
@@ -198,6 +208,7 @@ export const outsideInputConstructor: CreateRule = {
 
         return false;
       });
+
     return {
       ImportSpecifier(node) {
         const variable = binding(node.local);
@@ -255,8 +266,10 @@ export const outsideInputConstructor: CreateRule = {
         const curried = callee.type === "CallExpression" && sync.test(name(callee.callee) ?? "");
         const type = call.split(".")[0] ?? "";
         const added = /\/(?:data\/id|access\/Authorization|runtime\/(?:Nemesis|ChaosState))\.ts$/.test(pathIn(context));
+
         const constructor =
           call.endsWith(".make") && !declarations.has(type) && (added || inputs.has(type) || inDecoder(node));
+
         const throwing = constructor || sync.test(call) || curried;
 
         if (!idMake && !throwing) {

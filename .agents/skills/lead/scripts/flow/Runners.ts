@@ -8,7 +8,9 @@ import type { Answer } from "./Outcome.ts";
 import type { Step } from "./Step.ts";
 
 /** A runner could not do its work at all (it could not start, or its args do not parse). */
-export class StepFailed extends Schema.TaggedError<StepFailed>()("StepFailed", { reason: Schema.String }) {}
+export class StepFailed extends Schema.TaggedError<StepFailed, { readonly brand: unique symbol }>()("StepFailed", {
+  reason: Schema.String,
+}) {}
 
 /** One step's work: the step in, its answer out. */
 export type Runner<R = never> = (step: Step) => Effect.Effect<Answer, StepFailed, R>;
@@ -28,6 +30,7 @@ export const layer = <R>(table: Readonly<Record<string, Runner<R>>>): Layer.Laye
     Runners,
     Effect.gen(function* () {
       const services = yield* Effect.context<R>();
+
       const run = Effect.fn("Runners.run")(function* (step: Step) {
         const runner = table[step.name];
 
@@ -37,6 +40,7 @@ export const layer = <R>(table: Readonly<Record<string, Runner<R>>>): Layer.Laye
 
         return yield* runner(step).pipe(Effect.provideContext(services));
       });
+
       return Runners.of({ names: new Set(Object.keys(table)), run });
     }),
   );

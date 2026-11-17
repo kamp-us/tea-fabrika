@@ -14,7 +14,9 @@ type Code<A extends ReadonlyArray<unknown>, R> = { call(...args: A): R }["call"]
 
 /** A schema a program declares. It decodes and encodes without services. */
 type Declared = Schema.Codec<unknown, unknown>;
+
 const isDeclared = (u: unknown): u is Declared => Schema.isSchema(u);
+
 const isCode = <F>(u: unknown): u is F => Predicate.isFunction(u);
 
 const code = <F>(expected: string) => Schema.declare((u: unknown): u is F => isCode<F>(u), { expected });
@@ -49,6 +51,7 @@ export const Refusal = Schema.Struct({
   now: Schema.optionalKey(Schema.Number),
   most: Schema.optionalKey(Schema.Number),
 });
+
 /**
  * A program's own no to a fresh Msg, as `Refusal` decodes it.
  *
@@ -73,6 +76,7 @@ export const State = Schema.Struct({
   schema: Schemas,
   upgrades: Schema.Array(Upgrade),
 });
+
 /**
  * The saved model's shape, as `State` decodes it.
  *
@@ -112,6 +116,7 @@ type ReadPort<Q extends Declared, A> = Omit<typeof InputSchema.cases.read.Type, 
 };
 
 const readInput = InputSchema.cases.read.make;
+
 const writeInput = InputSchema.cases.write.make;
 
 const readPort = <Q extends Declared, A extends (view: never, input: NoInfer<Q["Type"]>) => unknown>(
@@ -140,6 +145,7 @@ const writeCase = Schema.make<InputConstructors["cases"]["write"]>(InputSchema.c
 });
 
 Object.defineProperty(readCase, "make", { value: readPort });
+
 Object.defineProperty(writeCase, "make", { value: writePort });
 
 /**
@@ -167,6 +173,7 @@ export const Input = Schema.make<InputConstructors>(InputSchema.ast, {
  * @category schemas
  */
 export const EventPolicy = Schema.Struct({ schema: Schemas, personOnly: Schema.Boolean });
+
 /**
  * One row of a program's `writes`, as `EventPolicy` decodes it.
  *
@@ -365,7 +372,9 @@ const Authoring = Schema.Struct({
 });
 
 const decodeDeclaration = Schema.decodeUnknownResult(Declaration);
+
 const decodeLoadable = Schema.decodeUnknownResult(Loadable);
+
 const decodeAuthoring = Schema.decodeUnknownResult(Authoring);
 
 const construct = (raw: unknown) =>
@@ -471,6 +480,7 @@ export const Write = Schema.TaggedUnion({
   caused: { parent: ParentText, event: Event },
   own: { event: Event },
 });
+
 /**
  * What a program asks the runner to write, as `Write` decodes it.
  *
@@ -493,6 +503,7 @@ export const Step = Schema.TaggedUnion({
   },
   refused: Refusal.fields,
 });
+
 /**
  * One pure step's answer, as `Step` decodes it.
  *
@@ -508,6 +519,7 @@ export type Step = typeof Step.Type;
  * @category schemas
  */
 export const Admission = Schema.TaggedUnion({ admitted: {}, invalid: {}, refused: Refusal.fields });
+
 /**
  * An admission answer, as `Admission` decodes it.
  *
@@ -550,6 +562,7 @@ export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown"
     }
 
     const original = Object.hasOwn(this, "cause") ? this.cause : this;
+
     return original instanceof Error ? original.constructor.name : original === null ? "null" : typeof original;
   }
 }
@@ -578,6 +591,7 @@ export type Stepper = {
 };
 
 const decodeRefusal = Schema.decodeUnknownResult(Schema.NullOr(Refusal));
+
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
 
 const isTyped = (u: unknown): u is Typed =>
@@ -641,6 +655,7 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
   }
 
   const error = Predicate.hasProperty(msg, "error") ? msg.error : undefined;
+
   return Option.some(isTagged(error));
 };
 
@@ -710,6 +725,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     }
 
     const decoded = decodeMsg(raw);
+
     return Result.isSuccess(decoded) && isTyped(decoded.success) ? Option.some(decoded.success) : Option.none();
   };
 
@@ -728,6 +744,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     }
 
     const schemas: object = def.schema;
+
     return "input" in schemas && accepts(schemas.input, cmd);
   };
 
@@ -762,6 +779,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       try: f,
       catch: (cause) => (Schema.is(ProgramDown)(cause) ? cause : new ProgramDown({ reason: "step", cause })),
     });
+
   const fresh: Stepper["fresh"] = (raw, msg) =>
     checked(() => {
       const now = model(raw, "saved_state");
@@ -781,6 +799,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
         ? Admission.cases.admitted.make({})
         : Admission.cases.refused.make(refusal.success);
     });
+
   const update: Stepper["update"] = (raw, msg) =>
     checked(() => {
       const now = model(raw, "saved_state");
@@ -791,6 +810,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       }
 
       const [next, cmds] = guard("step", () => applyCell(machine, now, m.value));
+
       return prepare(next, cmds, "step");
     });
 
@@ -801,6 +821,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     init: (saved) => {
       const start = saved === null ? null : model(saved, "saved_state");
       const [next] = guard("load", () => machine.init(start, {}));
+
       return prepare(next, [], "load");
     },
     step: (raw, msg) => {
@@ -842,6 +863,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       }
 
       const [next, cmds] = guard("saved_letter", () => applyCell(machine, now, m.value));
+
       return prepare(next, cmds, "saved_letter");
     },
   });

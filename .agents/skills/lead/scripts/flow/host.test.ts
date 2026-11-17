@@ -28,10 +28,12 @@ const options = { seed: 119120, numRuns: 200 };
 
 const temp = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
+
   return yield* fs.makeTempDirectoryScoped({ prefix: "host-" });
 });
 
 const command = fc.stringMatching(/^[a-z][a-z0-9 ./=-]{0,40}$/).filter((c) => c === c.trim());
+
 const sha = "a".repeat(40);
 
 const args = (commands: ReadonlyArray<string>) => ({
@@ -54,6 +56,7 @@ describe("the quest brief's host commands", () => {
         const section = [...prose, "```sh", "# a comment", ...inside.flatMap((c) => [c, ""]), "```", ...prose].join(
           "\n",
         );
+
         expect(hostCommands(section)).toEqual(inside);
       }),
       options,
@@ -92,12 +95,15 @@ describe("the quest brief's host commands", () => {
     ran(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
+
         const node = (pkg: unknown) =>
           Effect.gen(function* () {
             const dir = yield* temp;
             yield* fs.writeFileString(`${dir}/package.json`, JSON.stringify(pkg));
+
             return yield* repoNode(dir);
           });
+
         expect(yield* node({ volta: { node: "26.13.0" }, engines: { node: "26.1.0" } })).toBe("26.13.0");
         expect(yield* node({ engines: { node: "26.13.0" } })).toBe("26.13.0");
         expect(yield* node({ engines: { node: ">=22" } })).toBeNull();
@@ -166,6 +172,7 @@ describe("the host step's outcomes", () => {
     ran(
       Effect.gen(function* () {
         const dir = yield* temp;
+
         const outcome = yield* runCommands(
           dir,
           ['printf "%s|" "$FABRIKA_HOME" > env.txt; env | grep -c "^FABRIKA_FOREGROUND=" >> env.txt || true'],
@@ -173,6 +180,7 @@ describe("the host step's outcomes", () => {
           `${dir}/log`,
           1,
         );
+
         expect(outcome).toBeNull();
         const fs = yield* FileSystem.FileSystem;
         expect(yield* fs.readFileString(`${dir}/env.txt`)).toBe(`${dir}/home|0\n`);
@@ -203,15 +211,18 @@ describe("one Electron app at a time", () => {
         // This test's own pid: a live process that holds the lock.
         yield* fs.writeFileString(lock, String(process.pid));
         const taken = yield* Ref.make(false);
+
         const fiber = yield* Effect.forkChild(
           Effect.scoped(
             Effect.gen(function* () {
               yield* electronLock(lock, "10 millis");
               yield* Ref.set(taken, true);
+
               return yield* fs.readFileString(lock);
             }),
           ),
         );
+
         yield* Effect.sleep("100 millis");
         expect(yield* Ref.get(taken)).toBe(false);
         yield* fs.remove(lock);
@@ -229,9 +240,11 @@ describe("one Electron app at a time", () => {
         const lock = `${yield* temp}/electron.lock`;
         // Above any pid macOS hands out (99998), so no process holds it.
         yield* fs.writeFileString(lock, "2000000000");
+
         const held = yield* Effect.scoped(
           electronLock(lock, "1 hour").pipe(Effect.andThen(fs.readFileString(lock)), Effect.timeoutOption("5 seconds")),
         );
+
         expect(held).toEqual(Option.some(String(process.pid)));
       }),
     ));
@@ -245,12 +258,14 @@ describe("the quest's state file", () => {
         const boxes = yield* temp;
         yield* fs.makeDirectory(`${boxes}/state`);
         const state = `${boxes}/state/quest.json`;
+
         const before = {
           quest: "quest",
           ticket: "7",
           head: sha,
           steps: [{ step: "build", outcome: "done", head: sha }],
         };
+
         yield* fs.writeFileString(state, JSON.stringify(before));
         const at = { boxes, quest: "quest", name: "quest-host3", head: sha };
         const sent = { _tag: "send", to: "build", reason: "red" } as const;
@@ -280,6 +295,7 @@ describe("the quest's state file", () => {
         const boxes = yield* temp;
         yield* fs.makeDirectory(`${boxes}/state`);
         const state = `${boxes}/state/t9.json`;
+
         const before = {
           lane: "t9",
           ticket: "9",
@@ -289,6 +305,7 @@ describe("the quest's state file", () => {
           head: sha,
           steps: [{ step: "build", box: "t9-build1", outcome: "done", head: sha }],
         };
+
         yield* fs.writeFileString(state, `${JSON.stringify(before, null, "\t")}\n`);
         const done = { _tag: "done", reason: "ok" } as const;
         yield* recordInQuest(

@@ -10,6 +10,7 @@ import { Effect, Exit, Schema } from "effect";
 import { asks } from "./edges.ts";
 
 const PRODUCT = "next/packages/libfabrika/src/data/project.ts";
+
 const OTHER = "next/packages/libfabrika/src/data/ledger.ts";
 
 const EDGE = "// oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object answers a Promise";
@@ -17,6 +18,7 @@ const EDGE = "// oxlint-disable-next-line fabrika/no-promises -- edge: a Durable
 const RUN_EDGE = "// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the platform calls it";
 
 const CALL = "export const a = Effect.tryPromise(() => p);";
+
 const PRELUDE = 'import {Effect} from "effect";\ndeclare const p: Promise<number>;';
 
 const file = (...lines: ReadonlyArray<string>) => [PRELUDE, ...lines, ""].join("\n");
@@ -74,6 +76,7 @@ describe("asks", () => {
         [OTHER]: file(EDGE, CALL),
       },
     );
+
     expect(found.map((e) => [e.path, e.line])).toEqual([
       [OTHER, 3],
       [PRODUCT, 5],
@@ -106,6 +109,7 @@ describe("edges.ts, as CI runs it", () => {
   const { GITHUB_STEP_SUMMARY: _summary, ...env } = process.env;
   const quiet = { ...env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
   const script = join(import.meta.dirname, "edges.ts");
+
   // Each test builds its own repository in its own scope, which removes it when the test ends (0061).
   const scenario = Effect.acquireRelease(
     Effect.sync(() => mkdtempSync(join(tmpdir(), "edges-"))),
@@ -125,10 +129,12 @@ describe("edges.ts, as CI runs it", () => {
 
         return out.stdout.trim();
       };
+
       const put = (path: string, text: string) => {
         mkdirSync(dirname(join(repo, path)), { recursive: true });
         writeFileSync(join(repo, path), text);
       };
+
       const edges = (base: string, extra: Record<string, string> = {}) =>
         spawnSync(process.execPath, [script, "--base", base], {
           cwd: repo,
@@ -145,6 +151,7 @@ describe("edges.ts, as CI runs it", () => {
       put(OTHER, file(RUN_EDGE, "export const b = 1;"));
       git("add", ".");
       git("commit", "-q", "-m", "head");
+
       return { repo, put, edges, base };
     }),
   );

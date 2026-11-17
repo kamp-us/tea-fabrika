@@ -26,25 +26,30 @@ const main = Effect.fn("publish.main")(function* (branch: string) {
 
   if (head === "" || repo === null) {
     yield* Console.log("publish: refused: no HEAD, or an origin that is not a GitHub repo");
+
     return yield* setExit(1);
   }
 
   const title = yield* git(dir, "log", "-1", "--format=%s", head);
   const services = Layer.mergeAll(PushesProcess.layer(import.meta.dirname), PullRequestsGh.layer(repo, dir));
   const text = { title, body: Publish.DRAFT_BODY };
+
   const published = yield* Publish.publish({ dir, branch, head, text }).pipe(
     Effect.provide(services),
     Effect.map((p) => ({ ok: true, line: Publish.line(branch, p) })),
     Effect.catch((e) => Effect.succeed({ ok: false, line: `refused: ${e.reason}` })),
   );
+
   yield* Console.log(`publish: ${published.line}`);
   yield* setExit(published.ok ? 0 : 1);
 });
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
+
   const program =
     args.length === 1 ? main(args[0] ?? "") : Effect.andThen(Console.error("usage: publish.ts <branch>"), setExit(2));
+
   NodeRuntime.runMain(
     program.pipe(
       Effect.catchTag("PlatformError", (e) =>

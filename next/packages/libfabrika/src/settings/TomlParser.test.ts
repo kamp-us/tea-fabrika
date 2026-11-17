@@ -16,12 +16,14 @@ import { Toml, TomlError } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: 100 };
 
 const parse = (text: string) =>
   Effect.runPromiseExit(
     Effect.gen(function* () {
       const toml = yield* Toml;
+
       return yield* toml.parse(text);
     }).pipe(Effect.provide(TomlParser.layer)),
   );
@@ -117,6 +119,7 @@ const write = (d: Doc) => {
     }
 
     lines.push(p.trailing ? `${text} # trailing` : text);
+
     return lines.length;
   };
 

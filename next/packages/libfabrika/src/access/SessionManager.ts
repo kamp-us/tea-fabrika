@@ -27,6 +27,7 @@ export const Writer = Schema.TaggedUnion({
   person: { key: Schema.String, for: Schema.String },
   agent: { key: Schema.String, for: Schema.String },
 });
+
 /**
  * The decoded type of `Writer`.
  *
@@ -60,6 +61,7 @@ export const Session = Schema.Struct({
   traceId: Schema.String,
   span: Span,
 });
+
 /**
  * The decoded type of `Session`.
  *
@@ -82,9 +84,12 @@ export type Session = typeof Session.Type;
  *
  * @category errors
  */
-export class SigningRefused extends Schema.TaggedError<SigningRefused>()("SigningRefused", {
-  reason: Schema.Literals(["not_delivered", "spent", "person_only", "ended", "signal"]),
-}) {}
+export class SigningRefused extends Schema.TaggedError<SigningRefused, { readonly brand: unique symbol }>()(
+  "SigningRefused",
+  {
+    reason: Schema.Literals(["not_delivered", "spent", "person_only", "ended", "signal"]),
+  },
+) {}
 
 /**
  * Error for a request that is not let through: most often a writer whose key does not belong, or
@@ -99,7 +104,7 @@ export class SigningRefused extends Schema.TaggedError<SigningRefused>()("Signin
  *
  * @category errors
  */
-export class NotGranted extends Schema.TaggedError<NotGranted>()("NotGranted", {}) {}
+export class NotGranted extends Schema.TaggedError<NotGranted, { readonly brand: unique symbol }>()("NotGranted", {}) {}
 
 /**
  * Reason for a session table that could not be read or written: the `Sql` threw. The throw is
@@ -107,7 +112,9 @@ export class NotGranted extends Schema.TaggedError<NotGranted>()("NotGranted", {
  *
  * @category errors
  */
-export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Reason for a saved input or receipt that does not decode. The decoder's failure is kept as
@@ -115,7 +122,9 @@ export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: S
  *
  * @category errors
  */
-export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Schema.Defect() }) {}
+export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Reason for a membership check that failed for any cause but `NotGranted`, such as the access
@@ -123,7 +132,9 @@ export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Sche
  *
  * @category errors
  */
-export class Membership extends Schema.TaggedError<Membership>()("Membership", { cause: Schema.Defect() }) {}
+export class Membership extends Schema.TaggedError<Membership, { readonly brand: unique symbol }>()("Membership", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Error for a session call that failed below the session rules: in its own tables, or in the
@@ -132,9 +143,12 @@ export class Membership extends Schema.TaggedError<Membership>()("Membership", {
  *
  * @category errors
  */
-export class SessionManagerError extends Schema.TaggedError<SessionManagerError>()("SessionManagerError", {
-  reason: Schema.Union([Storage, BadRow, Membership]),
-}) {}
+export class SessionManagerError extends Schema.TaggedError<SessionManagerError, { readonly brand: unique symbol }>()(
+  "SessionManagerError",
+  {
+    reason: Schema.Union([Storage, BadRow, Membership]),
+  },
+) {}
 
 /** The manager's own error for a throw in a stored step: a decoder's failure is a bad row. */
 const storageFault = (cause: unknown) =>
@@ -164,9 +178,11 @@ const InputRecord = Schema.Struct({
   digest: Schema.String,
   traceId: Schema.String,
   span: Span,
-  arrivedAt: Schema.Number,
+  arrivedAt: Schema.Finite,
 });
+
 type InputRecord = typeof InputRecord.Type;
+
 const State = Schema.TaggedUnion({ recorded: {}, delivered: {} });
 
 /**
@@ -180,7 +196,7 @@ const State = Schema.TaggedUnion({ recorded: {}, delivered: {} });
  *
  * @category models
  */
-export class SavedInput extends Schema.Opaque<SavedInput>()(
+export class SavedInput extends Schema.Opaque<SavedInput, { readonly brand: unique symbol }>()(
   Schema.Struct({
     input: InputRecord,
     state: State,
@@ -202,8 +218,11 @@ export class SavedInput extends Schema.Opaque<SavedInput>()(
 }
 
 const encode = Schema.encodeSync(Schema.fromJsonString(SavedInput));
+
 const decode = Schema.decodeUnknownSync(Schema.fromJsonString(SavedInput));
+
 const encodeSession = Schema.encodeSync(Schema.fromJsonString(Session));
+
 const decodeSession = Schema.decodeUnknownSync(Schema.fromJsonString(Session));
 
 /**
@@ -267,6 +286,7 @@ export class SessionManager extends Context.Service<
       SessionManager,
       Effect.gen(function* () {
         const context = yield* Effect.context<R>();
+
         const ensure = () => {
           sql.exec("CREATE TABLE IF NOT EXISTS gateway_sessions (parent TEXT PRIMARY KEY, saved TEXT NOT NULL)");
           sql.exec("CREATE TABLE IF NOT EXISTS gateway_ended (process TEXT PRIMARY KEY)");
@@ -274,19 +294,25 @@ export class SessionManager extends Context.Service<
             "CREATE TABLE IF NOT EXISTS gateway_receipts (id TEXT PRIMARY KEY, parent TEXT NOT NULL, process TEXT NOT NULL, kind TEXT NOT NULL, session TEXT NOT NULL, UNIQUE(parent, process, kind))",
           );
         };
+
         const stored = Effect.fnUntraced(function* <A>(step: () => A) {
           return yield* Effect.try({ try: step, catch: storageFault });
         });
+
         const ended = (process: string) =>
           sql.exec("SELECT process FROM gateway_ended WHERE process=?", process).length > 0;
+
         const load = (parent: string) => {
           const [row] = sql.exec("SELECT saved FROM gateway_sessions WHERE parent=?", parent);
+
           return row === undefined ? null : decode(row.saved);
         };
+
         /** A saved input's writer must still belong; with no saved input, the read after answers. */
         const belongs = Effect.fnUntraced(function* (parent: string) {
           const saved = yield* stored(() => {
             ensure();
+
             return load(parent);
           });
 
@@ -299,6 +325,7 @@ export class SessionManager extends Context.Service<
             );
           }
         });
+
         /** The session of an input delivered to a live process, read in the caller's transaction. */
         const deliveredTo = (parent: string, process: string, personOnly: boolean) => {
           if (ended(process)) {
@@ -306,10 +333,12 @@ export class SessionManager extends Context.Service<
           }
 
           const current = load(parent);
+
           return current === null
             ? Result.fail(SigningRefused.make({ reason: "not_delivered" }))
             : SavedInput.sign(current, process, personOnly);
         };
+
         const signer = Effect.fn("session.signer")(function* (parent: string, process: string, kind: string) {
           const request = yield* SignRequest;
 
@@ -354,6 +383,7 @@ export class SessionManager extends Context.Service<
                 kind,
                 encodeSession(session.success),
               );
+
               return session;
             }),
           ).pipe(
@@ -362,17 +392,20 @@ export class SessionManager extends Context.Service<
             ),
           );
         });
+
         return {
           signer,
           sender: Effect.fn("session.sender")(function* (parent: string, process: string) {
             yield* belongs(parent);
             // A read, in one transaction as `signer`'s: no request, and no receipt is written.
             const session = yield* stored(() => sql.transaction(() => deliveredTo(parent, process, false)));
+
             return yield* Effect.fromResult(session).pipe(Effect.map(({ by }) => by));
           }),
           receipt: Effect.fn("session.receipt")(function* (id: string, parent: string, process: string, kind: string) {
             const exists = yield* stored(() => {
               ensure();
+
               return (
                 sql.exec(
                   "SELECT id FROM gateway_receipts WHERE id=? AND parent=? AND process=? AND kind=?",
@@ -400,6 +433,7 @@ export class SessionManager extends Context.Service<
                 }
 
                 const prior = load(input.id);
+
                 const saved = SavedInput.make({
                   input: { ...input, personOnly: input.personOnly && policy.input(input.name) },
                   state: State.cases.recorded.make({}),
@@ -412,6 +446,7 @@ export class SessionManager extends Context.Service<
                 }
 
                 sql.exec("INSERT INTO gateway_sessions (parent,saved) VALUES (?,?)", input.id, encode(saved));
+
                 return Result.succeed(undefined);
               }),
             );
@@ -440,6 +475,7 @@ export class SessionManager extends Context.Service<
                   encode(SavedInput.make({ ...saved, state: State.cases.delivered.make({}) })),
                   parent,
                 );
+
                 return Result.succeed(undefined);
               }),
             );

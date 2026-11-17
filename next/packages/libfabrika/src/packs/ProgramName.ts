@@ -15,6 +15,7 @@ export const ProgramName = Schema.String.check(
   Schema.isPattern(/^[A-Za-z_][\w-]*\/[A-Za-z_][\w-]*$/),
   Schema.isMaxLength(256),
 );
+
 /**
  * A program's name, `pack/program`.
  *
