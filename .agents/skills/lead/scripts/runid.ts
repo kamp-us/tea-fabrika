@@ -47,6 +47,7 @@ export const make = (parts: Parts): string => `${parts.quest}-${parts.step}${par
 /** A run id's parts, or `null` when the text is no run id. */
 export const parse = (id: string): Parts | null => {
   const m = ID.exec(id);
+
   return m === null ? null : { quest: m[1] ?? "", step: m[2] ?? "", n: Number(m[3]) };
 };
 

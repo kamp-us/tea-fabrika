@@ -17,7 +17,8 @@
 // machine's own helpers.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { type Access, access, admitted, type Folded, type MemberEvent, members, type Reason } from "./Access.ts";
@@ -30,18 +31,27 @@ const Tag = Schema.TaggedUnion({
 });
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const RUNS = 100;
 
 type Founded = Extract<Folded, { readonly _tag: "founded" }>;
+
 type Unfounded = Extract<Folded, { readonly _tag: "unfounded" }>;
+
 type Key = Founded["keys"] extends ReadonlyMap<string, infer K> ? K : never;
+
 type Standing = Key["_tag"];
 
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const OTHER = "person_01m6v5270hg0000000000000zz";
+
 const TO = "ledger:home";
+
 const SENT = "2026-11-11T09:00:00.000Z";
+
 const SAW = { code: "4417", label: "Mac", location: "Istanbul", method: "compare", check: "touch", has: [] } as const;
+
 const TOOK = { label: "Mac", location: "Istanbul", method: "panel", check: "touch" } as const;
 
 const ADD_SAW = {
@@ -94,6 +104,7 @@ const Choice = fc.record({
   keys: fc.array(fc.string({ maxLength: 2 }), { maxLength: 4 }),
   window: fc.option(fc.string({ maxLength: 2 }), { nil: null }),
 });
+
 type Choice = typeof Choice extends fc.Arbitrary<infer A> ? A : never;
 
 const Walk = fc.array(Choice, { maxLength: 60, size: "max" });
@@ -141,6 +152,7 @@ const personFor = (event: MemberEvent): string | null => {
 };
 
 const keysIn = (model: Folded): ReadonlyMap<string, Key> => (model._tag === "founded" ? model.keys : new Map());
+
 const idsIn = (model: Folded): ReadonlySet<string> => (model._tag === "founded" ? model.ids : new Set());
 
 const at = <A>(xs: ReadonlyArray<A>, n: number): A | undefined => (xs.length === 0 ? undefined : xs[n % xs.length]);
@@ -164,7 +176,9 @@ const pickSigner = (model: Folded, c: Choice, n: number): string => {
   const pools = SIGNERS.map(([weight, test]) => [weight, withStanding(model, test)] as const)
     .filter(([, keys]) => keys.length > 0)
     .flatMap(([weight, keys]) => Array.from({ length: weight }, () => keys));
+
   const pool = at([...pools, []], c.pool) ?? [];
+
   return at(pool, c.signer) ?? `stranger:${c.raw}#${n}`;
 };
 
@@ -180,6 +194,7 @@ const pickTarget = (model: Folded, c: Choice, n: number, fresh: string): string 
 
   const live = withStanding(model, (k) => k._tag === "live");
   const stopped = withStanding(model, (k) => k._tag !== "live");
+
   return at(c.aim === 7 ? stopped : c.aim === 6 ? [...keysIn(model).keys()] : live, c.target) ?? `${fresh}#${n}`;
 };
 
@@ -200,6 +215,7 @@ const pickFor = (model: Folded, c: Choice): string =>
 
 const pickId = (model: Folded, c: Choice, refused: ReadonlyArray<string>, n: number, kind: string): string => {
   const accepted = [...idsIn(model)];
+
   return (c.id === 0 ? at(accepted, c.pick) : c.id === 1 ? at(refused, c.pick) : undefined) ?? `${kind}_${c.raw}#${n}`;
 };
 
@@ -389,6 +405,7 @@ const ruled = (pre: Founded, event: MemberEvent): "accepted" | Reason => {
     }
 
     const target = pre.keys.get(event.revoke.key);
+
     return target === undefined ? "not_member" : target._tag === "live" ? "accepted" : "revoked";
   }
 

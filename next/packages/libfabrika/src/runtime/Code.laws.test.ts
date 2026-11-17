@@ -36,6 +36,7 @@ const Tag = Schema.TaggedUnion({
 });
 
 const SEED = 119120;
+
 const RUNS = 300;
 
 type Model = typeof Code.Selected.Type;
@@ -60,13 +61,18 @@ type Loaded = {
 };
 
 type From = "watch" | "deploy" | "boot" | "restart" | "open";
+
 type Selection = { readonly hash: string; readonly load: string };
+
 expectTypeOf<Omit<(typeof Code.CodeEvent.cases)["code.loaded"]["Type"], "_tag">>().toEqualTypeOf<Loaded>();
+
 expectTypeOf<typeof Code.From.Type>().toEqualTypeOf<From>();
+
 expectTypeOf<Model[string]>().toEqualTypeOf<Selection>();
 
 // L20 (type): both code facts take a program's qualified name; `code.failed`'s reason is closed.
 expectTypeOf<(typeof Code.CodeEvent.cases)["code.loaded"]["Type"]["program"]>().toEqualTypeOf<ProgramName>();
+
 expectTypeOf<(typeof Code.CodeEvent.cases)["code.failed"]["Type"]["program"]>().toEqualTypeOf<ProgramName>();
 
 expectTypeOf<(typeof Code.CodeEvent.cases)["code.failed"]["Type"]["reason"]>().toEqualTypeOf<
@@ -77,6 +83,7 @@ expectTypeOf<(typeof Code.CodeEvent.Type)["_tag"]>().toEqualTypeOf<"code.loaded"
 
 const step = (model: Model, msg: Msg): readonly [Model, ReadonlyArray<Cmd>] => {
   const [next, cmds] = applyCell(Code.code, model, msg as never);
+
   return [next, cmds as ReadonlyArray<Cmd>];
 };
 
@@ -86,7 +93,9 @@ const Stored = Schema.fromJsonString(Code.Selected);
 const roundTrip = (model: Model): Model => Schema.decodeUnknownSync(Stored)(Schema.encodeSync(Stored)(model));
 
 const hashes = fc.uint8Array({ minLength: 32, maxLength: 32 }).map((b) => Buffer.from(b).toString("hex"));
+
 const names = fc.stringMatching(/^[a-z_][a-z0-9-]{0,7}\/[a-z_][a-z0-9-]{0,7}$/);
+
 const froms = fc.constantFrom<From>("watch", "deploy", "boot", "restart", "open");
 
 const Cell = fc.record({
@@ -95,7 +104,9 @@ const Cell = fc.record({
   hash: hashes,
   from: froms,
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
+
 const tapes = fc.tuple(fc.uniqueArray(names, { minLength: 1, maxLength: 4 }), fc.array(Cell, { maxLength: 60 }));
 
 /** What the walk knows from its own moves only. */
@@ -129,12 +140,14 @@ const nth = <A>(items: ReadonlyArray<A>, i: number): A => {
 const moves = (w: World, programs: ReadonlyArray<string>, cell: Cell, n: number): ReadonlyArray<Move> => {
   const program = nth(programs, cell.pick);
   const fresh = `install_${n}`;
+
   const options: Array<Move> = [
     {
       name: "checked_new",
       msg: { ...Tag.cases.checked.make({}), id: fresh, program, hash: cell.hash, from: cell.from },
     },
   ];
+
   const earlier = w.seen.get(program) ?? [];
 
   if (earlier.length > 0) {
@@ -206,6 +219,7 @@ const account = (move: Move, cmds: ReadonlyArray<Cmd>, w: World): void => {
 
   if (move.msg._tag === "loaded") {
     w.selected.set(program, { hash, load: id });
+
     return;
   }
 
@@ -240,6 +254,7 @@ describe("P15 slice 1: the brain's code per program", () => {
               // p72: the hash already selected is nothing a reader sees.
               expect(cmds, "checked with the selected hash emits nothing").toEqual([]);
               seen.add("same");
+
               return;
             }
 
@@ -267,6 +282,7 @@ describe("P15 slice 1: the brain's code per program", () => {
 
             w.appendIds.set(id, appendId);
             seen.add(current === undefined ? "first" : "was");
+
             return;
           }
 

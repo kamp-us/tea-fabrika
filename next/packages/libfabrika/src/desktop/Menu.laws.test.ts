@@ -1,8 +1,10 @@
 // next/, ticket 887, P21 slice 1. Each plant named here runs after Menu.ts exists.
 import { arbGuidedSequence, foldEvents, propertyInvariant, propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Declarations from "../settings/Declarations.ts";
 import * as Test from "./Menu.test-support.ts";
@@ -22,11 +24,13 @@ const waiting = (s: Test.Model) =>
   Menu.view(s).filter((i): i is Extract<typeof Menu.Item.Type, { _tag: "waiting" }> => i._tag === "waiting");
 
 const safe = (s: string) => s.replace(/[\p{Cc}\p{Cf}]/gu, "");
+
 // pinned: amendment A-Lint uses the existing brain-line text cap, in UTF-16 code units.
 const labelLimit = 256;
 
 const displayed = (raw: string) => {
   const cut = safe(raw).slice(0, labelLimit);
+
   return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
 };
 
@@ -34,6 +38,7 @@ const hasLabel = (words: string, raw: string) => {
   const clean = safe(raw);
   const shown = displayed(raw);
   const next = clean.codePointAt(shown.length);
+
   return (
     !/[\uD800-\uDFFF]/u.test(words) &&
     words.includes(shown) &&
@@ -123,6 +128,7 @@ it("L2: the signature keeps the clicked row, capabilities and act across later r
           msg._tag === "approve"
             ? prev.rows.find((r) => r.key === msg.key)
             : prev.clients.find((c) => c.key === msg.key && !c.own);
+
         return (
           shown === undefined ||
           (next._tag === "checking" &&
@@ -214,6 +220,7 @@ it("L3: Deny writes once without a finger in both states, and tabs share one wai
       }
 
       const [command] = cmds;
+
       return (
         (cmds.length === 1 &&
           command?._tag === "deny" &&
@@ -377,6 +384,7 @@ it.effect.prop(
       const raw = new TextEncoder().encode(secret);
       const digest = yield* Digest.Digest;
       const hash = yield* digest.digestHex(Digest.sha256, raw);
+
       const flows = Test.walks.map((messages) =>
         messages.map((msg) =>
           msg._tag === "opened"
@@ -386,6 +394,7 @@ it.effect.prop(
               : msg,
         ),
       );
+
       propertyTrace(
         Test.machine,
         Test.ctx,
@@ -400,12 +409,14 @@ it.effect.prop(
               JSON.stringify(cmds),
             ]),
           ];
+
           const forms = [
             secret,
             JSON.stringify(secret).slice(1, -1),
             encodeURIComponent(secret),
             JSON.stringify(Array.from(raw)),
           ];
+
           return (
             outputs.every((output) => forms.every((form) => !output.includes(form))) ||
             "a link secret escaped its driver"
@@ -426,13 +437,14 @@ it("L8: equal models give ordered unique items, empty is explicit, and state is 
     (steps, final) => {
       for (const state of [Test.machine.init(null, Test.ctx)[0], ...steps.map((s) => s.next), final]) {
         const items = Menu.view(state);
-        const clone = Schema.decodeUnknownSync(Test.modelJson)(Test.encoded(state));
+        const clone = Schema.decodeSync(Test.modelJson)(Test.encoded(state));
 
         if (!Test.same(items, Menu.view(clone)) || !Test.same(items, Menu.view(state))) {
           return "equal models rendered differently";
         }
 
         const rank = { status: 0, empty: 1, waiting: 1, client: 2, action: 3 };
+
         const keys = items.map((i) =>
           i._tag === "action" ? `action:${i.id}` : i._tag === "waiting" || i._tag === "client" ? i.key : i._tag,
         );
@@ -456,6 +468,7 @@ it("L8: equal models give ordered unique items, empty is explicit, and state is 
         }
 
         const status = items.find((i) => i._tag === "status");
+
         const statusWords = {
           connecting: /connect|starting/i,
           online: /running|online|connected/i,
@@ -503,6 +516,7 @@ it("L9: prompts and items keep the code and the safe label within the pinned 256
         .map(([length, pair]) => `${"x".repeat(length)}${pair}tail`),
     ),
   });
+
   const flows = hostile.chain(({ label }) =>
     Test.walks.map((messages) =>
       messages.map((msg) =>
@@ -514,6 +528,7 @@ it("L9: prompts and items keep the code and the safe label within the pinned 256
       ),
     ),
   );
+
   propertyInvariant(
     Test.machine,
     Test.ctx,
@@ -650,6 +665,7 @@ it.effect.prop(
         },
         { maxLength: 60, size: "max" },
       );
+
       propertyTrace(
         machine,
         Test.ctx,

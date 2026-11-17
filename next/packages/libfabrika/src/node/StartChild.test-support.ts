@@ -4,9 +4,18 @@
 // StartChild*.integration.test.ts run the laws over it, a part each, so CI can run the parts on
 // different machines.
 // Edge: Effect has no node:sqlite driver.
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
-import { Context, Effect, FileSystem, Layer, Path, Stream, Tracer } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Scope from "effect/Scope";
+import * as ScopedRef from "effect/ScopedRef";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import * as SessionSenders from "../access/SessionSenders.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -34,35 +43,31 @@ const folder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ pr
 export const databases = Effect.gen(function* () {
   const path = yield* folder;
   const paths = yield* Path.Path.pipe(Effect.provide(NodeServices.layer));
-  const held = new Map<string, { db: DatabaseSync; sql: Sql }>();
-  const connect = (part: string) => {
-    const db = new DatabaseSync(paths.join(path, `${part}.db`));
-    db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
-    return { db, sql: nodeSql(db) };
-  };
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => {
-      for (const { db } of held.values()) {
-        if (db.isOpen) {
-          db.close();
-        }
-      }
-    }),
-  );
+  // A part is opened from a plain call, so its handle is acquired into this scope, which closes it.
+  const scope = yield* Effect.scope;
+  const held = new Map<string, ScopedRef.ScopedRef<{ db: DatabaseSync; sql: Sql }>>();
+
+  const connect = (part: string) =>
+    TestDatabase.make(paths.join(path, `${part}.db`)).pipe(Effect.map((db) => ({ db, sql: nodeSql(db) })));
+
   const handle = (part: string) => {
     const found = held.get(part);
 
     if (found !== undefined) {
-      return found;
+      return ScopedRef.getUnsafe(found);
     }
 
-    const made = connect(part);
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Sql is synchronous, and a part opens on its first call
+    const made = Effect.runSync(Scope.provide(scope)(ScopedRef.fromAcquire(connect(part))));
     held.set(part, made);
-    return made;
+
+    return ScopedRef.getUnsafe(made);
   };
+
   // One Sql per part across reopens: each call goes to the database open now.
   const sqls = new Map<string, Sql>();
   const bytes = new TextEncoder();
+
   const sql = (part: string): Sql => {
     const known = sqls.get(part);
 
@@ -90,20 +95,24 @@ export const databases = Effect.gen(function* () {
       transaction: (step) => handle(part).sql.transaction(step),
       size: () => handle(part).sql.size(),
     };
+
     sqls.set(part, made);
+
     return made;
   };
-  const reopen = Effect.sync(() => {
-    for (const [part, { db }] of held) {
-      db.close();
-      held.set(part, connect(part));
-    }
+
+  const reopen = Effect.forEach(held, ([part, ref]) => ScopedRef.set(ref, connect(part)), {
+    discard: true,
+    concurrency: 1,
   });
-  const open = () => [...held.values()].filter(({ db }) => db.isOpen).length;
+
+  const open = () => [...held.values()].filter((ref) => ScopedRef.getUnsafe(ref).db.isOpen).length;
+
   const data = (sql: Sql) =>
     Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransactionSql.layer(sql)).pipe(
       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
     );
+
   const shared: StartChildTest.Store["shared"] = (sql, next, world) =>
     Layer.mergeAll(
       ChildrenLedger.layer({ grants: StartChildTest.STARTS, fabrika: StartChildTest.FABRIKA }).pipe(
@@ -128,6 +137,7 @@ export const databases = Effect.gen(function* () {
       Layer.provideMerge(Mailbox.layer),
       Layer.provideMerge(data(sql)),
     );
+
   const entries: StartChildTest.Store["entries"] = (names) =>
     Effect.forEach(
       ["processes", ...[...new Set(names)].flatMap((name) => [`processes/${name}`, `${name}/inbox`])],
@@ -138,9 +148,11 @@ export const databases = Effect.gen(function* () {
       Effect.provide(data(sql("ledger"))),
       Effect.orDie,
     );
+
   const tracer: StartChildTest.Store["tracer"] = (sql) =>
     Effect.map(Layer.build(SpanSink.layer(sql, { object: "p42-secrets" })), (context) =>
       Context.get(context, Tracer.Tracer),
     );
+
   return { sql, reopen, shared, entries, probe: { open }, tracer } satisfies StartChildTest.Store;
 });

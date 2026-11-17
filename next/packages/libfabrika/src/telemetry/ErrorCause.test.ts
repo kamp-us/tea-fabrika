@@ -11,6 +11,7 @@ import { type RecordCalls, RecordManager } from "./Records.ts";
 import { Chain, SinkError, sinkError } from "./Trace.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const RUNS = 100;
 
 /** A failure as a platform gives one: an Error, a subclass with its own cause, or a plain object. */
@@ -38,6 +39,7 @@ const digestRejects = <A, E>(failure: unknown, work: Effect.Effect<A, E>) =>
   );
 
 const put = (body: Uint8Array) => Archive.use((archive) => archive.put("spans/1", body));
+
 const bodies = fc.uint8Array({ maxLength: 64 });
 
 describe("T695, sinkError keeps the thrown value", () => {
@@ -70,6 +72,7 @@ describe("T695, the archive keeps what failed", () => {
           put: () => Promise.resolve(),
           head: () => Promise.resolve(null),
         };
+
         const archive = onBucket ? Archive.bucket(calls) : Archive.memory;
         const direct = yield* Effect.flip(digestRejects(failure, sha256(body)));
         const stored = yield* Effect.flip(digestRejects(failure, Effect.provide(put(body), archive)));
@@ -91,6 +94,7 @@ describe("T695, the archive keeps what failed", () => {
           put: () => (call === "put" ? Promise.reject(failure) : Promise.resolve()),
           head: () => (call === "head" ? Promise.reject(failure) : Promise.resolve(null)),
         };
+
         const error = yield* Effect.flip(Effect.provide(put(body), Archive.bucket(calls)));
         expect(error.reason).toBe("unreachable");
         expect(error.cause).toBe(failure);
@@ -108,6 +112,7 @@ describe("T695, the archive keeps what failed", () => {
           // A valid head is `{ sha256: string }`; this one's hash is the wrong type.
           head: () => Promise.resolve(JSON.parse(JSON.stringify({ sha256: bad }))),
         };
+
         const error = yield* Effect.flip(Effect.provide(put(body), Archive.bucket(calls)));
         expect(error.reason).toBe("bad_row");
         expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);
@@ -131,12 +136,14 @@ describe("T695, a remote record part keeps what failed", () => {
           content: () => Effect.succeed({ _tag: "absent", rolled: bad }),
           deleteContent: () => Effect.succeed({ _tag: "absent", rolled: false }),
         };
+
         const error = yield* Effect.flip(
           Effect.provide(
             RecordManager.use((records) => records.content(chain, spanId)),
             RecordManager.remote(() => calls),
           ),
         );
+
         expect(error).toBeInstanceOf(SinkError);
         expect(error.reason).toBe("bad_row");
         expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);
@@ -150,18 +157,21 @@ describe("T695, a remote record part keeps what failed", () => {
     ({ failure, reason }) =>
       Effect.gen(function* () {
         const thrown = new SinkError({ reason, held: 0, cause: failure });
+
         const calls: RecordCalls = {
           write: () => Effect.fail(thrown),
           read: () => Effect.fail(thrown),
           content: () => Effect.fail(thrown),
           deleteContent: () => Effect.fail(thrown),
         };
+
         const error = yield* Effect.flip(
           Effect.provide(
             RecordManager.use((records) => records.content(chain, "span-1")),
             RecordManager.remote(() => calls),
           ),
         );
+
         expect(error).toBe(thrown);
         expect(error.cause).toBe(failure);
       }),

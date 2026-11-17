@@ -3,9 +3,10 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Arbitrary, Effect, Layer, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
@@ -16,6 +17,7 @@ import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { type From } from "../processes/Mailbox.ts";
 import { Activity } from "../processes/Process.ts";
+import type { QuotasError } from "../processes/Quotas.ts";
 import type { Sql } from "../Sql.ts";
 import { Checkpoint as CheckpointSchema, Placed, ProcessStore, RuntimeRecord } from "./ProcessStore.ts";
 
@@ -44,16 +46,7 @@ const folder = Effect.acquireRelease(
   (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
 );
 
-const openDb = (path: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(path)),
-    (db) =>
-      Effect.sync(() => {
-        if (db.isOpen) {
-          db.close();
-        }
-      }),
-  );
+const openDb = (path: string) => TestDatabase.make(path);
 
 const handle = (path: string, first: DatabaseSync) => {
   let db = first;
@@ -169,7 +162,7 @@ type Checkpoint = {
 
 type Store = {
   readonly load: Effect.Effect<Checkpoint | null, LedgerError>;
-  readonly save: (value: Checkpoint) => Effect.Effect<void, LedgerError>;
+  readonly save: (value: Checkpoint) => Effect.Effect<void, LedgerError | QuotasError>;
   readonly record: (id: string, event: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
 };
 

@@ -51,6 +51,7 @@ const fcAsk = (keys: ReadonlyArray<string>): fc.Arbitrary<typeof Ask.Type> =>
   }));
 
 const Cell = fc.record({ move: fc.nat(), pick: fc.nat(), said: fcRecorded, result: fcResult });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
 /**
@@ -65,6 +66,7 @@ const Tape = fc.uniqueArray(fcFingerprint, { minLength: 2, maxLength: 2 }).chain
     cells: fc.array(Cell, { minLength: 8, maxLength: 30, size: "max" }),
   }),
 );
+
 type Tape = typeof Tape extends fc.Arbitrary<infer A> ? A : never;
 
 type Move = "ask" | "change" | "finish" | "reopen";
@@ -95,6 +97,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>)
     const saved = new Map<string, Saved>();
     const target = () => choose(tape.targets, life);
     const settings = () => choose(tape.hashes, life);
+
     const ask = (a: typeof Ask.Type, from: From) =>
       HandsTasks.use((h) => h.ask(copied(a), from)).pipe(
         Effect.provide(
@@ -104,22 +107,27 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>)
         ),
         Effect.result,
       );
+
     const tasks = <A, E>(call: (j: Tasks["Service"]) => Effect.Effect<A, E>) =>
       Tasks.use(call).pipe(Effect.provide(tasksLife), Effect.result);
+
     const read = (id: string) => tasks((j) => j.read(id));
 
     for (const cell of tape.cells) {
       const waiting = [...saved.entries()].filter(([, s]) => s.phase === "requested");
+
       const can: Record<Move, boolean> = {
         ask: true,
         change: life + 1 < tape.targets.length,
         finish: waiting.length > 0,
         reopen: true,
       };
+
       const move = choose(
         (["ask", "change", "finish", "reopen"] as const).filter((m) => can[m]),
         cell.move,
       );
+
       const from: From = { ...cell.said, seen: 0 };
 
       if (move === "ask") {
@@ -256,6 +264,7 @@ const Foreign = fc.uniqueArray(fcFingerprint, { minLength: 1, maxLength: 1 }).ch
     })
     .filter(({ mine, theirs }) => mine.process !== theirs.process),
 );
+
 type Foreign = typeof Foreign extends fc.Arbitrary<infer A> ? A : never;
 
 /**
@@ -266,6 +275,7 @@ const foreign = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<strin
   Effect.fnUntraced(function* (tape: Foreign) {
     const store = yield* open;
     const tasksLife = yield* Layer.build(store.tasks);
+
     const ask = (a: typeof Ask.Type, from: From) =>
       HandsTasks.use((h) => h.ask(copied(a), from)).pipe(
         Effect.provide(
@@ -275,8 +285,10 @@ const foreign = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<strin
         ),
         Effect.result,
       );
+
     const tasks = <A, E>(call: (j: Tasks["Service"]) => Effect.Effect<A, E>) =>
       Tasks.use(call).pipe(Effect.provide(tasksLife), Effect.result);
+
     const from: From = { ...tape.said, seen: 0 };
     const id = tape.mine.id;
     const reached = STATES.indexOf(tape.state);
@@ -309,6 +321,7 @@ const foreign = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<strin
       yield* ask({ ...tape.mine, process: tape.theirs.process }, { ...tape.asked, seen: 0 }),
       "an ask from another process answers",
     );
+
     // The answer is the bare refusal, for good: no receipt and no result, the asker's to read.
     expect(reply, `S2: another process's ask is refused id_reused and nothing else (${tape.state})`).toEqual(
       Reply.cases.refused.make({ reason: "id_reused" }),

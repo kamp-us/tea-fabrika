@@ -13,23 +13,31 @@ const Ended = Schema.Struct({
   row: SpanRow,
   content: Schema.NullOr(Schema.String),
 });
+
 /** @internal */
 export type Ended = typeof Ended.Type;
 
+/** The newest hour a sized commit reached: `-Infinity` before the first, so any hour is newer. */
+const Checked = Schema.Union([
+  Schema.Finite,
+  Schema.declare((input): input is number => input === Number.NEGATIVE_INFINITY),
+]);
+
 /** `clean` and `failed` hold no spans, `holding` and `reported` hold at least one. A failure awaits
- *  a flush in `failed` and `holding`. `checked` is the newest hour a sized commit reached. */
+ *  a flush in `failed` and `holding`. */
 const Model = Schema.TaggedUnion({
-  clean: { checked: Schema.Number },
-  failed: { checked: Schema.Number },
-  holding: { checked: Schema.Number, spans: Schema.NonEmptyArray(Ended) },
-  reported: { checked: Schema.Number, spans: Schema.NonEmptyArray(Ended) },
+  clean: { checked: Checked },
+  failed: { checked: Checked },
+  holding: { checked: Checked, spans: Schema.NonEmptyArray(Ended) },
+  reported: { checked: Checked, spans: Schema.NonEmptyArray(Ended) },
 });
+
 type Model = typeof Model.Type;
 
 /** @internal A flush's commit failed or landed, or the next flush was checked. */
 export const Msg = Schema.TaggedUnion({
   commit_failed: { more: Schema.Array(Ended) },
-  committed: { hour: Schema.Number, sized: Schema.Boolean },
+  committed: { hour: Schema.Finite, sized: Schema.Boolean },
   flush_checked: {},
 });
 
@@ -46,6 +54,7 @@ export const machine = Machine.make({
   update: {
     commit_failed: (s, m) => {
       const spans = [...held(s), ...m.more];
+
       return [
         Arr.isReadonlyArrayNonEmpty(spans)
           ? Model.cases.holding.make({ checked: s.checked, spans })
@@ -55,6 +64,7 @@ export const machine = Machine.make({
     },
     committed: (s, m) => {
       const checked = m.sized && m.hour > s.checked ? m.hour : s.checked;
+
       return [
         s._tag === "failed" || s._tag === "holding"
           ? Model.cases.failed.make({ checked })

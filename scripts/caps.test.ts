@@ -22,6 +22,9 @@ import { testConfig } from "../vitest.config.ts";
 const root = resolve(import.meta.dirname, "..");
 const options = { seed: 325, numRuns: 4 };
 const configUrl = pathToFileURL(join(root, "vitest.config.ts")).href;
+// A compiler name no process has, so the laptop wait in typecheck.sh never holds up a law whose
+// subject is something else, even while a real tsgo runs on the machine.
+const idle = "tc-idle-compiler";
 
 const load = `
 if (process.env.TEST_NODE_VERSION) {
@@ -233,6 +236,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
                   PATH: `${bin}:${process.env.PATH}`,
                   TMPDIR: temp,
                   FABRIKA_TYPECHECK_LOCK: join(dir, "typecheck.lock"),
+                  FABRIKA_TYPECHECK_COMPILER: idle,
                   TEST_EVENTS: events,
                   TEST_ID: id,
                   TEST_RELEASE: join(dir, `release-${id}`),
@@ -887,6 +891,7 @@ exit 0
             ...process.env,
             PATH: `${bin}:${process.env.PATH}`,
             FABRIKA_TYPECHECK_LOCK: join(dir, "typecheck.lock"),
+            FABRIKA_TYPECHECK_COMPILER: idle,
             TYPESAFE_API_KEY: undefined,
             INSTALL_FAILS: outcome === "install failed" ? "1" : undefined,
           },
@@ -972,6 +977,7 @@ exit 0
                   PATH: `${bin}:${process.env.PATH}`,
                   TMPDIR: dir,
                   FABRIKA_TYPECHECK_LOCK: join(dir, "typecheck.lock"),
+                  FABRIKA_TYPECHECK_COMPILER: idle,
                   TEST_ID: id,
                   TEST_EXIT: String(code),
                   TEST_EVENTS: events,
@@ -1036,5 +1042,119 @@ exit 0
       ),
       options,
     );
+  });
+});
+
+// Decision 0178: a real-resource or visual law never starts on the laptop by accident. Each law
+// below asks Vitest only for its file list (`list --filesOnly`), which imports no test file, so a
+// broken guard still runs nothing.
+describe("host-only laws stay off the laptop", () => {
+  const vitest = join(dirname(createRequire(import.meta.url).resolve("vitest/package.json")), "vitest.mjs");
+  const integration = "next/apps/fabrika/src/start-child.laws.integration.test.ts";
+  const visual = "next/apps/fabrika/e2e/electron-launchd.visual.test.ts";
+  const list = (cwd: string, args: string[], env: Record<string, string | undefined> = {}) =>
+    spawnSync(process.execPath, [vitest, "list", "--filesOnly", "--config", join(root, "vitest.config.ts"), ...args], {
+      cwd,
+      encoding: "utf8",
+      timeout: 60_000,
+      env: {
+        ...process.env,
+        CI: undefined,
+        CLAUDE_CODE_REMOTE: undefined,
+        FABRIKA_HOST_RUN_OWNER_APPROVED: undefined,
+        TYPESAFE_API_KEY: undefined,
+        ...env,
+      },
+    });
+  const refused = (ran: ReturnType<typeof list>, path: string) => {
+    expect(ran.status, ran.stdout).not.toBe(0);
+    expect(ran.stderr).toContain("Local host-only test run refused (decision 0178)");
+    expect(ran.stderr).toContain(`  ${path}\n`);
+    expect(ran.stderr).toContain("Use eligible disposable CI for the selected laws (0594).");
+    expect(ran.stderr).toContain("Portable signal laws may use Linux; Mac-specific laws need macOS.");
+    expect(ran.stderr).not.toContain("FABRIKA_HOST_RUN_OWNER_APPROVED=1");
+    expect(ran.stdout).not.toContain(path);
+  };
+
+  // Plants: drop the guard from the config's plugins; leave it off the next-visual project, which
+  // extends nothing from the root. The first two paths are the ones run by name on 2026-11-15.
+  it("scenario: a local list of an integration or a visual path is refused", () => {
+    for (const args of [
+      [integration],
+      ["next/programs/pipeline/src/node/queue.laws.integration.test.ts"],
+      ["--project", "next-integration", integration],
+      ["--project", "next-visual", visual],
+    ]) {
+      refused(list(root, args), args.at(-1) ?? "");
+    }
+  });
+
+  // Plant: judge the run by its path filters, not by the files Vitest resolves.
+  it("scenario: a local --changed that reaches an integration file is refused, and one that does not runs", () => {
+    const dir = mkdtempSync(join(tmpdir(), "caps-host-"));
+
+    try {
+      const git = (...args: string[]) => {
+        const ran = spawnSync("git", ["-c", "user.name=Tests", "-c", "user.email=tests@example.invalid", ...args], {
+          cwd: dir,
+          encoding: "utf8",
+        });
+        expect(ran.status, ran.stderr).toBe(0);
+      };
+      const put = (file: string, text: string) => {
+        mkdirSync(dirname(join(dir, file)), { recursive: true });
+        writeFileSync(join(dir, file), text);
+      };
+      const src = "next/apps/toy/src";
+      put(`${src}/lib.ts`, "export const a = 1;\n");
+      put(`${src}/other.ts`, "export const b = 1;\n");
+      put(`${src}/lib.integration.test.ts`, 'import { a } from "./lib.ts";\nvoid a;\n');
+      put(`${src}/other.test.ts`, 'import { b } from "./other.ts";\nvoid b;\n');
+      git("init", "-q");
+      git("add", ".");
+      git("commit", "-qm", "base");
+      git("update-ref", "refs/remotes/origin/main", "HEAD");
+
+      put(`${src}/lib.ts`, "export const a = 2;\n");
+
+      for (const form of ["--changed", "--changed=origin/main"]) {
+        refused(list(dir, [form]), `${src}/lib.integration.test.ts`);
+        expect(list(dir, [form], { CI: "1" }).stdout).toContain(`${src}/lib.integration.test.ts`);
+      }
+
+      git("checkout", "-q", "--", ".");
+      put(`${src}/other.ts`, "export const b = 2;\n");
+      const plain = list(dir, ["--changed"]);
+      expect(plain.status, plain.stderr).toBe(0);
+      expect(plain.stdout).toContain(`${src}/other.test.ts`);
+      expect(plain.stdout).not.toContain("integration");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Plant: refuse every local run, not only one that reaches a host-only file.
+  it("scenario: a local list of a plain unit file still runs", () => {
+    const plain = "vitest.hostrun.test.ts";
+    const ran = list(root, [plain]);
+    expect(ran.status, ran.stderr).toBe(0);
+    expect(ran.stdout).toContain(plain);
+
+    // These plain names contain real signal calls. Listing them never executes their laws.
+    for (const path of ["scripts/caps.test.ts", ".agents/skills/lead/scripts/box.test.ts"]) {
+      refused(list(root, [path]), path);
+      refused(list(root, [path], { FABRIKA_HOST_RUN_OWNER_APPROVED: "1" }), path);
+    }
+  });
+
+  // Plants: refuse when CI is set; ignore the owner's named way in.
+  it("scenario: CI, or the owner's named yes, still reaches the integration and visual files", () => {
+    for (const env of [{ CI: "1" }, { FABRIKA_HOST_RUN_OWNER_APPROVED: "1" }]) {
+      for (const args of [[integration], ["--project", "next-visual", visual]]) {
+        const ran = list(root, args, env);
+        expect(ran.status, ran.stderr).toBe(0);
+        expect(ran.stdout).toContain(args.at(-1));
+      }
+    }
   });
 });

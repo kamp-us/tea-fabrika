@@ -21,6 +21,7 @@ const script = join(import.meta.dirname, "keepruns.sh");
 /** Every file under a folder, as its relative path and content. */
 const filesIn = (root: string): Record<string, string> => {
   const out: Record<string, string> = {};
+
   const visit = (dir: string) => {
     for (const name of readdirSync(dir)) {
       const path = join(dir, name);
@@ -78,6 +79,7 @@ const run = (main: string, folder: string) => {
     },
     timeout: 15_000,
   });
+
   return { code: r.status, out: r.stdout.trim(), err: r.stderr.trim() };
 };
 
@@ -96,13 +98,16 @@ describe("keepruns.sh, today's tooling", () => {
             const folder = join(root, name);
             mkdirSync(folder);
             write(join(folder, "runs"), runs);
+
             // Names already taken under MAIN's runs/: <name>, then <name>-1.
             const before = taken.map((files, i) => {
               const at = join(main, "runs", i === 0 ? name : `${name}-${i}`);
               mkdirSync(at, { recursive: true });
               write(at, files);
+
               return [at, filesIn(at)] as const;
             });
+
             const got = run(main, folder);
             expect(got.code, got.err).toBe(0);
 
@@ -112,6 +117,7 @@ describe("keepruns.sh, today's tooling", () => {
 
             if (Object.keys(runs).length === 0) {
               expect(got.out).toBe("");
+
               return;
             }
 

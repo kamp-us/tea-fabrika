@@ -15,12 +15,14 @@ import { projectRuntime, settings as decodeSettings } from "./runtime.ts";
 const held = vi.hoisted(() => ({ project: [] as Array<unknown>, door: [] as Array<unknown> }));
 
 vi.mock("virtual:fabrika-built", () => ({ programs: {}, assets: {} }));
+
 vi.mock("@kampus/libfabrika/workers/gateway", () => ({ connectionLayer: () => Layer.empty }));
 
 vi.mock("@kampus/libfabrika/workers/runtime", async (original) => ({
   ...(await original<typeof import("@kampus/libfabrika/workers/runtime")>()),
   projectRuntime: (_ctx: unknown, _env: unknown, options: unknown) => {
     held.project.push(options);
+
     return { runPromise: Effect.runPromise, dispose: async () => {} };
   },
 }));
@@ -30,6 +32,7 @@ vi.mock("./door.ts", () => ({
     pipe: (f: (self: Effect.Effect<void>) => unknown) => f(Effect.void),
     layer: (options: unknown) => {
       held.door.push(options);
+
       return Layer.empty;
     },
   },
@@ -72,10 +75,12 @@ const composedName = async (): Promise<(m: unknown) => string | undefined> => {
   const door = typeof project === "object" && project !== null ? Reflect.get(project, "door") : undefined;
   expect(typeof door).toBe("function");
   const checked = await Effect.runPromise(readSettings(env));
+
   // The door is read off an untyped capture, so its Effect is named here, as `runtime` is above.
   const built: Effect.Effect<unknown, unknown, RecordedStart> = Reflect.apply(door, undefined, [
     { deliver: () => Effect.void },
   ]);
+
   await Effect.runPromise(
     built.pipe(Effect.provideService(RecordedStart, { ...checked, receipt: StartsTest.receipt(input) })),
   );
@@ -83,6 +88,7 @@ const composedName = async (): Promise<(m: unknown) => string | undefined> => {
   const inputs = typeof options === "object" && options !== null ? Reflect.get(options, "inputs") : undefined;
   const name = typeof inputs === "object" && inputs !== null ? Reflect.get(inputs, "name") : undefined;
   expect(typeof name).toBe("function");
+
   return (m) => Reflect.apply(name, undefined, [m]);
 };
 
@@ -118,6 +124,7 @@ const Message = fc.record({
   proxy: fc.boolean(),
   throwOn: fc.constantFrom("none", "none", "has", "get"),
 });
+
 type Message = typeof Message extends fc.Arbitrary<infer A> ? A : never;
 
 /** A fresh message from its recipe; a proxy logs each read of `_tag` in `trace`. */
@@ -181,6 +188,7 @@ const message = (r: Message, trace: Array<string>): unknown => {
 const answer = (f: (m: unknown) => string | undefined, r: Message) => {
   const trace: Array<string> = [];
   const got = Result.try({ try: () => f(message(r, trace)), catch: () => "thrown" as const });
+
   return { name: Result.isSuccess(got) ? got.success : ("thrown" as const), trace };
 };
 

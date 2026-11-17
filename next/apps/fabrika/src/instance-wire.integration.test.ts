@@ -31,9 +31,13 @@ const Tag = Schema.TaggedUnion({
 });
 
 const APP = resolve(import.meta.dirname, "..");
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const SENT = "2026-11-08T04:00:00.000Z";
+
 // A bound on one wait for an observable fact after a kill, as worker-supervision's WAIT is.
 const WAIT = 25_000;
 
@@ -47,11 +51,13 @@ it(
         const dev = yield* devServer(h);
         const first = yield* reader(h, dev);
         const name = "checklist:1";
+
         const pid = resolveName(
           yield* first.read(`processes/${name}`),
           name,
           (by) => by === "brain" || by.startsWith("brain:"),
         );
+
         expect(pid).not.toBeNull();
         const View = Schema.Struct({ result: Schema.Struct({ rev: Schema.Int, view: checklistView }) });
         yield* first.call("view.open", { pid });
@@ -87,6 +93,7 @@ const field = (a: string | Buffer) => {
   const bytes = typeof a === "string" ? Buffer.from(a) : a;
   const size = Buffer.alloc(4);
   size.writeUInt32BE(bytes.length);
+
   return Buffer.concat([size, bytes]);
 };
 
@@ -96,12 +103,14 @@ const identity = () => {
   const bytes = Buffer.from(raw, "base64url");
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
   const fingerprint = `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+
   return {
     raw,
     fingerprint,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
     proof: (text: string) => {
       const digest = createHash("sha512").update(text).digest();
+
       const signed = Buffer.concat([
         Buffer.from("SSHSIG"),
         field("fabrika-client"),
@@ -109,9 +118,11 @@ const identity = () => {
         field("sha512"),
         field(digest),
       ]);
+
       const signature = Buffer.concat([field("ssh-ed25519"), field(sign(null, signed, pair.privateKey))]);
       const version = Buffer.alloc(4);
       version.writeUInt32BE(1);
+
       const packet = Buffer.concat([
         Buffer.from("SSHSIG"),
         version,
@@ -121,6 +132,7 @@ const identity = () => {
         field("sha512"),
         field(signature),
       ]);
+
       return `-----BEGIN SSH SIGNATURE-----\n${packet
         .toString("base64")
         .match(/.{1,70}/g)!
@@ -139,13 +151,17 @@ const statusWithHost = (url: string, host: string) =>
       response.resume();
       done(response.statusCode ?? 0);
     });
+
     sent.once("error", fail);
     sent.end();
   });
 
 const children: Array<ChildProcess> = [];
+
 const homes: Array<string> = [];
+
 const ports: Array<Effect.Effect<void>> = [];
+
 const sockets: Array<WebSocket> = [];
 
 // What one instance holds: its dev.ts children, its homes and its held ports. The older cases share one
@@ -185,6 +201,7 @@ afterEach(async () => {
 const unusedPort = async (held: Held) => {
   const port = await Effect.runPromise(heldPort());
   held.ports.push(port.release);
+
   return port.port;
 };
 
@@ -238,6 +255,7 @@ const launch = async (
     ],
     { cwd: APP, env, stdio: ["ignore", "pipe", "pipe"] },
   );
+
   held.children.push(child);
   let output = "";
   child.stdout!.on("data", (b: Buffer) => {
@@ -295,6 +313,7 @@ const savedRows = (home: string, table: "gateway_bindings" | "dev_clients") => {
       ),
       Effect.scoped,
     );
+
     rows.push(...Effect.runSync(read));
   }
 
@@ -376,6 +395,7 @@ class Client {
 
   hello(nonce?: string, overrides: object = {}) {
     const challenge = nonce === undefined ? Effect.promise(() => this.challenge()) : Effect.succeed(nonce);
+
     return challenge.pipe(
       Effect.flatMap((n) =>
         Effect.promise(() =>
@@ -409,11 +429,13 @@ class Client {
     }
 
     this.ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+
     return this.next((f) => typeof f !== "string" && f.id === id);
   }
 
   ping() {
     this.ws.send("ping");
+
     return this.next((f) => f === "pong");
   }
 
@@ -426,12 +448,14 @@ const connected = async (s: Awaited<ReturnType<typeof instance>>, tab = "tab-a")
   const client = new Client(s.url, s.key, tab);
   const hello = await Effect.runPromise(client.hello());
   expect(hello.error).toBeUndefined();
+
   return client;
 };
 
-const read = async (client: Client, stream: string, after = 0): Promise<ReadonlyArray<typeof Entry.Type>> => {
+const read = async (client: Client, stream: string, after = 0): Promise<ReadonlyArray<Entry>> => {
   const response = await client.call("ledger.read", { stream, after });
   expect(response.error).toBeUndefined();
+
   return Schema.decodeUnknownSync(Schema.Array(Entry))(response.result.entries);
 };
 
@@ -441,6 +465,7 @@ const counter = async (c: Client) => {
   expect(started, "instance must start the real counter:1").toBeDefined();
   // P40: the registered name stays `counter:1`; the code it runs is the core pack's `fabrika/counter`.
   expect(started!.body).toMatchObject({ program: "fabrika/counter" });
+
   return (started!.body as { process: string }).process;
 };
 
@@ -448,11 +473,13 @@ const send = (c: Client, pid: string, letter: string, m: unknown = Tag.cases.inc
   c.call("process.send", { pid, letter, m, sentAt: SENT, seen, traceId: TRACE });
 
 const ratePolicy = { limit: 4, window: 1000 };
+
 type Call = { sent: number; replied: number; reply: Frame };
 
 const timed = Effect.fnUntraced(function* (c: Client, pid: string, letter: string) {
   const sent = yield* Clock.currentTimeMillis;
   const reply = yield* Effect.promise(() => send(c, pid, letter));
+
   return { sent, replied: yield* Clock.currentTimeMillis, reply };
 });
 
@@ -461,25 +488,30 @@ const spent = Effect.fnUntraced(function* (c: Client, pid: string, letter: strin
 
   for (let n = 0; n < 10 * ratePolicy.limit; n += ratePolicy.limit + 1) {
     const sent = yield* Clock.currentTimeMillis;
+
     // The socket is already open. Send the whole batch before waiting for any reply.
     const pending = yield* Effect.sync(() =>
       Array.from({ length: Math.min(ratePolicy.limit + 1, 10 * ratePolicy.limit - n) }, () => send(c, pid, letter)),
     );
+
     const calls = yield* Effect.forEach(
       pending,
       (reply) =>
         Effect.gen(function* () {
           const answer = yield* Effect.promise(() => reply);
+
           return { sent, replied: yield* Clock.currentTimeMillis, reply: answer };
         }),
       { concurrency: "unbounded" },
     );
+
     // Drain every reply: calls after the first refusal can still spend a later window's budget.
     allowed.push(...calls.filter((call) => !call.reply.error));
     const refused = calls.find((call) => call.reply.error);
 
     if (refused) {
       const last = calls.reduce((last, call) => (call.replied > last.replied ? call : last), refused);
+
       return { allowed, refused, last };
     }
   }
@@ -491,8 +523,20 @@ const retryAfter = (call: Call) => {
   const delay = call.reply.error?.data?.retryAfter;
   expect(delay).toBeGreaterThan(0);
   expect(delay).toBeLessThanOrEqual(ratePolicy.window);
+
   return delay!;
 };
+
+/** The time by which a new window has begun that no call so far spent from. `latest` is the last
+ *  call answered. A refusal names its own window's end. An accepted call names none, but the window
+ *  that holds it ends at most one window after its reply. */
+const freshAfter = (latest: Call) =>
+  latest.replied + (latest.reply.error?.data?.reason === "rate_limited" ? retryAfter(latest) : ratePolicy.window);
+
+/** Sleeps until `freshAfter(latest)`, plus a little. */
+const waitFresh = Effect.fnUntraced(function* (latest: Call) {
+  yield* Effect.sleep(Math.max(0, freshAfter(latest) - (yield* Clock.currentTimeMillis)) + 5);
+});
 
 const placing = (r: Frame) => {
   expect(r.error).toBeUndefined();
@@ -501,16 +545,19 @@ const placing = (r: Frame) => {
     rev: expect.any(Number),
     pos: expect.any(Number),
   });
+
   return r.result as { rev: number; pos: number };
 };
 
 const view = async (c: Client, pid: string) => {
   const response = await c.call("view.open", { pid });
   expect(response.error).toBeUndefined();
+
   return response.result as { rev: number; view: { count: number } };
 };
 
 type Launched = Awaited<ReturnType<typeof instance>>;
+
 type Placing = { rev: number; pos: number };
 
 const range = (n: number) => Array.from({ length: n }, (_, at) => at);
@@ -519,9 +566,11 @@ const range = (n: number) => Array.from({ length: n }, (_, at) => at);
 const launched = Effect.acquireRelease(
   Effect.gen(function* () {
     const held: Held = { children: [], homes: [], ports: [] };
+
     const s = yield* Effect.promise(() => launch(held)).pipe(
       Effect.onError(() => Effect.promise(() => giveBack(held))),
     );
+
     return { s, held };
   }),
   ({ held }) => Effect.promise(() => giveBack(held)),
@@ -541,10 +590,12 @@ it.live.each(["flags", "env", "file"] as const)(
   (source) =>
     Effect.gen(function* () {
       const held: Held = { children: [], homes: [], ports: [] };
+
       const s = yield* Effect.acquireRelease(
         Effect.promise(() => launch(held, undefined, ratePolicy, source)),
         () => Effect.promise(() => giveBack(held)),
       );
+
       const c = yield* client(s, "budget-one");
       const pid = yield* Effect.promise(() => counter(c));
       const letter = `t843-${source}`;
@@ -553,10 +604,13 @@ it.live.each(["flags", "env", "file"] as const)(
       const accepted = settled.allowed[0]!.reply;
       placing(accepted);
       expect(settled.refused.reply.error?.data?.reason).toBe("rate_limited");
-      yield* Effect.sleep(retryAfter(settled.refused) + 5);
+      retryAfter(settled.refused);
+      // Calls after the first refusal can land in the next window, so the wait is from the last one.
+      yield* waitFresh(settled.last);
       let previous = settled.last;
       const rounds: Array<string> = [];
       const times = ({ sent, replied, reply }: Call) => ({ sent, replied, retryAfter: reply.error?.data?.retryAfter });
+
       const round = yield* Effect.gen(function* () {
         for (;;) {
           const { allowed, refused } = yield* spent(c, pid, letter);
@@ -583,10 +637,10 @@ it.live.each(["flags", "env", "file"] as const)(
             return { allowed, refused, second, again };
           }
 
+          // `again` is the round's last call. Accepted, it spent the next window's budget, so the
+          // next round waits that window out, never only the refusal's.
           previous = again;
-          const last = again.reply.error?.data?.reason === "rate_limited" ? again : refused;
-          const until = last.replied + retryAfter(last);
-          yield* Effect.sleep(Math.max(0, until - (yield* Clock.currentTimeMillis)) + 5);
+          yield* waitFresh(again);
           second.close();
         }
       }).pipe(
@@ -595,6 +649,7 @@ it.live.each(["flags", "env", "file"] as const)(
           orElse: () => Effect.die(new Error(`no single-window round in ${WAIT} ms; rounds: [${rounds.join(",")}]`)),
         }),
       );
+
       expect(round.allowed).toHaveLength(ratePolicy.limit);
 
       for (const call of round.allowed) {
@@ -608,7 +663,7 @@ it.live.each(["flags", "env", "file"] as const)(
       }
 
       yield* Effect.logInfo(`T843 ${source}: ${rounds.length} rounds`, { rounds });
-      yield* Effect.sleep(retryAfter(round.again) + 5);
+      yield* waitFresh(round.again);
       const recovered = yield* Effect.promise(() => send(round.second, pid, letter));
       expect(recovered.error).toBeUndefined();
       expect(recovered.result).toEqual(accepted.result);
@@ -657,6 +712,7 @@ const sendSettled = (c: Client, pid: string, letter: string, answered: Deferred.
         throw error;
       },
     );
+
     return reply === null ? { _tag: "cut" } : { _tag: "accepted", placing: placing(reply) };
   }).pipe(Effect.tap((settled) => (settled._tag === "accepted" ? Deferred.succeed(answered, undefined) : Effect.void)));
 
@@ -666,6 +722,7 @@ const restartedAfter = (c: Client, stream: string, after: string) =>
   Effect.promise(async () => {
     const end = Date.now() + WAIT,
       tags: Array<string> = [];
+
     let seen = 0;
 
     while (Date.now() < end) {
@@ -691,7 +748,7 @@ const restartedAfter = (c: Client, stream: string, after: string) =>
     throw new Error(`no restarted after ${after} on ${stream} in ${WAIT} ms; saw ${JSON.stringify(tags)}`);
   });
 
-const restartedRows = (rows: ReadonlyArray<typeof Entry.Type>) => rows.filter((row) => row._tag === "restarted");
+const restartedRows = (rows: ReadonlyArray<Entry>) => rows.filter((row) => row._tag === "restarted");
 
 const crashStarts = (c: Client, firstStart: string) =>
   Effect.promise(async (signal) => {
@@ -713,13 +770,16 @@ describe("P12 real dev.ts wire", () => {
   it("scenario: a new dev command links its lifecycle event to the previous runtime", async () => {
     const first = await instance(),
       c = await connected(first);
+
     const starts = (await read(c, "gateway/brain")).filter((row) => row._tag === "started");
     expect(starts).toHaveLength(1);
     c.close();
     first.child.kill("SIGTERM");
     await new Promise<void>((done) => first.child.once("exit", () => done()));
+
     const second = await instance(first),
       reopened = await connected(second, "reopened");
+
     const now = (await read(reopened, "gateway/brain")).filter((row) => row._tag === "started");
     expect(now).toHaveLength(2);
     expect(now[1]!.body).toMatchObject({ after: (starts[0]!.body as { start: string }).start });
@@ -728,6 +788,7 @@ describe("P12 real dev.ts wire", () => {
     const s = await instance(),
       c = await connected(s),
       pid = await counter(c);
+
     const first = placing(await send(c, pid, "once"));
     expect(placing(await send(c, pid, "once"))).toEqual(first);
     const changed = await send(c, pid, "once", Tag.cases.dec.make({}));
@@ -736,11 +797,14 @@ describe("P12 real dev.ts wire", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ id: "once", rev: first.rev, pos: first.pos });
     expect((await view(c, pid)).view).toEqual({ count: 1 });
+
     const otherKey = identity(),
       other = new Client(s.url, otherKey, "other-key");
+
     expect((await Effect.runPromise(other.hello())).error?.data?.reason).toBe("not_granted");
     const knocked = await other.call("gateway.knock", { label: "Other client" });
     const { grantText } = await import("@kampus/libfabrika/access/Text");
+
     const text = grantText({
       id: "grant-other",
       key: otherKey.raw,
@@ -757,11 +821,13 @@ describe("P12 real dev.ts wire", () => {
       },
       sentAt: SENT,
     });
+
     const granted = await fetch(`${s.url}/grant`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ text, armored: s.key.proof(text) }),
     });
+
     expect(granted.ok).toBe(true);
     const notification = await other.next((f) => typeof f !== "string" && f.method === "client.granted");
     expect((await Effect.runPromise(other.hello(notification.params.nonce))).error).toBeUndefined();
@@ -773,6 +839,7 @@ describe("P12 real dev.ts wire", () => {
     const s = await instance(),
       c = await connected(s),
       pid = await counter(c);
+
     // T890, L8. The PAGE + 3 sends start in order on one socket and are awaited together.
     // Three plants, each at the gateway's ledger read for a page, run once on a laptop and restored:
     // reverse a page (red: the second page has 256 entries, 3 expected); repeat a page, so the read
@@ -809,6 +876,7 @@ describe("P12 real dev.ts wire", () => {
       c = await connected(s),
       other = await connected(s, "tab-b"),
       pid = await counter(c);
+
     const first = placing(await send(c, pid, "before-wait"));
     const waiting = c.call("ledger.wait", { stream: "counter:1/inbox", after: first.rev });
     await other.call("ledger.read", { stream: "counter:1/inbox", after: 0 });
@@ -827,6 +895,7 @@ describe("P12 real dev.ts wire", () => {
       a = await connected(s),
       b = await connected(s, "tab-b"),
       pid = await counter(a);
+
     expect(await view(a, pid)).toEqual({ rev: 0, view: { count: 0 } });
     const replies = await Promise.all(Array.from({ length: 12 }, (_, n) => send(n % 2 ? a : b, pid, `burst-${n}`)));
     const placed = replies.map(placing).sort((x, y) => x.pos - y.pos);
@@ -856,16 +925,19 @@ describe("P12 real dev.ts wire", () => {
   it("scenario: unauthenticated connections leave no input or span records", async () => {
     const s = await instance(),
       c = await connected(s);
+
     expect(await statusWithHost(s.url, "wrong.test")).toBe(421);
     expect((await fetch(s.url, { headers: { origin: "https://foreign.test" } })).status).toBe(403);
     // Every routed call is recorded, so reader c's own reads add rows here. Only rows
     // written by anyone other than c's key could come from a stranger.
-    const notC = (rows: ReadonlyArray<typeof Entry.Type>) => rows.filter((r) => r.by !== s.key.fingerprint);
+    const notC = (rows: ReadonlyArray<Entry>) => rows.filter((r) => r.by !== s.key.fingerprint);
     const before = await read(c, "gateway/inputs");
     const traces = await c.call("spans.read", { chain: { _tag: "spans" }, after: 0 });
+
     const strangerKey = identity(),
       unknownKey = identity(),
       badKey = identity();
+
     const stranger = new Client(s.url, strangerKey, "pre-hello");
     await stranger.challenge();
     expect((await stranger.call("ledger.read", { stream: "processes", after: 0 })).error?.data?.reason).toBe(
@@ -883,14 +955,18 @@ describe("P12 real dev.ts wire", () => {
     expect(notC(inputs)).toEqual(notC(before));
     const after = await c.call("spans.read", { chain: { _tag: "spans" }, after: 0 });
     const keys = [strangerKey, unknownKey, badKey];
+
     const connections = savedRows(s.home, "dev_clients").filter((row) =>
       keys.some((key) => String(row.connection).includes(encodeURIComponent(key.fingerprint))),
     );
+
     expect(connections).toHaveLength(3);
+
     const identities = [
       ...keys.flatMap((key) => [key.raw, key.fingerprint]),
       ...connections.map((row) => String(row.client)),
     ];
+
     const attributed = (row: unknown) => identities.some((id) => JSON.stringify(row).includes(id));
     expect(after.result.spans.filter(attributed)).toEqual([]);
     // A planted unauthorized record with either identity must be found by this same predicate.
@@ -903,6 +979,7 @@ describe("P12 real dev.ts wire", () => {
     const s = await instance(),
       c = await connected(s),
       pid = await counter(c);
+
     const seen = placing(await send(c, pid, "seed")).rev;
     expect(seen).toBeGreaterThan(0);
     const accepted = placing(await send(c, pid, "metadata", Tag.cases.inc.make({}), seen));
@@ -938,10 +1015,12 @@ describe("P12 real dev.ts wire", () => {
   it("scenario: sealed program plant: unknown programs never fall back to a host import", async () => {
     const s = await instance(),
       c = await connected(s);
+
     // The trusted process API is exercised by instance-records, including an outbound probe program.
     const pid = Effect.runSync(
       Id.Generator.use((ids) => ids.next(Id.Process)).pipe(Effect.provide(Id.Generator.layer)),
     );
+
     const missing = await c.call("view.open", { pid });
     expect(missing.error).toBeDefined();
 
@@ -950,6 +1029,7 @@ describe("P12 real dev.ts wire", () => {
         process: "counter:1",
         personOnly: false,
       });
+
       expect(response.error?.data?.reason).toBe("unknown_method");
     }
   });
@@ -988,6 +1068,7 @@ describe("P12 real dev.ts wire", () => {
     delete env.FABRIKA_FOREGROUND;
     delete env.CLOUDFLARE_API_TOKEN;
     const key = identity();
+
     // Port 0 is outside the settings range, so the instance child fails before it builds.
     const failed = spawn(
       process.execPath,
@@ -1006,6 +1087,7 @@ describe("P12 real dev.ts wire", () => {
       ],
       { cwd: APP, env, stdio: ["ignore", "ignore", "ignore"] },
     );
+
     children.push(failed);
     const code = await new Promise<number | null>((done) => failed.once("exit", (c) => done(c)));
     expect(code).not.toBe(0);
@@ -1019,9 +1101,11 @@ describe("P12 real dev.ts wire", () => {
         const s = yield* launched;
         const c = yield* client(s, "tab-a");
         const pid = yield* Effect.promise(() => counter(c));
+
         const firstStart = (yield* Effect.promise(() => read(c, "gateway/brain"))).find(
           (row) => row._tag === "started",
         )!;
+
         const accepted = new Map<string, Placing>();
         yield* Effect.forEach(
           range(10),
@@ -1069,10 +1153,13 @@ describe("P12 real dev.ts wire", () => {
         const s = yield* launched;
         const c = yield* client(s, "tab-a");
         const pid = yield* Effect.promise(() => counter(c));
+
         const firstStart = (yield* Effect.promise(() => read(c, "gateway/brain"))).find(
           (row) => row._tag === "started",
         )!;
+
         const firstAnswer = yield* Deferred.make<void>();
+
         const fibers = yield* Effect.forEach(
           range(20),
           (n) => Effect.forkScoped(sendSettled(c, pid, `kill-${n}`, firstAnswer)),
@@ -1080,6 +1167,7 @@ describe("P12 real dev.ts wire", () => {
             concurrency: 1,
           },
         );
+
         yield* Deferred.await(firstAnswer);
         yield* killWorkerd(s.child.pid!);
         const before = yield* Effect.forEach(fibers, Fiber.join, { concurrency: "unbounded" });
@@ -1088,6 +1176,7 @@ describe("P12 real dev.ts wire", () => {
         // same committed rows the wake reads. The moment decides which of the two laws below this run must meet.
         const moment = yield* killedMoment(s.home, "counter:1", pid);
         const refused: Array<{ call: string; retry: Frame }> = [];
+
         // A refusal is the name restarting; the refused call's one retry waits for the fact that says so.
         const answered = (call: string, first: Frame, again: () => Promise<Frame>) =>
           Effect.gen(function* () {
@@ -1104,14 +1193,17 @@ describe("P12 real dev.ts wire", () => {
             yield* restartedAfter(resumed, "processes/counter:1", pid);
             const retry = yield* Effect.promise(again);
             refused.push({ call, retry });
+
             return retry;
           });
 
         for (const n of range(20)) {
           const id = `kill-${n}`;
+
           const reply = yield* answered(id, yield* Effect.promise(() => send(resumed, pid, id)), () =>
             send(resumed, pid, id),
           );
+
           const now = placing(reply);
           const was = before[n]!;
 
@@ -1123,6 +1215,7 @@ describe("P12 real dev.ts wire", () => {
         const inbox = yield* Effect.promise(() => read(resumed, "counter:1/inbox"));
         expect(inbox).toHaveLength(20);
         expect(new Set(inbox.map((r) => r.id)).size).toBe(20);
+
         // When the gateway answered every resend (each letter settled or held), the view is the first call
         // into the object: it wakes a cut step and is the one refusal, so it too waits for the fact.
         const opened = yield* answered(
@@ -1130,9 +1223,11 @@ describe("P12 real dev.ts wire", () => {
           yield* Effect.promise(() => resumed.call("view.open", { pid })),
           () => resumed.call("view.open", { pid }),
         );
+
         expect(opened.error).toBeUndefined();
         const live = yield* Effect.promise(() => counter(resumed));
         expect((yield* Effect.promise(() => view(resumed, live))).view.count).toBe(20);
+
         const restarted = restartedRows(yield* Effect.promise(() => read(resumed, "processes/counter:1"))).filter(
           (row) => (row.body as { after?: string }).after === pid,
         );

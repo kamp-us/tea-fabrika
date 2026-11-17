@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-leakgrep-patch-added-review",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T23:05:03-08:00",
+  "ended": "2026-11-15T23:13:00-08:00",
+  "parent": "2026-11-15-leakgrep-patch-added-tests2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The one review of the fast-tracked lead-tooling change on branch fabrikalfa/leakgrep-patch-added-lines at 19e9165ff, today's tooling: merge-ready, two finding rows. The one behavior change in .agents/skills/lead/scripts/leakgrep.sh is the approved one: Quotes.quoted also counts a plus line inside a hunk of a file under patches/, and only em_dash is skipped there. Headers after a diff line, files outside patches/, .patch files elsewhere and every secret, path, name and private-word shape still read those lines. The comments say what is skipped and why. The three laws hold their rules, and the old law's removed added case took nothing else. The exam route obeyed stepcommit.sh: the build did not commit the exam path, and a tests step, not the builder, committed the owner-approved exam change as its own commit, as docs/direction/nobody-writes-their-own-exam.md allows. Findings: in a file under patches/ with no diff line between files, a second file's +++ header is read as inside a hunk and now skips the em dash; and the new laws use fc.assert with a hand seed, which decision 0579 says is not the way in our tooling.",
+  "plants": [
+    {
+      "law": "leakgrep.patches.test.ts: an em dash on any added line inside a hunk of a patches/ file passes",
+      "plant": "main's leakgrep.sh, by TEST_LEAKGREP on a scratch copy",
+      "result": "red"
+    },
+    {
+      "law": "leakgrep.patches.test.ts: an em dash on a patches/ file's <place> line outside a hunk still fails",
+      "plant": "Quotes.quoted counts every plus line of a patch, inside a hunk or not",
+      "result": "red"
+    },
+    {
+      "law": "leakgrep.patches.test.ts: a <kind> on an added line inside a hunk of a patches/ file still fails",
+      "plant": "a quoted line skips every shape, not only the style ones",
+      "result": "red"
+    },
+    {
+      "law": "leakgrep.patches.test.ts: an em dash on an added line inside a hunk of <path> still fails",
+      "plant": "is_patch matches patches/ anywhere in the path or any .patch file",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Read-only apart from this row. Ran at 19e9165ff with nice -n 15 pnpm exec vitest run --maxWorkers=3, one file at a time: leakgrep.commits 11, leakgrep.lines 12, leakgrep.patches 21, leakgrep.respaced 21, leakgrep 14, all green. pnpm lint with NODE_OPTIONS=--max-old-space-size=6144: exit 0. loosening.sh on the range: two unrecognized change hits, the patches test file (the approved removal of the old added case, plus new imports) and leakgrep.sh itself (the approved exam change), no law loosened past the approved reversal. git merge-tree with origin/main b510ed2e8: no conflict. Not run: pnpm typecheck, since the build ran it and leakgrep.sh is outside every tsconfig.",
+  "step": "review"
+}

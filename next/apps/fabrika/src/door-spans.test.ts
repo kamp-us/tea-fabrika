@@ -21,7 +21,7 @@ import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Layer, Option, Result, Schema, Stream, Tracer } from "effect";
-import * as RateLimiter from "effect/persistence/RateLimiter";
+import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -34,11 +34,17 @@ const Tag = Schema.TaggedUnion({
 });
 
 const CHECK = { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }), endOnFailure: true };
+
 const URL = "https://fabrika.test/entry/project-socket";
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
+
 const SENT = "2026-11-08T04:00:00.000Z";
+
 const Input = Schema.TaggedUnion({ comment: { text: Schema.String } });
+
 const text = fc.string({ minLength: 1, maxLength: 100 });
 
 const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json));
@@ -53,6 +59,7 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
     }
 
     const decoded = decodeText(value);
+
     const result = [
       value,
       ...(Result.isSuccess(decoded) ? texts(decoded.success, cache) : []),
@@ -63,7 +70,9 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
         ),
       ),
     ];
+
     cache.set(value, result);
+
     return result;
   }
 
@@ -90,11 +99,13 @@ type Sample = typeof sample extends fc.Arbitrary<infer A> ? A : never;
 const u32 = (n: number) => {
   const b = Buffer.alloc(4);
   b.writeUInt32BE(n);
+
   return b;
 };
 
 const field = (value: string | Uint8Array) => {
   const bytes = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+
   return Buffer.concat([u32(bytes.length), bytes]);
 };
 
@@ -111,8 +122,10 @@ const key = (seed: Uint8Array, salt: number) => {
     format: "der",
     type: "pkcs8",
   });
+
   const raw = createPublicKey(privateKey).export({ format: "der", type: "spki" }).subarray(-32);
   const blob = Buffer.concat([field("ssh-ed25519"), field(raw)]);
+
   return {
     raw: raw.toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -120,6 +133,7 @@ const key = (seed: Uint8Array, salt: number) => {
     sshFingerprint: fingerprint(blob),
     sign: (text: string) => {
       const space = "fabrika-client";
+
       const signed = Buffer.concat([
         Buffer.from("SSHSIG"),
         field(space),
@@ -127,7 +141,9 @@ const key = (seed: Uint8Array, salt: number) => {
         field("sha512"),
         field(createHash("sha512").update(text).digest()),
       ]);
+
       const signature = Buffer.concat([field("ssh-ed25519"), field(sign(null, signed, privateKey))]);
+
       const bytes = Buffer.concat([
         Buffer.from("SSHSIG"),
         u32(1),
@@ -137,6 +153,7 @@ const key = (seed: Uint8Array, salt: number) => {
         field("sha512"),
         field(signature),
       ]);
+
       return `-----BEGIN SSH SIGNATURE-----\n${bytes
         .toString("base64")
         .match(/.{1,70}/g)
@@ -149,10 +166,12 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
   const databases: Array<DatabaseSync> = [];
   const writes: Array<string> = [];
   const archived: Array<string> = [];
+
   const open = () => {
     const db = new DatabaseSync(":memory:");
     databases.push(db);
     const sql = nodeSql(db);
+
     return {
       ...sql,
       exec: (query: string, ...params: Parameters<typeof sql.exec> extends [string, ...infer P] ? P : never) => {
@@ -164,6 +183,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
       },
     };
   };
+
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {
       for (const db of databases) {
@@ -172,10 +192,13 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
     }),
   );
   const sql = open();
+
   const root = key(a.seed, 0),
     window = key(a.seed, 1),
     stranger = key(a.seed, 2);
+
   const controls = { fail: "", deliveryFails: false, audit: "ok", selections: 0, deliveries: 0 };
+
   const actual = yield* Effect.service(Ledger).pipe(
     Effect.provide(
       LedgerSql.layer(sql, { reader: "project" }).pipe(
@@ -183,11 +206,13 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
       ),
     ),
   );
+
   const ledger = Layer.succeed(Ledger, {
     ...actual,
     append: (stream, id, line) =>
       controls.fail === stream ? Effect.fail(new LedgerError({ reason: "storage" })) : actual.append(stream, id, line),
   });
+
   const transaction = Layer.effect(
     LedgerTransaction,
     LedgerTransaction.pipe(
@@ -211,6 +236,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
     Layer.provide(LedgerTransactionSql.layer(sql)),
     Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
   );
+
   const founder = {
     name: "project",
     person: PERSON,
@@ -219,8 +245,10 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
     by: root.sshFingerprint,
     build: "test-build",
   };
+
   const clients = ClientManagerLedger.layer(founder).pipe(Layer.provideMerge(ledger));
   const parts = new Map<string, ReturnType<typeof nodeSql>>();
+
   const records = RecordManager.sql((name) => {
     let part = parts.get(name);
 
@@ -231,15 +259,18 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
 
     return part;
   }, 64 * 1024);
+
   const archive = Layer.effect(
     Archive,
     Effect.map(Archive, (actual) => ({
       put: (name: string, bytes: Uint8Array) => {
         archived.push(new TextDecoder().decode(bytes));
+
         return actual.put(name, bytes);
       },
     })),
   ).pipe(Layer.provide(Archive.memory));
+
   const layer = Gateway.layer({
     sql,
     founder,
@@ -258,10 +289,12 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
     notify: () => Effect.void,
     deliver: () => {
       controls.deliveries++;
+
       return controls.deliveryFails ? Effect.fail(new LedgerError({ reason: "unreachable" })) : Effect.void;
     },
     audit: (_process, message) => {
       controls.selections++;
+
       return Effect.fromResult(
         Audit.select(
           {
@@ -313,17 +346,20 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
       ),
     ),
   );
+
   return { layer, window, stranger, root, controls, writes, databases, archived };
 });
 
 const capture = (delegate: Tracer.Tracer) => {
   const spans: Array<Tracer.Span> = [];
+
   const events: Array<{
     spanId: string;
     name: string;
     startTime: bigint;
     attributes: Record<string, unknown> | undefined;
   }> = [];
+
   const tracer = Tracer.make({
     span(options) {
       const span = delegate.span(options);
@@ -332,10 +368,13 @@ const capture = (delegate: Tracer.Tracer) => {
         events.push({ spanId: span.spanId, name, startTime, attributes });
         event(name, startTime, attributes);
       };
+
       spans.push(span);
+
       return span;
     },
   });
+
   return { spans, events, tracer };
 };
 
@@ -362,8 +401,10 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                   history.length === 0
                     ? ["send", "append_failed", "delivery_failed", "decode", "selector", "output"]
                     : ["send", "append_failed", "delivery_failed", "decode", "selector", "output", "retry"];
+
                 const move = moves[pick % moves.length]!;
                 reached.add(move);
+
                 const input =
                   move === "retry"
                     ? history[Math.floor(pick / moves.length) % history.length]!
@@ -379,6 +420,7 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                 const beforeSelections = w.controls.selections;
                 const beforeDeliveries = w.controls.deliveries;
                 const beforeInputs = yield* Stream.runCollect((yield* Ledger).read("gateway/inputs", 0));
+
                 const exit = yield* Effect.exit(
                   d
                     .route(client, "process.send", {
@@ -423,12 +465,14 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                 yield* Effect.void.pipe(Effect.withSpan("archive-control"));
                 yield* (yield* SpanSink).flush;
                 expect(w.archived.length).toBeGreaterThan(0);
+
                 const cells = w.databases.flatMap((db) =>
                   db
                     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
                     .all()
                     .flatMap(({ name }) => db.prepare(`SELECT * FROM "${String(name)}"`).all()),
                 );
+
                 const shown = JSON.stringify(
                   {
                     spans: tracer.spans.map((s) => ({ name: s.name, tags: [...s.attributes] })),
@@ -436,6 +480,7 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                   },
                   (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v),
                 );
+
                 const outputs = [...w.writes, ...w.archived, JSON.stringify(cells), shown, ...errors].flatMap(
                   (output) => texts(output, decoded),
                 );
@@ -481,6 +526,7 @@ const checkSpan = (span: Tracer.Span, a: Sample, ok: boolean, attributes: Record
 const hello = Effect.fnUntraced(function* (d: typeof Gateway.Service, k: ReturnType<typeof key>, tab: string) {
   const client = yield* d.connect(),
     nonce = yield* d.challenge(client);
+
   return {
     client,
     input: {
@@ -506,6 +552,7 @@ const online = Effect.fnUntraced(function* (
 ) {
   const h = yield* hello(d, w.window, a.text);
   expect(yield* d.initialize(h.client, h.input, h.trusted)).toMatchObject({ _tag: "online" });
+
   return h.client;
 });
 
@@ -567,13 +614,16 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                 const d = yield* Gateway,
                   tracer = yield* Tracer.Tracer,
                   c = capture(tracer);
+
                 const h = yield* hello(d, w.window, a.text);
                 w.controls.fail = fail ? "gateway/hellos" : "";
+
                 const result = yield* Effect.exit(
                   d
                     .initialize(h.client, h.input, h.trusted)
                     .pipe(Effect.withParentSpan(parent(a)), Effect.withTracer(c.tracer)),
                 );
+
                 expect(
                   Exit.isSuccess(result),
                   Exit.isFailure(result) ? String(Cause.squash(result.cause)) : "success",
@@ -623,8 +673,10 @@ describe("door partial spans, next/ tracing keep-laws", () => {
               yield* Effect.gen(function* () {
                 const d = yield* Gateway;
                 yield* online(d, w, a);
+
                 const tracer = yield* Tracer.Tracer,
                   c = capture(tracer);
+
                 const text = grantText({
                   id: a.id,
                   key: w.stranger.raw,
@@ -634,16 +686,19 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                   saw: saw(a),
                   sentAt: SENT,
                 });
+
                 expect((yield* d.grant({ text, armored: a.text }).pipe(Effect.withTracer(c.tracer)))._tag).toBe(
                   "refused",
                 );
                 expect(c.spans).toEqual([]);
                 w.controls.fail = fail ? "gateway/access" : "";
+
                 const result = yield* Effect.exit(
                   d
                     .grant({ text, armored: w.root.sign(text) })
                     .pipe(Effect.withParentSpan(parent(a)), Effect.withTracer(c.tracer)),
                 );
+
                 expect(Exit.isSuccess(result)).toBe(!fail);
                 const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
                 expect(spans.map((s) => s.name)).toEqual(["gateway.grant"]);
@@ -671,12 +726,15 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                   client = yield* online(d, w, a),
                   tracer = yield* Tracer.Tracer,
                   c = capture(tracer);
+
                 w.controls.fail = fail ? "gateway/access" : "";
+
                 const result = yield* Effect.exit(
                   d
                     .deny(client, { key: w.stranger.raw, saw: saw(a) })
                     .pipe(Effect.withParentSpan(parent(a)), Effect.withTracer(c.tracer)),
                 );
+
                 expect(Exit.isSuccess(result)).toBe(!fail);
                 const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
                 expect(spans.map((s) => s.name)).toEqual(["gateway.deny"]);
@@ -720,6 +778,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                     const c = capture(tracer);
                     w.controls.fail = call === "input_failed" ? "gateway/inputs" : "";
                     w.controls.deliveryFails = call === "delivery_failed";
+
                     const input = {
                       pid: PROCESS,
                       letter: `${a.id}-${index}`,
@@ -727,11 +786,13 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                       sentAt: SENT,
                       seen: 0,
                     };
+
                     const result = yield* Effect.exit(
                       d
                         .route(client, call === "refused" ? a.id : "process.send", input)
                         .pipe(Effect.withParentSpan(parent(a)), Effect.withTracer(c.tracer)),
                     );
+
                     const ok = call === "send" || call === "refused";
                     expect(Exit.isSuccess(result)).toBe(ok);
 

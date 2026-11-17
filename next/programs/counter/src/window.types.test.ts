@@ -27,6 +27,7 @@ const Tag = Schema.TaggedUnion({
 });
 
 type Props = WindowProps<typeof counter>;
+
 type CounterMsg = typeof counterMachine.msg.Type;
 
 describe("P14 S1.4: the counter's window accepts its own data and emits only its own messages", () => {
@@ -36,6 +37,7 @@ describe("P14 S1.4: the counter's window accepts its own data and emits only its
     expectTypeOf<Parameters<typeof CounterWindow>[0]>().toMatchTypeOf<Props>();
     // A press that took unknown would accept anything: the program's Msg is narrower than unknown.
     expectTypeOf<unknown>().not.toMatchTypeOf<Parameters<Props["press"]>[0]>();
+
     const press = (props: Props) => {
       props.press(Tag.cases.inc.make({}));
       props.press(Tag.cases.dec.make({}));
@@ -47,6 +49,7 @@ describe("P14 S1.4: the counter's window accepts its own data and emits only its
       // @ts-expect-error a press is a Msg, not a bare word
       props.press("inc");
     };
+
     expect(press).toBeTypeOf("function");
   });
 
@@ -69,11 +72,13 @@ describe("P14 S1.4: the counter's window accepts its own data and emits only its
     expect(counterWindow.data).toBe(counterModel);
     expect(counterMachine.model).toBe(counterModel);
     const decode = Schema.decodeUnknownExit(counterWindow.data);
+
     const wrong = fc.oneof(
       fc.record({ count: fc.oneof(fc.string(), fc.double({ noInteger: true }), fc.boolean(), fc.constant(null)) }),
       fc.record({ total: fc.integer() }),
       fc.anything().filter((u) => typeof u !== "object" || u === null || !("count" in u)),
     );
+
     fc.assert(
       fc.property(fc.integer(), wrong, (count, other) => {
         const selected = counter.view.select({ count });
@@ -91,6 +96,7 @@ describe("P14 S1.4: the counter's window accepts its own data and emits only its
         const row: ReadonlyArray<string> | undefined = (counterKeys as Readonly<Record<string, ReadonlyArray<string>>>)[
           `counter.${input}`
         ];
+
         expect(row?.length, `counter.${input} has a default row`).toBeGreaterThan(0);
         expect(row!.every((key) => typeof key === "string" && key.length > 0)).toBe(true);
       }),

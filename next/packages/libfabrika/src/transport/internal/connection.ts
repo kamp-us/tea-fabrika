@@ -1,5 +1,5 @@
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { Attached, Wait, Who } from "../Wire.ts";
 
 const Online = {
@@ -19,8 +19,10 @@ const Model = Schema.TaggedUnion({
   idle: Online,
   busy: Online,
 });
+
 /** @internal */
 export type Model = typeof Model.Type;
+
 type Online = typeof Model.cases.idle.Type | typeof Model.cases.busy.Type;
 
 /** @internal */
@@ -35,6 +37,7 @@ export const Msg = Schema.TaggedUnion({
 export type Msg = typeof Msg.Type;
 
 const MAX_WAITS = 64;
+
 const MAX_BYTES = 16_384;
 
 /**
@@ -65,6 +68,7 @@ const loaded = (attached: typeof Attached.Type): Model => {
   }
 
   const s = fields(attached);
+
   return attached.busy ? Model.cases.busy.make(s) : Model.cases.idle.make(s);
 };
 
@@ -116,6 +120,7 @@ export const connection = Machine.make({
       }
 
       const next = { ...s, waits: [...s.waits, m.wait] };
+
       return [admits(s, next, m.wait) ? next : s, []];
     },
     answered: (s, m) => {
@@ -125,6 +130,7 @@ export const connection = Machine.make({
 
       const { id, stream, after } = m.wait;
       const matching = s.waits.some((w) => w.id === id && w.stream === stream && w.after === after);
+
       return [matching ? { ...s, waits: s.waits.filter((w) => w.id !== id) } : s, []];
     },
   },

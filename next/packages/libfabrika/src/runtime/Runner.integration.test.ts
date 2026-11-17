@@ -8,11 +8,11 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { applyCell, Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import {
   Cause,
   Arbitrary,
@@ -25,6 +25,7 @@ import {
   Option,
   Result,
   Schema,
+  Scope,
   Stream,
 } from "effect";
 import { TestClock } from "effect/testing";
@@ -39,6 +40,7 @@ import { Appended, type Entry, InputId, lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { letterLine, Mailbox, type From } from "../processes/Mailbox.ts";
 import { Activity, Down, Owner, Recipient, recoverActivity, signalId, Start } from "../processes/Process.ts";
+import type { QuotasError } from "../processes/Quotas.ts";
 import { mailChunk } from "../settings/Declarations.ts";
 import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -264,6 +266,7 @@ type Failure =
   | NotGranted
   | WatchersError
   | RecoveryStoreError
+  | QuotasError
   | SessionManagerError;
 
 type Sent =
@@ -303,36 +306,23 @@ type Update =
     };
 
 // A case's disks: one temp folder and every connection opened in it. A world opens its files as
-// its layers ask for them, so the case holds them all here. The scope that holds the disks closes
-// the connections, then removes the folder (0061).
-const disks = Effect.acquireRelease(
-  Effect.sync(() => ({
-    folder: mkdtempSync(join(tmpdir(), "p11-runner-")),
-    databases: new Array<DatabaseSync>(),
-    files: 0,
-  })),
-  ({ folder, databases }) =>
-    Effect.sync(() => {
-      for (const db of databases.splice(0)) {
-        if (db.isOpen) {
-          db.close();
-        }
-      }
-
-      rmSync(folder, { recursive: true, force: true });
-    }),
-);
+// its layers ask for them, with plain calls, so each file is opened into the scope that holds the
+// disks: that scope closes the connections, last opened first, then removes the folder (0061).
+const disks = Effect.gen(function* () {
+  const scope = yield* Effect.scope;
+  const folder = yield* Effect.acquireRelease(
+    Effect.sync(() => mkdtempSync(join(tmpdir(), "p11-runner-"))),
+    (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+  );
+  return { folder, scope, files: 0 };
+});
 
 type Disks = Effect.Success<typeof disks>;
 
-const connect = ({ databases }: Disks, path: string) => {
-  const db = new DatabaseSync(path);
-  // Match dev-recording.ts's WAL. Its synchronous=FULL guards against power loss, which a test
-  // process cannot have; here it only made the time follow the disk (ticket 585, decision 0052).
-  db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
-  databases.push(db);
-  return db;
-};
+// A test store's journal in memory and no disk sync (`TestDatabase.make`): a disk sync guards
+// against power loss, which a test process cannot have; here it only made the time follow the disk
+// (ticket 585, decision 0052).
+const connect = ({ scope }: Disks, path: string) => Effect.runSync(Scope.provide(scope)(TestDatabase.make(path)));
 
 const disk = (disks: Disks) => {
   const path = join(disks.folder, `${++disks.files}.db`);

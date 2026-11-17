@@ -261,6 +261,7 @@ const plants: Plant[] = [
       (w) => {
         const env = step(w, "next", "end to end").env!;
         const count = Number(/\|\| (\d+)\s*\}\}$/.exec(env.SHARD ?? "")?.[1]);
+
         const wrong: Record<string, string> = {
           "": `\${{ matrix.shard }}`,
           x: e2eShard("x"),
@@ -269,6 +270,7 @@ const plants: Plant[] = [
           "sized only": `\${{ matrix.shard }}/\${{ needs.legs.outputs.e2e }}`,
           "vitest's": `\${{ matrix.shard }}/\${{ needs.legs.outputs.vitest || ${count} }}`,
         };
+
         env.SHARD = typeof fault === "number" ? e2eShard(count + fault) : wrong[fault]!;
       },
     ],

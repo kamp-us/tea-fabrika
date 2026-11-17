@@ -21,12 +21,17 @@ import { Toml } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: 100 };
+
 const PERSON = "~/.fabrika/fabrika.toml";
+
 const REPO = ".fabrika/fabrika.toml";
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
+
 const port = fc.integer({ min: 1, max: 65535 });
+
 const segment = fc.stringMatching(/^[a-z][a-z0-9]{0,5}$/);
 
 // Words with Markdown punctuation and line breaks, which plain text must keep.
@@ -38,6 +43,7 @@ const doc = fc
   .map((words) => words.join(" "));
 
 const SOURCES = ["flag", "env", "repo", "person"] as const;
+
 type Slot = (typeof SOURCES)[number];
 
 /** Port declarations, each with values in some sources: often its own default, or one shared value. */
@@ -91,11 +97,14 @@ const loadRows = (ds: Declared) =>
         ]),
       ),
     );
+
     const value = (d: Declared[number], slot: Slot) => {
       const v = d.supplied[slot];
+
       // "default" supplies the declaration's own default explicitly.
       return v === undefined ? undefined : v === "default" ? d.default : v;
     };
+
     const flags: Record<string, string> = {};
     const env: Record<string, string> = {};
     const files: Record<"repo" | "person", Array<readonly [string, string, number]>> = { repo: [], person: [] };
@@ -120,19 +129,23 @@ const loadRows = (ds: Declared) =>
       }
     });
     const toml = yield* Toml;
+
     const resolved = yield* Sources.resolve(group, {
       flags: Sources.flags(flags),
       env: Sources.env(env),
       repo: Sources.file(REPO, yield* toml.parse(fileText(files.repo))),
       person: Sources.file(PERSON, yield* toml.parse(fileText(files.person))),
     });
+
     const snapshot = yield* Snapshot.make(group, resolved);
+
     return { group, snapshot, rows: Reference.rows(group, snapshot) };
   }).pipe(Effect.provide([TomlParser.layer, Digest.layerWebCrypto]), Effect.runPromise);
 
 /** Whether `line` starts the row of `path`: the path first, then no further key character. */
 const starts = (line: string, path: string) => {
   const rest = line.trimStart();
+
   return rest.startsWith(path) && !/^[a-z0-9.-]/.test(rest.slice(path.length));
 };
 
@@ -199,6 +212,7 @@ describe("L5, the printed report says what the snapshot holds, and --all adds on
         // row's lines run to the end, so a closing line after it may differ.
         const explicit = (report: string) =>
           blocks(report, paths).filter((b) => rows.find((r) => r.path === b.path)!.origin._tag !== "default");
+
         const [a, b] = [explicit(all), explicit(plain)];
         expect(a.map((x) => x.path)).toEqual(b.map((x) => x.path));
         a.forEach((x, n) => {

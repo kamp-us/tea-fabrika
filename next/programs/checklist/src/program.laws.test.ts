@@ -28,9 +28,12 @@ const Tag = Schema.TaggedUnion({
 const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
 
 const SEED = 119120;
+
 const RUNS = 100;
+
 // Loaded per law, so a missing export reds its law and not the file's collection.
 const load = () => import("./program.ts");
+
 type ChecklistMachine = Awaited<ReturnType<typeof load>>["checklistMachine"];
 
 type State =
@@ -40,6 +43,7 @@ type State =
   | { readonly _tag: "checked"; readonly note: string | null };
 
 type Item = { readonly name: string; readonly state: State };
+
 type Model = { readonly items: ReadonlyArray<Item> };
 
 type Msg =
@@ -51,8 +55,11 @@ type Msg =
   | { readonly _tag: "timer"; readonly at: number; readonly arrivedAt: number };
 
 expectTypeOf<Model>().toEqualTypeOf<ChecklistMachine["model"]["Type"]>();
+
 expectTypeOf<Item>().toEqualTypeOf<ChecklistMachine["model"]["Type"]["items"][number]>();
+
 expectTypeOf<State>().toEqualTypeOf<ChecklistMachine["model"]["Type"]["items"][number]["state"]>();
+
 expectTypeOf<Msg>().toEqualTypeOf<ChecklistMachine["msg"]["Type"]>();
 
 type Fresh = Exclude<Msg, { readonly _tag: "timer" }>;
@@ -96,6 +103,7 @@ const Move = fc.record({
   onTime: fc.boolean(),
   note: Note,
 });
+
 type Move = typeof Move extends fc.Arbitrary<infer A> ? A : never;
 
 const at = <A>(items: ReadonlyArray<A>, i: number): A | undefined => items[i % Math.max(items.length, 1)];
@@ -108,13 +116,16 @@ const choose = (m: Model, names: ReadonlyArray<string>, move: Move, clock: numbe
   const checked = m.items.filter((i) => i.state._tag === "checked").map((i) => i.name);
   const wakes = m.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since + DAY] : []));
   const wake = m.items.some((i) => i.state._tag === "new") ? 0 : wakes.length > 0 ? Math.min(...wakes) : clock;
+
   const timer: Msg = {
     ...Tag.cases.timer.make({}),
     at: wake,
     arrivedAt: move.onTime ? Math.max(wake, clock + move.gap) : clock + move.gap,
   };
+
   const name = at(here, move.pick);
   const fresh = at(free, move.other);
+
   const check = (one: string | undefined): Msg =>
     one === undefined
       ? timer
@@ -140,6 +151,7 @@ const choose = (m: Model, names: ReadonlyArray<string>, move: Move, clock: numbe
       const one = at(checked, move.pick);
       return one === undefined ? timer : { ...Tag.cases.uncheck.make({}), name: one };
     }
+
     default:
       return timer;
   }
@@ -224,10 +236,12 @@ const reached = (machine: ChecklistMachine) =>
   walked(machine, 4).chain(({ names, model }) => {
     const any = fc.constantFrom(...names);
     const here = model.items.map((i) => i.name);
+
     const name =
       here.length === 0
         ? any
         : fc.oneof({ arbitrary: fc.constantFrom(...here), weight: 3 }, { arbitrary: any, weight: 1 });
+
     return fc
       .record({ kind: fc.constantFrom("add", "rename", "remove", "check", "uncheck"), name, to: any })
       .map(({ kind, name, to }): { model: Model; msg: Fresh } => ({
@@ -372,11 +386,13 @@ describe("ticket 806 the checklist's laws", () => {
       walked(checklistMachine).map((w) => w.msgs),
       ({ next }) => {
         const since = next.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since] : []));
+
         const want = next.items.some((i) => i.state._tag === "new")
           ? 0
           : since.length === 0
             ? null
             : Math.min(...since) + DAY;
+
         return checklist.wake(next) === want || `wake ${checklist.wake(next)}, want ${want}`;
       },
       { seed: SEED, numRuns: RUNS },
@@ -385,6 +401,7 @@ describe("ticket 806 the checklist's laws", () => {
 
   it("L6: a timer makes an open item late exactly when arrivedAt >= since + LATE, and stamps every new item from arrivedAt", async () => {
     const { checklistMachine } = await load();
+
     const Timed = walked(checklistMachine, 4).chain((w) =>
       fc
         .record({
@@ -395,9 +412,11 @@ describe("ticket 806 the checklist's laws", () => {
         .map(({ pick, offset, asked }) => {
           const open = w.model.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since] : []));
           const since = at(open, pick) ?? w.clock;
+
           return { model: w.model, arrivedAt: since + DAY + offset, asked };
         }),
     );
+
     fc.assert(
       fc.property(Timed, ({ model, arrivedAt: time, asked }) => {
         const [next] = applyCell(checklistMachine, model, { ...Tag.cases.timer.make({}), at: asked, arrivedAt: time });
@@ -425,7 +444,7 @@ describe("ticket 806 the checklist's laws", () => {
     const { checklistMachine, checklist } = await load();
     const port = checklist.inputs.left;
     // The query takes no input: its schema is `Null`, and its answer reads the view alone.
-    expect(Schema.decodeUnknownSync(port.schema)(null)).toBeNull();
+    expect(Schema.decodeSync(port.schema)(null)).toBeNull();
     propertyInvariant(
       checklistMachine,
       {},
@@ -433,6 +452,7 @@ describe("ticket 806 the checklist's laws", () => {
       ({ next }) => {
         const view = checklist.view.select(next);
         const answer: unknown = port.answer(view);
+
         return (
           (Number.isInteger(answer) &&
             typeof answer === "number" &&
@@ -449,7 +469,7 @@ describe("ticket 806 the checklist's laws", () => {
 
   it("L8: finished is a Done exactly when there is an item and all are checked, and it decodes by Done", async () => {
     const { checklistMachine, finished, Done } = await load();
-    const roundTrip = (d: unknown) => Schema.decodeUnknownSync(Done)(Schema.encodeUnknownSync(Done)(d));
+    const roundTrip = (d: unknown) => Schema.decodeSync(Done)(Schema.encodeUnknownSync(Done)(d));
     propertyInvariant(
       checklistMachine,
       {},
@@ -477,7 +497,7 @@ describe("ticket 806 the checklist's laws", () => {
     const { checklist } = await load();
     const port = checklist.inputs.items;
     expect(port._tag).toBe("read");
-    expect(Schema.decodeUnknownSync(port.schema)(null)).toBeNull();
+    expect(Schema.decodeSync(port.schema)(null)).toBeNull();
     fc.assert(
       fc.property(walked(checklist.machine), ({ msgs }) => {
         for (const { model, record } of folded(checklist.machine, msgs)) {
@@ -500,15 +520,17 @@ describe("ticket 806 the checklist's laws", () => {
       fc.property(walked(checklist.machine), Broken, fc.nat(), ({ msgs }, broken, pick) => {
         for (const { record } of folded(checklist.machine, msgs)) {
           expect(roundTrip(record), "a reached model").toEqual(record);
+
           // The schema is a wall, not a pass-through: the same model with one item made wrong is refused.
           const items: ReadonlyArray<Item> =
             record.items.length === 0 ? [{ name: "x", state: { _tag: "new" } }] : record.items;
+
           const wrong = items.map((i, n) => (n === pick % items.length ? broken(i) : i));
           expect(decodes({ items: wrong }), `a model with ${JSON.stringify(wrong)}`).toBe(false);
         }
 
         for (const msg of msgs) {
-          expect(Schema.decodeUnknownSync(checklist.msg)(msg), "a walked Msg").toEqual(msg);
+          expect(Schema.decodeSync(checklist.msg)(msg), "a walked Msg").toEqual(msg);
         }
       }),
       { seed: SEED, numRuns: RUNS },
@@ -518,7 +540,7 @@ describe("ticket 806 the checklist's laws", () => {
       // pinned: main's saved shape, `note: NullOr(String)` with no length checks (plan, L14): an
       // empty note and one past `MOST` still decode, so the saved state needs no upgrade and stays v 1.
       const saved = { items: [{ name: "x", state: { _tag: "checked", note } }] };
-      expect(Schema.decodeUnknownSync(model)(saved), `a saved note of ${note?.length ?? "null"}`).toEqual(saved);
+      expect(Schema.decodeSync(model)(saved), `a saved note of ${note?.length ?? "null"}`).toEqual(saved);
     }
   });
 
@@ -545,6 +567,7 @@ describe("ticket 806 the checklist's laws", () => {
   it("L11 type: an input key that is no Msg type, a query on a field the view lacks, or a check note that is not a string, does not compile", async () => {
     // A type law (plan, L11): the checks are the `@ts-expect-error` lines, read by the typecheck.
     const { checklist, checklistMachine } = await load();
+
     const spec = {
       name: checklist.name,
       machine: checklistMachine,
@@ -555,6 +578,7 @@ describe("ticket 806 the checklist's laws", () => {
       writes: {},
       wake: checklist.wake,
     };
+
     // @ts-expect-error `tick` is no Msg type of the checklist.
     Program.make({ ...spec, inputs: { tick: "Tick" } });
     // @ts-expect-error The checklist's view has no `done` field to read.

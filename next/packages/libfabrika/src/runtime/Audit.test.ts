@@ -23,6 +23,7 @@ const Metadata = Schema.TaggedStruct("save", {
 });
 
 const Save = Schema.Struct({ ...Metadata.fields, body: Schema.String });
+
 const parameters = { seed: 119120, numRuns: 100 };
 
 const raised = (body: string): never => {
@@ -124,6 +125,7 @@ describe("P13 safe audit", () => {
                 const modes = ["decode", "selector", "output", "json", "rpc", "reply"] as const;
                 const mode = modes[cell.move % modes.length]!;
                 reached.add(mode);
+
                 const program =
                   mode === "selector"
                     ? declared(() => raised(body))
@@ -132,6 +134,7 @@ describe("P13 safe audit", () => {
                       : mode === "json"
                         ? declared(() => ({ hidden: 1n }), Schema.Unknown)
                         : declared(metadata);
+
                 const node = nodeExecution(program);
 
                 if (mode !== "rpc" && mode !== "reply") {
@@ -171,14 +174,18 @@ describe("P13 safe audit", () => {
                         }),
                       ),
                     );
+
                     outputs.push(JSON.stringify(answer));
                     expect(Schema.is(Audit.Answer)(answer)).toBe(true);
+
                     return answer;
                   },
                 });
+
                 const exit = yield* Effect.exit(
                   execution.audit(mode === "decode" ? { ...input, base: body } : input),
                 ).pipe(Effect.withTracer(spans.tracer));
+
                 expect(Exit.isFailure(exit)).toBe(true);
 
                 if (Exit.isFailure(exit)) {

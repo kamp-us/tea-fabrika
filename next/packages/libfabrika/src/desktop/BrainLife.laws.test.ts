@@ -2,7 +2,8 @@
 import { applyCell } from "@demlik/tea";
 import { arbGuidedSequence, propertyInvariant, propertyTrace, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { syncTest } from "../Testing.ts";
@@ -23,9 +24,12 @@ const Tag = Schema.TaggedUnion({
 const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
 
 const options = { seed: 119120, numRuns: 150 };
+
 const ctx = stubCtxThrowingProxy<unknown>();
+
 const Failure = Schema.TaggedUnion({ Operation: {} });
-const oldId = Schema.decodeUnknownSync(Id.Cmd)("cmd_01m6v5270hf3c8x2q7w9z4k5mn");
+
+const oldId = Schema.decodeSync(Id.Cmd)("cmd_01m6v5270hf3c8x2q7w9z4k5mn");
 
 const walks = (machine: ReturnType<typeof BrainLife.machine>) => {
   const settled = <A>(value: fc.Arbitrary<A>) => fc.record({ value, failed: fc.integer({ min: 0, max: 9 }) });
@@ -68,6 +72,7 @@ const walks = (machine: ReturnType<typeof BrainLife.machine>) => {
     },
     { maxLength: 240, size: "max" },
   );
+
   return guided.map((msgs) => {
     let [state] = machine.init(null, ctx);
     const history: Array<Extract<BrainLife.Msg, { cmd: unknown }>> = [];
@@ -115,6 +120,7 @@ describe("P19 lifecycle", () => {
             equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
             seed: 119120,
           });
+
           return true;
         },
         options,
@@ -221,6 +227,7 @@ describe("P19 lifecycle", () => {
                   prev,
                   { ...reply, at },
                 );
+
                 const expected = prev.action === "up" ? "failed_up" : "failed_stop";
 
                 if (
@@ -238,6 +245,7 @@ describe("P19 lifecycle", () => {
                   cmd: { ...msg.cmd, id: oldId },
                   at,
                 } as BrainLife.Msg);
+
                 expect(stale).toEqual(prev);
                 expect(staleCmds).toEqual([]);
               }
@@ -307,6 +315,7 @@ it.effect.prop(
           const poisoned = { ...msg, cause: secret, stderr: secret, url: `${Outside.spec.url}?secret=${encoded}` };
           const [next] = applyCell(machine, prev, poisoned);
           const outputs = [JSON.stringify(next), JSON.stringify(Schema.encodeSync(BrainLife.Model)(next))];
+
           return outputs.every((output) =>
             [secret, encoded, JSON.stringify(secret).slice(1, -1)].every((form) => !output.includes(form)),
           );

@@ -13,9 +13,13 @@ import { plant } from "./plant.ts";
 import { checkPromiseTypes } from "./promise-types.ts";
 
 const CODE = "fabrika(no-promises)";
+
 const FIRES = "next/packages/libfabrika/src/app/fires.ts";
+
 const PASSES = "next/packages/libfabrika/src/app/passes.ts";
+
 const EDGE = "next/packages/libfabrika/src/data/project.ts";
+
 const paths = Effect.runSync(Path.Path.pipe(Effect.provide(NodePath.layer)));
 
 const typed = (files: Readonly<Record<string, string>>, workers = false) => {
@@ -58,6 +62,7 @@ const typed = (files: Readonly<Record<string, string>>, workers = false) => {
     try {
       const project = snapshot.getProject(config)!;
       expect(project.program.getSemanticDiagnostics()).toEqual([]);
+
       return checkPromiseTypes(project, root, paths);
     } finally {
       snapshot.dispose();
@@ -153,7 +158,9 @@ const rpcSource = (
       bare: ["", ""],
     } as const
   )[spelling];
+
   const inBridge = spelling !== "bare";
+
   // Installed workers-types: WorkerStub -> Fetcher<T> -> Rpc.Provider<T> ->
   // MethodOrProperty<V> -> Result<Awaited<R>> turns Promise<unknown> into never.
   const before = [
@@ -171,6 +178,7 @@ const rpcSource = (
     ...Array.from({ length: gap }, () => ""),
     ...(marked ? ["// oxlint-disable-next-line fabrika/no-promises -- edge: Worker RPC returns a Promise"] : []),
   ];
+
   return {
     file: "next/rpc.ts",
     line: before.length + 1,
@@ -391,6 +399,7 @@ describe("no-promises", async () => {
   });
   it("pinned: the P12 storage-method gap refuses unmarked returned Promises", () => {
     const file = "next/apps/fabrika/src/storage-method.ts";
+
     const findings = typed({
       [file]: [
         "declare const storage: {put(key: string, value: unknown): Promise<void>};",
@@ -399,12 +408,14 @@ describe("no-promises", async () => {
         "}",
       ].join("\n"),
     });
+
     expect(findings.filter((f) => f.file === file).map((f) => f.line)).toContain(3);
   });
   it("refuses Promise values, inferred returns, imported aliases and thunks outside one marked line", () => {
     fc.assert(
       fc.property(fc.stringMatching(/^[a-z]{1,8}$/), (suffix) => {
         const file = `next/case-${suffix}.ts`;
+
         const findings = typed({
           "next/binding.ts":
             "export type Later<T> = Promise<T>; export declare const platform: {read(): Later<number>};",
@@ -438,12 +449,14 @@ describe("no-promises", async () => {
           "next/helper.test-support.ts": "declare const p: Promise<number>; export const f = () => p;",
           "packages/today.ts": "declare const p: Promise<number>; export const f = () => p;",
         });
+
         expect(findings.filter((f) => f.file === file).map((f) => f.line)).toEqual([3, 4, 5, 6, 7, 8, 9, 12, 15]);
         expect(findings.filter((f) => f.file !== file)).toEqual([]);
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
+
   const all = await plant({
     [FIRES]: fires,
     [PASSES]: passes,

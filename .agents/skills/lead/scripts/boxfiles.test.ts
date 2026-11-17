@@ -19,7 +19,9 @@ import { boxTree, boxView, IDLE, oldBoxTree } from "./quest.ts";
 
 // Today's tooling. The rules are pure; one scenario runs the script on a folder of its own.
 const options = { seed: 119120, numRuns: 300 };
+
 const word = fc.stringMatching(/^[a-z][a-z0-9]{0,6}$/);
+
 const branch = word.map((w) => `fabrikalfa/${w}`);
 
 describe("box files, today's tooling", () => {
@@ -121,15 +123,18 @@ describe("box files, today's tooling", () => {
     const main = join(dir, "main");
     const home = join(dir, "home");
     const old = (Date.now() - 3 * IDLE) / 1000;
+
     const put = (path: string, text = "x", fresh = false) => {
       mkdirSync(join(path, ".."), { recursive: true });
       writeFileSync(path, text);
       utimesSync(path, fresh ? Date.now() / 1000 : old, fresh ? Date.now() / 1000 : old);
     };
+
     const folder = (path: string, fresh = false) => {
       put(join(path, "inside"), "x", fresh);
       utimesSync(path, fresh ? Date.now() / 1000 : old, fresh ? Date.now() / 1000 : old);
     };
+
     const quest = (name: string, branch: string, steps: string[], key = "quest") =>
       put(
         join(boxes, "state", `${name}.json`),
@@ -174,6 +179,7 @@ describe("box files, today's tooling", () => {
     utimesSync(codex, old, old);
     folder(codexHomeOf(main, { HOME: home }));
     folder(codexHomeOf(oldBoxTree(boxes, "done-review1"), { HOME: home }));
+
     const run = (dry: boolean) =>
       spawnSync(
         process.execPath,
@@ -188,6 +194,7 @@ describe("box files, today's tooling", () => {
         ],
         { encoding: "utf8", env: { ...process.env, HOME: home } },
       );
+
     const listing = () =>
       [boxes, main, home]
         .flatMap((d) => readdirSync(d, { recursive: true, encoding: "utf8" }).map((p) => join(d, p)))

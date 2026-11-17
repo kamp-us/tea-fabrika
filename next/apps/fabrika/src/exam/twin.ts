@@ -5,11 +5,14 @@ import { Console, Effect, FileSystem, Path } from "effect";
 import { parseSync, type ModuleExportName } from "oxc-parser";
 
 type Tree = any;
+
 type Program = ReturnType<typeof parseSync>["program"];
+
 type Finding = { file: string; line: number; reason: string };
 
 const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, string>) => {
   const { dirname, join, resolve } = path;
+
   const text = (file: string) => {
     const body = sources.get(file);
 
@@ -19,7 +22,9 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     return body;
   };
+
   const source = (file: string, spec: string) => resolve(dirname(file), spec.replace(/\.js$/, ".ts"));
+
   const nodes = (node: Tree, visit: (node: Tree) => void): void => {
     if (node === null || typeof node !== "object") {
       return;
@@ -41,7 +46,9 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
       }
     }
   };
+
   const parsedFiles = new Map<string, Program>();
+
   const tree = (file: string, body?: string): Program => {
     const saved = body === undefined ? parsedFiles.get(file) : undefined;
 
@@ -61,6 +68,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     return parsed.program;
   };
+
   // These wrappers preserve the called value. Follow them at every member depth.
   const unwrap = (node: Tree): Tree => {
     while (
@@ -77,6 +85,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     return node;
   };
+
   const member = (raw: Tree): string | null => {
     const node = unwrap(raw);
 
@@ -86,11 +95,13 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     if (node?.type === "MemberExpression" && !node.computed) {
       const base = member(node.object);
+
       return base === null ? null : `${base}.${node.property.name}`;
     }
 
     return null;
   };
+
   const root = (raw: Tree): string | null => {
     const node = unwrap(raw);
 
@@ -100,7 +111,9 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     return node?.type === "MemberExpression" ? root(node.object) : null;
   };
+
   const name = (node: ModuleExportName) => (node.type === "Identifier" ? node.name : node.value);
+
   // Follow the package's actual namespace and star exports, including aliases.
   const exported = (file: string, path: ReadonlyArray<string>, seen = new Set<string>()): string | null => {
     const key = `${file}:${path.join(".")}`;
@@ -156,6 +169,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     return null;
   };
+
   const imports = (file: string) => {
     const result = new Map<string, { file: string; name: string }>();
 
@@ -171,17 +185,21 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     return result;
   };
+
   const sameSymbol = (file: string, symbol: string, targetFile: string, target: string): boolean => {
     if (file === targetFile && symbol === target) {
       return true;
     }
 
     const imported = imports(file).get(symbol);
+
     return imported !== undefined && imported.file === targetFile && imported.name === target;
   };
+
   // Installed trees are one snapshot for this command, just like parsedFiles above.
   const cached = (read: (file: string, symbol: string) => boolean) => {
     const answers = new Map<string, boolean>();
+
     return (file: string, symbol: string) => {
       const key = `${file}:${symbol}`;
       const known = answers.get(key);
@@ -192,9 +210,11 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
       const answer = read(file, symbol);
       answers.set(key, answer);
+
       return answer;
     };
   };
+
   // Read the sidecar's real registration calls, rather than believing a LocalProvider filename.
   const registered = cached((targetFile: string, target: string): boolean => {
     const local = join(CF, "Local.ts");
@@ -243,8 +263,10 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         (p: Tree) => p.key?.name === "local" && /ProviderLocal/.test(text(targetFile).slice(p.start, p.end)),
       );
     });
+
     return dual;
   });
+
   const resource = cached((file: string, symbol: string): boolean => {
     let found = false;
     nodes(tree(file), (node) => {
@@ -257,20 +279,25 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         found = true;
       }
     });
+
     // Worker is implemented by overloads, and its provider registration is still independent evidence.
     return found || registered(file, symbol);
   });
+
   const scan = (file: string, body: string, contract?: string): Array<Finding> => {
     const ast = tree(file, body),
       found: Array<Finding> = [];
+
     const cloud = new Set<string>(),
       alchemy = new Set<string>(),
       named = new Map<string, string>();
+
     const remote = new Set<string>();
     const helpers = new Set<string>();
     // A reference may be used only as the root of a checked direct call. Rejecting its
     // escape also covers aliases, destructuring, spread, callbacks and indirect invocation.
     const checkedRoots = new Set<Tree>();
+
     const checkRoot = (raw: Tree) => {
       let node = unwrap(raw);
 
@@ -282,10 +309,13 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         checkedRoots.add(node);
       }
     };
+
     const cloudImport = (node: Tree) => {
       const first = root(node);
+
       return first !== null && (cloud.has(first) || named.has(first));
     };
+
     const report = (node: Tree, reason: string) =>
       found.push({ file, line: body.slice(0, node.start).split("\n").length, reason });
 
@@ -348,8 +378,10 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
     }
 
     let total = 0;
+
     const isRemote = (callee: string | null) =>
       callee !== null && (remote.has(callee) || [...alchemy].some((a) => callee === `${a}.remote`));
+
     nodes(ast, (node) => {
       if (node.type === "VariableDeclarator") {
         const alias = member(node.init);
@@ -400,9 +432,11 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
       if (["Worker", "Workers.Worker"].includes(parts.join("."))) {
         const props = unwrap(node.arguments[1]);
         const key = (p: Tree) => (p?.computed ? null : (p?.key?.name ?? p?.key?.value));
+
         const literalKeys = (object: Tree): boolean => {
           if (object?.type !== "ObjectExpression") {
             report(object ?? node, "unsupported-case: class-name bindings are not a literal object");
+
             return false;
           }
 
@@ -425,6 +459,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
           return valid;
         };
+
         const env = props?.properties?.find((p: Tree) => key(p) === "env");
 
         let hostedNames: Array<string> = [];
@@ -528,6 +563,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
       if (owner === null) {
         report(node, `unsupported-case: unknown Cloudflare.${parts.join(".")}`);
+
         return;
       }
 
@@ -535,6 +571,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
       if (symbol === undefined) {
         report(node, "unsupported-case: empty Cloudflare resource name");
+
         return;
       }
 
@@ -553,6 +590,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         }
       }
     });
+
     const references = (node: Tree): void => {
       if (node === null || typeof node !== "object") {
         return;
@@ -610,6 +648,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         }
       }
     };
+
     references(ast);
 
     if (total === 0 && found.length === 0) {
@@ -618,6 +657,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     return found;
   };
+
   return scan;
 };
 
@@ -642,9 +682,11 @@ const lint = Effect.fnUntraced(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
   const scan = yield* scanner;
   const path = yield* Path.Path;
+
   const contract = yield* fs
     .readFileString(path.resolve(import.meta.dirname, "../../../../packages/libfabrika/src/cloudflare/objects.ts"))
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
+
   const findings = scan(file, yield* fs.readFileString(file), contract);
 
   for (const f of findings) {
@@ -652,6 +694,7 @@ const lint = Effect.fnUntraced(function* (file: string) {
   }
 
   yield* Console.info(`lint:twin: ${findings.length} findings`);
+
   return findings.length === 0 ? 0 : 1;
 });
 

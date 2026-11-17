@@ -1,12 +1,12 @@
 /**
  * The hands' journal file: Effect's `KeyValueStore` over one SQLite file, one row per key. SQLite
  * commits each write whole or not at all, so a crash or a power cut never leaves a torn entry.
- *
- * @stability unstable
  */
 import { DatabaseSync } from "node:sqlite"; // edge: no Effect SQL client for Node's SQLite is installed; the repo's node:sqlite handle is the existing one
-import { Effect, Layer, Predicate } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
+import * as Predicate from "effect/Predicate";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import type { Sql } from "../../Sql.ts";
 
@@ -24,11 +24,13 @@ const failed = (method: string, key?: string) => (cause: unknown) =>
 const store = (sql: Sql) => {
   const exec = (method: string, key: string | undefined, query: string, ...params: ReadonlyArray<string>) =>
     Effect.try({ try: () => sql.exec(query, ...params), catch: failed(method, key) });
+
   return KeyValueStore.makeStringOnly({
     get: (key) =>
       exec("get", key, "SELECT value FROM journal WHERE key = ?", key).pipe(
         Effect.flatMap(([row]) => {
           const value = row?.["value"];
+
           return value === undefined
             ? Effect.undefined
             : Predicate.isString(value)
@@ -64,7 +66,6 @@ const store = (sql: Sql) => {
  * A file that cannot be opened is a defect, not an error: the hands cannot keep their promise of
  * running a task at most once without their journal, so the start stops with its cause.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (options: { readonly file: string }) =>
@@ -75,6 +76,7 @@ export const layer = (options: { readonly file: string }) =>
         try: () => {
           const db = new DatabaseSync(options.file);
           db.exec(TABLE);
+
           return db;
         },
         catch: failed("open"),

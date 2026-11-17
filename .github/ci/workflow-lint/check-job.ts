@@ -1,18 +1,27 @@
 // Today's CI, serving both versions. check.yaml's check job (F1, ticket 985): each step on its own
-// flag, the field rows last, and the one ratchet step that holds every list file to shrinking (0524).
+// flag, the field rows last, the one ratchet step that holds every list file to shrinking (0524), and
+// the copy-paste advice step (0587).
 import { compact, env, map, ROW_INSTALL, type Rule, steps } from "./shared.ts";
 
 const BUILD = "needs.changes.outputs.build!='false'";
+
 // The commit a run's change starts from, for vitest's `--changed`: a pull request's base, a merge
 // queue group's base, or what main held before a push. All zeros (a first push) is no base.
 const TEST_BASE = `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`;
+
 const RATCHET = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
+
+// 0587: the clones a pull request adds, as advice. Only a pull request has a base to tell a clone new by.
+const COPIES = 'node .github/ci/copies.ts --base "$BASE"';
+
+const COPIES_BASE = `\${{ github.event.pull_request.base.sha }}`;
 
 // The check job's flags (ticket 985): lint on check, field rows on field, the CI package's install
 // when only rows changed.
 const CHECK = "needs.changes.outputs.check!='false'";
 
 const ROWS = "!cancelled()&&needs.changes.outputs.field!='false'";
+
 const ROWS_ALONE = "needs.changes.outputs.check=='false'";
 
 export const checkJob: Rule = ({ jobs }, require) => {
@@ -53,10 +62,22 @@ export const checkJob: Rule = ({ jobs }, require) => {
   const ratchets = checkSteps.filter(
     (step) => typeof step["run"] === "string" && step["run"].includes("next/apps/fabrika/src/exam/ratchet"),
   );
+
   require(ratchets.length === 1 &&
     ratchets[0]?.["run"] === RATCHET &&
     compact(map(ratchets[0]?.["env"])["BASE"]) === compact(TEST_BASE) &&
     compact(ratchets[0]?.["if"]) === CHECK &&
     ratchets[0]?.["continue-on-error"] ===
       undefined, `check runs ${RATCHET} once, on the test base, and its failure blocks`);
+
+  // 0587: jscpd is advice until its false alarms are measured, so its step can never fail the job,
+  // and it runs before lint, so a red lint still shows the advice.
+  const copies = checkSteps.filter((step) => step["run"] === COPIES);
+  const lint = checkSteps.findIndex((step) => step["run"] === "pnpm lint");
+  require(copies.length === 1 &&
+    copies[0]?.["continue-on-error"] === true &&
+    compact(copies[0]?.["if"]) === CHECK &&
+    compact(map(copies[0]?.["env"])["BASE"]) === compact(COPIES_BASE) &&
+    checkSteps.indexOf(copies[0]) <
+      lint, `C1: check runs ${COPIES} once, before lint, on the pull request's base, and it never fails the job (0587)`);
 };

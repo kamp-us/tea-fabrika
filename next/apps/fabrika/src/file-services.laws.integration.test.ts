@@ -37,6 +37,7 @@ const cli = vi.hoisted(() => ({
 
 vi.mock("@effect/platform-node", async (original) => {
   const actual = await original<typeof import("@effect/platform-node")>();
+
   return {
     ...actual,
     NodeServices: {
@@ -73,6 +74,7 @@ it("dev refuses every invalid parent with reason parent_gone before touching set
       .filter((pid) => pid !== process.ppid)
       .map(String),
   );
+
   await fc.assert(
     fc.asyncProperty(invalid, async (parent) => {
       const argv = process.argv;
@@ -100,11 +102,13 @@ it("dev defaults to a scoped detached child and reports its nonzero exit as chil
     fc.asyncProperty(fc.uuid(), fc.integer({ min: 0, max: 255 }), async (name, code) => {
       const argv = process.argv;
       const commands: Array<import("effect/process/ChildProcess").Command> = [];
+
       const spawn = Layer.succeed(
         ChildProcessSpawner.ChildProcessSpawner,
         ChildProcessSpawner.make((command) =>
           Effect.sync(() => {
             commands.push(command);
+
             return ChildProcessSpawner.makeHandle({
               pid: ChildProcessSpawner.ProcessId(27000),
               exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(code)),
@@ -121,6 +125,7 @@ it("dev defaults to a scoped detached child and reports its nonzero exit as chil
           }),
         ),
       );
+
       cli.layer = Layer.mergeAll(FileSystem.layerNoop({}), Path.layer, spawn);
       process.argv = [process.execPath, "dev.ts", "--name", name];
 
@@ -164,11 +169,13 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
       fc.asyncProperty(fc.uuid(), async (name) => {
         const argv = process.argv;
         const folder = mkdtempSync(join(tmpdir(), "p12-dev-error-"));
+
         const failure = PlatformError.systemError({
           module: "FileSystem",
           method: edge,
           _tag: "PermissionDenied",
         });
+
         const fs = FileSystem.layerNoop({
           makeDirectory: () => Effect.void,
           exists: () => Effect.succeed(true),
@@ -185,6 +192,7 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
             ),
           [edge]: () => Effect.fail(failure),
         });
+
         vi.stubEnv("FABRIKA_HOME", folder);
         cli.layer = Layer.merge(fs, Path.layer);
         process.argv = [process.execPath, "dev.ts", "--child", `--parent=${process.ppid}`];
@@ -241,6 +249,7 @@ vi.mock("./local-instance.ts", () => ({
   ) =>
     Effect.suspend(() => {
       instances.push({ port: Number(options.settings.values["instance.port"]) });
+
       return Effect.fail({ reason: "test_instance_ready" });
     }),
 }));
@@ -259,6 +268,7 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
   const out = join(folder, "build"),
     pending = join(folder, ".fabrika-build-test"),
     backup = `${pending}.old`;
+
   const files = new Map([
     [source, text],
     [join(root, "compiler-ledger.json"), "[]"],
@@ -270,11 +280,14 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
   }
 
   const modes: Array<ReadonlyArray<unknown>> = [];
+
   const calls: Array<ReadonlyArray<unknown>> = [],
     paths: Array<ReadonlyArray<string>> = [];
+
   const note = (name: string, ...args: ReadonlyArray<unknown>) => {
     calls.push([name, ...args]);
   };
+
   const move = (from: string, to: string) => {
     for (const [path, text] of [...files]) {
       if (path === from || path.startsWith(`${from}/`)) {
@@ -283,11 +296,13 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
       }
     }
   };
+
   const write = (path: string, text: string) =>
     Effect.sync(() => {
       note("write", path, text);
       files.set(path, text);
     });
+
   const fs = FileSystem.layerNoop({
     realPath: (path) => Effect.succeed(path),
     glob: () => Effect.succeed([relative(root, source)]),
@@ -296,6 +311,7 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
     readFileString: (path) =>
       Effect.suspend(() => {
         note("read", path);
+
         return path === unreadable
           ? Effect.fail(
               PlatformError.systemError({
@@ -314,10 +330,12 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
     makeTempDirectory: () =>
       Effect.sync(() => {
         note("temp", pending);
+
         return pending;
       }),
     writeFileString: (path, text, options) => {
       modes.push([path, options?.mode]);
+
       return write(path, text);
     },
     writeFile: (path, bytes) => write(path, new TextDecoder().decode(bytes)),
@@ -337,6 +355,7 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
         }
 
         move(from, to);
+
         return Effect.void;
       }),
     remove: (path) =>
@@ -350,17 +369,21 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
         }
       }),
   });
+
   const path = Effect.runSync(Path.Path.pipe(Effect.provide(Path.layer)));
+
   const layer = Layer.merge(
     fs,
     Layer.succeed(Path.Path, {
       ...path,
       join: (...parts) => {
         paths.push(parts);
+
         return path.join(...parts);
       },
     }),
   );
+
   return { out, pending, backup, files, calls, paths, modes, layer };
 };
 
@@ -370,6 +393,7 @@ for (const failed of [false, true]) {
       fc.asyncProperty(generated, async ({ name, label }) => {
         const folder = mkdtempSync(join(tmpdir(), "p12-build-fs-")),
           source = join(folder, `${name}.tsx`);
+
         const text = `export const label = ${JSON.stringify(label)};`;
         const w = recorded(folder, source, text, failed);
         // HEAD has real paths too, so ignoring the supplied service fails an assertion, not setup.
@@ -381,6 +405,7 @@ for (const failed of [false, true]) {
           const result = await Effect.runPromiseExit(
             build({ out: w.out, files: [source] }).pipe(Effect.provide(w.layer)),
           );
+
           // P14 slice 2 (ticket 828): the app's build selects its tab, so the tab's three stylesheets are
           // read through the same FileSystem too, and every read still comes before the first write.
           const reads = w.calls.flatMap(([call, file]) => (call === "read" ? [String(file)] : []));
@@ -390,9 +415,11 @@ for (const failed of [false, true]) {
           ]);
           expect(w.calls[0]).toEqual(["read", source]);
           expect(w.calls[1]).toEqual(["read", join(root, "compiler-ledger.json")]);
+
           const ledgerRead = w.calls.findIndex(
             ([call, file]) => call === "read" && file === join(root, "compiler-ledger.json"),
           );
+
           expect(
             w.calls.slice(0, ledgerRead).every(([call]) => call === "read"),
             "only reads come before the compiler ledger read",
@@ -456,6 +483,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
         const folder = mkdtempSync(join(tmpdir(), "p12-dev-fs-")),
           file = join(folder, "instance.json"),
           source = join(folder, "view.tsx");
+
         // T664: a port saved by an older start is never a source, so it differs from the default.
         const saved = {
           name: "saved-project",
@@ -465,6 +493,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           port: 18799,
           build: "old",
         };
+
         const w = recorded(folder, source, "export const view = 1;", false);
 
         if (choices.saved) {
@@ -478,6 +507,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
         cli.layer = w.layer;
         cli.work = undefined;
         instances.length = 0;
+
         const overrides = {
           name,
           person: `person-${name}`,
@@ -485,11 +515,13 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           window: `-window-${name}`,
           port,
         };
+
         const selected = Object.entries(overrides).filter(
           ([field]) =>
             choices[field as keyof typeof overrides] ||
             (!choices.saved && ["name", "person", "founder"].includes(field)),
         );
+
         process.argv = [
           process.execPath,
           "dev.ts",
@@ -514,11 +546,13 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           const { port: _flag, ...founding } = Object.fromEntries(selected);
           const { port: _saved, ...kept } = saved;
           const { port: _override, ...named } = overrides;
+
           const expected = {
             ...(choices.saved ? kept : { ...named, window: null }),
             ...founding,
             build: "pending",
           };
+
           expect(instances.map((instance) => instance.port)).toEqual([choices.port ? port : 18787]);
           expect(calls).toEqual([
             ["mkdir", folder],
@@ -585,6 +619,7 @@ it("L11: no failed settings load reaches the instance write, the build or the in
               Effect.sync(() => mkdtempSync(join(tmpdir(), "t664-dev-load-"))),
               (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
             );
+
             const argv = process.argv;
             yield* Effect.addFinalizer(() =>
               Effect.sync(() => {
@@ -594,8 +629,10 @@ it("L11: no failed settings load reaches the instance write, the build or the in
                 vi.unstubAllEnvs();
               }),
             );
+
             const source = join(folder, "view.tsx"),
               person = join(folder, "fabrika.toml");
+
             const w = recorded(
               folder,
               source,
@@ -684,16 +721,19 @@ it("dev without saved settings reports settings for each missing required value"
 
 it("build returns BuildError for malformed compiler ledger bytes supplied by FileSystem", async () => {
   const encoded = Schema.fromJsonString(Schema.Array(Row));
+
   const invalid = fc
     .oneof(
       fc.string(),
       fc.jsonValue().map((value) => JSON.stringify(value)),
     )
     .filter((text) => !Schema.is(encoded)(text));
+
   await fc.assert(
     fc.asyncProperty(invalid, async (raw) => {
       const folder = mkdtempSync(join(tmpdir(), "p12-ledger-fs-")),
         source = join(folder, "view.tsx");
+
       const w = recorded(folder, source, "export const view = 1;", false);
       w.files.set(join(root, "compiler-ledger.json"), raw);
       writeFileSync(source, "export const view = 1;");
@@ -726,16 +766,19 @@ it("dev returns InstanceError for malformed saved settings without writing or bu
     .filter((text) => {
       try {
         const raw: unknown = JSON.parse(text);
+
         return typeof raw !== "object" || raw === null || !("name" in raw);
       } catch {
         return true;
       }
     });
+
   await fc.assert(
     fc.asyncProperty(invalid, async (raw) => {
       const folder = mkdtempSync(join(tmpdir(), "p12-settings-fs-")),
         source = join(folder, "view.tsx"),
         file = join(folder, "instance.json");
+
       const w = recorded(folder, source, "export const view = 1;", false);
       w.files.set(file, raw);
       writeFileSync(file, raw);
@@ -797,11 +840,14 @@ it.effect.prop(
               vi.unstubAllEnvs();
             }),
         );
+
         // Only the counted FileSystem sees this home. No real folder or Worker is opened.
         const folder = join(tmpdir(), `t753-saved-port-${choices[0]}`),
           file = join(folder, "instance.json"),
           source = join(folder, "view.tsx");
+
         const w = recorded(folder, source, "export const view = 1;", false);
+
         const founding = {
           name: "test-project",
           person: "test-person",
@@ -809,6 +855,7 @@ it.effect.prop(
           window: null,
           build: "old",
         };
+
         vi.stubEnv("FABRIKA_HOME", folder);
         vi.stubEnv(Declarations.port.env, undefined);
         cli.layer = w.layer;
@@ -837,16 +884,19 @@ it.effect.prop(
             );
           }
 
-          const saved = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(
+          const saved = Schema.decodeSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(
             w.files.get(file) ?? "{}",
           );
+
           const refused = saved.port !== undefined && !Schema.is(Declarations.port.schema)(saved.port);
           const entries: Array<{ readonly level: string; readonly text: string }> = [];
+
           const logger = Logger.layer([
             Logger.make((entry) => {
               entries.push({ level: entry.logLevel, text: Logger.formatJson.log(entry) });
             }),
           ]);
+
           const before = w.calls.length;
           instances.length = 0;
           cli.work = undefined;
@@ -856,6 +906,7 @@ it.effect.prop(
             catch: (cause: unknown) => new Error("dev import failed", { cause }),
           });
           expect(cli.work).toBeDefined();
+
           const exit = yield* Effect.exit(
             cli.work!.pipe(Effect.provide(logger), Effect.provideService(References.MinimumLogLevel, "All")),
           );

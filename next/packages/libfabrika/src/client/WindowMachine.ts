@@ -4,12 +4,14 @@
  * client and each tile's own machine by sending each its own Msgs, and it decodes every frame the
  * door sends. It reads no socket and no clock: the start turns socket events into Msgs and its Cmds
  * into writes.
- *
- * @stability unstable
  */
 import { applyCell, type Cmd as TeaCmd, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Option, Predicate, Result, Schema, type Types } from "effect";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Types from "effect/Types";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace } from "../processes/Process.ts";
 import * as C from "../runtime/Client.ts";
@@ -29,6 +31,7 @@ import { Prefix, prefixMachine, PrefixMsg } from "./Prefix.ts";
 import { optimisticState, TezgahClient, type TezgahCmd, TezgahMsg, tezgahMachine } from "./Tezgah.ts";
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
 
 const Reach = Schema.TaggedUnion({
@@ -43,6 +46,7 @@ const Reach = Schema.TaggedUnion({
   ended: { pid: Schema.String, reason: ExitReason, id: Schema.Int },
   missing: {},
 });
+
 type Reach = typeof Reach.Type;
 
 // The window's own inbox, `client:<tab>/inbox`, read past the cursor `after`, one call at a time.
@@ -60,6 +64,7 @@ const StatusMessage = Schema.TaggedUnion({
   ended: { tile: Schema.String, reason: ExitReason },
   refused: { tile: Schema.String, m: Schema.Json, reason: Schema.String },
 });
+
 type StatusMessage = typeof StatusMessage.Type;
 
 // A bad recovery answer does not permit another ask. A checked whole or a new dial does.
@@ -82,6 +87,7 @@ const Call = Schema.TaggedUnion({
   },
   knock: {},
 });
+
 type Call = typeof Call.Type;
 
 const CallError = Schema.TaggedUnion({
@@ -91,7 +97,9 @@ const CallError = Schema.TaggedUnion({
 });
 
 const OnWrite = { id: Schema.Int, dial: Schema.Int };
+
 const Via = Schema.Literals(["button", "key"]);
+
 // How a letter's command was given, for its press row: a click is also Tab, DOM focus moved into
 // another tile by the page's own means.
 const By = Schema.Literals(["button", "key", "click"]);
@@ -121,6 +129,7 @@ const TezgahLink = Schema.Struct({
   attach: Attach,
   cursors: Schema.Record(Schema.String, Schema.NullOr(CursorKey)),
 });
+
 type TezgahLink = typeof TezgahLink.Type;
 
 /** What the window says in its polite region on its own: a split refused because a tile would be
@@ -147,7 +156,6 @@ const Size = Schema.Struct({ width: Pixels, height: Pixels });
  * `presses` counts the key presses the window has read, so a page can tell which of the presses it
  * handed over are still waiting in the run's line (`handle`).
  *
- * @stability unstable
  * @category models
  */
 export const WindowModel = Schema.Struct({
@@ -200,7 +208,6 @@ export const WindowModel = Schema.Struct({
 /**
  * The type of a window's whole state.
  *
- * @stability unstable
  * @category models
  */
 export type WindowModel = typeof WindowModel.Type;
@@ -216,7 +223,6 @@ export type WindowModel = typeof WindowModel.Type;
  * box, so the tile lands at its top and never on the row the view still keeps. Every landing in a
  * tile reads this one answer: focus coming back to it, and a click on its own title bar.
  *
- * @stability unstable
  * @category getters
  */
 export const lastCursor = (
@@ -224,6 +230,7 @@ export const lastCursor = (
   tile: { readonly id: string; readonly cursor: string | null },
 ): string | null => {
   const notes = tezgah?.cursors ?? {};
+
   return Object.hasOwn(notes, tile.id) ? (notes[tile.id] ?? null) : tile.cursor;
 };
 
@@ -306,6 +313,7 @@ const Split = Schema.Struct({
 
 /** How a person gave a command to tezgah, in tezgah's own Via: by keys, or by a click or Tab. */
 const ByKeys = Schema.TaggedStruct("key", { keys: Schema.String });
+
 const ByClick = Schema.TaggedStruct("click", {});
 
 /** What this window sends tezgah, in tezgah's own inputs (next/programs/tezgah): a first look at a
@@ -329,6 +337,7 @@ const mint = Cmd.make("mint", {
 
 const platformFailure = (error: unknown) => {
   const decoded = Schema.decodeUnknownResult(Schema.Union([ClientKeyError, ClientRowsError]))(error);
+
   return Result.isSuccess(decoded) ? decoded.success.error : ("other" as const);
 };
 
@@ -346,7 +355,6 @@ const now = Cmd.make("now", {
  * It settles when the frame is handed to the socket, never when the brain answers: the answer
  * arrives later as a frame. It fails `unreachable` at once when the dial has no open socket.
  *
- * @stability unstable
  * @category constructors
  */
 export const write = Cmd.make("write", {
@@ -382,7 +390,7 @@ type Out = ReadonlyArray<
 // --- The door's frames ----------------------------------------------------------------------------
 
 const RpcAnswer = Schema.Struct({
-  id: Schema.Union([Schema.String, Schema.Number]),
+  id: Schema.Union([Schema.String, Schema.Finite]),
   result: Schema.optionalKey(Schema.Unknown),
   error: Schema.optionalKey(
     Schema.Struct({ data: Schema.optionalKey(Schema.Struct({ reason: Schema.optionalKey(Schema.String) })) }),
@@ -390,19 +398,26 @@ const RpcAnswer = Schema.Struct({
 });
 
 const Notice = Schema.Struct({ method: Schema.String, params: Schema.optionalKey(Schema.Unknown) });
+
 const decodeFrame = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Union([RpcAnswer, Notice])));
 
 const Nonce = Schema.Struct({ nonce: Schema.String });
-const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Number });
+
+const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Finite });
+
 const Opened = Schema.Struct({ rev: Schema.Int, view: Schema.Json });
+
 const Entries = Schema.Struct({ entries: Schema.Array(Schema.Unknown) });
+
 const Woke = Schema.Struct({ rev: Schema.Int });
+
 const ViewNotice = Schema.Struct({ pid: Schema.String, type: Schema.Literals(["whole", "patch"]) });
 
 /** The door's error reasons after which the same call may be tried again. */
 const AGAIN: ReadonlySet<string> = new Set(["unreachable", "not_granted", "no_hello", "storage"]);
 
 type Step = readonly [WindowModel, Out];
+
 type ClientStep = (client: C.Client, msg: C.ClientMsg) => readonly [C.Client, ReadonlyArray<string>];
 
 type AnyProgram = Program<any, any, any, any, any>;
@@ -425,11 +440,14 @@ type WindowCtx = {
 };
 
 type Shown = { readonly id: string; readonly name: string };
+
 type TileRow = WindowModel["tiles"][number];
+
 type SocketSub = Sub<"socket", { readonly dial: number; readonly rejected: string | null; readonly tries: number }>;
 
 const wrote = (s: WindowModel, dial: number, calls: ReadonlyArray<Call>): Step => {
   const out = calls.map((call, i) => write({ call, id: s.serial + i, dial }));
+
   return [
     {
       ...s,
@@ -458,6 +476,7 @@ const flush = (s: WindowModel): Step => {
         ...(p.traceId === undefined ? {} : { traceId: p.traceId }),
       }),
     );
+
   const attempts = { ...s.attempts };
 
   for (const call of calls) {
@@ -472,6 +491,7 @@ type On = { readonly id: number; readonly dial: number };
 
 const answered = (s: WindowModel, m: On, tag: Call["_tag"]) => {
   const found = s.flight.find((f) => f.id === m.id && f.dial === m.dial && f.call._tag === tag);
+
   return found === undefined ? null : { call: found.call, rest: s.flight.filter((f) => f !== found) };
 };
 
@@ -514,6 +534,7 @@ const tellEnded = (s: WindowModel, tile: TileRow, pid: string, reason: ExitReaso
   }
 
   const noted: WindowModel = { ...s, tiles: s.tiles.map((t) => (t.id === tile.id ? { ...t, told: pid } : t)) };
+
   return drawnSpace(s.tezgah)?.space.focus === tile.id
     ? noted
     : say(noted, StatusMessage.cases.ended.make({ tile: tile.id, reason }));
@@ -525,19 +546,23 @@ const resolveAgain = (s: WindowModel, dial: number, ids: ReadonlySet<string>): S
   const reads = picked.map((t) => Call.cases.read.make({ stream: nameStream(t.name), after: 0 }));
   const [written, out] = wrote(s, dial, reads);
   const flights = new Map(picked.map((t, i) => [t.id, s.serial + i]));
+
   const tiles = written.tiles.map((t) => {
     const id = flights.get(t.id);
+
     // A new life starts its own view recovery, as a new dial does.
     return id === undefined
       ? t
       : { ...t, reach: Reach.cases.resolving.make({ id, life: C.emptyFold }), recovery: Recovery.make("ready") };
   });
+
   return [{ ...written, tiles }, out];
 };
 
 /** Parks one `ledger.wait` on the window's own inbox past `after`. */
 const waitInbox = (s: WindowModel, dial: number, after: number): Step => {
   const [written, out] = wrote(s, dial, [Call.cases.wait.make({ stream: clientInbox(s.tab), after })]);
+
   return [{ ...written, inbox: Inbox.cases.waiting.make({ after, id: s.serial }) }, out];
 };
 
@@ -555,6 +580,7 @@ const resolved = (s: WindowModel, dial: number, tile: TileRow, life: C.NameFold,
 
   if (full) {
     const [written, out] = wrote(s, dial, [Call.cases.read.make({ stream, after: life.after })]);
+
     return [reached(written, tile.id, Reach.cases.resolving.make({ id: s.serial, life })), out];
   }
 
@@ -564,12 +590,14 @@ const resolved = (s: WindowModel, dial: number, tile: TileRow, life: C.NameFold,
     const ref = `w${s.serial}`;
     const calls = [Call.cases.monitor.make({ ref, pid, tile: tile.id }), Call.cases.open.make({ pid })];
     const [written, out] = wrote(s, dial, calls);
+
     return [reached(written, tile.id, Reach.cases.opening.make({ pid, id: s.serial + 1, ref })), out];
   }
 
   if (life.ended !== null) {
     const { pid, reason } = life.ended;
     const [written, out] = wrote(s, dial, [Call.cases.wait.make({ stream, after: life.after })]);
+
     return [
       tellEnded(reached(written, tile.id, Reach.cases.ended.make({ pid, reason, id: s.serial })), tile, pid, reason),
       out,
@@ -584,6 +612,7 @@ const decodeLetter = Schema.decodeUnknownOption(
 );
 
 const decodeRev = Schema.decodeUnknownOption(Schema.Struct({ rev: Schema.Int }));
+
 const decodeDown = Schema.decodeUnknownOption(Down);
 
 /**
@@ -605,8 +634,10 @@ const downFor = (s: WindowModel, raw: unknown) => {
 
   const tile = s.tiles.find((t) => {
     const watch = held(t.reach);
+
     return watch !== null && watch.ref === down.ref && watch.pid === down.process;
   });
+
   return tile === undefined ? null : { tile, down, rev: letter.rev };
 };
 
@@ -618,13 +649,16 @@ const downFor = (s: WindowModel, raw: unknown) => {
 const inboxRead = (s: WindowModel, dial: number, page: ReadonlyArray<unknown>): Step => {
   const downs = page.flatMap((letter) => downFor(s, letter) ?? []);
   const revs = page.flatMap((letter) => Option.toArray(decodeRev(letter)).map(({ rev }) => rev));
+
   const rows = downs.map(({ tile, down, rev }) =>
     record({
       record: ClientRecord.cases.down.make({ name: tile.name, pid: down.process, reason: down.reason._tag, rev }),
     }),
   );
+
   const [again, reads] = resolveAgain(s, dial, new Set(downs.map(({ tile }) => tile.id)));
   const [waited, waits] = waitInbox(again, dial, Math.max(s.inbox.after, ...revs));
+
   return [waited, [...rows, ...reads, ...waits]];
 };
 
@@ -638,8 +672,10 @@ const monitorAnswered = (s: WindowModel, m: On, result: "watching" | "refused"):
 
   const { pid, tile } = found.call;
   const asker = s.tiles.find((t) => t.id === tile);
+
   const rows =
     asker === undefined ? [] : [record({ record: ClientRecord.cases.monitor.make({ name: asker.name, pid, result }) })];
+
   return [{ ...s, flight: found.rest }, rows];
 };
 
@@ -663,10 +699,12 @@ const waitAnswered = (s: WindowModel, m: On, woke: boolean): Step => {
 
     const { after } = s.inbox;
     const [written, out] = wrote(next, m.dial, [Call.cases.read.make({ stream: clientInbox(s.tab), after })]);
+
     return [{ ...written, inbox: Inbox.cases.reading.make({ after, id: s.serial }) }, out];
   }
 
   const tile = s.tiles.find((t) => t.reach._tag === "ended" && t.reach.id === m.id);
+
   return tile === undefined ? [next, []] : resolveAgain(next, m.dial, new Set([tile.id]));
 };
 
@@ -725,6 +763,7 @@ const noticed = (
       }),
     ),
   ];
+
   return [
     {
       ...s,
@@ -746,6 +785,7 @@ const opened = (s: WindowModel, pid: string): WindowModel => ({
   trouble: null,
   tiles: s.tiles.map((t) => {
     const watch = held(t.reach);
+
     return watch?.pid === pid ? { ...t, last: pid, reach: Reach.cases.open.make({ pid, ref: watch.ref }) } : t;
   }),
   flight: s.flight.filter((f) => f.call._tag !== "open" || f.call.pid !== pid),
@@ -776,6 +816,7 @@ const pressed = (s: WindowModel, step: ClientStep, tile: string, m: Schema.Json,
 const tezgahTiles = (link: TezgahLink): ReadonlyArray<Shown> => {
   const view = optimisticState(link.client);
   const space = view?.workspaces.find((w) => w.n === link.client.workspace);
+
   return view === null || space === undefined
     ? []
     : order(space.layout).flatMap((id) =>
@@ -821,6 +862,7 @@ const tezgahTook = (s: WindowModel, pid: string, msg: TezgahMsg, fresh: (t: Show
   const asks = cmds.filter((c) => c._tag === "ask");
   const view = client.serverState;
   const due = link.attach === "waiting" && view !== null && !view.workspaces.some((w) => w.n === client.workspace);
+
   const [after, reads] = followed(
     {
       ...s,
@@ -834,14 +876,17 @@ const tezgahTook = (s: WindowModel, pid: string, msg: TezgahMsg, fresh: (t: Show
     },
     fresh,
   );
+
   const reopen =
     asks.length > 0 &&
     after.link._tag === "online" &&
     !after.flight.some((f) => f.call._tag === "open" && f.call.pid === pid);
+
   const [written, writes] =
     reopen && after.link._tag === "online"
       ? wrote(after, after.link.dial, [Call.cases.open.make({ pid })])
       : ([after, []] as const);
+
   return [written, [...focusRows(cmds), ...reads, ...writes, ...(due ? [mint({})] : [])]];
 };
 
@@ -861,6 +906,7 @@ const tezgahStep = (s: WindowModel, msg: TezgahMsg): Step => {
   }
 
   const [client, cmds] = applyCell<TezgahClient, TezgahMsg, TezgahCmd>(tezgahMachine, s.tezgah.client, msg);
+
   return [{ ...s, tezgah: { ...s.tezgah, client } }, focusRows(cmds)];
 };
 
@@ -873,6 +919,7 @@ const DIRS: Readonly<Record<(typeof Split.Type)["does"], Dir>> = {
 const drawnSpace = (link: TezgahLink | null) => {
   const view = link === null ? null : optimisticState(link.client);
   const space = view?.workspaces.find((w) => w.n === link?.client.workspace);
+
   return view === null || space === undefined ? null : { view, space };
 };
 
@@ -880,6 +927,7 @@ const drawnSpace = (link: TezgahLink | null) => {
  *  before the page has said one. Worked out on each step, never stored (0277). */
 const stripsNow = (s: WindowModel): ReadonlySet<TileId> => {
   const drawn = drawnSpace(s.tezgah);
+
   return s.size === null || drawn === null ? new Set() : fold(drawn.space, s.size);
 };
 
@@ -895,6 +943,7 @@ const folded = (was: WindowModel, [next, cmds]: Step): Step => {
 
   const size = next.size ?? { width: 0, height: 0 };
   const row = ClientRecord.cases.fold.make({ strips: after.size, width: size.width, height: size.height });
+
   return [next, [...cmds, record({ record: row })]];
 };
 
@@ -908,6 +957,7 @@ const PROBE = Schema.decodeSync(TileId)("tile_0000000000e008000000000000");
 const roomFor = (space: Workspace, at: TileId, dir: Dir, size: typeof Size.Type): boolean => {
   const here = focusOn(space, at);
   const before = fold(here, size);
+
   return [...fold(split(here, at, dir, PROBE), size)].every((t) => before.has(t));
 };
 
@@ -954,6 +1004,7 @@ const AIMS: Readonly<Record<string, Aim>> = {
 const aimed = (space: Workspace, aim: Aim): TileId | null => {
   const tiles = order(space.layout);
   const at = tiles.indexOf(space.focus);
+
   const found =
     aim === "next"
       ? tiles[(at + 1) % tiles.length]
@@ -962,6 +1013,7 @@ const aimed = (space: Workspace, aim: Aim): TileId | null => {
         : aim === "last"
           ? space.recent[1]
           : neighbor(space.layout, space.focus, aim);
+
   return found === undefined || found === null || found === space.focus ? null : found;
 };
 
@@ -1019,6 +1071,7 @@ const focusedIn = (s: WindowModel, step: ClientStep, tile: string, cursor: strin
   }
 
   const noted: WindowModel = { ...s, tezgah: { ...link, cursors: { ...link.cursors, [at]: cursor } } };
+
   return at === drawn.space.focus
     ? [noted, []]
     : moved(noted, step, "tezgah.focus", drawn.space.focus, at, ByClick.make({}));
@@ -1055,6 +1108,7 @@ const pressedKey = (s: WindowModel, step: ClientStep, table: Keys.Table, key: st
 
   const does = routed.does;
   const keys = s.prefix._tag === "armed" ? `${table.prefix} ${key}` : key;
+
   const row = record({
     record: ClientRecord.cases.prefix.make({
       does,
@@ -1079,6 +1133,7 @@ const pressedKey = (s: WindowModel, step: ClientStep, table: Keys.Table, key: st
     }
 
     const [sent, cmds] = moved(done, step, does, from, to, ByKeys.make({ keys }));
+
     return [sent, [row, ...cmds]];
   }
 
@@ -1090,6 +1145,7 @@ const pressedKey = (s: WindowModel, step: ClientStep, table: Keys.Table, key: st
     }
 
     const [sent, cmds] = closing({ ...done, polite: null }, step, from, keys);
+
     return [sent, [row, ...cmds]];
   }
 
@@ -1126,6 +1182,7 @@ const dated = (
   const slot = client.pending.find((p) => p.n === n);
   const owner = s.from[n];
   const tile = s.tiles.find((t) => t.id === owner?.tile);
+
   const type =
     slot &&
     Predicate.isObject(slot.m) &&
@@ -1134,7 +1191,9 @@ const dated = (
     /^[a-z_]{1,40}$/.test(slot.m._tag)
       ? slot.m._tag
       : "other";
+
   const command = owner?.does ?? `${tile?.name.split(":")[0] ?? "program"}.${type}`;
+
   const rows =
     before?._tag === "dating" && slot?._tag === "ready" && owner !== undefined
       ? [
@@ -1151,6 +1210,7 @@ const dated = (
           }),
         ]
       : [];
+
   // A focus move's pending entry takes its letter, so tezgah's answer finds it.
   const [noted] = tezgahStep(
     { ...s, client, redate: s.redate.filter((r) => r !== n) },
@@ -1159,7 +1219,9 @@ const dated = (
       letter: stamp.letter,
     }),
   );
+
   const [next, cmds] = flush(noted);
+
   return [next, [...rows, ...cmds]];
 };
 
@@ -1187,6 +1249,7 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
   const [knocked, writes] = wrote(next, open ?? 0, knocks);
   next = knocked;
   out.push(...writes);
+
   const result =
     s.link._tag !== "online" && link._tag === "online"
       ? "online"
@@ -1244,15 +1307,19 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
 
   // A tezgah window reads its person's tezgah first: the person is the one the door admitted.
   const person = next.handshake._tag === "admitted" ? next.handshake.person : null;
+
   const first =
     next.tezgah === null || person === null
       ? []
       : [Call.cases.read.make({ stream: nameStream(tezgahName(person)), after: 0 })];
+
   const [asked, firsts] = wrote(next, link.dial, first);
+
   const tezgah =
     asked.tezgah === null || first.length === 0
       ? asked.tezgah
       : { ...asked.tezgah, reach: TezgahReach.cases.resolving.make({ id: next.serial }) };
+
   const [reading, reads] = resolveAgain({ ...asked, tezgah }, link.dial, new Set(s.tiles.map((t) => t.id)));
   const [waiting, waits] = waitInbox(reading, link.dial, reading.inbox.after);
   next = { ...waiting, trouble: null };
@@ -1263,6 +1330,7 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
   }
 
   const [flushed, sends] = flush(next);
+
   return [flushed, [...out, ...firsts, ...reads, ...waits, ...sends, ...(askPersist ? [persist({})] : [])]];
 };
 
@@ -1331,6 +1399,7 @@ const shook = (s: WindowModel, m: HandshakeIn): Step => {
   // Link keeps its own stall and backoff path, so a passing refusal heals on its own.
   if (handshake._tag === "refused" && s.handshake._tag !== "refused") {
     const { dial, reason, ms } = handshake;
+
     return [
       next,
       [...sent, record({ record: ClientRecord.cases.connect.make({ dial, result: "refused", reason, ms }) })],
@@ -1344,6 +1413,7 @@ const shook = (s: WindowModel, m: HandshakeIn): Step => {
   }
 
   const [after, out] = linked(next, told);
+
   return [after, [...sent, ...out]];
 };
 
@@ -1456,6 +1526,7 @@ const frameIn = (s: WindowModel, m: Frame, own: (s: WindowModel, msg: OwnerMsg) 
 
     const on = { id, dial: m.dial };
     const tag = flight.call._tag;
+
     const msgs: ReadonlyArray<OwnerMsg> =
       frame.error === undefined
         ? answerTo(tag, on, frame.result, m.ms ?? 0, s.fingerprint ?? "", s.handshake)
@@ -1468,9 +1539,11 @@ const frameIn = (s: WindowModel, m: Frame, own: (s: WindowModel, msg: OwnerMsg) 
                   : CallError.cases.unknown.make({}),
             }),
           ];
+
     return msgs.reduce<Step>(
       ([acc, cmds], msg) => {
         const [next, more] = own(acc, msg);
+
         return [next, [...cmds, ...more]];
       },
       [s, []],
@@ -1529,15 +1602,17 @@ const loadedInto = (loaded: WindowModel, tab: string): WindowModel =>
  * Model. The machine's `socket` Sub asks for one socket per dial the Link has; its `ctx` names the
  * tiles.
  *
- * @stability unstable
  * @category constructors
  */
 export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: WindowChecks<P>) => {
   const client = C.clientMachineFor(checks);
+
   const step: ClientStep = (s, m) => {
     const [next, cmds] = applyCell<C.Client, C.ClientMsg, ReturnType<typeof client.init>[1][number]>(client, s, m);
+
     return [next, cmds.map((c) => c.pid)];
   };
+
   const fresh = (t: Shown): TileRow => ({
     ...t,
     reach: Reach.cases.unresolved.make({}),
@@ -1547,6 +1622,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
     last: null,
     told: null,
   });
+
   const machine = Machine.make({
     model: WindowModel,
     msg: Schema.Union([LinkMsg, Own]),
@@ -1604,6 +1680,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       press: (s, m): Step => pressed(s, step, m.tile, m.m, m.via ?? "button"),
       key: (s, m): Step => {
         const [next, cmds] = checks.keys === undefined ? [s, []] : pressedKey(s, step, checks.keys, m.key, m.at);
+
         return [{ ...next, presses: s.presses + 1 }, cmds];
       },
       size: (s, m): Step => [{ ...s, size: { width: m.width, height: m.height } }, []],
@@ -1684,6 +1761,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         }
 
         const call = found.call;
+
         const next: WindowModel = {
           ...s,
           flight: found.rest,
@@ -1698,6 +1776,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
                 )
               : s.tiles,
         };
+
         // The inbox's own call never reached the door: it waits for the resend timer.
         return [s.inbox._tag !== "idle" && s.inbox.id === m.cmd.id ? inboxIdle(next) : next, []];
       },
@@ -1724,6 +1803,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           }
 
           const [written, cmds] = wrote(next, m.dial, [Call.cases.open.make({ pid })]);
+
           return [
             { ...written, tezgah: { ...link, reach: TezgahReach.cases.opening.make({ pid, id: written.serial - 1 }) } },
             cmds,
@@ -1801,7 +1881,9 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
             .filter((p) => next.tiles.some((t) => held(t.reach)?.pid === p))
             .filter((p) => !next.flight.some((f) => f.call._tag === "open" && f.call.pid === p))
             .map((p) => Call.cases.open.make({ pid: p }));
+
           const [written, writes] = wrote({ ...next, trouble: "Bad view" }, s.link.dial, calls);
+
           return [written, [...rows, ...writes]];
         }
 
@@ -1812,6 +1894,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       },
       open_err: (s, m): Step => {
         const found = answered(s, m, "open");
+
         return found === null ? [s, []] : [{ ...s, flight: found.rest, trouble: "No view" }, []];
       },
       send_ok: (s, m): Step => {
@@ -1825,6 +1908,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         const slot = s.client.pending.find((p) => p._tag === "ready" && p.letter === letter);
         const [client] = step(s.client, C.ClientMsg.cases.reply.make({ letter, answer: m.value }));
         const owner = slot && s.from[slot.n]?.tile;
+
         // A letter to tezgah names its command, and its refusal is no tile's.
         const refusal =
           m.value._tag === "refused" &&
@@ -1833,6 +1917,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           s.tiles.some((t) => t.id === owner)
             ? { m: slot.m, reason: m.value.reason }
             : null;
+
         // A focus move is dropped on its refusal, or once its position is shown (0167).
         const [moves, rows] = tezgahStep(
           s,
@@ -1840,6 +1925,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
             ? TezgahMsg.cases.accepted.make({ letter, pos: m.value.pos, ms: m.ms })
             : TezgahMsg.cases.refused.make({ letter, ms: m.ms }),
         );
+
         const settled = {
           ...moves,
           client,
@@ -1849,6 +1935,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           from: Object.fromEntries(Object.entries(s.from).filter(([n]) => Number(n) !== slot?.n)),
           tiles: refusal === null ? s.tiles : s.tiles.map((t) => (t.id === owner ? { ...t, refusal } : t)),
         };
+
         return [
           refusal === null || owner === undefined
             ? settled
@@ -1877,6 +1964,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         }
 
         const letter = found.call.letter;
+
         return [
           {
             ...s,
@@ -1892,15 +1980,18 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       monitor_err: (s, m): Step => monitorAnswered(s, m, "refused"),
       knock_ok: (s, m): Step => {
         const f = answered(s, m, "knock");
+
         return f === null ? [s, []] : [{ ...s, flight: f.rest }, []];
       },
       knock_err: (s, m): Step => {
         const f = answered(s, m, "knock");
+
         return f === null ? [s, []] : [{ ...s, flight: f.rest }, []];
       },
       view: (s, m): Step => {
         if (s.tezgah !== null && "pid" in s.tezgah.reach && s.tezgah.reach.pid === m.pid) {
           const note = decodeTezgahNote(m.note);
+
           return Option.isNone(note)
             ? [s, []]
             : tezgahTook(
@@ -1925,6 +2016,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         }
 
         const [written, writes] = wrote(after, s.link.dial, [Call.cases.open.make({ pid: m.pid })]);
+
         return [written, [...rows, ...writes]];
       },
       seen: (s, m): Step => [{ ...s, client: step(s.client, C.ClientMsg.cases.read.make({ rev: m.rev }))[0] }, []],
@@ -1937,10 +2029,12 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         }
 
         const [flushed, out] = flush({ ...quiet, redate: [] });
+
         const [next, waits] =
           flushed.link._tag === "online" && flushed.inbox._tag === "idle"
             ? waitInbox(flushed, flushed.link.dial, flushed.inbox.after)
             : [flushed, []];
+
         return [next, [...s.redate.map((n) => now({ n })), ...out, ...waits]];
       },
       persist_ok: (s, m): Step => [
@@ -2031,11 +2125,13 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         _tag: "socket",
         deps: (s) => {
           const dial = socketDial(s.link);
+
           return dial === null ? null : { dial, rejected: s.rejected, tries: s.tries };
         },
       },
     ],
   });
+
   // Every step, whatever its Msg, records a change of the window's strips (the plan's `fold` row).
   const update = Object.fromEntries(
     Object.entries(machine.update).map(([type, cell]: [string, (s: WindowModel, m: never) => Step]) => [
@@ -2043,6 +2139,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       (s: WindowModel, m: never): Step => folded(s, cell(s, m)),
     ]),
   ) as typeof machine.update;
+
   // The machine's `model` is `WindowModel` itself; its own type lets a caller save and load it.
   return Object.assign(machine, { model: WindowModel, update });
 };
@@ -2050,7 +2147,6 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
 /**
  * The type of every Msg a window parent takes.
  *
- * @stability unstable
  * @category models
  */
 export type WindowMsg =
@@ -2059,7 +2155,6 @@ export type WindowMsg =
 /**
  * One key press a page hands its window, as the window's `key` Msg says it.
  *
- * @stability unstable
  * @category models
  */
 export type KeyPress = Types.ExtractTag<WindowMsg, "key">;
@@ -2069,7 +2164,6 @@ export type KeyPress = Types.ExtractTag<WindowMsg, "key">;
  * were pressed. `from` is how many presses the window had read when the first of `keys` was handed
  * over, so the window's `presses` says how many of them it has read since.
  *
- * @stability unstable
  * @category models
  */
 export type Unread = { readonly from: number; readonly keys: ReadonlyArray<KeyPress> };
@@ -2079,7 +2173,6 @@ export type Unread = { readonly from: number; readonly keys: ReadonlyArray<KeyPr
  * `pass` it to the window and keep its default, as the prefix again reaches the tile (tmux's
  * send-prefix); or `take` it, for the window alone.
  *
- * @stability unstable
  * @category models
  */
 export type Handling = "leave" | "pass" | "take";
@@ -2095,7 +2188,6 @@ export type Handling = "leave" | "pass" | "take";
  * them is not seen here, so a press right behind one is judged against the older focus and tiles
  * (finding 2026-11-15-handle-skips-non-press-msgs).
  *
- * @stability unstable
  * @category getters
  */
 export const handle = (
@@ -2108,12 +2200,14 @@ export const handle = (
   const waiting = unread.keys.slice(Math.max(0, now.presses - unread.from));
   const ahead = waiting.reduce((s, m) => applyCell(window, s, m)[0], now);
   const routed = Keys.route(table, ahead.prefix, null, press);
+
   const handling: Handling =
     routed._tag === "platform" || (routed._tag === "tile" && ahead.prefix._tag === "idle")
       ? "leave"
       : routed._tag === "tile"
         ? "pass"
         : "take";
+
   return {
     handling,
     unread: { from: now.presses, keys: handling === "leave" ? waiting : [...waiting, press] },

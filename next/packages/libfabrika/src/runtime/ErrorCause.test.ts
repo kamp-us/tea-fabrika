@@ -23,6 +23,7 @@ const Tag = Schema.TaggedUnion({
 });
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const RUNS = 100;
 
 /** A property over generated input, each run an Effect on the real code. */
@@ -129,6 +130,7 @@ describe("T695, a step's ProgramDown keeps what failed", () => {
       Effect.gen(function* () {
         const run = nodeExecution(program({}));
         const saved = { count: bad };
+
         const work =
           call === "init"
             ? run.init(saved)
@@ -254,6 +256,7 @@ describe("T695, a declaration that does not load keeps why", () => {
       Effect.gen(function* () {
         const expected = stepper(declared);
         expect(Result.isFailure(expected)).toBe(true);
+
         const error = yield* Effect.flip<unknown, ProgramDown, never>(
           call === "execution"
             ? nodeExecution(declared).init(null)
@@ -262,6 +265,7 @@ describe("T695, a declaration that does not load keeps why", () => {
                 ProgramLoader.layer({ broken: declared }, {}),
               ),
         );
+
         expect(error).toBeInstanceOf(ProgramDown);
         expect((error as ProgramDown).reason).toBe("load");
         expect(Schema.isSchemaError((error as ProgramDown).cause), "the cause is the stepper's SchemaError").toBe(true);

@@ -20,7 +20,11 @@
 // toward the cap. C2, spawn with `extendEnv: true`. C3, report `git` when the file exists without
 // an execute bit.
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Layer, Path } from "effect";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as fc from "fast-check";
 import { Commands } from "../../client/Commands.ts";
 import { Command, type Result } from "../../tasks/Task.ts";
@@ -31,12 +35,14 @@ import { type Child, fresh, gitVectors, type Seen, spawner } from "./Spawner.tes
 
 /** The plan's cap for `git_version`: stdout and stderr together, in bytes. */
 const CAP = 4096;
+
 const GIT_VERSION = Command.cases.git_version.make({});
 
 /** The disk C1 and C2 run on: one executable `git` on the `PATH` they give. */
 const withGit = () => {
   const d = MemoryFiles.disk(["/usr/bin"]);
   MemoryFiles.put(d, "/usr/bin/git", new Uint8Array([0x7f, 0x45, 0x4c, 0x46]), 0o755);
+
   return d;
 };
 
@@ -66,6 +72,7 @@ const expected = (child: Child): Result => {
 
   const out = new Uint8Array(child.chunks.filter((c) => c.to === "out").flatMap((c) => [...c.bytes]));
   const decoded = new TextDecoder().decode(out);
+
   // Bytes are UTF-8 exactly when decoding and encoding again gives them back: a byte that is not
   // becomes U+FFFD, three other bytes. stdout that is not UTF-8 answers an empty version.
   const text =
@@ -98,6 +105,7 @@ const cut = (bytes: Uint8Array, at: ReadonlyArray<number>): Array<Uint8Array> =>
 /** Two chunk lists merged in a generated order that keeps each list's own order. */
 const merge = <A>(a: ReadonlyArray<A>, b: ReadonlyArray<A>, picks: ReadonlyArray<boolean>): Array<A> => {
   const out: Array<A> = [];
+
   let i = 0,
     j = 0,
     k = 0;
@@ -151,12 +159,15 @@ const ChildArb: fc.Arbitrary<Child> = fc
     }
 
     const err = new Uint8Array(Math.max(0, g.total - out.length)).fill(g.errByte);
+
     const chunks = merge<Child["chunks"][number]>(
       cut(out, g.outCuts).map((bytes) => ({ to: "out", bytes })),
       cut(err, g.errCuts).map((bytes) => ({ to: "err", bytes })),
       g.order,
     );
+
     const total = out.length + err.length;
+
     return {
       spawn: g.spawnFails ? "fails" : "ok",
       chunks,
@@ -235,12 +246,14 @@ describe("P39 slice 4b: the real command layer", () => {
 
       for (const vector of gitVectors) {
         const seen = fresh();
+
         const child: Child = {
           spawn: "ok",
           chunks: [{ to: "out", bytes: encoder.encode(vector.stdout) }],
           code: 0,
           endless: false,
         };
+
         const exit = yield* execute(child, seen, { PATH: "/usr/bin" }, withGit());
         const answer = Exit.isSuccess(exit) && exit.value._tag === "Some" ? exit.value.value : null;
         expect(answer).toEqual({ _tag: "exited", code: 0, version: vector.version });
@@ -278,12 +291,14 @@ describe("P39 slice 4b: the real command layer", () => {
             const childEnv = command.options.env ?? {};
             expect(Object.keys(childEnv), "C2: the child's environment holds PATH and nothing else").toEqual(["PATH"]);
             expect(String(childEnv["PATH"]), "C2: PATH is the hands' own PATH").toBe(PATH);
+
             // Every named output of the spawn: the executable, the argv and every option, in each form a
             // value could be written.
             const text = JSON.stringify(
               { c: command.command, a: command.args.map(String), o: command.options },
               (_k, v) => (typeof v === "object" && v !== null && "value" in v ? String(v.value) : v),
             );
+
             const forms = [
               planted,
               encodeURIComponent(planted),
@@ -329,11 +344,13 @@ describe("P39 slice 4b: the real command layer", () => {
                 }
               });
               const runnable = folders.some((f) => f.kind === "file" && (f.mode & 0o111) !== 0);
+
               const has = yield* Commands.use((commands) => Effect.succeed(commands.has)).pipe(
                 Effect.provide(
                   layers({ spawn: "ok", chunks: [], code: 0, endless: false }, fresh(), { PATH: names.join(":") }, d),
                 ),
               );
+
               expect(
                 has,
                 "C3: has reads an executable git on PATH, never a folder or a file without an execute bit",

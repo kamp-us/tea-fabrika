@@ -45,6 +45,7 @@ const modulePath = "./RecoveryStore.ts";
 
 const subject = async (): Promise<Subject> => {
   expect(existsSync(new URL(modulePath, import.meta.url)), "P34 durable RecoveryStore is missing").toBe(true);
+
   return await import(modulePath);
 };
 
@@ -130,9 +131,9 @@ describe("P34 recovery storage", () => {
     const disk = storage();
     const before = disk.sql.exec("SELECT name FROM sqlite_master");
     await Effect.runPromise(
-      Effect.gen(function* () {
-        yield* S;
-      }).pipe(Effect.provide(S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3, schema: Supervision }))),
+      Effect.asVoid(S).pipe(
+        Effect.provide(S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3, schema: Supervision })),
+      ),
     );
     expect(disk.sql.exec("SELECT name FROM sqlite_master")).toEqual(before);
   });
@@ -178,6 +179,7 @@ describe("P34 recovery storage", () => {
               Effect.gen(function* () {
                 const s = yield* S;
                 yield* s.save(snapshot);
+
                 const full = {
                   ...snapshot,
                   receipts: [
@@ -185,6 +187,7 @@ describe("P34 recovery storage", () => {
                     { ...terminal, letter: "other", input: { ...input, padding: "x".repeat(value) } },
                   ],
                 };
+
                 expect(yield* Effect.flip(s.save(full))).toMatchObject({
                   _tag: "RecoveryStoreError",
                   reason: { _tag: "Storage" },
@@ -267,6 +270,7 @@ describe("P34 recovery storage", () => {
     const disk = storage();
     let fail = false;
     const full = new Error("SQLITE_FULL");
+
     const sql: Sql = {
       ...disk.sql,
       exec: (q, ...args) => {
@@ -277,6 +281,7 @@ describe("P34 recovery storage", () => {
         return disk.sql.exec(q, ...args);
       },
     };
+
     const layer = () => S.layer(sql, { name: "counter:1", capacity: 1024 ** 3, schema: Supervision });
     await Effect.runPromise(
       Effect.gen(function* () {
@@ -345,11 +350,13 @@ describe("P34 recovery storage", () => {
   // Plant: delete receipts omitted from a compact snapshot.
   it("J9: a snapshot that omits receipts keeps every earlier receipt, its tries and its input", async () => {
     const { RecoveryStore: S } = await subject();
+
     const receipt = fc.record({
       tries: fc.integer({ min: 0, max: 3 }),
       dead: fc.boolean(),
       text: fc.string({ maxLength: 40 }),
     });
+
     const letters = fc.uniqueArray(fc.stringMatching(/^[a-z][a-z0-9-]{0,11}$/), { minLength: 1, maxLength: 6 });
     await fc.assert(
       fc.asyncProperty(
@@ -360,6 +367,7 @@ describe("P34 recovery storage", () => {
           const all = ids.map((letter, n) => {
             const body = bodies[n]!;
             const tries = body.dead ? Math.max(body.tries, 1) : body.tries;
+
             return {
               letter,
               input: tries === 0 && n % 2 === 0 ? null : { ...input, id: letter, text: body.text },
@@ -370,6 +378,7 @@ describe("P34 recovery storage", () => {
               process: A,
             };
           });
+
           const idle = { ...snapshot, journal: { _tag: "idle", process: A } };
           const disk = storage();
           const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3, schema: Supervision });

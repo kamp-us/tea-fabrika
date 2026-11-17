@@ -8,9 +8,13 @@ import { processClocks } from "../Id.test-support.ts";
 import { ProcessIdGenerator } from "./ProcessIdGenerator.ts";
 
 const maxClock = 2 ** 48 - 1;
+
 const Time = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: maxClock - 10_000 }));
+
 const Count = Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 512 }));
+
 const Calls = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 16 }));
+
 const Many = Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 1024 }));
 
 const BeforeEpoch = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }));
@@ -23,13 +27,16 @@ describe("P10 shared process ids", () => {
     { at: processClocks },
     ({ at }) => {
       const spans: Array<Tracer.NativeSpan> = [];
+
       const tracer = Tracer.make({
         span: (options) => {
           const span = new Tracer.NativeSpan(options);
           spans.push(span);
+
           return span;
         },
       });
+
       return Effect.gen(function* () {
         yield* TestClock.setTime(at);
         const generator = yield* ProcessIdGenerator;
@@ -51,13 +58,16 @@ describe("P10 shared process ids", () => {
     { at: Time, count: Calls },
     ({ at, count }) => {
       const spans: Array<Tracer.NativeSpan> = [];
+
       const tracer = Tracer.make({
         span: (settings) => {
           const span = new Tracer.NativeSpan(settings);
           spans.push(span);
+
           return span;
         },
       });
+
       return Effect.gen(function* () {
         yield* TestClock.setTime(at);
         const generator = yield* ProcessIdGenerator;
@@ -108,9 +118,11 @@ describe("P10 shared process ids", () => {
       Effect.gen(function* () {
         yield* TestClock.setTime(at);
         const gen = yield* ProcessIdGenerator;
+
         const ids = yield* Effect.forEach(Array.from({ length: count }), () => gen.next, {
           concurrency: 1,
         });
+
         expect(new Set(ids).size).toBe(ids.length);
 
         for (let i = 1; i < ids.length; i++) {
@@ -126,13 +138,16 @@ describe("P10 shared process ids", () => {
       { at: Time, distance: Count, marker: Schema.String },
       ({ at, distance, marker }) => {
         const spans: Array<Tracer.NativeSpan> = [];
+
         const tracer = Tracer.make({
           span: (settings) => {
             const span = new Tracer.NativeSpan(settings);
             spans.push(span);
+
             return span;
           },
         });
+
         const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
           if (exitReason === "entropy") {
             throw new Error(marker);
@@ -144,6 +159,7 @@ describe("P10 shared process ids", () => {
 
           return array;
         });
+
         return Effect.gen(function* () {
           try {
             yield* TestClock.setTime(exitReason === "clock" ? -distance : exitReason === "exhausted" ? maxClock : at);

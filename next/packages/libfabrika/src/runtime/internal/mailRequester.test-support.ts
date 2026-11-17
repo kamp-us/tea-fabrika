@@ -15,6 +15,7 @@ export const Model = Schema.TaggedUnion({
   answered: { ref: Schema.String, value: Schema.Int },
   failed: { ref: Schema.String, reason: Schema.String },
 });
+
 /** @internal */
 export type Model = typeof Model.Type;
 
@@ -64,6 +65,7 @@ export const mailRequester = (config: { readonly self: string; readonly peer: st
           m.claim === undefined
             ? { to: m.to ?? config.peer, m: body }
             : { to: m.to ?? config.peer, m: body, source: m.claim };
+
         return [Model.cases.waiting.make({ ref: m.ref }), [send(input)]];
       },
       answer: (s, m) =>
@@ -81,6 +83,7 @@ export const mailRequester = (config: { readonly self: string; readonly peer: st
           : [s, []],
     },
   });
+
   return Program.make({
     name: `requester-${config.self}`,
     machine,

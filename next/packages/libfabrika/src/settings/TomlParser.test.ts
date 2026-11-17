@@ -9,18 +9,21 @@
 //   (`"a.b" = 1` is `["a.b"]`, `a.b = 1` is `["a", "b"]`) and `line` counts from 1.
 // - Broken TOML fails with `TomlError`, carrying the parser's `line` and its `cause`.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { Toml, TomlError } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: 100 };
 
 const parse = (text: string) =>
   Effect.runPromiseExit(
     Effect.gen(function* () {
       const toml = yield* Toml;
+
       return yield* toml.parse(text);
     }).pipe(Effect.provide(TomlParser.layer)),
   );
@@ -116,6 +119,7 @@ const write = (d: Doc) => {
     }
 
     lines.push(p.trailing ? `${text} # trailing` : text);
+
     return lines.length;
   };
 
@@ -213,3 +217,121 @@ describe("L9, TOML paths and lines stay right for every spelling", () => {
     );
   });
 });
+
+// The array-of-tables law (ticket 1056, slice 5 of the Reflect ban, its fix round). A `[[name]]`
+// header adds one table to the array `name`, and a `[name.sub]` or `[[name.items]]` after it lands
+// in that array's last table. The names include keys every object inherits, so each step down a
+// path must read an own key, and must step into an array as it steps into a table.
+// Plants: step into the next value only when it is a table and not an array (`Predicate.isObject`
+// in `put`); write a header's table onto the parent instead of into the array. Each turns it red.
+const Name = Schema.Literals(["__proto__", "constructor", "toString", "starts", "rows"]);
+
+const Leaves = Schema.Array(
+  Schema.Struct({ key: Name, value: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 99999 })) }),
+).check(Schema.isMaxLength(3));
+
+const Element = Schema.Struct({
+  leaves: Leaves,
+  sub: Schema.optional(Schema.Struct({ name: Name, leaves: Leaves })),
+  items: Schema.optional(
+    Schema.Struct({ name: Name, elements: Schema.Array(Leaves).check(Schema.isBetweenLength(1, 3)) }),
+  ),
+});
+
+const Group = Schema.Struct({ name: Name, elements: Schema.Array(Element).check(Schema.isBetweenLength(1, 3)) });
+
+// Every run holds these as array names, each with a table and an array inside its last element.
+const hostile = ["__proto__", "constructor", "toString"] as const;
+const prototype = Object.getOwnPropertyNames(Object.prototype).sort();
+
+// The model keeps every key as an own key, as a parsed document must.
+const own = <A>(table: object, key: string, value: A): A => {
+  Object.defineProperty(table, key, { value, enumerable: true, writable: true, configurable: true });
+  return value;
+};
+
+/** The text of arrays of tables, and the value a parse must give. A repeated name is left out. */
+const arrays = (groups: ReadonlyArray<typeof Group.Type>) => {
+  const lines: Array<string> = [];
+  const value = {};
+  const names = new Set<string>();
+  const seen = { elements: 0, subs: 0, items: 0 };
+
+  // One header and its keys. Returns the keys the table now holds.
+  const fill = (table: object, header: string, leaves: typeof Leaves.Type): Set<string> => {
+    const keys = new Set<string>();
+    lines.push(header);
+
+    for (const leaf of leaves) {
+      if (!keys.has(leaf.key)) {
+        keys.add(leaf.key);
+        lines.push(`${leaf.key} = ${leaf.value}`);
+        own(table, leaf.key, leaf.value);
+      }
+    }
+
+    return keys;
+  };
+
+  for (const group of groups) {
+    if (names.has(group.name)) {
+      continue;
+    }
+
+    names.add(group.name);
+    const list = own(value, group.name, new Array<object>());
+
+    for (const element of group.elements) {
+      const table = {};
+      list.push(table);
+      seen.elements++;
+      const taken = fill(table, `[[${group.name}]]`, element.leaves);
+
+      if (element.sub && !taken.has(element.sub.name)) {
+        taken.add(element.sub.name);
+        fill(own(table, element.sub.name, {}), `[${group.name}.${element.sub.name}]`, element.sub.leaves);
+        seen.subs++;
+      }
+
+      if (element.items && !taken.has(element.items.name)) {
+        const items = own(table, element.items.name, new Array<object>());
+
+        for (const leaves of element.items.elements) {
+          const item = {};
+          items.push(item);
+          fill(item, `[[${group.name}.${element.items.name}]]`, leaves);
+        }
+
+        seen.items++;
+      }
+    }
+  }
+
+  return { text: `${lines.join("\n")}\n`, value, names, seen };
+};
+
+it.effect.prop(
+  "T1056 an array of tables parses into its array, hostile names and tables inside an element included",
+  { groups: Schema.Array(Group).check(Schema.isBetweenLength(1, 3)), leaves: Leaves },
+  ({ groups, leaves }) =>
+    Effect.gen(function* () {
+      const toml = yield* Toml;
+      const nested = {
+        leaves: [],
+        sub: { name: "toString", leaves },
+        items: { name: "constructor", elements: [leaves, leaves] },
+      } as const;
+      // The hostile arrays come first, so a drawn group of the same name is the one left out.
+      const w = arrays([...hostile.map((name) => ({ name, elements: [{ leaves }, nested] })), ...groups]);
+      const parsed = yield* toml.parse(w.text);
+
+      expect(parsed.value, w.text).toEqual(w.value);
+      expect([...w.names], "every run holds each hostile array name").toEqual(expect.arrayContaining([...hostile]));
+      expect(w.seen.subs, "a table inside an element in every hostile array").toBeGreaterThanOrEqual(hostile.length);
+      expect(w.seen.items, "an array inside an element in every hostile array").toBeGreaterThanOrEqual(hostile.length);
+      expect(Object.getOwnPropertyNames(Object.prototype).sort(), "Object.prototype keeps its members").toEqual(
+        prototype,
+      );
+    }).pipe(Effect.provide(TomlParser.layer)),
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 200, full: 1000 }) } },
+);

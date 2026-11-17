@@ -9,8 +9,10 @@ import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 
 const SEED = 119120;
+
 // Defer export lookup so the red base's missing exports do not prevent law collection.
 const LIBRARY = "@kampus/libfabrika";
+
 const TESTING = "@kampus/libfabrika/testing";
 
 /** The counter's Msg, restated by the exam and pinned to the machine's own below (0135). */
@@ -39,7 +41,7 @@ describe("P11 real counter laws", () => {
         expect(port.personOnly).toBe(false);
         expect(port.description.trim().length).toBeGreaterThan(0);
         const made = Msg.cases[type].make({});
-        expect(Schema.decodeUnknownSync(port.schema)(made)).toEqual(made);
+        expect(Schema.decodeSync(port.schema)(made)).toEqual(made);
       }),
       { seed: SEED, numRuns: 100 },
     );
@@ -98,16 +100,18 @@ describe("P11 real counter laws", () => {
             const { counter } = await import("./program.ts");
             const { Program, ProgramLoader }: typeof import("@kampus/libfabrika") = await import(LIBRARY);
             // P40: the core pack is `fabrika`, so the counter's identity is `fabrika/counter` (0083).
-            expect(Schema.decodeUnknownSync(Program.schema)(counter)).toMatchObject({
+            expect(Schema.decodeSync(Program.schema)(counter)).toMatchObject({
               name: "fabrika/counter",
               state: { v: 1 },
               writes: {},
             });
+
             const p = Effect.runSync(
               Effect.gen(function* () {
                 return (yield* (yield* ProgramLoader).load("fabrika/counter")).stepper;
               }).pipe(Effect.provide(ProgramLoader.layer({ "fabrika/counter": counter }, {}))),
             );
+
             const boot = p.init(null);
             expect(boot).toMatchObject({ _tag: "stepped", view: { count: 0 }, cmds: [] });
 

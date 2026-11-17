@@ -4,9 +4,13 @@ import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
 const CODE = "fabrika(no-of)";
+
 const FIRES = "next/packages/tuval/src/desktop/fires.ts";
+
 const PASSES = "next/packages/tuval/src/desktop/passes.ts";
+
 const TEST = "next/packages/tuval/src/desktop/fires.test.ts";
+
 const LEASE = "next/packages/tuval/src/desktop/lease.ts";
 
 const fires = [

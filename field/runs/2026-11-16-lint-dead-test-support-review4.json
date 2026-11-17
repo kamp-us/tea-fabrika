@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-lint-dead-test-support-review4",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-16T01:23:57-08:00",
+  "ended": "2026-11-16T01:29:47-08:00",
+  "parent": "2026-11-16-lint-dead-test-support-tests5",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Recheck after the owner's ruling on review1's class 1 (patch code-graph locally, file upstream, 0006 stays whole), lead tooling slice lint-dead-test-support, head 77a2416ea7a8be3b723f50b1c84fe93534f28ba3: merge-ready, class 1 closed. The patch to patches/@demlik__code-graph@0.15.0.patch is minimal: its old hunks differ only in new-side line offsets (+5) and the index blob hash, and it adds two hunks. In judge, a test-like file's export is withheld only when the file is a test file or another file names it, so an unused one reaches otherOccurrences and is dead. In isCandidate only isTestFile is skipped, so usedElsewhere decides. The installed dist (patch_hash 2dd91ed5) holds both. Law 4 plants unused functions and constants beside a used helper at next/'s top and nested, and checks dead, unused-export and the used helper withheld. Without the patch it is red: review1's plant showed an unused .test-support.ts export withheld as test-support-surface. The 14 fixes were checked under 0006. Twelve drop an export no other file names, which lint:dead's by-name check proves. beat in fixtures/next/packs/schedules/beat.ts: its only reader, scheduled-job-alarm.integration.test.ts:107-110, reads the file as text and appends 'export { beat as program }', which binds the local beat. fixtures/mutation/clamp.ts Unit and unit: the fixture's tsconfig has no noUnusedLocals, no line moves, and the stryker tests pass. Project in e2e/chaos-revoke.worker.test-support.ts is a real entry: chaos-revoke.integration.test.ts:304 builds that file as the Worker entry, and alchemy.run.ts:46 binds Cloudflare.DurableObject(\"Project\"). The new node-kinds.json convention names only that file and that name. The L6 change in node-kinds.test.ts is not a loosening. A glob's homes moved from the repo's TEST filter to code-graph's own TEST_FILE (dist/index.js:1251, copied exactly as UNJUDGED), so homes are now the files code-graph judges. Test-support and *Test.ts files become homes; .spec, .test-d and .type-test files stop being homes. The binding check is unchanged, and the Projekt plant in tests5 stays red. loosening.sh 701a651..HEAD gives ten 'unrecognized change' hits, judged by hand: five support or fixture files and beat.ts drop exports (no law changes); scheduled-job-alarm line 200 is the one comment line; node-kinds.json adds the real entry; the patch and pnpm-lock.yaml make lint:dead stricter; node-kinds.test.ts is the L6 change above. None is a real loosening. The upstream repro in build1 and tests5 is one bug, with a tree, a command, actual and expected output, version 0.15.0 and the repository URL. It is not filed yet: the merge session owes it today.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Ran at 77a2416 after pnpm install --frozen-lockfile (code-graph 0.15.0, patch_hash 2dd91ed5). nice -n 15 pnpm exec vitest run --maxWorkers=3 on next/apps/fabrika/src/exam/unreachable.integration.test.ts and next/apps/fabrika/src/exam/node-kinds.test.ts: 2 files, 5 tests passed. The same on packages/pipeline/src/stages/mutation/stryker.test.ts, stryker.start.test.ts and next/apps/fabrika/src/scheduled-job-alarm.integration.test.ts: 3 files, 8 tests passed. NODE_OPTIONS=--max-old-space-size=6144 pnpm lint:dead: exit 0, 'PASS, 3 recorded finding(s), none new'; unreachable-ledger.json md5 unchanged, no prune. NODE_OPTIONS=--max-old-space-size=6144 pnpm lint: exit 0, 18 parts passed. No pnpm typecheck: another session's tsgo was running (pgrep -x tsgo found one), and the box allows one at a time. Dropping export from types that exported types still use compiles, since no tsconfig here turns on declaration emit; CI's typecheck confirms. Not run: the .visual. tests that read the changed support files, as the brief says.",
+  "step": "review"
+}

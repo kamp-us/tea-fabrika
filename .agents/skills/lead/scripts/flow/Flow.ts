@@ -20,6 +20,7 @@ export const Flow = Schema.Struct({
   steps: Schema.NonEmptyArray(Step).check(uniqueNames),
   attempts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
 });
+
 export type Flow = typeof Flow.Type;
 
 /** The cap on step attempts when a flow names none. */

@@ -1,8 +1,6 @@
 /**
  * The local runtime's control entrypoint: a private, token-guarded way to call a fixed set of
  * methods on the Project, a Process, the Record, the Worker Loader or the bucket.
- *
- * @stability unstable
  */
 import { Effect, Equal, Redacted, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -84,6 +82,7 @@ const dispatch = Effect.fnUntraced(function* (
       const [key, bytes, checksum] = yield* Schema.decodeUnknownEffect(
         Schema.Tuple([Schema.String, Schema.Array(Schema.Number), Schema.String]),
       )(args).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+
       return yield* checkedPut(env.MEASUREMENTS, key, Uint8Array.from(bytes), checksum);
     }
 
@@ -91,6 +90,7 @@ const dispatch = Effect.fnUntraced(function* (
       const [key] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Schema.String]))(args).pipe(
         Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
       );
+
       return yield* bucketHead(env.MEASUREMENTS, key);
     }
 
@@ -120,8 +120,10 @@ const dispatch = Effect.fnUntraced(function* (
             processStub(env, project, yield* rpc(ProjectClient.make(projectStub(env, project)).processObject(name))),
           )
         : RecordClient.make(recordStub(env, project, name));
+
   // Only the fixed internal method set above is callable. Public fetch never reaches this entrypoint.
   const answer: Effect.Effect<unknown, unknown> = Reflect.apply(Reflect.get(client, method), client, args);
+
   return yield* target === "process" && method === "abort" ? answer.pipe(Effect.ignore) : rpc(answer);
 });
 
@@ -136,7 +138,6 @@ const dispatch = Effect.fnUntraced(function* (
  * reason `unknown_method`, and a Project `commit` that names its own `process` with reason
  * `reserved`. A success answers `{ value }`, and a failure a 500 with `{ error: { reason } }`.
  *
- * @stability unstable
  * @category combinators
  */
 export const control = Effect.fn("runtime.control")(function* (
@@ -160,6 +161,7 @@ export const control = Effect.fn("runtime.control")(function* (
   }
 
   const answer = yield* Effect.result(dispatch(env, programs, input.success));
+
   return Result.isSuccess(answer)
     ? Response.json({ value: answer.success ?? null })
     : Response.json(

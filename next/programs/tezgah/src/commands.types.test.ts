@@ -23,6 +23,7 @@ type Row = (typeof commands)[number];
 type Did = Extract<typeof tezgahMachine.msg.Type, { readonly _tag: "did" }>;
 
 const PLATFORMS = ["browser", "electron", "headless"] as const;
+
 const OSES = ["macos", "windows", "linux", "android", "ios", "unknown"] as const;
 
 describe("L19: every tezgah command is named tezgah.<word> and carries a word and a label", () => {

@@ -34,7 +34,8 @@
 // answer, whoever it names.
 import { applyCell, type Cmd } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Option, Schema } from "effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { fcTypeId } from "../tasks/TasksTest.ts";
 import {
@@ -68,8 +69,10 @@ const Tag = Schema.TaggedUnion({
 const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
 
 const SEED = 119120;
+
 /** The client's own hands key, as the door admits it, and another key the brain also holds work for. */
 const KEY = "SHA256:hands-own-key-0000000000000000000000000000";
+
 const OTHER = "SHA256:hands-other-key-00000000000000000000000000";
 
 /** The Cmds the plan names for the machine; any other is a broken contract. */
@@ -100,13 +103,16 @@ type Sent = { readonly _tag: string } & Readonly<Record<string, unknown>>;
 type Out = Cmd & Readonly<Record<string, unknown>>;
 
 const step = (s: Model, m: Sent) => applyCell<Model, Sent, Out>(handsMachine, s, m);
+
 const boot = (): readonly [Model, ReadonlyArray<Out>] => handsMachine.init(null, {});
 
 const record = (v: unknown): ReadonlyMap<string, unknown> =>
   typeof v === "object" && v !== null ? new Map(Object.entries(v)) : new Map();
 
 const text = (v: unknown) => (typeof v === "string" ? v : "");
+
 const tagIn = (v: unknown) => text(record(v).get("_tag"));
+
 const parse = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
 
 /** The task a work state is about, and its execution, or null for a state about no task. */
@@ -177,12 +183,14 @@ const Cell = fc.record({
   pick: fc.nat(),
   variant: fc.nat(),
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
 const Tape = fc.record({
   processes: fc.uniqueArray(fcTypeId("process"), { minLength: 3, maxLength: 6 }),
   cells: fc.array(Cell, { minLength: 120, maxLength: 320, size: "max" }),
 });
+
 type Tape = typeof Tape extends fc.Arbitrary<infer A> ? A : never;
 
 /** What a law lets the walk do. */
@@ -200,6 +208,7 @@ const rpc = (body: object) => JSON.stringify({ jsonrpc: "2.0", ...body });
 
 const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
   const [s0, cmds0] = boot();
+
   const w: World = {
     s: s0,
     waiting: [...cmds0],
@@ -226,6 +235,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
   const socketDial = (): number | null => {
     const [deps] = subs(w.s, "socket");
     const dial = record(deps).get("dial");
+
     return typeof dial === "number" ? dial : null;
   };
 
@@ -341,6 +351,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     w.s = next;
     w.waiting.push(...cmds);
     w.at += 7;
+
     return { prev, next, cmds };
   };
 
@@ -355,6 +366,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         method: text(r.get("method")),
         params: r.get("params"),
       };
+
       (call.dial === socketDial() ? w.wire : w.stale).push(call);
       return { ...Tag.cases.write_ok.make({}), cmd: c, value: null, at: w.at };
     }
@@ -429,6 +441,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
 
     if (forge !== null) {
       const theirs = w.door.all().find((j) => j.request.target === OTHER);
+
       const forged =
         forge === "other" && theirs !== undefined
           ? rpc({ id: call.id, result: w.door.assignedTo(theirs.request.id, OTHER) })
@@ -437,6 +450,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
             : forge === "refused"
               ? rpc({ id: call.id, result: TakeReply.cases.refused.make({ reason: "ambiguous" }) })
               : rpc({ id: call.id, error: { code: -32000, message: "no", data: { reason: forge } } });
+
       return frame(call.dial, forged);
     }
 
@@ -446,6 +460,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     if (outcome._tag === "parked") {
       w.stale = w.stale.filter((x) => x !== call);
       w.parked.push({ ...call, after: outcome.after });
+
       return null;
     }
 
@@ -453,10 +468,12 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
       // The answer never came, so the call is still the machine's live one, never a stale id.
       w.stale = w.stale.filter((x) => x !== call);
       done.add("finish:lost");
+
       return null;
     }
 
     const body = answerText(call.id, outcome);
+
     return body === null ? null : frame(call.dial, body);
   };
 
@@ -481,6 +498,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         weight: 6,
         run: () => {
           w.challenged.add(dial);
+
           return frame(dial, rpc({ method: "challenge", params: { nonce: `nonce_${dial}_${w.n}` } }));
         },
       });
@@ -493,6 +511,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         weight: 8,
         run: () => {
           w.waiting = w.waiting.filter((x) => x !== c);
+
           return c === undefined ? null : settle(c, cell);
         },
       });
@@ -517,6 +536,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
           }
 
           w.wire = w.wire.filter((x) => x !== call);
+
           return null;
         },
       });
@@ -527,9 +547,11 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     if (moves.forge && take !== undefined) {
       // Another key's assignment is offered only once the brain holds a task for that key.
       const theirs = w.door.all().some((j) => j.request.target === OTHER);
+
       const forges = theirs
         ? (["other", "idle", "refused", "not_allowed", "lacks_capability"] as const)
         : (["idle", "refused", "lacks_capability"] as const);
+
       const forge = forges[cell.variant % forges.length] ?? "idle";
       out.push({ label: `forge:${forge}`, weight: 4, run: () => answer(take, cell, forge) });
     }
@@ -543,6 +565,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         weight: 8,
         run: () => {
           w.parked = w.parked.filter((x) => x !== call);
+
           return call === undefined ? null : frame(call.dial, rpc({ id: call.id, result: { rev: w.door.rev(KEY) } }));
         },
       });
@@ -556,6 +579,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         run: () => {
           const mine = w.door.all().find((j) => j.request.target === KEY);
           const result = mine === undefined ? TakeReply.cases.idle.make({}) : w.door.assignedTo(mine.request.id, KEY);
+
           return old === undefined ? null : frame(dial, rpc({ id: old.id, result }));
         },
       });
@@ -579,6 +603,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
           const target = moves.forge && cell.variant % 3 === 0 ? OTHER : KEY;
           w.door.request(target, process, ++w.n);
           done.add(target === KEY ? "request" : "request:other");
+
           return null;
         },
       });
@@ -593,6 +618,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
           w.door.request(KEY, process, ++w.n);
           w.door.request(KEY, process, ++w.n);
           w.twins.add(process);
+
           return null;
         },
       });
@@ -653,6 +679,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
           w.heldOn = new Map();
           w.refused = new Map();
           w.listRev = null;
+
           return null;
         },
       });
@@ -752,6 +779,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     // with a `tasks.wait` after the list's rev, never a take that cannot succeed and never a poll:
     // a process with two open tasks, a task refused for good on this link at this rev, a held task.
     const listed = answered.get("tasks");
+
     const pointers = Array.isArray(listed)
       ? listed.map((p) => ({ id: text(record(p).get("id")), process: text(record(p).get("process")) }))
       : [];
@@ -773,6 +801,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     // key's assignment.
     const forgedLive = chosen.label.startsWith("forge:") && take !== undefined && take.id === live.call;
     const takeReply = chosen.label === "door:tasks.take" && reply.get("id") === live.call;
+
     const forGood =
       ["idle", "refused"].includes(tagIn(answered)) ||
       ["ambiguous", "not_allowed", "lacks_capability", "bad_input"].includes(reason);

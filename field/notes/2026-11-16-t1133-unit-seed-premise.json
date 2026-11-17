@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-16-t1133-unit-seed-premise",
+  "date": "2026-11-16",
+  "quests": ["tea-fabrika#1133"],
+  "stage": "harness",
+  "kind": "failure",
+  "what": "The remote-plant plan assumed main already configured the shared 119120 seed. It does not. The recorded unit checks used the installed runtime defaults.",
+  "cause": "A future setup on the settings pair was treated as current main configuration.",
+  "person": false,
+  "primitive": null,
+  "fix": "Corrected the private approved plan to describe the actual installed defaults, keeping all 100-run counts and adding no seed override. The shared setup remains separate. This changes no current seed policy and grants no actual adapter or product proof.",
+  "test": "Read current vitest setup and both property-library configurations before attributing a fixed seed to a passing run.",
+  "links": []
+}

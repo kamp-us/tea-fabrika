@@ -43,6 +43,7 @@ const checks = new Set([
 export const preferSchemaArbitrary: CreateRule = {
   create(context) {
     const source = context.sourceCode;
+
     const binding = (id: Node) => {
       if (id.type !== "Identifier") {
         return undefined;
@@ -66,11 +67,15 @@ export const preferSchemaArbitrary: CreateRule = {
 
       return undefined;
     };
+
     type Binding = NonNullable<ReturnType<typeof binding>>;
+
     const initial = (id: Node): Node | undefined => {
       const def = binding(id)?.defs[0]?.node;
+
       return def?.type === "VariableDeclarator" ? (def.init ?? undefined) : undefined;
     };
+
     const imported = (id: Node, seen = new Set<Binding>()): { from: string; name: string } | undefined => {
       const variable = binding(id);
 
@@ -83,6 +88,7 @@ export const preferSchemaArbitrary: CreateRule = {
 
       if (def?.type === "ImportBinding" && def.parent?.type === "ImportDeclaration") {
         const spec = def.node;
+
         return {
           from: def.parent.source.value,
           name:
@@ -95,8 +101,10 @@ export const preferSchemaArbitrary: CreateRule = {
       }
 
       const init = initial(id);
+
       return init?.type === "Identifier" ? imported(init, seen) : undefined;
     };
+
     const moduleName = (node: Node): { from: string; name: string } | undefined => {
       if (node.type === "Identifier") {
         return imported(node);
@@ -109,31 +117,37 @@ export const preferSchemaArbitrary: CreateRule = {
         const object = node.type === "TSQualifiedName" ? node.left : node.object;
         const name = node.type === "TSQualifiedName" ? node.right.name : node.property.name;
         const owner = moduleName(object);
+
         return owner ? { from: owner.from, name: owner.name === "*" ? name : `${owner.name}.${name}` } : undefined;
       }
 
       return undefined;
     };
+
     const fcCall = (node: Node) => {
       if (node.type !== "CallExpression") {
         return undefined;
       }
 
       const name = moduleName(node.callee);
+
       return name?.from === "fast-check" ? name.name : undefined;
     };
+
     const effectCheck = (node: Node) => {
       if (node.type !== "CallExpression") {
         return false;
       }
 
       const name = moduleName(node.callee);
+
       return (
         name !== undefined &&
         ((name.from === "effect" && name.name.startsWith("Schema.")) || name.from === "effect/Schema") &&
         checks.has(name.name.split(".").at(-1) ?? "")
       );
     };
+
     const schema = (node: Node, seen = new Set<Binding>()): string | undefined => {
       if (!["Identifier", "MemberExpression", "TSQualifiedName"].includes(node.type)) {
         return undefined;
@@ -147,6 +161,7 @@ export const preferSchemaArbitrary: CreateRule = {
 
       if (node.type === "MemberExpression" || node.type === "TSQualifiedName") {
         const origin = moduleName(node);
+
         return origin &&
           origin.from !== "fast-check" &&
           (origin.from !== "effect" || origin.name.startsWith("Schema.")) &&
@@ -201,6 +216,7 @@ export const preferSchemaArbitrary: CreateRule = {
         init?.type === "CallExpression" &&
         [...below(init)].some((part) => {
           const importedName = moduleName(part);
+
           return (
             importedName &&
             ((importedName.from === "effect" && importedName.name.startsWith("Schema.")) ||
@@ -213,6 +229,7 @@ export const preferSchemaArbitrary: CreateRule = {
 
       return undefined;
     };
+
     return {
       "Program:exit"(program) {
         const nodes = [...below(program)];
@@ -222,6 +239,7 @@ export const preferSchemaArbitrary: CreateRule = {
         }
 
         const flows = new Map<Binding, Node>();
+
         const roots = (node: Node, seen = new Set<Binding>()): Node[] => {
           const variable = binding(node);
 
@@ -283,6 +301,7 @@ export const preferSchemaArbitrary: CreateRule = {
         }
 
         const matches = new Map<Node, string>();
+
         const mark = (value: Node, name: string | undefined) => {
           if (name) {
             for (const root of roots(value)) {
@@ -290,6 +309,7 @@ export const preferSchemaArbitrary: CreateRule = {
             }
           }
         };
+
         // A check names the whole generated binding. Assembling a new object from fields
         // does not prove those field generators match the checked object's Schema.
         const checkedRoots = (value: Node, seen = new Set<Binding>()): Node[] => {
@@ -307,8 +327,10 @@ export const preferSchemaArbitrary: CreateRule = {
           }
 
           const init = initial(value);
+
           return init?.type === "Identifier" ? checkedRoots(init, seen) : [];
         };
+
         const arbitraryRoots = (value: Node, seen = new Set<Binding>()): Node[] => {
           if (constructors.has(fcCall(value) ?? "")) {
             return [value];
@@ -323,6 +345,7 @@ export const preferSchemaArbitrary: CreateRule = {
 
             seen.add(variable);
             const init = initial(value);
+
             return init ? arbitraryRoots(init, seen) : [];
           }
 
@@ -338,6 +361,7 @@ export const preferSchemaArbitrary: CreateRule = {
 
           return [];
         };
+
         const maker = (node: Node) => {
           if (
             node.type !== "MemberExpression" ||
@@ -349,12 +373,14 @@ export const preferSchemaArbitrary: CreateRule = {
           }
 
           const base = node.object;
+
           const target =
             base.type === "MemberExpression" &&
             base.object.type === "MemberExpression" &&
             dotted(base.object.property) === "cases"
               ? base.object.object
               : base;
+
           return schema(target);
         };
 

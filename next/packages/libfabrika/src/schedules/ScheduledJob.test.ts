@@ -1,7 +1,8 @@
 import { applyCell, type CmdOf } from "@demlik/tea";
 import { Cmd } from "@demlik/tea/effect";
 import { arbGuidedSequence, propertyTrace, stubCtxThrowingProxy } from "@demlik/tea/pbt";
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import fc from "fast-check";
 import { expect, it } from "vitest";
 import * as ScheduledJob from "./ScheduledJob.ts";
@@ -15,7 +16,7 @@ const Tag = Schema.TaggedUnion({
 });
 
 const write = Cmd.make("write", {
-  input: Schema.Struct({ due: Schema.Number, period: Schema.Int }),
+  input: Schema.Struct({ due: Schema.Finite, period: Schema.Int }),
   ok: Schema.Json,
   err: ["not_delivered", "ended", "spent"],
 });
@@ -24,12 +25,14 @@ const make = (period: number) =>
   ScheduledJob.make({ period, cmd: write, work: (due, ms) => write({ due, period: ms }) });
 
 const ctx = stubCtxThrowingProxy<unknown>();
+
 const period = fc.integer({ min: 1, max: 1_000_000_000 });
 
 // Fast-check supplies boundary times and invalid durations; there is no domain schema for them.
 // The plan gives no run count. Keep the shared seed and use 150 walks of up to 100 moves.
 const walks = period.chain((ms) => {
   const { machine } = Result.getOrThrow(make(ms));
+
   return arbGuidedSequence(
     machine,
     ctx,
@@ -96,6 +99,7 @@ it("L1: only a due idle scheduled job emits work; answers while idle do nothing"
                 prev,
                 { ...Tag.cases.timer.make({}), at: prev.next },
               );
+
               expect(due).toEqual({ _tag: "running", due: prev.next, period: prev.period });
               expect(jobs).toEqual([write({ due: prev.next, period: prev.period })]);
             }
@@ -161,6 +165,7 @@ it("L3: early and repeated timers leave the model and commands unchanged", () =>
               prev,
               { ...Tag.cases.timer.make({}), at },
             );
+
             expect(unchanged).toEqual(prev);
             expect(sent).toEqual([]);
             const ignored = msg._tag === "timer" && (prev._tag === "running" || msg.at < prev.next);

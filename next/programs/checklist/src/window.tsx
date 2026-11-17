@@ -5,11 +5,13 @@ import { ChecklistMsg, checklist, checklistView } from "./program.ts";
 import { TileMsg, tile } from "./tile.ts";
 
 type Props = WindowProps<typeof checklist> & TileProps<typeof tile>;
+
 const states = { new: "Open", open: "Open", late: "Late", checked: "Done" } as const;
 
 /** A click asks the brain. Only a checked view changes a box or the list. */
 const ChecklistWindow = ({ data, press, tile: own, send, refusal }: Props) => {
   const description = useId();
+
   return (
     <div className="checklist">
       {data.items.length === 0 ? (

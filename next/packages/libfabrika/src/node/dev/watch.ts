@@ -1,12 +1,17 @@
 /**
  * Hot reload on Node: one Rolldown watcher per selected program, which rebuilds the program after
  * each save and hands the checked build to the brain.
- *
- * @stability unstable
  */
 import { run } from "@demlik/tea/effect";
-import type { Scope } from "effect";
-import { Clock, Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import { watch, type RolldownWatcherEvent } from "rolldown";
 import * as Id from "../../Id.ts";
 import { hash } from "../../runtime/Built.ts";
@@ -28,6 +33,7 @@ type Reloaded =
     });
 
 const InstallId = Id.make("install");
+
 const Location = Schema.Struct({ file: Schema.optionalKey(Schema.String), line: Schema.optionalKey(Schema.Int) });
 
 const Diagnostic = Schema.Struct({
@@ -43,11 +49,13 @@ const details = (raw: unknown, root: string, path: Path.Path) => {
   const many = Schema.decodeUnknownOption(Errors)(raw);
   const list = Schema.decodeUnknownOption(Schema.Array(Diagnostic))(raw);
   const one = Schema.decodeUnknownOption(Diagnostic)(raw);
+
   const item = Option.isSome(many)
     ? many.value.errors[0]
     : Option.isSome(list)
       ? list.value[0]
       : Option.getOrUndefined(one);
+
   const file = item?.loc?.file ?? item?.id ?? item?.path;
 
   if (file === undefined) {
@@ -61,6 +69,7 @@ const details = (raw: unknown, root: string, path: Path.Path) => {
   }
 
   const line = item?.loc?.line ?? item?.line;
+
   return { path: relative, ...(line === undefined ? {} : { line }) };
 };
 
@@ -78,7 +87,6 @@ const details = (raw: unknown, root: string, path: Path.Path) => {
  * `Installed` answer with the program and hash; an install that fails gives `failed` with reason
  * `load`. Each watcher is closed with the scope.
  *
- * @stability unstable
  * @category constructors
  */
 export const watchPrograms = (options: {
@@ -96,17 +104,21 @@ export const watchPrograms = (options: {
       const events = yield* Queue.unbounded<RolldownWatcherEvent>();
       // Results are owned as soon as the callback receives them, including during interruption.
       const results = new Set<Extract<RolldownWatcherEvent, { code: "BUNDLE_END" | "ERROR" }>["result"]>();
+      const failed = () => ControlError.make({ reason: "watch_close" });
+
       const close = (result: Extract<RolldownWatcherEvent, { code: "BUNDLE_END" | "ERROR" }>["result"]) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown result cleanup returns a Promise
-        Effect.tryPromise({ try: () => result.close(), catch: () => new ControlError({ reason: "watch_close" }) }).pipe(
+        Effect.tryPromise({ try: () => result.close(), catch: failed }).pipe(
           Effect.orDie,
           Effect.tap(() => Effect.sync(() => results.delete(result))),
         );
+
       const received = Effect.fnUntraced(function* (event: RolldownWatcherEvent) {
         if ((event.code === "BUNDLE_END" || event.code === "ERROR") && event.result !== undefined) {
           yield* Effect.acquireUseRelease(
             Effect.sync(() => {
               results.add(event.result);
+
               return event.result;
             }),
             () => Effect.void,
@@ -116,6 +128,7 @@ export const watchPrograms = (options: {
 
         Queue.offerUnsafe(events, event);
       });
+
       yield* Effect.acquireRelease(
         Effect.sync(() => {
           const watcher = watch({
@@ -147,13 +160,14 @@ export const watchPrograms = (options: {
               },
             ],
           });
+
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Rolldown awaits its listener before END
           watcher.on("event", (event) => Effect.runPromise(received(event)));
+
           return watcher;
         }),
         (watcher) =>
           Effect.gen(function* () {
-            const failed = () => new ControlError({ reason: "watch_close" });
             // oxlint-disable-next-line fabrika/no-promises -- edge: closing Rolldown stops its event callbacks
             yield* Effect.tryPromise({ try: () => watcher.close(), catch: failed }).pipe(Effect.orDie);
 
@@ -166,6 +180,7 @@ export const watchPrograms = (options: {
       const ids = yield* Id.Generator.pipe(Effect.provide(Id.Generator.layer));
       const handle = yield* run(watcher, { ctx: {} });
       const phase = yield* handle.ready.pipe(Effect.orDie);
+
       const failure = Effect.fn("watch.failed")(function* (reason: Failed["reason"], cause: unknown) {
         const fact = CodeEvent.cases["code.failed"].make({
           program: selected.name,
@@ -173,7 +188,9 @@ export const watchPrograms = (options: {
           reason,
           ...details(cause, root, path),
         });
+
         yield* options.failed(fact).pipe(Effect.ignore);
+
         return {
           ...Installed.cases.failed.make({ reason }),
           program: selected.name,
@@ -181,6 +198,7 @@ export const watchPrograms = (options: {
           ...details(cause, root, path),
         };
       });
+
       return Stream.fromQueue(events).pipe(
         Stream.split((event) => event.code === "END"),
         Stream.mapEffect(
@@ -190,6 +208,7 @@ export const watchPrograms = (options: {
             FileSystem.FileSystem | Path.Path
           > {
             const started = yield* Clock.currentTimeMillis;
+
             const finish = Effect.fnUntraced(function* (result: Option.Option<Reloaded>, bytes = 0) {
               yield* Effect.annotateCurrentSpan({
                 program: selected.name,
@@ -197,14 +216,17 @@ export const watchPrograms = (options: {
                 ms: (yield* Clock.currentTimeMillis) - started,
                 outcome: Option.isSome(result) ? result.value._tag : "same",
               });
+
               return result;
             });
 
             // An ERROR may describe bytes from before a later save. Always build the current inputs.
             const inputs = new Map<string, string>();
+
             const built = yield* Effect.result(
               buildPrograms({ root, entry: options.entry, programs: [selected] }, undefined, inputs),
             );
+
             const digest = yield* hash(JSON.stringify([...inputs].sort(([a], [b]) => a.localeCompare(b))));
 
             if (built._tag === "Failure" && phase.getState().failedInputs === digest) {
@@ -236,8 +258,10 @@ export const watchPrograms = (options: {
                 ...code,
                 from: phase.getState()._tag === "booting" ? "boot" : "watch",
               })
-              .pipe(Effect.catch(() => Effect.succeed(Installed.cases.failed.make({ reason: "load" }))));
+              .pipe(Effect.orElseSucceed(() => Installed.cases.failed.make({ reason: "load" })));
+
             yield* phase.dispatch(WatcherMsg.cases.attempted.make({})).pipe(Effect.orDie);
+
             return yield* finish(
               Option.some({ ...answer, program: selected.name, hash: code.hash }),
               new TextEncoder().encode(code.source).byteLength,
@@ -248,6 +272,7 @@ export const watchPrograms = (options: {
         Stream.map((result) => result.value),
       );
     });
+
   return Stream.unwrap(
     Effect.map(Effect.forEach(options.programs, program, { concurrency: 1 }), (streams) =>
       Stream.mergeAll(streams, { concurrency: "unbounded" }),

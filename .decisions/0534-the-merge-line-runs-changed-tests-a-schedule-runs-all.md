@@ -1,7 +1,7 @@
 ---
 id: 0534
 title: The merge line runs only the tests a change reaches, a schedule runs the whole next/ suite every 3 hours and opens a GitHub issue when red, and the queue builds two groups at once
-status: amended-in-part by [0539](0539-the-merge-line-runs-no-tooling-tests.md), [0541](0541-ci-speed-has-a-goal-and-a-daily-check.md), [0581](0581-main-full-run-starts-on-push-and-hourly.md)
+status: amended-in-part by [0539](0539-the-merge-line-runs-no-tooling-tests.md), [0541](0541-ci-speed-has-a-goal-and-a-daily-check.md), [0581](0581-main-full-run-starts-on-push-and-hourly.md), [0590](0590-a-branch-proof-run-runs-only-what-its-change-reaches.md), [0595](0595-scheduled-runs-share-slots.md)
 date: 2026-11-14
 tags: [ci, merge-queue, schedule, tests, next, main, github-issues]
 ---

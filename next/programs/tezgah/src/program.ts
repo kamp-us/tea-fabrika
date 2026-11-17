@@ -63,6 +63,7 @@ const Msg = Schema.Union([
     via: Via,
   }),
 ]);
+
 type Msg = typeof Msg.Type;
 
 /** A start tezgah asked for and waits on: a workspace's first tile, or a split's new tile. As on the
@@ -77,6 +78,7 @@ const Starting = Schema.TaggedUnion({
     name: Schema.String,
   },
 });
+
 type Starting = typeof Starting.Type;
 
 const Model = Schema.Struct({
@@ -86,6 +88,7 @@ const Model = Schema.Struct({
   next: Schema.Int,
   starting: Schema.Array(Starting),
 });
+
 type Model = typeof Model.Type;
 
 type Step = readonly [
@@ -138,6 +141,7 @@ const placed = (m: Model, s: Starting, answer: Started): Model => {
       focus: s.tile,
       recent: [s.tile],
     });
+
     return { ...rest, workspaces: [...m.workspaces, space], tiles: [...m.tiles, made(m, s, answer)], next: m.next + 1 };
   }
 
@@ -148,6 +152,7 @@ const placed = (m: Model, s: Starting, answer: Started): Model => {
   }
 
   const at = Layout.order(w.layout).includes(s.at) ? s.at : w.focus;
+
   return {
     ...rest,
     workspaces: m.workspaces.map((x) => (x === w ? Layout.split(w, at, s.dir, s.tile) : x)),
@@ -168,6 +173,7 @@ export const tezgahMachine = Machine.make({
       }
 
       const name = msg.workspace === 1 ? FIRST : Workspace.childName(NEW_TILE, msg.tile);
+
       return [
         {
           ...m,
@@ -185,6 +191,7 @@ export const tezgahMachine = Machine.make({
 
       if (msg.does === "tezgah.close") {
         const shown = m.tiles.find((t) => t.id === msg.from);
+
         return [
           {
             ...m,
@@ -198,10 +205,12 @@ export const tezgahMachine = Machine.make({
       // A focus move: the only letter that names a `to`.
       if ("to" in msg) {
         const moved = leaving(m, msg.from, msg.cursor);
+
         return [{ ...moved, workspaces: moved.workspaces.map((x) => (x === w ? Layout.focus(w, msg.to) : x)) }, []];
       }
 
       const name = Workspace.childName(NEW_TILE, msg.tile);
+
       const split = Starting.cases.split.make({
         space: w.id,
         at: msg.from,
@@ -209,6 +218,7 @@ export const tezgahMachine = Machine.make({
         tile: msg.tile,
         name,
       });
+
       return [
         { ...leaving(m, msg.from, msg.cursor), starting: [...m.starting, split] },
         [StartChild.startChild({ program: NEW_TILE, name })],
@@ -216,6 +226,7 @@ export const tezgahMachine = Machine.make({
     },
     start_child_ok: (m, msg): Step => {
       const s = m.starting.find((x) => x.name === msg.cmd.name);
+
       return s === undefined ? [m, []] : [placed(m, s, msg.value), []];
     },
     // A refused start drops what waited on it, and nothing else changes.

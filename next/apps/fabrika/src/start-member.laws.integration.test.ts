@@ -75,6 +75,7 @@ const client = async (instance: Instance, key: Key, tab: string) => {
   const socket = new WebSocket(
     `${String(instance.url).replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
   );
+
   const frames: any[] = [];
   let closed = false;
   socket.addEventListener("message", (event) => {
@@ -86,6 +87,7 @@ const client = async (instance: Instance, key: Key, tab: string) => {
     closed = true;
   });
   let serial = 0;
+
   const next = async (match: (frame: any) => boolean) => {
     const end = Date.now() + WAIT;
 
@@ -105,12 +107,16 @@ const client = async (instance: Instance, key: Key, tab: string) => {
 
     throw new Error(`no frame in ${WAIT} ms`);
   };
+
   const call = async (method: string, params: unknown) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+
     return next((frame) => frame.id === id);
   };
+
   const nonce = (await next((frame) => frame.method === "challenge")).params.nonce;
+
   const hello = await call("initialize", {
     versions: [1],
     has: ["seal"],
@@ -123,7 +129,9 @@ const client = async (instance: Instance, key: Key, tab: string) => {
     sentAt: SENT,
     signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
   });
+
   expect(hello.error).toBeUndefined();
+
   const close = async () => {
     socket.close();
     const end = Date.now() + WAIT;
@@ -132,6 +140,7 @@ const client = async (instance: Instance, key: Key, tab: string) => {
       await pause(20);
     }
   };
+
   return { call, close };
 };
 
@@ -164,6 +173,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
               },
               home.from,
             );
+
             const starter = Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
             const window = await client(instance, home.key, "member");
 
@@ -172,15 +182,19 @@ describe("T953: a start is checked against the member who caused it, end to end"
                 "process.send",
                 letter(starter, "start-1", { ...Tag.cases.start.make({}), program: "p42/child", name: "child:1" }),
               );
+
               expect(sent, "the starter takes the person's letter").toMatchObject({ result: { _tag: "accepted" } });
+
               const child = await until(
                 "L17: the child is live with no start grant",
                 () => livePid(instance, "child:1"),
                 (pid) => pid !== undefined,
               );
+
               const line = (await rows(instance, "processes/child:1")).find(
                 (row) => row._tag === "started" && row.body.process === child,
               );
+
               expect(line?.body.member, "L17: the started line names the person whose input caused it").toEqual({
                 _tag: "person",
                 key: home.key.fingerprint,
@@ -225,12 +239,15 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const fixture = yield* childProject();
           const runtime = yield* fixture.acquire();
           const project = yield* Effect.promise(() => runtime.runPromise(ProjectService));
+
           const call = <A>(work: Effect.Effect<A, unknown, ProjectService>) =>
             Effect.promise(() => runtime.runPromise(work));
+
           const person = fixture.from.for;
           const url = "http://127.0.0.1:18787";
           const saw = { label: "agent", location: "test", method: "command", check: "touch" } as const;
           const signed = (text: string) => ({ text, armored: fixture.founder.proof(text) });
+
           // The founder lets the agent in.
           const granted = yield* call(
             ProjectService.use((p) =>
@@ -249,11 +266,13 @@ describe("T953: a start is checked against the member who caused it, end to end"
               ),
             ),
           );
+
           expect(granted, "the founder's grant lets the agent in").toMatchObject({ _tag: "applied" });
           // The agent comes online and sends an input to the boot's process.
           const agent = yield* call(ProjectService.use((p) => p.connect()));
           const nonce = yield* call(ProjectService.use((p) => p.challenge(agent)));
           const tab = "agent";
+
           const online = yield* call(
             ProjectService.use((p) =>
               p.initialize(
@@ -274,17 +293,22 @@ describe("T953: a start is checked against the member who caused it, end to end"
               ),
             ),
           );
+
           expect(online, "the agent is online").toMatchObject({ _tag: "online" });
           const boot = project.boot.process;
+
           const sent = yield* call(
             ProjectService.use((p) =>
               p.route(agent, "process.send", letter(boot, "agent-inc", Tag.cases.inc.make({}))),
             ),
           );
+
           expect(sent, "the door takes the agent's input").toMatchObject({ _tag: "ok" });
+
           const incoming = Schema.decodeUnknownSync(
             Schema.Struct({ id: Schema.String, envelope: Schema.Struct({ id: Schema.String }) }),
           )(fixture.delivered.at(-1));
+
           // The founder removes the agent before the step that the input causes runs.
           const revoked = yield* call(
             ProjectService.use((p) =>
@@ -302,7 +326,9 @@ describe("T953: a start is checked against the member who caused it, end to end"
               ),
             ),
           );
+
           expect(revoked, "the founder's revoke removes the agent").toMatchObject({ _tag: "applied" });
+
           // The test plays the runner: the step on that input asks for a child.
           const child = {
             id: `${boot}/agent-inc/0`,
@@ -310,9 +336,11 @@ describe("T953: a start is checked against the member who caused it, end to end"
             code: { program: "p42/child", hash: CODE.child.hash },
             requester: Recipient.cases.process.make({ process: boot }),
           };
+
           const answer = yield* call(
             ProjectService.use((p) => p.processChild(child, { ...fixture.from, parent: incoming.envelope.id })),
           );
+
           expect(answer, "L18: the removed sender's start is refused forbidden").toEqual({
             _tag: "ChildrenError",
             reason: "forbidden",

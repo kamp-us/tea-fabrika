@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-lint-dead-test-support-tests2",
+  "ticket": "lint-dead-test-support",
+  "pr": null,
+  "started": "2026-11-16T00:04:21-08:00",
+  "ended": "2026-11-16T00:13:09-08:00",
+  "parent": "2026-11-16-lint-dead-test-support-review1",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests fix round 1 for lead tooling slice lint-dead-test-support, branch fabrikalfa/lint-dead-test-support, from fb0ccec. It fixes the review's two named faults in next/apps/fabrika/src/exam/unreachable.integration.test.ts and nothing else; node-kinds.json is unchanged and the open owner question (a .test-support.ts export used by nothing) is left alone. Fault 1: law 3 now plants, in every case, a helper for every spelling of every pattern in code-graph 0.15.0's two default groups (test-directory: test/, tests/, __tests__/, e2e/, e2e<suffix>/; test-helper-module: test-helper/, test-helpers/, test-util/, test-utils/, fixture/, fixtures/, test-helper.ts, test-db.ts, <base>.fixture.ts), each in .ts and .tsx, and checks that every default pattern and both extensions were met and that every planted path is a default place. Fault 2: the three laws move from fc.assert inside it.effect with a hand seed to @effect/vitest 4.1.3's it.effect.prop with Schema inputs (Segment, Folder, Name, Names, Several), runs from runsFor({fast: 3, full: 12}) and no seed (0579). Since no case may rest on what a seed draws, each case now plants every case its law must meet in one tree (law 1: a helper at next/'s top and a file of several in a nested folder; law 2: dead exports at next/'s top and nested; law 3: all spellings), and the coverage checks run per case. A fact found on the way: code-graph 0.15.0 counts a use by export name, so planted files sharing export names read as referenced-in-non-test-file and hid the file-name plant; every planted file now names its exports apart.",
+  "plants": [
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export of a .test-support.ts file that only tests use is not flagged",
+      "plant": "node-kinds.json as on main, with no testSupportFilePatterns",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export nothing uses is still flagged as dead beside test support",
+      "plant": "node-kinds.json with testSupportFilePatterns holding only an over-wide group plant [\\.ts$]",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export in each default test-helper place that only tests use is not flagged",
+      "plant": "node-kinds.json with the three file-name patterns (test-helper, test-db, .fixture) removed from test-helper-module",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export in each default test-helper place that only tests use is not flagged",
+      "plant": "node-kinds.json with testSupportFilePatterns holding only test-support-module, without the default groups",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export in each default test-helper place that only tests use is not flagged",
+      "plant": "the law's own spelling list without test-db, to see its coverage check fire",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Red lines: law 1 on main's node-kinds.json: expected [ 'next/a.test-support.ts:ta0', …(2) ] to deeply equal []. Law 2 over-wide: expected [] to deeply equal ArrayContaining. Law 3 file-name plant: expected [ Array(6) ] to deeply equal [] (test-helper, test-db and .fixture in .ts and .tsx). Law 3 only-new-group plant: expected [ …(28) ] to deeply equal []. Coverage plant: no helper was planted where (^|/)test-db\\.tsx?$ reads it. Before names were made unique, the file-name plant stayed green; that first draft was not committed. Each plant ran once on a saved copy and was restored by copy; git status showed only the law file before the commit. 0579 says the seed is set once in the package setup, but no setup sets it yet and 0579 leaves where it lives undecided, so the laws carry no seed and the Effect Arbitrary draws its own; the per-case coverage makes that safe. Plants stay in comments: 0580's plant option is not built in @kampus/vitest yet. Ran with nice -n 15 pnpm exec vitest run --maxWorkers=3: unreachable.integration.test.ts and node-kinds.test.ts, 2 files and 4 tests passed at the fast depth; the law file also passed at FABRIKA_TEST_DEPTH=full (3 tests, 16 s). pnpm format, then NODE_OPTIONS=--max-old-space-size=6144 pnpm lint: 18 parts passed. ratchet.ts --base 701a651: exit 0. No pnpm typecheck in this step.",
+  "step": "tests"
+}

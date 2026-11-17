@@ -18,7 +18,9 @@ const Tag = Schema.TaggedUnion({
 });
 
 const SEED = 119120;
+
 const start = Effect.runSync(processId);
+
 const after = Effect.runSync(processId);
 
 const events = [
@@ -66,6 +68,7 @@ describe("P12 instance machine laws", () => {
           { ...Tag.cases.started.make({}), start: after, after: start, build, reason },
           { ...Tag.cases.braked.make({}), after, reason },
         ] as const;
+
         const [initial] = brainLife.init(null, {});
         expect(initial).toMatchObject({ _tag: "starting" });
         const [online] = applyCell(brainLife, initial, msgs[0]);

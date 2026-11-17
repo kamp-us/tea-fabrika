@@ -32,16 +32,22 @@ const Tag = Schema.TaggedUnion({
 });
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const SENT = "2026-11-15T04:00:00.000Z";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const PROJECT = "m13-watch";
+
 /** Bounded waits tied to observable facts. */
 const WAIT = 25_000;
 
 const field = (value: Buffer | string) => {
   const body = Buffer.from(value),
     n = Buffer.alloc(4);
+
   n.writeUInt32BE(body.length);
+
   return Buffer.concat([n, body]);
 };
 
@@ -49,8 +55,10 @@ const field = (value: Buffer | string) => {
 const identity = () => {
   const pair = generateKeyPairSync("ed25519"),
     raw = pair.publicKey.export({ format: "jwk" }).x!;
+
   const bytes = Buffer.from(raw, "base64url"),
     blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -63,8 +71,10 @@ const identity = () => {
         field("sha512"),
         field(createHash("sha512").update(text).digest()),
       ]);
+
       const v = Buffer.alloc(4);
       v.writeUInt32BE(1);
+
       const packet = Buffer.concat([
         Buffer.from("SSHSIG"),
         v,
@@ -74,6 +84,7 @@ const identity = () => {
         field("sha512"),
         field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
       ]);
+
       return `-----BEGIN SSH SIGNATURE-----\n${packet
         .toString("base64")
         .match(/.{1,70}/g)!
@@ -184,8 +195,10 @@ const until = async <A>(message: string, look: () => Promise<A>, done: (value: A
 /** A real WebSocket client at the door, initialized with a signed hello. */
 const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket) => {
   const frames: any[] = [];
+
   let closeCode: number | undefined,
     serial = 0;
+
   socket.addEventListener("message", (event) => {
     if (event.data !== "pong") {
       frames.push(JSON.parse(String(event.data)));
@@ -197,6 +210,7 @@ const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket
   socket.addEventListener("error", () => {
     closeCode ??= 1006;
   });
+
   const next = async (match: (frame: any) => boolean) => {
     const end = Date.now() + WAIT;
 
@@ -216,11 +230,14 @@ const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket
 
     throw new Error(`no frame in ${WAIT} ms; last frames ${JSON.stringify(frames.slice(-3))}`);
   };
+
   const call = async (method: string, params: unknown) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+
     return next((frame) => frame.id === id);
   };
+
   const nonce = (await next((frame) => frame.method === "challenge")).params.nonce;
   expect(
     (
@@ -238,6 +255,7 @@ const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket
       })
     ).error,
   ).toBeUndefined();
+
   return { call, next };
 };
 
@@ -252,17 +270,20 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
+
   return Effect.runPromise(
     Effect.gen(function* () {
       const home = yield* Effect.acquireRelease(
         Effect.sync(() => mkdtempSync(join(tmpdir(), "m13w-"))),
         (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
       );
+
       const key = identity();
       yield* Effect.acquireRelease(
         Effect.sync(() => {
           const previous = process.env.FABRIKA_HOME;
           process.env.FABRIKA_HOME = home;
+
           return previous;
         }),
         (previous) =>
@@ -292,6 +313,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
       yield* Effect.gen(function* () {
         // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
         const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+
         const instance = yield* localInstance(
           built,
           RecordWireTest.startupFixture({
@@ -304,7 +326,9 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
             starts: [{ source: "m13/parent", to: "m13/writer" }],
           }),
         );
+
         const scope = yield* Effect.scope;
+
         const from: From = {
           by: key.fingerprint,
           for: PERSON,
@@ -314,6 +338,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
           traceId: TRACE,
           build: built.build,
         };
+
         yield* Effect.promise(() =>
           test(instance, {
             connect: (tab) =>
@@ -328,6 +353,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
                     ),
                     (socket) => Effect.sync(() => socket.close()),
                   );
+
                   return yield* Effect.promise(() => wire(instance, key, tab, socket));
                 }).pipe(Effect.provideService(Scope.Scope, scope)),
               ),
@@ -335,10 +361,12 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
               const program = `m13/${name.split(":")[0]}`;
               const code = built.programs[program];
               expect(code).toBeDefined();
+
               const started = await Reflect.get(instance.project(PROJECT), "start")(
                 { _tag: "first", id: `start-${name}`, name, code: { program, hash: code!.hash } },
                 from,
               );
+
               return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
             },
           }),
@@ -380,6 +408,7 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
     const writer = await fixture.start("writer:1");
     const client = await fixture.connect("watch");
     const log = async () => ((await client.call("view.open", { pid: reader })).result?.view?.log ?? []) as any[];
+
     const send = async (pid: string, id: string, m: unknown) =>
       expect(await client.call("process.send", letter(pid, id, m))).toMatchObject({ result: { _tag: "accepted" } });
 
@@ -414,6 +443,7 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
     const folded = await until("the reader folds the writer's DOWN", log, (rows) =>
       rows.some((r) => r.type === "DOWN" && r.ref === kept),
     );
+
     expect(
       folded,
       "M13: exactly one DOWN, for the kept ref, the writer's life, its name and normal; none for the dropped ref",
@@ -474,6 +504,7 @@ it("scenario: M16, a watcher that only waits folds one DOWN with shutdown when t
     const parent = await fixture.start("parent:1");
     const reader = await fixture.start("reader:1");
     const client = await fixture.connect("stopped");
+
     const send = async (pid: string, id: string, m: unknown) => {
       const answer = await client.call("process.send", letter(pid, id, m));
       expect(Sent.guards.accepted(answer.result), `M16: ${id} is accepted, got ${JSON.stringify(answer)}`).toBe(true);

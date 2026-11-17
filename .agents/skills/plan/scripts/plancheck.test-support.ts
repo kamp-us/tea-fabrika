@@ -10,6 +10,7 @@ import { expect } from "vitest";
 
 // Today's tooling. Run each plant in a disposable copy of the script beside this test.
 export const script = join(import.meta.dirname, "plancheck.sh");
+
 export const options = { seed: 520, numRuns: 24 };
 
 export const table = (heads: string[], rows: string[][]) =>
@@ -25,13 +26,16 @@ export const check = (body: string, marker = "Plancheck-Version: 2") => {
     writeFileSync(plan, `Approved by the lead agent, builds ticket 520.\n\n${marker}\n\n${body}\n`);
     const words = join(folder, "words");
     writeFileSync(words, "private_generated\n");
+
     const ran = spawnSync("sh", [script, plan], {
       encoding: "utf8",
       timeout: 5_000,
       env: { ...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined },
     });
+
     expect(ran.error).toBeUndefined();
     expect(ran.signal).toBeNull();
+
     return { code: ran.status, text: ran.stdout + ran.stderr };
   } finally {
     rmSync(folder, { recursive: true, force: true });
@@ -48,13 +52,16 @@ export const handoff = (text: string, draft = false) => {
     writeFileSync(plan, text);
     const words = join(folder, "words");
     writeFileSync(words, "private_generated\n");
+
     const ran = spawnSync("sh", [script, ...(draft ? ["--draft"] : []), plan], {
       encoding: "utf8",
       timeout: 5_000,
       env: { ...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined },
     });
+
     expect(ran.error).toBeUndefined();
     expect(ran.signal).toBeNull();
+
     return { code: ran.status, text: ran.stdout + ran.stderr };
   } finally {
     rmSync(folder, { recursive: true, force: true });
@@ -139,6 +146,9 @@ export const complete = (extra = "") =>
     "",
     "## Files",
     table(["File", "Owner step"], [["src/plain.ts", "build"]]),
+    "",
+    "## Existing tools",
+    "- `src/plain.ts`: searched `rg plain src`; none found.",
     "",
     "## Size",
     "Size: 1 agent hour, 80 lines. Confidence: 85%.",

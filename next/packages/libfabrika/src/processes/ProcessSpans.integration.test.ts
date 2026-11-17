@@ -60,13 +60,16 @@ const date = Arbitrary.schema(
 
 const capture = () => {
   const spans: Array<Tracer.NativeSpan> = [];
+
   const tracer = Tracer.make({
     span: (options) => {
       const span = new Tracer.NativeSpan(options);
       spans.push(span);
+
       return span;
     },
   });
+
   return {
     tracer,
     spans,
@@ -77,6 +80,7 @@ const capture = () => {
 const records = () => {
   const sink = storage();
   const parts = new Map<string, ReturnType<typeof storage>>();
+
   const open = (name: string) => {
     let part = parts.get(name);
 
@@ -87,6 +91,7 @@ const records = () => {
 
     return part.sql;
   };
+
   return {
     sink,
     parts,
@@ -124,6 +129,7 @@ describe("p97, process calls", () => {
     examples([["one"]], (ref: string) => {
       const store = storage();
       const trace = capture();
+
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         const placed = yield* processes.start(first(), from());
@@ -174,6 +180,7 @@ describe("p97, process calls", () => {
     examples([[[A, B]]], ([A, B]: readonly [string, string]) => {
       const store = storage();
       const world = records();
+
       return Effect.gen(function* () {
         yield* Effect.gen(function* () {
           const processes = yield* ProcessManager;
@@ -210,6 +217,7 @@ describe("p97, process calls", () => {
       (now: number, lag: number, monitorSent: string, exitSent: string) => {
         const store = storage();
         const world = records();
+
         return Effect.gen(function* () {
           yield* TestClock.setTime(now);
           yield* Effect.gen(function* () {
@@ -229,10 +237,12 @@ describe("p97, process calls", () => {
           yield* TestClock.setTime(now + lag);
           expect(yield* receive(W).pipe(Effect.provide(manager(store, processCaller(W))))).toHaveLength(1);
           yield* SpanSink.use((sink) => sink.flush);
+
           const measurements = world.sink
             .db()
             .prepare("SELECT * FROM measurements WHERE piece='process.receive'")
             .all();
+
           expect(measurements).toHaveLength(1);
           expect(measurements[0]?.["lag"]).toBe(lag);
         }).pipe(Effect.provide(world.layer), Effect.provide(TestClock.layer()));
@@ -256,6 +266,7 @@ describe("p99, process content stays out of span tags and measurements", () => {
     examples([["p33-private-message-marker", "p33-redacted-secret-marker"]], (MESSAGE: string, SECRET: string) => {
       const store = storage();
       const world = records();
+
       return Effect.gen(function* () {
         yield* Effect.gen(function* () {
           const processes = yield* ProcessManager;
@@ -269,10 +280,12 @@ describe("p99, process content stays out of span tags and measurements", () => {
           store.fault.after = null;
         }).pipe(Effect.provide(manager(store)));
         yield* SpanSink.use((sink) => sink.flush);
+
         const rows = [
           ...(yield* recorded(A)),
           ...(yield* RecordManager.use((r) => Stream.runCollect(r.read(Chain.cases.spans.make({}))))),
         ];
+
         expect(rows.some((row) => row.name === "process.receive")).toBe(true);
         expect(rows.some((row) => row.name === "process.exit" && !row.ok)).toBe(true);
         leakFree(rows, [MESSAGE, SECRET, "SQLITE_FULL planted after an earlier write"]);

@@ -34,7 +34,9 @@ const Tag = Schema.TaggedUnion({
 });
 
 const SEED = 119120;
+
 const PID = "process_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const DAY = 86_400_000;
 
 // The exam's own statement of the view, pinned to the schema's type (0135).
@@ -50,10 +52,13 @@ type View = {
 expectTypeOf<View>().toEqualTypeOf<typeof checklistView.Type>();
 
 type Model = typeof checklistMachine.model.Type;
+
 type Msg = typeof checklistMachine.msg.Type;
 
 const decode = Schema.decodeUnknownSync(checklistWindow.data);
+
 const client = clientMachineFor({ decode: () => decode });
+
 type ClientModel = ReturnType<typeof client.init>[0];
 
 const POOL = ["milk", "bread", "eggs", "tea", "a".repeat(80)] as const;
@@ -72,6 +77,7 @@ type Choice = typeof choice extends fc.Arbitrary<infer C> ? C : never;
 const moves = (m: Model, now: number, c: Choice): ReadonlyArray<Msg> => {
   const names = m.items.map((i) => i.name);
   const held = names.length === 0 ? null : names[c.pick % names.length]!;
+
   const out: Array<Msg> = [
     { ...Tag.cases.add.make({}), name: c.name },
     { ...Tag.cases.timer.make({}), at: checklist.wake(m) ?? now, arrivedAt: now + c.later },
@@ -104,11 +110,13 @@ const walk = (list: ReadonlyArray<Choice>, each: (s: Step) => void) => {
   let rev = 0;
   let view: View = checklist.view.select(model);
   const [c0] = client.init(null, {});
+
   let shown: ClientModel = applyCell(client, c0, {
     ...Tag.cases.notice.make({}),
     pid: PID,
     note: { type: "whole", rev, view },
   })[0];
+
   expect(shown.views[PID]).toEqual({ rev, view });
 
   for (const c of list) {
@@ -122,6 +130,7 @@ const walk = (list: ReadonlyArray<Choice>, each: (s: Step) => void) => {
       now = msg._tag === "timer" ? msg.arrivedAt : now;
       view = checklist.view.select(model);
       rev += 1;
+
       const note = c.whole
         ? { type: "whole", rev, view }
         : { type: "patch", base: rev - 1, rev, patch: diff(before, view) };

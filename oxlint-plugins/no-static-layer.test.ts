@@ -14,10 +14,15 @@ import { noStaticLayer } from "./no-static-layer.ts";
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const root = join(import.meta.dirname, "..");
+
 const tester = new RuleTester({ cwd: root });
+
 const CODE = "fabrika(no-static-layer)";
+
 const RULE = "fabrika/no-static-layer";
 
 /** How the file reaches `Context.Service`: its import line, and the callee it writes. */
@@ -120,6 +125,7 @@ it("fires exactly on the static members of a class that extends Context.Service,
     fc.property(generated, ({ base, spelling, expression, members }) => {
       const extended = heritage(base, spelling, "Retries");
       const open = `class Retries${extended.text} {`;
+
       const head = [
         extended.line ?? SPELLINGS[spelling].line,
         'import { Schema } from "effect";',
@@ -130,14 +136,17 @@ it("fires exactly on the static members of a class that extends Context.Service,
       // An index after each name keeps two members of one name apart.
       const body = members.map(({ form, name }, i) => {
         const [text, fires] = FORMS[form] ?? FORMS[0]!;
+
         return { text: `  ${text(`${name}${i === 0 ? "" : i}`)}`, fires: fires && base === "service" };
       });
+
       const code = [...head, ...body.map((b) => b.text), expression ? "};" : "}", ""].join("\n");
       const lines = body.flatMap((b, i) => (b.fires ? [head.length + i + 1] : []));
       const filename = "next/packages/libfabrika/src/tasks/Retries.ts";
 
       if (lines.length === 0) {
         tester.run("no-static-layer", noStaticLayer, { valid: [{ code, filename }], invalid: [] });
+
         return;
       }
 
@@ -193,9 +202,11 @@ const toValue = (node: Tree): unknown => {
 const configured = (): readonly string[] => {
   const text = readFileSync(join(root, ".oxlintrc.json"), "utf8");
   const tree: Tree = parseSync("oxlintrc.ts", `export default ${text}`).program;
+
   const config = toValue(tree.body[0].declaration) as {
     readonly overrides: ReadonlyArray<{ readonly files: readonly string[]; readonly rules: Record<string, unknown> }>;
   };
+
   return config.overrides.filter((o) => o.rules[RULE] === "error").flatMap((o) => o.files);
 };
 
@@ -223,6 +234,7 @@ it("scenario: the real config holds a static layer in each listed folder, and le
   // folder, saved or added since, and per left-out kind.
   const folders = [...new Set([...LISTED, ...configured()])].filter((f) => f !== "next/**");
   const on = folders.map((folder) => folder.replace(/\*\*$/, "planted/Planted.ts"));
+
   const off = [
     "next/packages/libfabrika/src/tasks/Planted.test.ts",
     "next/packages/libfabrika/src/tasks/Planted.test.tsx",
@@ -231,6 +243,7 @@ it("scenario: the real config holds a static layer in each listed folder, and le
     "next/apps/fabrika/src/Planted.test.ts",
     "packages/fabrika/src/Planted.ts",
   ];
+
   const linted = await plant(Object.fromEntries([...on, ...off].map((path) => [path, SERVICE])));
 
   expect(on.map((path) => [path, linted(CODE, path)])).toEqual(on.map((path) => [path, [4]]));

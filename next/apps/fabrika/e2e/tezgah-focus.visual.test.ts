@@ -46,6 +46,7 @@ const Tag = Schema.TaggedUnion({
 
 /** The law's own limit in ms: a brain, two tabs and about forty waits of at most 30 s each. */
 const LIMIT = 420_000;
+
 /** How long the law waits to see that something did not happen, in ms: a move reaches tezgah and
  *  comes back in well under a second on the real `dev.ts`. */
 const QUIET = 2_000;
@@ -78,6 +79,7 @@ const loseLink = () => {
 };
 
 type View = Parameters<typeof differences>[0];
+
 type Page = Parameters<typeof drawn>[0];
 
 /** Whether tile `under` sits right below tile `above` in workspace 1 of `view`, the two alone in one
@@ -90,6 +92,7 @@ const splitBelow = (view: View, above: string, under: string): boolean => {
       node.parts[0]!.inner === above &&
       node.parts[1]!.inner === under) ||
       node.parts.some((p) => holds(p.inner)));
+
   return holds(view.workspaces[0]!.layout);
 };
 
@@ -128,6 +131,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
           /** DOM focus is inside the region of tile `id` of `view`. */
           const domIn = (on: Page, view: View, id: string, label: string) => {
             const t = view.tiles.find((x) => x.id === id)!;
+
             return domSettles(on, (f) => f.region === regionName(t), `L30: DOM follows desk focus to ${label}`);
           };
 
@@ -137,6 +141,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
               yield* keys(on, ...pressed);
               const view = yield* at(on, to, () => true, `${pressed.join(" ")} ${label}`);
               yield* domIn(on, view, to, `${pressed.join(" ")} ${label}`);
+
               return view;
             });
 
@@ -249,11 +254,13 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
           const t4 = focused(three);
           yield* move(page, ["Control+b", "j"], t3.id, "down from t4 to the lower tile");
           yield* keys(page, "Control+b", "%");
+
           const grid = yield* at(
             page,
             null,
             (n, v) => {
               const l = v.workspaces[0]!.layout;
+
               return (
                 n === 4 &&
                 typeof l !== "string" &&
@@ -263,6 +270,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
             },
             "a 2x2",
           );
+
           const t5 = focused(grid);
           // A key that finds no tile on its side moves nothing (the window's lean, L26's window half).
           yield* keys(page, "Control+b", "l");
@@ -274,13 +282,16 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
 
           // L28: on t1, DOM focus on the milk row; C-b o leaves it, and tezgah keeps the cursor on t1.
           yield* at(page, t1.id, () => true, "the tour ends back on t1");
+
           const milk = page.getByRole("region", { name: regionName(t1), exact: true }).getByRole("checkbox", {
             name: "milk",
             exact: true,
           });
+
           yield* promised(() => milk.focus());
           yield* domSettles(page, (f) => f.region === regionName(t1) && f.cursor === "item:milk", "on the milk row");
           yield* move(page, ["Control+b", "o"], t4.id, "away from t1");
+
           const kept = yield* settle(
             page,
             r,
@@ -289,6 +300,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
               view.tiles.find((t) => t.id === t1.id)?.cursor === "item:milk" ? [] : ["t1 keeps no cursor yet"],
             "L28: tezgah keeps the cursor t1 was left on",
           );
+
           expect(kept.tiles.find((t) => t.id === t1.id)?.cursor, "L28: t1's cursor in tezgah's view").toBe("item:milk");
           yield* keys(page, "Control+b", ";");
           yield* at(page, t1.id, () => true, "C-b ; back to t1");
@@ -382,11 +394,13 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
               .first()
               .click(),
           );
+
           const onTop = yield* domSettles(
             page,
             (f) => f.region === regionName(t1),
             "L28: a click on t1's title bar from its add box stays in t1",
           );
+
           expect(
             onTop.cursor === null || onTop.cursor === onTop.first,
             `L28: a click on t1's title bar from its add box lands at t1's top, not ${onTop.cursor}`,
@@ -418,11 +432,13 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
           yield* promised(() => list.field.focus());
           yield* at(page, t1.id, () => true, "L30: DOM focus into t1 focuses it");
           yield* keys(page, "Tab");
+
           const entered = yield* domSettles(
             page,
             (f) => f.region !== null && f.region !== regionName(t1),
             "Tab leaves t1 for the next tile",
           );
+
           const into = grid.tiles.find((t) => regionName(t) === entered.region)!;
           yield* at(page, into.id, () => true, `L30: Tab into ${entered.region} focuses it`);
 
@@ -467,6 +483,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
               const before = yield* tezgahView(r, pid);
               yield* keys(page, ...pressed);
               const under = (view: View) => shown(view).find((t) => !shown(before).some((b) => b.id === t.id));
+
               const view = yield* at(
                 page,
                 null,
@@ -477,6 +494,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
                   splitBelow(v, above, under(v)!.id),
                 `${pressed.join(" ")} with no pause splits the tile the move landed on`,
               );
+
               const bar = yield* statusBar(page);
               expect(bar.text, `1043: the prefix is disarmed after ${pressed.join(" ")}`).not.toContain("Esc cancel");
               expect((yield* drawn(page)).polite, `1043: the polite region no longer says prefix`).not.toMatch(
@@ -492,6 +510,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
 
               return under(view)!;
             });
+
           yield* fastSplit(["Control+b", "h", "Control+b", '"'], t3.id, 5);
           yield* fastSplit(["Control+b", "l", "Control+b", '"'], t5.id, 6);
         }),

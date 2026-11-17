@@ -19,6 +19,7 @@ const Tag = Schema.TaggedUnion({
 });
 
 RunnerTest.suite(ChaosTest.open, checklist);
+
 TargetsTest.suite(ChaosTest.open, checklist);
 
 it.prop(

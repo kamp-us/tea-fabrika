@@ -20,7 +20,12 @@
 // Plants, each run once and undone (recorded in the tests step's field row): K1, make a new key when
 // the file does not decode. K2, compute the fingerprint over the key line instead of the raw bytes.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Layer, Option, Path } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as fc from "fast-check";
 import { property } from "../../Testing.test-support.ts";
 import { ClientKey, ClientKeyError, type Identity } from "../../transport/ClientKey.ts";
@@ -31,7 +36,9 @@ import * as KeyFile from "./KeyFile.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
 
 const FOLDER = "/fabrika-home/hands";
+
 const FILE = `${FOLDER}/key.json`;
+
 const ORIGIN = "http://127.0.0.1:18787";
 
 /** What the model knows of the file: none, or one that is damaged, too open, or both. */
@@ -76,6 +83,7 @@ const openStep = (rejected: "none" | "stored" | "other"): Step => ({
   toString: () => `open(${rejected})`,
   step: (m, r) => {
     const label = `open(${rejected})`;
+
     return Effect.gen(function* () {
       const before = MemoryFiles.read(r.disk, FILE);
       const fp = rejected === "stored" ? m.fingerprint : rejected === "other" ? "SHA256:not-this-key" : null;
@@ -88,6 +96,7 @@ const openStep = (rejected: "none" | "stored" | "other"): Step => ({
         expect((MemoryFiles.read(r.disk, FILE)?.mode ?? 0) & 0o777, "K1: a new key file has mode 0600").toBe(0o600);
         m.file = { damaged: false, wide: false };
         m.fingerprint = id?.fingerprint ?? null;
+
         return "created";
       }
 
@@ -105,6 +114,7 @@ const openStep = (rejected: "none" | "stored" | "other"): Step => ({
           "K1: a file that fails to read is left as it was, never replaced",
         ).toBe(true);
         expect(after?.mode, "K1: its mode is left as it was").toBe(before?.mode);
+
         return m.file.damaged ? "damaged" : "wide";
       }
 
@@ -118,6 +128,7 @@ const openStep = (rejected: "none" | "stored" | "other"): Step => ({
           0o600,
         );
         m.fingerprint = id?.fingerprint ?? null;
+
         return "replaced";
       }
 
@@ -126,6 +137,7 @@ const openStep = (rejected: "none" | "stored" | "other"): Step => ({
       expect(same(MemoryFiles.read(r.disk, FILE)?.bytes, before?.bytes), "K1: reusing never writes the file").toBe(
         true,
       );
+
       return `reused:${rejected}`;
     });
   },
@@ -155,6 +167,7 @@ const damageStep = (form: "bytes" | "truncated" | "empty-object" | "other-key-ty
               : // Leading 0xFF: never JSON, whatever follows.
                 new Uint8Array([0xff, ...bytes]);
       m.file.damaged = true;
+
       return "damage";
     }),
 });
@@ -174,6 +187,7 @@ const widenStep = (extra: number): Step => ({
 
       entry.mode = 0o600 | extra;
       m.file.wide = true;
+
       return "widen";
     }),
 });
@@ -188,6 +202,7 @@ const removeStep = (): Step => ({
       r.disk.entries.delete(FILE);
       m.file = null;
       m.fingerprint = null;
+
       return "remove";
     }),
 });
@@ -274,12 +289,14 @@ describe("P39 slice 4b: the hands key file", () => {
             }
 
             const key = exit.value;
+
             const signed = yield* writeSshsig({
               text: helloText({ url: ORIGIN, tab, nonce }),
               space: "fabrika-client",
               line: key.line,
               sign: key.sign,
             });
+
             const hello = {
               versions: [1],
               has: ["git"],
@@ -293,6 +310,7 @@ describe("P39 slice 4b: the hands key file", () => {
               sentAt: "2026-11-15T10:00:00.000Z",
               signed,
             };
+
             const checked = yield* checkHello({
               hello,
               url: ORIGIN,
@@ -307,6 +325,7 @@ describe("P39 slice 4b: the hands key file", () => {
                   Admission.cases.admitted.make({ identity: { key: fingerprint, person: "person_k2", as: "hands" } }),
                 ),
             });
+
             expect(checked._tag, `K2: the door admits the key file's hello: ${JSON.stringify(checked)}`).toBe("online");
           }),
         { numRuns: 60 },

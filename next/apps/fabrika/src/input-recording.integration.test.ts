@@ -22,11 +22,17 @@ const Tag = Schema.TaggedUnion({
 });
 
 const PROGRAM = "p13/recording";
+
 const NAME = "recording:1";
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const SENT = "2026-11-11T00:00:00Z";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const Stored = Schema.Struct({ id: Schema.String, body: Schema.Json });
+
 const Started = Schema.Struct({ process: Schema.String });
 
 const Journal = Schema.Struct({
@@ -54,6 +60,7 @@ export const program={name:"p13/recording",machine:Machine.make({model:Model,msg
 const field = (bytes: Uint8Array) => {
   const n = Buffer.alloc(4);
   n.writeUInt32BE(bytes.length);
+
   return Buffer.concat([n, bytes]);
 };
 
@@ -82,15 +89,19 @@ const pendingReply = Effect.fnUntraced(function* (
   route: Effect.Effect<unknown, Error>,
 ) {
   const db = yield* recovery(home);
+
   const read = () =>
     Schema.decodeUnknownSync(Schema.fromJsonString(Journal))(
       db.prepare("SELECT value FROM process_recovery WHERE name=?").get(NAME)?.value,
     );
+
   const before = read();
+
   const trigger =
     move === "reply_write"
       ? "CREATE TRIGGER p13_cut BEFORE INSERT ON process_replies BEGIN SELECT RAISE(FAIL, 'reply cut'); END"
       : "CREATE TRIGGER p13_cut BEFORE UPDATE OF value ON process_recovery WHEN json_extract(OLD.value, '$.journal._tag')='writing_reply' AND json_extract(NEW.value, '$.journal._tag')='idle' BEGIN SELECT RAISE(FAIL, 'reply completion cut'); END";
+
   yield* Effect.acquireRelease(
     Effect.sync(() => db.exec(trigger)),
     () => Effect.sync(() => db.exec("DROP TRIGGER p13_cut")),
@@ -111,9 +122,11 @@ const pendingReply = Effect.fnUntraced(function* (
 
 const resumedReply = Effect.fnUntraced(function* (home: string) {
   const db = yield* recovery(home);
+
   const saved = Schema.decodeUnknownSync(Schema.fromJsonString(Journal))(
     db.prepare("SELECT value FROM process_recovery WHERE name=?").get(NAME)?.value,
   );
+
   expect(saved.journal._tag).toBe("idle");
   expect(saved.crashes).toBe(0);
 });
@@ -129,13 +142,16 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
   const held = yield* Effect.acquireRelease(heldPort(), (p) => p.release);
   const pair = generateKeyPairSync("ed25519");
   const raw = pair.publicKey.export({ format: "der", type: "spki" }).subarray(-32);
-  const line = Schema.decodeUnknownSync(KeyLine)(
+
+  const line = Schema.decodeSync(KeyLine)(
     `ssh-ed25519 ${Buffer.concat([field(Buffer.from("ssh-ed25519")), field(raw)]).toString("base64")}`,
   );
+
   yield* Effect.acquireRelease(
     Effect.sync(() => {
       const previous = { fabrika: process.env.FABRIKA_HOME, alchemy: process.env.ALCHEMY_HOME };
       process.env.FABRIKA_HOME = home;
+
       return previous;
     }),
     (previous) =>
@@ -153,6 +169,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
         }
       }),
   );
+
   const instance = yield* localInstance(
     built,
     RecordWireTest.startupFixture({
@@ -164,8 +181,10 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       port: held.port,
     }),
   );
+
   const project = instance.project("p13-recording");
   const fingerprint = `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`;
+
   const from = {
     by: fingerprint,
     for: PERSON,
@@ -175,6 +194,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     traceId: TRACE,
     build: built.build,
   };
+
   const started = yield* invoke(project, "start", [
     Start.cases.first.make({
       id: "recording-start",
@@ -183,17 +203,21 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     }),
     from,
   ]);
+
   const pid = Schema.decodeUnknownSync(Started)(started).process;
+
   const connect = Effect.fnUntraced(function* (n: number) {
     const client = yield* invoke(project, "connect", []);
     const nonce = Schema.decodeUnknownSync(Schema.String)(yield* invoke(project, "challenge", [client]));
     const tab = `recording-${n}`;
+
     const signed = yield* writeSshsig({
       text: `fabrika-hello\n${instance.url}\n${tab}\n${nonce}`,
       line,
       space: "fabrika-client",
       sign: (bytes) => Effect.sync(() => sign(null, bytes, pair.privateKey)),
     });
+
     const answer = yield* invoke(project, "initialize", [
       client,
       {
@@ -210,9 +234,12 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       },
       { url: instance.url, tab, name: fingerprint },
     ]);
+
     expect(answer).toMatchObject({ _tag: "online" });
+
     return client;
   });
+
   let client = yield* connect(0);
   let count = 0;
   let serial = 0;
@@ -230,6 +257,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       ...(accepted.length === 0 ? [] : ["lost_answer", "retry"]),
       ...(refused.length === 0 ? [] : ["refused_retry", "refused_lost_answer", "reply_write", "reply_complete"]),
     ];
+
     const move = choices[entropy % choices.length]!;
     reached.add(move);
 
@@ -258,6 +286,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     } else {
       const body = `BODY-${entropy}-${serial} "/雪\n`;
       bodies.push(body);
+
       const m = {
         ...Tag.cases.save.make({}),
         note: move === "audit_failed" ? "fail" : "record",
@@ -265,6 +294,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
         reason: "user-save",
         body,
       } as const;
+
       const letter = `wire-${++serial}`;
       const route = () => invoke(project, "route", [client, "process.send", { pid, letter, m, sentAt: SENT, seen: 0 }]);
       let result;

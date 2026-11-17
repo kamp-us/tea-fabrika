@@ -61,16 +61,22 @@ const Tag = Schema.TaggedUnion({
 });
 
 const SEED = 119120;
+
 const RUNS = 100;
+
 const NAME = "counter:1";
+
 const PROGRAM = "counter";
+
 const BUILD = "build-a";
 
-type Model = typeof Supervision.Type;
+type Model = Supervision;
+
 type Journal = Model["journal"];
 type Msg = { readonly _tag: string; readonly [key: string]: unknown };
 
 const pid = (n: number): string => `process_0000000000e00800${String(n).padStart(10, "0")}`;
+
 /** A process no fold creates. */
 const FOREIGN = pid(9_999_999_999);
 
@@ -81,7 +87,7 @@ const policy = {
   backoff: { minMs: 100, maxMs: 800, resetAfterMs: 5000 },
 };
 
-const ctx = (p: typeof Policy.Type = policy) => ({ policy: p, process: A, name: NAME, build: BUILD, at: 0 });
+const ctx = (p: Policy = policy) => ({ policy: p, process: A, name: NAME, build: BUILD, at: 0 });
 
 const step = (model: Model, msg: Msg): Model => applyCell(supervisor, model, msg as never)[0];
 
@@ -101,7 +107,7 @@ const canon = (value: unknown): string =>
 const decodes = (raw: unknown): boolean => Result.isSuccess(Schema.decodeUnknownResult(Supervision)(raw));
 
 /** Accepted policies: every brake reachable (the waits of one window fit inside it). */
-const policies: fc.Arbitrary<typeof Policy.Type> = fc
+const policies: fc.Arbitrary<Policy> = fc
   .record({
     intensity: fc.integer({ min: 1, max: 8 }),
     deliveries: fc.integer({ min: 1, max: 6 }),
@@ -133,7 +139,9 @@ const Cell = fc.record({
   gap: fc.integer({ min: 0, max: 3000 }),
   error: fcErrorClass.filter((e) => e.length <= 40),
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
+
 const tapes = fc.array(Cell, { minLength: 1, maxLength: 80 });
 
 const LETTERS = ["l1", "l2", "l3"] as const;
@@ -199,8 +207,9 @@ const receiptFor = (letter: string, process: string) => ({
 });
 
 /** The smallest time at or after `t` with room in the window, by the fold's own search. */
-const roomAt = (restarts: ReadonlyArray<number>, t: number, p: typeof Policy.Type): number => {
+const roomAt = (restarts: ReadonlyArray<number>, t: number, p: Policy): number => {
   const candidates = [t, ...restarts.map((r) => r + p.periodMs + 1)].filter((c) => c >= t).toSorted((a, b) => a - b);
+
   return candidates.find((c) => restarts.filter((r) => r >= c - p.periodMs).length + 1 <= p.intensity) ?? t;
 };
 
@@ -220,6 +229,7 @@ const moves = (w: World, cell: Cell, swaps = false): ReadonlyArray<Move> => {
 
   // A swap names the process the journal holds, or one it does not, with a build the fold makes.
   const j = w.model.journal;
+
   const own =
     j._tag === "idle"
       ? j.process
@@ -228,7 +238,9 @@ const moves = (w: World, cell: Cell, swaps = false): ReadonlyArray<Move> => {
         : j._tag === "writing_exit"
           ? j.process
           : w.process;
+
   const build = `build-swap-${cell.pick % 4}`;
+
   return [
     ...base,
     { name: "swapped", weight: 3, msg: { ...Tag.cases.swapped.make({}), process: own, build } },
@@ -251,6 +263,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
     case "idle": {
       const letter = LETTERS[cell.pick % LETTERS.length]!;
       const receipt = w.model.receipts.find((r) => r.letter === letter);
+
       const fresh: Array<Move> =
         receipt === undefined
           ? [
@@ -261,8 +274,10 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
               },
             ]
           : [];
+
       const request = `restart-${cell.pick % 3}`;
       const compactable = w.model.receipts.find((r) => r.tries === 0 && r.input !== null);
+
       return [
         ...fresh,
         ...(receipt !== undefined && receipt.result === null
@@ -338,8 +353,10 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         ...stale,
       ];
     }
+
     case "stepping": {
       const seq = j.attempt.seq;
+
       return [
         { name: "finished", msg: { ...Tag.cases.finished.make({}), seq } },
         {
@@ -368,6 +385,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         ...stale,
       ];
     }
+
     case "swapping":
       return [{ name: "swap_completed", msg: { ...Tag.cases.swap_completed.make({}), load: j.change.load } }, ...stale];
     case "checking":
@@ -406,6 +424,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
     case "writing_exit": {
       // The exit lands 0 to 50 ms after the throw, so a wait counted from the throw shows.
       const late = cell.gap % 51;
+
       return [
         {
           name: "exit_written",
@@ -424,6 +443,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         ...stale,
       ];
     }
+
     case "writing_down":
       return [
         { name: "down_written", msg: { ...Tag.cases.down_written.make({}), process: j.recovery.process } },
@@ -447,6 +467,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
     case "waiting_start": {
       const until = j.timing._tag === "scheduled" ? j.timing.until : w.at;
       const ready = w.at >= until;
+
       return [
         later,
         ready
@@ -474,6 +495,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         ...stale,
       ];
     }
+
     case "checkpointing":
       return [
         {
@@ -494,7 +516,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
 type Observer = (before: Model, move: Move, after: Model, w: World) => void;
 
 /** Folds one tape through the real machine, calling each observer after every step. */
-const walk = (p: typeof Policy.Type, tape: ReadonlyArray<Cell>, observe: Observer, swaps = false): World => {
+const walk = (p: Policy, tape: ReadonlyArray<Cell>, observe: Observer, swaps = false): World => {
   const w: World = {
     model: supervisor.init(null, ctx(p))[0],
     at: 0,
@@ -534,7 +556,7 @@ const walk = (p: typeof Policy.Type, tape: ReadonlyArray<Cell>, observe: Observe
 };
 
 /** Keeps the fold's own account. It reads only its own moves and which way the journal went. */
-const account = (before: Model, move: Move, after: Model, w: World, p: typeof Policy.Type): void => {
+const account = (before: Model, move: Move, after: Model, w: World, p: Policy): void => {
   if (move.stale) {
     return;
   }
@@ -544,6 +566,7 @@ const account = (before: Model, move: Move, after: Model, w: World, p: typeof Po
   switch (move.name) {
     case "limited":
       w.limit = msg.maxDeliveries === null ? null : Number(msg.maxDeliveries);
+
       return;
     case "threw":
     case "check_threw":
@@ -569,8 +592,10 @@ const account = (before: Model, move: Move, after: Model, w: World, p: typeof Po
 
       w.observations++;
       w.crashes++;
+
       return;
     }
+
     case "restart": {
       if (!w.requests.has(String(msg.id)) && after !== before) {
         w.requests.set(String(msg.id), String(msg.build));
@@ -578,16 +603,20 @@ const account = (before: Model, move: Move, after: Model, w: World, p: typeof Po
 
       return;
     }
+
     case "started":
     case "adopted": {
       w.pids++;
       w.process = pid(w.pids);
       w.live = true;
       w.restarts.push(w.at);
+
       return;
     }
+
     case "checkpointed":
       w.healthyAt = w.at;
+
       return;
     case "advance":
     case "healthy":
@@ -612,6 +641,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
       fc.integer({ min: 1, max: 2 }).map((intensity) => ({ ...policy, intensity })),
       fc.integer({ min: 1, max: 1500 }).map((periodMs) => ({ ...policy, periodMs })),
     );
+
     fc.assert(
       fc.property(invalid, (candidate) => {
         const bytes = JSON.stringify(candidate);
@@ -635,6 +665,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
     fc.assert(
       fc.property(policies, tapes, fc.nat(), (p, tape, pick) => {
         const reached: Array<Model> = [];
+
         const w = walk(p, tape, (_before, _move, after) => {
           expect(valid(after), `reached ${after.journal._tag}`).toBe(true);
           expect(decodes(roundTrip(after))).toBe(true);
@@ -736,6 +767,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
             move.name !== "finished"
           ) {
             const seq = before.journal.attempt.seq;
+
             const again = step(after, {
               ...Tag.cases.interrupted.make({}),
               process: before.journal.attempt.process,
@@ -745,6 +777,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
               from: from(),
               at: w.at,
             });
+
             const threw = step(after, {
               ...Tag.cases.threw.make({}),
               seq,
@@ -752,6 +785,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
               reason: reasonFor("fresh", "TypeError"),
               from: from(),
             });
+
             expect(again).toEqual(after);
             expect(threw).toEqual(after);
             const observation = after.observations.find((o) => o.seq === seq);
@@ -792,6 +826,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
 
             if (before.journal.origin._tag === "manual") {
               expect(after.journal).toMatchObject({ _tag: "waiting_start", timing: { _tag: "immediate" } });
+
               return;
             }
 
@@ -873,6 +908,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
   // Plant: an unreachable brake, or a down before the window is full.
   it("J8: every generated policy trips its brake at crash intensity + 1, and a letter goes dead at its limit", () => {
     const G = 50;
+
     const Cycle = fc.record({
       // Mostly a held letter, so high delivery limits are reached too.
       reuse: fc.integer({ min: 0, max: 7 }).map((n) => n > 0),
@@ -883,6 +919,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
       late: fc.integer({ min: 0, max: G }),
       error: fcErrorClass.filter((e) => e.length <= 40),
     });
+
     const cases = fc
       .record({
         deliveries: fc.integer({ min: 1, max: 32 }),
@@ -908,8 +945,10 @@ describe("P34c slice 2: one saved recovery journal", () => {
           periodMs: total + 3 * intensity * G + 1 + slack,
           backoff: { minMs, maxMs, resetAfterMs: 1_000_000_000 },
         });
+
         return fc.tuple(fc.constant(accepted), fc.array(Cycle, { minLength: intensity + 1, maxLength: intensity + 1 }));
       });
+
     const seen = new Set<string>();
 
     fc.assert(
@@ -920,10 +959,12 @@ describe("P34c slice 2: one saved recovery journal", () => {
         let crashes = 0;
         const restarts: Array<number> = [];
         const tries = new Map<string, number>();
+
         const send = (msg: Msg): Model => {
           const after = step(model, msg);
           expect(after, `${msg._tag} from ${model.journal._tag} moved the journal`).not.toEqual(model);
           model = after;
+
           return after;
         };
 
@@ -975,6 +1016,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
               recovery: { process, crashes, until },
             });
             seen.add(`brake:${p.intensity}`);
+
             return;
           }
 
@@ -1117,6 +1159,7 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
   const journal = raw.journal;
   const fields = Object.keys(journal).filter((key) => key !== "_tag");
   const dropped = fields[pick % Math.max(fields.length, 1)];
+
   const broken: Array<unknown> = [
     { ...raw, journal: { ...journal, _tag: "starting" } },
     { ...raw, journal: Object.fromEntries(Object.entries(journal).filter(([key]) => key !== dropped)) },
@@ -1212,10 +1255,12 @@ void j13;
 describe("P13 A11 saved admission work", () => {
   it("A11: checking, admission, reply and cleanup survive every JSON cut; stale completion cannot close work", () => {
     const reached = new Set<string>();
+
     const paths = tapes.map((tape) => {
       let model = supervisor.init(null, ctx())[0];
       let letters = 0;
       const messages: Array<typeof supervisor.msg.Type> = [];
+
       const send = (msg: Msg) => {
         const checked = Schema.decodeUnknownSync(Schema.toType(supervisor.msg))(msg);
         messages.push(checked);
@@ -1269,6 +1314,7 @@ describe("P13 A11 saved admission work", () => {
 
       return messages;
     });
+
     propertyTrace(
       supervisor,
       ctx(),
@@ -1341,6 +1387,7 @@ describe("P13 A11 saved admission work", () => {
                 reason: reasonFor("fresh", "TypeError"),
                 from: from(),
               };
+
               expect(step(after, stale)).toEqual(after);
             }
           }
@@ -1353,6 +1400,7 @@ describe("P13 A11 saved admission work", () => {
           equals: (a, b) => canon(a) === canon(b),
           seed: SEED,
         });
+
         return true;
       },
       { seed: SEED, numRuns: 100 },

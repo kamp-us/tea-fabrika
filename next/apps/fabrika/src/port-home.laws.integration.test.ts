@@ -37,14 +37,13 @@
 import { createHash, createPrivateKey, generateKeyPairSync, sign } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { resolve } from "node:path";
-// edge: Effect SQL has no read-only open of another process's SQLite file, which the T833 law reads
-import { DatabaseSync } from "node:sqlite";
 // edge: workerd writes a Durable Object's key-value rows with V8's serializer, and only node:v8 reads it
 import { deserialize } from "node:v8";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { Activity } from "@kampus/libfabrika/processes/Process";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Clock, Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
@@ -61,8 +60,11 @@ const Tag = Schema.TaggedUnion({
 });
 
 const ROOT = resolve(import.meta.dirname, "../../../..");
+
 const FIXTURE = resolve(ROOT, "fixtures/next/port-home");
+
 const NAME = "port-home";
+
 // The two programs the saved home's build started by itself, so the saved home holds their facts.
 const STREAMS = ["processes/counter:1", "processes/checklist:1"];
 
@@ -74,8 +76,11 @@ const Founding = Schema.Struct({ person: Schema.String, founder: Schema.String, 
 const booted = (founding: typeof Founding.Type) => [tezgahName(founding.person)];
 
 const Row = Schema.Struct({ name: Schema.String, process: Schema.String });
+
 const Entries = Schema.Array(Schema.Unknown);
+
 const Seen = Schema.Struct({ table: Schema.Array(Row), streams: Schema.Record(Schema.String, Entries) });
+
 /** What a Process object answers when a client opens it: its position and its program's view. */
 const Opened = Schema.Struct({ rev: Schema.Int, view: Schema.Unknown });
 
@@ -97,6 +102,7 @@ const field = (value: Buffer | string) => {
   const body = Buffer.from(value);
   const size = Buffer.alloc(4);
   size.writeUInt32BE(body.length);
+
   return Buffer.concat([size, body]);
 };
 
@@ -104,6 +110,7 @@ const field = (value: Buffer | string) => {
 const identity = (key: typeof TestKey.Type) => {
   const bytes = Buffer.from(key.jwk.x, "base64url");
   const privateKey = createPrivateKey({ key: { ...key.jwk }, format: "jwk" });
+
   return {
     raw: key.jwk.x,
     line: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(bytes)]).toString("base64")}`,
@@ -116,9 +123,11 @@ const identity = (key: typeof TestKey.Type) => {
         field("sha512"),
         field(createHash("sha512").update(text).digest()),
       ]);
+
       const version = Buffer.alloc(4);
       version.writeUInt32BE(1);
       const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
       const packet = Buffer.concat([
         Buffer.from("SSHSIG"),
         version,
@@ -128,6 +137,7 @@ const identity = (key: typeof TestKey.Type) => {
         field("sha512"),
         field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, privateKey))])),
       ]);
+
       return `-----BEGIN SSH SIGNATURE-----\n${packet
         .toString("base64")
         .match(/.{1,70}/g)
@@ -137,7 +147,7 @@ const identity = (key: typeof TestKey.Type) => {
 };
 
 const Frame = Schema.Struct({
-  id: Schema.optionalKey(Schema.Number),
+  id: Schema.optionalKey(Schema.Finite),
   method: Schema.optionalKey(Schema.String),
   params: Schema.optionalKey(Schema.Unknown),
   result: Schema.optionalKey(Schema.Unknown),
@@ -159,18 +169,21 @@ const press = Effect.fnUntraced(function* (
   const url: string = instance.url;
   const tab = `port-home-${letter}`;
   const frames: Array<typeof Frame.Type> = [];
+
   const socket = yield* Effect.acquireRelease(
     Effect.sync(() => {
       const socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(id.fingerprint)}/${tab}`);
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
-          frames.push(Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(String(event.data)));
+          frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data)));
         }
       });
+
       return socket;
     }),
     (held) => Effect.sync(() => held.close()),
   );
+
   const next = Effect.fnUntraced(function* (match: (frame: typeof Frame.Type) => boolean) {
     for (let n = 0; n < 300; n++) {
       const at = frames.findIndex(match);
@@ -188,14 +201,19 @@ const press = Effect.fnUntraced(function* (
 
     return yield* Effect.die("the signed client received no matching frame within 30 seconds");
   });
+
   let serial = 0;
+
   const ask = Effect.fnUntraced(function* (method: string, params: unknown) {
     const n = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id: n, method, params }));
+
     return yield* next((frame) => frame.id === n);
   });
+
   const challenge = yield* next((frame) => frame.method === "challenge");
   const { nonce } = yield* Schema.decodeUnknownEffect(Schema.Struct({ nonce: Schema.String }))(challenge.params);
+
   const hello = yield* ask("initialize", {
     versions: [1],
     has: ["seal"],
@@ -208,9 +226,11 @@ const press = Effect.fnUntraced(function* (
     sentAt: SENT,
     signed: id.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
   });
+
   expect(hello.error, "the test key is admitted").toBeUndefined();
   const sent = yield* ask("process.send", { pid, letter, m, sentAt: SENT, seen: 0 });
   expect(sent, "the input is accepted").toMatchObject({ result: { _tag: "accepted" } });
+
   return yield* ask("view.open", { pid });
 }, Effect.scoped);
 
@@ -219,7 +239,7 @@ const inc = (instance: any, key: typeof TestKey.Type, pid: string, letter: strin
   press(instance, key, pid, letter, Tag.cases.inc.make({})).pipe(
     Effect.flatMap(
       Schema.decodeUnknownEffect(
-        Schema.Struct({ result: Schema.Struct({ view: Schema.Struct({ count: Schema.Number }) }) }),
+        Schema.Struct({ result: Schema.Struct({ view: Schema.Struct({ count: Schema.Finite }) }) }),
       ),
     ),
     Effect.map((answer) => answer.result.view.count),
@@ -296,6 +316,7 @@ const open = Effect.fnUntraced(function* <A, E, R>(
     }),
   );
   const instance = yield* localInstance(built, startupFixture({ home, name: NAME, ...founding, port: at.port }));
+
   return yield* use(instance, dists, built);
 }, Effect.scoped);
 
@@ -316,7 +337,7 @@ const observe = Effect.fnUntraced(function* (instance: any) {
   }
 
   // Through JSON and back, so a live answer compares as the saved one reads from its file.
-  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Seen))(
+  return yield* Schema.decodeEffect(Schema.fromJsonString(Seen))(
     JSON.stringify({
       table: rows.map((row) => ({ name: row.name, process: row.process })).sort((a, b) => a.name.localeCompare(b.name)),
       streams,
@@ -332,7 +353,7 @@ const reopened = Effect.gen(function* () {
     yield* fs.exists(path.join(FIXTURE, "saved.json")),
     "no saved home in fixtures/next/port-home: save one with T502_PORT_HOME=write, on the commit before the slice's product code",
   ).toBe(true);
-  const saved = yield* Schema.decodeUnknownEffect(Saved)(yield* fs.readFileString(path.join(FIXTURE, "saved.json")));
+  const saved = yield* Schema.decodeEffect(Saved)(yield* fs.readFileString(path.join(FIXTURE, "saved.json")));
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t502-h-" });
   yield* fs.copy(path.join(FIXTURE, "home"), home, { overwrite: true });
   const seen = yield* open(home, saved.founding, observe);
@@ -382,7 +403,7 @@ const relativeMain = Effect.fnUntraced(function* (home: string, dists: ReadonlyA
     }
 
     const text = yield* fs.readFileString(full);
-    const resource = yield* Schema.decodeUnknownEffect(Resource)(text);
+    const resource = yield* Schema.decodeEffect(Resource)(text);
     const props = resource["props"];
     const main = Predicate.isObject(props) && "main" in props ? props.main : undefined;
 
@@ -414,6 +435,7 @@ const relativeMain = Effect.fnUntraced(function* (home: string, dists: ReadonlyA
  *  path (on macOS `/var` is `/private/var`), and the repo root. */
 const machineRoots = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
+
   return [...new Set([homedir(), tmpdir(), yield* fs.realPath(tmpdir()), ROOT])];
 });
 
@@ -425,25 +447,31 @@ const written = Effect.gen(function* () {
   // A test key made fresh for this fixture, saved whole so a law can sign in with it. It founds
   // only this saved home and is never read from or written to anyone's machine.
   const jwk = generateKeyPairSync("ed25519").privateKey.export({ format: "jwk" });
+
   const key = yield* Schema.decodeUnknownEffect(TestKey)({
     note: "test key: made fresh for this fixture by its writer in port-home.laws.test.ts; it guards nothing",
     jwk: { kty: jwk.kty, crv: jwk.crv, x: jwk.x, d: jwk.d },
   });
+
   const founding: typeof Founding.Type = {
     person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
     founder: identity(key).line,
     window: key.jwk.x,
   };
+
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t502-w-" });
+
   const { seen, dists } = yield* open(home, founding, (instance, dists) =>
     Effect.gen(function* () {
       // One input, so the saved home holds counter:1's checkpoint at its program's state version.
       const rows = yield* call("info", Schema.Array(Row), () => instance.project(NAME).info());
       const pid = rows.find((row) => row.name === "counter:1")!.process;
       expect(yield* inc(instance, key, pid, "port-home-1"), "counter:1 stepped its one input").toBe(1);
+
       return { seen: yield* observe(instance), dists };
     }),
   );
+
   // Everything is staged and guarded first: no path below removes or writes FIXTURE before the
   // guard has found nothing.
   const staging = yield* fs.makeTempDirectoryScoped({ prefix: "t502-s-" });
@@ -518,7 +546,8 @@ const SavedProcess = Schema.Struct({
 });
 
 const Descriptors = Schema.Array(Schema.Struct({ value: Schema.fromJsonString(SavedProcess) }));
-const Revs = Schema.Array(Schema.Struct({ rev: Schema.NullOr(Schema.Number) }));
+
+const Revs = Schema.Array(Schema.Struct({ rev: Schema.NullOr(Schema.Finite) }));
 
 const Checkpoints = Schema.Array(
   Schema.Struct({
@@ -535,7 +564,7 @@ const Markers = Schema.Array(Schema.Struct({ value: Schema.Uint8Array }));
 
 const Lines = Schema.Array(
   Schema.Struct({
-    rev: Schema.Number,
+    rev: Schema.Finite,
     stream: Schema.String,
     _tag: Schema.String,
     build: Schema.String,
@@ -567,19 +596,20 @@ const rowsUnder = Effect.fnUntraced(function* <S extends Schema.Top>(
       continue;
     }
 
-    const raw = yield* Effect.acquireUseRelease(
-      Effect.sync(() => new DatabaseSync(path.join(home, file), { readOnly: true })),
-      (db) =>
+    const raw = yield* TestDatabase.open(path.join(home, file), { readOnly: true }).pipe(
+      Effect.orDie,
+      Effect.flatMap((db) =>
         Effect.sync(() =>
           db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table) === undefined
             ? null
             : db.prepare(query).all(),
         ),
-      (db) => Effect.sync(() => db.close()),
+      ),
+      Effect.scoped,
     );
 
     if (raw !== null) {
-      found.push({ file, rows: yield* Schema.decodeUnknownEffect(rows)(raw) });
+      found.push({ file, rows: yield* Schema.decodeEffect(rows)(raw) });
     }
   }
 
@@ -595,6 +625,7 @@ const writtenBy = Effect.fnUntraced(function* (
   since: bigint,
 ) {
   const named: Array<{ record: string; build: string }> = [];
+
   const checkpoints = yield* rowsUnder(
     home,
     "process_state",
@@ -667,16 +698,19 @@ const writtenBy = Effect.fnUntraced(function* (
 const reopenedOnItsCode = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const saved = yield* Schema.decodeUnknownEffect(Saved)(yield* fs.readFileString(path.join(FIXTURE, "saved.json")));
+  const saved = yield* Schema.decodeEffect(Saved)(yield* fs.readFileString(path.join(FIXTURE, "saved.json")));
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t833-h-" });
   yield* fs.copy(path.join(FIXTURE, "home"), home, { overwrite: true });
+
   // Read from the copy, never the fixture: even a read-only open is the copy's to make.
   const descriptors = (yield* rowsUnder(home, "dev_descriptors", "SELECT value FROM dev_descriptors", Descriptors))
     .flatMap((found) => found.rows)
     .map((row) => row.value);
+
   const [last] = (yield* rowsUnder(home, "entries", "SELECT max(rev) AS rev FROM entries", Revs)).flatMap(
     (f) => f.rows,
   );
+
   const after = last?.rev ?? 0;
   expect(descriptors.length, "the saved home has its processes' descriptors").toBeGreaterThan(0);
   // Each saved process steps below, so the law names them all: a new one needs its own step here.
@@ -684,6 +718,7 @@ const reopenedOnItsCode = Effect.gen(function* () {
   const counter = descriptors.find((d) => d.name === "counter:1")!;
   const checklist = descriptors.find((d) => d.name === "checklist:1")!;
   const since = BigInt(yield* Clock.currentTimeMillis) * 1_000_000n;
+
   const code = yield* open(
     home,
     saved.founding,
@@ -695,10 +730,12 @@ const reopenedOnItsCode = Effect.gen(function* () {
           yield* add(instance, saved.key, checklist.id, "t833-two", "t833 item"),
           "checklist:1 stepped one real input",
         ).toContain("t833 item");
+
         return Object.fromEntries(Object.entries(built.programs).map(([name, program]) => [name, program.hash]));
       }),
     { "fabrika/counter": counterAt(1) },
   );
+
   const added = (yield* rowsUnder(
     home,
     "entries",
@@ -709,6 +746,7 @@ const reopenedOnItsCode = Effect.gen(function* () {
   for (const descriptor of descriptors) {
     const hash = code[descriptor.program];
     expect(hash, `this build has ${descriptor.program}`).toBeDefined();
+
     const moves = added.filter(
       (line) =>
         line.stream === "gateway/code" &&
@@ -716,6 +754,7 @@ const reopenedOnItsCode = Effect.gen(function* () {
         line.body["program"] === descriptor.program &&
         line.body["was"] === descriptor.build,
     );
+
     // Soft, so one run reports every record that names other code, not only the first.
     // One fact records the move from the saved build to this build's code; none when they match.
     expect
@@ -773,13 +812,15 @@ const reopenedOnItsCode = Effect.gen(function* () {
 const upgradedOnItsCode = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const saved = yield* Schema.decodeUnknownEffect(Saved)(yield* fs.readFileString(path.join(FIXTURE, "saved.json")));
+  const saved = yield* Schema.decodeEffect(Saved)(yield* fs.readFileString(path.join(FIXTURE, "saved.json")));
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t833-u-" });
   yield* fs.copy(path.join(FIXTURE, "home"), home, { overwrite: true });
+
   const counter = (yield* rowsUnder(home, "dev_descriptors", "SELECT value FROM dev_descriptors", Descriptors))
     .flatMap((found) => found.rows)
     .map((row) => row.value)
     .find((d) => d.name === "counter:1")!;
+
   const checkpoint = (yield* rowsUnder(
     home,
     "process_state",
@@ -788,11 +829,15 @@ const upgradedOnItsCode = Effect.gen(function* () {
   ))
     .flatMap((found) => found.rows)
     .find((row) => row.process === counter.id);
+
   expect(checkpoint, "the saved home holds counter:1's checkpoint").toBeDefined();
+
   const [last] = (yield* rowsUnder(home, "entries", "SELECT max(rev) AS rev FROM entries", Revs)).flatMap(
     (f) => f.rows,
   );
+
   const after = last?.rev ?? 0;
+
   const hash = yield* open(
     home,
     saved.founding,
@@ -802,16 +847,19 @@ const upgradedOnItsCode = Effect.gen(function* () {
         expect(yield* inc(instance, saved.key, counter.id, "t833-upgrade"), "the upgraded counter kept its count").toBe(
           2,
         );
+
         return built.programs["fabrika/counter"]!.hash;
       }),
     { "fabrika/counter": counterAt(2) },
   );
+
   const added = (yield* rowsUnder(
     home,
     "entries",
     `SELECT rev, stream, _tag, build, body FROM entries WHERE rev > ${after} ORDER BY rev`,
     Lines,
   )).flatMap((found) => found.rows);
+
   // The open moved counter:1 off its saved build first, as one code.loaded from "open" (0529).
   expect
     .soft(

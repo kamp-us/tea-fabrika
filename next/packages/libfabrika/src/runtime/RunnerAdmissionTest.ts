@@ -23,9 +23,13 @@ import { ProgramRunner, Sent } from "./Runner.ts";
 import { BRAIN, type Harness } from "./RunnerRepliesTest.ts";
 
 const NAME = "admission:1";
+
 const PROGRAM = "admission";
+
 const SENT_AT = "2026-11-11T00:00:00Z";
+
 const TRACE = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
+
 const Model = Schema.Struct({ versions: Schema.Record(Schema.String, Schema.Int) });
 
 const Save = Schema.TaggedStruct("save", {
@@ -49,6 +53,7 @@ const Step = Schema.TaggedUnion({
 const Later = Schema.Literals(["finished", "reply_written", "attempt_cleared"]);
 
 const COUNTS: Runs = { fast: 10, full: 40 };
+
 const parameters = { seed: 119120, numRuns: runsFor(COUNTS) };
 
 // The tape carries entropy only. Each choice is rebuilt from the state reached by its prefix.
@@ -110,6 +115,7 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
     }
 
     const decoded = decodeText(value);
+
     const result = [
       value,
       ...(Result.isSuccess(decoded) ? texts(decoded.success, cache) : []),
@@ -120,7 +126,9 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
         ),
       ),
     ];
+
     cache.set(value, result);
+
     return result;
   }
 
@@ -144,8 +152,10 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
   const savedInputs = new Map<string, Schema.Json>();
   const pending = new Map<string, Incoming>();
   const owner = Writer.cases.person.make({ key: BRAIN, for: "fixture-writer" });
+
   const connect = Effect.fnUntraced(function* () {
     const raw = yield* files("journal").pipe(Scope.provide(scope));
+
     const sql: Sql = {
       exec: (query, ...params) => {
         if (cut !== "" && WRITE.test(query) && query.includes(cut)) {
@@ -159,13 +169,16 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
       transaction: (step) => raw.transaction(step),
       size: () => raw.size(),
     };
+
     return recoveryStore(sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision });
   });
+
   let store = yield* connect();
   yield* store.save(model);
 
   for (const [n, cell] of tape.entries()) {
     const j = model.journal;
+
     const options =
       j._tag === "idle"
         ? ["begin", "crash"]
@@ -176,6 +189,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
             : j._tag === "writing_reply"
               ? ["reply_written", "crash"]
               : ["attempt_cleared", "crash"];
+
     const move = nth(options, cell.move);
     reached.add(`${move}:${j._tag}`);
 
@@ -208,6 +222,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
         seen: 0,
         span: TRACE,
       };
+
       pending.set(input.id, input);
       message = { ...Step.cases.begin.make({}), process, letter: input.id, build: "test", phase: "fresh", at: n };
     } else if (j._tag === "checking") {
@@ -311,6 +326,7 @@ const walk = Effect.fnUntraced(function* (
   const versions = new Map<string, number>();
   const ids = yield* Id.Generator.pipe(Effect.provide(Id.Generator.layer));
   const owner = Writer.cases.person.make({ key: BRAIN, for: "fixture-writer" });
+
   const meta = {
     by: BRAIN,
     for: owner.for,
@@ -320,6 +336,7 @@ const walk = Effect.fnUntraced(function* (
     traceId: TRACE.traceId,
     build: "test",
   };
+
   const control = { cut: "", hits: 0, checks: 0, updates: 0, mode: "", expected: null as Incoming | null };
   let serial = 0;
   let booted = false;
@@ -333,21 +350,28 @@ const walk = Effect.fnUntraced(function* (
         const text = JSON.stringify([query, params]);
         // Keep even rolled-back writes: inserting a body and later deleting it is a leak.
         writes.push(text);
+
         const admission =
           /process_recovery/.test(query) &&
           params.some((p) => typeof p === "string" && p.includes('"_tag":"stepping"'));
+
         const reply = /process_replies/.test(query);
+
         const cleanup =
           /process_activity/.test(query) && params.some((p) => typeof p === "string" && p.includes('"_tag":"idle"'));
+
         const activity =
           /process_activity/.test(query) &&
           params.some((p) => typeof p === "string" && p.includes('"_tag":"stepping"'));
+
         const refusal =
           /process_recovery/.test(query) &&
           params.some((p) => typeof p === "string" && p.includes('"_tag":"writing_reply"'));
+
         const abandonment =
           /process_recovery/.test(query) &&
           params.some((p) => typeof p === "string" && p.includes('"_tag":"clearing_attempt"'));
+
         const replyComplete =
           /process_recovery/.test(query) && params.some((p) => typeof p === "string" && p.includes('"_tag":"idle"'));
 
@@ -376,6 +400,7 @@ const walk = Effect.fnUntraced(function* (
     transaction: (body) => sql.transaction(body),
     size: () => sql.size(),
   });
+
   const program = {
     name: PROGRAM,
     machine: Machine.make({
@@ -408,6 +433,7 @@ const walk = Effect.fnUntraced(function* (
       }
 
       const now = s.versions[m.note] ?? 0;
+
       return m.base === now ? null : { reason: "changed_elsewhere", now };
     },
     inputs: { save: Input.cases.write.make({ schema: Save, description: "Save", personOnly: false }) },
@@ -415,6 +441,7 @@ const walk = Effect.fnUntraced(function* (
     writes: {},
     wake: () => null,
   };
+
   const connect = Effect.fnUntraced(function* () {
     const raw = yield* open("inbox").pipe(Scope.provide(scope));
     const manager = yield* open("manager").pipe(Scope.provide(scope));
@@ -433,10 +460,12 @@ const walk = Effect.fnUntraced(function* (
     }
 
     const status = yield* processes.status(NAME);
+
     const loader = Layer.effect(
       ProgramLoader,
       Effect.gen(function* () {
         const loaded = yield* ProgramLoader.use((l) => l.load(PROGRAM));
+
         return {
           load: () =>
             Effect.succeed({
@@ -492,6 +521,7 @@ const walk = Effect.fnUntraced(function* (
         };
       }),
     ).pipe(Layer.provide(ProgramLoader.layer({ [PROGRAM]: program }, {})));
+
     const dependencies = Layer.mergeAll(
       loader,
       ProcessStore.layer(sql, { process: status.state.process }),
@@ -521,16 +551,19 @@ const walk = Effect.fnUntraced(function* (
 
           control.cut = "";
           control.hits++;
+
           return Effect.fail(new SinkError({ reason: "storage", held: 0 }));
         }),
       }),
     ).pipe(Layer.provideMerge(Layer.succeedContext(services)));
+
     const context = yield* Layer.build(
       ProgramRunner.layer(
         { id: status.state.process, name: NAME, program: PROGRAM, build: "test", owner },
         { recovery: { sql, name: NAME, capacity: 1024 ** 3 }, chunk: ANY_CHUNK },
       ).pipe(Layer.provide(dependencies)),
     ).pipe(Scope.provide(scope));
+
     const runner = Context.get(context, ProgramRunner);
 
     for (let round = 0; round < 12; round++) {
@@ -552,15 +585,19 @@ const walk = Effect.fnUntraced(function* (
 
     return yield* Effect.die(new Error("recovery did not reach a live successor"));
   });
+
   let live = yield* connect();
+
   const reopen = Effect.fnUntraced(function* () {
     yield* Scope.close(scope, Exit.void);
     scope = yield* acquire;
     live = yield* connect();
   });
+
   const input = Effect.fnUntraced(function* (cell: Cell, refusing: boolean) {
     const note = `n${cell.pick % 3}`;
     const now = versions.get(note) ?? 0;
+
     return {
       id: `letter-${++serial}`,
       envelope: {
@@ -578,11 +615,13 @@ const walk = Effect.fnUntraced(function* (
       span: TRACE,
     } satisfies Incoming;
   });
+
   const noteError = (exit: Exit.Exit<unknown, unknown>) => {
     if (Exit.isFailure(exit)) {
       errors.push(JSON.stringify(Cause.squash(exit.cause)), Cause.pretty(exit.cause));
     }
   };
+
   const check = Effect.fnUntraced(function* () {
     const saved = yield* live.journal.load;
     expect((yield* live.runner.open("verify")).view, "only accepted inputs change the model").toEqual({
@@ -594,9 +633,11 @@ const walk = Effect.fnUntraced(function* (
     }
 
     expect(saved?.receipts.filter((r) => r.tries > 0).every((r) => r.errors.length === r.tries)).toBe(true);
+
     const records = live.raw
       .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .flatMap(({ name }) => live.raw.exec(`SELECT * FROM "${name}"`));
+
     const outputs = [...writes, ...records.map((row) => JSON.stringify(row)), ...errors, ...monitor.text()].flatMap(
       (output) => texts(output, decoded),
     );
@@ -614,6 +655,7 @@ const walk = Effect.fnUntraced(function* (
     const unansweredFailures = failures.filter(
       (failed) => !answers.some((answered) => answered.input.id === failed.id),
     );
+
     const available = enabled.filter((move) =>
       move === "refuse_failed"
         ? unansweredFailures.length > 0
@@ -621,6 +663,7 @@ const walk = Effect.fnUntraced(function* (
           ? answers.length > 0
           : true,
     );
+
     const move = nth(available, cell.move);
     reached.add(move);
 
@@ -642,10 +685,12 @@ const walk = Effect.fnUntraced(function* (
     if (move === "legacy_refuse" || move === "invalid") {
       const original = yield* input(cell, true);
       const message = Schema.decodeUnknownSync(Save)(original.envelope.input);
+
       const delivery =
         move === "legacy_refuse"
           ? { ...original, envelope: { ...original.envelope, id: `in-${yield* ids.next(Id.Process)}-${serial}` } }
           : { ...original, envelope: { ...original.envelope, input: { ...message, base: "invalid" } } };
+
       refusedBodies.push(message.body);
       const answer = yield* live.runner.msg(delivery);
       expect(answer).toEqual(
@@ -659,8 +704,10 @@ const walk = Effect.fnUntraced(function* (
       expect((yield* live.journal.load)?.crashes).toBe(before?.crashes ?? 0);
       expect(control.updates).toBe(beforeUpdates);
       expect(control.checks).toBe(beforeChecks + (move === "invalid" ? 0 : 1));
+
       const hasReplies =
         live.raw.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='process_replies'").length > 0;
+
       expect(
         hasReplies ? live.raw.exec("SELECT id FROM process_replies WHERE name=? AND id=?", NAME, original.id) : [],
       ).toEqual([]);
@@ -696,6 +743,7 @@ const walk = Effect.fnUntraced(function* (
     if (move === "retry" || move === "reuse") {
       const prior = nth(answers, cell.pick);
       const component = Math.floor(cell.pick / answers.length) % 4;
+
       const changed =
         component === 0
           ? { ...prior.input, seen: prior.input.seen + 1 }
@@ -719,6 +767,7 @@ const walk = Effect.fnUntraced(function* (
                     by: Writer.cases.person.make({ key: owner.key, for: "different-fixture-writer" }),
                   },
                 };
+
       const retried = move === "retry" ? prior.input : changed;
       // Accepted placement permits new clocks on a resend; its body stays bound.
       const sameAnswer = move === "retry" || (prior.first._tag === "accepted" && component < 2);
@@ -732,6 +781,7 @@ const walk = Effect.fnUntraced(function* (
 
     const refusing =
       move === "refuse" || move === "refusal_save" || move === "reply_write" || move === "reply_complete";
+
     const fresh = yield* input(cell, refusing);
     control.expected = refusing ? null : fresh;
     control.mode = move;
@@ -944,6 +994,7 @@ export const suite = (harness: Harness, register: Register) =>
         Tape,
         (tape) => {
           const monitor = capture();
+
           return walk(harness, tape, moves, reached, monitor).pipe(Effect.withTracer(monitor.tracer));
         },
         { ...parameters, numRuns: runsFor(runs) },
@@ -951,6 +1002,7 @@ export const suite = (harness: Harness, register: Register) =>
         required,
       );
     };
+
     law(
       "A2, A4, A10, A12 [secrets]: refusal writes no draft, spends no crash budget and keeps the first bound answer",
       ["admit", "refuse", "legacy_refuse", "invalid", "retry", "reuse", "reopen", "restart"],

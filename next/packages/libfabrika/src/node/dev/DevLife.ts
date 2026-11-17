@@ -1,11 +1,9 @@
 /**
  * The local runtime's life as one tea machine. The driver in `dev.ts` sends it what the runtime
  * reports and reads the state back; nothing here does input or output.
- *
- * @stability unstable
  */
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 
 // Zero is how the local runtime says it has no control socket, so a known port is never zero.
 const Port = Schema.Int.check(Schema.makeFilter((port: number) => port !== 0));
@@ -14,6 +12,7 @@ const Listener = Schema.TaggedUnion({
   absent: {},
   known: { port: Port },
 });
+
 type Listener = typeof Listener.Type;
 
 // An exit leaves a replacement waiting for its listener; the token names the driver's handle.
@@ -21,6 +20,7 @@ const Replacement = Schema.TaggedUnion({
   none: {},
   pending: { id: Schema.String },
 });
+
 type Replacement = typeof Replacement.Type;
 
 const Session = Schema.Struct({
@@ -41,7 +41,6 @@ const Signal = Schema.Literals(["SIGTERM", "SIGKILL"]);
  * The state holds only this, and a start that reports anything else is refused, so no signal can
  * reach a group.
  *
- * @stability unstable
  * @category schemas
  */
 export const Pid = Schema.Int.check(Schema.isGreaterThan(0));
@@ -61,7 +60,6 @@ const isPid = Schema.is(Pid);
  * listener is heard again; in `replacing` it can only be pending. `replacing` also holds the bytes
  * the memory sampler saw, when it saw them, and the last signal sent.
  *
- * @stability unstable
  * @category schemas
  */
 export const DevState = Schema.TaggedUnion({
@@ -75,7 +73,7 @@ export const DevState = Schema.TaggedUnion({
     listener: Listener,
     replacement: Replacement.cases.pending,
     bytes: Schema.Int,
-    at: Schema.Number,
+    at: Schema.Finite,
     signal: Signal,
   },
   exited: { session: Session, listener: Listener, replacement: Replacement },
@@ -83,13 +81,14 @@ export const DevState = Schema.TaggedUnion({
     session: Session,
     listener: Listener,
     replacement: Replacement,
-    until: Schema.Number,
+    until: Schema.Finite,
     reason: Schema.String,
   },
   braked: { start: Schema.NullOr(Schema.String), listener: Listener, reason: Schema.String },
   stopping: { start: Schema.NullOr(Schema.String), listener: Listener, replacement: Replacement },
   stopped: { listener: Listener },
 });
+
 type DevState = typeof DevState.Type;
 
 /**
@@ -104,11 +103,11 @@ export const DevMsg = Schema.TaggedUnion({
     start: Schema.String,
     pid: Pid,
     build: Schema.String,
-    at: Schema.Number,
+    at: Schema.Finite,
   },
   exited: { replacement: Schema.String },
   waiting: {
-    until: Schema.Number,
+    until: Schema.Finite,
     reason: Schema.String,
   },
   braked: { reason: Schema.String },
@@ -119,7 +118,7 @@ export const DevMsg = Schema.TaggedUnion({
     pid: Pid,
     replacement: Schema.String,
     bytes: Schema.Int,
-    at: Schema.Number,
+    at: Schema.Finite,
   },
   killed: { pid: Pid },
 });
@@ -139,7 +138,6 @@ const heard = (port: number | null): Listener => {
 /**
  * Returns the control socket's port, or null when none is known. The port is kept after an exit.
  *
- * @stability unstable
  * @category getters
  */
 export const address = (s: DevState): number | null => {
@@ -157,7 +155,6 @@ export const address = (s: DevState): number | null => {
 /**
  * Returns the pid of the live process the memory sampler may read, or null when none runs.
  *
- * @stability unstable
  * @category getters
  */
 export const target = (s: DevState): number | null => {
@@ -183,11 +180,11 @@ const replacement = (s: DevState): Replacement => {
 /**
  * Returns the id of the replacement still waiting for its listener, or null when none waits.
  *
- * @stability unstable
  * @category getters
  */
 export const pending = (s: DevState): string | null => {
   const r = replacement(s);
+
   return r._tag === "pending" ? r.id : null;
 };
 
@@ -201,7 +198,6 @@ export const pending = (s: DevState): string | null => {
  * replaced, or a replacement that started before its listener, keeps its old port in `address`, and
  * that port is never dialed.
  *
- * @stability unstable
  * @category getters
  */
 export const reachable = (s: DevState): number | null =>
@@ -211,7 +207,6 @@ export const reachable = (s: DevState): number | null =>
  * Returns true while a replacement is pending and may still come up: from a replace or an exit
  * until its listener, a brake or a stop.
  *
- * @stability unstable
  * @category getters
  */
 export const recovering = (s: DevState): boolean => pending(s) !== null && s._tag !== "stopping";
@@ -220,7 +215,6 @@ export const recovering = (s: DevState): boolean => pending(s) !== null && s._ta
  * Returns the latest start of this runtime, the one its exit, restart, brake and stop events name.
  * Null before the first start and after the stop.
  *
- * @stability unstable
  * @category getters
  */
 export const latest = (s: DevState): string | null => {
@@ -237,6 +231,7 @@ export const latest = (s: DevState): string | null => {
 
 const active = (s: DevState) => {
   const tag = s._tag;
+
   return tag !== "braked" && tag !== "stopping" && tag !== "stopped";
 };
 
@@ -253,7 +248,6 @@ const active = (s: DevState) => {
  * running process whose pid is the one its Msg names, and `killed` only moves a replace of that pid
  * from SIGTERM to SIGKILL; the replaced process leaves `replacing` by its exit, like any other.
  *
- * @stability unstable
  * @category machines
  */
 export const devLife = Machine.make({
@@ -278,6 +272,7 @@ export const devLife = Machine.make({
       // The listener, not the start, completes a replacement.
       if (s._tag === "spawned" || s._tag === "online") {
         const { session, pid } = s;
+
         return [
           listener._tag === "known"
             ? DevState.cases.online.make({ session, pid, port: listener.port, replacement: none })
@@ -307,6 +302,7 @@ export const devLife = Machine.make({
       const session = { start: m.start, after, build: m.build };
       const port = address(s);
       const kept = replacement(s);
+
       return [
         port === null
           ? DevState.cases.spawned.make({ session, pid: m.pid, replacement: kept })
@@ -334,6 +330,7 @@ export const devLife = Machine.make({
       }
 
       const { session, listener } = s;
+
       return [
         DevState.cases.waiting.make({
           session,

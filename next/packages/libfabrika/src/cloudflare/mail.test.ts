@@ -81,6 +81,7 @@ it.effect("R1: RPC refusals keep their reason; failed transport and undecodable 
   Effect.gen(function* () {
     const check = Effect.fnUntraced(function* (choice: typeof Cases extends fc.Arbitrary<infer A> ? A : never) {
       let wakes = 0;
+
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: fake RPC handles supply only the methods this layer calls
       const env = {
         PROJECT: {
@@ -106,10 +107,12 @@ it.effect("R1: RPC refusals keep their reason; failed transport and undecodable 
           }),
         },
       } as unknown as Env;
+
       const result = yield* MailDelivery.use((mail) => mail.send(delivery)).pipe(
         Effect.provide(mailLayer(env, "mail-test")),
         Effect.result,
       );
+
       expect(Result.isFailure(result)).toBe(true);
 
       if (Result.isFailure(result)) {
@@ -120,6 +123,7 @@ it.effect("R1: RPC refusals keep their reason; failed transport and undecodable 
 
       expect(wakes, "no refused or unconfirmed delivery schedules a target").toBe(0);
     });
+
     const property = fc.asyncProperty(Cases, (choice) => Effect.runPromise(check(choice)));
     yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 100 }));
   }),
@@ -169,6 +173,7 @@ for (const flow of [
       ) {
         const secrets = yield* Arbitrary.sampleEffect(RepliesTest.sentinel, { seed, count: 1 });
         const secret = secrets[0]!;
+
         const receipt: Receipt = {
           id: fields.id,
           command: fields.command,
@@ -188,15 +193,18 @@ for (const flow of [
           rev: fields.rev,
           pos: fields.pos,
         };
+
         const rejection =
           rejected === "error"
             ? new Error(secret)
             : rejected === "text"
               ? secret
               : { message: secret, mail: receipt.m };
+
         const spans: Array<Tracer.Span> = [];
         const captured = RepliesTest.capture();
         const outputs: Array<string> = [];
+
         const logger = Logger.layer([
           Logger.make((options) => {
             // Effect 4 keeps a line's annotations on its fiber; a logger that throws would hide the line.
@@ -208,14 +216,18 @@ for (const flow of [
             );
           }),
         ]);
+
         const tracer = Tracer.make({
           span(options) {
             const span = captured.tracer.span(options);
             spans.push(span);
+
             return span;
           },
         });
+
         const wakes: Array<{ readonly traceId: string; readonly spanId: string } | undefined> = [];
+
         // oxlint-disable-next-line fabrika/no-type-assertions -- edge: fake RPC handles supply only the methods this layer calls
         const env = {
           PROJECT: {
@@ -257,6 +269,7 @@ for (const flow of [
             }),
           },
         } as unknown as Env;
+
         const exit = yield* MailDelivery.use((mail) =>
           mail.send({ ...delivery, command: receipt.command, to: receipt.to.name, m: receipt.m }),
         ).pipe(
@@ -306,6 +319,7 @@ for (const flow of [
 
         RepliesTest.unleaked([...outputs, ...captured.text()], secrets);
       });
+
       const property = fc.asyncProperty(
         ReceiptFields,
         flow.choices,
@@ -313,6 +327,7 @@ for (const flow of [
         fc.constantFrom("error" as const, "text" as const, "object" as const),
         (fields, choice, seed, rejected) => Effect.runPromise(check(fields, choice, seed, rejected)),
       );
+
       yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 100 }));
     }),
   );
@@ -329,8 +344,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const reached = new Set<string>();
+
       const check = Effect.fnUntraced(function* (choice: "full" | "ok" | "forbidden", unread: number, cap: number) {
         const woken: Array<unknown> = [];
+
         // oxlint-disable-next-line fabrika/no-type-assertions -- edge: fake RPC handles supply only the methods this layer calls
         const env = {
           PROJECT: {
@@ -371,15 +388,18 @@ it.effect(
             }),
           },
         } as unknown as Env;
+
         const result = yield* MailDelivery.use((mail) => mail.send(delivery)).pipe(
           Effect.provide(mailLayer(env, "mail-test")),
           Effect.result,
         );
+
         reached.add(choice);
 
         if (choice === "ok") {
           expect(Result.isSuccess(result), "a saved letter is queued").toBe(true);
           expect(woken, "a saved letter wakes its target once").toHaveLength(1);
+
           return;
         }
 
@@ -393,18 +413,21 @@ it.effect(
           expect(woken, "a refusal schedules no target").toEqual([]);
         }
       });
+
       const property = fc.asyncProperty(
         fc.constantFrom("full" as const, "full" as const, "ok" as const, "forbidden" as const),
         fc.nat({ max: 20_000 }),
         fc.integer({ min: 1, max: 16_384 }),
         (choice, unread, cap) => Effect.runPromise(check(choice, unread, cap)),
       );
+
       yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 50 }));
       expect([...reached].sort()).toEqual(["forbidden", "full", "ok"]);
     }),
 );
 
 const COUNTER = "fabrika/counter";
+
 const BRAIN_BUILD = "brain-build-test";
 
 const START = StartsTest.fixture(
@@ -428,6 +451,7 @@ const counter = () => {
     init: (kept) => [kept ?? { count: 0 }, []],
     update: { inc: (s) => [{ count: s.count + 1 }, []] },
   });
+
   const program = Program.make({
     name: COUNTER,
     machine,
@@ -439,6 +463,7 @@ const counter = () => {
     writes: {},
     wake: () => null,
   });
+
   return ProgramLoader.use((loader) => loader.load(COUNTER)).pipe(
     Effect.provide(ProgramLoader.layer<never>({ [COUNTER]: program }, {})),
     Effect.map((loaded) => loaded.declaration),
@@ -463,8 +488,10 @@ const project = Effect.fnUntraced(function* () {
     Effect.sync(() => new DatabaseSync(":memory:")),
     (db) => Effect.sync(() => db.close()),
   );
+
   const sql = nodeSql(db);
   const values = new Map<string, unknown>();
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
   const ctx = {
     id: { name: "project-test" },
@@ -483,7 +510,9 @@ const project = Effect.fnUntraced(function* () {
     },
     exports: { IsolateTail: () => ({ fetch: () => Promise.resolve(new Response()) }) },
   } as unknown as DurableObjectState;
+
   const descriptors = new Map<string, Pick<Descriptor, "id" | "name" | "build" | "program">>();
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
     INSTANCE: JSON.stringify(START),
@@ -495,6 +524,7 @@ const project = Effect.fnUntraced(function* () {
         },
         descriptor: async (pid?: string) => {
           const d = descriptors.get(key)!;
+
           return { ...d, id: pid ?? d.id };
         },
         msg: async () => ({ _tag: "accepted", rev: 1, pos: 1 }),
@@ -513,7 +543,9 @@ const project = Effect.fnUntraced(function* () {
       }),
     },
   } as unknown as Env;
+
   const source = "export default {};\n";
+
   const context = yield* Layer.build(
     projectLayer(ctx, env, {
       programs: { [COUNTER]: { hash: yield* hash(source), source } },
@@ -542,12 +574,14 @@ const project = Effect.fnUntraced(function* () {
         ),
     }),
   );
+
   // The build forks its configure calls (ticket 762): wait for the Project's record of them.
   yield* Effect.suspend(() =>
     sql.exec("SELECT process FROM dev_descriptors WHERE pending>0").length === 0
       ? Effect.void
       : Effect.fail("a start is not yet delivered to its object"),
   ).pipe(Effect.retry(Schedule.spaced("5 millis")), Effect.timeout("5 seconds"), Effect.orDie);
+
   return {
     project: Context.get(context, ProjectService),
     /** Every ack row the ledger holds for `name`, in log order. */
@@ -563,6 +597,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const reached = new Set<string>();
+
       const walk = Effect.fnUntraced(function* (moves: ReadonlyArray<{ readonly move: number; readonly pos: number }>) {
         const i = yield* project();
         const live = i.project.boot.process;
@@ -596,6 +631,7 @@ it.effect(
           acked = lands ? pos : acked;
         }
       });
+
       const property = fc.asyncProperty(
         fc.array(fc.record({ move: fc.nat({ max: 15 }), pos: fc.integer({ min: 1, max: 12 }) }), {
           minLength: 4,
@@ -603,6 +639,7 @@ it.effect(
         }),
         (moves) => Effect.runPromise(Effect.scoped(walk(moves))),
       );
+
       yield* Effect.promise(() =>
         fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 10, full: 50 }), endOnFailure: true }),
       );
@@ -616,14 +653,17 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const reached = new Set<string>();
+
       const check = Effect.fnUntraced(function* (name: string, traced: boolean, rejects: boolean) {
         const objects: Array<string> = [];
         const traces: Array<unknown> = [];
+
         // oxlint-disable-next-line fabrika/no-type-assertions -- edge: fake RPC handles supply only the methods this layer calls
         const env = {
           PROCESS: {
             getByName: (object: string) => {
               objects.push(object);
+
               return {
                 mailed: async (trace?: unknown) => {
                   traces.push(trace);
@@ -636,16 +676,20 @@ it.effect(
             },
           },
         } as unknown as Env;
+
         const wake = MailWakeups.use((mail) => mail.wake(name)).pipe(
           Effect.provide(wakeups(env, "mail-test")),
           Effect.exit,
         );
+
         const [caller, exit] = traced
           ? yield* Effect.gen(function* () {
               const span = yield* Effect.currentSpan;
+
               return [{ traceId: span.traceId, spanId: span.spanId }, yield* wake] as const;
             }).pipe(Effect.withSpan("caller"))
           : ([undefined, yield* wake] as const);
+
         reached.add(`${traced ? "traced" : "untraced"}:${rejects ? "rejects" : "saves"}`);
         expect(objects, "the wake reaches its name's one object").toEqual([JSON.stringify(["mail-test", name])]);
         expect(traces, "the wake carries the caller's span, or no trace when it has none").toEqual([caller]);
@@ -658,12 +702,14 @@ it.effect(
           expect(Exit.isSuccess(exit), "a saved wake answers").toBe(true);
         }
       });
+
       const property = fc.asyncProperty(
         fc.string({ minLength: 1 }),
         fc.boolean(),
         fc.boolean(),
         (name, traced, rejects) => Effect.runPromise(check(name, traced, rejects)),
       );
+
       yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 100 }));
       // An empty run cannot pass: every caller and answer was met.
       expect([...reached].sort()).toEqual(["traced:rejects", "traced:saves", "untraced:rejects", "untraced:saves"]);

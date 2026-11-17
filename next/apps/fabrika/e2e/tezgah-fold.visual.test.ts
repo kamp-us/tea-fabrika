@@ -54,9 +54,11 @@ const Tag = Schema.TaggedUnion({
 
 /** The law's own limit in ms: a brain, two tabs and about sixty waits of at most 30 s each. */
 const LIMIT = 600_000;
+
 /** How long the law waits to see that something did not happen, in ms: a move reaches tezgah and
  *  comes back in well under a second on the real `dev.ts`. */
 const QUIET = 2_000;
+
 /** How many Tabs may lie between a tile's title bar and the strip after it: the checklist's field,
  *  its button and its rows. */
 const TABS = 30;
@@ -64,6 +66,7 @@ const TABS = 30;
 const promised = <A>(f: () => Promise<A>) => Effect.promise(f);
 
 type View = Parameters<typeof foldDifferences>[0];
+
 type Page = Parameters<typeof shoot>[0];
 
 describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter or a click", () => {
@@ -111,6 +114,7 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
             Effect.gen(function* () {
               const wide = yield* at(big, want, () => [], `${label}, in the 1440x900 tab`);
               const narrow = yield* at(small, want, () => [], `${label}, in the 1024x700 tab`);
+
               return { wide, narrow };
             });
 
@@ -118,6 +122,7 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
           const letter = (m: object, done: (view: View) => boolean, label: string) =>
             Effect.gen(function* () {
               yield* tell(r, pid, { ...m, via: { _tag: "word" } }, `letter_tezgah_fold_${++letters}`);
+
               // The wait reads tezgah alone: the tab is checked where the law looks at it.
               return yield* foldSettle(big, r, pid, (view) => (done(view) ? [] : [`not yet ${label}`]), label);
             });
@@ -134,6 +139,7 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
                 (view) => has(view, id),
                 `a split of ${from}`,
               );
+
               return id;
             });
 
@@ -165,6 +171,7 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
             (view) => (shown(view).length === 1 ? [] : ["not yet one tile"]),
             "one tile",
           );
+
           const t1 = focused(one.view).id;
 
           // The 2x2, by letters: t1 over a, a beside b, t1 beside c.
@@ -258,10 +265,12 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
             fBox?.width ?? 0,
             "L33: f, opened from a 1/16 share, is drawn at least 220 wide",
           ).toBeGreaterThanOrEqual(219);
+
           const fTitle = yield* whole(
             small,
             `section[aria-label="${regionName(named(clicked.narrow.view, f))}"] header`,
           );
+
           expect(fTitle, "L33: f's title bar is drawn whole, its name and id never cut").toEqual({ found: 1, cut: [] });
           expect(
             stripped(clicked.wide.view, clicked.wide.d).map((t) => t.id),
@@ -279,19 +288,23 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
           // tab, its four strips lying along it, each named and each drawn whole.
           yield* clickTile(big, clicked.wide.view, t1);
           yield* promised(() => small.setViewportSize({ width: 420, height: 700 }));
+
           const banded = yield* at(
             small,
             t1,
             (view, x) => (stripped(view, x).length === 5 ? [] : ["not yet the lower row folded whole"]),
             "a 420x700 tab folds the lower row whole",
           );
+
           expect(
             stripped(banded.view, banded.d).map((t) => t.id),
             "c and the whole lower row fold at 420x700",
           ).toEqual([c, a, bb, d, f]);
+
           const band = [a, bb, d, f].map(
             (id) => banded.d.strips.find((x) => x.name === stripName(named(banded.view, id)))?.box,
           );
+
           expect(
             band.every(
               (x) => x !== undefined && x !== null && Math.abs(x.height - 20) <= 1 && Math.abs(x.y - band[0]!.y) <= 1,

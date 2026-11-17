@@ -9,6 +9,7 @@ import type { windowMachineFor } from "./WindowMachine.ts";
 import type { ClientInfo, start } from "./WindowStart.ts";
 
 type Options = Parameters<typeof start>[0];
+
 type HeadlessOptions = Parameters<typeof Headless.start>[0];
 
 it("format: start and Headless.start take the same machine and no React or Tuval type, and ClientInfo.platform is the hello's platform", () => {

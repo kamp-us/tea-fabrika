@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { availableParallelism } from "node:os";
 import { basename, isAbsolute, join, relative } from "node:path";
@@ -7,6 +8,7 @@ import { parseCLI } from "vitest/node";
 import { isScript, isTest, load, reached } from "./oxlint-plugins/script-reads.mjs";
 import packageJson from "./package.json" with { type: "json" };
 import { changedFiles } from "./vitest.changed.ts";
+import { hostFiles } from "./vitest.hostrun.ts";
 import { Shards } from "./vitest.shards.ts";
 
 // Today's version's tests. It is frozen, and no CI job runs them (0525, 0533); they run on the laptop.
@@ -17,6 +19,7 @@ const TOOLING = [
   "oxlint-plugins/*.test.ts",
   "vitest.shards.test.ts",
   "vitest.changed.test.ts",
+  "vitest.hostrun.test.ts",
   ".github/ci/*.test.ts",
   // workflow-lint's families of laws, each test file beside its module.
   ".github/ci/workflow-lint/*.test.ts",
@@ -96,8 +99,12 @@ if (!Number.isInteger(workers) || workers < 1) {
   throw new Error("FABRIKA_MAX_WORKERS must be a positive integer");
 }
 
+// A person's or an agent's `vitest` command. Stryker and other programs that load this config go
+// their own way.
+const cliRun = () => /^vitest(?:\.[cm]?js)?$/.test(basename(process.argv[1] ?? ""));
+
 const localLimits = () => {
-  if (!/^vitest(?:\.[cm]?js)?$/.test(basename(process.argv[1] ?? ""))) {
+  if (!cliRun()) {
     return;
   }
 
@@ -153,6 +160,50 @@ const localLimits = () => {
   return { test: { maxWorkers: requested } };
 };
 
+// A test that drives a real resource or a real window runs on CI, never on the laptop by accident
+// (0178, 0536): twice on 2026-11-15 an agent started a real-Worker `.integration.` law here, once
+// through `--changed`. The include globs cannot say which files a run reaches, since `--changed`,
+// `--related`, `--project` and path filters narrow them later, so this asks Vitest itself. Vitest
+// 5.0.5 awaits every project's `configureVitest` hook once its projects and its git provider are
+// set up, and before `run` or `list` resolves a file (`_attachProjectServers` in its cli-api
+// chunk). `getRelevantTestSpecifications` is the public call both commands make next: the include
+// globs, the path filters, then `--changed`'s import graph, so the files it returns are the files
+// the run would start.
+//
+// Plain tooling names can hide real signals too. hostFiles also parses the selected source using
+// the existing test-kind reader, without running it. Signals, real windows and real instances
+// stay off the laptop (0594); an owner marker cannot clear those source checks. This catches the
+// selected file's own calls, not arbitrary calls hidden inside its helpers or shell scripts.
+const checked = new WeakSet<object>();
+
+const hostOnly: Plugin = {
+  name: "fabrika-local-host-only",
+  async configureVitest({ vitest }) {
+    // Each project runs this hook; the files are the whole run's, so one look is enough.
+    if (!cliRun() || checked.has(vitest)) {
+      return;
+    }
+
+    checked.add(vitest);
+    const { filter } = parseCLI(["vitest", ...process.argv.slice(2)], { allowUnknownOptions: true });
+    const files = (await vitest.getRelevantTestSpecifications(filter)).map((spec) =>
+      relative(process.cwd(), spec.moduleId),
+    );
+    const reached = hostFiles(files, process.env, process.platform, (path) => readFileSync(path, "utf8"));
+
+    if (reached.length > 0) {
+      throw new Error(
+        [
+          `Local host-only test run refused (decision 0178). This run reaches ${reached.length} real-resource file(s):`,
+          ...reached.slice(0, 5).map((path) => `  ${path}`),
+          ...(reached.length > 5 ? [`  and ${reached.length - 5} more`] : []),
+          "Use eligible disposable CI for the selected laws (0594). Portable signal laws may use Linux; Mac-specific laws need macOS.",
+        ].join("\n"),
+      );
+    }
+  },
+};
+
 const root = import.meta.dirname;
 
 // A lead-script test starts its scripts as child processes, which Vitest's import graph cannot see.
@@ -193,6 +244,9 @@ export const projects = [
   { extends: true, test: { name: "next-integration", include: [...INTEGRATION], exclude: [...EXCLUDE] } },
   {
     extends: false,
+    // A project that does not extend the root gets none of its plugins, so `--project next-visual`
+    // alone would skip the host-only guard.
+    plugins: [hostOnly],
     test: {
       name: "next-visual",
       root: import.meta.dirname,
@@ -264,6 +318,7 @@ export default defineConfig({
   // Vite runs this hook only while resolving a run. Importers can merge or spread the object.
   plugins: [
     { name: "fabrika-local-test-limits", enforce: "post", config: localLimits },
+    hostOnly,
     scriptReads,
     githubReads,
     shardTable,

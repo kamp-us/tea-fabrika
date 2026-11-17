@@ -26,14 +26,18 @@ import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 export const SENT = "2026-11-11T04:00:00.000Z";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 export const PROJECT = "p42-children";
 
 const field = (value: Buffer | string) => {
   const body = Buffer.from(value);
   const n = Buffer.alloc(4);
   n.writeUInt32BE(body.length);
+
   return Buffer.concat([n, body]);
 };
 
@@ -43,6 +47,7 @@ const identity = () => {
   const raw = pair.publicKey.export({ format: "jwk" }).x ?? "";
   const bytes = Buffer.from(raw, "base64url");
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -55,8 +60,10 @@ const identity = () => {
         field("sha512"),
         field(createHash("sha512").update(text).digest()),
       ]);
+
       const v = Buffer.alloc(4);
       v.writeUInt32BE(1);
+
       const packet = Buffer.concat([
         Buffer.from("SSHSIG"),
         v,
@@ -66,7 +73,9 @@ const identity = () => {
         field("sha512"),
         field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
       ]);
+
       const lines = packet.toString("base64").match(/.{1,70}/g) ?? [];
+
       return `-----BEGIN SSH SIGNATURE-----\n${lines.join("\n")}\n-----END SSH SIGNATURE-----\n`;
     },
   };
@@ -101,6 +110,7 @@ const env = (key: string, value: string) =>
     Effect.sync(() => {
       const old = process.env[key];
       process.env[key] = value;
+
       return old;
     }),
     (old) =>
@@ -130,19 +140,24 @@ export const childHome = Effect.fnUntraced(
     yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
     yield* fs.writeFileString(path.join(home, "starter.ts"), starterSource);
     yield* fs.writeFileString(path.join(home, "child.ts"), childSource);
+
     const built = yield* build({
       out: path.join(home, "dist"),
       programs: { "p42/starter": path.join(home, "starter.ts"), "p42/child": path.join(home, "child.ts") },
     });
+
     const hashes = {
       starter: built.programs["p42/starter"]?.hash ?? "",
       child: built.programs["p42/child"]?.hash ?? "",
     };
+
     const key = identity();
+
     const boot = Effect.gen(function* () {
       // Held until the scope closes, after the instance that binds it (finalizers run in reverse). Each
       // boot takes its own port: the runtime keeps a closed instance's port marked taken for a while.
       const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+
       return yield* localInstance(
         built,
         RecordWireTest.startupFixture({
@@ -156,6 +171,7 @@ export const childHome = Effect.fnUntraced(
         }),
       );
     }).pipe(Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(NodeServices.layer));
+
     const from: From = {
       by: key.fingerprint,
       for: PERSON,
@@ -165,6 +181,7 @@ export const childHome = Effect.fnUntraced(
       traceId: TRACE,
       build: built.build,
     };
+
     return { boot, key, hashes, from };
   },
   Effect.provide(SecureRandom.layerWebCrypto),
@@ -180,6 +197,7 @@ export const childInstance = Effect.fnUntraced(function* (
 ) {
   const { boot, key, hashes, from } = yield* childHome(starts);
   const instance = yield* boot;
+
   return { instance, key, hashes, from };
 });
 
@@ -188,6 +206,7 @@ export const letter = (pid: string, id: string, m: unknown) => ({ pid, letter: i
 
 // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: platform RPC doubles return Promises to the public client adapters
 const remote = <A>(work: Effect.Effect<A>) => Effect.runPromise(work);
+
 const Written = Schema.TaggedStruct("written", {});
 
 /** The platform operation that fails during a child start or its recovery. */
@@ -209,6 +228,7 @@ export const childProject = Effect.fnUntraced(function* () {
     Effect.sync(() => new DatabaseSync(":memory:")),
     (held) => Effect.sync(() => held.close()),
   );
+
   const sql = nodeSql(db);
   const key = identity();
   const delivered: Array<unknown> = [];
@@ -220,6 +240,7 @@ export const childProject = Effect.fnUntraced(function* () {
   let observing = false;
   let target: { operation: number; error: Error } | undefined;
   let operations: Array<string> = [];
+
   const observe = (operation: string) => {
     if (!observing) {
       return;
@@ -235,7 +256,9 @@ export const childProject = Effect.fnUntraced(function* () {
       throw error;
     }
   };
+
   let hit = false;
+
   const trip = (point: ChildFailure, process?: string) => {
     if (failure?.point === point && (failure.process === undefined || failure.process === process)) {
       const error = failure.error;
@@ -245,6 +268,7 @@ export const childProject = Effect.fnUntraced(function* () {
       throw error;
     }
   };
+
   const storage = {
     sql: {
       exec: (query: string, ...params: Array<string | number | null>) => {
@@ -285,18 +309,22 @@ export const childProject = Effect.fnUntraced(function* () {
       },
       get databaseSize() {
         observe("databaseSize");
+
         return sql.size();
       },
     },
     transactionSync: <A>(step: () => A): A => {
       observe("transaction.begin");
+
       return sql.transaction(() => {
         const value = step();
         observe("transaction.commit");
+
         return value;
       });
     },
   };
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the storage members read by the public Project service; workerd alone constructs the branded handle
   const ctx = {
     id: { name: PROJECT },
@@ -304,6 +332,7 @@ export const childProject = Effect.fnUntraced(function* () {
     // oxlint-disable-next-line fabrika/no-promises -- edge: the ctx.exports fetch binding returns a Promise
     exports: { IsolateTail: () => ({ fetch: async () => new Response() }) },
   } as unknown as DurableObjectState;
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- only platform transports are supplied; authority, ledger and start logic are real
   const env = {
     INSTANCE: JSON.stringify(
@@ -320,6 +349,7 @@ export const childProject = Effect.fnUntraced(function* () {
     PROCESS: {
       getByName: (name: string) => {
         const [, registered] = JSON.parse(name) as [string, string];
+
         return {
           configure: (descriptor: Descriptor, wake = false) =>
             remote(
@@ -334,6 +364,7 @@ export const childProject = Effect.fnUntraced(function* () {
             remote(
               Effect.sync(() => {
                 observe("process.descriptor");
+
                 return descriptors.get(registered);
               }),
             ),
@@ -343,6 +374,7 @@ export const childProject = Effect.fnUntraced(function* () {
               Effect.sync(() => {
                 observe("process.msg");
                 delivered.push(incoming);
+
                 return Sent.cases.accepted.make({ rev: delivered.length, pos: delivered.length });
               }),
             ),
@@ -363,6 +395,7 @@ export const childProject = Effect.fnUntraced(function* () {
             Effect.sync(() => {
               observe("record.write");
               recorded.push(rows);
+
               return Written.make({});
             }),
           ),
@@ -389,6 +422,7 @@ export const childProject = Effect.fnUntraced(function* () {
       }),
     },
   } as unknown as Env;
+
   // Each restart loses service memory but keeps the database and the remote objects' storage.
   const acquire = () =>
     Effect.acquireRelease(
@@ -396,6 +430,7 @@ export const childProject = Effect.fnUntraced(function* () {
       // oxlint-disable-next-line fabrika/no-promises -- edge: ManagedRuntime disposal returns a Promise
       (runtime) => Effect.promise(() => runtime.dispose()),
     );
+
   const from: From = {
     by: key.fingerprint,
     for: PERSON,
@@ -405,6 +440,7 @@ export const childProject = Effect.fnUntraced(function* () {
     traceId: TRACE,
     build: "p42-project",
   };
+
   return {
     acquire,
     from,
@@ -450,6 +486,7 @@ export const childProject = Effect.fnUntraced(function* () {
     observed: () => {
       observing = false;
       target = undefined;
+
       return operations;
     },
     fail: (point: ChildFailure, error: Error, process?: string) => {

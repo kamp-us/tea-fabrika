@@ -9,6 +9,7 @@ export const Post = Schema.TaggedUnion({
   comment: { ticket: Schema.Number, body: Schema.String },
   close: { ticket: Schema.Number },
 });
+
 export type Post = typeof Post.Type;
 
 /** The calls that fail with a reason, by name. */
@@ -24,6 +25,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<Tickets> => 
     Effect.suspend(() => {
       w.posts.push(post);
       const reason = failing[name];
+
       return reason === undefined ? Effect.void : Effect.fail(new TicketsError({ reason }));
     });
 

@@ -6,8 +6,11 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 const options = { seed: 119120, numRuns: 10 };
+
 const word = fc.stringMatching(/^[a-z]{8,12}$/).map((s) => `private_${s}`);
+
 const ranges = ["tip", "saved", "diverged", "undone"] as const;
+
 const input = fc.record({ word, leak: fc.boolean(), range: fc.constantFrom(...ranges) });
 
 // Real Git and real caller. Only keychain, HTTP and network Git are replaced. The RSA key exists
@@ -56,9 +59,12 @@ describe("T325 K6 botpush, today's tooling", () => {
                 ["-c", "user.name=Tests", "-c", "user.email=tests@example.invalid", ...args],
                 { cwd: dir, encoding: "utf8" },
               );
+
               expect(out.status, out.stderr).toBe(0);
+
               return out.stdout.trim();
             };
+
             git("init", "-q");
             // A leaked case must add the word; a clean case must remove it.
             writeFileSync(join(dir, "subject.md"), `${leak ? "safe base" : word}\n`);
@@ -105,6 +111,7 @@ describe("T325 K6 botpush, today's tooling", () => {
             git("notes", "--ref=fabrika", "add", "-m", "throwaway");
             const pushed = join(dir, "pushed");
             writeFileSync(pushed, "");
+
             const out = spawnSync(
               process.execPath,
               ["--import", join(dir, "shim.mjs"), join(scripts, "botpush.mjs"), dir, "fabrikalfa/test", ...sourceArgs],
@@ -121,6 +128,7 @@ describe("T325 K6 botpush, today's tooling", () => {
                 },
               },
             );
+
             expect(out.error).toBeUndefined();
             expect({ code: out.status, pushed: readFileSync(pushed, "utf8") }, out.stdout + out.stderr).toEqual({
               code: leak ? 1 : 0,
@@ -129,6 +137,7 @@ describe("T325 K6 botpush, today's tooling", () => {
             // A refusing shared checker must stop this caller even when its text is safe.
             writeFileSync(join(scripts, "leakgrep.sh"), "#!/bin/sh\necho 'leakgrep: planted refusal' >&2\nexit 1\n");
             writeFileSync(pushed, "");
+
             const refused = spawnSync(
               process.execPath,
               ["--import", join(dir, "shim.mjs"), join(scripts, "botpush.mjs"), dir, "fabrikalfa/test", ...sourceArgs],
@@ -144,6 +153,7 @@ describe("T325 K6 botpush, today's tooling", () => {
                 },
               },
             );
+
             expect(refused.status).toBe(1);
             expect(readFileSync(pushed, "utf8")).toBe("");
           } finally {
@@ -232,14 +242,18 @@ describe("T388 botpush retries a notes race once, today's tooling", () => {
           writeFileSync(join(dir, "words"), "private_zzzzzzzz\n");
           const work = join(dir, "work");
           const remote = join(dir, "remote.git");
+
           const run = (cwd: string, ...args: string[]) => {
             const out = spawnSync("git", ["-c", "user.name=Tests", "-c", "user.email=tests@example.invalid", ...args], {
               cwd,
               encoding: "utf8",
             });
+
             expect(out.status, out.stderr).toBe(0);
+
             return out.stdout.trim();
           };
+
           run(dir, "init", "-q", "--bare", remote);
           run(work, "init", "-q");
           writeFileSync(join(work, "a.md"), "base\n");
@@ -263,15 +277,18 @@ describe("T388 botpush retries a notes race once, today's tooling", () => {
           run(work, "commit", "-qm", "step");
           const source = run(work, "rev-parse", "HEAD");
           run(work, "notes", "--ref=fabrika", "add", "-m", "signed", source);
+
           const tipOf = () =>
             spawnSync(
               "git",
               ["--git-dir", remote, "rev-parse", "-q", "--verify", "refs/heads/fabrikalfa/test^{commit}"],
               { encoding: "utf8" },
             ).stdout.trim();
+
           const before = tipOf();
           const pushed = join(dir, "pushed");
           writeFileSync(pushed, "");
+
           const out = spawnSync(
             process.execPath,
             ["--import", join(dir, "shim.mjs"), join(scripts, "botpush.mjs"), work, "fabrikalfa/test"],
@@ -294,6 +311,7 @@ describe("T388 botpush retries a notes race once, today's tooling", () => {
               },
             },
           );
+
           expect(out.error).toBeUndefined();
           const pushes = readFileSync(pushed, "utf8").split("\n").filter(Boolean).length;
           const tip = tipOf();
@@ -311,6 +329,7 @@ describe("T388 botpush retries a notes race once, today's tooling", () => {
               spawnSync("git", ["--git-dir", remote, "notes", "--ref=fabrika", "show", sha], {
                 encoding: "utf8",
               }).stdout;
+
             expect(notes(source)).toContain("signed");
 
             if (races > 0) {

@@ -29,6 +29,7 @@ const slots = (flags: Record<string, string>) => ({
 const declaration = (path: string) => {
   const value = Declarations.all.declarations.find((d) => d.path === path);
   expect(value, `${path} is declared`).toBeDefined();
+
   return value!;
 };
 
@@ -75,11 +76,13 @@ it.effect.prop(
       const toml = yield* Toml;
       const repo = yield* toml.parse(`[desktop]\n${path.split(".")[1]} = 1\n`);
       const own = yield* toml.parse("");
+
       const failed = yield* Files.validate(
         Declarations.all,
         { repo: { file: "repo", document: repo }, person: { file: "person", document: own } },
         { version: "0.0.0" },
       ).pipe(Effect.exit);
+
       expect(Exit.isFailure(failed)).toBe(true);
     }).pipe(Effect.provide(TomlParser.layer)),
   { arbitrary: { seed: 119120, runs: 100 } },
@@ -139,11 +142,13 @@ it.effect.prop(
       const toml = yield* Toml;
       const person = yield* toml.parse(`[desktop]\nbrain-memory = "${zero}"\n`);
       const repo = yield* toml.parse("");
+
       const failed = yield* Files.validate(
         Declarations.all,
         { repo: { file: "repo", document: repo }, person: { file: "person", document: person } },
         { version: "0.0.0" },
       ).pipe(Effect.flip);
+
       expect(failed.reason).toBe("invalid");
       // A person reads which setting, and the schema's own title in place of "a valid value".
       expect(failed.message).toContain("desktop.brain-memory");

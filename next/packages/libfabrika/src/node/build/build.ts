@@ -5,11 +5,15 @@
  * last good file.
  *
  * Disk and paths go through Effect's `FileSystem` and `Path`, which the caller provides.
- *
- * @stability unstable
  */
 import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
-import { Context, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { ProgramName } from "../../packs/ProgramName.ts";
 import { Asset, type AssetType, Built as Tables, BuildError, type BuiltProgram, hash } from "../../runtime/Built.ts";
@@ -21,7 +25,6 @@ export {
   /**
    * Error for a build that stopped, re-exported from the runtime's build tables.
    *
-   * @stability unstable
    * @category errors
    */
   BuildError,
@@ -31,7 +34,6 @@ export {
  * One program an app selects for its build: its `pack/program` name, its package, and the export
  * that holds its declaration.
  *
- * @stability unstable
  * @category models
  */
 export type Selection = { readonly name: string; readonly package: string; readonly export: string };
@@ -40,7 +42,6 @@ export type Selection = { readonly name: string; readonly package: string; reado
  * What a finished build answers: the published brain file and its hash, and the tables that file
  * carries, each program's compiled source by name and each window file by route.
  *
- * @stability unstable
  * @category models
  */
 export type Built = {
@@ -56,7 +57,6 @@ export type Built = {
  * What a build is given: where to publish, the repo root, the brain's entry module, the selected
  * programs and, when there is one, the tab's window.
  *
- * @stability unstable
  * @category models
  */
 export type Options = {
@@ -80,16 +80,21 @@ export type Options = {
 
 /** The module the brain imports its tables from (`build-modules.d.ts`). */
 const BUILT_MODULE = "virtual:fabrika-built";
+
 const TEXT = "\0fabrika-text:";
+
 const WINDOW = "fabrika:window:";
+
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+
 const isProgramName = Schema.is(ProgramName);
 
 const Manifest = Schema.Struct({
   exports: Schema.optionalKey(Schema.Union([Schema.String, Schema.Record(Schema.String, Schema.Unknown)])),
 });
 
-const fail = (reason: string) => (cause: unknown) => new BuildError({ reason, cause });
+const fail = (reason: string) => (cause: unknown) => BuildError.make({ reason, cause });
+
 const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 
 // The window a selected package exports, if any. A path, not a package name, has no manifest.
@@ -111,7 +116,9 @@ const findWindow = Effect.fn("build.manifest")(function* (from: string, selected
           Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Manifest))),
           Effect.mapError(fail("table")),
         );
+
       const exports = manifest.exports;
+
       return typeof exports === "object" && Object.hasOwn(exports, "./window")
         ? Option.some(`${selected}/window`)
         : Option.none<string>();
@@ -139,7 +146,7 @@ const collect = Effect.fn("build.collect")(function* (output: ReadonlyArray<Outp
       type = contentType(item.fileName);
 
     if (type === undefined || Object.hasOwn(assets, route)) {
-      return yield* new BuildError({ reason: "bundle", message: "two window files on one route" });
+      return yield* BuildError.make({ reason: "bundle", message: "two window files on one route" });
     }
 
     const body =
@@ -148,6 +155,7 @@ const collect = Effect.fn("build.collect")(function* (output: ReadonlyArray<Outp
         : typeof item.source === "string"
           ? item.source
           : new TextDecoder().decode(item.source);
+
     assets[route] = yield* Asset.makeEffect({ hash: yield* hash(body), type, body }).pipe(
       Effect.mapError(fail("bundle")),
     );
@@ -171,9 +179,11 @@ const stylesheets = (
     const emit = inlineStylesheet(id).pipe(
       Effect.map((source) => {
         this.emitFile({ type: "asset", name: path.basename(id), source });
+
         return { code: "", moduleType: "js" as const };
       }),
     );
+
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Rolldown hook answers with a Promise
     return Effect.runPromiseWith(context)(emit);
   },
@@ -183,19 +193,24 @@ const stylesheets = (
 const embed = (tables: Tables): Plugin => {
   const texts: Array<string> = [];
   const text = (body: string) => `t${texts.push(body) - 1}`;
+
   const programs = Object.entries(tables.programs).map(
     ([name, p]) => `${JSON.stringify(name)}: {hash: ${JSON.stringify(p.hash)}, source: ${text(p.source)}}`,
   );
+
   const assets = Object.entries(tables.assets).map(
     ([route, a]) =>
       `${JSON.stringify(route)}: {hash: ${JSON.stringify(a.hash)}, type: ${JSON.stringify(a.type)}, body: ${text(a.body)}}`,
   );
+
   const imports = texts.map((_, n) => `import t${n} from ${JSON.stringify(`${TEXT}${n}`)};`);
+
   const code = [
     ...imports,
     `export const programs = {${programs.join(", ")}};`,
     `export const assets = {${assets.join(", ")}};`,
   ].join("\n");
+
   return {
     name: "fabrika-built",
     resolveId(id) {
@@ -294,6 +309,7 @@ const tabPage = (styles: ReadonlyArray<string>): Plugin => ({
         }),
       ),
     );
+
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Rolldown hook answers with a Promise
     return Effect.runPromiseWith(Context.empty())(emit);
   },
@@ -306,6 +322,7 @@ const tabAssets = Effect.fn("build.tab")(function* (
   cwd: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
+
   // A listed file that cannot be read fails as a read; then the window's own CSS check inlines its
   // local `@import`s and refuses any local file it names.
   const styles = yield* Effect.forEach(
@@ -313,16 +330,18 @@ const tabAssets = Effect.fn("build.tab")(function* (
     (file) => fs.readFileString(file).pipe(Effect.mapError(fail("read")), Effect.andThen(inlineStylesheet(file))),
     { concurrency: 1 },
   );
+
   const output = yield* bundle(tab.entry, [...plugins, browserOnly, tabPage(styles)], {
     phase: "tab",
     cwd,
     define: { "process.env.NODE_ENV": JSON.stringify("production") },
     minify: true,
   });
+
   const html = output.output.find((o): o is OutputAsset => o.type === "asset" && o.fileName === PAGE);
 
   if (html === undefined || typeof html.source !== "string") {
-    return yield* new BuildError({ reason: "bundle", message: "the tab's call emitted no page" });
+    return yield* BuildError.make({ reason: "bundle", message: "the tab's call emitted no page" });
   }
 
   return {
@@ -348,6 +367,7 @@ const publish = Effect.fn("build.emit")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const digest = yield* hash(brain);
   yield* Effect.annotateCurrentSpan({
     "brain.hash": digest,
@@ -355,6 +375,7 @@ const publish = Effect.fn("build.emit")(function* (
     "programs.bytes": sizes.programs,
     "window.bytes": sizes.window,
   });
+
   const swap = Effect.gen(function* () {
     const directory = path.dirname(out);
 
@@ -364,6 +385,7 @@ const publish = Effect.fn("build.emit")(function* (
 
     const pending = yield* fs.makeTempDirectory({ directory, prefix: ".fabrika-build-" });
     const backup = `${pending}.old`;
+
     // Once the last good file is moved aside, a failure or an interruption at any later point
     // (the final rename included, even one that landed) puts it back. The disk says how far it got.
     const restore = Effect.gen(function* () {
@@ -374,6 +396,7 @@ const publish = Effect.fn("build.emit")(function* (
       yield* fs.remove(out, { recursive: true, force: true });
       yield* fs.rename(backup, out);
     }).pipe(Effect.ignore);
+
     // Each disk step, once asked for, runs to its end: an interruption waits for it, so cleanup
     // and restore never race a write or a rename the disk is still doing.
     yield* Effect.gen(function* () {
@@ -394,7 +417,9 @@ const publish = Effect.fn("build.emit")(function* (
       ),
     );
   });
+
   yield* recorded(swap.pipe(Effect.mapError(fail("publish"))));
+
   return digest;
 });
 
@@ -410,7 +435,6 @@ const publish = Effect.fn("build.emit")(function* (
  * `inputs` receives every module's text by its id, and `reached`, once the check passes, each
  * checked `.tsx` file's text by its path from the root.
  *
- * @stability unstable
  * @category constructors
  */
 export const buildPrograms = Effect.fn("build.programs")(function* (
@@ -420,9 +444,11 @@ export const buildPrograms = Effect.fn("build.programs")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const root = yield* fs.realPath(options.root).pipe(Effect.orElseSucceed(() => options.root));
   const entry = yield* fs.realPath(options.entry).pipe(Effect.orElseSucceed(() => options.entry));
   const files = new Map<string, string>();
+
   const compiler: Plugin = {
     name: "fabrika-program-compiler",
     // Rolldown warnings can quote source. Reload reports only the checked build's result.
@@ -437,10 +463,13 @@ export const buildPrograms = Effect.fn("build.programs")(function* (
       }
 
       files.set(path.relative(root, id), code);
+
       return { code: compile(id, code).code };
     },
   };
+
   const ledgerFile = path.join(root, "compiler-ledger.json");
+
   const ledger =
     options.ledger ??
     ((yield* fs.exists(ledgerFile))
@@ -451,19 +480,21 @@ export const buildPrograms = Effect.fn("build.programs")(function* (
             Effect.mapError(fail("read")),
           )
       : []);
+
   const programs = yield* bundlePrograms({
     root: path.dirname(entry),
     cwd: root,
     plugins: [compiler],
     programs: Object.fromEntries(options.programs.map((p) => [p.name, { module: p.package, name: p.export }])),
   });
+
   const findings = check(
     files,
     ledger.filter((row) => files.has(row.file)),
   );
 
   if (findings.length > 0) {
-    return yield* new BuildError({
+    return yield* BuildError.make({
       reason: "compiler",
       cause: findings.map(({ file, line }) => ({ path: file, line })),
     });
@@ -495,12 +526,12 @@ export const buildPrograms = Effect.fn("build.programs")(function* (
  * One finding fails the whole build as `compiler`, and the error does not list the findings: run
  * the check alone to read them.
  *
- * @stability unstable
  * @category constructors
  */
 export const build = Effect.fn("build.build")(function* (options: Options) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
   yield* Effect.annotateCurrentSpan({ chaos: options.chaos, programs: options.programs.length });
   const names = options.programs.map((p) => p.name);
@@ -509,7 +540,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
     new Set(names).size !== names.length ||
     !options.programs.every((p) => isProgramName(p.name) && IDENTIFIER.test(p.export))
   ) {
-    return yield* new BuildError({ reason: "table" });
+    return yield* BuildError.make({ reason: "table" });
   }
 
   // Rolldown names modules by their real paths, so the ledger's relative paths start from the real
@@ -535,6 +566,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
         Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Row)))),
         Effect.mapError(fail("read")),
       ));
+
   const compiler: Plugin = {
     name: "fabrika-compiler",
     transform(code, id) {
@@ -543,9 +575,11 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
       }
 
       files.set(path.relative(root, id), code);
+
       return { code: compile(id, code).code };
     },
   };
+
   const windows: Record<string, string> = {};
 
   for (const p of options.programs) {
@@ -560,9 +594,11 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
     { root: options.root, entry: options.entry, programs: options.programs, ledger },
     files,
   );
+
   // A segment holds no `.`, so `pack.program` names one generated file per qualified name. The
   // window's entry keeps the whole name, so it is emitted at `/pack/program.js`.
   const generated = (name: string) => path.join(from, `window.${name.replace("/", ".")}.generated.ts`);
+
   const entries: Plugin = {
     name: "fabrika-window",
     resolveId(id) {
@@ -578,6 +614,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
       }
     },
   };
+
   const assets: Record<string, Asset> = Object.keys(windows).length
     ? yield* bundle(
         Object.fromEntries(Object.keys(windows).map((name) => [name, `${WINDOW}${name}`])),
@@ -594,7 +631,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
   if (options.tab !== undefined) {
     for (const [route, file] of Object.entries(yield* tabAssets(options.tab, [compiler], root))) {
       if (Object.hasOwn(assets, route)) {
-        return yield* new BuildError({ reason: "bundle", message: "two window files on one route" });
+        return yield* BuildError.make({ reason: "bundle", message: "two window files on one route" });
       }
 
       assets[route] = file;
@@ -602,11 +639,13 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
   }
 
   const tables = yield* Tables.makeEffect({ programs, assets }).pipe(Effect.mapError(fail("table")));
+
   const output = yield* bundle(options.entry, [compiler, embed(tables), unreachableChunksPlugin()], {
     phase: "brain",
     cwd: root,
     define: { "globalThis.__ALCHEMY_RUNTIME__": "true" },
   });
+
   const brain = output.output
     .filter((o) => o.type === "chunk")
     .map((o) => o.code)
@@ -614,14 +653,16 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 
   // Every module a bundle reached is in `files` now: check them all, and the ledger for stale rows.
   if (check(files, ledger).length) {
-    return yield* new BuildError({ reason: "compiler" });
+    return yield* BuildError.make({ reason: "compiler" });
   }
 
   const size = (bodies: ReadonlyArray<string>) => bodies.reduce((total, body) => total + bytes(body), 0);
+
   const digest = yield* publish(options.out, brain, {
     programs: size(Object.values(programs).map((p) => p.source)),
     window: size(Object.values(assets).map((a) => a.body)),
   });
+
   return {
     build: digest,
     brain: path.join(options.out, "brain.mjs"),

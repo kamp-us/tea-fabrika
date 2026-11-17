@@ -1,7 +1,5 @@
 /**
  * The settings module's TOML service. It owns key positions; a Layer such as `TomlParser.layer` owns the grammar.
- *
- * @stability unstable
  */
 import type { Effect } from "effect";
 import { Context, Schema } from "effect";
@@ -9,7 +7,6 @@ import { Context, Schema } from "effect";
 /**
  * A parsed TOML document: its values, and where each key and table header starts.
  *
- * @stability unstable
  * @category models
  */
 export interface TomlDocument {
@@ -25,30 +22,27 @@ export interface TomlDocument {
 /**
  * The text is not valid TOML.
  *
- * @stability unstable
  * @category errors
  */
-export class Syntax extends Schema.TaggedError<Syntax>()("Syntax", {
+export class Syntax extends Schema.TaggedError<Syntax, { readonly brand: unique symbol }>()("Syntax", {
   cause: Schema.Defect(),
 }) {}
 
 /**
  * A value cannot be written as TOML.
  *
- * @stability unstable
  * @category errors
  */
-export class Value extends Schema.TaggedError<Value>()("Value", {
+export class Value extends Schema.TaggedError<Value, { readonly brand: unique symbol }>()("Value", {
   cause: Schema.Defect(),
 }) {}
 
 /**
  * The path of a `set` or `remove` does not name an editable setting, such as a path through a value that is not a table.
  *
- * @stability unstable
  * @category errors
  */
-export class Conflict extends Schema.TaggedError<Conflict>()("Conflict", {
+export class Conflict extends Schema.TaggedError<Conflict, { readonly brand: unique symbol }>()("Conflict", {
   path: Schema.Array(Schema.String),
   cause: Schema.Defect(),
 }) {}
@@ -60,10 +54,9 @@ export class Conflict extends Schema.TaggedError<Conflict>()("Conflict", {
  *
  * `reason` is `Syntax` when the text does not parse, `Value` when a value to write is not TOML, and `Conflict` when the path does not name an editable setting. A syntax error carries the parser's line, and a value error always says line 1.
  *
- * @stability unstable
  * @category errors
  */
-export class TomlError extends Schema.TaggedError<TomlError>()("TomlError", {
+export class TomlError extends Schema.TaggedError<TomlError, { readonly brand: unique symbol }>()("TomlError", {
   reason: Schema.Union([Syntax, Value, Conflict]),
   message: Schema.String,
   line: Schema.Int,
@@ -77,7 +70,6 @@ export class TomlError extends Schema.TaggedError<TomlError>()("TomlError", {
  *
  * `parse` returns the document. `set` and `remove` return the edited text, and the result is parsed again before it is returned.
  *
- * @stability unstable
  * @category services
  */
 export class Toml extends Context.Service<

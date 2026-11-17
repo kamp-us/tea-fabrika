@@ -5,8 +5,15 @@
  *
  * @internal
  */
-import { Clock, Effect, Option, Predicate, Queue, Random, Schema, Stream } from "effect";
-import { Socket } from "effect/socket";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Queue from "effect/Queue";
+import * as Random from "effect/Random";
+import * as Schema from "effect/Schema";
+import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
 import type { Identity } from "../../transport/ClientKey.ts";
 import { ErrorClass } from "../../transport/ClientRows.ts";
 import { backoff, CAP } from "../../transport/Link.ts";
@@ -42,7 +49,7 @@ export const DialMsg = Schema.TaggedUnion({
 export type DialMsg = typeof DialMsg.Type;
 
 /** The id of a frame that answers a call, read only to time the answer. */
-const answerId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Number })));
+const answerId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Finite })));
 
 /** The class of a socket that failed to open: the thrown error's own class, or a network failure. */
 const openFailure = (error: Socket.SocketError): ErrorClass => {
@@ -54,6 +61,7 @@ const openFailure = (error: Socket.SocketError): ErrorClass => {
 
   const cause = "cause" in reason ? reason.cause : undefined;
   const name = Predicate.hasProperty(cause, "name") ? cause.name : null;
+
   return Schema.is(ErrorClass)(name) ? name : "NetworkError";
 };
 
@@ -66,7 +74,7 @@ const acquire = (make: Socket.WebSocketConstructor["Service"], url: string) =>
   Effect.acquireRelease(
     Effect.try({
       try: () => make(url),
-      catch: (cause) => new Socket.SocketError({ reason: new Socket.SocketOpenError({ kind: "Unknown", cause }) }),
+      catch: (cause) => Socket.SocketError.make({ reason: Socket.SocketOpenError.make({ kind: "Unknown", cause }) }),
     }),
     (ws) => Effect.sync(() => ws.close(1000)),
   );
@@ -98,6 +106,7 @@ export const send = (
 ): Effect.Effect<void, "none" | Socket.SocketError> =>
   Effect.suspend((): Effect.Effect<void, "none" | Socket.SocketError> => {
     const handle = handles.get(dial);
+
     return handle === undefined ? Effect.fail("none" as const) : handle.writer.write(text);
   });
 
@@ -121,10 +130,12 @@ export const dialer =
         const emit = (m: DialMsg): void => {
           Queue.offerUnsafe(queue, m);
         };
+
         const key = yield* identity;
         yield* dialWait(tries);
         const url = `${options.origin.replace(/^http/, "ws")}/client/${encodeURIComponent(key.fingerprint)}/${encodeURIComponent(options.tab)}`;
         const connection = yield* Socket.fromWebSocket(acquire(options.sockets, url));
+
         const pull = yield* Socket.readerString(connection).pipe(
           Effect.catch((error) =>
             Effect.gen(function* () {
@@ -139,6 +150,7 @@ export const dialer =
             }),
           ),
         );
+
         const writer = yield* connection.writer;
         const written = new Map<number, number>();
         yield* Effect.acquireRelease(
@@ -155,6 +167,7 @@ export const dialer =
                 const sent = Option.flatMap(answerId(text), ({ id }) => {
                   const at = Option.fromUndefinedOr(written.get(id));
                   written.delete(id);
+
                   return at;
                 });
                 emit(

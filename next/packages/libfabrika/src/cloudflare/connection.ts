@@ -2,6 +2,7 @@ import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "ef
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
+import { News, type Published } from "../runtime/News.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
 import { targetStream } from "../tasks/Tasks.ts";
 import { causeClass, REFUSED, SinkError } from "../telemetry/Trace.ts";
@@ -22,12 +23,107 @@ import {
   type ProjectOptions,
 } from "./runtime.ts";
 
+/** The method each kind of view update is sent under, keyed by the update's own `type`. */
+const METHOD = { whole: "view.whole", patch: "view.patch" } as const satisfies Record<Published["type"], string>;
+
+/** One JSON-RPC notification, as the text a socket is sent. */
+const frame = (method: string, params: Schema.Json) => JSON.stringify({ jsonrpc: "2.0", method, params });
+
+// A route's answer, its rate failures counted as storage and its refusals tagged on the span.
+const routed = Effect.fnUntraced(function* (work: Effect.Effect<typeof Answer.Type, LedgerError>) {
+  return yield* work.pipe(
+    Effect.mapError((error) => {
+      const failure = rejected(error);
+      return Schema.is(RateCountFailure)(failure)
+        ? new SinkError({ reason: "storage", held: 0, message: failure.message, cause: error })
+        : error;
+    }),
+    Effect.tap((answer) =>
+      answer._tag === "refused" && ["reserved", "rate_limited", "quota"].includes(answer.reason)
+        ? Effect.annotateCurrentSpan(REFUSED, answer.reason)
+        : Effect.void,
+    ),
+    Effect.tapError((error) =>
+      Schema.is(RateCountFailure)(error) ? Effect.annotateCurrentSpan(REFUSED, "rate_limited") : Effect.void,
+    ),
+  );
+});
+
+// One wait the gateway asks its project for, read from the project's answer: `ready` at a rev, or
+// `parked`. A hands key's own `target:` stream is asked again as its `tasks.wait`: it may not call
+// `ledger.wait`, and the gateway names that stream from its key alone. Either way the ring goes to
+// `reader`, the object where the socket is. A ready answer whose rev does not decode is a
+// `LedgerError` of reason `bad_row`, in the typed channel.
+const waitOn = (p: ProjectClient["Service"]) =>
+  Effect.fnUntraced(function* (client: ConnectionId, stream: string, after: number, reader: string) {
+    const asked = stream.startsWith(targetStream(""))
+      ? p.route(client, "tasks.wait", { after }, reader)
+      : p.route(client, "ledger.wait", { stream, after }, reader);
+    const answer = yield* rpc(routed(asked));
+
+    if (answer._tag === "parked") {
+      return Waited.cases.parked.make({});
+    }
+
+    if (answer._tag !== "ok") {
+      return yield* Effect.fail(answer);
+    }
+
+    const ready = yield* Schema.decodeUnknownEffect(Schema.Struct({ rev: Schema.Int }))(answer.result).pipe(
+      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+    );
+    return Waited.cases.ready.make(ready);
+  });
+
+/**
+ * The gateway's waits on its project: `wait(client, stream, after, reader)` asks the project for one
+ * wait and answers `ready` at a rev or `parked`. A ready answer that does not decode fails with a
+ * `LedgerError` of reason `bad_row`. `GatewayWaits.layer` asks through the gateway's own `ProjectClient`.
+ *
+ * @category services
+ */
+export class GatewayWaits extends Context.Service<
+  GatewayWaits,
+  {
+    readonly wait: (
+      client: ConnectionId,
+      stream: string,
+      after: number,
+      reader: string,
+    ) => Effect.Effect<Waited, LedgerError | SinkError | typeof Answer.cases.refused.Type>;
+  }
+>()("@kampus/libfabrika/cloudflare/connection.GatewayWaits") {
+  static readonly layer = Layer.effect(
+    GatewayWaits,
+    Effect.gen(function* () {
+      return { wait: waitOn(yield* ProjectClient) };
+    }),
+  );
+}
+
+/**
+ * The one `ProjectClient` a gateway and its waits share: a client over the stub of the project the
+ * recorded start names. Cloudflare keeps calls in order only within one stub, so every route the
+ * gateway sends, its waits included, goes through this one.
+ *
+ * @category layers
+ */
+export const gatewayProject = (env: Env) =>
+  Layer.effect(
+    ProjectClient,
+    Effect.gen(function* () {
+      const checked = yield* RecordedStart;
+      return ProjectClient.make(projectStub(env, checked.input.name));
+    }),
+  );
+
 const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: Env) {
   const checked = yield* RecordedStart;
   const port = checked.values.port;
   const config = checked.input;
-  const p = ProjectClient.make(projectStub(env, config.name)),
-    ids = yield* ProcessIdGenerator;
+  const p = yield* ProjectClient,
+    ids = yield* ProcessIdGenerator,
+    waits = yield* GatewayWaits;
   const gateway = yield* Schema.decodeUnknownEffect(Schema.String)(ctx.id.name).pipe(
     Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
@@ -36,24 +132,6 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
   ).pipe(Effect.provideService(RecordedStart, checked));
   const recorded = <A, E>(work: Effect.Effect<A, E>, counted?: (value: A) => boolean) =>
     complete(work, counted).pipe(Effect.provideContext(recording));
-  const routed = Effect.fnUntraced(function* (work: Effect.Effect<typeof Answer.Type, LedgerError>) {
-    return yield* work.pipe(
-      Effect.mapError((error) => {
-        const failure = rejected(error);
-        return Schema.is(RateCountFailure)(failure)
-          ? new SinkError({ reason: "storage", held: 0, message: failure.message, cause: error })
-          : error;
-      }),
-      Effect.tap((answer) =>
-        answer._tag === "refused" && ["reserved", "rate_limited"].includes(answer.reason)
-          ? Effect.annotateCurrentSpan(REFUSED, answer.reason)
-          : Effect.void,
-      ),
-      Effect.tapError((error) =>
-        Schema.is(RateCountFailure)(error) ? Effect.annotateCurrentSpan(REFUSED, "rate_limited") : Effect.void,
-      ),
-    );
-  });
   yield* recorded(Effect.void);
   const connections = new Map<WebSocket, ReturnType<typeof connection>>();
   const attached = Effect.fnUntraced(function* (ws: WebSocket) {
@@ -75,26 +153,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       ping: () => ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? null,
       wait: Effect.fnUntraced(function* (stream, after, reader) {
         const client = (yield* attached(ws)).client as ConnectionId;
-        // A hands key's own `target:` stream is asked again as its `tasks.wait`: it may not call
-        // `ledger.wait`, and the gateway names that stream from its key alone. Either way the ring
-        // goes to `reader`, this object, where the socket is.
-        const asked = stream.startsWith(targetStream(""))
-          ? p.route(client, "tasks.wait", { after }, reader)
-          : p.route(client, "ledger.wait", { stream, after }, reader);
-        const answer = yield* rpc(routed(asked));
-
-        if (answer._tag === "parked") {
-          return Waited.cases.parked.make({});
-        }
-
-        if (answer._tag !== "ok") {
-          return yield* Effect.fail(answer);
-        }
-
-        const ready = yield* Schema.decodeUnknownEffect(Schema.Struct({ rev: Schema.Int }))(answer.result).pipe(
-          Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-        );
-        return Waited.cases.ready.make(ready);
+        return yield* waits.wait(client, stream, after, reader);
       }),
       call: Effect.fnUntraced(
         function* (method, params) {
@@ -158,7 +217,11 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
               const waiting = yield* Schema.decodeUnknownEffect(
                 Schema.Struct({ code: Schema.String, until: Schema.Number }),
               )(result.result).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
-              yield* rpc(p.publish(client, { method: "gateway.waiting", params: waiting }));
+              // The waiting room's notice goes to the knocking socket itself, beside the knock's answer.
+              yield* Effect.try({
+                try: () => ws.send(frame("gateway.waiting", waiting)),
+                catch: (cause) => new LedgerError({ reason: "unreachable", cause }),
+              });
               return Answer.cases.ok.make({ result: waiting });
             }
 
@@ -233,22 +296,22 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
     return yield* new LedgerError({ reason: "unreachable" });
   });
-  const notify = Effect.fn("connection.notify")(function* (client: string, news: unknown) {
+  // Another object's call is decoded on arrival: its sender may run another build.
+  const notify = Effect.fn("connection.notify")(function* (client: string, news: News) {
+    const told = yield* Schema.decodeUnknownEffect(News)(news).pipe(
+      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+    );
+    yield* Effect.annotateCurrentSpan("fab.gateway.news", told._tag);
+
     for (const ws of ctx.getWebSockets()) {
       if ((yield* attached(ws)).client === client) {
         yield* Effect.try({
-          try: () => {
-            if (typeof news === "object" && news !== null && "close" in news && typeof news.close === "number") {
-              ws.close(news.close, "permission changed");
-            } else {
-              ws.send(
-                JSON.stringify({
-                  jsonrpc: "2.0",
-                  ...(typeof news === "object" && news !== null ? news : {}),
-                }),
-              );
-            }
-          },
+          try: () =>
+            News.match(told, {
+              close: ({ code }) => ws.close(code, "permission changed"),
+              granted: ({ nonce }) => ws.send(frame("client.granted", { nonce })),
+              view: ({ update }) => ws.send(frame(METHOD[update.type], update)),
+            }),
           catch: (cause) => new LedgerError({ reason: "unreachable", cause }),
         });
       }
@@ -307,7 +370,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
     }),
     ring: (stream: string, rev: number) => recorded(ring(stream, rev), (counted) => counted).pipe(Effect.asVoid),
     probe: (session: string) => recorded(probe(session)),
-    notify: Effect.fnUntraced(function* (client: string, news: unknown) {
+    notify: Effect.fnUntraced(function* (client: string, news: News) {
       const states = yield* Effect.forEach(ctx.getWebSockets(), attached, { concurrency: 1 });
       const online = states.some((state) => state.client === client && state._tag === "online");
       return yield* online ? recorded(notify(client, news)) : notify(client, news);
@@ -325,9 +388,19 @@ export class ConnectionService extends Context.Service<
     readonly close: (ws: WebSocket, code?: number) => Effect.Effect<void, LedgerError | SinkError>;
     readonly ring: (stream: string, rev: number) => Effect.Effect<void, unknown>;
     readonly probe: (session: string) => Effect.Effect<number | null, unknown>;
-    readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError | SinkError>;
+    readonly notify: (client: string, news: News) => Effect.Effect<void, LedgerError | SinkError>;
   }
 >()("@kampus/libfabrika/cloudflare/connection.ConnectionService") {}
+
+/**
+ * The gateway's `ConnectionService`, over the `GatewayWaits`, the `ProjectClient` and the recorded
+ * start its caller provides. `connectionLayer` provides the real ones, with one `ProjectClient` for
+ * the gateway and its waits.
+ *
+ * @category layers
+ */
+export const gatewayLayer = (ctx: DurableObjectState, env: Env) =>
+  Layer.effect(ConnectionService, gatewayLogic(ctx, env)).pipe(Layer.provide(ProcessIdGenerator.layer));
 
 export const connectionLayer = (
   ctx: DurableObjectState,
@@ -335,8 +408,9 @@ export const connectionLayer = (
   _config?: BrainOptions,
   input?: ProjectOptions["input"],
 ) =>
-  Layer.effect(ConnectionService, gatewayLogic(ctx, env)).pipe(
-    Layer.provide(ProcessIdGenerator.layer),
+  gatewayLayer(ctx, env).pipe(
+    Layer.provide(GatewayWaits.layer),
+    Layer.provide(gatewayProject(env)),
     Layer.provide(input === undefined ? recordedLayer(env) : recordedLayer(env, input)),
   );
 

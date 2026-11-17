@@ -23,7 +23,9 @@ const Tag = Schema.TaggedUnion({
 });
 
 const SEED = 119120;
+
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
+
 /** How long a wait on the instance may take before the law fails with what it last saw. */
 const WAIT = 60;
 
@@ -73,6 +75,7 @@ const View = Schema.Struct({
   workspaces: Schema.Array(Schema.Struct({ n: Schema.Int, layout: Schema.Unknown })),
   tiles: Schema.Array(Schema.Struct({ id: Schema.String, shows: Schema.String, child: Schema.Boolean })),
 });
+
 type View = typeof View.Type;
 
 const order = (node: unknown): ReadonlyArray<string> =>
@@ -84,11 +87,14 @@ const order = (node: unknown): ReadonlyArray<string> =>
 
 const tilesOn = (v: View, n: number) => {
   const space = v.workspaces.find((w) => w.n === n);
+
   return space === undefined ? [] : order(space.layout).flatMap((id) => v.tiles.filter((t) => t.id === id));
 };
 
 const via = Schema.encodeSync(Via)(Via.cases.key.make({ keys: "ctrl+b x" }));
+
 let minted = 0;
+
 const fresh = () => typeId("tile", 70_000 + ++minted);
 
 type Live = Effect.Success<Open>;
@@ -137,6 +143,7 @@ const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: 
     yield* until(`the split's ${tile} on workspace ${n}`, readView(live), (v) =>
       tilesOn(v, n).some((t) => t.id === tile),
     );
+
     return;
   }
 
@@ -147,6 +154,7 @@ const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: 
     expect(answer, "the last tile of a workspace never closes").toEqual(
       Answer.cases.refused.make({ reason: "last_tile" }),
     );
+
     return;
   }
 

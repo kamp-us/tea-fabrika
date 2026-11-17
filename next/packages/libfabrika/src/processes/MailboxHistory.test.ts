@@ -70,13 +70,16 @@ describe("P11 richer mailbox history", () => {
   it.effect("each history read ends one mailbox.read span", () =>
     check(fc.array(fc.jsonValue(), { maxLength: 10 }), [], (messages) => {
       const spans: Tracer.NativeSpan[] = [];
+
       const tracer = Tracer.make({
         span: (options) => {
           const span = new Tracer.NativeSpan(options);
           spans.push(span);
+
           return span;
         },
       });
+
       return Effect.gen(function* () {
         const mailbox = yield* Mailbox;
 

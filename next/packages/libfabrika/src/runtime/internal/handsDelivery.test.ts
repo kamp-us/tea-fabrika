@@ -26,6 +26,7 @@ const RUNS = { seed: 119120, numRuns: 100 };
 type Msg = (typeof handsDelivery)["msg"]["Type"];
 
 const rev = fc.integer({ min: 1, max: 1_000_000 });
+
 const arrivedAt = fc.integer({ min: 1_700_000_000_000, max: 1_900_000_000_000 });
 
 const reply = fc.oneof(

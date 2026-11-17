@@ -15,7 +15,10 @@
 # and fails a files-table path that is no repo path: one with a `:`, or a word with no `/` or `.`.
 # A versioned plan also gets `advice:` lines, which never change the exit: a type or lint law with
 # an fc. generator, a test law with an fc. generator and no run count, and a Validation section that
-# tells a boxed step to run `--changed` or a typecheck.
+# tells a boxed step to run `--changed` or a typecheck. Draft mode also refuses a files-table path
+# that adds a code file (a `.ts`, `.tsx`, `.js` or `.mjs` file that is no test, is not owned by
+# tests and is not in the repo yet) unless a line under `## Existing tools` names that path and says what was "searched"
+# (0587).
 set -eu
 draft=0
 case ${1:-} in --draft) draft=1; shift;; --approved) draft=approved; shift;; --owners-json) draft=owners; shift;; esac
@@ -40,7 +43,7 @@ if [ "$draft" = 1 ]; then
     node "$here/../../lead/scripts/sizecap.ts" plan "$plan" || echo "size: not checked"
 fi
 python3 - "$plan" "$here/../../step-commit/scripts/exam.py" "$draft" <<'PY'
-import hashlib, json, re, subprocess, sys
+import hashlib, json, os, re, subprocess, sys
 plan, exam, draft = sys.argv[1:]
 def norm(w):
     while w.startswith("./"): w = w[2:]
@@ -267,7 +270,25 @@ def estimate():
     end = next((j for j in heads if size is not None and j > size), len(lines))
     last = next((j for j in range(end - 1, size, -1) if lines[j].strip()), None) if size is not None else None
     return [] if last == i else [f"plan estimate: line {i + 1} must be the last line of the Size section"]
+CODE = re.compile(r"\.(?:[cm]?ts|tsx|[cm]?js)$")
+def existing_tools():
+    # 0587: each new helper's line under `## Existing tools` names its path and what was searched.
+    # A new helper is a files-table path to a code file that is not in the repo yet, is no test and
+    # is not the tests step's: the exam's laws and their support are the tests step's to shape.
+    # A new function in a file that exists gets its line too, but only review can see it.
+    heads = [j for j, l in enumerate(lines) if re.match(r"^##\s", l)]
+    start = next((j for j in heads if re.match(r"^##\s+existing tools\b", lines[j], re.I)), None)
+    end = next((j for j in heads if start is not None and j > start), len(lines))
+    said = [lines[k] for k in range(start + 1, end)] if start is not None else []
+    out = []
+    for p in sorted(file_paths):
+        if not CODE.search(p) or ".test." in p or "*" in p or owned.get(p) == "tests" or os.path.exists(p): continue
+        named = any(p in {scanned(w) for w in re.split(r"[^A-Za-z0-9._/-]+", l)} and re.search(r"\bsearched\b", l, re.I) for l in said)
+        if not named:
+            out.append(f"plan existing tools: {p} is a new code file; add a line under ## Existing tools that names it and says what was searched (0587)")
+    return out
 if draft in ("1", "approved"):
+    if draft == "1": bad.extend(existing_tools())
     if not opening: bad.append("plan_section_missing: opening fenced block")
     if not laws_table: bad.append("plan_section_missing: laws table")
     if not files_table: bad.append("plan_section_missing: files table")

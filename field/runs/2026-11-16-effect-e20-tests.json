@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e20-tests",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-16T04:10:00Z",
+  "ended": "2026-11-16T04:30:00Z",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-sonnet-5-5",
+  "effort": "medium",
+  "outcome": "pass",
+  "why": "Slice E20, effectSucceedWithVoid, in next/: 4 hits met, 3 fixed by hand (sed, Effect.succeed(undefined) to Effect.void): next/apps/fabrika/e2e/stored.test-support.ts:59 and :65, next/apps/fabrika/src/exam/twin.ts:647. 1 waiting on 1366: next/packages/libfabrika/src/runtime/ProcessStore.ts:203. Lock: next/apps/fabrika/tsconfig.json for all of the app (**/*.ts, **/*.tsx); next/packages/libfabrika/tsconfig.json for src/*.ts and every src folder except runtime. L1 planted once at twin.ts:647: error, then removed. Recount at zero for both locks.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 20,
+  "note": "Ran: twin.integration.test.ts and stored.integration.test.ts, 88 tests green, at the pushed head. pnpm lint: 16 of 17 parts pass; lint:dead aborts with SIGABRT (exit 134) on a clean main too, so it is not from this change. No pnpm typecheck run. The plan listed 3 hits; libfabrika had a fourth, in a 1366 file.",
+  "step": "tests"
+}

@@ -106,14 +106,213 @@
               }
             }
           },
-          // A library imports each Effect module by its path (E7, 0023). On for the folders
-          // at zero, their tests too. Each import slice adds its folder, and the last makes it
-          // all of `next/packages`. `oxlint-plugins/namespace-imports.test.ts` keeps the list.
+          // E3 of the Effect-check sweep (ticket 1075): a Schema class is built with `.make`, never
+          // `new`. On for every folder at zero once its hits are fixed, tests too. The libfabrika
+          // folders `runtime`, `cloudflare`, `gateway`, `processes`, `settings`, `ledger` and
+          // `telemetry` and the app's top `src/` files wait for the slice that follows
+          // the quotas branch (E62); it grows this list.
           {
-            "include": ["next/packages/libfabrika/src/ci/**/*.ts", "next/packages/libfabrika/src/codehost/**/*.ts"],
+            "include": [
+              ".agents/**/*.ts",
+              ".github/ci/**/*.ts",
+              ".github/ci/**/*.mjs",
+              "oxlint-plugins/**/*.ts",
+              "oxlint-plugins/**/*.mjs",
+              "next/packages/tuval/**/*.ts",
+              "next/packages/tuval/**/*.tsx",
+              "next/packages/vitest/**/*.ts",
+              "next/programs/**/*.ts",
+              "next/programs/**/*.tsx",
+              "next/apps/fabrika/*.ts",
+              "next/apps/fabrika/e2e/**/*.ts",
+              "next/apps/fabrika/src/exam/**/*.ts",
+              "next/apps/fabrika/src/entry/**/*.ts",
+              "next/apps/fabrika/src/entry/**/*.tsx",
+              "fixtures/next/**/*.ts",
+              "next/packages/libfabrika/src/*.ts",
+              "next/packages/libfabrika/src/access/**/*.ts",
+              "next/packages/libfabrika/src/ci/**/*.ts",
+              "next/packages/libfabrika/src/client/**/*.ts",
+              "next/packages/libfabrika/src/codehost/**/*.ts",
+              "next/packages/libfabrika/src/coordination/**/*.ts",
+              "next/packages/libfabrika/src/desktop/**/*.ts",
+              "next/packages/libfabrika/src/node/**/*.ts",
+              "next/packages/libfabrika/src/packs/**/*.ts",
+              "next/packages/libfabrika/src/permissions/**/*.ts",
+              "next/packages/libfabrika/src/presence/**/*.ts",
+              "next/packages/libfabrika/src/repositories/**/*.ts",
+              "next/packages/libfabrika/src/schedules/**/*.ts",
+              "next/packages/libfabrika/src/tasks/**/*.ts",
+              "next/packages/libfabrika/src/tezgah/**/*.ts",
+              "next/packages/libfabrika/src/transport/**/*.ts"
+            ],
             "options": {
-              "namespaceImportPackages": ["effect"],
-              "diagnosticSeverity": { "preferNamespaceImport": "error" }
+              "diagnosticSeverity": { "newSchemaClass": "error" }
+            }
+          },
+          // E0 of the Effect-check sweep (0565): every check with 0 hits in `next/` and our
+          // tooling on 2026-11-15, at error there, so a new hit fails the typecheck. A slice
+          // that brings another check to zero adds its own entry below, and
+          // `oxlint-plugins/effect-checks.test.ts` fails if a folder stops ending at error.
+          {
+            "include": [
+              "next/**/*.ts",
+              "next/**/*.tsx",
+              "fixtures/next/**/*.ts",
+              ".agents/**/*.ts",
+              ".github/ci/**/*.ts",
+              ".github/ci/**/*.mjs",
+              "oxlint-plugins/**/*.ts",
+              "oxlint-plugins/**/*.mjs",
+              "stylelint.config.ts"
+            ],
+            "options": {
+              "diagnosticSeverity": {
+                "abortControllerInEffect": "error",
+                "acquireReleaseDisposable": "error",
+                "allOfMapToForEach": "error",
+                "catchAllTagDispatchToCatchTag": "error",
+                "catchAllToMapError": "error",
+                "catchChainToFirstSuccessOf": "error",
+                "catchDieToOrDie": "error",
+                "catchIfTagToCatchTag": "error",
+                "catchRefailToTapError": "error",
+                "catchTagToCatchReason": "error",
+                "catchUnfailableEffect": "error",
+                "classSelfMismatch": "error",
+                "cryptoRandomUUID": "error",
+                "cryptoRandomUUIDInEffect": "error",
+                "duplicatePackage": "error",
+                "effectDoNotation": "error",
+                "effectFnIife": "error",
+                "effectFnImplicitAny": "error",
+                "effectFnOpportunity": "error",
+                "effectGenUsesAdapter": "error",
+                "effectInFailure": "error",
+                "effectInVoidSuccess": "error",
+                "effectMapFlatten": "error",
+                "effectMapVoid": "error",
+                "effectSleepZeroToYieldNow": "error",
+                "errorPayloadShadowsName": "error",
+                "experimentalApiUsage": "error",
+                "failCauseToConstructor": "error",
+                "flatMapIdentityToFlatten": "error",
+                "flatMapToMap": "error",
+                "flatMapToTap": "error",
+                "floatingEffect": "error",
+                "floatingEffectInVitest": "error",
+                "genericEffectServices": "error",
+                "globalRandom": "error",
+                "globalRandomInEffect": "error",
+                "globalTimersInEffect": "error",
+                "layerMergeAllWithDependencies": "error",
+                "lazyPromiseInEffectSync": "error",
+                "leakingRequirements": "error",
+                "manualMetricTapToTrack": "error",
+                "mapConstToAs": "error",
+                "mapSomeToAsSome": "error",
+                "matchEffectToMapBoth": "error",
+                "matchEffectToMatch": "error",
+                "missingEffectContext": "error",
+                "missingEffectError": "error",
+                "missingEffectServiceDependency": "error",
+                "missingLayerContext": "error",
+                "missingReturnYieldStar": "error",
+                "missingStarInYieldEffectGen": "error",
+                "nonObjectEffectServiceType": "error",
+                "obsoleteMatchImport": "error",
+                "obsoleteSchemaImport": "error",
+                "optionMatchToFromOption": "error",
+                "outdatedApi": "error",
+                "overriddenSchemaConstructor": "error",
+                "preferSchemaTaggedError": "error",
+                "preferSchemaTypeProperty": "error",
+                "promiseInEffectSuccess": "error",
+                "provideLayerSucceedToProvideService": "error",
+                "raceFirstWithSleepToTimeout": "error",
+                "redundantMapError": "error",
+                "redundantOrDie": "error",
+                "redundantSchemaTagIdentifier": "error",
+                "schemaClassObjectLiteral": "error",
+                "schemaLiteralNonFinite": "error",
+                "schemaOpaqueInstanceMember": "error",
+                "schemaUnionOfLiterals": "error",
+                "scopeInLayerEffect": "error",
+                "serviceNotAsClass": "error",
+                "syncToSucceed": "error",
+                "timeoutCatchTagToTimeoutOrElse": "error",
+                "tryCatchInEffectGen": "error",
+                "unknownInEffectCatch": "error",
+                "unnecessaryPipe": "error",
+                "unnecessaryPipeChain": "error",
+                "unsafeEffectTypeAssertion": "error"
+              }
+            }
+          },
+          // Effect's unstable parts are used on purpose, to stay on its leading edge, and each one
+          // we use is named once here (0574, E1 of the Effect-check sweep). `unstableApiUsage` blocks
+          // in the folders that reach zero once our own `@stability` tags are gone; a part not named
+          // here fails there until someone adds it on purpose, with the reason in the pull request.
+          // The setting replaces the base list for the files an entry matches, so each slice that
+          // locks another folder adds its glob to this entry and keeps one list.
+          // `oxlint-plugins/effect-checks.test.ts` keeps the folders.
+          {
+            "include": [
+              ".agents/**/*.ts",
+              ".github/ci/**/*.ts",
+              ".github/ci/**/*.mjs",
+              "next/apps/fabrika/src/entry/**/*.ts",
+              "next/apps/fabrika/src/entry/**/*.tsx",
+              "next/packages/libfabrika/src/*.ts",
+              "next/packages/libfabrika/src/ci/**/*.ts",
+              "next/packages/libfabrika/src/codehost/**/*.ts",
+              "next/packages/libfabrika/src/presence/**/*.ts",
+              "next/packages/libfabrika/src/repositories/**/*.ts",
+              "next/packages/libfabrika/src/schedules/**/*.ts",
+              "next/packages/libfabrika/src/tezgah/**/*.ts",
+              "next/packages/libfabrika/src/transport/**/*.ts",
+              "next/packages/tuval/**/*.ts",
+              "next/packages/tuval/**/*.tsx",
+              "next/packages/vitest/**/*.ts",
+              "next/programs/tezgah/**/*.ts",
+              "oxlint-plugins/**/*.ts",
+              "oxlint-plugins/**/*.mjs"
+            ],
+            "options": {
+              "allowedUnstableApis": [
+                "@effect/platform-browser/BrowserRuntime",
+                "@effect/platform-node/NodeFileSystem",
+                "@effect/platform-node/NodePath",
+                "@effect/platform-node/NodeRuntime",
+                "@effect/platform-node/NodeServices",
+                "@effect/vitest",
+                "effect/Arbitrary",
+                "effect/ByteSize",
+                "effect/FileSystem",
+                "effect/Path",
+                "effect/PlatformError",
+                "effect/Schema#ByteSize",
+                "effect/Stdio",
+                "effect/cli/Argument",
+                "effect/cli/Command",
+                "effect/cli/Flag",
+                "effect/cli/Prompt",
+                "effect/crypto/Digest",
+                "effect/crypto/SecureRandom",
+                "effect/http/FetchHttpClient",
+                "effect/http/HttpClient",
+                "effect/http/HttpClientRequest",
+                "effect/http/HttpClientResponse",
+                "effect/http/HttpServerRequest",
+                "effect/http/HttpServerResponse",
+                "effect/persistence/KeyValueStore",
+                "effect/persistence/RateLimiter",
+                "effect/process/ChildProcess",
+                "effect/process/ChildProcessSpawner",
+                "effect/socket/Socket",
+                "effect/testing/TestConsole"
+              ],
+              "diagnosticSeverity": { "unstableApiUsage": "error" }
             }
           },
           // The lead tooling imports tea 0.27.0 itself and today's agent runner, which runs on

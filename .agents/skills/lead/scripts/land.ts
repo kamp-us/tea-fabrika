@@ -40,12 +40,33 @@
 //
 //   land.ts arm <pr>
 //     the lead session, the one way merge when ready is turned on (0530, 0544; pr/Arm.ts): refuses
-//     one that is not open, not into main, or titled `Plan:`; reads the full run (scheduled.yaml) on
-//     its branch at its head, and refuses one that is red or not ended, printing each job that is
-//     not green, its failed steps and its failing test lines. With no full run at the head it arms,
-//     as 0544 allows, and says so in one line, unless the branch's newest run at an older head is
-//     not green. Then marks a draft ready and turns on merge when ready, a squash pinned to the head
-//     that was read.
+//     one that is not open, not into main, or titled `Plan:`; runs the leak gate (pr/Leaks.ts) on its
+//     net change, each of its commits and its title and description, and refuses on any hit or on a
+//     grep that could not run; reads the proof run (scheduled.yaml) on its branch at its head, the
+//     full set or, since 0590, the changed set, and refuses one that is red or not ended, printing
+//     each job that is not green, its failed steps and its failing test lines. With no run at the
+//     head it arms, as 0544 allows, and says so in one line, unless the branch's newest run at an
+//     older head is not green or is a changed-set run, which proves only that head's change. Then
+//     marks a draft ready and turns on merge when ready, a squash pinned to the head that was read.
+//
+//   land.ts merge <pr> [--admin]
+//     the lead session, the only way it merges a pull request by hand (pr/Merge.ts); never a bare
+//     `gh pr merge`. Without --admin, as `queue`. With --admin, an admin merge past the queue, only
+//     for a docs-only pull request (0183: every file Markdown in a docs folder, or a field row) or a
+//     branch an open sev0 allows (0532, whose fix also needs `ci-required` green). Both run the
+//     leak gate first, on the change, each commit, the title and the description, and refuse on any
+//     hit or on a grep that could not run.
+//
+//   land.ts stack <top-pr>
+//     the lead session, the one way a native stack lands (pr/Stack.ts, ticket 1115); never a bare
+//     `gh stack merge`, and `arm` cannot land a stacked pull request (github/gh-stack#591). Refuses
+//     unless the top is in an open stack whose layers from the bottom up to it are open and ready;
+//     runs `arm`'s gates on each layer, the leak gate on its change, commits and words and the
+//     `## New names` check; refuses unless `ci-required` is a success at each layer's head
+//     (ticket 1119); then refuses when more layers are open than the base branch's merge
+//     queue builds at once (`max_entries_to_build`, read from its rules), naming both numbers, since
+//     the queue splits a larger stack and drops its upper layers. Then one stack merge, squashes,
+//     pinned to the heads the gates read.
 //
 //   land.ts merged <pr>...
 //     the lead session, later: one read of each pull request, no wait. Merged into main: closes
@@ -69,12 +90,16 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, DateTime, Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
+import * as Level from "../../sev/scripts/Level.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as RunsGh from "./ci/RunsGh.ts";
 import * as Arm from "./pr/Arm.ts";
+import * as Merge from "./pr/Merge.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
+import { LeakGrepRefused } from "./pr/Pushes.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
+import * as Stack from "./pr/Stack.ts";
 import * as SweepsProcess from "./pr/SweepsProcess.ts";
 import * as TicketsCli from "./pr/TicketsCli.ts";
 
@@ -90,6 +115,7 @@ const Check = Schema.Literals([
   "pr",
   "queue",
   "arm",
+  "stack",
 ]);
 
 class Refused extends Schema.TaggedError<Refused>()("Refused", {
@@ -137,9 +163,11 @@ const sh = Effect.fn("land.sh")(
       cwd,
       ...(stdin === undefined ? {} : { stdin: Stream.make(new TextEncoder().encode(stdin)) }),
     });
+
     const [out, err, code] = yield* Effect.all([text(ran.stdout), text(ran.stderr), ran.exitCode], {
       concurrency: 3,
     });
+
     return { code: Number(code), out, err } satisfies Ran;
   },
   Effect.scoped,
@@ -174,7 +202,9 @@ const loadEnv = Effect.gen(function* () {
     '. "$0" && printf "%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$FABRIKA_COAUTHOR" "$HOME" "${FABRIKA_HOME:-$HOME/Library/Application Support/@kampus/fabrika-app}"',
     `${HERE}/env.sh`,
   ]);
+
   const [MAIN = "", BOXES = "", GH_REPO = "", COAUTHOR = "", HOME = "", TRACKER_HOME = ""] = out.split("\n");
+
   return { MAIN, BOXES, GH_REPO, COAUTHOR, HOME, TRACKER_HOME };
 });
 
@@ -198,6 +228,7 @@ const stepOwning = (owners: Readonly<Record<string, string>>, path: string): str
   const under = Object.keys(owners)
     .filter((row) => row.endsWith("/") && path.startsWith(row))
     .toSorted((a, b) => b.length - a.length)[0];
+
   return under === undefined ? "no row in the plan" : (owners[under] ?? "no row in the plan");
 };
 
@@ -210,6 +241,7 @@ const planOwners = Effect.fnUntraced(function* (main: string, plan: string | und
   }
 
   const ran = yield* sh(main, "sh", [`${main}/.agents/skills/plan/scripts/plancheck.sh`, "--owners-json", plan]);
+
   return ran.code === 0 ? Schema.decodeUnknownOption(Owners)(ran.out).pipe(Option.getOrElse(() => ({}))) : {};
 });
 
@@ -217,6 +249,7 @@ const planOwners = Effect.fnUntraced(function* (main: string, plan: string | und
 const prBody = (body: string, loosening: string) => {
   const [first = "", ...rest] = body.split("\n");
   const fence = (t: string) => ["```text", t.trimEnd() || "(empty)", "```"];
+
   return {
     title: first.replace(/^#+\s*/, "").trim(),
     body: [rest.join("\n").trim(), "", "## Loosening", "", ...fence(loosening), ""].join("\n"),
@@ -297,6 +330,7 @@ const ready = Command.make(
       plan: Option.getOrUndefined(Option.map(ask.plan, (p) => path.resolve(p))),
       sentAt: DateTime.formatIso(yield* DateTime.now),
     });
+
     yield* fs.makeDirectory(`${env.BOXES}/state`, { recursive: true });
     yield* fs.writeFileString(`${env.BOXES}/state/${ask.quest}.land.json`, Schema.encodeSync(ReadyJson)(record));
     yield* note(
@@ -328,6 +362,7 @@ const gitIn =
 export const readReady = Effect.fn("land.readReady")(function* (quest: string, ticket: string) {
   const fs = yield* FileSystem.FileSystem;
   const env = yield* loadEnv;
+
   const ready = yield* fs.readFileString(`${env.BOXES}/state/${quest}.land.json`).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(ReadyJson)),
     Effect.mapError(
@@ -335,6 +370,7 @@ export const readReady = Effect.fn("land.readReady")(function* (quest: string, t
         new Refused({ check: "ready", reason: `no readable state/${quest}.land.json: run land.ts ready`, output: "" }),
     ),
   );
+
   return { quest, ticket, ready, env } satisfies Quest;
 });
 
@@ -370,6 +406,7 @@ export const draftPr = Effect.fn("land.draftPr")(function* ({ quest, ready, env 
   const file = `${env.BOXES}/${quest}-land-body.md`;
   yield* fs.writeFileString(file, posted.body);
   yield* must("leak", "the leak grep refused the PR body", ready.tree, "sh", [`${HERE}/leakgrep.sh`, "--text", file]);
+
   return { title: posted.title, file };
 });
 
@@ -398,7 +435,9 @@ export const mergeMain = Effect.fn("land.mergeMain")(function* ({ ready, env }: 
       const conflicts = (yield* sh(ready.tree, "git", ["diff", "--name-only", "--diff-filter=U"])).out
         .split("\n")
         .filter((p) => p !== "");
+
       const owners = yield* planOwners(env.MAIN, ready.plan);
+
       return yield* new Refused({
         check: "merge",
         reason: [
@@ -416,6 +455,7 @@ export const mergeMain = Effect.fn("land.mergeMain")(function* ({ ready, env }: 
 /** Leak-greps the branch's net change from main and each commit a push would send (0048). */
 export const leakCheck = Effect.fn("land.leakCheck")(function* ({ ready }: Quest, main: string) {
   const leakgrep = `${HERE}/leakgrep.sh`;
+
   const diff = yield* gitIn(ready.tree)(
     "leak",
     "the diff from main does not read",
@@ -425,6 +465,7 @@ export const leakCheck = Effect.fn("land.leakCheck")(function* ({ ready }: Quest
     "--unified=0",
     `${main}...HEAD`,
   );
+
   yield* must("leak", "the leak grep refused the branch's change", ready.tree, "sh", [leakgrep], `${diff}\n`);
   yield* must("leak", "the leak grep refused a commit", ready.tree, "sh", [
     leakgrep,
@@ -446,6 +487,7 @@ export const signLead = Effect.fn("land.signLead")(function* (
   merged: boolean,
 ) {
   const git = gitIn(ready.tree);
+
   const commits = (yield* git(
     "sign",
     "the quest's commits do not read",
@@ -454,6 +496,7 @@ export const signLead = Effect.fn("land.signLead")(function* (
     "--topo-order",
     `${main}..HEAD`,
   )).split("\n");
+
   const missing = ready.lead.filter((sha) => !commits.includes(sha));
 
   if (missing.length > 0) {
@@ -466,6 +509,7 @@ export const signLead = Effect.fn("land.signLead")(function* (
 
   const signer = `${env.MAIN}/next/apps/fabrika/src/exam/commits.ts`;
   const key = `${env.HOME}/.fabrika/step-keys/lead`;
+
   const sign = (at: string, subject: string) =>
     must("sign", `the sign script refused ${subject}`, at, "node", [
       signer,
@@ -515,6 +559,7 @@ export const push = Effect.fn("land.push")(function* ({ ready }: Quest) {
     target,
     "HEAD",
   ]);
+
   return { target, tip: yield* gitIn(ready.tree)("push", "HEAD does not read", "rev-parse", "HEAD") };
 });
 
@@ -537,6 +582,7 @@ export const openPr = Effect.fn("land.openPr")(function* (
     "-q",
     ".[0].number",
   ]);
+
   const open = Number(listed);
 
   if (listed !== "" && Number.isInteger(open) && open > 0) {
@@ -550,6 +596,7 @@ export const openPr = Effect.fn("land.openPr")(function* (
       "-F",
       `body=@${draft.file}`,
     ]);
+
     return open;
   }
 
@@ -565,6 +612,7 @@ export const openPr = Effect.fn("land.openPr")(function* (
     "--body-file",
     draft.file,
   ]);
+
   const number = Number(/\/pull\/(\d+)/.exec(made)?.[1]);
 
   if (!Number.isInteger(number)) {
@@ -603,6 +651,7 @@ export const queue = Effect.fn("land.queue")(function* (env: Env, pr: number, wa
 /** Puts HEAD and the notes back as they were before the merge: the tree was clean, so nothing else is lost. */
 const rollback = Effect.fn("land.rollback")(function* ({ ready }: Quest) {
   const notes = yield* sh(ready.tree, "git", ["rev-parse", "--verify", "-q", "refs/notes/fabrika"]);
+
   return Effect.gen(function* () {
     yield* sh(ready.tree, "git", ["merge", "--abort"]);
     yield* sh(ready.tree, "git", ["reset", "-q", "--hard", ready.head]);
@@ -625,13 +674,16 @@ const run = Command.make(
     yield* checkTree(quest);
     const draft = yield* draftPr(quest);
     const back = yield* rollback(quest);
+
     // Every refusal before the push changes nothing.
     const { main, signed, target, tip } = yield* Effect.gen(function* () {
       const { main, merged } = yield* mergeMain(quest);
       yield* leakCheck(quest, main);
       const signed = yield* signLead(quest, main, merged);
+
       return { main, signed, ...(yield* push(quest)) };
     }).pipe(Effect.onError(() => back));
+
     yield* say(`main at ${main.slice(0, 8)}, signed ${signed} lead commits, pushed ${target} at ${tip.slice(0, 8)}`);
 
     if (draft === undefined) {
@@ -656,22 +708,87 @@ const queueCommand = Command.make(
   }),
 );
 
+/** A refusal from a merge path: a leak grep that refused or could not run is the `leak` check's. */
+const refusedAt =
+  (check: typeof Check.Type) =>
+  (e: { readonly reason: string }): Refused =>
+    new Refused({ check: e instanceof LeakGrepRefused ? "leak" : check, reason: e.reason, output: "" });
+
 const armCommand = Command.make(
   "arm",
   { pr: PrNumber },
   Effect.fn("land.armCommand")(function* ({ pr }) {
     const env = yield* loadEnv;
-    const armed = yield* Arm.arm({ repo: env.GH_REPO, pr }).pipe(
+
+    const armed = yield* Arm.arm({ repo: env.GH_REPO, dir: env.MAIN, pr }).pipe(
       Effect.provide(
         Layer.mergeAll(
           PullRequestsGh.layer(env.GH_REPO, env.MAIN),
+          PushesProcess.layer(HERE),
           RunsGh.layer(env.GH_REPO, env.MAIN),
           ChecksGh.layer(env.GH_REPO),
         ),
       ),
-      Effect.mapError((e) => new Refused({ check: "arm", reason: e.reason, output: "" })),
+      Effect.mapError(refusedAt("arm")),
     );
+
     yield* Console.log(Arm.line(armed));
+  }),
+);
+
+const stackCommand = Command.make(
+  "stack",
+  { top: Argument.Int("top-pr") },
+  Effect.fn("land.stackCommand")(function* ({ top }) {
+    const env = yield* loadEnv;
+
+    const landed = yield* Stack.land({ dir: env.MAIN, top }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          PullRequestsGh.layer(env.GH_REPO, env.MAIN),
+          PushesProcess.layer(HERE),
+          ChecksGh.layer(env.GH_REPO),
+        ),
+      ),
+      Effect.mapError(refusedAt("stack")),
+    );
+
+    yield* Console.log(Stack.line(landed));
+  }),
+);
+
+/** The branches an open sev0 allows, from the sev log in the main checkout; none when none is open. */
+const sev0Allows = Effect.fn("land.sev0Allows")(function* (main: string) {
+  const { sev0 } = yield* Level.read(`${main}/runs/sev`).pipe(
+    Effect.mapError(
+      (e) =>
+        new Refused({
+          check: "merge",
+          reason: `the sev log does not read: ${e._tag === "Refused" ? e.reason : e.message}`,
+          output: "",
+        }),
+    ),
+  );
+
+  return sev0._tag === "open" ? sev0.allow : [];
+});
+
+const mergeCommand = Command.make(
+  "merge",
+  { pr: PrNumber, admin: Flag.Boolean("admin") },
+  Effect.fn("land.mergeCommand")(function* ({ pr, admin }) {
+    const env = yield* loadEnv;
+
+    const route = admin
+      ? Merge.Route.cases.admin.make({ sev0: yield* sev0Allows(env.MAIN) })
+      : Merge.Route.cases.queue.make({});
+
+    const done = yield* Merge.merge({ dir: env.MAIN, pr, route }).pipe(
+      Effect.provide(queueServices(env)),
+      Effect.mapError(refusedAt("merge")),
+    );
+
+    yield* Console.log(Merge.line(done));
   }),
 );
 
@@ -686,6 +803,7 @@ const merged = Command.make(
         Effect.provide(queueServices(env)),
         Effect.mapError((e) => new Refused({ check: "queue", reason: e.reason, output: "" })),
       );
+
       yield* Console.log(settled.lines.join("\n"));
     }
   }),
@@ -702,13 +820,14 @@ const closeNamed = Command.make(
         Effect.provide(queueServices(env)),
         Effect.mapError((e) => new Refused({ check: "queue", reason: e.reason, output: "" })),
       );
+
       yield* Console.log(settled.lines.join("\n"));
     }
   }),
 );
 
 const land = Command.make("land").pipe(
-  Command.withSubcommands([ready, run, queueCommand, armCommand, merged, closeNamed]),
+  Command.withSubcommands([ready, run, queueCommand, armCommand, stackCommand, mergeCommand, merged, closeNamed]),
 );
 
 if (import.meta.main) {

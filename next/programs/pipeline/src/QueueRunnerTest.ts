@@ -1,6 +1,18 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Effect,
+  Exit,
+  Fiber,
+  Logger,
+  Predicate,
+  Redacted,
+  Schema,
+  type Scope,
+  type Tracer,
+} from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as Mail from "./Mail.ts";
@@ -9,6 +21,7 @@ import type { queue } from "./Queue.ts";
 /** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
  *  A law hands over only the fields it reads, so a case holds the key alone. */
 const Tag = Schema.TaggedUnion({
+  merged: {},
   land: {},
   start_child: {},
   start_child_err: {},
@@ -111,6 +124,7 @@ const secret = Arbitrary.schema(
 ).pipe(
   Arbitrary.map(({ prefix, body, form }) => {
     const token = `${prefix}${body}`;
+
     return {
       token,
       text:
@@ -129,6 +143,7 @@ const cell = fc.record({
 type Cell = typeof cell extends fc.Arbitrary<infer A> ? A : never;
 
 const q5Runs = runsFor({ fast: 20, full: 200 });
+
 const s2Runs = 40;
 
 // Effect Arbitrary has no command-list generator. A generated seed draws fast-check's tape.
@@ -214,6 +229,7 @@ export const suite = (driver: Driver) =>
           const h = yield* driver.open();
           yield* h.allowStart(false);
           const answerIds: Array<string> = [];
+
           const inspect = (s: Snapshot, attempts: number, refused: number) => {
             const queue = s.starts.find((p) => p.name === "queue:1");
             expect(queue).toBeDefined();
@@ -222,6 +238,7 @@ export const suite = (driver: Driver) =>
             const answers = inbox.filter((l) =>
               Schema.is(Schema.TaggedUnion({ start_child_ok: {}, start_child_err: {} }))(l.m),
             );
+
             expect(requests).toHaveLength(attempts);
             expect(answers.map((l) => l.id)).toEqual(requests.map((l) => `${queue?.process}/${l.pos}/0/answer`));
             expect(answers.slice(0, answerIds.length).map((l) => l.id)).toEqual(answerIds);
@@ -240,6 +257,7 @@ export const suite = (driver: Driver) =>
 
             expect(s.model?.attempt).toBe(attempts);
             expect(s.model?.late).toBe(0);
+
             return answers.map((l) => l.id);
           };
 
@@ -305,14 +323,12 @@ export const suite = (driver: Driver) =>
         for (let change = 1; change <= 3; change++) {
           expect(replies(s, change)).toHaveLength(1);
           expect(replies(s, change)[0]).toHaveProperty("_tag", "merged");
-          expect(replies(s, change)[0]).toMatchObject({ ref: `own:${change}` });
+          expect(replies(s, change)[0]).toMatchObject({ ...Tag.cases.merged.make({}), ref: `own:${change}` });
+
           const first = s.letters.filter(
-            (l) =>
-              l.name === `merger:${change}.${change}` &&
-              typeof l.m === "object" &&
-              l.m !== null &&
-              Reflect.get(l.m, "_tag") === "land",
+            (l) => l.name === `merger:${change}.${change}` && Predicate.hasProperty(l.m, "_tag") && l.m._tag === "land",
           );
+
           expect(first).toHaveLength(1);
           expect(first[0]?.m).toMatchObject({
             ...Tag.cases.land.make({}),
@@ -440,11 +456,14 @@ export const suite = (driver: Driver) =>
                 ),
               { discard: true, concurrency: 1 },
             );
+
             const logger = Logger.map(Logger.formatSimple, (line) => {
               logs.push(line);
             });
+
             yield* Effect.gen(function* () {
               const h = yield* driver.open(Redacted.make(value.text));
+
               const inspect = Effect.gen(function* () {
                 const s = yield* h.snapshot;
                 driver.unleaked(
@@ -458,8 +477,10 @@ export const suite = (driver: Driver) =>
                   ],
                   [value.text, value.token],
                 );
+
                 return s;
               });
+
               // These faults are consumed before random moves may abandon the first child.
               yield* h.host.fail("update", { kind: "fault", reason: "unavailable" });
               yield* h.host.fail("update", { kind: "defect" });

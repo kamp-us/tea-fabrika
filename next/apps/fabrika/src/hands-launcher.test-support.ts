@@ -19,8 +19,11 @@ import { projectTasksLayer } from "./runtime.ts";
  * the Node test names the same two values itself and imports only this file's type.
  */
 const TASK = "hands-task";
+
 const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 /** One of the three calls, as this file's `Control` hands it to this file's Project. */
@@ -82,10 +85,12 @@ export class Project extends RealProject {
    */
   allRows() {
     const sql = this.ctx.storage.sql;
+
     const tables = sql
       .exec("SELECT name FROM sqlite_master WHERE type='table'")
       .toArray()
       .map((row) => String(row["name"]));
+
     return Object.fromEntries(
       tables.map((table) => [
         table,
@@ -138,6 +143,7 @@ export class Control extends RealControl {
     const real = () => super.fetch(request);
     const body = request.clone();
     const granted = request.headers.get("authorization") === `Bearer ${this.ctx.props.token}`;
+
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the private local control socket returns a Promise
     return Effect.runPromise(
       // oxlint-disable-next-line fabrika/no-promises -- edge: a Request body returns a Promise

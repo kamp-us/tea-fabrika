@@ -9,7 +9,9 @@ import { describe, expect, it } from "vitest";
 // newline. Every diff here is one git itself wrote, with the flags the bot's push reads its diff
 // with. The private word is made up.
 const script = process.env.TEST_LEAKGREP ?? join(import.meta.dirname, "leakgrep.sh");
+
 const options = { seed: 532, numRuns: 12 };
+
 const word = "private_zzqxjv";
 
 // The characters, other than the newline, that some line readers end a line at.
@@ -41,6 +43,7 @@ const lab = <A>(body: (lab: Lab) => A): A => {
     const draft = join(dir, "draft");
     mkdirSync(repo);
     writeFileSync(words, `${word}\n`);
+
     const git = (...args: string[]) => {
       const ran = spawnSync(
         "git",
@@ -57,9 +60,12 @@ const lab = <A>(body: (lab: Lab) => A): A => {
         ],
         { cwd: repo, encoding: "utf8" },
       );
+
       expect(ran.status, ran.stderr).toBe(0);
+
       return ran.stdout;
     };
+
     git("init", "-q");
     git("commit", "-q", "--allow-empty", "-m", "before");
 
@@ -76,6 +82,7 @@ const lab = <A>(body: (lab: Lab) => A): A => {
         }
 
         write(lines);
+
         return git("diff", "--cached", "--no-ext-diff", "--no-textconv", "--unified=0", "HEAD");
       },
       hits: (input, mode = "diff") => {
@@ -89,8 +96,10 @@ const lab = <A>(body: (lab: Lab) => A): A => {
           encoding: "utf8",
           env: { ...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined },
         });
+
         expect([0, 1], ran.stderr).toContain(ran.status);
         expect(ran.stdout + ran.stderr).not.toContain(word);
+
         return ran.stderr
           .split("\n")
           .map((line) => /^leakgrep: leak private_word at added line (\d+)$/.exec(line))
@@ -143,6 +152,7 @@ describe("T532 leakgrep reads a line up to the newline, today's tooling", () => 
           const expected = numbered(written)
             .filter(([, text]) => text.startsWith("+") && text.includes(word))
             .map(([n]) => n);
+
           expect(expected).toHaveLength(file.filter((text) => text.includes(word)).length);
           expect(hits(written)).toEqual(expected);
         });
@@ -157,9 +167,11 @@ describe("T532 leakgrep reads a line up to the newline, today's tooling", () => 
       fc.property(lines, (file) => {
         lab(({ hits }) => {
           const draft = file.map((text) => `${text}\n`).join("");
+
           const expected = numbered(draft)
             .filter(([, text]) => text.includes(word))
             .map(([n]) => n);
+
           expect(hits(draft, "text")).toEqual(expected);
         });
       }),

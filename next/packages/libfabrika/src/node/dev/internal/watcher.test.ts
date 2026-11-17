@@ -2,7 +2,7 @@
 // whatever its answer. Rebuilds remember failed inputs without advancing the phase.
 import { arbGuidedSequence, propertyTrace } from "@demlik/tea/pbt";
 import { expect, expectTypeOf, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 
 /** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
@@ -14,6 +14,7 @@ const Tag = Schema.TaggedUnion({
 
 it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attempt advances boot to watch", async () => {
   const { watcher } = await import("./watcher.ts");
+
   type Model =
     | { readonly _tag: "booting"; readonly failedInputs?: string | null }
     | { readonly _tag: "watching"; readonly failedInputs?: string | null };
@@ -30,6 +31,7 @@ it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attemp
     .map((failedInputs): Extract<Msg, { _tag: "rebuilt" }> => ({ ...Tag.cases.rebuilt.make({}), failedInputs }));
   const attempts = arbGuidedSequence(watcher, {}, { outside: { attempted, rebuilt } }, { maxLength: 60, size: "max" });
   const rebuildsSeen = new Set<string>();
+
   const run = propertyTrace(
     watcher,
     {},
@@ -61,14 +63,16 @@ it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attemp
         }
 
         expect(step.cmds).toEqual([]);
-        expect(Schema.decodeUnknownSync(json)(Schema.encodeSync(json)(step.next))).toEqual(step.next);
+        expect(Schema.decodeSync(json)(Schema.encodeSync(json)(step.next))).toEqual(step.next);
       }
 
       expect(final._tag).toBe(attemptedCount === 0 ? "booting" : "watching");
+
       return true;
     },
     { seed: 119120, numRuns: 100, failOnNeverActed: true },
   );
+
   const attemptsSeen = run.msgCounts.get("attempted");
   expect(attemptsSeen?.acted, "the walk reaches the first attempt").toBeGreaterThan(0);
   expect(attemptsSeen?.drawn, "the walk also reaches later attempts").toBeGreaterThan(attemptsSeen?.acted ?? 0);

@@ -15,6 +15,7 @@ export const Model = Schema.TaggedStruct("ready", {
   queued: Schema.Int,
   refused: Schema.Int,
 });
+
 /** @internal */
 export type Model = typeof Model.Type;
 

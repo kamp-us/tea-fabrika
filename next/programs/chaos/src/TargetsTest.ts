@@ -53,8 +53,11 @@ export type Open = Effect.Effect<
 >;
 
 const NAME = "checklist:1";
+
 const PROGRAM = "fabrika/checklist";
+
 const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 25 }) }, timeout: 120_000 };
+
 const integer = (maximum: number) => Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum })));
 
 const walk = Arbitrary.array(Arbitrary.all({ pick: integer(1000), retry: Arbitrary.schema(Schema.Boolean) }), {
@@ -69,6 +72,7 @@ const View = Schema.Struct({
 
 const shown = (raw: unknown) => {
   const view = Schema.decodeUnknownSync(View)(raw);
+
   return { ...view, items: [...view.items].sort((a, b) => a.name.localeCompare(b.name)) };
 };
 
@@ -88,12 +92,14 @@ export const suite = (open: Open, checklist: unknown) =>
             const items = new Map<string, string | null>();
             const replies: Array<{ input: Incoming; answer: unknown }> = [];
             let serial = 0;
+
             const expected = () => ({
               items: [...items]
                 .map(([name, kept]) => ({ name, state: kept === null ? "new" : "checked", note: kept }))
                 .sort((a, b) => a.name.localeCompare(b.name)),
               left: [...items.values()].filter((kept) => kept === null).length,
             });
+
             const send = Effect.fnUntraced(function* (
               runner: ProgramRunner["Service"],
               input: unknown,
@@ -102,8 +108,10 @@ export const suite = (open: Open, checklist: unknown) =>
               const sent = world.letter(++serial, input, by);
               const answer = yield* runner.msg(sent);
               replies.push({ input: sent, answer });
+
               return { input: sent, answer };
             });
+
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const { runner } = yield* world.session(NAME, PROGRAM, checklist, {});
@@ -167,6 +175,7 @@ export const suite = (open: Open, checklist: unknown) =>
                     // Choose from the current model: additions need a free name; every other move needs an item.
                     const free = ["one", "two", "three"].filter((name) => !items.has(name));
                     const available = [...items.keys()];
+
                     const legal = [
                       ...free.map((name) => ({ ...Tag.cases.add.make({}), name })),
                       ...available.flatMap((name) => [
@@ -175,6 +184,7 @@ export const suite = (open: Open, checklist: unknown) =>
                         { ...Tag.cases.remove.make({}), name },
                       ]),
                     ];
+
                     const input = legal[move.pick % legal.length];
 
                     if (input === undefined) {
@@ -296,6 +306,7 @@ export const suite = (open: Open, checklist: unknown) =>
               expect(
                 restarts.some((row) => Schema.is(Schema.Struct({ after: Schema.Literal(process) }))(row.body)),
               ).toBe(true);
+
               const exited = lives.filter(
                 Schema.is(
                   Schema.TaggedStruct("exited", {
@@ -306,6 +317,7 @@ export const suite = (open: Open, checklist: unknown) =>
                   }),
                 ),
               );
+
               expect(exited.find((exit) => exit.body.process === process)?.body.reason).toEqual(
                 Schema.TaggedStruct("crashed", { phase: Schema.String, error: Schema.String }).make({
                   phase: "step",

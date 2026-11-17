@@ -117,6 +117,7 @@ export const execArgs = (a: ExecAsk): string[] => [
 ];
 
 const ErrorEvent = Schema.Struct({ type: Schema.Literal("error"), message: Schema.String });
+
 const readError = Schema.decodeUnknownOption(Schema.fromJsonString(ErrorEvent));
 
 // Today's library's `Raw` is a plain union with no Schema maker, so its two values here are written out.
@@ -143,6 +144,7 @@ const probe = (config: CodexExecConfig, folder: string) =>
 
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const args = probeArgs(config.access, config.env.SHELL ?? "/bin/sh");
+
     const said = yield* spawner
       .string(
         ChildProcess.make(config.codex ?? "codex", args, {
@@ -158,12 +160,10 @@ const probe = (config: CodexExecConfig, folder: string) =>
       );
 
     if (!holdsPin(said, config.pin)) {
-      return yield* Effect.fail(
-        Agent.failed(
-          "start",
-          `the box's shell finds no Node ${config.pin}, so a test run there would be refused: ` +
-            `\`${NODE_PROBE}\` printed ${JSON.stringify(said.trim())}`,
-        ),
+      return yield* Agent.failed(
+        "start",
+        `the box's shell finds no Node ${config.pin}, so a test run there would be refused: ` +
+          `\`${NODE_PROBE}\` printed ${JSON.stringify(said.trim())}`,
       );
     }
   });
@@ -175,6 +175,7 @@ export const codexExecAdapter = (
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const fs = yield* FileSystem.FileSystem;
+
     return {
       name: "codex-exec",
       // No dollar cap on a plan. No `--output-schema`: it would make the last message the answer
@@ -184,7 +185,7 @@ export const codexExecAdapter = (
       start: (turn) =>
         Effect.gen(function* () {
           if (turn.system._tag === "replace") {
-            return yield* Effect.fail(Agent.failed("start", "codex-exec takes only an append system prompt"));
+            return yield* Agent.failed("start", "codex-exec takes only an append system prompt");
           }
 
           yield* probe(config, turn.folder).pipe(
@@ -194,7 +195,9 @@ export const codexExecAdapter = (
           const dir = yield* fs
             .makeTempDirectoryScoped({ prefix: "codex-exec-" })
             .pipe(Effect.mapError((e) => Agent.failed("start", String(e))));
+
           const last = `${dir}/last.md`;
+
           const args = execArgs({
             access: config.access,
             folder: turn.folder,
@@ -205,6 +208,7 @@ export const codexExecAdapter = (
             system: turn.system.text,
             last,
           });
+
           const handle = yield* spawner
             .spawn(
               ChildProcess.make(config.codex ?? "codex", args, {
@@ -221,6 +225,7 @@ export const codexExecAdapter = (
               // that could not start, never a defect that ends the run that asked.
               Effect.catchDefect((defect) => Effect.fail(Agent.failed("start", String(defect)))),
             );
+
           // What went wrong, from both sides: Codex's `error` events (it says capacity there) and its stderr.
           const said = { errors: "", stderr: "", ended: null as Agent.Raw | null };
           const trouble = () => `${said.errors}\n${said.stderr}`.trim().slice(-TAIL);
@@ -234,6 +239,7 @@ export const codexExecAdapter = (
             Effect.ignore,
             Effect.forkScoped,
           );
+
           const updates = handle.stdout.pipe(
             Stream.decodeText(),
             Stream.splitLines,
@@ -253,23 +259,24 @@ export const codexExecAdapter = (
 
               // The end waits for the last message file, which Codex writes on its way out.
               said.ended = raws.find((r) => r._tag === "ended") ?? said.ended;
+
               return Effect.succeed(raws.filter((r) => r._tag !== "ended"));
             }),
             Stream.flattenIterable,
           );
+
           // Done means a last message exists. Its text is the turn's last word, then the end.
           const finish = Effect.gen(function* () {
             const code = yield* handle.exitCode.pipe(Effect.orElseSucceed(() => -1));
             const text = yield* fs.readFileString(last).pipe(Effect.orElseSucceed(() => ""));
 
             if (text.trim() === "") {
-              return yield* Effect.fail(
-                Agent.failed("broke", `codex exited (${code}) with no last message: ${trouble()}`),
-              );
+              return yield* Agent.failed("broke", `codex exited (${code}) with no last message: ${trouble()}`);
             }
 
             return [lastWord(text), said.ended ?? ENDED];
           });
+
           return {
             updates: Stream.concat(updates, Stream.fromEffect(finish).pipe(Stream.flattenIterable)),
             pid: handle.pid,

@@ -2,8 +2,12 @@
 // Only this file owns content deletion and trace attribution; other laws inspect lifecycle events.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Option, Schema, Stream } from "effect";
-import { TestClock } from "effect/testing";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import { programBox } from "../../cloudflare/box.ts";
@@ -31,9 +35,13 @@ const policy = {
 };
 
 const NAME = "counter:1";
+
 const PRIVATE = "private failure text P34";
+
 const owner = Writer.cases.person.make({ key: "SHA256:caller", for: from().for });
+
 const Model = Schema.Struct({ count: Schema.Int });
+
 type Model = typeof Model.Type;
 const Msg = Schema.TaggedStruct("poison", {});
 // Only the platform base class and the RPC transport are supplied. Box methods are real.
@@ -52,8 +60,10 @@ const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveri
   const ledger = storage(),
     state = storage(),
     sink = storage();
+
   const next = ids(A, B, W, X);
   const parts = new Map<string, ReturnType<typeof storage>>();
+
   const records = RecordManager.sql((name) => {
     let part = parts.get(name);
 
@@ -64,6 +74,7 @@ const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveri
 
     return part.sql;
   }, 1024 ** 3);
+
   const machine = Machine.make({
     model: Model,
     msg: Msg,
@@ -75,6 +86,7 @@ const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveri
       },
     },
   });
+
   const p = {
     name: "counter",
     machine,
@@ -87,14 +99,17 @@ const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveri
     writes: {},
     wake: () => null,
   };
+
   const alarms: Array<number | null> = [];
   const loader = ProgramLoader.layer({ counter: p }, {});
+
   const workerLoader = Layer.effect(
     ProgramLoader,
     Effect.gen(function* () {
       const loaded = yield* ProgramLoader.use((l) => l.load("counter", "build-a"));
       const Box = programBox(p, "build-a");
       const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
+
       const execution = workerExecution({
         init: (s) => box.init(s),
         step: (s, m) => box.step(s, m),
@@ -107,11 +122,14 @@ const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveri
         check: (k, f) => box.check(k, f),
         admit: (m) => box.admit(m),
       });
+
       return { load: () => Effect.succeed({ ...loaded, execution }) };
     }),
   ).pipe(Layer.provide(loader));
+
   const base = () => Layer.mergeAll(data(ledger.sql), SpanSink.layer(sink.sql, { object: A }), records, Archive.memory);
   const manager = () => ProcessManager.layer(brain(), next.next).pipe(Layer.provideMerge(base()));
+
   const layer = () =>
     runnerLayer(
       { id: A, name: NAME, program: "counter", build: "build-a", owner },
@@ -131,6 +149,7 @@ const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveri
             CheckedWriter,
             Effect.gen(function* () {
               const m = yield* Mailbox;
+
               return {
                 append: (i: Incoming) => m.send(NAME, i.id, i.envelope.input, from()),
                 commit: () => Effect.die("no writes"),
@@ -149,6 +168,7 @@ const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveri
         ).pipe(Layer.provideMerge(base())),
       ),
     );
+
   const input = {
     id: "poison",
     envelope: { id: `in-${X}-1`, by: owner, arrivedAt: 0, input: Tag.cases.poison.make({}) },
@@ -156,6 +176,7 @@ const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveri
     seen: 0,
     span: { traceId: from().traceId, spanId: "00f067aa0ba902b7" },
   };
+
   return {
     ledger,
     sink,
@@ -219,7 +240,9 @@ const failure = fc
   )
   .map(([kind, id]) => {
     const message = `private-message-${id}`;
+
     class ProgramError extends Error {}
+
     const value =
       kind === "TypeError"
         ? new TypeError(message)
@@ -236,6 +259,7 @@ const failure = fc
                   : kind === "object"
                     ? { message }
                     : message;
+
     return { value, message, private: [message, ...(value instanceof Error ? [value.stack!] : [])] };
   });
 
@@ -250,10 +274,12 @@ const located = (location: string): { file: string; folder: boolean } => {
   if (origin !== null) {
     const inner = located(origin[2] ?? ""),
       outer = located(origin[3] ?? "");
+
     return { file: `eval at ${origin[1]} (${inner.file}), ${outer.file}`, folder: inner.folder || outer.folder };
   }
 
   const folder = !location.startsWith("node:") && /[/\\]/.test(location);
+
   return {
     file: folder ? location.slice(Math.max(location.lastIndexOf("/"), location.lastIndexOf("\\")) + 1) : location,
     folder,
@@ -269,6 +295,7 @@ const frames = (text: string) =>
     }
 
     const { file, folder } = located(frame[2] ?? frame[3] ?? "");
+
     return [{ frame: frame[1] === undefined ? file : `${frame[1]} (${file})`, folder }];
   });
 
@@ -312,14 +339,17 @@ for (const adapter of ["node", "worker"] as const) {
               const rows = yield* recorded(A);
               const r = yield* RecordManager;
               const chain = { _tag: "job", process: A } as const;
+
               const contents = yield* Effect.forEach(rows, (row) => r.content(chain, row.spanId), {
                 concurrency: 1,
               });
+
               const kept = contents.flatMap((c) => (Option.isSome(c) && c.value._tag === "kept" ? [c.value] : []));
               expect(kept.length).toBeGreaterThan(0);
 
               // A-Sink stores each frame with its folders cut, so the law asks for the frames, not the raw stack.
               const thrown = sample.value instanceof Error ? frames(sample.value.stack ?? "") : [];
+
               const lost = kept.map((c) => [
                 ...(sample.message === null || c.message.includes(sample.message) ? [] : [sample.message]),
                 ...lostFrames(
@@ -327,6 +357,7 @@ for (const adapter of ["node", "worker"] as const) {
                   thrown.map((raw) => raw.frame),
                 ),
               ]);
+
               expect(
                 lost.some((none) => none.length === 0),
                 `original message and every stack frame (name, file, line, column) must reach P37; lost: ${JSON.stringify(lost)}`,
@@ -341,15 +372,18 @@ for (const adapter of ["node", "worker"] as const) {
                   RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision }),
                 ),
               );
+
               const dead = yield* read(`${A}/dead`);
               const events = yield* read(`processes/${NAME}`);
               const measurements = w.sink.sql.exec("SELECT * FROM measurements");
+
               const name =
                 sample.value instanceof Error
                   ? sample.value.constructor.name
                   : sample.value === null
                     ? "null"
                     : typeof sample.value;
+
               expect(receipt).toMatchObject({ errors: [name], tries: 1 });
               expect(rows.find((row) => row.name === "runner.throw")?.attributes["error.type"]).toBe(name);
               expect(measurements.filter((row) => row.piece === "runner.throw")).toMatchObject([{ error: name }]);
@@ -454,17 +488,20 @@ describe("P34 supervision recording", () => {
               yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input)));
               const rows = yield* recorded(A);
               const r = yield* RecordManager;
+
               const contents = yield* Effect.forEach(
                 rows,
                 (row) => r.content({ _tag: "job", process: A }, row.spanId),
                 { concurrency: 1 },
               );
+
               const at = contents.findIndex((content) =>
                 Option.match(content, {
                   onNone: () => false,
                   onSome: (c) => c._tag === "kept" && c.message.includes(secret),
                 }),
               );
+
               expect(
                 at,
                 "the original throw must reach deletable content before guards erase it",

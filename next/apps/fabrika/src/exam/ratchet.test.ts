@@ -12,6 +12,7 @@ import { added, judge, LISTS } from "./ratchet.ts";
 const lintKey = (r: { file: string; rule: string; code: string }) => JSON.stringify([r.file, r.rule, r.code]);
 
 const runs = { seed: 119120, numRuns: 100 };
+
 const [NEXT, AGENTS, DEAD] = LISTS as [(typeof LISTS)[0], (typeof LISTS)[0], (typeof LISTS)[0]];
 
 const answer = (list: (typeof LISTS)[0], base: string | null, head: string | null) =>
@@ -49,10 +50,12 @@ describe("added (L1)", () => {
 });
 
 const field = fc.string({ maxLength: 8 });
+
 // A change that keeps the old text and adds to it, spaces included, so it is never the same string.
 const change = fc.constantFrom(" ", "  ", "\t", "x");
 
 const lintRow = fc.record({ file: field, rule: field, code: field });
+
 const deadRow = fc.record({ scope: field, kind: field, id: field, reason: field });
 
 describe("row identity follows each reader (L2)", () => {

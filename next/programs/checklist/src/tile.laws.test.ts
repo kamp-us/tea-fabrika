@@ -28,10 +28,12 @@ const Tag = Schema.TaggedUnion({
 });
 
 const SEED = 119120;
+
 const CAP = 80;
 
 // The exam's own statement of the tile's Model, pinned to the schema's type (0135).
 type Tile = { readonly draft: string };
+
 expectTypeOf<Tile>().toEqualTypeOf<typeof tile.model.Type>();
 
 type Msg = { readonly _tag: "typed"; readonly text: string } | { readonly _tag: "submit" };
@@ -81,6 +83,7 @@ const walk = (
 };
 
 const walks = fc.array(choice, { minLength: 1, maxLength: 40 });
+
 const opts = { seed: SEED, numRuns: 200 };
 
 describe("L22: the checklist tile", () => {
@@ -118,6 +121,7 @@ describe("L22: the checklist tile", () => {
           if (prev.draft === "") {
             seen.empty++;
             expect([next, cmds], "an empty submit sent something").toEqual([prev, []]);
+
             return;
           }
 

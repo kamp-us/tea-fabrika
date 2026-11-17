@@ -48,6 +48,7 @@ export const noNodeImports: CreateRule = {
     }
 
     const comments = context.sourceCode.getAllComments();
+
     const check = (source: Node | null | undefined) => {
       const value =
         source?.type === "Literal"
@@ -84,6 +85,7 @@ export const noNodeImports: CreateRule = {
         message: `Use ${replacement(module)}. Native imports in next/ need // edge: <reason> on this line (docs/direction/build-on-effect.md).`,
       });
     };
+
     return {
       ImportDeclaration: (node) => check(node.source),
       ExportNamedDeclaration: (node) => check(node.source),

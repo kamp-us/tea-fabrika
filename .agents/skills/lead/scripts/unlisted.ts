@@ -26,10 +26,12 @@ const main = Effect.gen(function* () {
 
   if (repo === null) {
     yield* Console.log("unlisted: cannot tell: origin is not a GitHub repo");
+
     return yield* setExit(1);
   }
 
   const services = Layer.mergeAll(BranchesGit.layer(dir), PullRequestsGh.layer(repo, dir));
+
   const report = yield* Unlisted.check().pipe(
     Effect.provide(services),
     Effect.map((r) => ({ ok: true, lines: Unlisted.lines(r) })),

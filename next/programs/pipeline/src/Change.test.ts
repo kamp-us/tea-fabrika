@@ -38,19 +38,25 @@ const normalize = (values: ReadonlyArray<unknown>) => [...new Set(values.map((v)
 
 const oracle = (checks: ReadonlyArray<typeof Change.Check.Type>, runs: typeof Checks.Type) => {
   const asked = checks.filter((c, i) => !checks.slice(0, i).some((p) => same(p, c)));
+
   const selected = runs.filter((r) =>
     asked.some((c) => c.name === r.name && (c.source === undefined || c.source === r.source)),
   );
+
   const red = selected.filter(
     (r) => r.status._tag === "done" && ["failure", "timed_out"].includes(r.status.conclusion),
   );
+
   const lost = selected.filter(
     (r) => r.status._tag === "done" && ["cancelled", "startup_failure"].includes(r.status.conclusion),
   );
+
   const pending = asked.filter((c) => {
     const matching = selected.filter((r) => r.name === c.name && (c.source === undefined || c.source === r.source));
+
     return matching.length === 0 || matching.some((r) => r.status._tag !== "done");
   });
+
   return red.length > 0
     ? { tag: "red", values: red }
     : lost.length > 0
@@ -81,6 +87,7 @@ describe("L5: the verdict", () => {
         )
         .map(([checks, shuffled, extra]) => ({ runs, checks: [checks[0]!, ...checks] as const, shuffled, extra })),
     );
+
     fc.assert(
       fc.property(cases, ({ checks, runs, shuffled, extra }) => {
         expect(Schema.is(Checks)(runs)).toBe(true);
@@ -119,9 +126,7 @@ const segment = fc.oneof(
   fc.stringMatching(/^[a-z0-9_-]{1,12}$/),
 );
 
-const path = fc
-  .array(segment, { minLength: 1, maxLength: 5 })
-  .map((parts) => Schema.decodeUnknownSync(Path)(parts.join("/")));
+const path = fc.array(segment, { minLength: 1, maxLength: 5 }).map((parts) => Schema.decodeSync(Path)(parts.join("/")));
 
 const glob = fc
   .oneof(
@@ -149,8 +154,10 @@ describe("L6: kind is the heaviest", () => {
                     : kinds.rows.some((g) => picomatch(g)(p))
                       ? "rows"
                       : "code";
+
                   return weight[kind] > weight[heavy] ? kind : heavy;
                 }, "rows");
+
           expect(Change.kind(kinds, paths)).toBe(expected);
           expect(Change.kind(kinds, null)).toBe("code");
           expect(Change.kind(kinds, [])).toBe("code");
@@ -168,10 +175,8 @@ describe("L6: kind is the heaviest", () => {
             expect(weight[Change.kind(kinds, [...paths, added])]).toBeGreaterThanOrEqual(weight[expected]);
           }
 
-          const both = Schema.decodeUnknownSync(Change.Glob)("**");
-          expect(Change.kind({ rows: [both], docs: [both] }, [Schema.decodeUnknownSync(Path)("docs/a b.md")])).toBe(
-            "docs",
-          );
+          const both = Schema.decodeSync(Change.Glob)("**");
+          expect(Change.kind({ rows: [both], docs: [both] }, [Schema.decodeSync(Path)("docs/a b.md")])).toBe("docs");
         },
       ),
       { seed: 119120, numRuns: 500 },
@@ -186,6 +191,9 @@ const emptyIsInvalid = (runs: typeof Checks.Type) => {
 };
 
 type Model = ReturnType<typeof merger>["machine"]["model"]["Type"];
+
 type Checking = Extract<Model, { readonly _tag: "checking" }>;
+
 expectTypeOf<readonly []>().not.toExtend<Checking["checks"]>();
+
 void emptyIsInvalid;

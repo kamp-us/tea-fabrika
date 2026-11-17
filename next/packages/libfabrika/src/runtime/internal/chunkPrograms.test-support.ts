@@ -34,6 +34,7 @@ export const Answer = Schema.Struct({
 
 /** @internal The answers, and the numbers of the chunked sends still unanswered, oldest first. */
 export const WriterModel = Schema.Struct({ answers: Schema.Array(Answer), pending: Schema.Array(Schema.Int) });
+
 type WriterModel = typeof WriterModel.Type;
 
 /** @internal The writers' inputs. `aside` is a plain letter to the writer's second peer, so a law sees
@@ -54,6 +55,7 @@ export const madeItems = (n: number, count: number, size: number, tail: number) 
 /** A plain send's number, read back from the letter its answer echoes. */
 const numbered = (m: unknown): number => {
   const plain = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Struct({ n: Schema.Int }) }))(m);
+
   return plain._tag === "Some" ? plain.value.m.n : -1;
 };
 
@@ -64,6 +66,7 @@ const decodeEcho = Schema.decodeUnknownOption(
 /** A chunked send's echoed `{to, as}`, read back from its answer's Cmd; nothing when it names none. */
 const address = (m: unknown): Partial<typeof Answer.Type> => {
   const echo = decodeEcho(m);
+
   return echo._tag === "Some" ? { to: echo.value.cmd.to, as: echo.value.cmd.as } : {};
 };
 
@@ -92,6 +95,7 @@ export const pipeWriter = (peer: string) => {
       send_err: (s, m) => [answered(s, numbered(m.cmd), m.error._tag), []],
     },
   });
+
   return Program.make({
     name: "t1041-writer",
     machine,
@@ -130,6 +134,7 @@ export const chunkWriter = (peer: string, other: string = peer) => {
       send_chunks_err: (s, m) => [chunkAnswered(s, m.error._tag, address(m)), []],
     },
   });
+
   return Program.make({
     name: "t1041-chunk-writer",
     machine,
@@ -171,6 +176,7 @@ export const pipeReader = () => {
       rows: (s, m) => [{ got: [...s.got, Got.cases.rows.make({ items: m.items, part: m.part })] }, []],
     },
   });
+
   return Program.make({
     name: "t1041-reader",
     machine,

@@ -23,7 +23,9 @@
 // back. Stale moves are chosen on purpose.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import { handshakeMachine } from "./Handshake.ts";
 
 /** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
@@ -50,12 +52,13 @@ const step = (s: State, m: Msg): readonly [State, ReadonlyArray<Cmd>] =>
   applyCell(handshakeMachine as never, s as never, m as never) as never;
 
 const ADMITTED = { version: 1, ping: 5_000, identity: { key: "SHA256:k", person: "person_x", as: "window" } };
+
 /** The door's admission of a generated person: Desk S2a keeps the person on `admitted`, so a window
  *  can name that person's tezgah (the plan's "Where tezgah runs"). */
 const admission = (person: string) => ({ ...ADMITTED, identity: { ...ADMITTED.identity, person } });
 
 const isAdmission = Schema.is(
-  Schema.Struct({ ping: Schema.Number, identity: Schema.Struct({ person: Schema.String }) }),
+  Schema.Struct({ ping: Schema.Finite, identity: Schema.Struct({ person: Schema.String }) }),
 );
 
 /** A blind draw the fold reads in the state it reached. */
@@ -73,7 +76,9 @@ const Pick = Schema.Struct({
   // The person the door admits: a person id, or any text a door could send.
   person: Schema.Union([Schema.String.check(Schema.isPattern(/^person_[0-9a-hjkmnp-tv-z]{26}$/)), Schema.String]),
 });
+
 type Pick = typeof Pick.Type;
+
 const Picks = Schema.Array(Pick).check(Schema.isMinLength(10), Schema.isMaxLength(120));
 
 type World = {
@@ -98,6 +103,7 @@ const moves = (w: World, c: Pick): ReadonlyArray<() => Msg> => {
   const s = w.s;
   const at = Math.max(0, w.at);
   const other = s.dial + 1 + (c.aux % 3);
+
   const out: Array<() => Msg> = [
     () => ({ ...Tag.cases.opened.make({}), dial: s.dial + 1, at }),
     () => ({ ...Tag.cases.challenge.make({}), dial: s.dial, nonce: c.nonce, at }),
@@ -107,6 +113,7 @@ const moves = (w: World, c: Pick): ReadonlyArray<() => Msg> => {
     () => ({ ...Tag.cases.waiting.make({}), dial: s.dial, code: c.code, until: c.until, at }),
     () => ({ ...Tag.cases.waiting.make({}), dial: other, code: c.code, until: c.until, at }),
   ];
+
   const id = liveId(s);
 
   if (id !== undefined) {
@@ -243,9 +250,7 @@ describe("P18 L2: the handshake answers only its own request", () => {
         }
 
         if (next._tag === "failed" && prev._tag !== "failed") {
-          expect(m._tag === "hello_err" && Reflect.get(Object(m["error"]), "_tag") === "key", `${label} failed`).toBe(
-            true,
-          );
+          expect(m._tag === "hello_err" && Predicate.isTagged(m["error"], "key"), `${label} failed`).toBe(true);
         }
 
         // The door's admission, answered to the live `initialize`, admits, and keeps the person it
@@ -288,6 +293,7 @@ describe("P18 L2: the handshake answers only its own request", () => {
           expect(n === undefined || (typeof n === "number" && n >= 0), `${field} ${String(n)}`).toBe(true);
         }
       });
+
       return true;
     },
     runs,
@@ -313,6 +319,7 @@ describe("P18 L2: the handshake answers only its own request", () => {
         Object.values(seen).every((n) => n > 0),
         JSON.stringify(seen),
       ).toBe(true);
+
       return true;
     },
     { arbitrary: { seed: SEED, runs: 3, size: 120 } },

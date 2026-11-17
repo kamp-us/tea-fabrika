@@ -24,10 +24,13 @@ const Tag = Schema.TaggedUnion({
 });
 
 type Model = typeof Waiting.machine.model.Type;
+
 type Msg = typeof Waiting.machine.msg.Type;
 type Knock = Extract<Msg, { readonly _tag: "knock" }>;
 type Empty = Extract<Model, { readonly _tag: "empty" }>;
+
 type Busy = Extract<Model, { readonly _tag: "waiting" }>;
+
 type Pending = Busy["rows"][number];
 
 // Compile-only law: `empty` holds no rows, `waiting` holds at least one, and a pending row holds
@@ -45,23 +48,27 @@ const shapeTypeLaw = (empty: Empty, busy: Busy, row: Pending) => {
   const bare: Busy = { ...busy, rows: [] };
   // @ts-expect-error tabs is derived when a row is encoded, never stored in the Model
   const tabs: number = row.tabs;
+
   return [one, lonely, full, bare, tabs];
 };
 
 void shapeTypeLaw;
 
 const runs = { seed: 119120, numRuns: 100 };
+
 const json = () => Schema.fromJsonString(Waiting.Stored);
 
 const step = (s: Model, msg: Msg): Model => {
   const [next, cmds] = applyCell(Waiting.machine, s, msg);
   expect(cmds).toEqual([]);
+
   return next;
 };
 
 const state = (ttl = 600_000, most = 3, loaded: Model | null = null): Model => {
   const [s, cmds] = Waiting.machine.init(loaded, { most, ttl });
   expect(cmds).toEqual([]);
+
   return s;
 };
 
@@ -93,6 +100,7 @@ describe("P10 waiting rows", () => {
         if (most < 1) {
           expect(() => Waiting.machine.init(null, { most, ttl: 600_000 })).toThrow();
           expect(Schema.decodeUnknownOption(Waiting.Stored)(raw)).toEqual(Option.none());
+
           return;
         }
 
@@ -140,7 +148,9 @@ const Walk = fc.record({
 });
 
 type Walk = typeof Walk extends fc.Arbitrary<infer A> ? A : never;
+
 type Seed = Walk["seeds"][number];
+
 type Step = { readonly before: Model; readonly msg: Msg; readonly after: Model };
 
 const at = <A>(list: ReadonlyArray<A>, n: number): A | undefined => list[n % Math.max(1, list.length)];
@@ -156,16 +166,21 @@ const resolve = (s: Model, seed: Seed, memory: Memory): Msg => {
   const rows = s.rows;
   const row = at(rows, seed.pick);
   const gone = memory.keys.filter((k) => !rows.some((r) => r.key === k));
+
   const time = () => {
     const t = row === undefined || seed.when === 2 ? memory.now + 1 + (seed.other % 5) : row.until + seed.when;
     memory.now = Math.max(memory.now, t);
+
     return t;
   };
+
   const freshKey = () => {
     const k = memory.names.keys[memory.keys.length]!;
     memory.keys.push(k);
+
     return k;
   };
+
   const absentKey = () => at(gone, seed.other) ?? "unknown";
 
   if (seed.kind === "expire") {
@@ -179,6 +194,7 @@ const resolve = (s: Model, seed: Seed, memory: Memory): Msg => {
 
   if (seed.kind === "leave") {
     const target = seed.fresh === 0 || row === undefined ? absentKey() : row.key;
+
     const client =
       seed.other % 3 === 0 ? "nobody" : (at(row?.clients ?? [], seed.other) ?? at(rows[0]?.clients ?? [], 0) ?? "x");
     return { ...Tag.cases.leave.make({}), key: target, client };
@@ -190,11 +206,14 @@ const resolve = (s: Model, seed: Seed, memory: Memory): Msg => {
       : seed.fresh === 1
         ? (at(gone, seed.other) ?? freshKey())
         : row.key;
+
   const own = rows.find((r) => r.key === key);
+
   const client =
     own !== undefined && seed.other % 3 !== 0
       ? (at(own.clients, seed.other) ?? "x")
       : memory.names.clients[memory.clients++]!;
+
   return {
     ...Tag.cases.knock.make({}),
     key,
@@ -415,12 +434,14 @@ it.prop(
     for (const [n, choice] of choices.entries()) {
       const rows = pending.rows;
       const leaves = [...grants.keys()].filter((k) => !revoked.has(k));
+
       const moves = [
         "knock",
         "expire",
         ...(rows.some((r) => !grants.has(r.key)) ? ["grant"] : []),
         ...(leaves.length > 0 ? ["revoke"] : []),
       ];
+
       const move = moves[choice % moves.length];
 
       if (move === "knock") {
@@ -452,6 +473,7 @@ it.prop(
         const available = rows.filter((r) => !grants.has(r.key));
         const row = available[choice % available.length]!;
         const as = (["hands", "window", "agent"] as const)[Math.floor(choice / 3) % 3]!;
+
         const grant = {
           id: `grant-${n}`,
           key: row.key,
@@ -461,6 +483,7 @@ it.prop(
           saw,
           sentAt: "writer-clock",
         };
+
         [access] = applyCell(Access.access, access, {
           ...Tag.cases.fold.make({}),
           event: Access.MemberEvent.cases.granted.make({
@@ -492,6 +515,7 @@ it.prop(
       const stored = Schema.decodeUnknownSync(Waiting.Stored)(
         JSON.parse(JSON.stringify(Schema.encodeSync(Waiting.Stored)(pending))),
       );
+
       expect(stored).toEqual(pending);
 
       for (const [key, as] of grants) {

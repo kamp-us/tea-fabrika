@@ -7,7 +7,9 @@ import * as fc from "fast-check";
 import { inboxMachine } from "./program.ts";
 
 const SEED = 119120;
+
 const RUNS = 100;
+
 const load = () => import("./program.ts");
 
 // Independent shapes from the approved plan, pinned to the product's schemas in I4 (0135).
@@ -21,6 +23,7 @@ const Fields = {
 };
 
 const Row = Schema.TaggedUnion({ added: Fields });
+
 const Model = Schema.Struct({ rows: Schema.Array(Row) });
 const Msg = Schema.TaggedStruct("added", Fields);
 
@@ -74,6 +77,7 @@ describe("ticket 884 the inbox program, slice 1", () => {
           ({ next, cmds }) => {
             expect(next.rows).toEqual(expected[index++]);
             expect(cmds).toEqual([]);
+
             return true;
           },
           { seed: SEED, numRuns: 1 },
@@ -107,7 +111,7 @@ describe("ticket 884 the inbox program, slice 1", () => {
         expectTypeOf<typeof Row.Type>().toEqualTypeOf<(typeof inboxView.Type)["rows"][number]>();
         expectTypeOf<typeof Model.Type>().toEqualTypeOf<typeof inboxView.Type>();
         const view = inbox.view.select(model);
-        expect(Schema.decodeUnknownSync(inboxView, { onExcessProperty: "error" })(view)).toEqual(view);
+        expect(Schema.decodeSync(inboxView, { onExcessProperty: "error" })(view)).toEqual(view);
         expect(view).toEqual(model);
       }),
     { arbitrary: { seed: SEED, runs: RUNS } },

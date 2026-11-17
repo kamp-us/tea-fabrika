@@ -3,7 +3,9 @@
 import { applyCell } from "@demlik/tea";
 import { propertyInvariant } from "@demlik/tea/pbt";
 import { expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { InputId } from "../../Id.ts";
 import { Event, TrustDecision } from "../RepositoryTrust.ts";
@@ -22,7 +24,9 @@ const Tag = Schema.TaggedUnion({
 });
 
 type Model = typeof Open.machine.model.Type;
+
 type Msg = typeof Open.machine.msg.Type;
+
 type Phase = "closed" | "checking" | "history" | "awaiting_trust" | "saving" | "ready" | "refused";
 
 const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
@@ -47,15 +51,19 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
       const events: Array<Event> = [];
       const selected: Array<typeof Event.cases.selected.Type> = [];
       const messages: Array<Msg> = [];
-      let decision: typeof TrustDecision.Type | undefined;
+      let decision: TrustDecision | undefined;
       let writes = 0;
+
       const send = (msg: Msg) => {
         messages.push(msg);
         model = applyCell(Open.machine, model, msg)[0];
+
         return model;
       };
+
       const select = (pick: number) => {
         const past = draw.snapshots[pick % draw.snapshots.length]!;
+
         const event = Event.cases.selected.make({
           repository: snapshot.repository,
           key: snapshot.key,
@@ -67,10 +75,13 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
           settings: past.settings,
           request: draw.selections[selected.length]!,
         });
+
         selected.push(event);
         events.push(event);
+
         return event;
       };
+
       const answer = (past: typeof Event.cases.selected.Type, yes: boolean) => {
         decision = yes ? TrustDecision.cases.accepted.make({}) : TrustDecision.cases.denied.make({});
         events.push(
@@ -87,6 +98,7 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
           }),
         );
       };
+
       const replay = (pick: number) => {
         const selection = draw.selections[pick % draw.selections.length]!;
         send({ ...Tag.cases.select.make({}), selection });
@@ -188,6 +200,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
       let accepted = false;
       const old: Array<Msg> = [];
       const messages: Array<Msg> = [];
+
       const send = (msg: Msg, expected: Phase) => {
         const [next] = applyCell(Open.machine, model, msg);
         messages.push(msg);
@@ -206,6 +219,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         model = next;
         cursor.phase = expected;
       };
+
       const select = (pick: number) => {
         if (model._tag !== "closed") {
           old.push({ ...Tag.cases.checked.make({}), selection, snapshot });
@@ -236,6 +250,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         accepted = false;
         send({ ...Tag.cases.select.make({}), selection }, "checking");
       };
+
       const advance = (pick: number, yes: boolean) => {
         if (cursor.phase === "closed" || cursor.phase === "ready" || cursor.phase === "refused") {
           select(pick);
@@ -369,6 +384,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
       }
 
       expect(model._tag).toBe("refused");
+
       // Require a stale yes to arrive while its replacement is actually awaiting an answer.
       const stale: Msg = {
         ...Tag.cases.answer.make({}),
@@ -376,6 +392,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         request,
         decision: TrustDecision.cases.accepted.make({}),
       };
+
       select(draw.cells[0]!.pick);
       advance(0, true);
       advance(0, true);

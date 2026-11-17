@@ -20,7 +20,7 @@ import { PERSON, type reader } from "./p14.test-support.ts";
 type Reader = Effect.Success<ReturnType<typeof reader>>;
 
 /** The workspace the tab shows: the browser entry starts its window on workspace 1. */
-export const WORKSPACE = 1;
+const WORKSPACE = 1;
 
 /** How far a drawn tile's edge may sit from where the drawn rule puts it, in CSS pixels: the
  *  browser's rounding of flex shares to layout units, never a divider or a padding. */
@@ -38,9 +38,11 @@ type Box = { readonly x: number; readonly y: number; readonly width: number; rea
  *  each part takes its percent of what is left. */
 const drawnRule = (layout: TezgahView["workspaces"][number]["layout"], area: Box): ReadonlyMap<string, Box> => {
   const out = new Map<string, Box>();
+
   const walk = (node: typeof layout, box: Box): void => {
     if (typeof node === "string") {
       out.set(node, box);
+
       return;
     }
 
@@ -59,7 +61,9 @@ const drawnRule = (layout: TezgahView["workspaces"][number]["layout"], area: Box
       at += share + GAP;
     }
   };
+
   walk(layout, area);
+
   return out;
 };
 
@@ -84,16 +88,20 @@ export const regionName = (tile: Pick<Tile, "program" | "n">): string =>
   `${tile.program.slice(tile.program.lastIndexOf("/") + 1)}, t${tile.n}`;
 
 const Started = Schema.TaggedStruct("started", { body: Schema.Struct({ process: Schema.String }) });
+
 const Opened = Schema.Struct({ result: Schema.Struct({ rev: Schema.Int, view: View }) });
 
 /** tezgah's process id for the founder, from `processes/tezgah:<person>`, as the window finds it. */
 export const tezgahPid = (r: Reader) =>
   Effect.gen(function* () {
     const entries = yield* r.read(`processes/${tezgahName(PERSON)}`);
+
     const started = entries.flatMap((e) => {
       const decoded = Schema.decodeUnknownOption(Started)(e);
+
       return decoded._tag === "Some" ? [decoded.value.body.process] : [];
     });
+
     const pid = started.at(-1);
 
     if (pid === undefined) {
@@ -119,7 +127,7 @@ export const tell = (r: Reader, pid: string, m: unknown, letter: string) =>
 
 /** What the tab draws: how many mains, each region in document order with its name and box, the
  *  main's box, the names of every element marked `aria-current`, and the polite region's words. */
-export type Drawn = {
+type Drawn = {
   readonly mains: number;
   readonly regions: ReadonlyArray<{ readonly name: string; readonly box: Box | null }>;
   readonly main: Box | null;
@@ -140,10 +148,13 @@ export const drawn = (page: Page): Effect.Effect<Drawn> =>
     const mains = yield* promised(() => page.getByRole("main").count());
     const main = page.getByRole("main").first();
     const snapshot = mains === 0 ? "" : yield* promised(() => main.ariaSnapshot());
+
     const names = snapshot.split("\n").flatMap((line) => {
       const m = REGION.exec(line);
+
       return m?.[1] === undefined ? [] : [m[1].replace(/\\(.)/g, "$1")];
     });
+
     const regions = yield* Effect.forEach(
       names,
       (name) =>
@@ -152,7 +163,9 @@ export const drawn = (page: Page): Effect.Effect<Drawn> =>
         ),
       { concurrency: 1 },
     );
+
     const mainBox = mains === 0 ? null : yield* promised(() => main.boundingBox());
+
     const facts = yield* promised(() =>
       page.evaluate(() => {
         const label = (el: Element) =>
@@ -162,6 +175,7 @@ export const drawn = (page: Page): Effect.Effect<Drawn> =>
                 .map((id) => document.getElementById(id)?.textContent?.trim() ?? "")
                 .join(" ")
             : (el.getAttribute("aria-label") ?? "");
+
         return {
           current: [...document.querySelectorAll("[aria-current]")]
             .filter((el) => el.getAttribute("aria-current") !== "false")
@@ -177,6 +191,7 @@ export const drawn = (page: Page): Effect.Effect<Drawn> =>
         };
       }),
     );
+
     return { mains, regions, main: mainBox, ...facts };
   });
 
@@ -191,10 +206,13 @@ export const differences = (view: TezgahView, d: Drawn): ReadonlyArray<string> =
   }
 
   const byId = new Map(view.tiles.map((t) => [t.id, t]));
+
   const named = (id: TileId) => {
     const tile = byId.get(id);
+
     return tile === undefined ? `a tile tezgah does not list (${id})` : regionName(tile);
   };
+
   const want = Layout.order(space.layout).map(named);
   const out: Array<string> = [];
 
@@ -262,6 +280,7 @@ export const settle = (
 
       if (wrong.length === 0 || tries >= 120) {
         expect(wrong, `${label}: ${JSON.stringify(view)}`).toEqual([]);
+
         return view;
       }
 
@@ -272,6 +291,7 @@ export const settle = (
 /** The tiles of workspace 1 in reading order. */
 export const shown = (view: TezgahView): ReadonlyArray<Tile> => {
   const space = view.workspaces.find((w) => w.n === WORKSPACE);
+
   return space === undefined ? [] : Layout.order(space.layout).flatMap((id) => view.tiles.filter((t) => t.id === id));
 };
 
@@ -280,6 +300,7 @@ export const focused = (view: TezgahView): Tile => {
   const space = view.workspaces.find((w) => w.n === WORKSPACE);
   const tile = view.tiles.find((t) => t.id === space?.focus);
   expect(tile, "tezgah's workspace 1 has a focused tile").toBeDefined();
+
   return tile as Tile;
 };
 
@@ -295,6 +316,7 @@ export type Shot = "one-tile" | "side-by-side" | "stacked" | "grid-2x2" | "small
  *  when `SHOTS` is unset, so a plain run writes no file. */
 export const shoot = (page: Page, state: string, layout: Shot) => {
   const folder = process.env.SHOTS;
+
   return folder === undefined || folder === ""
     ? Effect.void
     : promised(() => page.screenshot({ path: join(folder, `tezgah-${state}-${layout}.png`), fullPage: false }));
@@ -306,28 +328,33 @@ export const shoot = (page: Page, state: string, layout: Shot) => {
 export const processId = (r: Reader, name: string) =>
   Effect.gen(function* () {
     const entries = yield* r.read(`processes/${name}`);
+
     const started = entries.flatMap((e) => {
       const decoded = Schema.decodeUnknownOption(Started)(e);
+
       return decoded._tag === "Some" ? [decoded.value.body.process] : [];
     });
+
     const pid = started.at(-1);
+
     return pid === undefined ? yield* Effect.die(new Error(`the brain did not start ${name}`)) : pid;
   });
 
 /** Where DOM focus is in a tab: the name of the tile region holding it (null outside every tile),
  *  the `data-cursor` key of the nearest element around it that carries one (0165), and the first
  *  `data-cursor` key in that region, the top of the tile. */
-export type DomFocus = {
+type DomFocus = {
   readonly region: string | null;
   readonly cursor: string | null;
   readonly first: string | null;
 };
 
-export const domFocus = (page: Page): Effect.Effect<DomFocus> =>
+const domFocus = (page: Page): Effect.Effect<DomFocus> =>
   promised(() =>
     page.evaluate(() => {
       const active = document.activeElement;
       const region = active?.closest("section[aria-label]") ?? null;
+
       return {
         region: region?.getAttribute("aria-label") ?? null,
         cursor: active?.closest("[data-cursor]")?.getAttribute("data-cursor") ?? null,
@@ -344,6 +371,7 @@ export const domSettles = (page: Page, check: (f: DomFocus) => boolean, label: s
 
       if (check(f) || tries >= 120) {
         expect(check(f), `${label}: DOM focus is ${JSON.stringify(f)}`).toBe(true);
+
         return f;
       }
 
@@ -366,15 +394,18 @@ const STRIP = /^\s*- button "(open (?:[^"\\]|\\.)*)"/;
 export type FoldDrawn = Drawn & { readonly strips: ReadonlyArray<{ readonly name: string; readonly box: Box | null }> };
 
 /** Reads what the tab draws now, strips included, by role and accessible name. */
-export const foldDrawn = (page: Page): Effect.Effect<FoldDrawn> =>
+const foldDrawn = (page: Page): Effect.Effect<FoldDrawn> =>
   Effect.gen(function* () {
     const d = yield* drawn(page);
     const main = page.getByRole("main").first();
     const snapshot = d.mains === 0 ? "" : yield* promised(() => main.ariaSnapshot());
+
     const names = snapshot.split("\n").flatMap((line) => {
       const m = STRIP.exec(line);
+
       return m?.[1] === undefined ? [] : [m[1].replace(/\\(.)/g, "$1")];
     });
+
     const strips = yield* Effect.forEach(
       names,
       (name) =>
@@ -383,6 +414,7 @@ export const foldDrawn = (page: Page): Effect.Effect<FoldDrawn> =>
         ),
       { concurrency: 1 },
     );
+
     return { ...d, strips };
   });
 
@@ -404,9 +436,11 @@ const tilesIn = (node: Space["layout"]): ReadonlyArray<string> =>
 const foldRule = (space: Space, area: Box, strips: ReadonlySet<string>) => {
   const boxes = new Map<string, Box>();
   const bands: Array<{ readonly box: Box; readonly tiles: ReadonlyArray<string> }> = [];
+
   const walk = (node: Space["layout"], box: Box): void => {
     if (typeof node === "string") {
       boxes.set(node, box);
+
       return;
     }
 
@@ -442,7 +476,9 @@ const foldRule = (space: Space, area: Box, strips: ReadonlySet<string>) => {
       at += (shares[i] ?? 0) + GAP;
     }
   };
+
   walk(space.layout, area);
+
   return { boxes, bands };
 };
 
@@ -469,6 +505,7 @@ export const stripsHere = (view: TezgahView, main: Box): ReadonlyArray<Tile> => 
 
   for (;;) {
     const { boxes } = foldRule(space, padded(main), strips);
+
     const due = [...boxes].filter(
       ([t, r]) => !strips.has(t) && t !== space.focus && (r.width < SMALLEST.width || r.height < SMALLEST.height),
     );
@@ -540,6 +577,7 @@ export const foldDifferences = (view: TezgahView, d: FoldDrawn): ReadonlyArray<s
 
   const rule = foldRule(space, padded(d.main), new Set(strips.map((t) => t.id)));
   const banded = new Set(rule.bands.flatMap((b) => b.tiles));
+
   const boxFor = (t: Tile) =>
     (strips.includes(t)
       ? d.strips.find((s) => s.name === stripName(t))
@@ -597,6 +635,7 @@ export const whole = (on: Page, selector: string) =>
   promised(() =>
     on.evaluate((css) => {
       const found = [...document.querySelectorAll(css)];
+
       return {
         found: found.length,
         cut: found
@@ -620,10 +659,12 @@ export const statusBar = (on: Page) =>
   promised(() =>
     on.evaluate(() => {
       const bar = document.querySelector(".statusbar");
+
       const tiles = Object.fromEntries(
         [...document.querySelectorAll("main [data-tile], main [data-strip]")].map((el) => {
           const box = el.getBoundingClientRect();
           const id = el.getAttribute("data-tile") ?? `strip ${el.getAttribute("data-strip")}`;
+
           return [id, `${box.left},${box.top} ${box.width}x${box.height}`];
         }),
       );
@@ -633,8 +674,10 @@ export const statusBar = (on: Page) =>
       }
 
       const edge = bar.getBoundingClientRect();
+
       const within = (el: Element) => {
         const r = el.getBoundingClientRect();
+
         return (
           r.left >= edge.left - 0.5 &&
           r.right <= edge.right + 0.5 &&
@@ -643,12 +686,16 @@ export const statusBar = (on: Page) =>
           r.right <= window.innerWidth + 0.5
         );
       };
+
       const uncut = (el: Element) => el instanceof HTMLElement && el.scrollWidth <= el.clientWidth + 1;
+
       const ends = [...bar.querySelectorAll("*")]
         .filter((el) => el.textContent === "prefix" || el.textContent === "Esc cancel")
         .map((el) => ({ text: el.textContent ?? "", whole: within(el) && uncut(el) }));
+
       const out = [...bar.querySelectorAll("*")].find((el) => el.textContent === "Esc cancel");
       const padding = Number.parseFloat(getComputedStyle(bar).paddingRight);
+
       return {
         text: bar.textContent ?? "",
         height: edge.height,
@@ -679,6 +726,7 @@ export const foldSettle = (
 
       if (wrong.length === 0 || tries >= 120) {
         expect(wrong, `${label}: ${JSON.stringify(view)} ${JSON.stringify(d)}`).toEqual([]);
+
         return { view, d };
       }
 
@@ -699,6 +747,7 @@ export const focusRing = (page: Page) =>
 
       const css = getComputedStyle(el);
       const outline = css.outlineStyle !== "none" && Number.parseFloat(css.outlineWidth) > 0;
+
       return {
         tag: el.tagName.toLowerCase(),
         name: el.getAttribute("aria-label") ?? el.textContent?.trim() ?? "",

@@ -54,21 +54,26 @@ const Tag = Schema.TaggedUnion({
 });
 
 const SEED = 119120;
+
 /** The registered name of the process the window's one tile shows: its streams are read by it. */
 const NAME = "checklist:1";
+
 /** format: that tile's accessible name, `tileName`'s words (Desk S2b, 0503): the program first, then
  *  `t<n>`. The window draws workspace 1 of the founder's tezgah, whose first tile, t1, shows NAME. */
 const REGION = "checklist, t1";
+
 /** How a red law ends: at its first failing run, with that run's seed, path and moves, and no
  *  shrinking. Each retry of a shrink starts a brain and a browser again and may wait 30 s for what
  *  never shows, so a shrink outlasts CI's job. The seed and the run counts stay as they are. */
 const RED = { endOnFailure: true } as const;
+
 /** How long a page may wait to hear of a close it started, in ms. Measured on the real `dev.ts` and
  *  Chromium, 2026-11-13: 4 ms when the brain answers the close frame, 10,027 ms when it does not (the
  *  browser's own wait for a closing socket, after which it reports 1006). Two seconds is 500 times
  *  the answered time, room for a CI machine that is slow or stalls, and a fifth of the unanswered
  *  one, so a brain that stops answering can never pass. */
 const CLOSE_WITHIN = 2000;
+
 /** Each law's own limit in ms, the stop for a run that hangs. Every wait inside a law has a bound of
  *  its own (30 s for what a tile shows, 60 s for a screen or an answer, 180 s for `dev.ts`), so a red
  *  law ends long before this. Measured green on a 12-core laptop under load, 2026-11-13: L11 9 to
@@ -77,6 +82,7 @@ const CLOSE_WITHIN = 2000;
 const LIMIT = { L11: 90_000, L14: 90_000, L15: 300_000, L17: 480_000 } as const;
 
 type Model = typeof checklistMachine.model.Type;
+
 type Msg = typeof checklistMachine.msg.Type;
 
 /** What a tab must show for `model`: each item's box, checked when the item is. */
@@ -100,11 +106,14 @@ const online = (h: Home, page: import("playwright").Page) =>
   Effect.gen(function* () {
     const w = yield* waiting(page);
     expect((yield* grant(h, w)).ok, "the grant line as shown grants").toBe(true);
+
     return w;
   });
 
 const control = fc.record({ tab: fc.nat(), control: fc.nat(), row: fc.nat(), name: fc.nat() });
+
 type Control = typeof control extends fc.Arbitrary<infer A> ? A : never;
+
 const controls = fc.array(control, { minLength: 1, maxLength: 6 });
 
 /** Runs inside Chromium before the page script, where IndexedDB reports failure by throwing. */
@@ -121,6 +130,7 @@ const blockKeyStore = () => {
  *  tezgah (Desk S2b), passes untouched and joins no group. */
 const loseFirstAnswers = (pid: string) => {
   const NativeSocket = WebSocket;
+
   const observed: {
     groups: Array<{
       attempts: Array<{ dial: number; params: unknown }>;
@@ -131,6 +141,7 @@ const loseFirstAnswers = (pid: string) => {
   } = {
     groups: [],
   };
+
   Reflect.set(globalThis, "__p14Resends", observed);
   let active: (typeof observed.groups)[number] | undefined;
   let dials = 0;
@@ -200,11 +211,15 @@ const loseFirstAnswers = (pid: string) => {
 const checklistPid = (r: Effect.Success<ReturnType<typeof reader>>) =>
   Effect.gen(function* () {
     const Started = Schema.TaggedStruct("started", { body: Schema.Struct({ process: Schema.String }) });
+
     const pids = (yield* r.read(`processes/${NAME}`)).flatMap((e) => {
       const started = Schema.decodeUnknownOption(Started)(e);
+
       return started._tag === "Some" ? [started.value.body.process] : [];
     });
+
     expect(pids.length, `the brain started ${NAME}`).toBeGreaterThan(0);
+
     return pids.at(-1) ?? "";
   });
 
@@ -226,7 +241,7 @@ const Resends = Schema.Struct({
       ),
       firstAnswer: Schema.NullOr(Sent),
       result: Schema.NullOr(Sent),
-      closed: Schema.NullOr(Schema.Struct({ code: Schema.Int, clean: Schema.Boolean, ms: Schema.Number })),
+      closed: Schema.NullOr(Schema.Struct({ code: Schema.Int, clean: Schema.Boolean, ms: Schema.Finite })),
     }),
   ),
 });
@@ -321,11 +336,14 @@ describe("L11: boot", () => {
           // L16's plain child also reaches the reader's socket.
           yield* online(h, page);
           const audit = yield* reader(h, dev);
+
           const leaves = Effect.map(
             audit.spans(),
             (spans) => spans.filter((span) => Reflect.get(Object(span), "name") === "connections.leave").length,
           );
+
           const before = yield* leaves;
+
           // Start observing before page.close, and observe the brain rather than a destroyed page handle.
           const closed = yield* Effect.forkScoped(
             Effect.gen(function* () {
@@ -334,6 +352,7 @@ describe("L11: boot", () => {
               }
             }).pipe(Effect.timeout("10 seconds")),
           );
+
           yield* Effect.promise(() => page.close());
           yield* Fiber.join(closed);
         }),
@@ -434,6 +453,7 @@ describe("L15: use in two tabs (W2)", () => {
               const settled = tabs.map(() => 0);
               const accepted: Array<string> = [];
               const refused: Array<string> = [];
+
               const pressed = yield* useChecklist(tabs, moves, ["milk", "bread", "eggs"], Effect.void, (msg, at) =>
                 Effect.gen(function* () {
                   const index = settled[at]!;
@@ -469,6 +489,7 @@ describe("L15: use in two tabs (W2)", () => {
                   }
                 }),
               );
+
               // No letter id lands twice: a duplicated add could hide as a taken refusal.
               const inbox = yield* r.read(`${NAME}/inbox`);
               const ids = inbox.map((e) => e.id);
@@ -516,18 +537,22 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
               Effect.gen(function* () {
                 const h = yield* homeWithCredential(`person_${secret}`);
                 const stranger = yield* homeWithCredential(`stranger_${secret}`);
+
                 const dev = yield* devServer(h, {
                   FABRIKA_SENTINEL_TOKEN: `tok_${token}`,
                   FABRIKA_SENTINEL_SECRET: `sec_${secret}`,
                 });
+
                 const b = yield* browser;
                 const context = yield* profile(b);
                 const t = yield* tab(context, dev.url);
                 const second = yield* tab(context, dev.url);
                 const snapshots: Array<readonly [string, string]> = [];
+
                 const observe = Effect.gen(function* () {
                   snapshots.push(...(yield* look(t.page, t.seen)), ...(yield* look(second.page, second.seen)));
                 });
+
                 const w = yield* waiting(t.page);
                 const tt = yield* target(w);
                 yield* observe;
@@ -587,11 +612,13 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 yield* Effect.promise(() => t.page.getByRole("button", { name: "Ask again" }).click());
                 yield* waiting(t.page);
                 yield* observe;
+
                 const pid = resolveName(
                   yield* r.read(`processes/${NAME}`),
                   NAME,
                   (by) => by === "brain" || by.startsWith("brain:"),
                 );
+
                 expect(pid, "the checklist's live process has a span chain").not.toBeNull();
                 const spans = [...(yield* r.spans()), ...(yield* r.spans(Chain.cases.job.make({ process: pid! })))];
                 expect(
@@ -599,6 +626,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   "the real grant signature was observed",
                 ).toBeGreaterThan(0);
                 const credentials = [`tok_${token}`, `sec_${secret}`, h.credential, stranger.credential];
+
                 const signatures = [
                   ...[...h.grants, ...stranger.grants]
                     .flatMap((g) => g.signatures)
@@ -608,6 +636,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                     ]),
                   ...revoked.armored.split("\n").filter((line) => line.length > 20 && !line.startsWith("-----")),
                 ];
+
                 const access = yield* r.read("gateway/access");
                 const retained = access.filter((entry) => entry._tag === "granted" || entry._tag === "revoked");
                 expect(
@@ -619,6 +648,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   "the signed removal stays in its history",
                 ).toBe(true);
                 const accessBodies = new Map<string, string>();
+
                 const records = access.map((entry): readonly [string, string] => {
                   if (entry._tag !== "granted" && entry._tag !== "revoked") {
                     return ["access record", JSON.stringify(entry)];
@@ -637,20 +667,25 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   const body = object(entry.body);
                   const { armored: _proof, ...signed } = object(body.signed);
                   accessBodies.set(JSON.stringify(body), JSON.stringify({ ...body, signed }));
+
                   return ["access record", JSON.stringify({ ...entry, body: { ...body, signed } })];
                 });
+
                 const proofs = [...[...h.grants, ...stranger.grants].flatMap((g) => g.signatures), revoked.armored];
                 // The tabs' last look comes while the instance still runs. The scan reads the home once
                 // more while it runs, then stops it and reads a home nothing writes to any more.
                 const last = [...(yield* look(t.page, t.seen)), ...(yield* look(second.page, second.seen))];
+
                 const disk = yield* stored({ dir: h.dir, stop: dev.stop }, accessBodies, proofs).pipe(
                   Effect.provide(NodeServices.layer),
                 );
+
                 // The span queue's WAL holds rows deleted once delivered, and only while the instance
                 // runs, so the running pass must have read it.
                 expect(disk.running, "the running scan read the span queue's WAL").toContain(
                   "/brain.records.sqlite-wal",
                 );
+
                 const outputs: ReadonlyArray<readonly [string, string]> = [
                   ...snapshots,
                   ...last,
@@ -669,6 +704,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   [output, text],
                   [output, percentDecoded(text)],
                 ]);
+
                 const credentialOutputs = [
                   ...checkedOutputs,
                   ...disk.raw.flatMap(([output, text]): ReadonlyArray<readonly [string, string]> => [
@@ -734,12 +770,15 @@ const percentDecoded = (text: string): string => {
 const look = (page: import("playwright").Page, seen: Seen) =>
   Effect.gen(function* () {
     const html = yield* Effect.promise(() => page.content());
+
     const values = yield* Effect.promise(() =>
       page
         .locator("input")
         .evaluateAll((inputs) => inputs.map((input) => (input instanceof HTMLInputElement ? input.value : ""))),
     );
+
     const stored = yield* rows(page);
+
     return [
       ["page", html + JSON.stringify(values)],
       ["rows", JSON.stringify(stored)],
