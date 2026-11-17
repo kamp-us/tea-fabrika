@@ -1,0 +1,77 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-fabsh-v1-s1-build1",
+  "ticket": "kamp-us/tea-fabrika#1078",
+  "pr": null,
+  "parent": null,
+  "role": "step",
+  "step": "build",
+  "started": "2026-11-17T13:42:00-08:00",
+  "ended": "2026-11-17T14:07:17.568326-08:00",
+  "minutes": 25.29,
+  "active": null,
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "outcome": "parked",
+  "tokens": null,
+  "tools": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "base": "54a34e7ec3f7132b964f535964a1a5afbf3b51d0",
+  "head": "dcb9622f8ff42a7c466d95c734c38c8fdad434fc",
+  "why": "pipeline, tracker ticket 1078, build: In next/, S1 source authoring is finished and committed. Execution proof remains pending automatic CI under the owner instruction. This row makes no red or green claim.",
+  "note": "Source contains the shell reader, grammar, needed-fields checks, roles, completion, pure tea editor and key reader, search, screen and generated Ghostty cell data. The normal commit-only helper committed fifteen exact build-owned S1 paths. No source tests or config were edited by build. The same independent tests writer corrected exactly the factsOf import and call to facts in c6ea46dda0265454822ed1920432ee9c2f84fc26 under root approval. All assertions, counts, command reach, generators, wasm-vector depth and timeout are preserved. Product tests, listing, compiler, lint, list ratchet, plants, faults and benchmarks were not run locally. Table generation is source authoring, not correctness proof. All correctness evidence is pending CI. No signing, push, PR/queue action, CI dispatch or subagent occurred. Root owns the independent review handoff and landing.",
+  "session": "01a1eb75-8a06-7672-b17c-19e7e619e01f",
+  "turn": "01a1eb75-8a43-7ae2-be2a-17989e1c0c7f",
+  "firstProductRead": {
+    "at": "2026-11-17T21:42:19Z",
+    "path": "packages/fabrika/src/shell/words.ts",
+    "command": "sed -n 1,160p"
+  },
+  "firstWrite": {
+    "at": "2026-11-17T21:46:03Z",
+    "paths": [
+      "next/programs/fabsh/src/words.ts",
+      "next/programs/fabsh/src/grammar.ts"
+    ]
+  },
+  "access": "danger-full-access, approval never; active instructions and owned-tree access confirmed; root verified persisted turn profile",
+  "sourcePaths": [
+    "next/programs/fabsh/README.md",
+    "next/programs/fabsh/src/words.ts",
+    "next/programs/fabsh/src/grammar.ts",
+    "next/programs/fabsh/src/check.ts",
+    "next/programs/fabsh/src/roles.ts",
+    "next/programs/fabsh/src/complete.ts",
+    "next/programs/fabsh/src/editor/keys.ts",
+    "next/programs/fabsh/src/editor/editor.ts",
+    "next/programs/fabsh/src/editor/search.ts",
+    "next/programs/fabsh/src/editor/screen.ts",
+    "next/programs/fabsh/src/editor/cells.ts",
+    "next/programs/fabsh/src/editor/cells.table.ts",
+    "next/programs/fabsh/table.ts",
+    ".glossary/TERMS.md",
+    "docs/plan/tier-1.md"
+  ],
+  "checks": {
+    "format": "formatter-only passed on twelve source files; Markdown excluded by the standard config",
+    "ownership": "fifteen exact build-owned S1 paths, approved digest matched",
+    "tests": "original bytes preserved except independent approved two-occurrence naming correction",
+    "leaks": "fifteen source text checks and two-commit range clean",
+    "git": "clean at exact source head",
+    "loosening": "own commit: zero hits; full handoff range: two hits caused solely by the independent two-occurrence facts naming correction, read by hand; no assertion removed",
+    "product": "not executed; pending automatic CI"
+  },
+  "laws": {
+    "reader.laws.test.ts": "L1/L2/L4/L6 pending CI",
+    "complete.laws.test.ts": "L7 pending CI",
+    "editor/editor.laws.test.ts": "L8-L12 pending CI",
+    "editor/keys.laws.test.ts": "L13 pending CI",
+    "editor/cells.laws.test.ts": "L14 pending CI, every code point and hard positions",
+    "editor/screen.laws.test.ts": "L5/L15 pending CI",
+    "L24": "actual paint map is exhaustive; compiler proof pending CI",
+    "L25": "existing import lint preserved; lint proof pending CI"
+  },
+  "requiredEvidence": "semantic red where obtainable, all S1 laws green, compiler L24, lint L25, normal list ratchet, every described deliberate fault once with restoration"
+}

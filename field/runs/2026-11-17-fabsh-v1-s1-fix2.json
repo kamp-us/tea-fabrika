@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-fabsh-v1-s1-fix2",
+  "ticket": "kamp-us/tea-fabrika#1078",
+  "pr": null,
+  "parent": null,
+  "role": "step",
+  "step": "build",
+  "started": "2026-11-17T14:44:06-08:00",
+  "ended": "2026-11-17T14:51:36.141867-08:00",
+  "minutes": 7.5,
+  "active": null,
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "tokens": null,
+  "tools": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "outcome": "parked",
+  "base": "dc838d4c2f2154386c4d8fe925b35d8d6a3eb45f",
+  "head": "47fa142a81d204543699bc77fc77155030ca6ff5",
+  "session": "01a1eb75-8a06-7672-b17c-19e7e619e01f",
+  "turn": null,
+  "why": "pipeline, tracker ticket 1078, fix round 2: root authorized the two named in-plan corrections under 0564 and the same-agent tests/build route under 0177. Source authoring is committed. No executed correctness or caught-fault proof is claimed.",
+  "note": "Tests commit changes only the reader law file. Build changes only grammar, check and package README. L4 adds missing-value, connector, open-quote and nested malformed suffixes without replacing prior cases. L2 keeps Name/Array domains and original assertions, branches its new required-flag assertion by builtin status and adds all reserved names to that check. All original counts, seeds, widths, command walks, Unicode vectors and timeouts remain. The other five suites, prior editor/key/role/completion fixes, all config, table and generator are unchanged. No product tests, listing, compiler, lint, list ratchet, faults, plants, benchmarks, source generation, manual dispatch, CI polling, resource tests, subagents, sign, push or PR/queue action occurred.",
+  "testsCommit": "baa6038ffae6bea83385b9fa9989cfa264049aa0",
+  "buildCommit": "47fa142a81d204543699bc77fc77155030ca6ff5",
+  "sourcePaths": [
+    "next/programs/fabsh/src/reader.laws.test.ts",
+    "next/programs/fabsh/src/grammar.ts",
+    "next/programs/fabsh/src/check.ts",
+    "next/programs/fabsh/README.md"
+  ],
+  "checks": {
+    "ownership": "exact existing tests/S1 and build/S1 paths; approved body matches",
+    "format": "formatter-only",
+    "whitespace": "Git diff whitespace clean",
+    "leaks": "four source text checks and two-commit range clean",
+    "git": "final tree clean",
+    "loosening": "own build zero hits; whole fix two hits for the reader import and corrected unconditional L2 expectation, mapped in report",
+    "product": "not executed; pending automatic CI"
+  },
+  "laws": {
+    "L2": "same generated domains and 300 runs; reserved names retain builtin priority and ordinary programs still require missing flags",
+    "L4": "same fit cases, three-to-eight-stage chains and 300 runs plus malformed/incomplete suffixes; whole line must remain refused",
+    "other": "all previous workloads preserved"
+  },
+  "ciPending": "all six S1 suites, compiler L24, lint L25, normal listing/list ratchet, semantic red where obtainable and every deliberate fault followed by restoration"
+}
