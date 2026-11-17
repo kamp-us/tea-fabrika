@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0585, 0556, 0086, 0032, 0579 and 0594; body cb6da618dad1
+Approved by the lead agent, builds 0585, 0556, 0086, 0032, 0579 and 0594; body c5e26ec14d53
 Plancheck-Version: 3
 
 # Plan amendment: make slice 2 installable as a private config tarball
@@ -193,7 +193,7 @@ or clarify import followers. Old tests change module specifiers only; preserve t
 | kalfa/config/src/App.test.ts | tests | tests | Exact destination; preserve the full existing law body. |
 | kalfa/config/src/TomlParser.test.ts | tests | tests | Exact destination; preserve the full existing law body. |
 | kalfa/config/src/Toml.types.test.ts | tests | tests | Exact destination; preserve the full existing law body. |
-| kalfa/config/package.json | tests | tests | Initial package skeleton only. The lead must approve the ownership transfer below before build fills the runtime/export fields. |
+| kalfa/config/package.json | build | 70 | Lead transferred this path after reading the completed tests scaffold e51d42f86a083c0fe6d2157c4b5b9aca64430fa4. Preserve its skeleton and test scaffolding; fill only the approved runtime dependencies, public exports and build/pack scripts. |
 | kalfa/config/rslib.config.ts | build | 20 | Existing bundleless ESM/declaration build pattern, product entries only. |
 | kalfa/config/Pnpm.ts | build | 15 | Package-local pnpm packing guard. |
 | kalfa/config/README.md | build | docs | How to install the tested archive and use existing public App/Load APIs. |
