@@ -28,6 +28,7 @@ const workflow = fc
     const w = parse(source);
     w.concurrency.group = group;
     w.jobs.select.steps.find((step: { id?: string }) => step.id === "set").env.MOST = most;
+    w.jobs.changed.strategy["max-parallel"] = most;
     const shards: string[] = w.jobs.tests.strategy.matrix.shard;
     const lookup = Object.fromEntries(shards.map((shard, index) => [shard, slots[index]]));
     w.jobs.tests.concurrency.group = `scheduled-test-\${{ fromJSON('${JSON.stringify(lookup)}')[matrix.shard] }}`;
@@ -72,6 +73,32 @@ it("property: the stdin CLI refuses a private group on every shared job", () => 
       for (const name of ["gate", "select", "report", "tests", "changed"]) {
         const broken = structuredClone(w);
         broken.jobs[name].concurrency.group += `-${suffix}`;
+        const child = run(JSON.stringify(broken));
+        expect(child.error).toBeUndefined();
+        expect(child.status).not.toBe(0);
+        expect(child.stdout).not.toContain(sentinel.trim());
+        expect(child.stderr).toContain("SC19:");
+      }
+    }),
+    { seed: 119120, numRuns: 3 },
+  );
+});
+
+it("property: the stdin CLI refuses extra jobs and changed matrices that leave the shared budget", () => {
+  fc.assert(
+    fc.property(workflow, fc.stringMatching(/^[a-z]{1,8}$/), (w, suffix) => {
+      const extra = structuredClone(w);
+      extra.jobs[`extra-${suffix}`] = { "runs-on": "ubuntu-latest", steps: [] };
+      const axis = structuredClone(w);
+      axis.jobs.changed.strategy.matrix.extra = [suffix];
+      const fixed = structuredClone(w);
+      fixed.jobs.changed.strategy.matrix.shard = ["10"];
+      const expression = structuredClone(w);
+      expression.jobs.changed.strategy.matrix.shard = `\${{ fromJSON(vars.shards) }}`;
+      const parallel = structuredClone(w);
+      parallel.jobs.changed.strategy["max-parallel"] = 10;
+
+      for (const broken of [extra, axis, fixed, expression, parallel]) {
         const child = run(JSON.stringify(broken));
         expect(child.error).toBeUndefined();
         expect(child.status).not.toBe(0);

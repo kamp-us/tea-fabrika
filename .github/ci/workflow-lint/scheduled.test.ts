@@ -319,6 +319,20 @@ const plants: [string, (w: Workflow) => void][] = [
   ["SC12: one waiting run at most", (w) => (w.concurrency["queue"] = "single")],
   // SC19: the same nine test groups and one control group across participating workflows.
   // Plants, each run once with its new guard dropped and restored, must fail their own rule.
+  ["SC19: an extra job has no shared slot", (w) => (w.jobs["extra"] = { "runs-on": "ubuntu-latest", steps: [] })],
+  [
+    "SC19: changed adds another matrix axis",
+    (w) => void Object.assign(w.jobs["changed"]!.strategy!.matrix, { extra: ["a", "b"] }),
+  ],
+  ["SC19: changed admits a fixed unmapped slot", (w) => (w.jobs["changed"]!.strategy!.matrix.shard = ["10"])],
+  [
+    "SC19: changed reads arbitrary slots",
+    (w) => (w.jobs["changed"]!.strategy!.matrix.shard = `\${{ fromJSON(vars.shards) }}`),
+  ],
+  [
+    "SC19: changed's parallel count differs from its slot selection",
+    (w) => (w.jobs["changed"]!.strategy!["max-parallel"] = 10),
+  ],
   ...(["gate", "select", "report", "tests", "changed"] as const).flatMap((job): [string, (w: Workflow) => void][] => [
     [`SC19: ${job} has no shared job group`, (w) => Reflect.deleteProperty(w.jobs[job]!, "concurrency")],
     [`SC19: ${job} replaces a waiting job`, (w) => Reflect.deleteProperty(w.jobs[job]!.concurrency!, "queue")],
@@ -929,7 +943,10 @@ it("SC6 scenario: on the real scheduled.yaml, the tooling legs or the next legs 
   beside.jobs["tests"]!.strategy!["max-parallel"] = 8;
   beside.jobs["extra"] = { "runs-on": "ubuntu-latest", "timeout-minutes": 5, steps: [{ run: "true" }] };
   (beside.jobs["report"]!.needs as string[]).push("extra");
-  expect(lint(beside)).toEqual([ONE]);
+  expect(lint(beside)).toEqual([
+    ONE,
+    "scheduled.yaml: SC19: every admitted job is one of the five jobs with shared slots",
+  ]);
 });
 
 it("SC13 scenario: on the real scheduled.yaml, a test step with no limit of its own, or a job limit that is no backstop, is named by SC13", () => {

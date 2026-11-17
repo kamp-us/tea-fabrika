@@ -198,11 +198,19 @@ const jobSlots = (workflow: Record<string, unknown>, require: Require): void => 
 
   const selectEnv = map(selectRuns[0]?.["env"]);
 
+  const names = [GATE_JOB, SELECT_JOB, VERDICT, TESTS_JOB, CHANGED_JOB];
+  require(Object.keys(jobs).length === names.length &&
+    names.every((name) =>
+      Object.hasOwn(jobs, name),
+    ), "SC19: every admitted job is one of the five jobs with shared slots");
+
   // SC19. Fixed job groups reserve the same nine test slots and one control slot across
   // participating scheduled workflows, even when their refs have separate workflow queues.
   const fullSlots = slotsOf(map(map(jobs[TESTS_JOB])["concurrency"])["group"]);
   const fullShards = listed(map(jobs[TESTS_JOB]));
   const fullMatrix = map(map(map(jobs[TESTS_JOB])["strategy"])["matrix"]);
+  const changedStrategy = map(map(jobs[CHANGED_JOB])["strategy"]);
+  const changedMatrix = map(changedStrategy["matrix"]);
 
   const slotValues = Object.values(fullSlots).map((slot) =>
     typeof slot === "number" && Number.isInteger(slot) ? String(slot) : slot,
@@ -216,7 +224,7 @@ const jobSlots = (workflow: Record<string, unknown>, require: Require): void => 
     new Set(slotValues).size === TEST_SLOTS.length &&
     TEST_SLOTS.every((slot) => slotValues.includes(slot));
 
-  for (const name of [GATE_JOB, SELECT_JOB, VERDICT, TESTS_JOB, CHANGED_JOB]) {
+  for (const name of names) {
     const held = map(map(jobs[name])["concurrency"]);
     const group = held["group"];
 
@@ -229,7 +237,10 @@ const jobSlots = (workflow: Record<string, unknown>, require: Require): void => 
             typeof selectEnv["MOST"] === "number" &&
             Number.isInteger(selectEnv["MOST"]) &&
             selectEnv["MOST"] >= 1 &&
-            selectEnv["MOST"] <= TEST_SLOTS.length
+            selectEnv["MOST"] <= TEST_SLOTS.length &&
+            changedStrategy["max-parallel"] === selectEnv["MOST"] &&
+            Object.keys(changedMatrix).length === 1 &&
+            changedMatrix["shard"] === CHANGED_LEGS
           : typeof group === "string" && group.toLowerCase() === CONTROL_GROUP;
 
     require(Object.keys(held).length === 3 &&
