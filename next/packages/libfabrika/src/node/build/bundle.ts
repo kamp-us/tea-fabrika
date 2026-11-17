@@ -6,11 +6,13 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
-import effectPackage from "effect/package.json" with { type: "json" };
+import * as Function from "effect/Function";
 import * as Path from "effect/Path";
 import * as Rec from "effect/Record";
 import * as Str from "effect/String";
+
+import effectPackage from "effect/package.json" with { type: "json" };
+
 import {
   rolldown,
   VERSION,
@@ -128,7 +130,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
         // Rolldown has already embedded file names in the message before calling onLog.
         for (const file of [log.id, log.loc?.file, log.exporter, log.reexporter, ...(log.ids ?? [])]) {
           if (file !== undefined) {
-            message = pipe(message, Str.replaceAll(file, relative(file)));
+            message = Function.pipe(message, Str.replaceAll(file, relative(file)));
           }
         }
 

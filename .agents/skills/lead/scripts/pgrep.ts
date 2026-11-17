@@ -10,7 +10,7 @@
 // Code's, refuses the process list, so a guard there cannot see anything: it skips with one line
 // saying so, and never reads "refused" as "none running" in silence or waits on it.
 
-import { Array as Arr, Schema } from "effect";
+import { String as Str, pipe, Array as Arr, Schema } from "effect";
 
 /** What a `pgrep` run says: how many processes matched, or that it could not list them. */
 export const PgrepAnswer = Schema.TaggedUnion({
@@ -24,7 +24,7 @@ export type PgrepAnswer = typeof PgrepAnswer.Type;
 export const pgrepAnswer = (code: number, out: string): PgrepAnswer =>
   code === 0 || code === 1
     ? PgrepAnswer.cases.listed.make({
-        count: code === 1 ? 0 : Arr.filter(out.split("\n"), (line) => line.trim() !== "").length,
+        count: code === 1 ? 0 : Arr.filter(pipe(out, Str.split("\n")), (line) => Str.trim(line) !== "").length,
       })
     : PgrepAnswer.cases.refused.make({});
 

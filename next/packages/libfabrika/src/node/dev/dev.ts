@@ -14,7 +14,7 @@ import * as Effect from "effect/Effect";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Option from "effect/Option";
@@ -27,6 +27,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { Installed, type Install } from "../../runtime/Code.ts";
@@ -105,7 +106,11 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
   }
 
   const { sha256 } = yield* Schema.decodeUnknownEffect(Schema.Struct({ sha256: Schema.String }))(raw);
-  const pairs: ReadonlyArray<string> = Option.getOrElse(pipe(sha256, Str.match(/../g)), (): Array<string> => []);
+
+  const pairs: ReadonlyArray<string> = Option.getOrElse(
+    Function.pipe(sha256, Str.match(/../g)),
+    (): Array<string> => [],
+  );
 
   return {
     checksums: {

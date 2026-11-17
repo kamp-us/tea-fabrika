@@ -2,10 +2,11 @@
  * Narrow decoding of launchctl's non-API print output.
  */
 import * as Effect from "effect/Effect";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import { BrainControlError, Command, Status, Unsupported } from "../../desktop/BrainControl.ts";
 
 const Response = Schema.Struct({
@@ -99,7 +100,7 @@ export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) 
         sections.add(name);
 
         if (name === "arguments") {
-          const indentation = pipe(line, Str.slice(0, line.length - text.length));
+          const indentation = Function.pipe(line, Str.slice(0, line.length - text.length));
 
           if (!/^\t+$/u.test(indentation)) {
             return yield* failed(response);
@@ -116,9 +117,9 @@ export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) 
     }
 
     if (stack.length === 1 && stack[0] === "arguments") {
-      const argument = pipe(line, Str.slice(argumentPrefix.length));
+      const argument = Function.pipe(line, Str.slice(argumentPrefix.length));
 
-      if (!pipe(line, Str.startsWith(argumentPrefix)) || !scalar(argument)) {
+      if (!Function.pipe(line, Str.startsWith(argumentPrefix)) || !scalar(argument)) {
         return yield* failed(response);
       }
 

@@ -108,6 +108,27 @@
 // origin/main to the reviewed head and is given no mapping table, so a renamed law is a hit too; a
 // loosening comment that does not post is stuck.
 
+import {
+  Cause,
+  Array as Arr,
+  pipe,
+  String as Str,
+  Clock,
+  Context,
+  DateTime,
+  Duration,
+  Effect,
+  Formatter,
+  Layer,
+  Option,
+  Record as Rec,
+  Result,
+  Schedule,
+  Schema,
+} from "effect";
+import type { Config } from "effect";
+import { Digest } from "effect/crypto";
+
 // The chain's record, logs and brief are sync file calls: a debt agents-ledger.json named for this
 // import until three names left it and its line changed. The ledger only shrinks, so it is marked here.
 // oxlint-disable-next-line fabrika/no-node-imports -- edge: sync file calls not yet moved to Effect's FileSystem (0033)
@@ -116,11 +137,6 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Array as Arr, pipe, String as Str, Clock, Context, DateTime, Duration, Effect, Formatter, Layer, Option, Record as Rec, Result, Schedule, Schema } from "effect";
-import { Digest } from "effect/crypto";
-import type { Config } from "effect";
-
-
 
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
@@ -154,7 +170,7 @@ import * as Publish from "./pr/Publish.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
-import { pinFolder, stepOf, wipOf } from "./quest.ts";
+import { pinFolder, stepOf, wipBranch } from "./quest.ts";
 import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
@@ -541,7 +557,7 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
   ];
 
   if (step === "review") {
-    lines.push(`Parent base: origin/main at ${f.root}`, `Reviewed head: ${wipOf(f.branch)} at ${f.head}`);
+    lines.push(`Parent base: origin/main at ${f.root}`, `Reviewed head: ${wipBranch(f.branch)} at ${f.head}`);
   }
 
   if (step === "review" && f.host !== null) {
@@ -1998,9 +2014,10 @@ const backstopFor = (plan: string, brief: string) =>
 /** A limit's override from the environment, when set and a number. */
 const overridden =
   (ref: Context.Reference<number>, name: string) =>
-  <E>(self: Effect.Effect<void, E, never>): Effect.Effect<void, E | Config.ConfigError, never> =>
+  <E, R>(self: Effect.Effect<void, E, R>): Effect.Effect<void, E | Config.ConfigError, R> =>
     Effect.flatMap(variable(name), (set) => {
       const v = Number(set);
+
       return set !== undefined && Number.isFinite(v) ? Effect.provideService(self, ref, v) : self;
     });
 
@@ -2025,20 +2042,16 @@ const services = (env: Env) =>
  * process first.
  */
 const launch = (env: Env, quest: string, args: ReadonlyArray<string>) =>
-  NodeRuntime.runMain(
-    Effect.gen(function* () {
-      const folder = pinFolder(env.BOXES, quest, process.pid);
-      const pin = yield* Pin.acquire({ main: env.MAIN, folder, script: "chain.ts" });
-      const code = yield* Pin.runPinned(pin, env, "chain.ts", args);
-      yield* Effect.sync(() => {
-        process.exitCode = code;
-      });
-    }).pipe(
-      Effect.scoped,
-      Effect.catchTag("PinFailed", (e) => Effect.sync(() => unpinned(`scripts not pinned: ${e.reason}`, quest))),
-      Effect.provide(NodeServices.layer),
-    ),
-    { disableErrorReporting: true },
+  Effect.gen(function* () {
+    const folder = pinFolder(env.BOXES, quest, process.pid);
+    const pin = yield* Pin.acquire({ main: env.MAIN, folder, script: "chain.ts" });
+    const code = yield* Pin.runPinned(pin, env, "chain.ts", args);
+    yield* Effect.sync(() => {
+      process.exitCode = code;
+    });
+  }).pipe(
+    Effect.scoped,
+    Effect.catchTag("PinFailed", (e) => Effect.sync(() => unpinned(`scripts not pinned: ${e.reason}`, quest))),
   );
 
 const main = () => {
@@ -2046,7 +2059,7 @@ const main = () => {
   const args = process.argv.slice(2);
   const [quest = ""] = args;
 
-  Effect.runPromise(
+  NodeRuntime.runMain(
     Effect.gen(function* () {
       const state = Pin.pinState(yield* variable(Pin.PIN_ENV));
 
@@ -2056,7 +2069,7 @@ const main = () => {
 
       // A usage error needs no pin: it is printed here, from the checkout.
       if (state._tag === "unpinned" && QUEST_NAME.test(quest)) {
-        return yield* Effect.sync(() => launch(env, quest, args));
+        return yield* launch(env, quest, args);
       }
 
       const pin = state._tag === "pinned" ? state.pin : null;
@@ -2079,11 +2092,17 @@ const main = () => {
         overridden(QueueMinutes, "CHAIN_QUEUE_MINUTES"),
         withDriveMinutes,
       );
-    }).pipe(Effect.provide(services(env))),
-  ).catch((e: unknown) => {
-    console.log(JSON.stringify({ outcome: "stuck", reason: String(e), exit: 30 }));
-    process.exitCode = 30;
-  });
+    }).pipe(
+      Effect.provide(services(env)),
+      Effect.catchCause((cause) =>
+        Effect.sync(() => {
+          console.log(Formatter.formatJson({ outcome: "stuck", reason: Cause.pretty(cause), exit: 30 }));
+          process.exitCode = 30;
+        }),
+      ),
+    ),
+    { disableErrorReporting: true },
+  );
 };
 
 if (import.meta.main) {

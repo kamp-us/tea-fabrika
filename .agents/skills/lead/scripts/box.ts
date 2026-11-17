@@ -47,15 +47,20 @@ const name = rest[0] ?? "";
 const program = Effect.gen(function* () {
   if (command !== "rm" || rest.length !== 1) {
     yield* Console.error("usage: box.sh rm <name>");
+
     return yield* setExit(2);
   }
+
   const { main, boxes } = yield* Config.all({ main: text("MAIN"), boxes: text("BOXES") }).parse(
     ConfigProvider.fromEnv({ preserveEmptyStrings: true }),
   );
+
   if (main === undefined || boxes === undefined) {
     yield* Console.log(`kept box ${name}: inspection or removal failed`);
+
     return yield* setExit(1);
   }
+
   yield* rm(name, { boxes, main }).pipe(Effect.provide(services(main)));
 }).pipe(Effect.provide(NodeServices.layer));
 

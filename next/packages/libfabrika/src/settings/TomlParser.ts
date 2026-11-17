@@ -5,11 +5,10 @@ import { stringify } from "@decimalturn/toml-patch";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
-
 
 import { type AST, getStaticTOMLValue, ParseError, parseTOML } from "toml-eslint-parser";
 import * as Edit from "./internal/edit.ts";

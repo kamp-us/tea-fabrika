@@ -8,13 +8,14 @@
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace } from "../processes/Process.ts";
 import * as C from "../runtime/Client.ts";
@@ -489,7 +490,7 @@ const answered = (s: WindowModel, m: On, tag: Call["_tag"]) => {
 // --- Following a tile's process ---------------------------------------------------------------------
 
 /** The writer the window trusts for process facts and DOWNs: the brain's own. */
-const isBrain = (by: string): boolean => by === "brain" || pipe(by, Str.startsWith("brain:"));
+const isBrain = (by: string): boolean => by === "brain" || Function.pipe(by, Str.startsWith("brain:"));
 
 /** The watch a tile holds and the pid it shows, while it is opening or open. */
 const held = (reach: Reach): { readonly pid: string; readonly ref: string } | null =>
@@ -1797,7 +1798,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         const link = s.tezgah;
 
         if (link !== null && link.reach._tag === "resolving" && link.reach.id === m.id && found.call._tag === "read") {
-          const name = pipe(found.call.stream, Str.slice("processes/".length));
+          const name = Function.pipe(found.call.stream, Str.slice("processes/".length));
           const pid = C.resolveName(m.value, name, isBrain);
           const next = { ...s, flight: found.rest };
 

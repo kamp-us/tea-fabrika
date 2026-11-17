@@ -6,9 +6,6 @@ import { BuildError, build as buildOne, type Selection } from "@kampus/libfabrik
 import type { Row } from "@kampus/libfabrika/compiler";
 import { Array as Arr, String as Str, Effect, FileSystem, Path, Record as Rec } from "effect";
 
-
-
-
 import { programs as selected } from "./table.ts";
 
 export type {

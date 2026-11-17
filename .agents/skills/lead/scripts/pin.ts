@@ -29,7 +29,7 @@
 // packages in node_modules. Uncommitted edits under `.agents/` in the main checkout are not in the
 // pin either; the launch prints one line when there are some.
 
-import { Array as Arr, Console, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { String as Str, pipe, Option, Array as Arr, Console, Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** The environment variable the pinned chain reads: its pin, as JSON. */
@@ -73,7 +73,7 @@ export const pinText = (pin: Pinned): string => Schema.encodeSync(PinnedText)(pi
 export const pinnedScript = (folder: string, script: string): string =>
   `${folder}/.agents/skills/lead/scripts/${script}`;
 
-const short = (commit: string) => commit.slice(0, 12);
+const short = (commit: string) => pipe(commit, Str.slice(0, 12));
 
 /** The line the pinned chain prints at start: its commit, and what its quest's last process ran on. */
 export const pinLine = (before: Pinned | undefined, now: Pinned): string =>
@@ -99,7 +99,7 @@ const ran = Effect.fnUntraced(function* (command: ChildProcess.Command) {
     concurrency: 2,
   });
 
-  return { code: Number(code), output: output.trim() };
+  return { code: Number(code), output: Str.trim(output) };
 }, Effect.scoped);
 
 const git = (main: string, args: ReadonlyArray<string>) => ran(ChildProcess.make("git", ["-C", main, ...args]));

@@ -17,10 +17,11 @@
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import { armor, type Bytes, field, holds, join, reader, same, subtle, u32, utf8 } from "./internal/binary.ts";
 import { checkPasskey, passkeyBlob } from "./Webauthn.ts";
 
@@ -109,7 +110,7 @@ const read = (armored: string): Option.Option<Sshsig> =>
   Option.gen(function* () {
     const text = Str.trim(armored);
     yield* holds(Str.startsWith(BEGIN)(text) && Str.endsWith(END)(text) && text.length >= BEGIN.length + END.length);
-    const body = pipe(text, Str.slice(BEGIN.length, -END.length), Str.replace(/\s+/g, ""));
+    const body = Function.pipe(text, Str.slice(BEGIN.length, -END.length), Str.replace(/\s+/g, ""));
     const blob = yield* Option.getSuccess(Base64.decode(body));
     const fields = reader(blob);
     const magic = yield* fields.take(6);

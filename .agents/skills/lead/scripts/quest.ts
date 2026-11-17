@@ -1,8 +1,9 @@
 // quest.ts: pure rules about one quest that drive.ts and gc.ts share. Today's lead tooling, run on our
 // own laptop; it is not product.
 
+import { String as Str, pipe, Option, Array as Arr, Order, Schema, Predicate, Record as Rec } from "effect";
+
 import { dirname, matchesGlob } from "node:path";
-import { Array as Arr, Option, Order, pipe, Schema, Predicate, Record as Rec } from "effect";
 
 /** A text read as JSON, or none when it does not read. */
 const parsed = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
@@ -52,7 +53,7 @@ export const pinFolder = (boxes: string, quest: string, pid: number): string => 
 export const IDLE = 2 * 3_600_000;
 
 /** The quest's backup branch: `<branch>-wip`, and a branch that already ends in -wip as it is. */
-export const wipOf = (branch: string): string => `${branch.replace(/(-wip)+$/, "")}-wip`;
+export const wipBranch = (branch: string): string => `${pipe(branch, Str.replace(/(-wip)+$/, ""))}-wip`;
 
 /**
  * Where a step with no --from starts: the newest pushed tip, the branch's or its -wip backup's,
@@ -107,7 +108,7 @@ export const stepOf = (note: string): string[] => {
 };
 
 const stuckIn = (out: string) =>
-  Arr.flatMap(out.split("\n"), (line) => {
+  Arr.flatMap(pipe(out, Str.split("\n")), (line) => {
     const read = parsed(line);
 
     if (Option.isNone(read)) {
@@ -161,7 +162,7 @@ export const heldRules = (out: string, questSteps: ReadonlySet<string>): string[
       Arr.filter(
         [
           typeof a.reason === "string" ? a.reason : "stuck",
-          typeof a.sha === "string" ? a.sha.slice(0, 8) : "",
+          typeof a.sha === "string" ? pipe(a.sha, Str.slice(0, 8)) : "",
           typeof a.step === "string" ? `step ${a.step}` : "",
           ...paths,
         ],
@@ -178,7 +179,7 @@ export const checkHolds = (code: number, out: string, questSteps: ReadonlySet<st
 
 /** The `packages:` globs of a pnpm-workspace.yaml: the block's `- glob` lines, comments dropped. */
 export const workspaceGlobs = (yaml: string): string[] => {
-  const lines = yaml.split("\n");
+  const lines = pipe(yaml, Str.split("\n"));
   const start = Arr.findFirstIndex(lines, (l) => /^packages:\s*(#.*)?$/.test(l));
 
   if (Option.isNone(start)) {
@@ -207,8 +208,8 @@ export const workspaceGlobs = (yaml: string): string[] => {
 /** Whether a folder is a workspace package: the root, or one the globs take and no `!` glob drops. */
 const member = (dir: string, globs: readonly string[]) =>
   dir === "." ||
-  (Arr.some(globs, (g) => !g.startsWith("!") && matchesGlob(dir, g)) &&
-    !Arr.some(globs, (g) => g.startsWith("!") && matchesGlob(dir, g.slice(1))));
+  (Arr.some(globs, (g) => !pipe(g, Str.startsWith("!")) && matchesGlob(dir, g)) &&
+    !Arr.some(globs, (g) => pipe(g, Str.startsWith("!")) && matchesGlob(dir, pipe(g, Str.slice(1)))));
 
 /** The package.json fields pnpm-lock.yaml follows. Scripts, exports and the rest do not move it. */
 const LOCKED = [
@@ -284,7 +285,7 @@ export const lockfileBehind = (
             return true;
           }
 
-          if (path !== "package.json" && !path.endsWith("/package.json")) {
+          if (path !== "package.json" && !pipe(path, Str.endsWith("/package.json"))) {
             return false;
           }
 

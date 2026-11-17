@@ -5,10 +5,11 @@
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Str from "effect/String";
+
 import type { ObjectId } from "../../repositories/Repositories.ts";
 import {
   MissingPath,
@@ -61,7 +62,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
 
     return (
       relative === "" ||
-      (!pipe(relative, Str.startsWith(`..${path.sep}`)) && relative !== ".." && !path.isAbsolute(relative))
+      (!Function.pipe(relative, Str.startsWith(`..${path.sep}`)) && relative !== ".." && !path.isAbsolute(relative))
     );
   };
 
@@ -83,7 +84,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
     const pending = Arr.filter(Str.split(name, path.sep), (part) => part !== "");
 
     // A trailing separator requires a directory, just like a following dot segment.
-    if (pipe(name, Str.endsWith(path.sep))) {
+    if (Function.pipe(name, Str.endsWith(path.sep))) {
       pending.push(".");
     }
 
@@ -159,7 +160,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
         return yield* failed("symlink cycle");
       }
 
-      if (link === "" || pipe(link, Str.includes("\0"))) {
+      if (link === "" || Function.pipe(link, Str.includes("\0"))) {
         return yield* failed("invalid symlink");
       }
 

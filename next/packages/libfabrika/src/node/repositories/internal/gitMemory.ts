@@ -2,7 +2,7 @@ import * as Arr from "effect/Array";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
@@ -95,7 +95,7 @@ const concat = (parts: ReadonlyArray<Uint8Array>) => {
 
 const hexBytes = (hex: string) =>
   Uint8Array.from(
-    Option.getOrElse(pipe(hex, Str.match(/../g)), (): Array<string> => []),
+    Option.getOrElse(Function.pipe(hex, Str.match(/../g)), (): Array<string> => []),
     (pair) => Number.parseInt(pair, 16),
   );
 
@@ -211,14 +211,14 @@ export const make = Effect.fnUntraced(function* () {
       const folders = new Map<string, Map<string, Entry>>();
 
       for (const [file, entry] of index) {
-        const slash = pipe(file, Str.indexOf("/"));
+        const slash = Function.pipe(file, Str.indexOf("/"));
 
         if (Option.isNone(slash)) {
           entries.set(file, entry);
         } else {
-          const name = pipe(file, Str.slice(0, slash.value));
+          const name = Function.pipe(file, Str.slice(0, slash.value));
           const folder = folders.get(name) ?? new Map<string, Entry>();
-          folder.set(pipe(file, Str.slice(slash.value + 1)), entry);
+          folder.set(Function.pipe(file, Str.slice(slash.value + 1)), entry);
           folders.set(name, folder);
         }
       }
@@ -319,7 +319,7 @@ export const make = Effect.fnUntraced(function* () {
           place.refs.get(`refs/heads/${base}`) ??
           (place.store.objects.has(base) && base.length === (place.store.format === "sha1" ? 40 : 64) ? base : null));
 
-    const steps = pipe(match?.[2] ?? "", Str.match(/\^\{commit\}|\^[0-9]*|~[0-9]*/g));
+    const steps = Function.pipe(match?.[2] ?? "", Str.match(/\^\{commit\}|\^[0-9]*|~[0-9]*/g));
 
     for (const step of Option.getOrElse(steps, (): Array<string> => [])) {
       if (id === null) {
@@ -328,12 +328,12 @@ export const make = Effect.fnUntraced(function* () {
 
       if (step === "^{commit}") {
         id = readCommit(place.store, id) === null ? null : id;
-      } else if (pipe(step, Str.startsWith("~"))) {
-        for (let n = Number(pipe(step, Str.slice(1)) || "1"); n > 0 && id !== null; n--) {
+      } else if (Function.pipe(step, Str.startsWith("~"))) {
+        for (let n = Number(Function.pipe(step, Str.slice(1)) || "1"); n > 0 && id !== null; n--) {
           id = readCommit(place.store, id)?.parents[0] ?? null;
         }
       } else {
-        const n = Number(pipe(step, Str.slice(1)) || "1");
+        const n = Number(Function.pipe(step, Str.slice(1)) || "1");
         id = n === 0 ? id : (readCommit(place.store, id)?.parents[n - 1] ?? null);
       }
     }
@@ -402,7 +402,7 @@ export const make = Effect.fnUntraced(function* () {
     let folder = path.dirname(path.join(root, file));
 
     // Git drops the folders a removal empties, up to the worktree's root.
-    while (folder !== root && pipe(folder, Str.startsWith(root))) {
+    while (folder !== root && Function.pipe(folder, Str.startsWith(root))) {
       const left = yield* fs.readDirectory(folder).pipe(Effect.orElseSucceed(() => ["?"]));
 
       if (left.length > 0) {
@@ -581,19 +581,19 @@ export const make = Effect.fnUntraced(function* () {
     init: Effect.fnUntraced(function* (args, cwd) {
       const { set, rest } = flags(args, ["--bare", "-q", "--quiet"]);
 
-      const format = pipe(
-        Arr.findFirst(rest, (a) => pipe(a, Str.startsWith("--object-format="))),
+      const format = Function.pipe(
+        Arr.findFirst(rest, (a) => Function.pipe(a, Str.startsWith("--object-format="))),
         Option.map(Str.slice(16)),
         Option.getOrElse(() => "sha1"),
       );
 
-      const branch = pipe(
-        Arr.findFirst(rest, (a) => pipe(a, Str.startsWith("--initial-branch="))),
+      const branch = Function.pipe(
+        Arr.findFirst(rest, (a) => Function.pipe(a, Str.startsWith("--initial-branch="))),
         Option.map(Str.slice(17)),
         Option.getOrElse(() => "master"),
       );
 
-      const target = Arr.filter(rest, (a) => !pipe(a, Str.startsWith("--")));
+      const target = Arr.filter(rest, (a) => !Function.pipe(a, Str.startsWith("--")));
 
       if (!set.has("--bare") || target.length !== 1 || (format !== "sha1" && format !== "sha256")) {
         return yield* unsupported(["init", ...args]);
@@ -616,7 +616,7 @@ export const make = Effect.fnUntraced(function* () {
     clone: Effect.fnUntraced(function* (args, cwd) {
       const { rest } = flags(args, ["-q", "--quiet"]);
 
-      if (rest.length !== 2 || Arr.some(rest, (a) => pipe(a, Str.startsWith("-")))) {
+      if (rest.length !== 2 || Arr.some(rest, (a) => Function.pipe(a, Str.startsWith("-")))) {
         return yield* unsupported(["clone", ...args]);
       }
 
@@ -651,8 +651,8 @@ export const make = Effect.fnUntraced(function* () {
       for (const [ref, id] of origin.refs) {
         copy(origin, store, id);
 
-        if (pipe(ref, Str.startsWith("refs/heads/"))) {
-          store.refs.set(`refs/remotes/origin/${pipe(ref, Str.slice(11))}`, id);
+        if (Function.pipe(ref, Str.startsWith("refs/heads/"))) {
+          store.refs.set(`refs/remotes/origin/${Function.pipe(ref, Str.slice(11))}`, id);
         }
       }
 
@@ -682,7 +682,9 @@ export const make = Effect.fnUntraced(function* () {
       }
 
       const under = Arr.join(Str.split(path.relative(worktree.root, yield* canonical(cwd)), path.sep), "/");
-      const inside = (file: string) => under === "" || file === under || pipe(file, Str.startsWith(`${under}/`));
+
+      const inside = (file: string) =>
+        under === "" || file === under || Function.pipe(file, Str.startsWith(`${under}/`));
 
       if (rest.length > 1 || (rest.length === 1 && rest[0] !== ".") || (rest.length === 0 && set.size === 0)) {
         return yield* unsupported(["add", ...args]);
@@ -795,9 +797,9 @@ export const make = Effect.fnUntraced(function* () {
       advance(worktree, id);
 
       const name =
-        "ref" in worktree.head ? pipe(worktree.head.ref, Str.replace(/^refs\/heads\//, "")) : "detached HEAD";
+        "ref" in worktree.head ? Function.pipe(worktree.head.ref, Str.replace(/^refs\/heads\//, "")) : "detached HEAD";
 
-      return answer(0, set.has("-q") ? "" : `[${name} ${pipe(id, Str.slice(0, 7))}] ${rest[1] ?? ""}\n`);
+      return answer(0, set.has("-q") ? "" : `[${name} ${Function.pipe(id, Str.slice(0, 7))}] ${rest[1] ?? ""}\n`);
     }),
     revert: Effect.fnUntraced(function* (args, _cwd, env, here) {
       const worktree = here?.worktree;
@@ -863,7 +865,7 @@ export const make = Effect.fnUntraced(function* () {
 
       advance(worktree, id);
 
-      return answer(0, `[${pipe(id, Str.slice(0, 7))}] Revert "${subject}"\n`);
+      return answer(0, `[${Function.pipe(id, Str.slice(0, 7))}] Revert "${subject}"\n`);
     }),
     checkout: Effect.fnUntraced(function* (args, _cwd, _env, here) {
       const worktree = here?.worktree;
@@ -964,7 +966,7 @@ export const make = Effect.fnUntraced(function* () {
       worktrees.set(root, linked);
       yield* switchTree(linked, flatten(worktree.store, readCommit(worktree.store, target)?.tree ?? ""), true);
 
-      return answer(0, "", `Preparing worktree (detached HEAD ${pipe(target, Str.slice(0, 7))})\n`);
+      return answer(0, "", `Preparing worktree (detached HEAD ${Function.pipe(target, Str.slice(0, 7))})\n`);
     }),
     push: Effect.fnUntraced(function* (args, cwd, _env, here) {
       const { set, rest } = flags(args, ["-q", "--quiet", "--force", "-f"]);
@@ -973,12 +975,15 @@ export const make = Effect.fnUntraced(function* () {
         return fatal(NOT_A_REPOSITORY);
       }
 
-      if (rest.length !== 2 || Arr.some(rest, (a) => pipe(a, Str.startsWith("-")) || pipe(a, Str.includes(":")))) {
+      if (
+        rest.length !== 2 ||
+        Arr.some(rest, (a) => Function.pipe(a, Str.startsWith("-")) || Function.pipe(a, Str.includes(":")))
+      ) {
         return yield* unsupported(["push", ...args]);
       }
 
       const [remote = "", branch = ""] = rest;
-      const ref = pipe(branch, Str.startsWith("refs/")) ? branch : `refs/heads/${branch}`;
+      const ref = Function.pipe(branch, Str.startsWith("refs/")) ? branch : `refs/heads/${branch}`;
       const id = here.refs.get(ref);
 
       // Git reads the local refspec before it reaches the remote.
@@ -1008,7 +1013,7 @@ export const make = Effect.fnUntraced(function* () {
       target.refs.set(ref, id);
 
       if (url !== remote) {
-        here.refs.set(`refs/remotes/${remote}/${pipe(ref, Str.slice(11))}`, id);
+        here.refs.set(`refs/remotes/${remote}/${Function.pipe(ref, Str.slice(11))}`, id);
       }
 
       return answer(0, "", `To ${url}\n`);
@@ -1027,7 +1032,7 @@ export const make = Effect.fnUntraced(function* () {
         return fatal(NOT_A_REPOSITORY);
       }
 
-      if (rest.length !== 2 || !pipe(rest[1] ?? "", Str.startsWith("refs/"))) {
+      if (rest.length !== 2 || !Function.pipe(rest[1] ?? "", Str.startsWith("refs/"))) {
         return yield* unsupported(["fetch", ...args]);
       }
 
@@ -1091,7 +1096,7 @@ export const make = Effect.fnUntraced(function* () {
           lines.push(here.store.directory);
         } else if (arg === "--show-object-format") {
           lines.push(here.store.format);
-        } else if (pipe(arg, Str.startsWith("-"))) {
+        } else if (Function.pipe(arg, Str.startsWith("-"))) {
           return yield* unsupported(["rev-parse", ...args]);
         } else {
           const id = revision(here, arg);
@@ -1152,11 +1157,15 @@ export const make = Effect.fnUntraced(function* () {
       }
 
       if (verb === "remove" && args.length === 2) {
-        for (const known of Arr.filter([...here.config.keys()], (k) => pipe(k, Str.startsWith(`remote.${name}.`)))) {
+        for (const known of Arr.filter([...here.config.keys()], (k) =>
+          Function.pipe(k, Str.startsWith(`remote.${name}.`)),
+        )) {
           here.config.delete(known);
         }
 
-        for (const ref of Arr.filter([...here.refs.keys()], (r) => pipe(r, Str.startsWith(`refs/remotes/${name}/`)))) {
+        for (const ref of Arr.filter([...here.refs.keys()], (r) =>
+          Function.pipe(r, Str.startsWith(`refs/remotes/${name}/`)),
+        )) {
           here.refs.delete(ref);
         }
 
@@ -1186,7 +1195,7 @@ export const make = Effect.fnUntraced(function* () {
         return fatal(`Not a valid object name ${spelled}`);
       }
 
-      if (files.length > 1 || Arr.some(files, (file) => pipe(file, Str.endsWith("/")) || file === "")) {
+      if (files.length > 1 || Arr.some(files, (file) => Function.pipe(file, Str.endsWith("/")) || file === "")) {
         return yield* unsupported(["ls-tree", ...args]);
       }
 
@@ -1248,7 +1257,7 @@ export const make = Effect.fnUntraced(function* () {
     while (start < words.length) {
       if (SAFE_GLOBALS.has(words[start] ?? "")) {
         start++;
-      } else if (words[start] === "-c" && pipe(words[start + 1] ?? "", Str.includes("="))) {
+      } else if (words[start] === "-c" && Function.pipe(words[start + 1] ?? "", Str.includes("="))) {
         start += 2;
       } else {
         break;

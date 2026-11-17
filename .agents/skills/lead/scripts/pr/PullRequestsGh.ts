@@ -1,8 +1,10 @@
 // PullRequestsGh.layer: the PullRequests service on `gh`, the one way the lead tooling reaches
 // GitHub. `gh pr edit` fails here with a classic Projects error (AGENTS.md), so an edit goes
 // through `gh api -X PATCH`. Every call names the repo, so the checkout it runs in does not pick it.
-import { Array as Arr, Effect, Layer, Schema } from "effect";
+
+import { Array as Arr, String as Str, pipe, Effect, Layer, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/process";
+
 import { lastLine, run } from "./command.ts";
 import { type Detail, Patch, type PullRequest, PullRequests, PullRequestsError, type Text } from "./PullRequests.ts";
 
@@ -76,154 +78,158 @@ export const ARM = `mutation($id: ID!, $oid: GitObjectID!) {
 /** `owner/name` from an origin URL GitHub serves, https or ssh; `null` for any other. */
 export const repoFromUrl = (url: string): string | null =>
   /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([^/\s]+\/[^/\s]+?)(?:\.git)?\/?$/.exec(
-    url.trim(),
+    Str.trim(url),
   )?.[1] ?? null;
 
 /** `repo` is `owner/name`; `cwd` is any folder gh may start in. */
-export const make = (repo: string, cwd: string): Effect.Effect<PullRequests["Service"], never, ChildProcessSpawner.ChildProcessSpawner> =>
+export const make = (
+  repo: string,
+  cwd: string,
+): Effect.Effect<PullRequests["Service"], never, ChildProcessSpawner.ChildProcessSpawner> =>
   Effect.gen(function* () {
-      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
-      /** One gh call; any exit but 0 fails it with gh's own last line. */
-      const gh = Effect.fn("PullRequestsGh.gh")(
-        function* (args: ReadonlyArray<string>) {
-          const ran = yield* run("gh", args, cwd);
+    /** One gh call; any exit but 0 fails it with gh's own last line. */
+    const gh = Effect.fn("PullRequestsGh.gh")(
+      function* (args: ReadonlyArray<string>) {
+        const ran = yield* run("gh", args, cwd);
 
-          if (ran.code !== 0) {
-            return yield* PullRequestsError.make({
-              reason: `gh ${Arr.join(args.slice(0, 2), " ")} exited ${ran.code}: ${lastLine(ran)}`,
-            });
-          }
-
-          return ran.out;
-        },
-        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-        Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(PullRequestsError.make({ reason: `gh could not start: ${e.message}` })),
-        ),
-      );
-
-      const list = Effect.fn("PullRequestsGh.list")(function* (args: ReadonlyArray<string>) {
-        const out = yield* gh(["pr", "list", "-R", repo, "--json", FIELDS, ...args]);
-
-        const rows = yield* Schema.decodeEffect(Listed)(out.trim() || "[]").pipe(
-          Effect.mapError(() => PullRequestsError.make({ reason: "gh pr list answered a shape we do not read" })),
-        );
-
-        return Arr.map(rows, (r): PullRequest => ({
-          number: r.number,
-          head: r.headRefName,
-          oid: r.headRefOid,
-          state: r.state,
-          draft: r.isDraft,
-        }));
-      });
-
-      const openOn = (branch: string) =>
-        Effect.map(list(["--head", branch, "--state", "open"]), (prs) =>
-          Arr.findFirst(prs, (pr) => pr.head === branch),
-        );
-
-      const all = Effect.flatMap(list(["--state", "all", "--limit", String(LIMIT)]), (prs) =>
-        prs.length >= LIMIT
-          ? Effect.fail(PullRequestsError.make({ reason: `${LIMIT} or more pull requests: one read cannot hold all` }))
-          : Effect.succeed(prs),
-      );
-
-      const draft = Effect.fn("PullRequestsGh.draft")(function* (branch: string, text: Text) {
-        const args = ["--draft", "--base", "main", "--head", branch, "--title", text.title, "--body", text.body];
-        const out = yield* gh(["pr", "create", "-R", repo, ...args]);
-        const number = Number(/\/pull\/(\d+)/.exec(out)?.[1]);
-
-        if (!Number.isInteger(number)) {
-          return yield* PullRequestsError.make({ reason: `gh pr create named no pull request: ${out.trim()}` });
+        if (ran.code !== 0) {
+          return yield* PullRequestsError.make({
+            reason: `gh ${Arr.join(args.slice(0, 2), " ")} exited ${ran.code}: ${lastLine(ran)}`,
+          });
         }
 
-        return number;
-      });
+        return ran.out;
+      },
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Effect.catchTag("PlatformError", (e) =>
+        Effect.fail(PullRequestsError.make({ reason: `gh could not start: ${e.message}` })),
+      ),
+    );
 
-      const edit = (number: number, text: Text) =>
-        Effect.asVoid(
-          gh([
-            "api",
-            "-X",
-            "PATCH",
-            `repos/${repo}/pulls/${number}`,
-            "-f",
-            `title=${text.title}`,
-            "-f",
-            `body=${text.body}`,
-          ]),
-        );
+    const list = Effect.fn("PullRequestsGh.list")(function* (args: ReadonlyArray<string>) {
+      const out = yield* gh(["pr", "list", "-R", repo, "--json", FIELDS, ...args]);
 
-      const ready = (number: number) => Effect.asVoid(gh(["pr", "ready", String(number), "-R", repo]));
+      const rows = yield* Schema.decodeEffect(Listed)(Str.trim(out) || "[]").pipe(
+        Effect.mapError(() => PullRequestsError.make({ reason: "gh pr list answered a shape we do not read" })),
+      );
 
-      const view = Effect.fn("PullRequestsGh.view")(function* (number: number) {
-        const out = yield* gh(["pr", "view", String(number), "-R", repo, "--json", VIEW_FIELDS]);
-
-        const v = yield* Schema.decodeEffect(Viewed)(out).pipe(
-          Effect.mapError(() => PullRequestsError.make({ reason: "gh pr view answered a shape we do not read" })),
-        );
-
-        return {
-          number: v.number,
-          head: v.headRefName,
-          oid: v.headRefOid,
-          base: v.baseRefName,
-          state: v.state,
-          draft: v.isDraft,
-          title: v.title,
-          body: v.body,
-          mergeCommit: v.mergeCommit?.oid ?? null,
-        } satisfies Detail;
-      });
-
-      const enqueue = (number: number, oid: string) => Effect.asVoid(gh(mergeArgs(repo, number, oid)));
-
-      // REST, paged: `gh pr view --json files` stops at 100 files.
-      const files = Effect.fn("PullRequestsGh.files")(function* (number: number) {
-        const out = yield* gh(["api", "--paginate", `repos/${repo}/pulls/${number}/files`, "--jq", ".[].filename"]);
-
-        return Arr.filter(out.split("\n"), (path) => path !== "");
-      });
-
-      // The same paged list, one JSON line per file. GitHub leaves `patch` out for a file it will not show.
-      const patches = Effect.fn("PullRequestsGh.patches")(function* (number: number) {
-        const out = yield* gh([
-          "api",
-          "--paginate",
-          `repos/${repo}/pulls/${number}/files`,
-          "--jq",
-          ".[] | {path: .filename, patch: (.patch // null)}",
-        ]);
-
-        return yield* Effect.forEach(
-          out.split("\n").filter((row) => row !== ""),
-          (row) =>
-            Schema.decodeEffect(PatchRow)(row).pipe(
-              Effect.mapError(() =>
-                PullRequestsError.make({ reason: "gh api pulls/files answered a shape we do not read" }),
-              ),
-            ),
-          { concurrency: "unbounded" },
-        );
-      });
-
-      const arm = Effect.fn("PullRequestsGh.arm")(function* (number: number, oid: string) {
-        const id = (yield* gh(["pr", "view", String(number), "-R", repo, "--json", "id", "--jq", ".id"])).trim();
-
-        if (id === "") {
-          return yield* PullRequestsError.make({ reason: `gh pr view named no node id for pull request ${number}` });
-        }
-
-        yield* gh(["api", "graphql", "-f", `query=${ARM}`, "-f", `id=${id}`, "-f", `oid=${oid}`]);
-      });
-
-      const admin = (number: number, oid: string) => Effect.asVoid(gh(adminArgs(repo, number, oid)));
-
-      return PullRequests.of({ openOn, all, draft, edit, ready, view, enqueue, files, patches, arm, admin });
+      return Arr.map(rows, (r): PullRequest => ({
+        number: r.number,
+        head: r.headRefName,
+        oid: r.headRefOid,
+        state: r.state,
+        draft: r.isDraft,
+      }));
     });
 
+    const openOn = (branch: string) =>
+      Effect.map(list(["--head", branch, "--state", "open"]), (prs) => Arr.findFirst(prs, (pr) => pr.head === branch));
+
+    const all = Effect.flatMap(list(["--state", "all", "--limit", String(LIMIT)]), (prs) =>
+      prs.length >= LIMIT
+        ? Effect.fail(PullRequestsError.make({ reason: `${LIMIT} or more pull requests: one read cannot hold all` }))
+        : Effect.succeed(prs),
+    );
+
+    const draft = Effect.fn("PullRequestsGh.draft")(function* (branch: string, text: Text) {
+      const args = ["--draft", "--base", "main", "--head", branch, "--title", text.title, "--body", text.body];
+      const out = yield* gh(["pr", "create", "-R", repo, ...args]);
+      const number = Number(/\/pull\/(\d+)/.exec(out)?.[1]);
+
+      if (!Number.isInteger(number)) {
+        return yield* PullRequestsError.make({ reason: `gh pr create named no pull request: ${Str.trim(out)}` });
+      }
+
+      return number;
+    });
+
+    const edit = (number: number, text: Text) =>
+      Effect.asVoid(
+        gh([
+          "api",
+          "-X",
+          "PATCH",
+          `repos/${repo}/pulls/${number}`,
+          "-f",
+          `title=${text.title}`,
+          "-f",
+          `body=${text.body}`,
+        ]),
+      );
+
+    const ready = (number: number) => Effect.asVoid(gh(["pr", "ready", String(number), "-R", repo]));
+
+    const view = Effect.fn("PullRequestsGh.view")(function* (number: number) {
+      const out = yield* gh(["pr", "view", String(number), "-R", repo, "--json", VIEW_FIELDS]);
+
+      const v = yield* Schema.decodeEffect(Viewed)(out).pipe(
+        Effect.mapError(() => PullRequestsError.make({ reason: "gh pr view answered a shape we do not read" })),
+      );
+
+      return {
+        number: v.number,
+        head: v.headRefName,
+        oid: v.headRefOid,
+        base: v.baseRefName,
+        state: v.state,
+        draft: v.isDraft,
+        title: v.title,
+        body: v.body,
+        mergeCommit: v.mergeCommit?.oid ?? null,
+      } satisfies Detail;
+    });
+
+    const enqueue = (number: number, oid: string) => Effect.asVoid(gh(mergeArgs(repo, number, oid)));
+
+    // REST, paged: `gh pr view --json files` stops at 100 files.
+    const files = Effect.fn("PullRequestsGh.files")(function* (number: number) {
+      const out = yield* gh(["api", "--paginate", `repos/${repo}/pulls/${number}/files`, "--jq", ".[].filename"]);
+
+      return Arr.filter(pipe(out, Str.split("\n")), (path) => path !== "");
+    });
+
+    // The same paged list, one JSON line per file. GitHub leaves `patch` out for a file it will not show.
+    const patches = Effect.fn("PullRequestsGh.patches")(function* (number: number) {
+      const out = yield* gh([
+        "api",
+        "--paginate",
+        `repos/${repo}/pulls/${number}/files`,
+        "--jq",
+        ".[] | {path: .filename, patch: (.patch // null)}",
+      ]);
+
+      return yield* Effect.forEach(
+        Arr.filter(pipe(out, Str.split("\n")), (row) => row !== ""),
+        (row) =>
+          Schema.decodeEffect(PatchRow)(row).pipe(
+            Effect.mapError(() =>
+              PullRequestsError.make({ reason: "gh api pulls/files answered a shape we do not read" }),
+            ),
+          ),
+        { concurrency: "unbounded" },
+      );
+    });
+
+    const arm = Effect.fn("PullRequestsGh.arm")(function* (number: number, oid: string) {
+      const id = Str.trim(yield* gh(["pr", "view", String(number), "-R", repo, "--json", "id", "--jq", ".id"]));
+
+      if (id === "") {
+        return yield* PullRequestsError.make({ reason: `gh pr view named no node id for pull request ${number}` });
+      }
+
+      yield* gh(["api", "graphql", "-f", `query=${ARM}`, "-f", `id=${id}`, "-f", `oid=${oid}`]);
+    });
+
+    const admin = (number: number, oid: string) => Effect.asVoid(gh(adminArgs(repo, number, oid)));
+
+    return PullRequests.of({ openOn, all, draft, edit, ready, view, enqueue, files, patches, arm, admin });
+  });
+
 /** The service as a layer. */
-export const layer = (repo: string, cwd: string): Layer.Layer<PullRequests, never, ChildProcessSpawner.ChildProcessSpawner> =>
+export const layer = (
+  repo: string,
+  cwd: string,
+): Layer.Layer<PullRequests, never, ChildProcessSpawner.ChildProcessSpawner> =>
   Layer.effect(PullRequests, make(repo, cwd));

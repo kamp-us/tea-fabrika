@@ -5,15 +5,15 @@
  *
  * Paths are sorted before hashing, and origins stay out of it, so equal settings have one hash whatever source gave them.
  */
+import * as Digest from "effect/crypto/Digest";
+
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import * as Digest from "effect/crypto/Digest";
 import * as Str from "effect/String";
-
 
 import * as Codec from "./Codec.ts";
 import type * as Setting from "./Setting.ts";
@@ -60,9 +60,7 @@ const hashValues = Effect.fnUntraced(function* (values: Snapshot["values"]) {
   const text = yield* Schema.encodeUnknownEffect(
     Schema.fromJsonString(Schema.Unknown, {
       replacer: (_key, value: unknown) =>
-        Predicate.isObject(value)
-          ? Rec.fromEntries(Rec.toEntries(value).sort(([a], [b]) => (a < b ? -1 : 1)))
-          : value,
+        Predicate.isObject(value) ? Rec.fromEntries(Rec.toEntries(value).sort(([a], [b]) => (a < b ? -1 : 1))) : value,
     }),
   )(sorted).pipe(Effect.orDie);
   const digest = yield* Digest.Digest;

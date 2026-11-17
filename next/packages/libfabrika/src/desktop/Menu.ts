@@ -3,10 +3,11 @@
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
 import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import * as Access from "../access/Access.ts";
 import * as Id from "../Id.ts";
 
@@ -145,7 +146,7 @@ export const Item = Schema.TaggedUnion({
 });
 
 const safe = (text: string) =>
-  pipe(text, Str.replace(/[\uD800-\uDFFF]/gu, "\uFFFD"), Str.replace(/[\p{Cc}\p{Cf}]/gu, ""));
+  Function.pipe(text, Str.replace(/[\uD800-\uDFFF]/gu, "\uFFFD"), Str.replace(/[\p{Cc}\p{Cf}]/gu, ""));
 
 // The brain-line text cap is 256 UTF-16 units. Keep a pair whole at its boundary.
 const label = (text: string) => {

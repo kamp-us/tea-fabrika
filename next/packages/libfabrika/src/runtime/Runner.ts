@@ -6,6 +6,7 @@
  * wake folds saved letters and runs none of their Cmds.
  */
 import { applyCell, type Outcome } from "@demlik/tea";
+import * as Arr from "effect/Array";
 import * as ByteSize from "effect/ByteSize";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -16,18 +17,14 @@ import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import * as Tracer from "effect/Tracer";
-import * as Arr from "effect/Array";
 import * as Str from "effect/String";
-import * as Predicate from "effect/Predicate";
-import * as Rec from "effect/Record";
-
-
-
+import * as Tracer from "effect/Tracer";
 
 import { type SessionManagerError } from "../access/SessionManager.ts";
 import {

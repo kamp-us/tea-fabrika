@@ -11,10 +11,11 @@
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Str from "effect/String";
+
 import { bundleAsync, transform } from "lightningcss";
 import { BuildError } from "../../runtime/Built.ts";
 
@@ -31,7 +32,7 @@ const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 const refusal = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
 
-  const known = pipe(
+  const known = Function.pipe(
     message,
     Str.match(/(?:unsupported @import condition|stylesheet [^:]*)$/),
     Option.flatMapNullishOr((found) => found[0]),
@@ -41,11 +42,11 @@ const refusal = (error: unknown) => {
     return BuildError.make({ reason: "bundle", message: known.value, cause: error });
   }
 
-  if (pipe(message, Str.includes("BadString"))) {
+  if (Function.pipe(message, Str.includes("BadString"))) {
     return BuildError.make({ reason: "bundle", message: "stylesheet has a broken string", cause: error });
   }
 
-  if (pipe(message, Str.includes("BadUrl"))) {
+  if (Function.pipe(message, Str.includes("BadUrl"))) {
     return BuildError.make({ reason: "bundle", message: "stylesheet has a broken url()", cause: error });
   }
 
@@ -58,7 +59,7 @@ const offsets = (text: string) => {
   const starts = [0];
 
   // Effect's matchAll types a match's index as optional; a matchAll match always has one.
-  for (const m of pipe(text, Str.matchAll(/\r\n|[\n\r\f]/g))) {
+  for (const m of Function.pipe(text, Str.matchAll(/\r\n|[\n\r\f]/g))) {
     if (m.index !== undefined) {
       starts.push(m.index + m[0].length);
     }
@@ -122,7 +123,11 @@ const check = Effect.fn("build.css.check")(function* (file: string, text: string
 
   for (const start of imports) {
     const end = Math.min(text.length, ...Arr.filter(starts, (next) => next > start));
-    const bare = yield* Effect.try({ try: () => bareLayer(pipe(text, Str.slice(start, end))), catch: refusal });
+
+    const bare = yield* Effect.try({
+      try: () => bareLayer(Function.pipe(text, Str.slice(start, end))),
+      catch: refusal,
+    });
 
     if (bare) {
       return yield* BuildError.make({ reason: "bundle", message: unsupported });

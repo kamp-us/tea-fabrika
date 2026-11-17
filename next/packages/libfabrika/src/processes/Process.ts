@@ -8,11 +8,10 @@
 import { applyCell } from "@demlik/tea";
 import * as Equal from "effect/Equal";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
-
 
 import { LedgerError } from "../ledger/Ledger.ts";
 import type { LedgerTurn } from "../ledger/LedgerTransaction.ts";

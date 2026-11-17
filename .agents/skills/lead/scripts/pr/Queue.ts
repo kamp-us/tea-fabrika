@@ -13,7 +13,9 @@
 //
 // `add` answers "queued", never "merged": the merge is GitHub's, later. `settle` is how code learns
 // it happened. Read through its module: `Queue.add(...)`.
-import { Array as Arr, Duration, Effect, Option, Schedule, Schema, pipe } from "effect";
+
+import { String as Str, pipe, Option, Array as Arr, Duration, Effect, Schedule, Schema } from "effect";
+
 import { Checks, type Job } from "../ci/Checks.ts";
 import * as Leaks from "./Leaks.ts";
 import * as Names from "./Names.ts";
@@ -152,7 +154,9 @@ const PHRASE = /^[ \t]*fabrika close ticket ([0-9]+)[ \t]*$/;
 export const namedTickets = (body: string): ReadonlyArray<number> => [
   ...new Set(
     pipe(
-      body.replaceAll("\r", "").split("\n"),
+      body,
+      Str.replaceAll("\r", ""),
+      Str.split("\n"),
       Arr.map((row) => PHRASE.exec(row)?.[1]),
       Arr.filter((n) => n !== undefined),
       Arr.map(Number),

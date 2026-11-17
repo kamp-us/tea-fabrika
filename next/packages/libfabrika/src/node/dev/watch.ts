@@ -7,7 +7,7 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
@@ -15,6 +15,7 @@ import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
+
 import { watch, type RolldownWatcherEvent } from "rolldown";
 import * as Id from "../../Id.ts";
 import { hash } from "../../runtime/Built.ts";
@@ -67,7 +68,7 @@ const details = (raw: unknown, root: string, path: Path.Path) => {
 
   const relative = path.isAbsolute(file) ? path.relative(root, file) : file;
 
-  if (pipe(relative, Str.startsWith("..")) || path.isAbsolute(relative)) {
+  if (Function.pipe(relative, Str.startsWith("..")) || path.isAbsolute(relative)) {
     return {};
   }
 
@@ -158,7 +159,7 @@ export const watchPrograms = (options: {
                   }
                 },
                 transform(code, id) {
-                  if (pipe(id, Str.endsWith(".tsx"))) {
+                  if (Function.pipe(id, Str.endsWith(".tsx"))) {
                     return { code: compile(id, code).code };
                   }
                 },
@@ -233,7 +234,7 @@ export const watchPrograms = (options: {
             );
 
             const digest = yield* hash(
-              Formatter.formatJson([...inputs].sort(([a], [b]) => pipe(a, Str.localeCompare(b)))),
+              Formatter.formatJson([...inputs].sort(([a], [b]) => Function.pipe(a, Str.localeCompare(b)))),
             );
 
             if (built._tag === "Failure" && phase.getState().failedInputs === digest) {

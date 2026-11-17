@@ -7,7 +7,7 @@
  */
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
@@ -16,6 +16,7 @@ import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
+
 import type { Identity } from "../../transport/ClientKey.ts";
 import { ErrorClass } from "../../transport/ClientRows.ts";
 import { backoff, CAP } from "../../transport/Link.ts";
@@ -127,7 +128,7 @@ export const dialer =
 
         const key = yield* identity;
         yield* dialWait(tries);
-        const url = `${pipe(options.origin, Str.replace(/^http/, "ws"))}/client/${encodeURIComponent(key.fingerprint)}/${encodeURIComponent(options.tab)}`;
+        const url = `${Function.pipe(options.origin, Str.replace(/^http/, "ws"))}/client/${encodeURIComponent(key.fingerprint)}/${encodeURIComponent(options.tab)}`;
         const connection = yield* Socket.fromWebSocket(acquire(options.sockets, url));
 
         const pull = yield* Socket.readerString(connection).pipe(

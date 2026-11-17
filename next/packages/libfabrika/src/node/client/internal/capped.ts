@@ -1,12 +1,13 @@
 import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as ChildProcess from "effect/process/ChildProcess";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
+
 import { Result } from "../../../tasks/Task.ts";
 
 /** What one child has printed so far: its stdout's chunks in order, and each stream's byte count. */
@@ -37,7 +38,7 @@ const utf8 = new TextDecoder("utf-8", { fatal: true });
 /** stdout as UTF-8 with one trailing newline dropped, or "" when it is not UTF-8. */
 const version = (chunks: ReadonlyArray<Uint8Array>) =>
   Effect.try(() => utf8.decode(joined(chunks))).pipe(
-    Effect.map((text) => (pipe(text, Str.endsWith("\n")) ? pipe(text, Str.slice(0, -1)) : text)),
+    Effect.map((text) => (Function.pipe(text, Str.endsWith("\n")) ? Function.pipe(text, Str.slice(0, -1)) : text)),
     Effect.orElseSucceed(() => ""),
   );
 

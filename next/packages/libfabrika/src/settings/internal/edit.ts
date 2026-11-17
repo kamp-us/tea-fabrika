@@ -1,12 +1,9 @@
 import * as Equal from "effect/Equal";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
-
-
-
 
 /** @internal */
 export type Path = ReadonlyArray<string | number>;

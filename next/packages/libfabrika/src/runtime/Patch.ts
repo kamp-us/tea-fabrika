@@ -2,18 +2,13 @@
  * View patches: the RFC 6902 operations that turn one JSON view into the next. A watcher gets the
  * whole view once, then a patch per step. Pure, and it never changes its inputs.
  */
-import * as pipe from "effect/pipe";
 import * as Arr from "effect/Array";
+
+import * as Function from "effect/Function";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
-
-
-
-
-
-
 
 /**
  * One RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs.
@@ -26,7 +21,8 @@ export type Patch =
   | { readonly op: "replace"; readonly path: string; readonly value: unknown };
 
 /** A JSON Pointer token: `~` as `~0`, `/` as `~1` (RFC 6901). */
-const token = (key: string | number): string => pipe(String(key), Str.replaceAll("~", "~0"), Str.replaceAll("/", "~1"));
+const token = (key: string | number): string =>
+  Function.pipe(String(key), Str.replaceAll("~", "~0"), Str.replaceAll("/", "~1"));
 
 type Plain = { [key: string]: unknown };
 
@@ -40,9 +36,7 @@ const same = (a: unknown, b: unknown): boolean => {
 
   if (isPlain(a) && isPlain(b)) {
     const keys = Rec.keys(a);
-    return (
-      keys.length === Rec.keys(b).length && Arr.every(keys, (key) => Rec.has(b, key) && same(a[key], b[key]))
-    );
+    return keys.length === Rec.keys(b).length && Arr.every(keys, (key) => Rec.has(b, key) && same(a[key], b[key]));
   }
 
   return Object.is(a, b);
@@ -152,7 +146,7 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
       return invalid();
     }
 
-    const path = Arr.map(encoded, (p) => pipe(p, Str.replaceAll("~1", "/"), Str.replaceAll("~0", "~")));
+    const path = Arr.map(encoded, (p) => Function.pipe(p, Str.replaceAll("~1", "/"), Str.replaceAll("~0", "~")));
 
     if (Arr.some(path, (p) => unsafe.has(p))) {
       return invalid();

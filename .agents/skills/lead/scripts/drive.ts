@@ -105,7 +105,27 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices, type NodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Array as Arr, pipe, String as Str, Cause, Clock, DateTime, Effect, FileSystem, Formatter, Layer, Option, Order, Record as Rec, Config, ConfigProvider, Context, Result, Schema, Stream } from "effect";
+import {
+  Array as Arr,
+  pipe,
+  String as Str,
+  Cause,
+  Clock,
+  DateTime,
+  Effect,
+  FileSystem,
+  Formatter,
+  Layer,
+  Option,
+  Order,
+  Record as Rec,
+  Config,
+  ConfigProvider,
+  Context,
+  Result,
+  Schema,
+  Stream,
+} from "effect";
 import { ChildProcess } from "effect/process";
 import type { ChildProcessSpawner } from "effect/process";
 
@@ -142,7 +162,7 @@ import {
   questRoot,
   startHead,
   stepOf,
-  wipOf,
+  wipBranch,
   workspaceGlobs,
 } from "./quest.ts";
 import * as RunId from "./runid.ts";
@@ -609,7 +629,7 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
       outcome: { kind: "ask", who: "lead", for: "lockfile" },
       reason:
         `pnpm-lock.yaml is behind ${Arr.join(read.manifests, " ")}, and a box has no network. ` +
-        `Outside the box, on ${wipOf(ask.branch)} at ${pipe(read.head, Str.slice(0, 8))}: ` +
+        `Outside the box, on ${wipBranch(ask.branch)} at ${pipe(read.head, Str.slice(0, 8))}: ` +
         "pnpm install --lockfile-only, check each new version is exact and the plan names it, " +
         "commit pnpm-lock.yaml unsigned as a lead commit (stepcommit.sh --commit-only lead), and the lead " +
         "session signs it and pushes it to -wip (the lead skill's ready handover, ticket 652), " +
@@ -1497,7 +1517,7 @@ const handlers = (env: Env, started: readonly Phase[], path: string) => {
     // network (0045), so this host part does, the moment drive commits.
     backup_push: (cmd: { ask: Ask; head: string }) =>
       Effect.gen(function* () {
-        const r = sh("node", [join(HERE, "botpush.mjs"), env.MAIN, wipOf(cmd.ask.branch), cmd.head]);
+        const r = sh("node", [join(HERE, "botpush.mjs"), env.MAIN, wipBranch(cmd.ask.branch), cmd.head]);
 
         if (r.code !== 0) {
           return { ok: false, detail: `botpush: ${tail(r.out + r.err, 1)}` };
@@ -2232,7 +2252,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   // tip, unless the saved head has moved past it (`startHead`). A box started at main on a
   // branch that has work drops that work (2026-11-09), so a saved head off the branch loses.
   const pushed = pipe(
-    [branch, wipOf(branch)],
+    [branch, wipBranch(branch)],
     Arr.map((ref) =>
       Str.trim(sh("git", ["-C", env.MAIN, "rev-parse", "-q", "--verify", `refs/remotes/origin/${ref}^{commit}`]).out),
     ),
@@ -2598,16 +2618,22 @@ const main = () => {
           electron: holdsElectron(prepared.ask.step, prepared.electron),
         }),
       );
+
       return;
     }
 
     yield* stepped(prepared);
   }).pipe(withDriveMinutes);
-  NodeRuntime.runMain(program.pipe(Effect.provide(
-    Layer.mergeAll(PushesProcess.layer(HERE), PullRequestsGh.layer(env.GH_REPO, env.MAIN)).pipe(
-      Layer.provideMerge(nodeServices),
+
+  NodeRuntime.runMain(
+    program.pipe(
+      Effect.provide(
+        Layer.mergeAll(PushesProcess.layer(HERE), PullRequestsGh.layer(env.GH_REPO, env.MAIN)).pipe(
+          Layer.provideMerge(nodeServices),
+        ),
+      ),
     ),
-  )));
+  );
 };
 
 if (import.meta.main) {

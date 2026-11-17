@@ -45,7 +45,7 @@ import {
 import { Digest } from "effect/crypto";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import { repoNode } from "../boxnode.ts";
-import { questKeyed, wipOf } from "../quest.ts";
+import { questKeyed, wipBranch } from "../quest.ts";
 import * as Outcome from "./Outcome.ts";
 import { type Runner, StepFailed } from "./Runners.ts";
 
@@ -420,7 +420,7 @@ export const host = Effect.fn("host.run")(function* (a: HostArgs) {
 
   const head = Str.trim((yield* exec(dir, "git", ["rev-parse", "HEAD"])).output);
   // Pushed before the branch moves, so a failed push leaves the quest where review would find it.
-  const pushed = yield* exec(a.main, "node", [path.join(scripts, "botpush.mjs"), a.main, wipOf(a.branch), head]);
+  const pushed = yield* exec(a.main, "node", [path.join(scripts, "botpush.mjs"), a.main, wipBranch(a.branch), head]);
 
   if (pushed.code !== 0) {
     return {

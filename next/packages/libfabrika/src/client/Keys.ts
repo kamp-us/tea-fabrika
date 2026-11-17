@@ -13,10 +13,11 @@
  * a key pressed after the prefix.
  */
 import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import type { Binding } from "../runtime/Program.ts";
 import type { Hello } from "../transport/Wire.ts";
 import type { Prefix } from "./Prefix.ts";
@@ -96,7 +97,8 @@ const AFTER = "<prefix>";
 const BROWSER = ["w", "t", "n", "q"] as const;
 
 /** The press a row's key means on a backend: `mod` becomes the backend's command key. */
-const resolved = (key: string, mod: Backend["mod"]): string => pipe(key, Str.replace(/(^|\+)mod\+/, `$1${mod}+`));
+const resolved = (key: string, mod: Backend["mod"]): string =>
+  Function.pipe(key, Str.replace(/(^|\+)mod\+/, `$1${mod}+`));
 
 /**
  * Returns the backend a window runs on. A browser tab keeps Mod-W, Mod-T, Mod-N and Mod-Q, and on
@@ -149,8 +151,8 @@ export const load = (bindings: ReadonlyArray<Binding>, on: Backend): Result.Resu
         return Result.fail(LoadError.cases.cannot.make({ does: row.does, key }));
       }
 
-      if (pipe(press, Str.startsWith(AFTER))) {
-        after.set(pipe(press, Str.slice(AFTER.length)), row.does);
+      if (Function.pipe(press, Str.startsWith(AFTER))) {
+        after.set(Function.pipe(press, Str.slice(AFTER.length)), row.does);
       } else {
         alone.set(press, row.does);
       }

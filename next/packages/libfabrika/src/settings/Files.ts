@@ -8,12 +8,11 @@
 import * as Effect from "effect/Effect";
 import * as Order from "effect/Order";
 import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
-
 
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";

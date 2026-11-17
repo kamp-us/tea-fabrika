@@ -58,7 +58,7 @@ const routed = Effect.fnUntraced(function* (work: Effect.Effect<typeof Answer.Ty
 // `LedgerError` of reason `bad_row`, in the typed channel.
 const waitOn = (p: ProjectClient["Service"]) =>
   Effect.fnUntraced(function* (client: ConnectionId, stream: string, after: number, reader: string) {
-    const asked = stream.startsWith(targetStream(""))
+    const asked = Str.startsWith(targetStream(""))(stream)
       ? p.route(client, "tasks.wait", { after }, reader)
       : p.route(client, "ledger.wait", { stream, after }, reader);
     const answer = yield* rpc(routed(asked));

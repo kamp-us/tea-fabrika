@@ -41,7 +41,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { Array as Arr, pipe, String as Str, DateTime, Option, Result, Schema } from "effect";
 import { GC_SECONDS } from "./mutbox.ts";
 import { type PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
-import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipOf } from "./quest.ts";
+import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipBranch } from "./quest.ts";
 
 const HOUR = 3_600_000;
 
@@ -87,7 +87,7 @@ export type PinVerdict = typeof PinVerdict.Type;
 /** The branch a box's commits are backed up to, best first. */
 export const backupsOf = (name: string, branch: string | null): string[] => {
   const own = `fabrikalfa/${name}-wip`;
-  const wip = branch === null ? null : wipOf(branch);
+  const wip = branch === null ? null : wipBranch(branch);
 
   return wip !== null && pipe(wip, Str.startsWith("fabrikalfa/")) === true && wip !== own ? [wip, own] : [own];
 };

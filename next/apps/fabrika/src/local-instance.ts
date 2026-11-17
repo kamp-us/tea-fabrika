@@ -1,5 +1,6 @@
 import { Array as Arr, Cause, Effect, Path, Predicate, Schema } from "effect";
 import { FetchHttpClient } from "effect/http";
+
 import type { Options } from "./settings.ts";
 
 class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {

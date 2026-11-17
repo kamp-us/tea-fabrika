@@ -5,11 +5,12 @@
 import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import * as Id from "../../Id.ts";
 import * as Log from "../../ledger/Log.ts";
 import * as Open from "../../packs/Open.ts";
@@ -66,16 +67,18 @@ const documentFailed = (cause: Files.SettingsError) => {
   const label = Option.getOrUndefined(
     Arr.findFirst(labels, (name) =>
       Arr.some([":", ", line ", " could not be read."], (suffix) =>
-        pipe(cause.message, Str.startsWith(`${name}${suffix}`)),
+        Function.pipe(cause.message, Str.startsWith(`${name}${suffix}`)),
       ),
     ),
   );
 
   const line =
-    label === undefined ? undefined : /^, line ([0-9]+):/.exec(pipe(cause.message, Str.slice(label.length)))?.[1];
+    label === undefined
+      ? undefined
+      : /^, line ([0-9]+):/.exec(Function.pipe(cause.message, Str.slice(label.length)))?.[1];
 
   const location = label === undefined ? "Settings" : `${label}${line === undefined ? "" : `, line ${line}`}`;
-  const detail = label === undefined ? "" : pipe(cause.message, Str.slice(location.length + 2));
+  const detail = label === undefined ? "" : Function.pipe(cause.message, Str.slice(location.length + 2));
 
   const keys = Arr.flatMap(Declarations.all.declarations, (d) =>
     Arr.map(d.segments, (_, n) => Arr.join(d.segments.slice(0, n + 1), ".")),
@@ -87,7 +90,9 @@ const documentFailed = (cause: Files.SettingsError) => {
       : Option.getOrUndefined(
           Arr.findFirst(
             keys,
-            (name) => pipe(detail, Str.startsWith(`${name} =`)) || pipe(detail, Str.startsWith(`${name} is `)),
+            (name) =>
+              Function.pipe(detail, Str.startsWith(`${name} =`)) ||
+              Function.pipe(detail, Str.startsWith(`${name} is `)),
           ),
         );
 
@@ -200,7 +205,7 @@ export const open = Effect.fn("repositoryOpen.open")(function* <E, R>(
   const snapshot: Open.CheckedSelection = {
     ...prepared.snapshot,
     repository,
-    label: `Repository ${pipe(prepared.snapshot.key, Str.slice(0, 12))}`,
+    label: `Repository ${Function.pipe(prepared.snapshot.key, Str.slice(0, 12))}`,
     settings: prepared.settings,
     person: options.actor,
   };

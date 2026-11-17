@@ -1,6 +1,7 @@
 // command: one child process run to its end, its output read whole. The process layers of this
 // folder share it; each turns a failure into its own service's error.
-import { Array as Arr, Effect, Option, Stream } from "effect";
+
+import { String as Str, pipe, Option, Array as Arr, Effect, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** What one run left: its stdout, its stderr and its exit code. */
@@ -9,7 +10,7 @@ export type Ran = { readonly out: string; readonly err: string; readonly code: n
 /** The last line a run wrote that is not empty, stderr first: the one a failure reason shows. */
 export const lastLine = (ran: Ran): string =>
   Option.getOrElse(
-    Arr.findLast(`${ran.out}\n${ran.err}`.split("\n"), (line) => line.trim() !== ""),
+    Arr.findLast(pipe(`${ran.out}\n${ran.err}`, Str.split("\n")), (line) => Str.trim(line) !== ""),
     () => "",
   );
 

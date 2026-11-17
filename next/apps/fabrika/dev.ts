@@ -9,21 +9,24 @@ import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import * as RepositoryTrustLedger from "@kampus/libfabrika/packs/RepositoryTrustLedger";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
-import { Array as Arr, Record as Rec, String as Str, Config, ConfigProvider, Effect, FileSystem, Layer, Option, Path, Schema, Stream, Formatter } from "effect";
+import {
+  Array as Arr,
+  Record as Rec,
+  String as Str,
+  Config,
+  ConfigProvider,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Schema,
+  Stream,
+  Formatter,
+} from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
 import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
-
-
-
-
-
-
-
-
-
-
-
 
 import { build } from "./src/build.ts";
 import { localInstance } from "./src/local-instance.ts";

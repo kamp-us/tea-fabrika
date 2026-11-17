@@ -4,14 +4,13 @@
  * ones to object calls, the Worker Loader and the span sink; Node tests wire the same shapes.
  */
 import { type Outcome, type Tagged } from "@demlik/tea";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
 import * as Rec from "effect/Record";
-
+import * as Schema from "effect/Schema";
 
 import { type SessionManagerError } from "../access/SessionManager.ts";
 import {

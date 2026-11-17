@@ -16,13 +16,12 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Tracer from "effect/Tracer";
 import * as Str from "effect/String";
-import * as Rec from "effect/Record";
-
+import * as Tracer from "effect/Tracer";
 
 import type { Sql } from "../Sql.ts";
 import type { Archive } from "./Archive.ts";

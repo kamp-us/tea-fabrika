@@ -221,6 +221,7 @@ export const runners: Readonly<Record<string, Runner<Spawns>>> = {
     }
 
     const scripts = yield* script();
+
     // The `ci` step before this one waited for the checks, so the required one is read once here.
     // Each service is built for this one call, so ChecksGh's ETag cache lives only as long as it.
     return Outcome.answer(

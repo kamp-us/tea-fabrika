@@ -1,9 +1,8 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Str from "effect/String";
 import * as Rec from "effect/Record";
-
+import * as Str from "effect/String";
 
 import { LedgerError } from "../ledger/Ledger.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";

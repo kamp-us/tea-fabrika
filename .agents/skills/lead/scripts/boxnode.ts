@@ -24,7 +24,7 @@
 // shell is never a login shell (the `codex-exec` rows), and `NODE_PROBE` asks the box's own shell which
 // Node it finds before a step starts: `holdsPin` reads the answer.
 
-import { Array as Arr, Effect, FileSystem, Option, Schema } from "effect";
+import { String as Str, pipe, Option, Array as Arr, Effect, FileSystem, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 /** The repo's Node: the root package.json's `volta.node`, else its `engines.node`; `null` when neither. */
@@ -47,16 +47,16 @@ const Pins = Schema.Struct({
 /** `path` with `dirs` first, in their order, and each of them gone from the rest. */
 export const firstOnPath = (path: string, dirs: readonly string[]): string => {
   const front = [...new Set(Arr.filter(dirs, (dir) => dir !== ""))];
-  const rest = Arr.filter(path.split(":"), (dir) => dir !== "" && !front.includes(dir));
+  const rest = Arr.filter(pipe(path, Str.split(":")), (dir) => dir !== "" && !front.includes(dir));
 
   return Arr.join([...front, ...rest], ":");
 };
 
 /** The folder above a program's absolute path, or `null` for a path that is not one. */
 const holder = (program: string): string | null => {
-  const at = program.lastIndexOf("/");
+  const at = Option.getOrElse(pipe(program, Str.lastIndexOf("/")), () => -1);
 
-  return program.startsWith("/") && at > 0 ? program.slice(0, at) : null;
+  return pipe(program, Str.startsWith("/")) && at > 0 ? pipe(program, Str.slice(0, at)) : null;
 };
 
 /**
@@ -64,9 +64,9 @@ const holder = (program: string): string | null => {
  * `process.execPath`, then its `process.version`. `null` unless that version is the pin.
  */
 export const pinnedBin = (said: string, pin: string): string | null => {
-  const [execPath = "", version = ""] = said.trim().split("\n");
+  const [execPath = "", version = ""] = pipe(Str.trim(said), Str.split("\n"));
 
-  return version.trim() === `v${pin}` && execPath.endsWith("/node") ? holder(execPath.trim()) : null;
+  return Str.trim(version) === `v${pin}` && pipe(execPath, Str.endsWith("/node")) ? holder(Str.trim(execPath)) : null;
 };
 
 /**
@@ -74,10 +74,10 @@ export const pinnedBin = (said: string, pin: string): string | null => {
  * anything else, a Volta shim folder (`.volta/bin`) included, since the shim picks its own Node.
  */
 export const pnpmBin = (said: string): string | null => {
-  const program = said.trim();
-  const dir = program.includes("\n") || !program.endsWith("/pnpm") ? null : holder(program);
+  const program = Str.trim(said);
+  const dir = pipe(program, Str.includes("\n")) || !pipe(program, Str.endsWith("/pnpm")) ? null : holder(program);
 
-  return dir === null || dir.endsWith("/.volta/bin") ? null : dir;
+  return dir === null || pipe(dir, Str.endsWith("/.volta/bin")) ? null : dir;
 };
 
 /** What a box's shell runs to show its Node: the bare `node`, then the one `pnpm exec` finds. */
@@ -85,9 +85,9 @@ export const NODE_PROBE = "node -v; pnpm exec node -v";
 
 /** Whether `NODE_PROBE` printed the pin on both lines, and nothing else: no line, no Node. */
 export const holdsPin = (said: string, pin: string): boolean => {
-  const lines = said.trim().split("\n");
+  const lines = pipe(Str.trim(said), Str.split("\n"));
 
-  return lines.length === 2 && Arr.every(lines, (line) => line.trim() === `v${pin}`);
+  return lines.length === 2 && Arr.every(lines, (line) => Str.trim(line) === `v${pin}`);
 };
 
 type Env = Readonly<Record<string, string | undefined>>;

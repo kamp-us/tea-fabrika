@@ -4,14 +4,13 @@
  * the Worker adapters serve them; both read these shapes from here, so nothing here needs a
  * platform.
  */
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as SchemaGetter from "effect/SchemaGetter";
 import * as Arr from "effect/Array";
 import * as Digest from "effect/crypto/Digest";
+
+import * as Effect from "effect/Effect";
 import * as Rec from "effect/Record";
-
-
+import * as Schema from "effect/Schema";
+import * as SchemaGetter from "effect/SchemaGetter";
 
 import { ProgramName } from "../packs/ProgramName.ts";
 

@@ -6,13 +6,14 @@
 import { applyCell } from "@demlik/tea";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as R from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
+
 import * as Id from "../Id.ts";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerStreams } from "../ledger/LedgerStreams.ts";
@@ -246,7 +247,7 @@ export const layer = Layer.effect(
       forProcess: (process: typeof ProcessId.Type) =>
         streams.list(PREFIX).pipe(
           Stream.mapError((cause) => TasksError.make({ reason: "storage", cause })),
-          Stream.mapEffect((name) => read(pipe(name, Str.slice(PREFIX.length)))),
+          Stream.mapEffect((name) => read(Function.pipe(name, Str.slice(PREFIX.length)))),
           Stream.filter((task) => task.state._tag !== "absent" && task.state.request.process === process),
         ),
     };

@@ -9,8 +9,10 @@
 // not count against the login's 5,000 calls an hour (GitHub's REST docs, "Best practices for using
 // the REST API": use conditional requests), so a wait spends one call per change of the job, not
 // one per poll. Measured here on 2026-11-12: 20 such 304s in 9 seconds moved the count by none.
-import { Array as Arr, Effect, Layer, Option, Schema, Stream } from "effect";
+
+import { String as Str, pipe, Option, Array as Arr, Effect, Layer, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+
 import { Checks, ChecksError, type Job } from "./Checks.ts";
 
 /** What `gh api -i` printed: the status line's code, the `ETag` header and the body under them. */
@@ -18,10 +20,15 @@ export type Response = { readonly status: number; readonly etag: string | null; 
 
 /** Reads `gh api -i`'s output: a status line, the headers, an empty line, then the body. */
 export const responseIn = (out: string): Response => {
-  const [head = "", ...rest] = out.split(/\r?\n\r?\n/);
-  const lines = head.split(/\r?\n/);
+  const [head = "", ...rest] = pipe(out, Str.split(/\r?\n\r?\n/));
+  const lines = pipe(head, Str.split(/\r?\n/));
   const status = Number(/^HTTP\/\S+ (\d{3})\b/.exec(lines[0] ?? "")?.[1] ?? Number.NaN);
-  const etag = Arr.findFirst(lines, (line) => Option.fromUndefinedOr(/^etag:\s*(\S.*)$/i.exec(line)?.[1]?.trim()));
+
+  const etag = Arr.findFirst(lines, (line) =>
+    Option.fromUndefinedOr(
+      pipe(/^etag:\s*(\S.*)$/i.exec(line)?.[1], Option.fromNullishOr, Option.map(Str.trim), Option.getOrUndefined),
+    ),
+  );
 
   return { status, etag: Option.getOrNull(etag), body: Arr.join(rest, "\n\n") };
 };
@@ -56,90 +63,90 @@ export const latestIn = (body: string): Effect.Effect<Option.Option<Job>, Schema
 /** `repo` is `owner/name`. */
 export const make = (repo: string): Effect.Effect<Checks["Service"], never, ChildProcessSpawner.ChildProcessSpawner> =>
   Effect.gen(function* () {
-      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-      // The last answer per head and name, with its ETag: what a 304 stands for.
-      const seen = new Map<string, { readonly etag: string; readonly found: Option.Option<Job> }>();
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    // The last answer per head and name, with its ETag: what a 304 stands for.
+    const seen = new Map<string, { readonly etag: string; readonly found: Option.Option<Job> }>();
 
-      /** One `gh api` call, run to its end: what it printed and its exit code. */
-      const call = Effect.fn("ChecksGh.call")(
-        function* (args: ReadonlyArray<string>) {
-          const handle = yield* ChildProcess.make("gh", ["api", ...args], { stdin: "ignore" });
+    /** One `gh api` call, run to its end: what it printed and its exit code. */
+    const call = Effect.fn("ChecksGh.call")(
+      function* (args: ReadonlyArray<string>) {
+        const handle = yield* ChildProcess.make("gh", ["api", ...args], { stdin: "ignore" });
 
-          const [out, err, code] = yield* Effect.all(
-            [
-              Stream.mkString(Stream.decodeText(handle.stdout)),
-              Stream.mkString(Stream.decodeText(handle.stderr)),
-              handle.exitCode,
-            ],
-            { concurrency: 3 },
-          );
+        const [out, err, code] = yield* Effect.all(
+          [
+            Stream.mkString(Stream.decodeText(handle.stdout)),
+            Stream.mkString(Stream.decodeText(handle.stderr)),
+            handle.exitCode,
+          ],
+          { concurrency: 3 },
+        );
 
-          return { out, err, code: Number(code) };
-        },
-        Effect.scoped,
-        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-        Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(ChecksError.make({ reason: `gh could not start: ${e.message}` })),
-        ),
+        return { out, err, code: Number(code) };
+      },
+      Effect.scoped,
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Effect.catchTag("PlatformError", (e) =>
+        Effect.fail(ChecksError.make({ reason: `gh could not start: ${e.message}` })),
+      ),
+    );
+
+    /** Any exit but 0 is a failure, with gh's own last line. */
+    const exited = (args: ReadonlyArray<string>, ran: { readonly err: string; readonly code: number }) => {
+      const last = pipe(Str.trim(ran.err), Str.split("\n")).at(-1) ?? "";
+
+      const path = Option.getOrElse(
+        Arr.findFirst(args, (a) => !pipe(a, Str.startsWith("-"))),
+        () => "",
       );
 
-      /** Any exit but 0 is a failure, with gh's own last line. */
-      const exited = (args: ReadonlyArray<string>, ran: { readonly err: string; readonly code: number }) => {
-        const last = ran.err.trim().split("\n").at(-1) ?? "";
+      return ChecksError.make({ reason: `gh api ${path} exited ${ran.code}: ${last}` });
+    };
 
-        const path = Option.getOrElse(
-          Arr.findFirst(args, (a) => !a.startsWith("-")),
-          () => "",
-        );
+    const job = Effect.fn("ChecksGh.job")(function* (head: string, name: string) {
+      const key = `${head} ${name}`;
+      const before = seen.get(key);
+      const path = `repos/${repo}/commits/${head}/check-runs`;
+      const query = ["-X", "GET", "-f", `check_name=${name}`, "-f", "filter=latest"];
+      const unless = before === undefined ? [] : ["-H", `If-None-Match: ${before.etag}`];
+      const args = ["-i", path, ...query, ...unless];
+      const ran = yield* call(args);
+      const response = responseIn(ran.out);
 
-        return ChecksError.make({ reason: `gh api ${path} exited ${ran.code}: ${last}` });
-      };
+      // Not modified: gh exits 1 on a 304, and the answer is the one that ETag came with.
+      if (response.status === 304 && before !== undefined) {
+        return before.found;
+      }
 
-      const job = Effect.fn("ChecksGh.job")(function* (head: string, name: string) {
-        const key = `${head} ${name}`;
-        const before = seen.get(key);
-        const path = `repos/${repo}/commits/${head}/check-runs`;
-        const query = ["-X", "GET", "-f", `check_name=${name}`, "-f", "filter=latest"];
-        const unless = before === undefined ? [] : ["-H", `If-None-Match: ${before.etag}`];
-        const args = ["-i", path, ...query, ...unless];
-        const ran = yield* call(args);
-        const response = responseIn(ran.out);
+      if (ran.code !== 0) {
+        return yield* exited(args, ran);
+      }
 
-        // Not modified: gh exits 1 on a 304, and the answer is the one that ETag came with.
-        if (response.status === 304 && before !== undefined) {
-          return before.found;
-        }
+      const found = yield* latestIn(response.body).pipe(
+        Effect.mapError(() => ChecksError.make({ reason: `GitHub's check runs at ${head} did not parse` })),
+      );
 
-        if (ran.code !== 0) {
-          return yield* exited(args, ran);
-        }
+      if (response.etag === null) {
+        seen.delete(key);
+      } else {
+        seen.set(key, { etag: response.etag, found });
+      }
 
-        const found = yield* latestIn(response.body).pipe(
-          Effect.mapError(() => ChecksError.make({ reason: `GitHub's check runs at ${head} did not parse` })),
-        );
-
-        if (response.etag === null) {
-          seen.delete(key);
-        } else {
-          seen.set(key, { etag: response.etag, found });
-        }
-
-        return found;
-      });
-
-      const log = Effect.fn("ChecksGh.log")(function* (id: number) {
-        // A test log is colored. Since gh 2.97.0, whose release notes name the escape-sequence fix
-        // for `gh api`, gh exits 1 and prints nothing on an answer with terminal escape sequences
-        // unless told to pass them on; seen on 2.104.0 (job 133007568239, 2026-11-15). So this
-        // needs gh 2.97.0 or later.
-        const args = ["--allow-escape-sequences", `repos/${repo}/actions/jobs/${id}/logs`];
-        const ran = yield* call(args);
-
-        return ran.code === 0 ? ran.out : yield* exited(args, ran);
-      });
-
-      return Checks.of({ job, log });
+      return found;
     });
+
+    const log = Effect.fn("ChecksGh.log")(function* (id: number) {
+      // A test log is colored. Since gh 2.97.0, whose release notes name the escape-sequence fix
+      // for `gh api`, gh exits 1 and prints nothing on an answer with terminal escape sequences
+      // unless told to pass them on; seen on 2.104.0 (job 133007568239, 2026-11-15). So this
+      // needs gh 2.97.0 or later.
+      const args = ["--allow-escape-sequences", `repos/${repo}/actions/jobs/${id}/logs`];
+      const ran = yield* call(args);
+
+      return ran.code === 0 ? ran.out : yield* exited(args, ran);
+    });
+
+    return Checks.of({ job, log });
+  });
 
 /** The service as a layer. */
 export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpawner.ChildProcessSpawner> =>

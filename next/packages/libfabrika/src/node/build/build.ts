@@ -13,12 +13,13 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { ProgramName } from "../../packs/ProgramName.ts";
 import { Asset, type AssetType, Built as Tables, BuildError, type BuiltProgram, hash } from "../../runtime/Built.ts";
@@ -107,7 +108,7 @@ const findWindow = Effect.fn("build.manifest")(function* (from: string, selected
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
 
-  if (pipe(selected, Str.startsWith(".")) || path.isAbsolute(selected)) {
+  if (Function.pipe(selected, Str.startsWith(".")) || path.isAbsolute(selected)) {
     return Option.none<string>();
   }
 
@@ -136,9 +137,9 @@ const findWindow = Effect.fn("build.manifest")(function* (from: string, selected
 });
 
 const contentType = (file: string): AssetType | undefined =>
-  pipe(file, Str.endsWith(".js"))
+  Function.pipe(file, Str.endsWith(".js"))
     ? "text/javascript; charset=utf-8"
-    : pipe(file, Str.endsWith(".css"))
+    : Function.pipe(file, Str.endsWith(".css"))
       ? "text/css; charset=utf-8"
       : undefined;
 
@@ -177,7 +178,7 @@ const stylesheets = (
 ): Plugin => ({
   name: "fabrika-css",
   load(id) {
-    if (!pipe(id, Str.endsWith(".css"))) {
+    if (!Function.pipe(id, Str.endsWith(".css"))) {
       return;
     }
 
@@ -228,7 +229,7 @@ const embed = (tables: Tables): Plugin => {
         return `\0${BUILT_MODULE}`;
       }
 
-      if (pipe(id, Str.startsWith(TEXT))) {
+      if (Function.pipe(id, Str.startsWith(TEXT))) {
         return id;
       }
     },
@@ -237,8 +238,8 @@ const embed = (tables: Tables): Plugin => {
         return code;
       }
 
-      if (pipe(id, Str.startsWith(TEXT))) {
-        return { code: texts[Number(pipe(id, Str.slice(TEXT.length)))] ?? "", moduleType: "text" };
+      if (Function.pipe(id, Str.startsWith(TEXT))) {
+        return { code: texts[Number(Function.pipe(id, Str.slice(TEXT.length)))] ?? "", moduleType: "text" };
       }
     },
   };
@@ -259,18 +260,18 @@ const browserOnly: Plugin = {
     }
   },
   transform(code, id) {
-    if (pipe(id, Str.includes("/effect/dist/")) && pipe(code, Str.includes(NODE_PROBE))) {
-      return { code: pipe(code, Str.replace(NODE_PROBE, "undefined")) };
+    if (Function.pipe(id, Str.includes("/effect/dist/")) && Function.pipe(code, Str.includes(NODE_PROBE))) {
+      return { code: Function.pipe(code, Str.replace(NODE_PROBE, "undefined")) };
     }
   },
 };
 
 /** Text that cannot end the element it sits in. */
-const inert = (text: string): string => pipe(text, Str.replaceAll("</", "<\\/"));
+const inert = (text: string): string => Function.pipe(text, Str.replaceAll("</", "<\\/"));
 
 /** Text that cannot leave the attribute it sits in. */
 const attribute = (text: string): string =>
-  pipe(text, Str.replaceAll("&", "&amp;"), Str.replaceAll('"', "&quot;"), Str.replaceAll("<", "&lt;"));
+  Function.pipe(text, Str.replaceAll("&", "&amp;"), Str.replaceAll('"', "&quot;"), Str.replaceAll("<", "&lt;"));
 
 /** The tab's page: every stylesheet embedded in order, and the script at `/window.js`, which `build`
  *  names for the rows the tab records. No other request: the icon is empty. */
@@ -474,7 +475,7 @@ export const buildPrograms = Effect.fn("build.programs")(function* (
     transform(code, id) {
       inputs?.set(id, code);
 
-      if (!pipe(id, Str.endsWith(".tsx"))) {
+      if (!Function.pipe(id, Str.endsWith(".tsx"))) {
         return;
       }
 
@@ -586,7 +587,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
   const compiler: Plugin = {
     name: "fabrika-compiler",
     transform(code, id) {
-      if (!pipe(id, Str.endsWith(".tsx"))) {
+      if (!Function.pipe(id, Str.endsWith(".tsx"))) {
         return;
       }
 
@@ -613,13 +614,14 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 
   // A segment holds no `.`, so `pack.program` names one generated file per qualified name. The
   // window's entry keeps the whole name, so it is emitted at `/pack/program.js`.
-  const generated = (name: string) => path.join(from, `window.${pipe(name, Str.replace("/", "."))}.generated.ts`);
+  const generated = (name: string) =>
+    path.join(from, `window.${Function.pipe(name, Str.replace("/", "."))}.generated.ts`);
 
   const entries: Plugin = {
     name: "fabrika-window",
     resolveId(id) {
-      if (pipe(id, Str.startsWith(WINDOW))) {
-        return generated(pipe(id, Str.slice(WINDOW.length)));
+      if (Function.pipe(id, Str.startsWith(WINDOW))) {
+        return generated(Function.pipe(id, Str.slice(WINDOW.length)));
       }
     },
     load(id) {

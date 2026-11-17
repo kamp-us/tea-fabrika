@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
-import { pipe } from "effect/Function";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
@@ -16,6 +16,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
+
 import {
   BrainControl,
   BrainControlError,
@@ -282,7 +283,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       // An empty path is not yet "removed": an earlier removal may hold an entry it could not put
       // back. That entry is somebody's, so this removal refuses too, until a person has taken it.
       for (const name of yield* fs.readDirectory(spec.home).pipe(Effect.mapError(storage))) {
-        if (!pipe(name, Str.startsWith(".brain-"))) {
+        if (!Function.pipe(name, Str.startsWith(".brain-"))) {
           continue;
         }
 
@@ -348,7 +349,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         // The target is read as text, and bytes that are not UTF-8 come back as U+FFFD. Writing that
         // would put a different link at the path, so the captured link stays in its folder instead.
         // A target that really holds U+FFFD stays too: kept as it is, never a wrong link.
-        if (pipe(target, Str.includes("\uFFFD"))) {
+        if (Function.pipe(target, Str.includes("\uFFFD"))) {
           return yield* conflict("symlink target is not text");
         }
 

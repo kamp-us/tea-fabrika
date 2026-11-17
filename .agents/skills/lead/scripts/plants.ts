@@ -5,7 +5,7 @@
 // existed, and the quest looped (acpcancel and sjob1, 2026-11-11). The chain writes this section
 // into a review's brief instead.
 
-import { Array as Arr, Option, Schema } from "effect";
+import { String as Str, pipe, Option, Array as Arr, Schema } from "effect";
 
 /**
  * One plant as the state file keeps it, read loosely as the host step reads its entries: the
@@ -45,15 +45,9 @@ export type LawRecord = {
 const MAX_CELL = 300;
 
 const rowCells = (line: string) =>
-  Arr.map(
-    line
-      .trim()
-      .replace(/^\||\|$/g, "")
-      .split("|"),
-    (c) => c.trim(),
-  );
+  Arr.map(pipe(Str.trim(line), Str.replace(/^\||\|$/g, ""), Str.split("|")), (c) => Str.trim(c));
 
-const bare = (cell: string) => cell.replace(/^[`*]+|[`*]+$/g, "").trim();
+const bare = (cell: string) => Str.trim(pipe(cell, Str.replace(/^[`*]+|[`*]+$/g, "")));
 
 /**
  * What the report's plant tables say each failure of `law` looked like: the last cell of each row
@@ -63,8 +57,8 @@ export const failuresIn = (report: string, law: string): string[] => {
   const found: string[] = [];
   let header: string[] | null = null;
 
-  for (const line of report.split("\n")) {
-    if (!line.trim().startsWith("|")) {
+  for (const line of pipe(report, Str.split("\n"))) {
+    if (!pipe(Str.trim(line), Str.startsWith("|"))) {
       header = null;
       continue;
     }
@@ -72,14 +66,14 @@ export const failuresIn = (report: string, law: string): string[] => {
     const cells = rowCells(line);
 
     if (header === null) {
-      header = Arr.map(cells, (c) => bare(c).toLowerCase());
+      header = Arr.map(cells, (c) => Str.toLowerCase(bare(c)));
       continue;
     }
 
-    const plantTable = header[0] === "law" && Arr.some(header, (h) => h.includes("plant"));
+    const plantTable = header[0] === "law" && Arr.some(header, (h) => pipe(h, Str.includes("plant")));
 
     if (plantTable && cells.length > 1 && bare(cells[0] ?? "") === law) {
-      found.push((cells.at(-1) ?? "").slice(0, MAX_CELL));
+      found.push(pipe(cells.at(-1) ?? "", Str.slice(0, MAX_CELL)));
     }
   }
 
@@ -130,7 +124,7 @@ export const section = (records: ReadonlyArray<LawRecord>, build: string | null)
     return null;
   }
 
-  const short = (s: string) => s.slice(0, 8);
+  const short = (s: string) => pipe(s, Str.slice(0, 8));
 
   const lines = [
     "## Plant records",
