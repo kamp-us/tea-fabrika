@@ -45,6 +45,7 @@
     "@types/node": "catalog:",
     "esbuild": "catalog:",
     "fast-check": "catalog:",
+    "jscpd": "catalog:",
     "oxfmt": "catalog:",
     "oxc-parser": "catalog:",
     "oxlint": "catalog:",

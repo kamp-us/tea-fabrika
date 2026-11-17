@@ -30,9 +30,11 @@ export const BrainInput = Schema.Struct({
 /** The real local instance, then its ready file, then it waits to be stopped. */
 const brain = Effect.fn("P19Host.brain")(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
+
   const input = yield* fs
     .readFileString(file)
     .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(BrainInput))));
+
   yield* localInstance(input.built, input.options);
   yield* fs.writeFileString(
     `${input.options.home}/ready.json`,
@@ -43,6 +45,7 @@ const brain = Effect.fn("P19Host.brain")(function* (file: string) {
       electron: process.versions.electron,
     }),
   );
+
   return yield* Effect.never;
 });
 

@@ -7,7 +7,9 @@ import { isTimings, TIMED_LEGS } from "./time-tables.ts";
 // ready pull request alone, the merge commit the run checks out, and the upload of what it wrote
 // under the name it printed. `retention-days` is a setting (0069), so only its being there is held.
 const RECORD = "node .github/ci/changes.mjs --record";
+
 const RECORD_IF = "github.event_name=='pull_request'&&!github.event.pull_request.draft";
+
 const TESTED = `\${{ github.sha }}`;
 
 const RECORD_UPLOAD = {
@@ -20,6 +22,7 @@ const RECORD_UPLOAD = {
 export const record: Rule = ({ jobs }, require) => {
   const changes = map(jobs["changes"]),
     outputs = map(changes["outputs"]);
+
   const changeSteps = steps(changes);
   const sizing = changeSteps.find((s) => s["id"] === "size");
 
@@ -84,6 +87,7 @@ export const record: Rule = ({ jobs }, require) => {
   const uploaders = Object.values(jobs).flatMap((job) =>
     allSteps(map(job)).filter((s) => typeof s["uses"] === "string" && /(?:^|\/)upload-artifact@/.test(s["uses"])),
   );
+
   const timingsUploads = TIMED_LEGS.flatMap(([name]) => allSteps(map(jobs[name])).filter(isTimings));
   require(upload !== undefined &&
     uploaders.filter((s) => s === upload).length === 1 &&

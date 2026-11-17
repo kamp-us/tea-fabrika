@@ -4,7 +4,7 @@
 // law; Vitest does not typecheck, so the lead and CI run it with `pnpm typecheck`.
 // Plant: add a member tagged `LedgerError` to one method's error.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Effect } from "effect";
+import type * as Effect from "effect/Effect";
 import type { SessionManager } from "./SessionManager.ts";
 
 /** What one member of a service fails with: an Effect's error, or that of the Effect a function answers. */
@@ -33,6 +33,7 @@ it("type: no service of access/ fails with an error tagged LedgerError", () => {
 
   // SessionManager: its own error and its two refusals, and nothing of the ledger's.
   type Sessions = (typeof SessionManager)["Service"];
+
   expectTypeOf<Failures<Sessions>["_tag"]>().toEqualTypeOf<"SessionManagerError" | "SigningRefused" | "NotGranted">();
   expectTypeOf<FromLedger<Sessions>>().toBeNever();
 });

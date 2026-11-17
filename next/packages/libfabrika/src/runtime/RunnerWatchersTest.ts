@@ -18,7 +18,9 @@ import { BRAIN, type Harness } from "./RunnerRepliesTest.ts";
 import { Gone, Unreachable, WatcherManagerError } from "./WatcherManager.ts";
 
 const NAME = "watch-counter:1";
+
 const Model = Schema.Struct({ count: Schema.Int });
+
 const Msg = Schema.Struct({ type: Schema.Literal("inc") });
 
 const program = {
@@ -46,7 +48,9 @@ const Step = Arbitrary.all({
 });
 
 const Walk = Arbitrary.array(Step, { minLength: 3, maxLength: 12 });
+
 const TRACE = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
+
 const owner = Writer.cases.person.make({ key: "SHA256:fixture", for: "person-fixture" });
 
 const meta = {
@@ -73,6 +77,7 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
   let pos = 0;
   let serial = 0;
   const expected = new Map<string, { pos: number; count: number }>();
+
   const connect = Effect.fnUntraced(function* () {
     const sql = yield* files("inbox").pipe(Scope.provide(scope));
     const manager = yield* files("manager").pipe(Scope.provide(scope));
@@ -91,6 +96,7 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
     }
 
     const live = yield* processes.status(NAME).pipe(Effect.orDie);
+
     const dependencies = Layer.mergeAll(
       ProgramLoader.layer({ [program.name]: program }, {}),
       ProcessStore.layer(sql, { process: live.state.process }),
@@ -119,35 +125,43 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
             }
 
             frames.push({ client, update });
+
             return Effect.void;
           }),
       }),
       Layer.succeed(Alarm, { set: () => Effect.void }),
       Layer.succeed(Recording, { flush: Effect.void }),
     ).pipe(Layer.provideMerge(Layer.succeedContext(coordination)));
+
     const context = yield* Layer.build(
       ProgramRunner.layer(
         { id: live.state.process, name: NAME, program: program.name, build: "test", owner },
         { recovery: { sql, name: NAME, capacity: 1024 ** 3 }, chunk: ANY_CHUNK },
       ).pipe(Layer.provide(dependencies)),
     ).pipe(Scope.provide(scope));
+
     return { runner: Context.get(context, ProgramRunner), mailbox, sql };
   });
+
   let live = yield* connect();
+
   const rebuild = Effect.fnUntraced(function* () {
     yield* Scope.close(scope, Exit.void);
     scope = yield* Effect.acquireRelease(Scope.make(), (s) => Scope.close(s, Exit.void));
     live = yield* connect();
   });
+
   const open = Effect.fnUntraced(function* (client: string) {
     routes.add(client);
     const view = yield* live.runner.open(client);
     expect(view).toMatchObject({ rev: pos, view: { count: pos } });
     expected.set(client, { pos, count: pos });
   });
+
   const send = Effect.fnUntraced(function* () {
     frames.length = 0;
     attempted.length = 0;
+
     const incoming: Incoming = {
       id: `letter-${serial++}`,
       envelope: {
@@ -160,6 +174,7 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
       seen: 0,
       span: TRACE,
     };
+
     const answer = yield* live.runner.msg(incoming);
     pos++;
     expect(answer).toEqual(Sent.cases.accepted.make({ rev: answer._tag === "accepted" ? answer.rev : -1, pos }));
@@ -198,9 +213,11 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
       }
     }
   });
+
   // Required prefix: two pre-sleep watchers, one route removed while all Layers are closed.
   const first = `${nth(steps, 0).client}:a`,
     departed = `${nth(steps, 0).client}:b`;
+
   yield* open(first);
   yield* open(departed);
   yield* Scope.close(scope, Exit.void);

@@ -31,19 +31,25 @@ export interface CacheFiles {
 const PNPM_STORE = /pnpm[\s\S]*store|store[\s\S]*pnpm/i;
 
 const ON_MAIN = "github.ref=='refs/heads/main'";
+
 // scripts/typecheck.ts's buildinfo path, relative to each package.
 const BUILDINFO = /"--tsBuildInfoFile",\s*"([^"]+)"/;
+
 const TSC_HASH = "git ls-files -s pnpm-lock.yaml '*tsconfig*.json' | git hash-object --stdin";
+
 const TSC_PREFIX = `tsc-\${{ runner.os }}-\${{ steps.tsc-key.outputs.hash }}-`;
+
 const TSC_SAVED = `\${{ steps.tsc.outputs.cache-primary-key }}`;
 
 export const lintCaches = (files: CacheFiles): string[] => {
   const errors: string[] = [];
+
   const require = (holds: boolean, reason: string) => {
     if (!holds) {
       errors.push(reason);
     }
   };
+
   let action: Record<string, unknown>, workspace: Record<string, unknown>;
   const workflows: [string, Record<string, unknown>][] = [];
 
@@ -59,13 +65,16 @@ export const lintCaches = (files: CacheFiles): string[] => {
   }
 
   const actionSteps = steps(map(action["runs"]));
+
   // Only a workflow that runs for a pull request or a merge queue group saves on a ref of its own.
   const perRef = workflows.filter(([, workflow]) => {
     const on = workflow["on"];
+
     return ["pull_request", "merge_group"].some((event) =>
       Array.isArray(on) ? on.includes(event) : on === event || event in map(on),
     );
   });
+
   const everyStep: [string, Record<string, unknown>][] = [
     ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
     ...perRef.flatMap(([path, workflow]) =>

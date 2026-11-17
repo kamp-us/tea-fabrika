@@ -4,7 +4,6 @@
 // gets a fresh temporary folder; each open is a new connection to the same file, closed with its scope,
 // and each restart loads the program module again. Ticket 839: `letters` reads the inbox back on a
 // connection of its own, so L16 and L17 can count rows and read a saved note and writer.
-import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for the referee's transactions
 import { NodeServices } from "@effect/platform-node";
 import type { checklist } from "@kampus/checklist";
 import * as RunnerTest from "@kampus/checklist/RunnerTest";
@@ -20,14 +19,19 @@ import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, FileSystem, Layer, Path, type Scope, Stream } from "effect";
 
 const NAME = "checklist:1";
+
 const BUILD = "checklist-build";
+
 const BRAIN = "SHA256:brain";
+
 const TRACE = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
 
 const person = Writer.cases.person.make({ key: "SHA256:person", for: "person" });
+
 const agent = Writer.cases.agent.make({ key: "SHA256:agent", for: "agent" });
 
 const brainFrom = {
@@ -67,6 +71,7 @@ const session = (
     const ledger = yield* files("ledger");
     const store = yield* files("process");
     const manager = yield* files("manager");
+
     const started = Layer.effectDiscard(
       ProcessManager.use((m) =>
         m.status(NAME).pipe(
@@ -83,15 +88,18 @@ const session = (
         ),
       ).pipe(Effect.orDie),
     ).pipe(Layer.provideMerge(managerLayer(manager)));
+
     const process = yield* ProcessManager.use((m) => m.status(NAME)).pipe(
       Effect.map((s) => s.state.process),
       Effect.provide(started),
       Effect.orDie,
     );
+
     const checked = Layer.effect(
       CheckedWriter,
       Effect.gen(function* () {
         const mailbox = yield* Mailbox;
+
         return CheckedWriter.of({
           append: (i) =>
             mailbox.send(NAME, i.id, i.envelope.input, {
@@ -108,6 +116,7 @@ const session = (
         });
       }),
     );
+
     return ProgramRunner.layer(
       { id: process, name: NAME, program: program.name, build: BUILD, owner: person },
       { recovery: { sql: store, name: NAME, capacity: 1024 ** 3 }, chunk: mailChunk.default },
@@ -134,10 +143,7 @@ const session = (
 
 /** One connection to a database file, closed with its scope. */
 const connection = (file: string): Effect.Effect<Sql, never, Scope.Scope> =>
-  Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(file)),
-    (db) => Effect.sync(() => db.close()),
-  ).pipe(Effect.map(nodeSql));
+  TestDatabase.make(file).pipe(Effect.map(nodeSql));
 
 /** A fresh folder; each start opens its three databases again and runs one session over them. */
 const open: RunnerTest.Open = Effect.gen(function* () {
@@ -145,6 +151,7 @@ const open: RunnerTest.Open = Effect.gen(function* () {
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "t806-checklist-" });
   const files = (name: string) => connection(path.join(folder, `${name}.sqlite`));
+
   return {
     start: (program: typeof checklist, alarms: Array<number | null>) =>
       Effect.flatMap(session(files, alarms, program), (layer) => ProgramRunner.pipe(Effect.provide(layer))),

@@ -1,9 +1,9 @@
 /**
  * Checks that a key belongs, then writes, in one synchronous ledger transaction.
- *
- * @stability unstable
  */
-import { Effect, Result, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { Appended, type Line, valueFor } from "../ledger/Log.ts";
@@ -13,7 +13,8 @@ import { foldAccess } from "./AccessFold.ts";
 import { NotGranted } from "./SessionManager.ts";
 
 const known: ReadonlySet<string> = new Set(Object.keys(MemberEvent.cases));
-const decodeEvent = Schema.decodeUnknownResult(MemberEvent);
+
+const decodeEventResult = Schema.decodeUnknownResult(MemberEvent);
 
 /**
  * Appends a line to a stream only if the key is admitted by the membership as it stands now.
@@ -32,7 +33,6 @@ const decodeEvent = Schema.decodeUnknownResult(MemberEvent);
  * A membership row that does not decode fails the write with a `LedgerError` of reason `bad_row`.
  * A key that is not admitted fails with `NotGranted` and nothing is written.
  *
- * @stability unstable
  * @category combinators
  */
 export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
@@ -41,6 +41,7 @@ export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
       short({ "fab.authorization.id": write.id, "fab.authorization.stream": write.stream }),
     );
     const transaction = yield* LedgerTransaction;
+
     const result = yield* transaction.transact((turn): Result.Result<Appended, LedgerError | NotGranted> => {
       const events: MemberEvent[] = [];
 
@@ -49,23 +50,25 @@ export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
           continue;
         }
 
-        const event = decodeEvent(valueFor(row));
+        const event = decodeEventResult(valueFor(row));
 
         if (Result.isFailure(event)) {
-          return Result.fail(new LedgerError({ reason: "bad_row", cause: event.failure }));
+          return Result.fail(LedgerError.make({ reason: "bad_row", cause: event.failure }));
         }
 
         events.push(event.success);
       }
 
       if ("reason" in admitted(foldAccess(events), key)) {
-        return Result.fail(new NotGranted({}));
+        return Result.fail(NotGranted.make({}));
       }
 
       return Result.succeed(Appended.cases.placed.make(turn.append(write.stream, write.id, write.line)));
     });
+
     const appended = yield* Effect.fromResult(result);
     yield* Effect.annotateCurrentSpan("fab.authorization.outcome", "placed");
+
     return appended;
   },
   Effect.tapError((error) =>

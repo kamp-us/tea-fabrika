@@ -34,9 +34,11 @@ import { grouped } from "./match.ts";
 export const noTypeAssertions: CreateRule = {
   create(context) {
     const source = context.sourceCode;
+
     /** The type right after `as`, with no parentheses of its own: `as (any)` is not `as any`. */
     const asKeyword = (node: ESTree.TSAsExpression, kind: string): boolean =>
       node.typeAnnotation.type === kind && source.getTokenBefore(node.typeAnnotation)?.value === "as";
+
     return {
       TSAsExpression(node) {
         const inner = node.expression;
@@ -50,6 +52,7 @@ export const noTypeAssertions: CreateRule = {
 
           if (message !== null) {
             context.report({ node: inner.expression, message });
+
             return;
           }
         }

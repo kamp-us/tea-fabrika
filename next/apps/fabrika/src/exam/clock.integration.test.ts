@@ -4,9 +4,13 @@ import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
 const PURITY = "react(purity)";
+
 const CLOCK = "fabrika(no-clock-in-view)";
+
 const VIEW = "next/packages/tuval/src/window/view.tsx";
+
 const CLEAN = "next/packages/tuval/src/window/clean.tsx";
+
 const PLAIN = "next/packages/tuval/src/window/model.ts";
 
 const view = [

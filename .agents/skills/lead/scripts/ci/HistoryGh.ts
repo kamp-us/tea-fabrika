@@ -161,9 +161,11 @@ const Created = Schema.fromJsonString(Schema.Struct({ number: Schema.Number }));
 export const slices = (from: string, to: string): ReadonlyArray<readonly [string, string]> => {
   const end = Date.parse(to);
   const step = SLICE * 3_600_000;
+
   const starts = Array.from({ length: Math.max(0, Math.ceil((end - Date.parse(from)) / step)) }, (_, i) => {
     return Date.parse(from) + i * step;
   });
+
   return starts.map((start) => [new Date(start).toISOString(), new Date(Math.min(end, start + step)).toISOString()]);
 };
 
@@ -177,6 +179,7 @@ export const layer = (repo: string): Layer.Layer<History | Issues, never, ChildP
       const gh = Effect.fn("HistoryGh.gh")(
         function* (args: ReadonlyArray<string>) {
           const handle = yield* ChildProcess.make("gh", ["api", ...args], { stdin: "ignore" });
+
           const [out, err, code] = yield* Effect.all(
             [
               Stream.mkString(Stream.decodeText(handle.stdout)),
@@ -188,6 +191,7 @@ export const layer = (repo: string): Layer.Layer<History | Issues, never, ChildP
 
           if (Number(code) !== 0) {
             const last = err.trim().split("\n").at(-1) ?? "";
+
             return yield* new HistoryError({ reason: `gh api ${args[0] ?? ""} exited ${code}: ${last}` });
           }
 
@@ -222,6 +226,7 @@ export const layer = (repo: string): Layer.Layer<History | Issues, never, ChildP
         const all = yield* Effect.forEach(slices(from, to), ([a, b]) => slice(a, b), { concurrency: 2 });
         // A run created on a slice's edge is in both slices' answers; `to` itself is not in [from, to).
         const unique = new Map(all.flat().map((run) => [run.id, run]));
+
         return [...unique.values()].filter((run) => run.created < to);
       });
 
@@ -238,10 +243,12 @@ export const layer = (repo: string): Layer.Layer<History | Issues, never, ChildP
 
         do {
           const query = ["graphql", "-f", `query=${MERGED}`, "-f", `q=repo:${repo} is:pr is:merged merged:>=${since}`];
+
           const page = yield* read(
             "merged pull requests",
             pullsIn(yield* gh([...query, ...(after === null ? [] : ["-f", `after=${after}`])])),
           );
+
           found.push(...page.pulls);
           after = page.next;
         } while (after !== null);
@@ -267,6 +274,7 @@ export const layer = (repo: string): Layer.Layer<History | Issues, never, ChildP
           "-f",
           `labels[]=${label}`,
         ]);
+
         return (yield* read("new issue", Schema.decodeUnknownEffect(Created)(made))).number;
       });
 

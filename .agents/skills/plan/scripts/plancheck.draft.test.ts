@@ -32,13 +32,16 @@ const modeCheck = (text: string, mode: "--draft" | "--approved") => {
     writeFileSync(path, Buffer.from(text));
     const words = join(folder, "words");
     writeFileSync(words, "private_generated\n");
+
     const ran = spawnSync("sh", [script, mode, path], {
       encoding: "utf8",
       timeout: 5_000,
       env: { ...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined },
     });
+
     expect(ran.error).toBeUndefined();
     expect(ran.signal).toBeNull();
+
     return { code: ran.status, text: ran.stdout + ran.stderr };
   } finally {
     rmSync(folder, { recursive: true, force: true });
@@ -52,10 +55,12 @@ describe("T686 size advice in the draft check, today's tooling", () => {
     fc.assert(
       fc.property(fc.array(fc.integer({ min: 1, max: 5000 }), { minLength: 1, maxLength: 4 }), (slices) => {
         const listed = slices.map((lines, at) => `${at + 1}. **Slice ${at + 1}: ${lines} lines.**`).join("\n");
+
         const body = complete().replace(
           "Size: 1 agent hour, 80 lines. Confidence: 85%.",
           `Size: 1 agent hour. Confidence: 85%.\n\n${listed}`,
         );
+
         const ran = modeCheck(`\nPlancheck-Version: 3\n${body}`, "--draft");
         expect(ran.code, ran.text).toBe(0);
         expect(ran.text).toContain(`${slices.length} slices, the largest ${Math.max(...slices)}\n`);
@@ -86,9 +91,11 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
         ]) {
           const without = body.replace(part, "");
           expect(without).not.toBe(body);
+
           const decoy = part.startsWith("```")
             ? "## Example\n```text\nlate opening block\n```"
             : `${fence}md\n${part}\n${fence}`;
+
           const bad = modeCheck(`\nPlancheck-Version: 3\n${without}\n${decoy}\n`, "--draft");
           expect(bad.code, `${part}\n${bad.text}`).toBe(1);
           expect(bad.text).not.toMatch(/usage:|Traceback|cannot read installed/);
@@ -147,6 +154,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
               : place === "list"
                 ? `\n- \`${path}\``
                 : `\nChange \`${path}\` here.`;
+
           const body = complete(mention);
           const bad = modeCheck(`\nPlancheck-Version: 3\n${body}`, "--draft");
           expect(bad.code, bad.text).toBe(1);
@@ -167,6 +175,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
     fc.assert(
       fc.property(word, fc.integer({ min: 1, max: 999 }), (name, line) => {
         const path = `src/${name}.test.ts`;
+
         const at = (cell: string) =>
           complete().replace("| src/plain.ts | build |", `| src/plain.ts | build |\n| ${cell} | tests |`);
 
@@ -402,8 +411,9 @@ describe("T325 K6 plancheck, today's tooling", () => {
           const plan = join(root, "plan.md");
           writeFileSync(
             plan,
-            `${draft ? "" : "Approved by the lead agent, builds note."}\nPlancheck-Version: 3\n\n# Plan\n\n\`\`\`ts\nconst idea = 1;\n\`\`\`\n\n## Laws\n${laws("fc.record: text")}\n## Files\n${table(["File", "Owner step"], [["src/plain.ts", "build"]])}\n## Size\n2 files, 10 lines, 1 agent hour. Confidence: 90%.\nEstimate: 3 steps, $2\n## What it records\nRefusals.\n## What it cannot tell us\nNo live push.\n## Open questions\nNone.\nhttps://github.com/usirin/tea-fabrika/pull/532\n${leak ? privateWord : "Safe text."}\n`,
+            `${draft ? "" : "Approved by the lead agent, builds note."}\nPlancheck-Version: 3\n\n# Plan\n\n\`\`\`ts\nconst idea = 1;\n\`\`\`\n\n## Laws\n${laws("fc.record: text")}\n## Files\n${table(["File", "Owner step"], [["src/plain.ts", "build"]])}\n## Existing tools\n- \`src/plain.ts\`: searched src; none found.\n## Size\n2 files, 10 lines, 1 agent hour. Confidence: 90%.\nEstimate: 3 steps, $2\n## What it records\nRefusals.\n## What it cannot tell us\nNo live push.\n## Open questions\nNone.\nhttps://github.com/usirin/tea-fabrika/pull/532\n${leak ? privateWord : "Safe text."}\n`,
           );
+
           const run = () =>
             spawnSync("sh", [join(scripts, "plan/scripts/plancheck.sh"), ...(draft ? ["--draft"] : []), plan], {
               cwd: root,
@@ -411,6 +421,7 @@ describe("T325 K6 plancheck, today's tooling", () => {
               timeout: 5_000,
               env: { ...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined },
             });
+
           const out = run();
           expect(out.error).toBeUndefined();
           expect(out.status, out.stdout + out.stderr).toBe(leak ? 1 : 0);
@@ -489,6 +500,7 @@ describe("laws and validation advice, today's tooling", () => {
           location === "generator"
             ? row("test", count ? `${gen}, ${count}` : gen)
             : row("test", gen, `break it ${count}`);
+
         const got = check(kinded(head, [cells]));
         expect(got.code, got.text).toBe(0);
         expect(advice(got.text).length, got.text).toBe(count === "" ? 1 : 0);
@@ -505,11 +517,13 @@ describe("laws and validation advice, today's tooling", () => {
   // Plant: read only text outside fences; skip the lead filter; read every section.
   it("vector: the Validation section advises on --changed, changed tests and typecheck, and nothing else does", () => {
     const law = kinded("Kind", [row("test", "fc.record: x, 50 runs")]);
+
     const told = [
       "- Run `nice -n 19 pnpm exec vitest run --changed origin/main` once.",
       "- Run changed tests once, then one typecheck.",
       "```sh\npnpm typecheck\n```",
     ];
+
     const quiet = [
       "- The lead runs `--changed` and one typecheck.",
       "- CI runs typecheck.",
@@ -552,6 +566,7 @@ describe("laws and validation advice, today's tooling", () => {
       const words = join(folder, "words");
       writeFileSync(words, "private_generated\n");
       const pinned = join(folder, ".agents/skills/plan/scripts/plancheck.sh");
+
       const run = (main: string | undefined) =>
         spawnSync("sh", [pinned, "--approved", plan], {
           encoding: "utf8",
@@ -568,6 +583,50 @@ describe("laws and validation advice, today's tooling", () => {
       expect(without.stderr).toContain("MAIN is not set");
     } finally {
       rmSync(folder, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("0587 an Existing tools line for each new helper, today's tooling", () => {
+  // Plants: drop the existing tools check, stop reading the word "searched", read a line inside a
+  // fence, or ask a line of a test file, a file in the repo or a file the tests step owns.
+  const KNOWN = "- `src/plain.ts`: searched `rg plain src`; none found.";
+
+  const plan = (row: string, line: string) =>
+    complete()
+      .replace("| src/plain.ts | build |", `| src/plain.ts | build |\n${row}`)
+      .replace(KNOWN, `${KNOWN}\n${line}`);
+
+  it("property: a new code file needs a line that names it and says what was searched", () => {
+    fc.assert(
+      fc.property(word, fc.constantFrom(".ts", ".tsx", ".mjs", ".js"), word, (name, ext, other) => {
+        const path = `src/helpers/${name}${ext}`;
+        const row = `| ${path} | build |`;
+        const draft = (line: string) => modeCheck(`\nPlancheck-Version: 3\n${plan(row, line)}`, "--draft");
+
+        const missing = draft("");
+        expect(missing.code, missing.text).toBe(1);
+        expect(missing.text).toContain(`plan existing tools: ${path} is a new code file`);
+
+        const good = draft(`- \`${path}\`: searched \`rg ${name}\` and npm; none fits.`);
+        expect(good.code, good.text).toBe(0);
+
+        expect(draft(`- \`${path}\`: none fits.`).code).toBe(1);
+        expect(draft(`- \`src/helpers/${other}x${ext}\`: searched npm; none fits.`).code).toBe(1);
+        expect(draft(`\`\`\`text\n${path}: searched npm\n\`\`\``).code).toBe(1);
+      }),
+      { seed: 586, numRuns: 4 },
+    );
+  });
+
+  it("scenario: asks no line of a test file, a file in the repo or a file the tests step owns", () => {
+    for (const row of [
+      "| src/helpers/fresh.test.ts | build |",
+      "| .agents/skills/lead/scripts/pr/Queue.ts | build |",
+      "| src/helpers/fresh-support.ts | tests |",
+    ]) {
+      const ran = modeCheck(`\nPlancheck-Version: 3\n${plan(row, "")}`, "--draft");
+      expect(ran.code, ran.text).toBe(0);
     }
   });
 });

@@ -12,8 +12,11 @@ import { RecordManager } from "../Records.ts";
 import { SpanSink } from "../Sink.ts";
 
 const HOUR = 3_600_000;
+
 const H = 1_790_002_800_000;
+
 const TAG = "fab.gateway.refused";
+
 const PIECE = "gateway.route";
 
 const database = Effect.acquireRelease(

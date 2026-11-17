@@ -20,7 +20,7 @@ export type Model = {
 
 export const layer = (model: Model): Layer.Layer<BoxGit> => {
   const answer = <A>(command: string, value: A) =>
-    model.failing.includes(command) ? Effect.fail(new BoxGitError({ command })) : Effect.succeed(value);
+    model.failing.includes(command) ? Effect.fail(BoxGitError.make({ command })) : Effect.succeed(value);
 
   return Layer.succeed(
     BoxGit,
@@ -30,7 +30,8 @@ export const layer = (model: Model): Layer.Layer<BoxGit> => {
       refs: () => answer("for-each-ref", model.refs),
       objectsAt: (_at, ref) => {
         const oid = model.objects[ref];
-        return oid === undefined ? Effect.fail(new BoxGitError({ command: "rev-parse" })) : answer("rev-parse", [oid]);
+
+        return oid === undefined ? Effect.fail(BoxGitError.make({ command: "rev-parse" })) : answer("rev-parse", [oid]);
       },
       retained: answer("for-each-ref", model.retained),
       reachable: (tips) =>

@@ -87,6 +87,7 @@ describe("box rm, today's tooling", () => {
               ...path.parts,
               "borrowed",
             );
+
             mkdirSync(join(target, ".."), { recursive: true });
             const stored = path.through ? join(f.dir, "outside-storage") : target;
             renameSync(source, stored);
@@ -165,11 +166,13 @@ describe("box rm, today's tooling", () => {
             fixture(v, (f) => {
               const original = join(f.main, ".git");
               const history = f.git(f.main, "rev-list", "--objects", "--all");
+
               const target = join(
                 location === "work" ? join(f.work, "node_modules") : join(f.data, "objects/info"),
                 ...path.parts,
                 "storage",
               );
+
               const name = (from: string, to: string) => (path.relative ? relative(from, to) : to);
               mkdirSync(join(target, ".."), { recursive: true });
 

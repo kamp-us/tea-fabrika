@@ -9,10 +9,13 @@ import { Chain, Measurements, SpanRow } from "../Trace.ts";
 import { machine } from "./sink.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const HOUR = 3_600_000;
 
 type Model = typeof machine.model.Type;
+
 type Msg = typeof machine.msg.Type;
+
 type Ended = Extract<Msg, { readonly type: "commit_failed" }>["more"][number];
 
 /** The plan's payload, field for field, from the row schemas it keeps. */
@@ -41,6 +44,7 @@ const contracts = (span: Ended, checked: number) => {
   const heldFailed: Model = { _tag: "failed", checked, spans: [span] };
   // @ts-expect-error no failed flag beside the case to contradict it
   const flagged: Model = { _tag: "clean", checked, failed: true };
+
   return [holding, reported, clean, failed, emptyHolding, emptyReported, heldClean, heldFailed, flagged];
 };
 
@@ -55,6 +59,7 @@ const Walk = Arbitrary.all({
 });
 
 type Draw = typeof Draw.Type;
+
 type Move = "commit_failed" | "committed" | "flush_checked";
 
 const spansIn = (model: Model): ReadonlyArray<Ended> =>
@@ -78,6 +83,7 @@ const movesFrom = (model: Model): ReadonlyArray<Move> => {
 const hourFrom = (model: Model, draw: Draw): number => {
   const base = Number.isFinite(model.checked) ? model.checked : HOUR * (100 + draw.hour);
   const by = HOUR * (1 + (draw.hour % 4));
+
   return [base - by, base, base + by][draw.hour % 3] ?? base;
 };
 
@@ -95,10 +101,12 @@ const choose = (model: Model, draw: Draw, pool: ReadonlyArray<Ended>): Msg => {
   }
 
   const offered = [...spansIn(model), ...pool];
+
   const more = Array.from(
     { length: draw.size % 4 },
     (_, n) => offered[(draw.pick + n * 7 + draw.size) % offered.length]!,
   );
+
   return { type: "commit_failed", more };
 };
 
@@ -117,6 +125,7 @@ const remember = (history: History, msg: Msg): History => {
 
   if (msg.type === "committed") {
     const newer = msg.sized && msg.hour > history.checked;
+
     return { ...history, held: [], checked: newer ? msg.hour : history.checked };
   }
 

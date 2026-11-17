@@ -28,15 +28,23 @@ import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
 // selects; seconds come from a scratch table, so a law holds for any table, not only today's. Each
 // plant was run once on legs.ts and restored; each turned its law red.
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
+
 const workflow = readFileSync(join(ROOT, ".github/workflows/check.yaml"), "utf8");
+
 const full: Legs = { vitest: vitestLegs(workflow).length, e2e: e2eLegs(workflow).length };
+
 // The size step's BUDGET setting, as check.yaml declares it once and the step passes it.
 const budget = budgetOf(String(workflow.match(/^ {10}BUDGET: (.*)$/m)?.[1]));
+
 const limit = limits(nextMinutes(workflow), budget);
+
 const options = { seed: 119120, numRuns: 100 };
+
 const base = "b".repeat(40);
+
 // A pull request that asked for its visual tests with the `visual` label, and one that did not (0536).
 const pr: Run = { event: "pull_request", scope: "all", base, visual: true };
+
 const plainPr: Run = { ...pr, visual: false };
 
 // A merge line run that tests all of next/ from a base commit, the runs legs.ts sizes (0534), with
@@ -47,6 +55,7 @@ const line = fc
   .map(([event, sha, visual]): Run => ({ event, scope: "all", base: sha, visual }));
 
 let vitest: string[] = [];
+
 let e2e: string[] = [];
 
 beforeAll(async () => {
@@ -80,6 +89,7 @@ const picked = () =>
 const total = (files: readonly string[], table: Readonly<Record<string, number>>) => {
   const rows = Object.values(table).toSorted((a, b) => a - b);
   const unmeasured = rows[Math.floor((rows.length - 1) / 2)] ?? 1;
+
   return files.reduce((sum, path) => sum + (Object.hasOwn(table, path) ? table[path]! : unmeasured), 0);
 };
 
@@ -113,14 +123,18 @@ it("property: a selection whose seconds fit the budget gives one leg", () => {
       const pool = kind === "vitest" ? vitest : e2e;
       const most = (kind === "vitest" ? limit.vitest : limit.e2e) / 6;
       const files = Array.from(new Set(Array.from({ length: count }, (_, i) => pool[(at + i * 7) % pool.length]!)));
+
       const table = Object.fromEntries(
         files.flatMap((path, i) => (shares[i] === undefined ? [] : [[path, shares[i] * most]])),
       );
+
       return { kind, files, table };
     });
+
   fc.assert(
     fc.property(small, ({ kind, files, table }) => {
       expect(total(files, table)).toBeLessThanOrEqual(kind === "vitest" ? limit.vitest : limit.e2e);
+
       const legs = size(
         pr,
         kind === "vitest" ? { vitest: files, e2e: [] } : { vitest: [], e2e: files },
@@ -128,6 +142,7 @@ it("property: a selection whose seconds fit the budget gives one leg", () => {
         limit,
         table,
       );
+
       expect(legs).toEqual(kind === "vitest" ? { vitest: 1, e2e: 0 } : { vitest: 0, e2e: 1 });
       expect(shards(legs)).toEqual(kind === "vitest" ? ["1"] : ["e2e-1"]);
     }),
@@ -282,6 +297,7 @@ const budgeted = () =>
           .map(([at, shares]) => {
             const files = at.map((i) => vitest[i]!);
             const table = Object.fromEntries(files.map((path, i) => [path, (shares[i]! / 100) * budget.limit]));
+
             return { selected: { vitest: files, e2e: [] }, table };
           }),
       ),
@@ -398,6 +414,7 @@ it("property: the size step's BUDGET is a positive number of seconds, and anythi
 it("scenario: the main prints the full matrix to GITHUB_OUTPUT in the merge queue with no base commit, with no list", () => {
   // scenario: no BASE, so nothing to diff with; the list step would need git and an install.
   const output = join(mkdtempSync(join(tmpdir(), "legs-test-")), "out");
+
   const done = spawnSync(process.execPath, [fileURLToPath(new URL("./legs.ts", import.meta.url))], {
     encoding: "utf8",
     env: {
@@ -408,6 +425,7 @@ it("scenario: the main prints the full matrix to GITHUB_OUTPUT in the merge queu
       GITHUB_OUTPUT: output,
     },
   });
+
   expect(done.status).toBe(0);
   // 0536: the merge queue never starts the visual legs.
   expect(readFileSync(output, "utf8")).toBe('shards=["1","2","3","4","5"]\nvitest=5\ne2e=0\nnext=true\n');
@@ -485,10 +503,12 @@ it("property: the size step prints files only on a sized run with a vitest leg, 
       const lines = outputs(run, legs, selected);
       const files = lines.filter((line) => line.startsWith("files="));
       const onLine = ["pull_request", "merge_group", "push"].includes(run.event);
+
       const listed =
         onLine &&
         (run.scope === "readers" || (/^[a-f0-9]{40}$/.test(run.base) && !/^0+$/.test(run.base))) &&
         legs.vitest > 0;
+
       expect(files).toEqual(listed ? [`files=${selected.vitest.join(" ")}`] : []);
     }),
     options,

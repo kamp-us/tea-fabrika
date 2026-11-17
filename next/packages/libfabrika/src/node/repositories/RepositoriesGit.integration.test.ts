@@ -4,9 +4,20 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Path, Schema, Sink, Stream } from "effect";
-import { Digest } from "effect/crypto";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Digest from "effect/crypto/Digest";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
 import * as fc from "fast-check";
 import { Repositories } from "../../repositories/Repositories.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";
@@ -15,12 +26,16 @@ import { fixture, git, gitCommandBudget, runs, withReader } from "./Repositories
 // Fixture (init, clone, add, commit, push, rev-parse), initial open, four moves
 // (at most checkout/add/commit/push plus ls-tree/cat-file), worktree add, alias open.
 const pinnedReadGitCommands = 6 + 12 + 4 * (4 + 2) + 1 + 12;
+
 // Fixture, remove/commit/push, absent open, revert/push, four faulted opens,
 // remove origin, then the final open's four metadata commands.
 const failedReadGitCommands = 6 + 3 + 12 + 2 + 4 * 11 + 1 + 4;
+
 // Fixture, then add/commit/push and at most twelve open commands for each move.
 const legacyGitCommands = 6 + 4 * (3 + 12);
+
 const text = (bytes: Uint8Array | null) => (bytes === null ? null : new TextDecoder().decode(bytes));
+
 const services = Layer.mergeAll(NodeServices.layer, Digest.layerWebCrypto);
 
 describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) => {
@@ -103,12 +118,14 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                 yield* git(f.repo, ["rm", ".fabrika/fabrika.toml"]);
                 yield* git(f.repo, ["commit", "-m", "absent"]);
                 yield* git(f.repo, ["push", "origin", f.branch]);
+
                 const absent = yield* withReader(
                   f.person,
                   Effect.gen(function* () {
                     return yield* (yield* Repositories).open(f.repo);
                   }),
                 );
+
                 expect(absent.snapshot.text).toBeNull();
                 // Restore the committed document for blob/type failures, without touching this checkout's git.
                 yield* git(f.repo, ["revert", "--no-edit", "HEAD"]);
@@ -116,6 +133,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                 const real = yield* ChildProcessSpawner.ChildProcessSpawner;
                 const object = "a".repeat(40);
                 const validHead = `ref: refs/heads/release\tHEAD\n${object}\tHEAD\n`;
+
                 const faults = [
                   { operation: "fetch", flag: "--no-tags", output: "", code: 1 },
                   { operation: "ls-tree", flag: ".fabrika/fabrika.toml", output: "", code: 1 },
@@ -164,6 +182,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                 for (const cell of tape) {
                   const fault = faults[cell % faults.length]!;
                   let hits = 0;
+
                   const injected = ChildProcessSpawner.make((command) => {
                     if (
                       command._tag === "StandardCommand" &&
@@ -171,8 +190,10 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                       command.args.includes(fault.flag)
                     ) {
                       hits++;
+
                       const bytes =
                         typeof fault.output === "string" ? new TextEncoder().encode(fault.output) : fault.output;
+
                       return Effect.succeed(
                         ChildProcessSpawner.makeHandle({
                           pid: ChildProcessSpawner.ProcessId(1),
@@ -192,12 +213,14 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
 
                     return real.spawn(command);
                   });
+
                   const exit = yield* withReader(
                     f.person,
                     Effect.gen(function* () {
                       return yield* (yield* Repositories).open(f.repo);
                     }),
                   ).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, injected), Effect.exit);
+
                   expect(hits).toBeGreaterThan(0);
                   expect(Exit.isFailure(exit)).toBe(true);
 
@@ -210,12 +233,14 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                 // Named replacement for Load's former repo disk-failure law.
                 const missingOrigin = yield* git(f.repo, ["remote", "remove", "origin"]);
                 void missingOrigin;
+
                 const refused = yield* withReader(
                   f.person,
                   Effect.gen(function* () {
                     return yield* (yield* Repositories).open(f.repo);
                   }),
                 ).pipe(Effect.exit);
+
                 expect(Exit.isFailure(refused)).toBe(true);
               }),
             ).pipe(Effect.provide(layer.services)),
@@ -275,6 +300,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                       return yield* (yield* Repositories).open(f.repo);
                     }),
                   ).pipe(Effect.exit);
+
                   expect(Exit.isSuccess(result)).toBe(world === 3);
 
                   if (Exit.isSuccess(result)) {
@@ -309,6 +335,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                   const children: Array<ChildProcessSpawner.ChildProcessHandle> = [];
                   const directories: Array<string> = [];
                   const entered = yield* Deferred.make<void>();
+
                   const trackedFs: FileSystem.FileSystem = {
                     ...f.fs,
                     makeTempDirectoryScoped: (options) =>
@@ -316,6 +343,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                         .makeTempDirectoryScoped(options)
                         .pipe(Effect.tap((directory) => Effect.sync(() => directories.push(directory)))),
                   };
+
                   const tracked = ChildProcessSpawner.make((command) =>
                     Effect.gen(function* () {
                       yield* Effect.acquireRelease(
@@ -327,13 +355,16 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                             held--;
                           }),
                       );
+
                       const child = yield* real.spawn(
                         cell % 3 === 2
                           ? ChildProcess.make(process.execPath, ["-e", "setInterval(() => {}, 1000)"])
                           : command,
                       );
+
                       children.push(child);
                       yield* Deferred.succeed(entered, undefined);
+
                       return child;
                     }),
                   );
@@ -354,6 +385,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                     Effect.provideService(FileSystem.FileSystem, trackedFs),
                     Effect.exit,
                   );
+
                   const fiber = yield* operation.pipe(Effect.forkScoped);
                   yield* Deferred.await(entered);
 
@@ -404,11 +436,14 @@ it.effect.prop(
         const common = path.join(root, "common");
         yield* fs.makeDirectory(common);
         yield* fs.makeDirectory(path.join(repo, ".fabrika"), { recursive: true });
+
         const first = "a".repeat(width),
           second = "b".repeat(width);
+
         const documentId = "c".repeat(width),
           firstBlob = "d".repeat(width),
           secondBlob = "e".repeat(width);
+
         let head = first;
         let fault: "fetch" | "tree" | "blob" | "type" | "absent" | null = null;
         let held = 0;
@@ -418,6 +453,7 @@ it.effect.prop(
         const temporary = new Set<string>();
         const isolatedBase = path.join(root, "isolated");
         let serial = 0;
+
         const trackedFs: FileSystem.FileSystem = {
           ...fs,
           // Git never runs here, so its private folders can be scoped handles instead of disk writes.
@@ -427,6 +463,7 @@ it.effect.prop(
                 const directory = path.join(isolatedBase, String(serial++));
                 directories.push(directory);
                 temporary.add(directory);
+
                 return directory;
               }),
               (directory) =>
@@ -440,6 +477,7 @@ it.effect.prop(
             file.startsWith(isolatedBase) ? Effect.void : fs.writeFileString(file, value, options),
           exists: (file) => (file.startsWith(isolatedBase) ? Effect.sync(() => temporary.has(file)) : fs.exists(file)),
         };
+
         const spawner = ChildProcessSpawner.make((command) =>
           Effect.gen(function* () {
             expect(command._tag).toBe("StandardCommand");
@@ -460,10 +498,12 @@ it.effect.prop(
 
             if (stopped) {
               yield* Deferred.succeed(interrupted, undefined);
+
               return yield* Effect.never;
             }
 
             const args = command.args;
+
             let output = "",
               code = 0;
 
@@ -502,6 +542,7 @@ it.effect.prop(
             }
 
             const bytes = new TextEncoder().encode(output);
+
             return ChildProcessSpawner.makeHandle({
               pid: ChildProcessSpawner.ProcessId(1),
               exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(code)),
@@ -517,6 +558,7 @@ it.effect.prop(
             });
           }),
         );
+
         yield* withReader(
           root,
           Effect.gen(function* () {

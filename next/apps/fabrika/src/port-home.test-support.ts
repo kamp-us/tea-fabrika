@@ -6,15 +6,14 @@
 // every SQLite file is opened from a copy, read-only, and every text and blob cell of every table
 // is read: a cell longer than a page is split across SQLite's overflow pages, so a path in it may
 // never appear whole in the file's bytes. The folder it reads is never changed: a read-only open
-// may still write a `-shm` file, so it opens the copy.
-// edge: Effect SQL has no read-only open of a SQLite file, and the guard reads every cell of one
-import { DatabaseSync } from "node:sqlite";
+// may still write a `-shm` file, so it opens the copy, with `TestDatabase.open`, which sets nothing in it.
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, FileSystem, Path, Schema } from "effect";
 
 /** Where in a file a machine path was found: a byte offset in a file's raw bytes, or one SQLite cell. */
 export const Place = Schema.TaggedUnion({
-  byte: { offset: Schema.Number },
-  cell: { table: Schema.String, row: Schema.Number, column: Schema.String },
+  byte: { offset: Schema.Finite },
+  cell: { table: Schema.String, row: Schema.Finite, column: Schema.String },
 });
 
 /** One machine path found: the file, relative to the folder read, the place in it, and the root it names. */
@@ -26,6 +25,7 @@ class GuardError extends Schema.TaggedError<GuardError>()("GuardError", {
 }) {}
 
 const encoder = new TextEncoder();
+
 const SQLITE = encoder.encode("SQLite format 3\0");
 
 /** Every offset in `bytes` where `part` starts. */
@@ -51,6 +51,7 @@ const startsWith = (bytes: Uint8Array, head: Uint8Array) =>
 const rootForms = Effect.fnUntraced(function* (root: string) {
   const path = yield* Path.Path;
   const url = yield* path.toFileUrl(root);
+
   return [...new Set([root, JSON.stringify(root).slice(1, -1), url.href])].map((text) => ({
     text,
     bytes: encoder.encode(text),
@@ -69,6 +70,7 @@ const byteHits = (file: string, bytes: Uint8Array, roots: Forms): Array<typeof H
     const spans = forms
       .flatMap(({ bytes: form }) => offsets(bytes, form).map((start) => [start, start + form.length] as const))
       .sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+
     const merged: Array<[number, number]> = [];
 
     for (const [start, end] of spans) {
@@ -86,13 +88,8 @@ const byteHits = (file: string, bytes: Uint8Array, roots: Forms): Array<typeof H
 
 /** Every text and blob cell of every table of the SQLite file at `copy` that holds a root. */
 const cellHits = (file: string, copy: string, roots: Forms) =>
-  Effect.acquireRelease(
-    Effect.try({
-      try: () => new DatabaseSync(copy, { readOnly: true }),
-      catch: (cause) => new GuardError({ file, cause }),
-    }),
-    (db) => Effect.sync(() => db.close()),
-  ).pipe(
+  TestDatabase.open(copy, { readOnly: true }).pipe(
+    Effect.mapError((error) => new GuardError({ file, cause: error.cause })),
     Effect.flatMap((db) =>
       Effect.try({
         try: () => {
@@ -137,11 +134,13 @@ export const machinePaths = Effect.fn("portHome.machinePaths")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+
   const forms: Forms = yield* Effect.forEach(
     roots,
     (root) => rootForms(root).pipe(Effect.map((list) => ({ root, forms: list }))),
     { concurrency: 1 },
   );
+
   const hits: Array<typeof Hit.Type> = [];
 
   for (const file of (yield* fs.readDirectory(folder, { recursive: true })).sort()) {
@@ -173,6 +172,7 @@ export const machinePaths = Effect.fn("portHome.machinePaths")(function* (
         return yield* cellHits(file, copy, forms);
       }),
     );
+
     hits.push(...cells, ...raw.filter((hit) => !cells.some((cell) => cell.root === hit.root)));
   }
 

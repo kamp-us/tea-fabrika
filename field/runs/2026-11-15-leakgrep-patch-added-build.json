@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-leakgrep-patch-added-build",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T22:48:51-08:00",
+  "ended": "2026-11-15T22:56:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send_back",
+  "why": "Build step for a fast-tracked lead-tooling change with no tracker ticket, on branch fabrikalfa/leakgrep-patch-added-lines from the tests step's head 8aaec47, today's tooling. The build made the one behavior edit in .agents/skills/lead/scripts/leakgrep.sh (Quotes.quoted also counts a + line inside a hunk of a pnpm patch under patches/, and the header line, the comment above style_only and the Quotes comment say what is skipped and why), and with it every leakgrep law was green. It could not commit that edit: stepcommit.sh refused with 'a build may not commit exam paths; answer send to tests', because exam-paths.json line 64 lists leakgrep.sh as an exam path (the check that reads added text before a push). That guard is deliberate (docs/direction/nobody-writes-their-own-exam.md), so the build obeyed it, restored leakgrep.sh to the branch head and committed only this row. The lead decides who lands the edit: the tests step, which may commit an exam path, or the lead.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "note": "Ran at the working tree with the edit on top of 8aaec47: the patches law file before the edit (1 red, 20 green: the red law exits 1 where 0 is expected), then the five leakgrep test files one at a time (commits 11, lines 12, patches 21, respaced 21, base 14: 79 green), pnpm format, pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (exit 0), the list ratchet (exit 0), loosening.sh 8aaec47 HEAD (0 hits). No pnpm typecheck: leakgrep.sh is outside every tsconfig. The edit is not in git; the lead was given it as a 45-line diff.",
+  "step": "build"
+}

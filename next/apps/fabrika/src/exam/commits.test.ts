@@ -27,11 +27,17 @@ import {
 } from "./commits.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
+
 const runs = { seed: 119120, numRuns: 100 };
+
 const sha = fc.stringMatching(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
+
 const ticket = fc.stringMatching(/^[0-9]{1,12}$/);
+
 const id = fc.stringMatching(/^[A-Za-z0-9._:-]{1,24}$/);
+
 const filename = fc.stringMatching(/^[a-z][a-z0-9_-]{0,16}$/);
+
 const role = fc.constantFrom(...ROLES);
 
 const anyNote = fc.record({
@@ -96,6 +102,7 @@ const EXAM_ROWS = [
 const EXAM = examMatcher(EXAM_ROWS);
 
 const answers = (p: PullRequest) => check(p, EXAM).answers;
+
 const DONE = { _tag: "done" as const };
 
 const stuck = (reason: string, sha: string, more: object = {}) => ({
@@ -225,6 +232,7 @@ const keyFile = fc
     const lines = keys.map((key, i) =>
       i < 3 ? line(ROLES[i]!, key) : i < 6 ? line(`person:${people[i - 3]}`, key, "git") : line(ROLES[i % 3]!, key),
     );
+
     return fc.shuffledSubarray(lines, { minLength: lines.length, maxLength: lines.length }).map((ordered) => ({
       keys,
       people,
@@ -254,6 +262,7 @@ describe("keysProblem (p87, p87b)", () => {
     fc.assert(
       fc.property(keyFile, fc.nat(), fc.string(), (file, at, text) => {
         const person = line(`person:${file.people[0]}`, file.keys[0]!, "git");
+
         const badLines = [
           `lead namespaces="fabrika-step" ecdsa-sha2-nistp256 ${file.keys[0]}`,
           `lead ssh-ed25519 ${file.keys[0]}`,
@@ -285,6 +294,7 @@ describe("keysProblem (p87, p87b)", () => {
       fc.property(keyFile, id, role, (file, name, step) => {
         const steps = file.keys.slice(0, 3).map((key, i) => line(ROLES[i]!, key));
         const person = line(`person:${name}`, file.keys[3]!, "git");
+
         const files = [
           null,
           [...steps, line("build", file.keys[0]!)].join("\n"),
@@ -373,6 +383,7 @@ describe("exam paths and scope", () => {
             ["why", reason],
           ]),
         );
+
         expect(decodeExam(JSON.stringify(encoded))).toEqual(Option.some(rows));
         const list = Option.getOrThrow(decodeExam(readFileSync(join(ROOT, "exam-paths.json"), "utf8")));
         expect(list.every((row) => row.reason.length > 0)).toBe(true);
@@ -404,6 +415,7 @@ const route = fc
   .tuple(fc.uniqueArray(sha, { minLength: 4, maxLength: 10 }), ticket, fc.array(role, { minLength: 10, maxLength: 10 }))
   .map(([trees, ticket, roles]) => {
     const versions = { tests: 0, build: 0, lead: 0 };
+
     const notes = trees.slice(1).map((to, i): Note => ({
       _tag: "attested",
       step: roles[i]!,
@@ -414,6 +426,7 @@ const route = fc
       key: `key-${i}`,
       sig: `sig-${i}`,
     }));
+
     return { trees, notes, commits: notes.map((n) => commit(n)) };
   });
 
@@ -520,6 +533,7 @@ describe("newest links (p89)", () => {
         .shuffledSubarray(r.notes, { minLength: r.notes.length, maxLength: r.notes.length })
         .map((notes) => ({ ...r, notes })),
     );
+
     fc.assert(
       fc.property(ordered, role, (r, step) => {
         const notes = r.notes.map((n) => ({ ...n, step }));
@@ -576,6 +590,7 @@ describe("newest links (p89)", () => {
           ),
           signed({ ...n, version: n.version + 100, ticket: `${n.ticket}0` }),
         ]);
+
         expect(answers(pr(commits, { notes: [...noise, ...notes.map((n) => signed(n))] }))).toEqual([DONE]);
         expect(staleSteps(notes[0]!.ticket, [], [])).toEqual(new Set());
       }),
@@ -637,10 +652,12 @@ describe("chain (p86 and p89 after merge)", () => {
         expect(chain(d.squash, d.rows, d.trees, d.placed)).toEqual([DONE]);
         const i = at % d.rows.length;
         const n = d.rows[i]!.link;
+
         const person = {
           link: { ...n, step: "person" as const, to: n.from },
           signer: "person" as const,
         };
+
         expect(chain(d.squash, [...d.rows.slice(0, i), person, ...d.rows.slice(i)], d.trees, d.placed)).toEqual([DONE]);
       }),
       runs,
@@ -653,6 +670,7 @@ describe("chain (p86 and p89 after merge)", () => {
         const first = d.rows[0]!;
         const second = d.rows[1]!;
         const last = d.rows.at(-1)!;
+
         const bad: Logged[][] = [
           [],
           d.rows.slice(1),
@@ -687,10 +705,12 @@ describe("chain (p86 and p89 after merge)", () => {
     fc.assert(
       fc.property(chainData, (d) => {
         const first = d.rows[0]!;
+
         const empty = {
           link: { ...first.link, step: "person" as const, from: first.link.to },
           signer: "person" as const,
         };
+
         expect(chain(d.squash, [first, empty, empty, ...d.rows.slice(1)], d.trees, d.placed)).toEqual([
           stuck("broken_chain", d.squash),
         ]);
@@ -717,6 +737,7 @@ describe("chain (p86 and p89 after merge)", () => {
         const rows = d.rows.map((r, i) =>
           i === at % d.rows.length ? { ...r, link: { ...r.link, base: d.other } } : r,
         );
+
         expect(chain(d.squash, rows, d.trees, d.placed)).toEqual([stuck("broken_chain", d.squash)]);
       }),
       runs,
@@ -959,6 +980,7 @@ describe("0053 parent exam lists", () => {
             ),
             main,
           );
+
           expect(result.answers.filter((a) => a._tag === "ask")).toEqual(matched.length ? [ask(matched)] : []);
         }
       }),

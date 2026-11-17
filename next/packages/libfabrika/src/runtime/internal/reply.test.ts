@@ -21,6 +21,7 @@ type Reply = {
 };
 
 type Model = { readonly _tag: "empty" } | { readonly _tag: "remembered"; readonly reply: Reply };
+
 type Msg = { readonly type: "remember"; readonly reply: Reply };
 
 type Subject = {
@@ -33,6 +34,7 @@ type Subject = {
 const subject = (): Promise<Subject> => import("./reply.ts");
 
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
+
 const text = fc.string({ minLength: 1, maxLength: 12 });
 
 const inputId = fc
@@ -61,6 +63,7 @@ const reply: fc.Arbitrary<Reply> = fc.record({
 
 /** One move's entropy: which field of the stored reply to change, and the new value's seed. */
 const Move = fc.tuple(fc.nat(), reply);
+
 const Walk = fc.array(Move, { minLength: 1, maxLength: 40 });
 
 const FIELDS = ["name", "id", "parent", "by", "for", "digest", "answer"] as const;
@@ -74,6 +77,7 @@ const next = (model: Model, [pick, fresh]: readonly [number, Reply]): Msg => {
   // Same machine, so the same key: change one bound field or the answer, or repeat it exactly.
   const field = FIELDS[pick % (FIELDS.length + 1)];
   const stored = model.reply;
+
   return {
     type: "remember",
     reply: field === undefined || field === "name" || field === "id" ? stored : { ...stored, [field]: fresh[field] },

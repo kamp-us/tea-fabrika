@@ -6,8 +6,11 @@ import * as RunId from "./runid.ts";
 const options = { seed: 119120, numRuns: 300 };
 
 const quest = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,10}$/);
+
 const step = fc.constantFrom("plan", "tests", "build", "mutation", "review", "host", "judge");
+
 const n = fc.integer({ min: 1, max: 40 });
+
 const parts = fc.record({ quest, step, n });
 
 /** A file an older run left: its own quest and step, or another's, with any of a run's suffixes. */
@@ -59,13 +62,17 @@ describe("a quest's run id is quest + step + n, today's tooling", () => {
     const names = fc.array(fc.oneof(left(parts), left(fc.record({ quest: fc.constant("p39s1"), step, n }))), {
       maxLength: 30,
     });
+
     fc.assert(
       fc.property(step, names, (s, taken) => {
         const id = RunId.next("p39s1", s, taken);
+
         const held = taken.flatMap((name) => {
           const p = RunId.owner(name);
+
           return p !== null && p.quest === "p39s1" && p.step === s ? [p.n] : [];
         });
+
         expect(id).toBe(RunId.make({ quest: "p39s1", step: s, n: Math.max(0, ...held) + 1 }));
       }),
       options,

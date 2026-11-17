@@ -32,6 +32,7 @@ type Report = {
 };
 
 const options = { seed: 520, numRuns: 100 };
+
 const position = (a: Position, b: Position) => a.line - b.line || a.column - b.column;
 
 // Stryker 10.1.1's fs/project-reader.js keeps columns zero-based and subtracts one from lines.
@@ -45,6 +46,7 @@ const parseRange = (range: string) => {
   }
 
   const [, file, startLine, startColumn, endLine, endColumn] = match;
+
   return {
     file,
     start: { line: Number(startLine), column: Number(startColumn ?? 0) },
@@ -70,6 +72,7 @@ const changedLines = (changed: Changed[]) => {
   return (candidate: Candidate) => {
     const mine = lines.get(candidate.fileName);
     const { start, end } = candidate.location;
+
     return mine !== undefined && [...mine].some((line) => line >= start.line && line <= end.line);
   };
 };
@@ -199,6 +202,7 @@ describe("mutation sampling, today's tooling", () => {
         const candidates = Array.from({ length: lines * 2 }, (_, i) =>
           candidate(i, "src/a.ts", 1 + Math.floor(i / 2), (i % 2) * 10, (i % 2) * 10 + 1),
         );
+
         const changed = Array.from({ length: lines }, (_, i) => ({ file: "src/a.ts", line: i + 1 }));
         const report: Report = sample({ candidates, changed, seed, max: lines });
         const selected = checkReport(report, candidates, changed, seed, lines);
@@ -215,13 +219,16 @@ describe("mutation sampling, today's tooling", () => {
       fc.property(fc.integer({ min: 4, max: 16 }), fc.integer({ min: 1, max: 50 }), (n, line) => {
         const candidates = Array.from({ length: n }, (_, i) => candidate(i, "src/a.ts", line, i * 3, i * 3 + 1));
         const changed = [{ file: "src/a.ts", line }];
+
         const choices = new Set(
           Array.from({ length: 32 }, (_, seed) => {
             const report: Report = sample({ candidates, changed, seed, max: 1 });
             expect(checkReport(report, candidates, changed, seed, 1)).toHaveLength(1);
+
             return JSON.stringify(report.ranges);
           }),
         );
+
         expect(choices.size).toBeGreaterThan(1);
       }),
       { ...options, numRuns: 20 },
@@ -274,9 +281,11 @@ describe("mutation sampling across files, today's tooling", () => {
           // File names sort in this order, and the first file alone has more lines than any cap.
           const files = sizes.map((_, i) => `src/f${String(i).padStart(2, "0")}.ts`);
           const counts = sizes.map((n, i) => (i === 0 ? n + 150 : n));
+
           const candidates = files.flatMap((file, f) =>
             Array.from({ length: counts[f] }, (_, l) => candidate(f * 1000 + l, file, l + 1, 0, 1)),
           );
+
           const changed = candidates.map((c) => ({ file: c.fileName, line: c.location.start.line }));
           const max = Math.min(150, files.length + extra);
           const report: Report = sample({ candidates, changed, seed, max });
@@ -322,13 +331,16 @@ describe("T655 every changed file holds a mutant before any holds two, today's t
           // The first file has as many cheap lines as the cap, so its block costs more than the cap
           // would leave anyone else.
           const sized = shapes.map((s, i) => (i === 0 ? { ...s, lines: Math.max(s.lines, max) } : s));
+
           const candidates = sized.flatMap(({ bare, lines }, f) => [
             block(f * 1000, files[f], 1, bare + lines),
             ...Array.from({ length: lines }, (_, l) => candidate(f * 1000 + l + 1, files[f], bare + l + 1, 10, 11)),
           ]);
+
           const changed = sized.flatMap(({ bare, lines }, f) =>
             Array.from({ length: bare + lines }, (_, l) => ({ file: files[f], line: l + 1 })),
           );
+
           const report: Report = sample({ candidates, changed, seed, max });
           checkReport(report, candidates, changed, seed, max);
           expect(report.files.filter((f) => f.selected === 0)).toEqual([]);
@@ -366,21 +378,26 @@ describe("T655 every changed file holds a mutant before any holds two, today's t
 
   const repo = () => {
     const dir = mkdtempSync(join(tmpdir(), "sample655-"));
+
     const git = (...args: string[]) => {
       const ran = spawnSync("/usr/bin/git", ["-C", dir, ...args], { encoding: "utf8" });
       expect(ran.status, ran.stderr).toBe(0);
+
       return ran.stdout.trim();
     };
+
     const put = (path: string, text: string) => {
       mkdirSync(dirname(join(dir, path)), { recursive: true });
       writeFileSync(join(dir, path), text);
     };
+
     mkdirSync(join(dir, "packages"));
     symlinkSync(resolve("packages/pipeline"), join(dir, "packages/pipeline"));
     git("init", "-q", "-b", "main");
     git("config", "user.name", "Fixture");
     git("config", "user.email", "fixture@example.test");
     put(".gitignore", "packages/\n");
+
     return { dir, git, put };
   };
 
@@ -403,11 +420,13 @@ describe("T655 every changed file holds a mutant before any holds two, today's t
       git("add", "--all");
       git("commit", "-qm", "build");
       const report = join(dir, "s.json");
+
       const ran = spawnSync(
         process.execPath,
         [join(import.meta.dirname, "sample.ts"), "--build", "HEAD", "--since", base, "--report", report],
         { cwd: dir, encoding: "utf8" },
       );
+
       expect(ran.status, ran.stderr).toBe(0);
       const got = JSON.parse(readFileSync(report, "utf8")) as Report;
       expect(got.files.map((f) => f.file)).toEqual(["src/hook.cjs", "src/lib.mjs", "src/types.cts"]);
@@ -435,11 +454,13 @@ describe("T655 every changed file holds a mutant before any holds two, today's t
       git("add", "--all");
       git("commit", "-qm", "build");
       const report = join(dir, "s.json");
+
       const ran = spawnSync(
         process.execPath,
         [join(import.meta.dirname, "sample.ts"), "--build", "HEAD", "--since", base, "--report", report],
         { cwd: dir, encoding: "utf8" },
       );
+
       expect(ran.status, ran.stderr).toBe(0);
       const got = JSON.parse(readFileSync(report, "utf8")) as Report;
       expect(got.files.map((f) => f.file)).toEqual([at("lead", "chain"), at("lead", "flow/machine"), "src/a.ts"]);
@@ -463,6 +484,7 @@ describe("mutation sampling across lines, today's tooling", () => {
           span(0, { line, column: 0 }, { line: line + 1, column: 5 }),
           span(1, { line: line + 1, column: 0 }, { line: line + 1, column: 1 }),
         ];
+
         const changed = [{ file: "src/a.ts", line }];
         const report: Report = sample({ candidates, changed, seed, max });
         expect(checkReport(report, candidates, changed, seed, max)).toHaveLength(0);
@@ -470,12 +492,14 @@ describe("mutation sampling across lines, today's tooling", () => {
 
         // A refused range must not end its line's search: a cheap mutant inside it still fits.
         const other = line + 5;
+
         const mixed = [
           ...candidates,
           span(2, { line, column: 10 }, { line, column: 11 }),
           span(3, { line: other, column: 0 }, { line: other, column: 1 }),
           span(4, { line: other, column: 5 }, { line: other, column: 6 }),
         ];
+
         const both = [...changed, { file: "src/a.ts", line: other }];
         const picked = checkReport(sample({ candidates: mixed, changed: both, seed, max: 2 }), mixed, both, seed, 2);
         expect(new Set(picked.map((c) => c.location.start.line))).toEqual(new Set([line, other]));
@@ -490,12 +514,14 @@ describe("mutation sampling across lines, today's tooling", () => {
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 40 }), fc.integer(), (line, seed) => {
         const at = (l: number, column: number) => ({ line: l, column });
+
         // One range covers lines line and line+1. Line line+1 also has its own mutant.
         const covered = [
           span(0, at(line, 0), at(line + 1, 1)),
           span(1, at(line + 1, 5), at(line + 1, 6)),
           span(2, at(line + 2, 0), at(line + 2, 1)),
         ];
+
         const three = [0, 1, 2].map((n) => ({ file: "src/a.ts", line: line + n }));
         const a: Report = sample({ candidates: covered, changed: three, seed, max: 2 });
         const lines = (c: Candidate[]) => new Set(c.flatMap((m) => [m.location.start.line, m.location.end.line]));
@@ -510,6 +536,7 @@ describe("mutation sampling across lines, today's tooling", () => {
           span(4, at(line + 1, 0), at(line + 1, 1)),
           span(5, at(line + 1, 5), at(line + 1, 6)),
         ];
+
         const two = three.slice(0, 2);
         const b: Report = sample({ candidates: nested, changed: two, seed, max: 2 });
         expect(lines(checkReport(b, nested, two, seed, 2))).toEqual(new Set([line, line + 1]));
@@ -536,11 +563,14 @@ describe("T568 the sample reads the quest's own lines from its base, today's too
   // sample took main's lines. The real CLI, with Stryker's real Instrumenter, on a merge tip.
   it("scenario: a tip that merged main samples the quest's file from its base, and main's file without one", () => {
     const dir = mkdtempSync(join(tmpdir(), "sample568-"));
+
     const git = (...args: string[]) => {
       const ran = spawnSync("/usr/bin/git", ["-C", dir, ...args], { encoding: "utf8" });
       expect(ran.status, ran.stderr).toBe(0);
+
       return ran.stdout.trim();
     };
+
     const put = (path: string, text: string) => {
       mkdirSync(dirname(join(dir, path)), { recursive: true });
       writeFileSync(join(dir, path), text);
@@ -568,15 +598,19 @@ describe("T568 the sample reads the quest's own lines from its base, today's too
       git("checkout", "-q", "quest");
       git("merge", "-q", "--no-edit", "main");
       const tip = git("rev-parse", "HEAD");
+
       const files = (since: string[]) => {
         const ran = spawnSync(
           process.execPath,
           [join(import.meta.dirname, "sample.ts"), "--build", tip, ...since, "--report", join(dir, "s.json")],
           { cwd: dir, encoding: "utf8" },
         );
+
         expect(ran.status, ran.stderr).toBe(0);
+
         return new Set((JSON.parse(`[${ran.stdout.trim()}]`) as string[]).map((r) => r.split(":")[0]));
       };
+
       // The quest's base after the catch-up is the main it merged, so only the quest's file is left.
       expect(files(["--since", merged])).toEqual(new Set(["src/ours.ts"]));
       expect(files(["--since", base])).toEqual(new Set(["src/ours.ts", "src/theirs.ts"]));

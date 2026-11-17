@@ -51,6 +51,7 @@ const checkSecretTypes = (project: Project, root: string) => {
     }
 
     const reads: Array<{ node: ts.Node; reason: string; ancestors: Array<ts.Node> }> = [];
+
     const visit = (node: ts.Node): void => {
       let reason: string | undefined;
 
@@ -97,6 +98,7 @@ const checkSecretTypes = (project: Project, root: string) => {
 
       node.forEachChild(visit);
     };
+
     visit(source);
     const nodes = reads.flatMap((read) => read.ancestors);
     const types = checker.getTypeAtLocation(nodes);
@@ -105,9 +107,7 @@ const checkSecretTypes = (project: Project, root: string) => {
     for (const read of reads) {
       const protectedRead = read.ancestors
         .map(() => types[index++])
-        .some((type) => {
-          return type !== undefined && checker.getPropertyOfType(type, "~effect/Redacted") !== undefined;
-        });
+        .some((type) => type !== undefined && checker.getPropertyOfType(type, "~effect/Redacted") !== undefined);
 
       if (!protectedRead) {
         findings.push({
@@ -145,6 +145,7 @@ it("pinned: [secrets] P12 source-read gap, actual sources keep secret values Red
             .map((f) => [`${f.file}:${f.line}`, f]),
         ).values(),
       ];
+
       expect(findings).toEqual([]);
     } finally {
       snapshot.dispose();
@@ -164,12 +165,14 @@ it("[secrets] source type plants catch plain entropy, Authorization and binding 
         const file = "next/source.ts",
           path = join(folder, file),
           config = join(folder, "tsconfig.json");
+
         mkdirSync(dirname(path), { recursive: true });
         writeFileSync(
           join(folder, "crypto.d.ts"),
           'declare module "node:crypto" {export function randomBytes(n: number): {toString(encoding: string): string};}',
         );
         const prelude = `import {randomBytes as bytes${suffix}} from "node:crypto";\ninterface Redacted {readonly "~effect/Redacted": never}\ndeclare function wrap${suffix}(value: unknown): Redacted;\ndeclare const request: {headers: {get(name: string): string | null}};\ndeclare const ctx: {props: {token: string}};\n`;
+
         const lines = [
           `export const entropy = bytes${suffix}(32).toString("base64url");`,
           'export const header = request.headers.get("authorization");',
@@ -178,6 +181,7 @@ it("[secrets] source type plants catch plain entropy, Authorization and binding 
           `export const safeHeader = wrap${suffix}(request.headers.get("authorization"));`,
           `export const safeBinding = wrap${suffix}(ctx.props.token);`,
         ];
+
         writeFileSync(path, prelude + lines.join("\n"));
         writeFileSync(
           config,

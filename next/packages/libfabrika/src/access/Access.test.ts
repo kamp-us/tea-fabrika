@@ -20,19 +20,25 @@
 //   else is `{reason: "not_granted"}`.
 // Signatures are not checked here, so `signed` values are opaque text with the signer named.
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { admitted, type MemberEvent, type Access, members, Saw, Took } from "./Access.ts";
 import { allows, EMPTY, foldAccess } from "./AccessFold.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const RUNS = 300;
 
 // The ids are in the open id study's TypeID shape; the prefixes are made up (the plan's "Ids").
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const OTHER = "person_01m6v5270hg0000000000000zz"; // some other person, on the same ledger
+
 const NAME = "home";
+
 const TO = "ledger:home";
+
 const SENT = "2026-11-07T21:10:01.204Z";
 
 const SAW = {
@@ -63,6 +69,7 @@ const signed = (signer: string) => ({
 });
 
 let made = 0;
+
 const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
 
 const founded = (keys: ReadonlyArray<string> = ["pA"], window: string | null = "wA"): MemberEvent => ({
@@ -166,6 +173,7 @@ const liveWith = (m: Access, rank: string): ReadonlyArray<string> =>
 
 /** Recovery keys that are live and not spent: the sheets that still work. */
 const liveSheets = (m: Access) => liveWith(m, "recovery");
+
 const livePersons = (m: Access) => liveWith(m, "person");
 
 /** Every key above `key` live, walking `under` to a root. A loop counts as not live. */
@@ -188,11 +196,17 @@ const chainLive = (m: Access, key: string): boolean => {
 // ---- Random event lists, over a small pool of keys so events often touch the same keys ----
 
 const PERSONS = ["pA", "pB", "pC", "pD"] as const;
+
 const WINDOWS = ["wA", "wB", "wC", "wD"] as const; // WINDOWS[i] is PERSONS[i]'s window
+
 const LEAVES = ["t1", "t2", "t3", "g1", "g2"] as const; // tabs and agents, let in by a grant
+
 const SHEETS = ["r1", "r2", "r3"] as const;
+
 const STRANGER = "x1";
+
 const ALL: ReadonlyArray<string> = [...PERSONS, ...WINDOWS, ...LEAVES, ...SHEETS, STRANGER];
+
 // Keys no random list names, for a step a test adds on top.
 const FRESH_LEAF = "t9";
 
@@ -210,6 +224,7 @@ const signer = fc.oneof(
 const forWhom = fc.oneof({ weight: 9, arbitrary: fc.constant(P) }, { weight: 1, arbitrary: fc.constant(OTHER) });
 
 const anyKey = fc.constantFrom(...ALL);
+
 const drops = (most: number) => fc.uniqueArray(anyKey, { maxLength: most });
 
 const laterEvent: fc.Arbitrary<() => MemberEvent> = fc.oneof(
@@ -387,6 +402,7 @@ describe("p28, the traced history from the plan", () => {
           addedSheet("pB", "r1"),
           granted("pA", "g1", { as: "agent" }),
         ];
+
         const before = foldAccess(events);
         expect(before.person).toBe(P);
         expect(before.name).toBe(NAME);
@@ -485,6 +501,7 @@ describe("p28, founding", () => {
       keys: ["pC"],
       window: "wC",
     };
+
     fc.assert(
       fc.property(
         fc.string().filter((key) => !["pA", "wA", "t1"].includes(key)),
@@ -565,6 +582,7 @@ describe("p28, grants", () => {
             granted("pA", "g1", { as: "agent" }),
             addedSheet("pA", "r1"),
           ];
+
           const m = foldAccess(base);
 
           for (const by of ["wA", "t1", "g1", "r1"]) {
@@ -585,9 +603,11 @@ describe("p28, grants", () => {
     fc.assert(
       fc.property(history, (events) => {
         const m = foldAccess(events);
+
         const weak = [...m.keys.entries()]
           .filter(([key, k]) => k.rank !== "person" || m.spent.has(key))
           .map(([key]) => key);
+
         const target = [...m.keys.keys()].find((key) => isIn(m, key)) ?? "pA";
 
         for (const by of weak) {
@@ -613,6 +633,7 @@ describe("p28, a removed key stays out", () => {
           granted("pA", key),
           granted("pB", key),
         ]);
+
         expect(isIn(m, key)).toBe(false);
         expect(m.keys.get(key)?.live).toBe(false);
       }),
@@ -631,6 +652,7 @@ describe("p28, a removed key stays out", () => {
             addedDevice("pB", root, "wA"),
             { _tag: "founded", id: P, name: NAME, keys: [root], window: "wA" },
           ]);
+
           expect(m.keys.get(root)?.live).toBe(false);
           expect(isIn(m, "wA")).toBe(false);
           expect(livePersons(m)).toEqual(["pB"]);
@@ -727,11 +749,13 @@ describe("p28, the grant tree", () => {
         for (const m of prefixes(events)) {
           for (const key of [...ALL, ...m.keys.keys()]) {
             const k = m.keys.get(key);
+
             const should =
               k !== undefined &&
               (k.rank === "window" || k.rank === "agent" || k.rank === "hands") &&
               k.live &&
               chainLive(m, key);
+
             const answer = admitted(m, key);
             expect(answer, key).toEqual(should ? { key, person: m.person, as: k?.rank } : { reason: "not_granted" });
           }
@@ -840,8 +864,10 @@ describe("p28, devices are equal roots", () => {
 
         ran++;
         const [key, window] = FRESH_DEVICES[0];
+
         const by = (signer: string) =>
           byAdd ? addedDevice(signer, key, window, { drops: [target] }) : revoked(signer, target);
+
         const viaOne = foldAccess([...events, by(one)]);
         const viaTwo = foldAccess([...events, by(two)]);
         expect(view(viaOne)).toEqual(view(viaTwo));
@@ -878,11 +904,13 @@ describe("p28, the sheet", () => {
         expect(isIn(once, "wY")).toBe(true);
         expect(livePersons(once)).toEqual(["pY"]);
         expect([...once.spent]).toEqual([key]);
+
         const twice = foldAccess([
           ...base,
           addedDevice(key, "pY", "wY", { old: "lost", drops: ["pA"] }),
           addedDevice(key, "pZ", "wZ", { old: "lost", drops: ["pY"] }),
         ]);
+
         expect(view(twice)).toEqual(view(once));
       }),
       opts("r1"),

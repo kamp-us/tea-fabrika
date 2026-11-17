@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-mechanical-review1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1501",
+  "started": "2026-11-15T22:19:00-08:00",
+  "ended": "2026-11-15T22:27:00-08:00",
+  "parent": "2026-11-16-effect-mechanical-integrate",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Narrow review of one judgment commit in the mechanical fold, 314afb483, in next/: merge-ready, one finding row. The fix is right and exact: the sink's checked hour (next/packages/libfabrika/src/telemetry/internal/sink.ts:20) is now Schema.Finite or exactly -Infinity, so it refuses NaN and +Infinity, which plain Schema.Number on main let in; Schema.Literal(-Infinity) is no option, since Effect 4.1.3 throws 'A numeric literal must be finite'. The state stays in memory and is never encoded (Sink.ts:381 keeps it in a let, changed only by applyCell), so JSON's lack of -Infinity costs nothing. The law existed: sink.test.ts's three properties walk the real init. With E4's sink.ts from 17539ac22 in a scratch copy, all three go red ('Schema validation failed', checked is not a finite number); on the head all three pass. So no new law was owed; the E4 slice's tests step did not run this file. The other 247 added Finite lines in the fold were checked against every Infinity, NaN, Math.min and Math.max spread in the same files: each is guarded before it reaches a schema (heartbeat.ts:44, mutbox.ts:751 and 782, drive.ts:1823, ScheduledJob.ts:82) or is no schema field (measurements.ts:241, records.ts:242), and JSON-decoded fields cannot hold an infinity. Decisions 0209 and 0411 hold; the one gap is that Arbitrary.schema of the Model now throws on the bare Schema.declare, a finding row.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Read-only apart from this row. Head aefa65123. Plant run in a scratch copy, deleted after. loosening.sh 314afb483^..314afb483: 0 hits. git merge-tree with origin/main 58314e423: no conflict. Not run: pnpm typecheck, any .integration. or .visual. file.",
+  "step": "review"
+}

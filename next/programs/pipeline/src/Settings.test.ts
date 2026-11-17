@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, SchemaIssue } from "effect";
+import { ConfigProvider, Effect, Exit, Predicate, SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";
@@ -12,6 +12,7 @@ const invalid = fc.oneof(
 );
 
 const name = fc.string({ unit: "binary", minLength: 1, maxLength: 24 });
+
 const checks = fc.array(fc.record({ name, source: name }), { maxLength: 5 });
 
 it("L11: a person's nested table supplies values or defaults and refuses only bad keys", () => {
@@ -26,6 +27,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
     code: checks,
     glob: fc.constantFrom("docs/**", "rows/*.json", ".hidden/**"),
   });
+
   fc.assert(
     fc.property(
       values,
@@ -43,6 +45,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
               ),
             ),
           );
+
         const table = {
           queue: {
             ...(omitted[5] ? {} : { most: values.most }),
@@ -56,9 +59,11 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
             ...(omitted[6] ? {} : { rounds: values.rounds }),
           },
         };
+
         const defaults = Object.fromEntries(
           Object.entries(Settings.all.settings).map(([key, setting]) => [key, setting.default]),
         );
+
         const empty = read({});
         expect(Exit.isSuccess(empty)).toBe(true);
 
@@ -74,13 +79,15 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
         expect(Exit.isSuccess(decoded)).toBe(true);
 
         if (Exit.isSuccess(decoded)) {
+          const actual: Readonly<Record<string, unknown>> = decoded.value;
+
           for (const [key, setting] of Object.entries(Settings.all.settings)) {
             const from = setting.segments.reduce<unknown>(
-              (value, segment) =>
-                value !== null && typeof value === "object" ? Reflect.get(value, segment) : undefined,
+              (value, segment) => (Predicate.hasProperty(value, segment) ? value[segment] : undefined),
               table,
             );
-            expect(Reflect.get(decoded.value, key)).toEqual(from ?? setting.default);
+
+            expect(actual[key]).toEqual(from ?? setting.default);
           }
 
           expect(merger(decoded.value).machine).toBeDefined();
@@ -93,6 +100,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
         }
 
         const broken = structuredClone(table) as { queue: Record<string, unknown>; merger: Record<string, unknown> };
+
         const paths = [
           "merger.wait",
           "merger.poll",
@@ -102,6 +110,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           "queue.kinds",
           "queue.checks",
         ];
+
         const path = paths[pick % paths.length]!;
 
         if (path.startsWith("merger.")) {
@@ -136,6 +145,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
                 )
               : [],
           );
+
           expect(keys.length).toBeGreaterThan(0);
 
           for (const key of keys) {
@@ -159,6 +169,7 @@ it("L11: every declared numeric setting refuses zero, negatives and fractions at
       expect(declarations.length).toBeGreaterThan(0);
       const declaration = declarations[pick % declarations.length]!;
       const [group, key] = declaration.path.split(".") as [string, string];
+
       const parse = (value: unknown) =>
         Effect.runSyncExit(Settings.all.parse(ConfigProvider.fromUnknown({ [group]: { [key]: value } })));
 
@@ -174,6 +185,7 @@ it("L11: every declared numeric setting refuses zero, negatives and fractions at
                 )
               : [],
           );
+
           expect(paths.some((path) => path.includes(declaration.path))).toBe(true);
         }
       }

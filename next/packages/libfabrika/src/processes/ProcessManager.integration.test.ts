@@ -26,6 +26,7 @@ const hash = fc.string({ minLength: 1, maxLength: 80 });
 
 const fixture = (hash: string) => {
   const CODE = { ...originalCode, hash };
+
   return { CODE, first: (id?: string, name?: string) => makeFirst(id, name, CODE) };
 };
 
@@ -50,13 +51,16 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
     check(fcExitReason, [], (reason) => {
       const store = storage();
       const spans: Tracer.NativeSpan[] = [];
+
       const tracer = Tracer.make({
         span: (options) => {
           const span = new Tracer.NativeSpan(options);
           spans.push(span);
+
           return span;
         },
       });
+
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         yield* processes.start(makeFirst(), from());
@@ -70,6 +74,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
   it.effect("fresh receive refuses missing and ended lives with the typed ended error", () =>
     check(fcExitReason, [], (reason) => {
       const store = storage();
+
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         yield* processes.start(makeFirst(), from());
@@ -93,6 +98,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
     check(hash, ["build-a"], (hash) => {
       const { CODE, first } = fixture(hash);
       const store = storage();
+
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         const a = yield* processes.start(first(), from());
@@ -117,6 +123,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
       const { first } = fixture(hash);
       const store = storage();
       const generated = ids(A);
+
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         const a = yield* processes.start(first(), from());
@@ -132,6 +139,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
     check(hash, ["build-a"], (hash) => {
       const { first } = fixture(hash);
       const store = storage();
+
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         expect((yield* Effect.flip(processes.start(first(), from({ seen: 5 })))).reason).toBe("refused");
@@ -146,6 +154,7 @@ describe("p21, CoordinationLayer", () => {
     check(fc.jsonValue(), [{ type: "save" }], (m) => {
       const { first } = fixture("build-a");
       const store = storage();
+
       return Effect.gen(function* () {
         const mailbox = yield* Mailbox;
         const processes = yield* ProcessManager;
@@ -166,6 +175,7 @@ describe("p21, CoordinationLayer", () => {
       check(fc.jsonValue(), [1], (m) => {
         const { first } = fixture("build-a");
         const failure = new LedgerError({ reason });
+
         const broken = Layer.mergeAll(
           Layer.succeed(Ledger, {
             append: () => Effect.fail(failure),
@@ -175,6 +185,7 @@ describe("p21, CoordinationLayer", () => {
           Layer.succeed(LedgerTransaction, { transact: () => Effect.fail(failure) }),
           Layer.succeed(Doorbell, { ring: () => Effect.void }),
         );
+
         return Effect.gen(function* () {
           const processes = yield* ProcessManager;
           const mailbox = yield* Mailbox;

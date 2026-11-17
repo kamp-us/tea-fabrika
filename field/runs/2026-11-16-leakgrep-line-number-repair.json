@@ -1,0 +1,44 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-leakgrep-line-number-repair",
+  "ticket": "1110",
+  "pr": "1530",
+  "started": "2026-11-16T18:45:16-08:00",
+  "ended": "2026-11-16T19:16:11-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "In today's lead tooling, the lead completed the review's narrow test repair under the tooling fast track. Three generated laws put identical patch text inside a hunk and before its first header, at different new-file numbers. The source scanner is unchanged by this repair. Main was merged without a conflict or history rewrite.",
+  "note": "The final Schema/it.prop runner passed all 42 patch laws at full depth with pinned Node 26.13.0, nice 19, one worker. A scratch text-anywhere scanner made the three new laws fail; the other 39 were unselected. Before the runner conversion, one network-none container passed those 42 laws, the other four leak-check files passed 58 tests, and the changed-set run passed 39 files and 814 tests. Its only failure was sizecap's command scenario because the bookworm image's Git lacks check-attr --source=HEAD; one further test was skipped. A newer Git overlay built, but Docker ran out of space before Vitest could start. The owner then authorized ordinary checks directly. Final format, lint 18/18, typecheck, and ratchet passed. No timeout, count, or assertion was weakened. Separate token and dollar usage is unavailable for this repair; no paid API was called.",
+  "plants": [
+    {
+      "law": "an outer \" \" line matching a quoted line at another new-file number still fails",
+      "plant": "Scratch scanner looks for matching text anywhere among quoted lines, ignoring the new-file line number.",
+      "result": "red"
+    },
+    {
+      "law": "an outer \"-\" line matching a quoted line at another new-file number still fails",
+      "plant": "Scratch scanner looks for matching text anywhere among quoted lines, ignoring the new-file line number.",
+      "result": "red"
+    },
+    {
+      "law": "an outer \"+\" line matching a quoted line at another new-file number still fails",
+      "plant": "Scratch scanner looks for matching text anywhere among quoted lines, ignoring the new-file line number.",
+      "result": "red"
+    }
+  ],
+  "minutes": 30.92,
+  "tokens": null,
+  "tools": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billing": "subscription"
+}

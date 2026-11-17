@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-stepcommit-mislabels-workspace-error",
+  "date": "2026-11-16",
+  "by": "lead",
+  "model": null,
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/step-commit/scripts/stepcommit.sh",
+    "line": 154
+  },
+  "says": "Today's commit helper reports a formatting failure when pnpm refuses to run outside a workspace.",
+  "proof": "At PR 1530 repair head 722a6fe57, the named-path commit attempt refuses as not_formatted. Repeating its exact staged-copy formatter call exits 1 with ERR_PNPM_RECURSIVE_EXEC_NO_PACKAGE. The temporary directory has no package.json. The same files pass oxfmt --check in the checkout, and final format, lint, typecheck and field checks pass. The helper hides stderr and maps every formatter startup failure to not_formatted.",
+  "cost": "A correctly formatted change cannot be committed through the helper, and its message sends the next agent toward changing bytes that are already correct.",
+  "head": "722a6fe57d107d1410448d9b22c6f63903441839",
+  "ticket": "1123",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1530"
+}

@@ -109,6 +109,9 @@ catalog:
   mdast-util-from-markdown: 2.1.0
   mdast-util-gfm: 3.1.0
   micromark-extension-gfm: 3.0.0
+  # The copy-paste detector (0040, 0587): a pull request's new clones as advice, by .github/ci/copies.ts
+  # with .jscpd.json's settings. MIT. v5 is a Rust binary in a per-platform package, no install script.
+  jscpd: 5.4.3
   miniflare: 4.20260730.0
   playwright: 1.64.1
   react: 19.3.1
@@ -174,7 +177,8 @@ patchedDependencies:
   # demlik#905: a non-exported const beside an exported type of its name is not an unused export.
   # demlik#913 and #915: a row's `layer`, and a package import read by its subpath. demlik#947 and
   # #948: `--layers` fails a file under a `roots` folder that no layer claims, and `testFiles` are
-  # judged upward and sideways but not by the `imports` lists. Drop each at the release that has it.
+  # judged upward and sideways but not by the `imports` lists. demlik#968: an export of a
+  # test-support file that nothing uses is dead, not withheld. Drop each at the release that has it.
   '@demlik/code-graph@0.15.0': patches/@demlik__code-graph@0.15.0.patch
   # Alchemy's prebuilt-bundle watcher serves again on every watch event, changed or not. macOS
   # reports a late event for a folder made just before the watch began, so a Mac replaced the

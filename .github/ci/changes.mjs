@@ -14,15 +14,20 @@ import { fileURLToPath } from "node:url";
 /** @typedef {{check: boolean, typecheck: boolean, next: boolean, field: boolean, build: boolean}} Flags */
 /** @typedef {(args: string[]) => {status: number | null, stdout: string}} Runner */
 const all = { check: true, typecheck: true, next: true, field: true, build: true };
+
 const trees = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
+
 /**
  * Field rows: a direct `.jsonl` file, or anything in a log's folder, where each new row is its own
  * file (decision 0090). field-check.ts names and checks them; a misnamed file fails there.
  * @param {string} path
  */
 const rows = (path) => /^field\/[^/]+\.jsonl$/.test(path) || /^field\/(?:notes|runs|findings)\//.test(path);
+
 const readTrees = ["programs/", "fixtures/", "packages/", "next/"];
+
 const skillTrees = [".agents/skills/", ".claude/skills/"];
+
 /** @param {string} path */
 const script = (path) => /^\.agents\/skills\/[^/]+\/scripts\//.test(path);
 
@@ -257,6 +262,7 @@ export const jobs = (paths, event, draft, _proven = []) => {
 
 /** @param {string} sha */
 export const validSha = (sha) => /^[a-f0-9]{40}$/.test(sha) && !/^0+$/.test(sha);
+
 /** @type {Runner} */
 const git = (args) => spawnSync("git", args, { encoding: "utf8", maxBuffer: 2 ** 28 });
 
@@ -285,6 +291,7 @@ const start = (base, head, event, run) => {
   }
 
   const from = merged.stdout.trim();
+
   return validSha(from) ? from : null;
 };
 
@@ -375,6 +382,7 @@ export const github = (env, get = globalThis.fetch) => {
   }
 
   const api = env["GITHUB_API_URL"] || "https://api.github.com";
+
   /** @param {string} path */
   const read = async (path) => {
     const response = await get(`${api}/repos/${repository}/${path}`, {
@@ -403,6 +411,7 @@ export const github = (env, get = globalThis.fetch) => {
       ).workflow_runs,
     commit: async (sha) => {
       const commit = await read(`git/commits/${sha}`);
+
       return { tree: commit.tree.sha, parents: commit.parents.map((/** @type {{sha: string}} */ p) => p.sha) };
     },
     artifacts: async (name) => (await read(`actions/artifacts?name=${encodeURIComponent(name)}&per_page=20`)).artifacts,
@@ -419,6 +428,7 @@ const treeOf = (sha, run) => {
 
   const tree = run(["rev-parse", "--verify", "--quiet", `${sha}^{tree}`]);
   const id = tree.stdout.trim();
+
   return tree.status === 0 && validSha(id) ? id : null;
 };
 
@@ -532,6 +542,7 @@ export const covers = (ran, needed) =>
  */
 const groupNeeds = (base, head, run) => {
   const paths = readPaths(base, head, "merge_group", run);
+
   return paths === null ? null : { ...jobs(paths, "merge_group", false), scope: scope(paths, "merge_group") };
 };
 
@@ -745,8 +756,10 @@ export const outputs = async ({
 
   if (!same) {
     const queued = event === "push" && paths !== null && api !== null ? await tested(base, head, run, api) : null;
+
     const pulled =
       event === "merge_group" && paths !== null && api !== null ? await matched(base, head, run, api) : null;
+
     const flags = pulled !== null ? none : queued === null ? changed : skipTested(changed);
 
     if (queued !== null) {
@@ -760,6 +773,7 @@ export const outputs = async ({
     }
 
     const worth = paths !== null && from !== null && probe(paths, event, flags, from, head, run);
+
     return {
       ...Object.fromEntries(Object.entries(flags).map(([job, on]) => [job, String(on)])),
       filter: filterOf(first),
@@ -782,11 +796,13 @@ export const outputs = async ({
     note(
       `the parser could not load, so every next/ test runs: ${error instanceof Error ? error.message : String(error)}`,
     );
+
     return stand;
   }
 
   note(`oxc-parser ${parserVersion()}`);
   const proven = program.samePaths(from, head, candidates(paths), run, (path, verdict) => note(`${path}: ${verdict}`));
+
   return {
     next: String(jobs(paths, event, env["DRAFT"] === "true", proven).next),
     filter: filterOf(scope(paths, event, proven)),
@@ -806,6 +822,7 @@ const recorded = (env, note) => {
 
   if (made.name === null) {
     note(`no record of the tested tree: ${made.reason}`);
+
     return { name: "" };
   }
 
@@ -813,12 +830,14 @@ const recorded = (env, note) => {
   note(
     `recorded tree ${made.record.tree} from base tree ${made.record.base}, for a merge queue group of the same trees`,
   );
+
   return { name: made.name };
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const same = process.argv.includes("--same");
   const summary = process.env["GITHUB_STEP_SUMMARY"];
+
   /** @param {string} line */
   const note = (line) => {
     process.stdout.write(`${line}\n`);
@@ -827,11 +846,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       appendFileSync(summary, `- ${line}\n`);
     }
   };
+
   const recording = process.argv.includes("--record");
   const printed = recording ? recorded(process.env, note) : await outputs({ same, env: process.env, note });
+
   const output = `${Object.entries(printed)
     .map(([key, value]) => `${key}=${value}`)
     .join("\n")}\n`;
+
   process.stdout.write(output);
   const file = process.env["GITHUB_OUTPUT"];
 

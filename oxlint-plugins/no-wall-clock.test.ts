@@ -6,6 +6,7 @@ import { expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 
 const CODE = "fabrika(no-wall-clock)";
+
 const runs = { seed: 119120, numRuns: 12 };
 
 const name = fc
@@ -36,6 +37,7 @@ it("refuses each clock read in next/ product code, and passes what reads no cloc
         `next/apps/fabrika/${file}.ts`,
         `next/programs/counter/src/${file}.ts`,
       ];
+
       const result = await plant(
         Object.fromEntries(paths.map((path) => [path, [...reads(on), ...kept(at)].join("\n")])),
       );
@@ -59,6 +61,7 @@ it("leaves tests, test helpers, .tsx views and today's paths to their own rules"
         `packages/fabrika/src/${file}.ts`,
         `.agents/skills/x/scripts/${file}.ts`,
       ];
+
       const result = await plant(Object.fromEntries(paths.map((path) => [path, reads(on).join("\n")])));
 
       for (const path of paths) {

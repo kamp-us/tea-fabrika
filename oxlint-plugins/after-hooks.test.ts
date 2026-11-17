@@ -7,6 +7,7 @@ import { expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 
 const CODE = "vitest(no-hooks)";
+
 const runs = { seed: 119120, numRuns: 12 };
 
 const name = fc
@@ -35,6 +36,7 @@ it("refuses an after-hook in any next/ file, test or helper, and keeps the setup
           `next/apps/fabrika/src/${file}.laws.test.tsx`,
           `next/packages/libfabrika/src/processes/${file}.test-support.ts`,
         ];
+
         const free = [`packages/fabrika/src/${file}.test.ts`, `.agents/skills/x/scripts/${file}.test.ts`];
         const result = await plant(Object.fromEntries([...held, ...free].map((path) => [path, body(after, before)])));
 

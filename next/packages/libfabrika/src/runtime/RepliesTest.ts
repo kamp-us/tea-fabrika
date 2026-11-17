@@ -11,6 +11,7 @@ import { Replies } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
 
 const SEED = 119120;
+
 const RUNS = 100;
 
 /** A real SQLite database: each run of the inner Effect is a new connection to the same file,
@@ -19,14 +20,23 @@ export type Database = Effect.Effect<Effect.Effect<Sql, never, Scope.Scope>, nev
 
 // R13: the service speaks runtime types, shared names and its own error, never a lower module's.
 type Service = Module.Replies["Service"];
+
 type Reply = Module.Reply;
+
 expectTypeOf<Effect.Error<ReturnType<Service["reply"]>>>().toEqualTypeOf<Module.RepliesError>();
+
 expectTypeOf<Effect.Error<ReturnType<Service["rememberReply"]>>>().toEqualTypeOf<Module.RepliesError>();
+
 expectTypeOf<Effect.Success<ReturnType<Service["reply"]>>>().toEqualTypeOf<Reply | null>();
+
 expectTypeOf<Effect.Success<ReturnType<Service["rememberReply"]>>>().toEqualTypeOf<Reply>();
+
 expectTypeOf<Module.RepliesError["reason"]>().toEqualTypeOf<"storage" | "bad_row">();
+
 expectTypeOf<Reply["answer"]["_tag"]>().toEqualTypeOf<"refused">();
+
 expectTypeOf<Effect.Services<ReturnType<Service["reply"]>>>().toEqualTypeOf<never>();
+
 expectTypeOf<Effect.Services<ReturnType<Service["rememberReply"]>>>().toEqualTypeOf<never>();
 
 /** The `i`th item, wrapping around; a walk only asks when the list is not empty. */
@@ -90,17 +100,21 @@ export const text = (chars: string, maxLength: number) =>
 /** A tracer that keeps every span it makes. */
 export const capture = () => {
   const spans: Array<Tracer.NativeSpan> = [];
+
   const tracer = Tracer.make({
     span(options) {
       const span = new Tracer.NativeSpan(options);
       spans.push(span);
+
       return span;
     },
   });
+
   // An ended NativeSpan takes no more attributes, events or end, so its text is made once. A walk
   // that looks after every move asks for every span again each time; remaking each one cost about
   // a tenth of queue S2's time.
   const ended = new WeakMap<Tracer.NativeSpan, string>();
+
   const write = (span: Tracer.NativeSpan) =>
     [
       span.name,
@@ -108,6 +122,7 @@ export const capture = () => {
       JSON.stringify(span.events, (_, value) => (typeof value === "bigint" ? value.toString() : value)),
       span.status._tag === "Ended" && Exit.isFailure(span.status.exit) ? Cause.pretty(span.status.exit.cause) : "",
     ].join("\n");
+
   /** Each span as text: its name, tags, events and, once it ended, its exit. */
   const text = () =>
     spans.map((span) => {
@@ -125,6 +140,7 @@ export const capture = () => {
 
       return made;
     });
+
   return { tracer, text };
 };
 
@@ -155,12 +171,16 @@ const dump = (sql: Sql): ReadonlyArray<{ readonly table: string; readonly row: R
     .flatMap(({ name }) => sql.exec(`SELECT * FROM "${String(name)}"`).map((row) => ({ table: String(name), row })));
 
 const NAMES = ["notes:1", "notes:2", "counter:1"] as const;
+
 const REASONS = ["changed_elsewhere", "too_long", "bad_msg"] as const;
+
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
+
 const lower = text("abcdefghijklmnopqrstuvwxyz0123456789:_-", 12);
 
 /** One move's entropy. Which move it is, and its parameters, are read against the walk's state. */
 const char = Arbitrary.schema(Schema.Literals([...ALPHABET]));
+
 const small = Arbitrary.schema(Schema.UndefinedOr(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 }))));
 
 const Step = Arbitrary.all({
@@ -176,7 +196,9 @@ const Step = Arbitrary.all({
   most: small,
   body: sentinel,
 });
+
 type Step = typeof Step extends Arbitrary.Arbitrary<infer A> ? A : never;
+
 const Walk = Arbitrary.array(Step, { minLength: 4, maxLength: 30 });
 
 type Move = "fresh" | "repeat" | "read" | "reopen" | "fault" | "full" | "corrupt" | "accepted";
@@ -185,6 +207,7 @@ type Move = "fresh" | "repeat" | "read" | "reopen" | "fault" | "full" | "corrupt
  *  row, a field of the wrong type holding input text. R6's are an answer of the wrong case and a
  *  malformed refusal. */
 const CORRUPT = ["json", "missing", "key", "typed"] as const;
+
 const ANSWER = ["accepted", "malformed"] as const;
 
 const key = (name: string, id: string) => JSON.stringify([name, id]);
@@ -192,6 +215,7 @@ const key = (name: string, id: string) => JSON.stringify([name, id]);
 /** A stored cell read as a JSON object, or undefined when it is not one. */
 export const parsed = (cell: string): Record<string, unknown> | undefined => {
   const value = Result.try(() => JSON.parse(cell) as unknown);
+
   return Result.isSuccess(value) && Predicate.isObject(value.success)
     ? (value.success as Record<string, unknown>)
     : undefined;
@@ -235,6 +259,7 @@ const refusedWith = Effect.fnUntraced(function* <A>(
   const error = Cause.squash(exit.cause) as Module.RepliesError;
   expect(error._tag).toBe("RepliesError");
   expect(error.reason).toBe(reason);
+
   return error;
 });
 
@@ -254,36 +279,45 @@ const walk = (
     const errors: Array<string> = [];
     let scope = yield* Scope.make();
     let raw = yield* open.pipe(Scope.provide(scope));
+
     const connect = Effect.fnUntraced(function* (capacity: number) {
       const context = yield* Layer.build(RepliesSql.layer(faulty(raw, control), { capacity })).pipe(
         Scope.provide(scope),
       );
+
       return Context.get(context, Replies);
     });
+
     let service = yield* connect(1024 ** 3);
     yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+
     const reopen = Effect.fnUntraced(function* () {
       yield* Scope.close(scope, Exit.void);
       scope = yield* Scope.make();
       raw = yield* open.pipe(Scope.provide(scope));
       service = yield* connect(1024 ** 3);
     });
+
     const unseen = (step: Step, n: number): { name: string; id: string } => {
       // Half the time, a letter already stored under another registered name.
       const known = [...first.values()].filter((r) => !first.has(key(nth(NAMES, step.kind), r.id)));
       const reuse = step.kind % 2 === 0 ? known[step.pick % Math.max(known.length, 1)] : undefined;
       const name = nth(NAMES, step.kind);
+
       return { name, id: reuse?.id ?? `${step.id}-${n}` };
     };
+
     const note = (error: unknown) => {
       errors.push(String(error), JSON.stringify(error), Cause.pretty(Cause.fail(error)));
     };
 
     for (const [n, step] of steps.entries()) {
       const good = [...first.entries()].filter(([k]) => !corrupt.has(k));
+
       const moves = enabled.filter((move) =>
         move === "repeat" || move === "read" || move === "corrupt" || move === "accepted" ? good.length > 0 : true,
       );
+
       const move = nth(moves, step.pick);
       const chosen = good[step.kind % Math.max(good.length, 1)];
 
@@ -332,6 +366,7 @@ const walk = (
         expect(yield* service.reply(name, id), "a failed write is not a stored reply").toBeNull();
       } else if ((move === "corrupt" || move === "accepted") && chosen !== undefined) {
         const [k, stored] = chosen;
+
         const located = dump(raw).flatMap(({ table, row }) =>
           Object.entries(row).flatMap(([column, value]) => {
             if (typeof value !== "string" || parsed(value)?.["digest"] !== stored.digest) {
@@ -341,6 +376,7 @@ const walk = (
             return [{ table, column, value }];
           }),
         );
+
         expect(located, "one stored JSON value holds the reply").toHaveLength(1);
         const [{ table, column, value }] = located as [{ table: string; column: string; value: string }];
         const json = JSON.parse(value) as Record<string, unknown>;
@@ -348,6 +384,7 @@ const walk = (
         secrets.push(secret);
         const kind = move === "corrupt" ? nth(CORRUPT, step.kind) : nth(ANSWER, step.kind);
         const fields = ["parent", "by", "for", "digest", "answer"] as const;
+
         const damaged =
           kind === "json"
             ? `${value.slice(0, -1)}${secret}`
@@ -362,6 +399,7 @@ const walk = (
                   : kind === "accepted"
                     ? JSON.stringify({ ...json, answer: Wrong.cases.accepted.make({ rev: n + 1, pos: n + 1 }) })
                     : JSON.stringify({ ...json, answer: Wrong.cases.refused.make({ reason: { text: secret } }) });
+
         raw.exec(`UPDATE "${table}" SET "${column}"=? WHERE "${column}"=?`, damaged, value);
         corrupt.set(k, damaged);
       }
@@ -382,9 +420,11 @@ const walk = (
 
       // After every move: no stored row, printed error or span holds a body (R11).
       const damaged = new Set(corrupt.values());
+
       const cells = dump(raw)
         .flatMap(({ row }) => Object.values(row))
         .filter((cell): cell is string => typeof cell === "string" && !damaged.has(cell));
+
       unleaked([...cells, ...errors, ...spans.text()], secrets);
     }
 

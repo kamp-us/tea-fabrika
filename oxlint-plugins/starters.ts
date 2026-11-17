@@ -52,7 +52,7 @@ export const DRIVES: Readonly<Record<Tag, string>> = {
   disk: "local disk",
 };
 
-/** What a name from a module is: a call that opens, SQLite's constructor, a Node layer, or a service whose methods need one. */
+/** What a name from a module is: a call that opens, a SQLite opener (its constructor, or the test database's `make` and `open`), a Node layer, or a service whose methods need one. */
 type Role =
   | { readonly _tag: "call"; readonly tag: Tag; readonly needs: Layer | null }
   | { readonly _tag: "sqlite" }
@@ -60,6 +60,7 @@ type Role =
   | { readonly _tag: "service"; readonly needs: Layer };
 
 const call = (tag: Tag, needs: Layer | null = null): Role => ({ _tag: "call", tag, needs });
+
 const each = (names: ReadonlyArray<string>, role: Role) => Object.fromEntries(names.map((name) => [name, role]));
 
 const launchers = (browser: string) =>
@@ -69,7 +70,9 @@ const launchers = (browser: string) =>
   );
 
 const services: Role = { _tag: "layer", gives: ["process", "disk"] };
+
 const files: Role = { _tag: "layer", gives: ["disk"] };
+
 const spawner: Role = { _tag: "layer", gives: ["process"] };
 
 /** Each module whose names open a real thing, by the dotted path of the name inside the module. */
@@ -87,6 +90,8 @@ const MODULES: ReadonlyArray<{ readonly module: RegExp; readonly names: Readonly
   { module: /^(?:node:)?fs$/, names: each(["mkdtemp", "mkdtempSync", "promises.mkdtemp"], call("disk")) },
   { module: /^(?:node:)?fs\/promises$/, names: { mkdtemp: call("disk") } },
   { module: /^(?:node:)?sqlite$/, names: { DatabaseSync: { _tag: "sqlite" } } },
+  // The test primitives' SQLite module (ticket 1029): `make` and `open` open a file, as `new DatabaseSync` does.
+  { module: /^@kampus\/vitest\/TestDatabase$/, names: { make: { _tag: "sqlite" }, open: { _tag: "sqlite" } } },
   {
     module: /^(?:playwright|playwright-core|@playwright\/test)$/,
     names: { ...launchers("chromium"), ...launchers("firefox"), ...launchers("webkit"), ...launchers("_electron") },
@@ -128,6 +133,7 @@ const LOCAL = /^(?:localhost|127(?:\.\d+){3}|\[::1\]|0\.0\.0\.0)$/;
 /** A URL outside this machine, from the literal start of a call's first argument. */
 const remote = (first: string | null): boolean => {
   const host = /^(?:https?|wss?):\/\/([^/:?#]+|\[[^\]]+\])/.exec(first ?? "")?.[1];
+
   return host !== undefined && !LOCAL.test(host);
 };
 
@@ -151,8 +157,10 @@ export const reader = <N>() => {
   // A global `fetch` to another machine, kept apart: a file that stubs `fetch` reaches nothing.
   const fetched: Array<Open<N>> = [];
   let stubbed = false;
+
   const open = (node: N, shown: string, tag: Tag, needs: Layer | null = null) =>
     found.push({ _tag: tag, call: shown, node, needs });
+
   const bind = (written: string, role: Role) => {
     bound.set(written, role);
 
@@ -162,10 +170,13 @@ export const reader = <N>() => {
       }
     }
   };
+
   const service = (written: string): Layer | null => {
     const role = bound.get(written);
+
     return role?._tag === "service" ? role.needs : null;
   };
+
   // A port's client call to a literal URL on another machine reaches the network.
   const opened = (tag: Tag, first: string | null): Tag => (tag === "port" && remote(first) ? "network" : tag);
 
@@ -217,6 +228,8 @@ export const reader = <N>() => {
       if (role !== undefined) {
         if (role._tag === "call") {
           open(node, shown, opened(role.tag, first), role.needs);
+        } else if (role._tag === "sqlite" && first !== ":memory:") {
+          open(node, shown, "disk");
         }
       } else if (written === "process.kill") {
         open(node, shown, "signal");
@@ -230,6 +243,7 @@ export const reader = <N>() => {
     },
     opens: (scope: "alone" | "any"): ReadonlyArray<Open<N>> => {
       const all = stubbed ? found : [...found, ...fetched];
+
       return scope === "any" ? all : all.filter((one) => one.needs === null || provided.has(one.needs));
     },
   };
@@ -257,6 +271,7 @@ const receiver = (callee: Node): Receiver | null => {
 
   const service = yielded(callee.object);
   const written = dotted(callee.object);
+
   return service !== null ? { _tag: "yield", written: service } : written === null ? null : { _tag: "name", written };
 };
 
@@ -296,10 +311,12 @@ export const visitor = (read: ReturnType<typeof reader<Node>>): Visitor => ({
   },
   CallExpression(node) {
     const { callee } = node;
+
     const method =
       callee.type === "MemberExpression" && !callee.computed && callee.property.type === "Identifier"
         ? callee.property.name
         : null;
+
     read.calls(node, dotted(callee), method, receiver(callee), literal(node.arguments[0]));
   },
 });

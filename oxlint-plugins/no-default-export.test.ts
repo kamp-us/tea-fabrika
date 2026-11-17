@@ -64,10 +64,12 @@ it("an inline edge comment lets the default on the next line through, and no lin
       const edge = `// oxlint-disable-next-line import/no-default-export -- edge: ${reason}`;
       const marked = `${folder}/worker.ts`;
       const farther = `${folder}/farther.ts`;
+
       const result = await plant({
         [marked]: [edge, "export default { fetch: () => 1 };"].join("\n"),
         [farther]: [edge, "const a = 1;", "export default a;"].join("\n"),
       });
+
       expect(result(CODE, marked)).toEqual([]);
       expect(result(CODE, farther)).toEqual([3]);
     }),
@@ -89,8 +91,10 @@ it("scenario: a declare module block that types a loader's default is not an exp
   // apps/fabrika/src/window/wasm.d.ts types what esbuild's binary loader gives; the rule reads it as
   // a type, not as a module's own default.
   const file = "apps/fabrika/src/window/bytes.d.ts";
+
   const result = await plant({
     [file]: 'declare module "*.wasm" {\n  const bytes: Uint8Array;\n  export default bytes;\n}\n',
   });
+
   expect(result(CODE, file)).toEqual([]);
 });

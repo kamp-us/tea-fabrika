@@ -18,6 +18,8 @@ export const make = <E>(
       Predicate.isObject(update) && "type" in update
         ? { method: update.type === "whole" ? "view.whole" : "view.patch", params: update }
         : update;
+
     yield* notify(String(row.connection), client, news);
+
     return Publication.cases.sent.make({});
   });

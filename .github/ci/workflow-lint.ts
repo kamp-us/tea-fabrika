@@ -11,6 +11,7 @@ import { ciRequired } from "./workflow-lint/ci-required.ts";
 import { lintCiSpeed } from "./workflow-lint/ci-speed.ts";
 import { classifyStep } from "./workflow-lint/classify.ts";
 import { failFast } from "./workflow-lint/fail-fast.ts";
+import { lintHost } from "./workflow-lint/host.ts";
 import { lintIssues } from "./workflow-lint/issues.ts";
 import { jobLaws } from "./workflow-lint/jobs.ts";
 import { lintNoTooling, mergeLine } from "./workflow-lint/merge-line.ts";
@@ -60,6 +61,7 @@ export const lintWorkflow = (text: string): string[] => {
 
   const workflow = map(source);
   const errors: string[] = [];
+
   const require: Require = (holds, reason) => {
     if (!holds) {
       errors.push(`check.yaml: ${reason}`);
@@ -78,6 +80,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
     const check = read(".github/workflows/check.yaml");
     const files = cacheFiles(read);
+
     const errors = [
       ...lintWorkflow(check),
       ...lintScheduled(read(".github/workflows/scheduled.yaml"), check),
@@ -88,6 +91,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       ...lintIssues(files.workflows),
       ...lintCaches(files),
       ...lintCiSpeed(read(".github/workflows/ci-speed.yaml")),
+      ...lintHost(read(".github/workflows/host.yaml")),
     ];
 
     const manifest: unknown = JSON.parse(read("package.json"));

@@ -5,8 +5,6 @@
  * rows, and written in `ProcessManager.monitor`'s own turn: the `monitored` row, the watcher's
  * answer letter and, for a life that already ended, its `noproc` DOWN. A saved ref answers again
  * and writes nothing, so a retried Cmd is one watch.
- *
- * @stability unstable
  */
 import { Clock, Data, Effect, Layer, Option, Result, Schema } from "effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
@@ -25,6 +23,7 @@ import { ProcessManager } from "./ProcessManager.ts";
 const tag = (word: string): string => `fab.monitors.${word}`;
 
 const isName = Schema.is(ProcessName);
+
 const encodeWatched = Schema.encodeSync(Watched);
 
 const refuse = (reason: Exclude<MonitorsError["reason"], "storage">) => new MonitorsError({ reason });
@@ -67,6 +66,7 @@ const look = (
 
   if (saved !== undefined) {
     const watched = Watched.make({ ref: watch.id, process: saved.process, name: saved.name ?? watch.name });
+
     return Result.succeed(Found.saved({ watched }));
   }
 
@@ -81,12 +81,14 @@ const look = (
 
   if (Result.isFailure(picked)) {
     const { reason } = picked.failure;
+
     return Result.fail(
       reason === "storage" ? storage(picked.failure) : refuse(reason === "ended" ? "stale_sender" : "forbidden"),
     );
   }
 
   const member = picked.success;
+
   const allowed = Option.match(member, {
     onNone: () => Result.succeed(related(table, watcher.name, watch.name)),
     onSome: (checked) => may(turn, checked),
@@ -135,7 +137,6 @@ const answered = (watch: Watch, watched: typeof Watched.Type, at: number) => ({
  * The permission step reads the rows of the look turn, and the write turn does not check them
  * again, as a start's does: a relation removed between the two turns does not stop that watch.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (config: {
@@ -148,6 +149,7 @@ export const layer = (config: {
       const manager = yield* ProcessManager;
       const relations = yield* Relations;
       const senders = yield* Senders;
+
       const may: May = (turn, member) =>
         Result.map(relations.within(turn), (tuples) =>
           Result.isSuccess(WatchProcess.within(tuples, member, config.fabrika)),
@@ -188,6 +190,7 @@ export const layer = (config: {
 
           // Outside any turn, and kept as it came: it decides nothing before the saved-ref check.
           const sender = yield* senders.sender(from.parent, watch.watcher.process).pipe(Effect.result);
+
           const found = yield* tx
             .transact((turn) => look(manager.table(turn), turn, watch, sender, may))
             .pipe(Effect.mapError(storage), Effect.flatMap(Effect.fromResult));

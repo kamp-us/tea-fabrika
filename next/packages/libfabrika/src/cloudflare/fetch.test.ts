@@ -38,6 +38,7 @@ const world = (
 ) => {
   const calls: Array<{ to: string; method: string; args: unknown[] }> = [];
   const response = new Response("gateway", { status: 202 });
+
   const config = instanceFixture({
     name,
     port,
@@ -46,6 +47,7 @@ const world = (
     window: null,
     build: "build-test",
   });
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only the RPC members the public routes call
   const env = {
     INSTANCE: JSON.stringify(config),
@@ -53,6 +55,7 @@ const world = (
       getByName: (to: string) => ({
         fetch: async (request: Request) => {
           calls.push({ to, method: "fetch", args: [request] });
+
           return response;
         },
       }),
@@ -62,16 +65,20 @@ const world = (
         settingsStart: () => settingsStart(StartsTest.reply(config)),
         grant: async (body: unknown) => {
           calls.push({ to, method: "grant", args: [body] });
+
           return { granted: body };
         },
         target: async (target: string, code: string) => {
           calls.push({ to, method: "target", args: [target, code] });
+
           return { target, code };
         },
       }),
     },
   } as unknown as Env;
+
   const origin = `http://127.0.0.1:${port}`;
+
   const request = (
     path: string,
     method = "GET",
@@ -84,15 +91,18 @@ const world = (
       headers: { host, ...(originHeader === null ? {} : { origin: originHeader }) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
+
   return { calls, response, env, config, origin, request };
 };
 
 describe("P12 public Worker fetch", () => {
   it("malformed grant target escapes fail typed before any Project call", async () => {
     const fetch = Route.fetch;
+
     const bad = fc
       .tuple(fc.string(), fc.constantFrom("%", "%G0", "%0G", "%C0%AF", "%E0%A4", "%ED%A0%80", "%F4%90%80%80"))
       .map(([prefix, suffix]) => encodeURIComponent(prefix) + suffix);
+
     await fc.assert(
       fc.asyncProperty(bad, async (target) => {
         const w = world(18787, "parse-test");
@@ -113,11 +123,13 @@ describe("P12 public Worker fetch", () => {
         fc.jsonValue().map((v) => `${JSON.stringify(v)}!`),
         async (body) => {
           const w = world(18787, "parse-test");
+
           const request = new Request(`${w.origin}/grant`, {
             method: "POST",
             headers: { host: "127.0.0.1:18787" },
             body,
           });
+
           const exit = await Effect.runPromiseExit(fetch(request, w.env, w.config));
           expect(Exit.isFailure(exit)).toBe(true);
           const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
@@ -154,6 +166,7 @@ describe("P12 public Worker fetch", () => {
         const result = await Effect.runPromise(
           fetch(w.request(path, "POST", origin, undefined, body), w.env, w.config),
         );
+
         expect(result.status).toBe(403);
       }
     }
@@ -164,6 +177,7 @@ describe("P12 public Worker fetch", () => {
     for (const originHeader of [null, `http://127.0.0.1:${port}`]) {
       const w = world(port, name),
         path = `/client/${encodeURIComponent(id)}`;
+
       const request = w.request(path, "GET", originHeader);
       const answer = await Effect.runPromise(fetch(request, w.env, w.config));
       // T502 S1: the request crosses through Alchemy's typed stub, whose fetcher sends the object a
@@ -182,9 +196,11 @@ describe("P12 public Worker fetch", () => {
   });
   law("POST grant forwards parsed JSON only to the configured project", async ({ port, name, body }, fetch) => {
     const w = world(port, name);
+
     const result = await Effect.runPromise(
       fetch(w.request("/grant", "POST", w.origin, undefined, body), w.env, w.config),
     );
+
     expect(result.status).toBe(200);
     expect(await result.json()).toEqual({ granted: body });
     expect(w.calls).toEqual([{ to: name, method: "grant", args: [body] }]);
@@ -194,9 +210,11 @@ describe("P12 public Worker fetch", () => {
     async ({ port, name, id, code }, fetch) => {
       for (const query of ["", `?code=${encodeURIComponent(code)}`]) {
         const w = world(port, name);
+
         const result = await Effect.runPromise(
           fetch(w.request(`/grant/client/${encodeURIComponent(id)}${query}`), w.env, w.config),
         );
+
         const expected = query === "" ? "" : code;
         expect(await result.json()).toEqual({ target: id, code: expected });
         expect(w.calls).toEqual([{ to: name, method: "target", args: [id, expected] }]);
@@ -207,23 +225,28 @@ describe("P12 public Worker fetch", () => {
   // that waits on work another request started. So a request never waits on another's read.
   it("requests that arrive before any read of the recorded start has finished each read for themselves, and a finished read serves the later ones", async () => {
     const fetch = Route.fetch;
+
     const arrivals = fc.integer({ min: 2, max: 8 }).chain((n) =>
       fc.shuffledSubarray(
         Array.from({ length: n }, (_, at) => at),
         { minLength: n },
       ),
     );
+
     await fc.assert(
       fc.asyncProperty(arrivals, generated, async (order, { port, name }) => {
         const held: Array<() => void> = [];
         const w = world(port, name, (reply) => new Promise((answer) => held.push(() => answer(reply))));
         const answered: Array<number> = [];
+
         const first = order.map(() =>
           Effect.runPromise(fetch(w.request("/"), w.env, w.config)).then((response) => {
             answered.push(response.status);
+
             return response;
           }),
         );
+
         // With no read finished, every request has asked the Project for itself.
         await vi.waitFor(() => expect(held).toHaveLength(order.length));
 
