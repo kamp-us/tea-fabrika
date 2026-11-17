@@ -62,11 +62,13 @@ The actual adapters remain unexercised until the workflow runs on disposable CI 
 Runner and CPU-profile gaps stay open. These measurements supply no branch proof or reliability claim.
 
 Today's lead tooling has a manual [plant exercise](../../.github/workflows/plant.yaml), ticket 1133.
-It accepts four fixed cases and an exact source commit, then records baseline, broken and restored observations.
+It accepts seven fixed cases and an exact source commit, then records baseline, broken and restored observations.
 Its real Git and Vitest adapters ran on trusted main for [checklist notice PIDs](../../field/notes/2026-11-17-checklist-pid-fault-exercise.json)
 in `next/`, and [host pinning and discovery](../../field/notes/2026-11-17-host-runtime-fault-exercises.json) in today's lead tooling.
+The [three remaining host faults](../../field/notes/2026-11-17-host-remaining-fault-exercises.json) now have the same actual observations:
+ignoring the requested pin, omitting the native pnpm directory and reversing prepared-environment precedence.
 Each accepted exercise passed before the deliberate break, failed at its intended assertion, then passed after restoration.
-The watcher case, six other checklist fault or probe groups, and three host faults still need their own evidence.
+The watcher case and six other checklist fault or probe groups still need their own evidence.
 These exercises supply neither whole-product review nor branch proof; the affected product tickets remain open.
 
 *2026-11-13:* the order of work changed ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)). The next thing built in `next/` is `fabsh`,

@@ -2,7 +2,15 @@
 import { Effect, RegExp as Regex, Schema } from "effect";
 
 export const Request = Schema.Struct({
-  case: Schema.Literals(["checklist-pid", "watcher-r1", "host-pin", "host-discovery-timeout"]),
+  case: Schema.Literals([
+    "checklist-pid",
+    "watcher-r1",
+    "host-pin",
+    "host-discovery-timeout",
+    "host-requested-pin",
+    "host-pnpm-path",
+    "host-env-order",
+  ]),
   sha: Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/)),
 });
 
@@ -66,6 +74,39 @@ export const cases = {
     const ended = yield* runLine(dir, line, childEnv, log).pipe(
       Effect.timeoutOption(Duration.minutes(minutes)),
     );`,
+  },
+  "host-requested-pin": {
+    project: "tooling",
+    file: ".agents/skills/lead/scripts/boxnode.ts",
+    test: ".agents/skills/lead/scripts/flow/host.test.ts",
+    title:
+      "the host step's outcomes scenario: an explicit pin keeps direct and nested pnpm on that Node, even when the manifest differs",
+    selector:
+      "the host step's outcomes > scenario: an explicit pin keeps direct and nested pnpm on that Node, even when the manifest differs",
+    before: "    const pin = requested ?? (yield* repoNode(main));",
+    after: "    const pin = yield* repoNode(main);",
+  },
+  "host-pnpm-path": {
+    project: "tooling",
+    file: ".agents/skills/lead/scripts/boxnode.ts",
+    test: ".agents/skills/lead/scripts/flow/host.test.ts",
+    title:
+      "the host step's outcomes scenario: an explicit pin keeps direct and nested pnpm on that Node, even when the manifest differs",
+    selector:
+      "the host step's outcomes > scenario: an explicit pin keeps direct and nested pnpm on that Node, even when the manifest differs",
+    before: '    return { ...parent, PATH: firstOnPath(parent.PATH ?? "", pnpm === null ? [node] : [node, pnpm]) };',
+    after: '    return { ...parent, PATH: firstOnPath(parent.PATH ?? "", [node]) };',
+  },
+  "host-env-order": {
+    project: "tooling",
+    file: ".agents/skills/lead/scripts/flow/host.ts",
+    test: ".agents/skills/lead/scripts/flow/host.test.ts",
+    title:
+      "the host step's outcomes scenario: an explicit pin keeps direct and nested pnpm on that Node, even when the manifest differs",
+    selector:
+      "the host step's outcomes > scenario: an explicit pin keeps direct and nested pnpm on that Node, even when the manifest differs",
+    before: "    node === null ? Effect.succeed(env) : boxEnv(dir, { ...process.env, ...env }, node),",
+    after: "    node === null ? Effect.succeed(env) : boxEnv(dir, { ...env, ...process.env }, node),",
   },
 } as const;
 

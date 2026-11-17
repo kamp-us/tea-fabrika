@@ -31,5 +31,5 @@
     "allowJs": true,
     "checkJs": true
   },
-  "include": ["*.ts", "*.mjs", "workflow-lint/*.ts"]
+  "include": ["*.ts", "*.mjs", "workflow-lint/*.ts", "../../scripts/vitest.setup.ts"]
 }
