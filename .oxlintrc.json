@@ -2877,6 +2877,7 @@
     {
       // 0561: every type cast carries a `SAFETY:` comment that says the fact the compiler cannot see.
       "files": [
+        "kalfa/config/**",
         "next/packages/libfabrika/src/ci/**",
         "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
@@ -2967,6 +2968,7 @@
     {
       // 0562: no tagged type written by hand.
       "files": [
+        "kalfa/config/**",
         "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/ci/**",
         "next/packages/libfabrika/src/codehost/**",
