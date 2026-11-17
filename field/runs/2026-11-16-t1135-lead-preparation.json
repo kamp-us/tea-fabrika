@@ -1,0 +1,93 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1135-lead-preparation",
+  "ticket": "tea-fabrika#1135",
+  "pr": null,
+  "started": "2026-11-16T21:47:44-08:00",
+  "ended": "2026-11-16T22:23:39-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "blocked",
+  "why": "Today's lead tooling for next/ L11: prepared independent fixed mappings, tea phase machine, private trace and report validation, ten-slot collection, and multiple-file restoration through memory stand-ins. Ten unit laws pass; ten deliberate unit breaks were assertion-red and restored. Format and all 18 lint parts pass. Final adapter, CLI and workflow integration awaits tracker 1133 landing. No compiler, runtime adapter, protected law, CI dispatch, output exercise or timing measurement ran. No reliability or product proof is claimed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 35.92,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "plants": [
+    {
+      "law": "strict requests reject caller additions and every unsupported case or source",
+      "plant": "Allow an extra request field",
+      "result": "red"
+    },
+    {
+      "law": "fixed edits reject missing or duplicate anchors and preserve every other byte",
+      "plant": "Accept the first duplicate anchor",
+      "result": "red"
+    },
+    {
+      "law": "fixed source and transform hashes refuse every changed input before writing",
+      "plant": "Omit the original source digest check",
+      "result": "red"
+    },
+    {
+      "law": "report reconciliation refuses missing, skipped, contradictory and wrong-name assertions",
+      "plant": "Accept a missing exact assertion name",
+      "result": "red"
+    },
+    {
+      "law": "private input equality compares complete ordered values and every changed point",
+      "plant": "Accept any two individually complete traces",
+      "result": "red"
+    },
+    {
+      "law": "ten declared slots retain the first failure and reject replacement attempts",
+      "plant": "Drop every failed or unstarted slot",
+      "result": "red"
+    },
+    {
+      "law": "[secrets] sanitized facts discard raw diagnostics, generated values and paths",
+      "plant": "Copy the raw reporter into the published observation",
+      "result": "red"
+    },
+    {
+      "law": "multiple-file restoration attempts every saved file after each injected I/O failure",
+      "plant": "Restore only the first saved file",
+      "result": "red"
+    },
+    {
+      "law": "case-specific phase walks preserve timing failures and require plant restoration",
+      "plant": "Skip the restored clean test phase",
+      "result": "red"
+    },
+    {
+      "law": "a plant timeout cannot complete while a measurement timeout remains an observation",
+      "plant": "Accept a timing failure as an output leak",
+      "result": "red"
+    }
+  ],
+  "checks": {
+    "unitLaws": 10,
+    "deliberateBreaks": 10,
+    "restoredBreaks": 10,
+    "lintParts": 18,
+    "compiler": null,
+    "realAdapters": null
+  },
+  "limits": [
+    "row mapping missing",
+    "initialization and recovery attribution missing",
+    "Runner mapping missing",
+    "CPU profile missing",
+    "global seed setup not integrated"
+  ]
+}

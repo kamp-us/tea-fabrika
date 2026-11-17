@@ -4,7 +4,7 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Cause, Clock, Context, DateTime, Effect, FileSystem, Option, Path, Ref, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { argv, cases, decodeRequest, derive, Request } from "./plant-cases.ts";
+import { argv, cases, decodeRequest, derive, prepare, Request } from "./plant-cases.ts";
 import { Failure } from "./plant-errors.ts";
 import { machine, Model, Observation, type Phase } from "./plant-machine.ts";
 
@@ -215,10 +215,30 @@ export const exercise = Effect.fn("plant.exercise")(function* (input: unknown) {
     return yield* fail("source_dirty_or_wrong_head");
   }
 
-  const expected = yield* derive(request.case, before.bytes).pipe(Effect.mapError(() => fail("source_unsupported")));
   const originalHash = yield* digest.digestHex(Digest.sha256, before.bytes);
+  const selected = cases[request.case];
+
+  if ("hashes" in selected && (before.mode !== 0o100644 || originalHash !== selected.hashes.source)) {
+    return yield* fail("source_unsupported");
+  }
+
+  const prepared = yield* prepare(request.case, before.bytes).pipe(Effect.mapError(() => fail("source_unsupported")));
+  const expected = yield* derive(request.case, prepared).pipe(Effect.mapError(() => fail("source_unsupported")));
+  const preparedHash = yield* digest.digestHex(Digest.sha256, prepared);
   const editedHash = yield* digest.digestHex(Digest.sha256, expected);
+
+  if ("hashes" in selected && (preparedHash !== selected.hashes.prepared || editedHash !== selected.hashes.edited)) {
+    return yield* fail("source_unsupported");
+  }
+
   const diffHash = yield* Ref.make<string | null>(null);
+
+  const observedHashes = yield* Ref.make<Record<Phase, string | null>>({
+    baseline: null,
+    broken: null,
+    restored: null,
+  });
+
   const cleanup = yield* Ref.make({ restored: false, hash: Option.none<string>() });
 
   const verify = Effect.fn("plant.verify")(function* (bytes: Uint8Array) {
@@ -227,6 +247,8 @@ export const exercise = Effect.fn("plant.exercise")(function* (input: unknown) {
     if (!unchanged(before, after, bytes, cases[request.case].file)) {
       return yield* fail("source_changed");
     }
+
+    return yield* digest.digestHex(Digest.sha256, after.bytes);
   });
 
   const restore = Effect.gen(function* () {
@@ -261,12 +283,13 @@ export const exercise = Effect.fn("plant.exercise")(function* (input: unknown) {
                 }
 
                 yield* Ref.set(diffHash, yield* digest.digestHex(Digest.sha256, bytes));
-              } else if (cmd.phase === "restored") {
-                yield* restore;
+              } else if (cmd.phase === "restored" || !equal(prepared, before.bytes)) {
+                yield* workspace.write(prepared, before.mode);
               }
 
-              const bytes = cmd.phase === "broken" ? expected : before.bytes;
-              yield* verify(bytes);
+              const bytes = cmd.phase === "broken" ? expected : prepared;
+              const observed = yield* verify(bytes);
+              yield* Ref.update(observedHashes, (hashes) => ({ ...hashes, [cmd.phase]: observed }));
               const answer = yield* workspace.test(cmd.phase);
               yield* verify(bytes);
 
@@ -288,10 +311,12 @@ export const exercise = Effect.fn("plant.exercise")(function* (input: unknown) {
   return {
     request,
     originalHash,
+    preparedHash,
     originalMode: before.mode,
     head: before.head,
     index: before.index,
     editedHash,
+    observedHashes: yield* Ref.get(observedHashes),
     diffHash: yield* Ref.get(diffHash),
     model,
     cleanup: { restored: restored.restored, hash: Option.getOrNull(restored.hash) },
@@ -325,7 +350,7 @@ const Attempt = Schema.Struct({
   startedAt: Schema.String,
   dispatchedAt: Schema.Null,
   dispatchTimeReason: Schema.String,
-  caller: Schema.NullOr(Event.fields.sender.fields.login),
+  caller: Schema.Null,
   source: Schema.NullOr(Request.fields.sha),
   request: Schema.NullOr(Request),
   runner: Request.fields.sha,
@@ -416,7 +441,6 @@ export const attempt = Effect.fn("plant.attempt")(function* <E, R>(
       Effect.mapError(() => fail("event_invalid")),
     );
 
-    yield* Ref.update(facts, (known) => ({ ...known, caller: event.sender.login }));
     yield* write(unfinished);
     const request = yield* decodeRequest(event.inputs).pipe(Effect.mapError(() => fail("request_invalid")));
     yield* Ref.update(facts, (known) => ({ ...known, source: request.sha, request }));
@@ -550,7 +574,15 @@ const main = attempt(process.env, (environment, request) =>
     });
 
     yield* regular;
-    yield* derive(request.case, yield* fs.readFile(target)).pipe(Effect.mapError(() => fail("source_unsupported")));
+    const original = yield* fs.readFile(target);
+    const digest = yield* Digest.Digest;
+
+    if ("hashes" in selected && (yield* digest.digestHex(Digest.sha256, original)) !== selected.hashes.source) {
+      return yield* fail("source_unsupported");
+    }
+
+    const prepared = yield* prepare(request.case, original).pipe(Effect.mapError(() => fail("source_unsupported")));
+    yield* derive(request.case, prepared).pipe(Effect.mapError(() => fail("source_unsupported")));
     const install = yield* child(source, "pnpm", ["install", "--frozen-lockfile"], "source-install");
 
     if (install.exit !== 0) {
