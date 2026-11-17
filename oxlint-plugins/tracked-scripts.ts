@@ -57,14 +57,103 @@ const RUNS_AS_SCRIPT = /^(?:(?:a|ba|da|k|mk|z|c|tc|y|fi)?sh|python[\d.]*|pypy[\d
  * and BSD env's `-u name`, `-C altwd`, `-P altpath` and `-L`/`-U user[/class]`
  * (https://man.freebsd.org/cgi/man.cgi?query=env&sektion=1). A short one may end a cluster of
  * flags that take none, as in `-iu NAME`. The `--unset=NAME` form is one word, a flag like any
- * other. `-S` takes the rest of the line, which env splits and reads again, so it is a flag here.
+ * other. Split-string options are read separately, since env splits their value and scans it again.
  */
 const TAKES_VALUE = /^(?:-[0iv]*[uCaPLU]|--(?:unset|chdir|argv0))$/;
+
+/** Static words of GNU env's split-string syntax, including quoted fragments and its escapes. */
+const splitEnv = (text: string): ReadonlyArray<string> => {
+  const words: Array<string> = [];
+  let word = "";
+  let active = false;
+  let quote: "'" | '"' | undefined;
+
+  const end = () => {
+    if (active) {
+      words.push(word);
+      word = "";
+      active = false;
+    }
+  };
+
+  const escapes: Readonly<Record<string, string>> = {
+    '"': '"',
+    "'": "'",
+    "#": "#",
+    $: "$",
+    "\\": "\\",
+    f: "\f",
+    n: "\n",
+    r: "\r",
+    t: "\t",
+    v: "\v",
+  };
+
+  for (let at = 0; at < text.length; at++) {
+    const char = text[at] ?? "";
+
+    if ((char === "'" || char === '"') && (quote === undefined || quote === char)) {
+      quote = quote === undefined ? char : undefined;
+      active = true;
+      continue;
+    }
+
+    if (quote === undefined && /[ \t\n\v\f\r]/.test(char)) {
+      end();
+      continue;
+    }
+
+    if (char === "#" && !active) {
+      break;
+    }
+
+    if (char === "\\" && (quote !== "'" || text[at + 1] === "\\" || text[at + 1] === "'")) {
+      const next = text[++at] ?? "";
+
+      if (next === "_" && quote !== '"') {
+        end();
+        continue;
+      }
+
+      if (next === "c" && quote !== '"') {
+        end();
+
+        return words;
+      }
+
+      const escaped = next === "_" ? " " : escapes[next];
+
+      if (escaped === undefined) {
+        return [];
+      }
+
+      word += escaped;
+    } else {
+      word += char;
+    }
+
+    active = true;
+  }
+
+  if (quote !== undefined) {
+    return [];
+  }
+
+  end();
+
+  return words;
+};
 
 /** The interpreter `env` runs: the first word that is not a flag, an option's value or a `NAME=value`. */
 const envTarget = ([word, ...rest]: ReadonlyArray<string>): string => {
   if (word === undefined) {
     return "";
+  }
+
+  const split = /^(?:-[0iv]*S|--split-string=)(.*)$/.exec(word);
+
+  if (split !== null || word === "--split-string") {
+    return envTarget(splitEnv(`${split?.[1] ?? ""} ${rest.join(" ")}`));
   }
 
   if (TAKES_VALUE.test(word)) {

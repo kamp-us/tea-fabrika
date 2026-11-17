@@ -20,7 +20,7 @@
 //     left out. `redacted` is the count in `<events>.redacted`, when redact.sh wrote one.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Config, Console, DateTime, Effect, FileSystem, Layer, Option, Result, Schema } from "effect";
+import { Config, ConfigProvider, Console, DateTime, Effect, FileSystem, Layer, Option, Result, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { rounded } from "./clauderow.ts";
 
@@ -295,11 +295,15 @@ export const fieldrow = Command.make(
     ),
 );
 
+/** Runs the command with Python's distinction between missing and present empty environment values. */
+export const run = (args: ReadonlyArray<string>, env?: Record<string, string>) =>
+  Command.runWith(fieldrow, { version: "0.0.0" })(args).pipe(
+    Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env, preserveEmptyStrings: true }))),
+  );
+
 if (import.meta.main) {
   NodeRuntime.runMain(
-    Command.runWith(fieldrow, { version: "0.0.0" })(process.argv.slice(2)).pipe(
-      Effect.provide(Layer.mergeAll(NodeServices.layer, DateTime.layerCurrentZoneLocal)),
-    ),
+    run(process.argv.slice(2)).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, DateTime.layerCurrentZoneLocal))),
     { disableErrorReporting: true },
   );
 }
