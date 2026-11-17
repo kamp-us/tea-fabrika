@@ -62,7 +62,7 @@ it.effect(
       expect(runner).toBeTruthy();
 
       if (runner === undefined) {
-        return yield* Effect.dieMessage("P2 requires RUNNER_TEMP for its tested archive and receipt");
+        return yield* Effect.die(new Error("P2 requires RUNNER_TEMP for its tested archive and receipt"));
       }
 
       const delivery = path.join(runner, "kalfa-config-package");
