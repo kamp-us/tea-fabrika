@@ -214,9 +214,11 @@ const proof = () => ({ cases: 0, moves: 0, started: 0, completed: 0, canceled: 0
 
 type Proof = ReturnType<typeof proof>;
 
+class AlarmFailure extends Schema.TaggedError<AlarmFailure>()("AlarmFailure", { cause: Schema.Defect() }) {}
+
 type AlarmWork = {
   readonly at: number;
-  readonly done: Deferred.Deferred<void, unknown>;
+  readonly done: Deferred.Deferred<void, AlarmFailure>;
 };
 
 type Entry = {
@@ -369,7 +371,7 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
 
                 if (at !== null && !closed) {
                   const current = entry;
-                  const work: AlarmWork = { at, done: Deferred.makeUnsafe<void, unknown>() };
+                  const work: AlarmWork = { at, done: Deferred.makeUnsafe<void, AlarmFailure>() };
                   alarms.add(work);
                   const timer = setTimeout(
                     () => {
@@ -382,7 +384,7 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
                           work.done,
                           Effect.tryPromise({
                             try: () => current.object.call("alarm", []),
-                            catch: (cause) => cause,
+                            catch: (cause) => new AlarmFailure({ cause }),
                           }).pipe(
                             Effect.asVoid,
                             Effect.ensuring(
