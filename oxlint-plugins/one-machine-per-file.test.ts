@@ -509,21 +509,26 @@ it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", ()
         const code = "code" in entry && typeof entry.code === "string" ? entry.code : null;
         const filename = "filename" in entry && typeof entry.filename === "string" ? entry.filename : null;
         const path = filename === null ? null : relative(root, resolve(root, filename));
+
         const safePath =
           path === null || path === "" || path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path)
             ? null
             : path;
+
         const labels = "labels" in entry && Array.isArray(entry.labels) ? entry.labels : [];
         const label: unknown = labels[0];
         const span = typeof label === "object" && label !== null && "span" in label ? label.span : null;
+
         const line =
           typeof span === "object" && span !== null && "line" in span && typeof span.line === "number"
             ? span.line
             : null;
+
         const column =
           typeof span === "object" && span !== null && "column" in span && typeof span.column === "number"
             ? span.column
             : null;
+
         const position =
           line !== null &&
           Number.isInteger(line) &&
