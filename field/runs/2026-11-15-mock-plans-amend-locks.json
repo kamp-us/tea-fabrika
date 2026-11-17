@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-plans-amend-locks",
+  "ticket": "1067",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1491",
+  "started": "2026-11-15T22:18:15-08:00",
+  "ended": "2026-11-15T22:26:39-08:00",
+  "parent": "2026-11-15-mock-plans-amend",
+  "active": null,
+  "role": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "The laptop lead's rulings, relayed by the coordinator, closed the three merge session questions on the lock: no interim narrower lock (0524); vi.mock, vi.doMock and vi.stubEnv are 0555's own targets, so this sweep fixes those hits too; a folder's lock lands whole in the one fold pull request once the folder is at zero, and a folder that cannot reach zero keeps its lock out and says so. Counted on main at 0683861: cloudflare 12 vi.mock (fixes effect 1 and ./objects.ts 4 in slice 2; 7 cloudflare:workers wait on 0042's Alchemy work), node-dev 2 vi.mock and 6 vi.stubEnv (fixes the 6 env stubs with ConfigProvider layers, the rolldown mock takes 0555's wrapper exception, 1 cloudflare:workers waits), app-src 25 vi.mock, 2 vi.doMock and 13 vi.stubEnv (a new slice 5 fixes 33; 4 Alchemy mocks and 3 cloudflare:workers wait). So all three folders keep their vi lock out of this sweep, and each plan says so. A finding row in the cloudflare plan names the unplanned Alchemy work. The fold branch is fabrikalfa/mock-fold. The opening paragraphs now name their decisions: app-src and oxlint-plugins their own, cloudflare and node-dev 0592, app-e2e and pipeline 0054. The previous row's ended time is filled from 6de2b17's commit time.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "The ended time was read from the clock just before the commit, not after it. app-src's slice 5 is sized at 55% confidence: each hit's way is 0555's own, but none was read call by call, and its tests step stops on any hit that needs a design call. Estimates move: cloudflare 7 steps $34, node-dev 4 steps $22, app-src 19 steps $93. plancheck --draft passed on all 12 plans, and pnpm format and pnpm lint passed; no test ran.",
+  "step": "lead"
+}

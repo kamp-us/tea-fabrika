@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-16-t1133-reporter-test-kind",
+  "date": "2026-11-16",
+  "quests": ["tea-fabrika#1133"],
+  "stage": "harness",
+  "kind": "failure",
+  "what": "Today's reporter compatibility check was first named as a plain test even though it writes temporary files and starts real Vitest children. The earlier local runs happened; their results do not establish that this was an allowed laptop check.",
+  "cause": "The agent classified the check by its small fixture instead of the real resources and cleanup it reaches. The installed process spawner can signal owned process groups at exit and scope release, including after a child has exited.",
+  "person": false,
+  "primitive": null,
+  "fix": "Renamed the check to plant-reporter.integration.test.ts and used a scenario title explaining why the actual reporter needs a real child. Its signal cleanup requires eligible disposable CI under 0594. No local rerun of this check, guard override or weaker classification was used. The separate in-memory plant.test.ts remains a plain test.",
+  "test": ".github/ci/plant-reporter.integration.test.ts; installed NodeChildProcessSpawner terminateProcessGroup and releaseProcess; decisions 0584 and 0594. Corrects the safe-check classification in field/notes/2026-11-16-t1133-causal-reporter.json and the earlier worker report without removing their historical results.",
+  "links": []
+}
