@@ -23,7 +23,7 @@
 // decoder refuses (red: `bad_row` is never answered, and the object is called).
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor, Stub } from "@kampus/vitest";
-import { Arbitrary, Effect, Predicate, Redacted, Result, Schema } from "effect";
+import { Arbitrary, Effect, Match, Predicate, Redacted, Result, Schema } from "effect";
 import type { ProcessBinding, ProjectBinding, RecordBinding } from "./bindings.ts";
 import { control, Payloads } from "./control.ts";
 import type { Env } from "./runtime.ts";
@@ -312,12 +312,12 @@ const oracle = Effect.fnUntraced(function* (
     return { reached: `${target}:bad_row`, refused: "bad_row", calls: [] };
   }
 
-  const key =
-    target === "project"
-      ? walk.project
-      : target === "process"
-        ? JSON.stringify([walk.project, `object-of-${walk.name}`])
-        : JSON.stringify([walk.project, walk.name]);
+  const key = Match.value(target).pipe(
+    Match.when("project", () => walk.project),
+    Match.when("process", () => JSON.stringify([walk.project, `object-of-${walk.name}`])),
+    Match.when("record", () => JSON.stringify([walk.project, walk.name])),
+    Match.exhaustive,
+  );
   return {
     reached: `${target}.${method}`,
     refused: null,
