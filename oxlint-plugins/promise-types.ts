@@ -539,7 +539,10 @@ export const scopeGaps = (
   }),
 ];
 
-class GitFailed extends Schema.TaggedError<GitFailed>()("GitFailed", { code: Schema.Number }) {}
+/** `git ls-files` exited with a code other than 0. */
+class GitFailed extends Schema.TaggedError<GitFailed, { readonly brand: unique symbol }>()("GitFailed", {
+  code: Schema.Finite,
+}) {}
 
 /** Every TypeScript file git tracks under `next/`, or would track: untracked files not ignored count too. */
 const trackedTypeScript = Effect.fnUntraced(function* (root: string) {
@@ -554,7 +557,7 @@ const trackedTypeScript = Effect.fnUntraced(function* (root: string) {
   });
 
   if (code !== 0) {
-    return yield* new GitFailed({ code });
+    return yield* GitFailed.make({ code });
   }
 
   return out.split("\0").filter((f) => TYPESCRIPT.test(f));
