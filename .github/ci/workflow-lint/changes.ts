@@ -39,7 +39,7 @@ const LEGS_OUTPUTS = [
 // held before the push (0534), the classify step's BASE.
 const SIZE_ENV = {
   EVENT: `\${{ github.event_name }}`,
-  FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/' }}`,
+  FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/ kalfa/' }}`,
   BASE: env.BASE,
   VISUAL: `\${{ ${VISUAL_LABEL} }}`,
 };
@@ -121,6 +121,11 @@ export const changesJob: Rule = ({ jobs }, require) => {
   for (const [key, expected] of Rec.toEntries(SIZE_ENV)) {
     require(map(sizing?.["env"])[key] === expected, `S1: the size step gets ${key} through env`);
   }
+
+  require(JSON.stringify(Object.keys(map(sizing?.["env"])).toSorted()) ===
+    JSON.stringify(
+      [...Object.keys(SIZE_ENV), "BUDGET"].toSorted(),
+    ), "S1: the size step gets exactly its own env, no second narrowing");
 
   // S1. BUDGET is the setting for a vitest leg's seconds (legs.ts): a positive number, declared here
   // once. legs.ts refuses any other value, and its step then prints nothing.

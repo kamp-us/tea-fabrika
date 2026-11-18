@@ -41,7 +41,8 @@ name: scheduled
 #                          by the workflow's own token
 #   next/ vitest    5      check.yaml's next legs 1 to 5, the `next` and `next-integration`
 #                          projects, every file, no `--changed`; a branch's full set runs `next`
-#                          alone (0602)
+#                          alone (0602); on main each leg checks its report, and the one that ran
+#                          the @kalfa/config package law keeps the tested archive (SC22)
 #   next/ visual    2      check.yaml's legs e2e-1 and e2e-2, the `next-visual` project, every file
 #   tooling tests   2      legs tooling-1 and tooling-2, the `tooling` and `tooling-integration`
 #                          projects, every file, no `--changed`; a branch's full set runs
@@ -222,10 +223,11 @@ jobs:
     # A backstop: the leg's test step limit (`next-limit` or `tooling-limit` below) and 3 minutes
     # more, so 20 for a next leg and 33 for a tooling leg (GitHub's docs, "Contexts reference": this
     # key may read `matrix`). In green runs 43765797242, 43734956911 and 43734841211 the steps
-    # before a test step took at most 56 s in all (chromium's included) and the three after it at
-    # most 7 s, against their 2 minutes of step limits. A job that hits this limit ends `cancelled`
-    # and so does its run, so only a hung setup or upload reaches it; the report still names it as a
-    # time-out.
+    # before a test step took at most 56 s in all (chromium's included). A numbered vitest leg runs
+    # five steps after `vitest`, with 4 minutes of step limits against these 3 (the plan's call): on
+    # four green main full runs (44268160795, 44250937513, 44242548956, 44232082653) they took 35 to
+    # 85 s, so a leg reaches this limit only if vitest passes late and a later step hangs. A job
+    # that hits it ends `cancelled` and so does its run; the report still names it as a time-out.
     timeout-minutes: ${{ startsWith(matrix.shard, 'tooling-') && 33 || 20 }}
     # Fail fast, GitHub's own (ticket 990): the first red leg stops every other leg, so they free
     # their runners, and the run still ends `failure`. MAIN_SLOTS legs at once on main, PROOF_SLOTS
@@ -256,6 +258,30 @@ jobs:
           FABRIKA_TEST_DEPTH: full
           PROJECTS: ${{ github.ref == 'refs/heads/main' && '--project next --project next-integration' || '--project next' }}
         run: pnpm exec vitest run $PROJECTS --shard "$SHARD" --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
+      # Main's full run keeps the tested @kalfa/config archive (SC22). The package law runs on one of
+      # the numbered legs, whichever `Shards` gives it, so every numbered leg reads its own report
+      # and says kept, absent (it ran no such law and left no folder) or refused (the step fails).
+      # It reads the runner's own variables, so it takes no env. Right after the tests and before
+      # any upload, so it binds the folder and report the law just wrote.
+      - name: package receipt
+        id: receipt
+        if: success() && github.ref == 'refs/heads/main' && !startsWith(matrix.shard, 'e2e-') && !startsWith(matrix.shard, 'tooling-')
+        timeout-minutes: 1
+        run: node .github/ci/related.ts --receipt
+      # Only the leg whose receipt said kept: exactly the two files the law's run wrote, so a missing
+      # one fails the step. The artifact's own name carries the commit and the attempt. The runner's
+      # runtime token uploads it, as the two uploads below, so `permissions` stay as they are.
+      - name: package archive
+        if: success() && github.ref == 'refs/heads/main' && steps.receipt.outputs.kept == 'true'
+        timeout-minutes: 1
+        uses: actions/upload-artifact@v7
+        with:
+          name: kalfa-config-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/kalfa-config-package/kalfa-config-0.0.0.tgz
+            ${{ runner.temp }}/kalfa-config-package/receipt.json
+          if-no-files-found: error
+          retention-days: 90
       # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
       # that answers, as in check.yaml.
       - name: chromium

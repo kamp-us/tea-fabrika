@@ -22,7 +22,7 @@ const groupOf = (job: Record<string, unknown>): string => {
   return typeof group === "string" ? group : "";
 };
 
-const OUTPUTS = ["run", "legs", "files", "projects"];
+const OUTPUTS = ["run", "legs", "files", "projects", "consumer"];
 
 const selector = (workflow: Record<string, unknown>) => {
   const job = map(map(workflow["jobs"])["select"]);
@@ -40,6 +40,30 @@ const selector = (workflow: Record<string, unknown>) => {
     env["HEAD"] === `\${{ github.sha }}` &&
     Object.keys(outputs).length === OUTPUTS.length &&
     OUTPUTS.every((key) => outputs[key] === `\${{ steps.set.outputs.${key} }}`)
+  );
+};
+
+const FAULT = "node .github/ci/related.ts --fault";
+
+const FAULT_IF = "success()&&needs.select.outputs.consumer==matrix.shard";
+
+/**
+ * The related job's one delivery-lane step: P1's source fault, on the leg that owns P1, right in the
+ * tooling limit, at full depth and with nothing else (no token, no soft failure). The command list holds
+ * its place, once, after `tooling`. The job keeps no receipt and no archive upload: main's full run
+ * keeps the archive (0602).
+ */
+const consumerFault = (job: Record<string, unknown>): boolean => {
+  const fault = steps(job).find((candidate) => candidate["run"] === FAULT);
+
+  return (
+    ungrouped(job) &&
+    fault !== undefined &&
+    fault["name"] === "consumer fault" &&
+    Object.keys(fault).length === 5 &&
+    compact(fault["if"]) === FAULT_IF &&
+    fault["timeout-minutes"] === 30 &&
+    JSON.stringify(map(fault["env"])) === JSON.stringify({ FABRIKA_TEST_DEPTH: "full" })
   );
 };
 
@@ -110,6 +134,7 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
       "pnpm install --frozen-lockfile",
       INTEGRATION,
       TOOLING,
+      FAULT,
       "node .github/ci/time-table.ts",
     ]), "R1: only the declared integration and tooling workloads run");
 
@@ -135,6 +160,10 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
       map(step["with"])["filter"] === "blob:none" &&
       !("ref" in map(step["with"])),
   ), "R1: related tests use the tested commit with complete ancestry and blobless history");
+
+  require(consumerFault(
+    related,
+  ), "R1: the consumer fault runs on the leg that owns P1, in the tooling limit, and the job keeps no receipt and no archive");
 
   const next = map(jobs["next"]);
 

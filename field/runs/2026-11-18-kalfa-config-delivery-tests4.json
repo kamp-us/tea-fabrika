@@ -1,0 +1,130 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-kalfa-config-delivery-tests4",
+  "ticket": "kamp-us/tea-fabrika#1076",
+  "pr": "kamp-us/tea-fabrika#1589",
+  "started": "2026-11-18T06:31:00-08:00",
+  "ended": "2026-11-18T06:57:00-08:00",
+  "parent": "2026-11-18-kalfa-config-delivery-tests3",
+  "active": null,
+  "driver_caused": false,
+  "role": "step",
+  "step": "tests",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Part 1 of the 0602 amendment (plan body 3e7221f27992): P2 leaves every related leg, the receipt keeps only on main's ref and reads the runner's own variables, check.yaml drops the receipt and archive steps and keeps the consumer fault, record.ts returns to its parent's bytes. scheduled.yaml and its guard wait for ticket 1161.",
+  "note": "51 plants on the real files, one run each, 47 red at first. Four were not: two refusal and stage-key checks had no case, so two were added and are now red; P2 back by path stayed green only on the 12-run process law, and scenario cases carry it; two guard conditions duplicated R1's command list, so they were removed and a plant on the list is red. The rows above are a sample of the 51. Also ported 1589's select(files, sizing) cases to 1618's select(event, lists, sizing), which the merge commit had not.",
+  "base": "a6ec9c7fc722f64ed8c4bd760f4eb53caf523cd5",
+  "head": "06ac2179d1ae714b44c68bf399bd2676fb347fef",
+  "sourceHashes": {
+    ".github/ci/related-selection.test.ts": "31f2b9f289a9bbbc1623872eba96fa79eb227f6f894c8606e6b73eee5db8e2fc",
+    ".github/ci/related.ts": "1916916583341e282fc0162b808cd7baccd0687d3538698c3da1a5b043103f02",
+    ".github/ci/workflow-lint/record.ts": "4fd880ae2c7e8563b93a9d5e60b342e55234522064ae1443487ecc16b44fe633",
+    ".github/ci/workflow-lint/related.test.ts": "64511e1fabd146eb5d9e0ae6e098acf7d235f24e4820a0f8797b7d3f66915422",
+    ".github/ci/workflow-lint/related.ts": "f028ab305b9d39db2bb691a1512fc1faaff8fe0f168391de097b52ab0b75659d",
+    ".github/workflows/check.yaml": "968102113945a5c59d5c2159532e7f8b3557011d7235bee004f7a46c62f3dbe1"
+  },
+  "plants": [
+    {
+      "law": "D1 the select step never adds P2 by path",
+      "plant": "add P2 back to the next-integration thunk by path",
+      "result": "red"
+    },
+    {
+      "law": "D1 the selector adds P1 to exactly one tooling leg",
+      "plant": "skip the owner check",
+      "result": "red"
+    },
+    {
+      "law": "D1 the selector adds P1 only after Vitest lists it",
+      "plant": "skip confirmed's discovery",
+      "result": "red"
+    },
+    {
+      "law": "D1 the fault's route selects P1",
+      "plant": "drop the kalfa/ rule from wantsConsumerLaw",
+      "result": "red"
+    },
+    {
+      "law": "D1 the fault's route selects P1",
+      "plant": "put the record guard back in the route",
+      "result": "red"
+    },
+    {
+      "law": "D4 select prints five outputs",
+      "plant": "print archive again",
+      "result": "red"
+    },
+    {
+      "law": "D2 the receipt keeps only on main's ref and a push, schedule or hand-start event",
+      "plant": "accept pull_request and merge_group",
+      "result": "red"
+    },
+    {
+      "law": "D2 the receipt keeps only on main's ref",
+      "plant": "ignore GITHUB_REF",
+      "result": "red"
+    },
+    {
+      "law": "D2 absent only when the report holds no P2 and no folder",
+      "plant": "read a stray folder as absent",
+      "result": "red"
+    },
+    {
+      "law": "D2 the receipt checks the archive's digest and both commits",
+      "plant": "drop the digest, source and requested checks",
+      "result": "red"
+    },
+    {
+      "law": "D2 the receipt step reads the runner's own variables",
+      "plant": "read EVENT and HEAD in place of GITHUB_EVENT_NAME and GITHUB_SHA",
+      "result": "red"
+    },
+    {
+      "law": "D2 the receipt step prints kept=false for another leg",
+      "plant": "print kept=true on an absent leg",
+      "result": "red"
+    },
+    {
+      "law": "D2 a stage no one asked for is recorded",
+      "plant": "drop the stage-key check",
+      "result": "green"
+    },
+    {
+      "law": "D3 no receipt and no archive upload in check.yaml",
+      "plant": "put the old package receipt and archive steps back",
+      "result": "red"
+    },
+    {
+      "law": "D3 one consumer fault step after tooling",
+      "plant": "run the fault on every leg, or make it soft",
+      "result": "red"
+    },
+    {
+      "law": "R1 the related guard pins the consumer fault",
+      "plant": "disable R1's command list",
+      "result": "red"
+    },
+    {
+      "law": "Q1 check.yaml uploads no kalfa-config- artifact",
+      "plant": "let record.ts allow a kalfa-config- upload",
+      "result": "red"
+    },
+    {
+      "law": "D2 a stage no one asked for is recorded, the case added after the first plant",
+      "plant": "drop the stage-key check, run again",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 25.9,
+  "costUsd": null,
+  "listUsd": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billed": null,
+  "billing": null
+}
