@@ -8,7 +8,7 @@ import { checklist } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
 import * as Programs from "@kampus/libfabrika/runtime/Program";
 import { senderTest } from "@kampus/libfabrika/testing";
-import { Arbitrary, Effect, FileSystem, Match, type Option, Predicate, Result, Schema } from "effect";
+import { Arbitrary, Effect, FileSystem, Match, type Option, Predicate, Result, Schema, Struct } from "effect";
 
 const SEED = 119120;
 
@@ -699,17 +699,17 @@ it.prop(
       throw new Error(`failed import: ${message}`);
     };
 
-    for (const law of Object.keys(paths) as ReadonlyArray<Law>) {
+    for (const law of Struct.keys(paths)) {
       expect(presence(new Set(), law, failed)).toBeNull();
 
-      for (const other of Object.keys(paths) as ReadonlyArray<Law>) {
+      for (const other of Struct.keys(paths)) {
         if (other !== law) {
           expect(presence(new Set([paths[other]]), law, failed)).toBeNull();
         }
       }
     }
 
-    for (const law of Object.keys(paths) as ReadonlyArray<Law>) {
+    for (const law of Struct.keys(paths)) {
       expect(() => presence(new Set([paths[law]]), law, failed)).toThrow("failed import");
     }
 
@@ -723,7 +723,7 @@ it.prop(
       missing: () => Effect.die("control only"),
     };
 
-    for (const law of Object.keys(paths) as ReadonlyArray<Law>) {
+    for (const law of Struct.keys(paths)) {
       expect(presence(new Set([paths[law]]), law, () => clean)).toBe(clean);
     }
 
