@@ -91,8 +91,10 @@ const clients = fc.uniqueArray(client, { selector: (c) => c.key, maxLength: 3 })
 
 const at = fc.constantFrom(0, 1, ttl - 1, ttl, ttl + 1, ttl * 2);
 
-const click = (type: "approve" | "deny" | "remove", keys: ReadonlyArray<string>) =>
-  fc.record({ key: fc.constantFrom(...keys), cmd: command }).map((fields) => Messages.cases[type].make(fields));
+const click = <A>(
+  keys: ReadonlyArray<string>,
+  make: (fields: { readonly key: string; readonly cmd: ReturnType<typeof cmdId> }) => A,
+) => fc.record({ key: fc.constantFrom(...keys), cmd: command }).map(make);
 
 // tea draws the operation order and answers commands actually sent. The second fold below
 // chooses click targets from the reached lists, retaining deliberately stale replies.
@@ -106,9 +108,9 @@ const proposals = arbGuidedSequence(
       link: fc
         .constantFrom(Link.cases.connecting.make({}), Link.cases.online.make({}), Link.cases.lost.make({}))
         .map((link) => Messages.cases.link.make({ link })),
-      approve: click("approve", ["waiting-a", "waiting-b", "waiting-c"]),
-      deny: click("deny", ["waiting-a", "waiting-b", "waiting-c"]),
-      remove: click("remove", ["client-a", "client-b", "client-c"]),
+      approve: click(["waiting-a", "waiting-b", "waiting-c"], Messages.cases.approve.make),
+      deny: click(["waiting-a", "waiting-b", "waiting-c"], Messages.cases.deny.make),
+      remove: click(["client-a", "client-b", "client-c"], Messages.cases.remove.make),
       enter: fc.constant(Messages.cases.enter.make({})),
       checked: fc.constantFrom("touch", "click").map((check) => Messages.cases.checked.make({ cmd: stale, check })),
       not_checked: fc

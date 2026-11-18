@@ -10,10 +10,10 @@ import * as ScheduledJob from "./ScheduledJob.ts";
 /** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
  *  A law hands over only the fields it reads, so a case holds the key alone. */
 const Tag = Schema.TaggedUnion({
-  timer: {},
   write_err: {},
   write_ok: {},
 });
+const Timer = Schema.TaggedStruct("timer", { at: Schema.Int });
 
 const write = Cmd.make("write", {
   input: Schema.Struct({ due: Schema.Finite, period: Schema.Int }),
@@ -38,7 +38,7 @@ const walks = period.chain((ms) => {
     ctx,
     {
       outside: {
-        timer: fc.oneof(fc.constant(0), fc.nat()).map((at) => ({ ...Tag.cases.timer.make({}), at })),
+        timer: fc.oneof(fc.constant(0), fc.nat()).map((at) => Timer.make({ at })),
         // A stale answer is an outside input, not the answer to a waiting Cmd.
         write_ok: fc
           .nat()
@@ -94,10 +94,10 @@ it("L1: only a due idle scheduled job emits work; answers while idle do nothing"
             }
 
             if (prev._tag === "idle") {
-              const [due, jobs] = applyCell<ScheduledJob.Model, { _tag: "timer"; at: number }, CmdOf<typeof write>>(
+              const [due, jobs] = applyCell<ScheduledJob.Model, typeof Timer.Type, CmdOf<typeof write>>(
                 machine,
                 prev,
-                { ...Tag.cases.timer.make({}), at: prev.next },
+                Timer.make({ at: prev.next }),
               );
 
               expect(due).toEqual({ _tag: "running", due: prev.next, period: prev.period });
@@ -160,10 +160,10 @@ it("L3: early and repeated timers leave the model and commands unchanged", () =>
           for (const { prev, msg, next, cmds } of steps) {
             // Choose the refusal from the state reached by this generated walk.
             const at = prev._tag === "idle" ? prev.next - 1 : prev.due;
-            const [unchanged, sent] = applyCell<ScheduledJob.Model, { _tag: "timer"; at: number }, CmdOf<typeof write>>(
+            const [unchanged, sent] = applyCell<ScheduledJob.Model, typeof Timer.Type, CmdOf<typeof write>>(
               machine,
               prev,
-              { ...Tag.cases.timer.make({}), at },
+              Timer.make({ at }),
             );
 
             expect(unchanged).toEqual(prev);

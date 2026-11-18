@@ -44,6 +44,7 @@ const World = Schema.Struct({
 });
 
 type World = typeof World.Type;
+
 const Msg = Schema.TaggedStruct("observe", { world: World });
 
 const facts = Machine.make({
