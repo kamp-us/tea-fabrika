@@ -102,6 +102,7 @@ const survey = Command.make(
   },
   Effect.fnUntraced(function* ({ file, law, from, to, out }) {
     const { settings, root, stryker } = yield* setup;
+
     const rows = yield* Run.survey({ file, law, from, to, settings, root }).pipe(
       Effect.scoped,
       Effect.provide(stryker),

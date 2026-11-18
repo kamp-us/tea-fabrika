@@ -37,6 +37,7 @@ export const Report = Schema.Struct({
   ),
   framework: Schema.optional(Schema.Struct({ version: Schema.optional(Schema.String) })),
 });
+
 export type Report = typeof Report.Type;
 
 /** A found target: the one mutant a plant names, with its place (line from 1, column from 0) and its folded texts. */
@@ -50,10 +51,12 @@ export const Found = Schema.Struct({
   original: Schema.String,
   replacement: Schema.String,
 });
+
 export type Found = typeof Found.Type;
 
 /** A test that killed a mutant, as the report's `testFiles` names it. */
 const Test = Schema.Struct({ file: Schema.String, name: Schema.String });
+
 type Test = typeof Test.Type;
 
 /** What a plant run answers. Only `killed` is a pass. */
@@ -71,6 +74,7 @@ export const Answer = Schema.TaggedUnion({
   /** The report holds no mutant at the target. */
   not_run: {},
 });
+
 export type Answer = typeof Answer.Type;
 
 /** What fails before Stryker starts, or when it cannot, each naming what it looked at and no text of the file. */
@@ -191,6 +195,7 @@ export const record = (
   ran: { readonly seconds: number; readonly node: string; readonly stryker: string },
 ): Line => {
   const mutant = targetOf(report, target);
+
   const beside = (report.files[target.file]?.mutants ?? []).filter(
     (other) => other !== mutant && inside(other, target),
   );

@@ -84,6 +84,7 @@ describe("Target.find, a plant's shape is found exactly once", () => {
 
           const { text, placed } = assemble(rows.flatMap((row) => [...row, "\n"]));
           const mine = placed.filter(({ node }) => node.tokens.join(" ") === s.tokens.join(" "));
+
           // Noise: a mutant on every line, none of them with a mutator of ours.
           const made = madeFor(
             FILE,
@@ -97,6 +98,7 @@ describe("Target.find, a plant's shape is found exactly once", () => {
 
           const found = Result.isSuccess(got) ? got.success : undefined;
           const refused = Result.isFailure(got) ? got.failure : undefined;
+
           const places = (list: ReadonlyArray<{ line: number; column: number }>) =>
             list.map(({ line, column }) => `${line}:${column}`).sort();
 
@@ -232,15 +234,19 @@ describe("Target.find, a plant's shape is found exactly once", () => {
           const first = `function ${one}_a() { return `;
           const second = `function ${two}_b() { return `;
           const wrapper = (head: string) => `${head}${nodeText(node)}; }`;
+
           const parts: Array<Part> =
             count === "twice"
               ? [first, node, "; }\n", first, node, "; }\n"]
               : [first, node, "; }\n", second, node, "; }\n"];
+
           const { text, placed } = assemble(parts);
+
           const snippet =
             count === "never"
               ? `function ${one}_missing() { return ${nodeText(node)}; }`
               : wrapper(pickFirst || count === "twice" ? first : second);
+
           const got = Target.find(text, madeFor(FILE, placed), named(s, { within: snippet }));
 
           seen.hit(count === "once" ? "narrowed" : count);

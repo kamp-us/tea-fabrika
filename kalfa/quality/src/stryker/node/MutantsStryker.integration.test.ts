@@ -54,10 +54,12 @@ it.live(
       yield* fs.symlink(path.join(import.meta.dirname, MODULES), path.join(root, "node_modules"));
 
       const catalog = [named("kills", KILLS), named("spares", SPARES)];
+
       // Nothing here is host-only: this law runs where Stryker may.
       const real = MutantsStryker.layer({ root, nice: 0 }).pipe(
         Layer.provide(Layer.succeed(Guard, { allow: () => Effect.void })),
       );
+
       const run = (name: string) =>
         Run.plant({ catalog, name, settings: settings(path, root), root }).pipe(Effect.scoped, Effect.provide(real));
 

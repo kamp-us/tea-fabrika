@@ -76,6 +76,7 @@ const reports = fc
       original: "x",
       replacement: g.target.replacement,
     };
+
     const law = { file: g.lawFile, name: g.lawName };
     const otherFile = TESTFILES.find((file) => file !== g.lawFile) ?? TESTFILES[0];
     let next = g.start;
@@ -118,6 +119,7 @@ const reports = fc
     });
 
     const here = { line: found.line, column: found.column, width: g.target.width };
+
     const killers: ReadonlyArray<typeof lawTest> =
       g.kind === "killed_alone"
         ? [lawTest]
@@ -267,6 +269,7 @@ describe("Report, the answer a plant run gives", () => {
         }
 
         const report = Schema.decodeUnknownSync(Report.Report)(dirty);
+
         const ask = plant({
           name: "subject",
           file: found.file,

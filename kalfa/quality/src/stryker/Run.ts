@@ -111,6 +111,7 @@ export const survey = Effect.fn("Run.survey")(function* (ask: {
   yield* checkPackages(ask.settings, ask.root, ask.file, ask.law);
 
   const dir = yield* tempDir;
+
   // No target: the whole of each line is the range, which Stryker reads as `file:from-to`.
   const nothing = {
     name: "survey",
@@ -120,6 +121,7 @@ export const survey = Effect.fn("Run.survey")(function* (ask: {
     replacement: "",
     law: { file: ask.law, name: "" },
   };
+
   const place = {
     file: ask.file,
     line: ask.from,
@@ -130,10 +132,12 @@ export const survey = Effect.fn("Run.survey")(function* (ask: {
     original: "",
     replacement: "",
   };
+
   const options = {
     ...Options.make(place, nothing, ask.settings, { dir, plugin: mutants.plugin }),
     mutate: [`${ask.file}:${ask.from}-${ask.to}`],
   };
+
   const done = yield* ran(options);
 
   return rows(done.report, ask.file);

@@ -87,6 +87,7 @@ const ran = async (
   script: Parameters<typeof MutantsMemory.make>[0],
 ) => {
   const memory = MutantsMemory.make(script);
+
   const layers = Layer.mergeAll(
     MemoryFiles.layer({ ...files, [`${ROOT}/package.json`]: "{}" }),
     Path.layer,
@@ -129,12 +130,14 @@ describe("Run.plant, a plant runs only once its target is certain", () => {
 
           for (let i = 0; i < count; i++) {
             const tokens = shapes[i]!;
+
             const node: Node = {
               tokens,
               gaps: tokens.slice(1).map(() => " "),
               mutator: "ConditionalExpression",
               replacement: "true",
             };
+
             const k = i !== picked ? 1 : mode === "not_found" ? 0 : mode === "ambiguous" ? 2 : 1;
             const built = fileOf(i, node, k);
             const lawFolder = i === picked && mode === "needs_in_place" ? "test" : "src";
@@ -164,6 +167,7 @@ describe("Run.plant, a plant runs only once its target is certain", () => {
 
           const name = mode === "unknown_plant" ? "no-such-plant" : `plant-${picked}`;
           const chosen = catalog[picked]!;
+
           const kind: Kind =
             mode === "elsewhere" || mode === "survived" || mode === "no_coverage" || mode === "timeout"
               ? mode
@@ -240,12 +244,14 @@ describe("Run.plant, a plant runs only once its target is certain", () => {
           };
 
           const under = (dir: string, file: string) => (dir === "" ? file : `${dir}/${file}`);
+
           const node: Node = {
             tokens: ["a", "===", "b"],
             gaps: [" ", " "],
             mutator: "ConditionalExpression",
             replacement: "true",
           };
+
           const built = fileOf(0, node, 1);
 
           const ask = plant({

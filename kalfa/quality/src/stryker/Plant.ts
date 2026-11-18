@@ -8,6 +8,7 @@ export const Law = Schema.Struct({
   file: Schema.String,
   name: Schema.String,
 });
+
 export type Law = typeof Law.Type;
 
 /**
@@ -29,6 +30,7 @@ export const Plant = Schema.Struct({
   within: Schema.optional(Schema.String),
   law: Law,
 });
+
 export type Plant = typeof Plant.Type;
 
 /** The repo's plants. Two plants never share a name, since a name is what a person types. */
@@ -37,6 +39,7 @@ export const Catalog = Schema.Array(Plant).check(
     (plants) => new Set(plants.map(({ name }) => name)).size === plants.length || "plant names must be unique",
   ),
 );
+
 export type Catalog = typeof Catalog.Type;
 
 /** A plant from its plain form; it throws on a form that does not decode, which a catalog file wants at load. */
