@@ -232,12 +232,14 @@ const paths = {
 
 const declared = (inputs: ReadonlyArray<InputDeclaration>) => {
   const writes = inputs.filter((d) => !d.readOnly || d.personOnly);
+
   const msg = Schema.Union([
     ...writes.map((d) =>
       Schema.Struct({ type: Schema.Literal(d.name), ...("fields" in d.schema ? d.schema.fields : {}) }),
     ),
     Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int }),
   ]);
+
   const machine = Machine.make({
     model: Schema.Null,
     msg,
@@ -245,6 +247,7 @@ const declared = (inputs: ReadonlyArray<InputDeclaration>) => {
     init: () => [null, []],
     update: Object.fromEntries([...writes.map((d) => [d.name, (m: null) => [m, []]]), ["timer", (m: null) => [m, []]]]),
   });
+
   return Programs.Program.make({
     name: "fabrika/checklist",
     machine,
@@ -270,24 +273,29 @@ const declared = (inputs: ReadonlyArray<InputDeclaration>) => {
 const bindTools = Effect.fnUntraced(function* () {
   const moduleName = "@kampus/libfabrika/mcp/Tools";
   // edge: JavaScript dynamic import loads only the law whose product file exists.
+
   const toolsModule: typeof import("@kampus/libfabrika/mcp/Tools") = yield* Effect.tryPromise({
     try: () => import(/* @vite-ignore */ moduleName),
     catch: (cause) => new Error("Tools import failed", { cause }),
   });
+
   const binding: Pick<Bridge, "tools" | "hidden"> = {
     tools: (inputs) =>
       Effect.gen(function* () {
         const result = toolsModule.list([declared(inputs)]);
+
         return yield* Effect.fromResult(result);
       }).pipe(Effect.orDie),
     hidden: (name, input, declarations) =>
       Effect.sync(() => {
         const call = toolsModule.read([declared(declarations)], name, { value: input });
         expect(call).toEqual({ _tag: "refused", reason: "unknown_tool" });
+
         return { words: `unknown tool ${name}`, letters: [] };
       }),
   };
   // The app owns the checklist dependency; lower library modules cannot import it.
+
   const listed = toolsModule.list([checklist]);
   expect(Result.isSuccess(listed)).toBe(true);
 
@@ -314,6 +322,7 @@ const presence = <A extends Partial<Bridge>>(files: ReadonlySet<string>, law: La
   }
 
   const binding = load();
+
   const methods: ReadonlyArray<keyof Bridge> =
     law === "tools" ? ["tools", "hidden"] : law === "malformed" ? ["malformed", "missing"] : [law];
 

@@ -504,6 +504,7 @@ const writePortCodec = (msg: Declared, key: string) =>
           }
 
           const { type: _, ...value } = wire;
+
           return value;
         },
       }),
@@ -514,6 +515,7 @@ const writePortCodec = (msg: Declared, key: string) =>
       SchemaTransformation.transform({
         decode: (m) => {
           const { type: _, ...fields } = Predicate.isObject(m) ? m : {};
+
           return fields;
         },
         encode: (fields) => ({ ...fields, type: key }),
